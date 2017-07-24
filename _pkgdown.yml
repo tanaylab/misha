@@ -1,0 +1,128 @@
+navbar:
+  title: "misha"
+  type: inverse
+  left:
+    - text: "Home"
+      href: index.html
+    - text: "Reference"
+      href: reference/index.html
+      icon: fa-th-list
+  right:
+    - icon: fa-bitbucket-square
+      href: https://bitbucket.org/aviezerl/misha-package
+
+
+reference:
+  - title: Track functions
+    desc:  Functions to manipulate and create tracks
+    contents:
+      - gtrack.2d.create
+      - gtrack.2d.import
+      - gtrack.2d.import_contacts
+      - gtrack.array.extract
+      - gtrack.array.get_colnames
+      - gtrack.array.import
+      - gtrack.array.set_colnames
+      - gtrack.attr.export
+      - gtrack.attr.get
+      - gtrack.attr.import
+      - gtrack.attr.set
+      - gtrack.convert
+      - gtrack.create
+      - gtrack.create_pwm_energy
+      - gtrack.create_sparse
+      - gtrack.exists
+      - gtrack.import
+      - gtrack.import_mappedseq
+      - gtrack.import_set
+      - gtrack.info
+      - gtrack.liftover
+      - gtrack.lookup
+      - gtrack.ls
+      - gtrack.modify
+      - gtrack.rm
+      - gtrack.smooth
+      - gtrack.var.get
+      - gtrack.var.ls
+      - gtrack.var.rm
+      - gtrack.var.set
+  - title: Virtual track functions
+    desc:  Functions to manipulate and create virtual tracks
+    contents:
+      - gvtrack.array.slice
+      - gvtrack.create
+      - gvtrack.info
+      - gvtrack.iterator
+      - gvtrack.iterator.2d
+      - gvtrack.ls
+      - gvtrack.rm
+  - title: Intervals functions
+    desc:  Functions to manipulate and create intervals
+    contents:
+      - gintervals
+      - gintervals.2d
+      - gintervals.2d.all
+      - gintervals.2d.band_intersect
+      - gintervals.all
+      - gintervals.canonic
+      - gintervals.chrom_sizes
+      - gintervals.diff
+      - gintervals.exists
+      - gintervals.force_range
+      - gintervals.import_genes
+      - gintervals.intersect
+      - gintervals.is.bigset
+      - gintervals.liftover
+      - gintervals.load
+      - gintervals.load_chain
+      - gintervals.ls
+      - gintervals.mapply
+      - gintervals.neighbors
+      - gintervals.quantiles
+      - gintervals.rbind
+      - gintervals.rm
+      - gintervals.save
+      - gintervals.summary
+      - gintervals.union
+      - gintervals.update
+      - giterator.cartesian_grid
+      - giterator.intervals
+  - title: Data manipulation functions
+    desc: Data manipulation functions
+    contents:
+      - gdist
+      - gbins.quantiles
+      - gbins.summary
+      - gcis_decay
+      - gcompute_strands_autocorr
+      - gdist
+      - gextract
+      - glookup
+      - gpartition
+      - gquantiles
+      - gsample
+      - gscreen
+      - gsegment
+      - gseq.extract
+      - gsummary
+  - title: Database functions
+    desc: Database functions
+    contents:
+      - gdb.create
+      - gdb.get_readonly_attrs
+      - gdb.init
+      - gdb.reload
+      - gdb.set_readonly_attrs
+      - gdir.cd
+      - gdir.create
+      - gdir.cwd
+      - gdir.rm
+  - title: Other functions
+    desc: Other
+    contents:
+      - misha-package
+      - gcluster.run
+      - gset_input_mode
+      - gtraceback
+      - gwget
+      - gwilcox
