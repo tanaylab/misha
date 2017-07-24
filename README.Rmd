@@ -1,0 +1,25 @@
+---
+output:
+  md_document:
+    variant: markdown_github
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "README-"
+)
+```
+
+# The misha pacakge #
+
+'misha' package is intended to help users to efficiently analyze genomic
+data achieved from various experiments.
+
+### Code
+Source code can be found at: 
+https://bitbucket.org/tanaylab/misha_package
+
