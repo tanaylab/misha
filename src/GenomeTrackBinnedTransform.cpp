@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "BinFinder.h"
 
 #include "GenomeTrackFixedBin.h"
@@ -11,12 +13,6 @@
 #include "TrackExpressionFixedBinIterator.h"
 #include "TrackExpressionScanner.h"
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
-
 using namespace std;
 using namespace rdb;
 
@@ -28,7 +24,7 @@ static double get_bin_tranformed_value(unsigned numexpr, bool force_binning, SEX
 	for (unsigned i = 0; i < numexpr; ++i) {
 		double val = scanner.last_real(i);
 
-		if (isnan(val)) {
+		if (std::isnan(val)) {
 			nan = true;
 			break;
 		} else {
@@ -159,8 +155,8 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());

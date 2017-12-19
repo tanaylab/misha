@@ -5,7 +5,7 @@
  *      Author: hoichman
  */
 
-#include <math.h>
+#include <cmath>
 #include <vector>
 
 #include "rdbinterval.h"
@@ -14,12 +14,6 @@
 #include "GIntervalsBigSet1D.h"
 #include "TrackExpressionFixedBinIterator.h"
 #include "TrackExpressionScanner.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 using namespace rdb;
@@ -157,7 +151,7 @@ void GenomeTrackSlidingWilcox::set_next_sample(double v)
 //Rprintf("z = %g\n", z);
 //debug_slide(old_v, new_v);
 
-	if (isnan(m_queue[m_center]) || z > m_maxz) {
+	if (std::isnan(m_queue[m_center]) || z > m_maxz) {
 		if (m_start_coord != -1) {
 			int64_t start = max(0L, m_start_coord - m_winsize_aside[SMALL] * m_binsize);
 			int64_t end = m_center_coord + m_winsize_aside[SMALL] * m_binsize;
@@ -200,12 +194,12 @@ void GenomeTrackSlidingWilcox::debug_slide(double *old_v, double *new_v)
 {
 	static deque<double> q[2];
 	for (int i = 0; i < 2; i++) {
-		if (!isnan(old_v[i])) {
+		if (!std::isnan(old_v[i])) {
 			if (q[i].front() != old_v[i])
 				verror("Deleting non existing val %g", old_v[i]);
 			q[i].pop_front();
 		}
-		if (!isnan(new_v[i]))
+		if (!std::isnan(new_v[i]))
 			q[i].push_back(new_v[i]);
 
 		Rprintf("Q[%d] =", i);
@@ -255,7 +249,7 @@ SEXP gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP _
 		IntervUtils iu(_envir);
 		GIntervalsFetcher1D *intervals = NULL;
 		iu.convert_rintervs(_intervals, &intervals, NULL);
-		auto_ptr<GIntervalsFetcher1D> intervals_guard(intervals);
+		unique_ptr<GIntervalsFetcher1D> intervals_guard(intervals);
 		intervals->sort();
 		intervals->unify_overlaps();
 

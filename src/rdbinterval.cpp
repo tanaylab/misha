@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cmath>
 #include <fstream>
 #include <time.h>
 #include <unistd.h>
@@ -20,14 +21,7 @@
 #include "GTrackIntervalsFetcher1D.h"
 #include "GTrackIntervalsFetcher2D.h"
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
-
 using namespace std;
-using namespace __gnu_cxx;
 
 #include "strutil.h"
 
@@ -418,8 +412,8 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 
 		for (unsigned i = 0; i < num_intervals; i++) {
 			if (isFactor(chroms) && INTEGER(chroms)[i] < 0 ||
-				isReal(starts) && isnan(REAL(starts)[i]) || isReal(ends) && isnan(REAL(ends)[i]) ||
-				strands != R_NilValue && isReal(strands) && isnan(REAL(strands)[i]))
+				isReal(starts) && std::isnan(REAL(starts)[i]) || isReal(ends) && std::isnan(REAL(ends)[i]) ||
+				strands != R_NilValue && isReal(strands) && std::isnan(REAL(strands)[i]))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
 			const char *chrom = isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
@@ -463,9 +457,9 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 
 		for (unsigned i = 0; i < num_intervals; i++) {
 			if (isFactor(chroms1) && INTEGER(chroms1)[i] < 0 ||
-				isReal(starts1) && isnan(REAL(starts1)[i]) || isReal(ends1) && isnan(REAL(ends1)[i]) ||
+				isReal(starts1) && std::isnan(REAL(starts1)[i]) || isReal(ends1) && std::isnan(REAL(ends1)[i]) ||
 				isFactor(chroms2) && INTEGER(chroms2)[i] < 0 ||
-				isReal(starts2) && isnan(REAL(starts2)[i]) || isReal(ends2) && isnan(REAL(ends2)[i]))
+				isReal(starts2) && std::isnan(REAL(starts2)[i]) || isReal(ends2) && std::isnan(REAL(ends2)[i]))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
 			const char *chrom1 = isString(chroms1) ? CHAR(STRING_ELT(chroms1, i)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(chroms1)[i] - 1));
@@ -622,14 +616,14 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 	if (!isReal(src_starts) && !isInteger(src_starts))
 		verror("Invalid format of intervals argument");
 
-	hash_map<string, int> src_chrom2id;
+	unordered_map<string, int> src_chrom2id;
 
 	for (unsigned i = 0; i < intervs.size(); i++) {
-		if (isFactor(src_chroms) && INTEGER(src_chroms)[i] < 0 || isReal(src_starts) && isnan(REAL(src_starts)[i]))
+		if (isFactor(src_chroms) && INTEGER(src_chroms)[i] < 0 || isReal(src_starts) && std::isnan(REAL(src_starts)[i]))
 			verror("Invalid format of interval at index %d", i + 1);
 
 		const char *src_chrom = isString(src_chroms) ? CHAR(STRING_ELT(src_chroms, i)) : CHAR(STRING_ELT(src_chrom_levels, INTEGER(src_chroms)[i] - 1));
-		hash_map<string, int>::const_iterator isrc_chrom2id = src_chrom2id.find(src_chrom);
+		unordered_map<string, int>::const_iterator isrc_chrom2id = src_chrom2id.find(src_chrom);
 		int src_chromid;
 
 		if (isrc_chrom2id == src_chrom2id.end()) {

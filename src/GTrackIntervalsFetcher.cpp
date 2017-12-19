@@ -82,16 +82,16 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		for (size_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
 			for (size_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
 				string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
-				auto_ptr<GenomeTrack2D> track;
+				unique_ptr<GenomeTrack2D> track;
 
 				if (track_type == GenomeTrack::RECTS) {
-					track = auto_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+					track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
 					((GenomeTrackRectsRects *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
 				} else if (track_type == GenomeTrack::POINTS) {
-					track = auto_ptr<GenomeTrack2D>(new GenomeTrackRectsPoints(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+					track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsPoints(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
 					((GenomeTrackRectsPoints *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
 				} else if (track_type == GenomeTrack::COMPUTED) {
-					track = auto_ptr<GenomeTrack2D>(new GenomeTrackComputed(get_groot(iu.get_env()), iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+					track = unique_ptr<GenomeTrack2D>(new GenomeTrackComputed(get_groot(iu.get_env()), iu.get_track_chunk_size(), iu.get_track_num_chunks()));
 					((GenomeTrackComputed *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
 				}
 

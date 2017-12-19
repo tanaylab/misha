@@ -1,12 +1,6 @@
-#include <math.h>
+#include <cmath>
 
 #include "IncrementalWilcox.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 
@@ -46,7 +40,7 @@ void IncrementalWilcox::update(double old_v1, double new_v1, double old_v2, doub
 		// Basiacally we want to say: "if (old_v == new_v)" however if one of the values is NaN
 		// we will get an exception in naive comparison. We also can't use "if (islessgreater(old_v, new_v))"
 		// since islessgreater(NaN, NaN) returns false.
-		if ((isnan(old_v) && isnan(new_v)) || (!isnan(old_v) && !isnan(new_v) && old_v == new_v))
+		if ((std::isnan(old_v) && std::isnan(new_v)) || (!std::isnan(old_v) && !std::isnan(new_v) && old_v == new_v))
 			continue;
 
 		int j = 1 - i;
@@ -55,7 +49,7 @@ void IncrementalWilcox::update(double old_v1, double new_v1, double old_v2, doub
 
 		vals_differ = true;
 
-		if (!isnan(old_v)) {
+		if (!std::isnan(old_v)) {
 			old_itr = m_v2cnt[i].find(old_v);
 			if (old_itr->second == 1)
 				m_v2cnt[i].erase(old_itr);
@@ -66,7 +60,7 @@ void IncrementalWilcox::update(double old_v1, double new_v1, double old_v2, doub
 			n[i]--;
 		}
 
-		if (!isnan(new_v)) {
+		if (!std::isnan(new_v)) {
 			new_itr = m_v2cnt[i].find(new_v);
 			if (new_itr == m_v2cnt[i].end())
 				m_v2cnt[i][new_v] = 1;

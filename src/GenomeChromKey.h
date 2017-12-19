@@ -2,12 +2,12 @@
 #define GENOMECHROMKEY_H_
 
 #include <stdint.h>
-#include <ext/hash_map>
+#include <unordered_map>
+#include <vector>
 #include "HashFunc.h"
 #include "TGLException.h"
 
 using namespace std;
-using namespace __gnu_cxx;
 
 // -------------------- GenomeChromKey  -----------------------
 // GenomeChromKey manages the mapping between chromosome id and chromosome name.
@@ -39,7 +39,7 @@ private:
 		bool operator<(const Chrom &chrom) const { return name < chrom.name; }
 	};
 
-	typedef __gnu_cxx::hash_map<string, int> Name2id;
+	typedef std::unordered_map<string, int> Name2id;
 	typedef std::vector<Chrom> Id2chrom;
 
 	Name2id    m_name2id;

@@ -2,7 +2,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fstream>
-#include <ext/hash_map>
+#include <unordered_map>
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -17,9 +17,9 @@ using namespace rdb;
 
 typedef pair<size_t, size_t> Chrom_pair;
 
-class BinIntervalsFiles : public hash_map<Chrom_pair, BufferedFile *> {
+class BinIntervalsFiles : public unordered_map<Chrom_pair, BufferedFile *> {
 public:
-	BinIntervalsFiles() : hash_map<Chrom_pair, BufferedFile *>() {}
+	BinIntervalsFiles() : unordered_map<Chrom_pair, BufferedFile *>() {}
 
 	~BinIntervalsFiles() {
 		for (iterator ifile = begin(); ifile != end(); ++ifile) 
@@ -235,7 +235,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 				const Rectangles &subarenas = are_all_points ? points_serializer.get_subarenas() : rects_serializer.get_subarenas();
 
 				for (size_t i = 0; i < subtrees_files.size(); ++i) {
-					sprintf(filename, "%s/.%d", dirname.c_str(), i);
+					sprintf(filename, "%s/.%ld", dirname.c_str(), i);
 					subtrees_files[i] = new BufferedFile();
 					if (subtrees_files[i]->open(filename, "w+")) 
 						verror("Opening an intermediate file %s: %s\n", filename, strerror(errno));

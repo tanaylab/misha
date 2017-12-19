@@ -26,7 +26,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		IntervUtils iu(_envir);
 		GIntervalsFetcher1D *intervals = NULL;
 		iu.convert_rintervs(_intervals, &intervals, NULL);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals);
 		intervals->sort();
 		intervals->unify_overlaps(false);
 		const char *track = CHAR(STRING_ELT(_track, 0));

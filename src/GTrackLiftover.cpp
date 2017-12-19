@@ -1,6 +1,7 @@
 #include "port.h"
 BASE_CC_FILE
 
+#include <cmath>
 #include <error.h>
 
 #include "rdbinterval.h"
@@ -10,12 +11,6 @@ BASE_CC_FILE
 #include "GenomeTrackFixedBin.h"
 #include "GenomeTrackRects.h"
 #include "GenomeTrackSparse.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 using namespace rdb;
@@ -41,7 +36,7 @@ public:
 	}
 
 	void write_interval(const GInterval &interval, float val) {
-		if ((isnan(val) && isnan(m_last_val) || val == m_last_val) && m_last_interval.end == interval.start)
+		if ((std::isnan(val) && std::isnan(m_last_val) || val == m_last_val) && m_last_interval.end == interval.start)
 			m_last_interval.end = interval.end;
 		else {
 			flush();
@@ -341,7 +336,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 						for ( ; iinterv_val != interv_vals.end(); ++iinterv_val) {
 							if (max(coord1, iinterv_val->interval.start) < min(coord2, iinterv_val->interval.end)) {
 								intersect = true;
-								if (!isnan(iinterv_val->val)) {
+								if (!std::isnan(iinterv_val->val)) {
 									sum += iinterv_val->val;
 									++num_intervals;
 								}

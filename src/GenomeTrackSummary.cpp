@@ -5,7 +5,7 @@
  *      Author: hoichman
  */
 
-#include <math.h>
+#include <cmath>
 
 #include "rdbinterval.h"
 #include "rdbutils.h"
@@ -14,12 +14,6 @@
 #include "GIntervalsBigSet1D.h"
 #include "GIntervalsBigSet2D.h"
 #include "TrackExpressionScanner.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 using namespace rdb;
@@ -43,7 +37,7 @@ struct IntervalSummary {
 
 	void update(double v) {
 		++num_bins;
-		if (!isnan(v)) {
+		if (!std::isnan(v)) {
 			num_non_nan_bins++;
 			total += v;
 			minval = min(minval, v);
@@ -127,8 +121,8 @@ SEXP gtracksummary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _ban
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals1d->unify_overlaps();
 		intervals2d->sort();
@@ -179,8 +173,8 @@ SEXP gtracksummary_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy,
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals1d->unify_overlaps();
 		intervals2d->sort();
@@ -253,8 +247,8 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
@@ -331,7 +325,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 				// interval has finished => calculate the percentile
 				if (scanner.get_iterator()->is_1d()) {
 					if (scanner.isend() || last_scope_interval1d.chromid != scanner.last_scope_interval1d().chromid) {
-						auto_ptr<GIntervalsFetcher1D> out_intervals(intervals1d->create_masked_copy(last_scope_interval1d.chromid));
+						unique_ptr<GIntervalsFetcher1D> out_intervals(intervals1d->create_masked_copy(last_scope_interval1d.chromid));
 
 						SEXP rintervals = build_rintervals_summary(out_intervals.get(), NULL, summaries, iu, false);
 						GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats1d);
@@ -340,7 +334,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 					}
 				} else {
 					if (scanner.isend() || !last_scope_interval2d.is_same_chrom(scanner.last_scope_interval2d())) {
-						auto_ptr<GIntervalsFetcher2D> out_intervals(
+						unique_ptr<GIntervalsFetcher2D> out_intervals(
 							intervals2d->create_masked_copy(last_scope_interval2d.chromid1(), last_scope_interval2d.chromid2()));
 
 						SEXP rintervals = build_rintervals_summary(NULL, out_intervals.get(), summaries, iu, false);
@@ -354,7 +348,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 			// finish saving (save skipped scope chromosomes + write meta)
 			if (scanner.get_iterator()->is_1d()) {
 				for (set<int>::const_iterator ichromid = chroms1d.begin(); ichromid != chroms1d.end(); ++ichromid) {
-					auto_ptr<GIntervalsFetcher1D> out_intervals(intervals1d->create_masked_copy(*ichromid));
+					unique_ptr<GIntervalsFetcher1D> out_intervals(intervals1d->create_masked_copy(*ichromid));
 
 					int size = intervals1d->size(*ichromid);
 					iu.verify_max_data_size(size, "Result", false);
@@ -369,7 +363,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 				GIntervalsBigSet1D::end_save(intervset_out.c_str(), zeroline, iu, chromstats1d);
 			} else {
 				for (set<ChromPair>::const_iterator ichrompair = chroms2d.begin(); ichrompair != chroms2d.end(); ++ichrompair)  {
-					auto_ptr<GIntervalsFetcher2D> out_intervals(intervals2d->create_masked_copy(ichrompair->chromid1, ichrompair->chromid2));
+					unique_ptr<GIntervalsFetcher2D> out_intervals(intervals2d->create_masked_copy(ichrompair->chromid1, ichrompair->chromid2));
 
 					int size = intervals2d->size(ichrompair->chromid1, ichrompair->chromid2);
 					iu.verify_max_data_size(size, "Result", false);
@@ -439,8 +433,8 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals1d->unify_overlaps();
 		intervals2d->sort();

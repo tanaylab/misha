@@ -16,7 +16,7 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 		IntervUtils iu(_envir);
 		GIntervalsFetcher1D *intervals = NULL;
 		iu.convert_rintervs(_intervals, &intervals, NULL);
-		auto_ptr<GIntervalsFetcher1D> intervals_guard(intervals);
+		unique_ptr<GIntervalsFetcher1D> intervals_guard(intervals);
 		intervals->sort();
 
 		if (!intervals->size())

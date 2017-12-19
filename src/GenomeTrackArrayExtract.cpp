@@ -96,7 +96,7 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 		vector<unsigned> interv_ids;
 
 		iu.convert_rintervs(_intervals, &intervals, NULL);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals);
 		intervals->sort();
 
 		Progress_reporter progress;

@@ -12,7 +12,6 @@
 #include "StatQuadTree.h"
 
 using namespace std;
-using namespace __gnu_cxx;
 using namespace rdb;
 
 struct IntervNeighbor {

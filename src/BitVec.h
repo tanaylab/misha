@@ -4,7 +4,7 @@
 #include <limits.h>
 #include <vector>
 #include <list>
-#include <ext/hash_map>
+#include <unordered_map>
 
 class ds_bitvec {
 
@@ -148,7 +148,7 @@ public:
 }
 
 //bool equal_to<const ds_bitvec *>::operator()(const ds_bitvec * const &b1, const ds_bitvec * const &b2) const;
-namespace __gnu_cxx {
+namespace std {
 template<> class hash<const ds_bitvec *> {
 public:
 	size_t operator()(const ds_bitvec * const &b1) const;

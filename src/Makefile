@@ -15,13 +15,13 @@ GCCVERSION := $(subst $(space),$(empty),$(GCCVERSION))
 GCCVERSION := $(shell expr `echo $(GCCVERSION)` | cut -b1-3)
 #$(warning $(GCCVERSION))
 
-GCC430_OR_LATER := $(shell expr `echo $(GCCVERSION)` \>= 430)
+#GCC430_OR_LATER := $(shell expr `echo $(GCCVERSION)` \>= 430)
 
-CFLAGS=-O3 -DNDEBUG -fpic -I$(R_INCLUDE_DIR)
+CFLAGS=-std=c++0x -O3 -DNDEBUG -fpic -I$(R_INCLUDE_DIR)
 
-ifeq ($(GCC430_OR_LATER), 1)
-	CFLAGS += -std=c++0x -Wno-deprecated
-endif
+#ifeq ($(GCC430_OR_LATER), 1)
+#	CFLAGS += -std=c++0x -Wno-deprecated
+#endif
 
 TGT=misha.so
 SRCS=$(wildcard *.cpp)

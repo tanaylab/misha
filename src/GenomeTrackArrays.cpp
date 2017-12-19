@@ -1,13 +1,8 @@
+#include <cmath>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include "GenomeTrackArrays.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 const char *GenomeTrackArrays::SLICE_FUNCTION_NAMES[GenomeTrackArrays::NUM_S_FUNCS] = { "avg", "min", "max", "stddev", "sum", "quantile" };
 const int GenomeTrackArrays::RECORD_SIZE = 2 * sizeof(int64_t) + sizeof(long);
@@ -238,14 +233,14 @@ void GenomeTrackArrays::write_next_interval(const GInterval &interval, const Arr
 	// write the values
 	unsigned num_non_nan_vals = 0;
 	for (ArrayVals::const_iterator iarray_val = iarray_vals_begin; iarray_val != iarray_vals_end; ++iarray_val) {
-		if (!isnan(iarray_val->val))
+		if (!std::isnan(iarray_val->val))
 			++num_non_nan_vals;
 	}
 
 	m_bfile.write(&num_non_nan_vals, sizeof(num_non_nan_vals));
 
 	for (ArrayVals::const_iterator iarray_val = iarray_vals_begin; iarray_val != iarray_vals_end; ++iarray_val) {
-		if (!isnan(iarray_val->val)) {
+		if (!std::isnan(iarray_val->val)) {
 			m_bfile.write(&iarray_val->val, sizeof(iarray_val->val));
 			m_bfile.write(&iarray_val->idx, sizeof(iarray_val->idx));
 		}
@@ -389,7 +384,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 			double N = 0;
 			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
-				if (!isnan(v)) {
+				if (!std::isnan(v)) {
 					sum += v;
 					++N;
 				}
@@ -403,7 +398,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 			float s_min = numeric_limits<float>::max();
 			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
-				if (!isnan(v))
+				if (!std::isnan(v))
 					s_min = min(v, s_min);
 				if (m_array_hints[islice] >= m_array_vals.size())
 					break;
@@ -415,7 +410,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 			float s_max = -numeric_limits<float>::max();
 			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
-				if (!isnan(v))
+				if (!std::isnan(v))
 					s_max = max(v, s_max);
 				if (m_array_hints[islice] >= m_array_vals.size())
 					break;
@@ -432,7 +427,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 
 			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
-				if (!isnan(v)) {
+				if (!std::isnan(v)) {
 					++N;
 					sum += v;
 					mean_square_sum += v * v;
@@ -453,7 +448,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 			double N = 0;
 			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
-				if (!isnan(v)) {
+				if (!std::isnan(v)) {
 					sum += v;
 					++N;
 				}
@@ -467,7 +462,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 			m_slice_sp.reset();
 			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
-				if (!isnan(v))
+				if (!std::isnan(v))
 					m_slice_sp.add(v);
 				if (m_array_hints[islice] >= m_array_vals.size())
 					break;

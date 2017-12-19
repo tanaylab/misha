@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <math.h>
+#include <cmath>
 #include <stdio.h>
 
 #include <limits>
@@ -22,15 +22,8 @@
 #include "TrackExpressionIterator.h"
 #include "TrackExpressionScanner.h"
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
-
 using namespace std;
 using namespace rdb;
-
 
 enum Smooth_type { LINEAR_RAMP, MEAN, NUM_SMOOTH_TYPES, INVALID_TYPE };
 
@@ -124,7 +117,7 @@ void Linear_ramp_smoother::set_next_sample(double sample)
 		float mean;
 		double weight = m_left_weights_sum + m_right_weights_sum;
 
-		if ((!m_smooth_nans && isnan(m_vals[m_peak_idx])) || !weight || weight < m_weight_thr)
+		if ((!m_smooth_nans && std::isnan(m_vals[m_peak_idx])) || !weight || weight < m_weight_thr)
 			mean = numeric_limits<double>::quiet_NaN();
 		else
 			mean = (m_left_weighted_vals_sum + m_right_weighted_vals_sum) / weight;
@@ -141,13 +134,13 @@ void Linear_ramp_smoother::set_next_sample(double sample)
 	m_left_weighted_vals_sum -= m_left_vals_sum;
 
 	// release the lefmost element
-	if (isnan(m_vals[m_left_idx]))
+	if (std::isnan(m_vals[m_left_idx]))
 		m_left_nans--;
 	else
 		m_left_vals_sum -= m_vals[m_left_idx];
 
 	// shift the peak element left
-	if (isnan(m_vals[m_peak_idx])) {
+	if (std::isnan(m_vals[m_peak_idx])) {
 		m_left_nans++;
 		m_right_nans--;
 	}
@@ -166,7 +159,7 @@ void Linear_ramp_smoother::set_next_sample(double sample)
 	m_right_weighted_vals_sum += m_right_vals_sum;
 
 	// add new element at the rightmost position
-	if (isnan(sample))
+	if (std::isnan(sample))
 		m_right_nans++;
 	else {
 		m_right_weights_sum++;
@@ -191,20 +184,20 @@ void Linear_ramp_smoother::set_next_sample(double sample)
 		for (unsigned i = 1; i <= m_num_samples_aside; ++i) {
 			// left of the peak
 			val = m_vals[(m_peak_idx + m_num_samples - i) % m_num_samples];
-			if (!isnan(val))
+			if (!std::isnan(val))
 				m_left_vals_sum += val;
 			m_left_weighted_vals_sum += m_left_vals_sum;
 
 			// right of the peak
 			val = m_vals[(m_peak_idx + i) % m_num_samples];
-			if (!isnan(val))
+			if (!std::isnan(val))
 				m_right_vals_sum += val;
 			m_right_weighted_vals_sum += m_right_vals_sum;
 		}
 
 		// update the peak itself (it is counted at the right)
 		val = m_vals[m_peak_idx];
-		if (!isnan(val)) {
+		if (!std::isnan(val)) {
 			m_right_weighted_vals_sum += val * (m_num_samples_aside + 1);
 			m_right_vals_sum += val;
 		}
@@ -268,7 +261,7 @@ Mean_smoother::~Mean_smoother()
 void Mean_smoother::set_next_sample(double sample)
 {
 	if (m_num_read_samples > m_num_samples_aside) {
-		float mean = (!m_smooth_nans && isnan(m_vals[m_peak_idx])) || !m_weights_sum || m_weights_sum < m_weight_thr ? numeric_limits<double>::quiet_NaN() : m_vals_sum / m_weights_sum;
+		float mean = (!m_smooth_nans && std::isnan(m_vals[m_peak_idx])) || !m_weights_sum || m_weights_sum < m_weight_thr ? numeric_limits<double>::quiet_NaN() : m_vals_sum / m_weights_sum;
 
 		if (m_counter % m_sample_skip == 0)
     		m_gtrack.write_next_bin(mean);
@@ -277,12 +270,12 @@ void Mean_smoother::set_next_sample(double sample)
 	} else
 		m_num_read_samples++;
 
-	if (!isnan(m_vals[m_left_idx])) {
+	if (!std::isnan(m_vals[m_left_idx])) {
 		m_weights_sum--;
 		m_vals_sum -= m_vals[m_left_idx];
 	}
 
-	if (!isnan(sample)) {
+	if (!std::isnan(sample)) {
 		m_weights_sum++;
 		m_vals_sum += sample;
 	}
@@ -297,7 +290,7 @@ void Mean_smoother::set_next_sample(double sample)
 	if (m_counter % m_num_samples_aside == 0) {
 		m_vals_sum = 0;
 		for (vector<double>::iterator i = m_vals.begin(); i != m_vals.end(); ++i) {
-			if (!isnan(m_vals_sum))
+			if (!std::isnan(m_vals_sum))
 				m_vals_sum += *i;
 		}
 	}

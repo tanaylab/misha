@@ -1,3 +1,4 @@
+#include <cmath>
 #include <unistd.h>
 
 #include "rdbutils.h"
@@ -12,12 +13,6 @@
 #include "GenomeTrackRects.h"
 #include "GenomeTrackSparse.h"
 #include "TrackExpressionVars.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
 		"avg", "min", "max", "nearest", "stddev", "sum", "quantile", "global.percentile", "global.percentile.min", "global.percentile.max", "weighted.sum", "area"
@@ -847,7 +842,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				if (ivar->requires_pv) {
 					double val = ivar->var[idx];
 
-					if (!isnan(val)) {
+					if (!std::isnan(val)) {
 						int bin = ivar->pv_binned.binfinder.val2bin(val);
 						if (bin < 0) {
 							if (val <= ivar->pv_binned.binfinder.get_breaks().front())

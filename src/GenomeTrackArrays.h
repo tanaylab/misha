@@ -1,17 +1,11 @@
 #ifndef GENOMETRACKARRAYS_H_
 #define GENOMETRACKARRAYS_H_
 
-#include <math.h>
+#include <cmath>
 #include <vector>
 
 #include "GenomeTrack1D.h"
 #include "GIntervals.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
@@ -140,7 +134,7 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 
 		for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 			v = (*itrack)->get_sliced_val(iinterv - m_intervals.begin());
-			if (!isnan(v)) {
+			if (!std::isnan(v)) {
 				(*itrack)->m_last_sum += v;
 				(*itrack)->m_last_min = min((*itrack)->m_last_min, v);
 				(*itrack)->m_last_max = max((*itrack)->m_last_max, v);
