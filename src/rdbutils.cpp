@@ -38,7 +38,6 @@
 
 using namespace std;
 using namespace rdb;
-using namespace __gnu_cxx;
 
 // A hack into R to change the default error report mechanism.
 //
@@ -89,12 +88,10 @@ size_t               RdbInitializer::s_max_res_size;
 size_t               RdbInitializer::s_max_mem_usage;
 bool                 RdbInitializer::s_is_kid = false;
 pid_t                RdbInitializer::s_parent_pid = 0;
-sem_t                RdbInitializer::s_signal_sem;
 sem_t               *RdbInitializer::s_shm_sem = SEM_FAILED;
 sem_t               *RdbInitializer::s_alloc_suspend_sem = SEM_FAILED;
 int                  RdbInitializer::s_kid_index;
 vector<RdbInitializer::LiveStat>     RdbInitializer::s_running_pids;
-vector<RdbInitializer::DeathStat>    RdbInitializer::s_dead_pids;
 RdbInitializer::Shm *RdbInitializer::s_shm = (RdbInitializer::Shm *)MAP_FAILED;
 struct sigaction     RdbInitializer::s_old_sigint_act;
 struct sigaction     RdbInitializer::s_old_sigchld_act;
@@ -116,18 +113,11 @@ RdbInitializer::RdbInitializer()
 		s_shm_size = 0;
 		s_is_kid = false;
 		s_parent_pid = getpid();
-		sem_init(&s_signal_sem, 0, 0);
 		s_shm_sem = SEM_FAILED;
 		s_alloc_suspend_sem = SEM_FAILED;
 		s_shm = (Shm *)MAP_FAILED;
 		s_kid_index = 0;
 		s_running_pids.clear();
-		s_dead_pids.clear();
-
-		// These containers are altered in a signal handler of SIGCHLD.
-		// Since malloc should be avoided in a signal handler let's reserve the memory in advance.
-		s_running_pids.reserve(MAX_KIDS);
-		s_dead_pids.reserve(MAX_KIDS);
 
 		m_old_error_handler = TGLException::set_error_handler(TGLException::throw_error_handler);
 
@@ -179,22 +169,22 @@ RdbInitializer::~RdbInitializer()
 		if (!s_is_kid) {
 			if (s_shm_sem != SEM_FAILED) {
 				SemLocker sl(s_shm_sem);
-				SigchldBlocker sb;
+				SigBlocker sb;
 
 				// kill all the remaining child processes
-				for (vector<LiveStat>::const_iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid) 
+				for (vector<LiveStat>::const_iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid)
 					kill(ipid->pid, SIGTERM);
 			}
 
 			// after SIGTERM is sent to all the kids let's wait till sigchld_hander() burries them all
-			while (1) {
-				{
-					SigchldBlocker sb;
-					if (s_running_pids.empty()) 
-						break;
-				}
-				sem_wait(&s_signal_sem);
-			}
+            while (1) {
+                SigBlocker sb;
+                check_kids_state(true);
+                if (s_running_pids.empty())
+                    break;
+
+                sigsuspend(&sb.oldsigset);
+            }
 
 			if (s_shm_sem != SEM_FAILED)
 				sem_close(s_shm_sem); // semaphore should be already unlinked, only need to close it
@@ -215,8 +205,6 @@ RdbInitializer::~RdbInitializer()
 		// install old signal handlers
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
 		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
-
-		sem_destroy(&s_signal_sem);
 
 		// close all file descriptors opened during the session
 		set<int> open_fds;
@@ -318,8 +306,6 @@ pid_t RdbInitializer::launch_process()
 	if (s_kid_index >= MAX_KIDS) 
 		verror("Too many child processes");
 
-	SigchldBlocker sb;
-
 	check_interrupt();
 
 	{
@@ -365,9 +351,47 @@ pid_t RdbInitializer::launch_process()
 	return pid;
 }
 
+void RdbInitializer::check_kids_state(bool ignore_errors)
+{
+    int status;
+    pid_t pid;
+
+    while ((pid = waitpid((pid_t)-1, &status, WNOHANG)) > 0) {
+        int kid_idx = -1;
+
+        for (vector<LiveStat>::iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid) {
+            if (ipid->pid == pid) {
+                swap(*ipid, s_running_pids.back());
+                s_running_pids.pop_back();
+
+                if (!ignore_errors && !WIFEXITED(status))
+                    verror("Child process %d ended unexpectedly", (int)ipid->pid);
+
+                // choose a new untouchable kid: the one with maximal memory consumption
+                if (kid_idx == s_shm->untouchable_kid_idx && s_running_pids.size()) {
+                    int untouchable_kid_idx = s_running_pids.begin()->index;
+                    int64_t max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
+                    for (vector<LiveStat>::iterator ipid2 = s_running_pids.begin() + 1; ipid2 < s_running_pids.end(); ++ipid2) {
+                        if (max_kid_mem_usage < s_shm->mem_usage[ipid2->index]) {
+                            untouchable_kid_idx = ipid->index;
+                            max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
+                        }
+                    }
+                    s_shm->untouchable_kid_idx = untouchable_kid_idx;
+                }
+                break;
+            }
+        }
+
+        if (kid_idx >= 0)
+            s_shm->is_alive[kid_idx] = false;
+    }
+}
+
 void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 {
 	int64_t delay_msec = LAUNCH_DELAY / 2;
+    bool slept_once = false;
 
 	struct timespec timeout, last_progress_time, last_delay_change_time;
 	int last_progress = -1;
@@ -375,111 +399,82 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 	clock_gettime(CLOCK_REALTIME, &timeout);
 	last_progress_time = last_delay_change_time = timeout;
 
-	while (1) {
-		clock_gettime(CLOCK_REALTIME, &timeout);
-		set_abs_timeout(delay_msec, timeout);
+    while (1) {
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        set_rel_timeout(delay_msec, timeout);
 
-		// sem_wait is interrupted by signal handlers
-		while (sem_timedwait(&s_signal_sem, &timeout) < 0 && errno == EINTR)
-			;
+        check_interrupt();
+        check_kids_state(false);
 
-		check_interrupt();
+        {
+            SemLocker sl(s_shm_sem);
+            if (s_shm->error_msg[0])
+                verror("%s", s_shm->error_msg);
+        }
 
-		{
-			SemLocker sl(s_shm_sem);
-			if (s_shm->error_msg[0])
-				verror("%s", s_shm->error_msg);
-		}
+        if (s_res_var_size) {
+            // update of data_size is atomic => don't use a semaphore
+            size_t res_num_records = 0;
 
-		SigchldBlocker sb;
-		while (s_dead_pids.size()) {
-			const DeathStat &death_stat = s_dead_pids.back();
+            for (int i = 0; i < get_num_kids(); ++i)
+                res_num_records += s_shm->kid_res_num_records[i];
+            iu.verify_max_data_size(res_num_records, "Result");
+        }
 
-			{
-				SemLocker sl(s_shm_sem);
-				s_shm->num_kids_running--;
-				if (death_stat.index >= 0) {
-					s_shm->total_mem_usage -= s_shm->mem_usage[death_stat.index];
-					s_shm->mem_usage[death_stat.index] = 0;
-				}
+        if (s_running_pids.empty()) 
+            break;
 
-			}
-			if (WIFEXITED(death_stat.status))
-				s_dead_pids.pop_back();
-			else
-				verror("Child process %d ended unexpectedly", (int)death_stat.pid);
+        nanosleep(&timeout, NULL);
 
-			// increase the frequency of memory usage checks after child process death
-			if (s_running_pids.size() > 1) {
-				delay_msec = MEM_SYNC_DELAY / 2;
-				clock_gettime(CLOCK_REALTIME, &last_delay_change_time);
-			} else
-				delay_msec = REPORT_INTERVAL_DELAY;
-		}
+        int64_t total_mem_usage = s_shm->total_mem_usage;
 
-		if (s_res_var_size) {
-			// update of data_size is atomic => don't use a semaphore
-			size_t res_num_records = 0;
+        update_kids_mem_usage();
 
-			for (int i = 0; i < get_num_kids(); ++i)
-				res_num_records += s_shm->kid_res_num_records[i];
-			iu.verify_max_data_size(res_num_records, "Result");
-		}
+        // Check the memory consumption increase from the last measurement. If the memory limit is going to be
+        // breached till the next measurement => increase the monitoring rate.
+        int64_t delta_mem_usage = s_shm->total_mem_usage - total_mem_usage;
+        int64_t time2reach_limit = -1;
 
-		if (s_running_pids.empty()) 
-			break;
+        if (delta_mem_usage > 0 && s_shm->total_mem_usage <= s_max_mem_usage)
+            time2reach_limit = delay_msec * ((s_max_mem_usage - s_shm->total_mem_usage) / delta_mem_usage);
 
-		if (s_running_pids.size() > 1) {
-			int64_t total_mem_usage = s_shm->total_mem_usage;
+        if (time2reach_limit >= 0 && time2reach_limit < delay_msec) {
+            delay_msec = min(MEM_SYNC_DELAY / 2, delay_msec);
+            delay_msec = max(delay_msec, time2reach_limit);
+            clock_gettime(CLOCK_REALTIME, &last_delay_change_time);
+        } else if (delay_msec < REPORT_INTERVAL_DELAY && is_time_elapsed(2 * s_running_pids.size() * delay_msec, last_delay_change_time)) {
+            // after (2 * s_running_pids.size() * initial_delay) increase the delay twice, i.e. lower down the frequency update_kids_mem_usage() is called
+            // anyway do not drop the delay below what is required for progress reporting
+            delay_msec = min(2 * delay_msec, REPORT_INTERVAL_DELAY);
+            clock_gettime(CLOCK_REALTIME, &last_delay_change_time);
+        }
 
-			update_kids_mem_usage();
+        if (is_time_elapsed(REPORT_INTERVAL_DELAY, last_progress_time)) {
+            // update of progress is atomic => don't use a semaphore
+            int progress = 0;
 
-			// Check the memory consumption increase from the last measurement. If the memory limit is going to be
-			// bridged till the next measurement => increase the monitoring rate.
-			int64_t delta_mem_usage = s_shm->total_mem_usage - total_mem_usage;
-			int64_t time2reach_limit = -1;
+            for (int i = 0; i < get_num_kids(); ++i) 
+                progress += s_shm->kid_progress[i];
 
-			if (delta_mem_usage > 0 && s_shm->total_mem_usage <= s_max_mem_usage)
-				time2reach_limit = delay_msec * ((s_max_mem_usage - s_shm->total_mem_usage) / delta_mem_usage);
+            progress = progress / get_num_kids();
+            if (progress < 100 && progress != last_progress)
+                Rprintf("%d%%...", progress); 
+            else {
+                if (last_progress == -1) 
+                    Rprintf("0%%...");
+                else
+                    Rprintf(".");
+            }
+            last_progress = progress;
+            clock_gettime(CLOCK_REALTIME, &last_progress_time);
+        }
 
-			if (time2reach_limit >= 0 && time2reach_limit < delay_msec) {
-				delay_msec = min(MEM_SYNC_DELAY / 2, delay_msec);
-				delay_msec = max(delay_msec, time2reach_limit);
-				clock_gettime(CLOCK_REALTIME, &last_delay_change_time);
-			} else if (delay_msec < REPORT_INTERVAL_DELAY && is_time_elapsed(2 * s_running_pids.size() * delay_msec, last_delay_change_time)) {
-				// after (2 * s_running_pids.size() * initial_delay) increase the delay twice, i.e. lower down the frequency update_kids_mem_usage() is called
-				// anyway do not drop the delay below what is required for progress reporting
-				delay_msec = min(2 * delay_msec, REPORT_INTERVAL_DELAY);
-				clock_gettime(CLOCK_REALTIME, &last_delay_change_time);
-			}
-		}
-
-		if (is_time_elapsed(REPORT_INTERVAL_DELAY, last_progress_time)) {
-			// update of progress is atomic => don't use a semaphore
-			int progress = 0;
-
-			for (int i = 0; i < get_num_kids(); ++i) 
-				progress += s_shm->kid_progress[i];
-			
-			progress = progress / get_num_kids();
-			if (progress < 100 && progress != last_progress)
-				Rprintf("%d%%...", progress); 
-			else {
-				if (last_progress == -1) 
-					Rprintf("0%%...");
-				else
-					Rprintf(".");
-			}
-			last_progress = progress;
-			clock_gettime(CLOCK_REALTIME, &last_progress_time);
-		}
-		
-		if (!s_shm->num_kids_running || s_shm->total_mem_usage < s_max_mem_usage) {
-			// wake up suspended processes
-			for (int i = 0; i < s_shm->num_kids_suspended; ++i) 
-				sem_post(s_alloc_suspend_sem);
-		}
-	}
+        if (!s_shm->num_kids_running || s_shm->total_mem_usage < s_max_mem_usage) {
+            // wake up suspended processes
+            for (int i = 0; i < s_shm->num_kids_suspended; ++i) 
+                sem_post(s_alloc_suspend_sem);
+        }
+    }
 
 	if (last_progress >= 0) 
 		Rprintf("100%%\n");
@@ -554,57 +549,12 @@ void RdbInitializer::sigint_handler(int)
 
 	// Normally this condition should be always true since the kid installs the default handler for SIGINT.
 	// However due to race condition the old handler might still be in use.
-	if (getpid() == s_parent_pid) {
-		// wake up myself from wait_for_kids()
-		sem_post(&s_signal_sem);
+	if (getpid() == s_parent_pid)
 		printf("CTL-C!\n");
-	}
 }
 
 void RdbInitializer::sigchld_handler(int)
 {
-	// Normally this condition should be always true since the kid installs the default handler for SIGINT.
-	// However due to race condition the old handler might still be in use.
-	if (getpid() == s_parent_pid) {
-		int status;
-		pid_t pid;
-
-		while ((pid = waitpid((pid_t)-1, &status, WNOHANG)) > 0) {
-			int kid_idx = -1;
-
-			for (vector<LiveStat>::iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid) {
-				if (ipid->pid == pid) {
-					kid_idx = ipid->index;
-					if (ipid != s_running_pids.end() - 1)
-						*ipid = *(s_running_pids.end() - 1);
-					s_running_pids.pop_back();
-
-					// choose a new untouchable kid: the one with maximal memory consumption
-					if (kid_idx == s_shm->untouchable_kid_idx && s_running_pids.size()) {
-						int untouchable_kid_idx = s_running_pids.begin()->index;
-						int64_t max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
-						for (vector<LiveStat>::iterator ipid2 = s_running_pids.begin() + 1; ipid2 < s_running_pids.end(); ++ipid2) {
-							if (max_kid_mem_usage < s_shm->mem_usage[ipid2->index]) {
-								untouchable_kid_idx = ipid->index;
-								max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
-							}
-						}
-						s_shm->untouchable_kid_idx = untouchable_kid_idx;
-					}
-					break;
-				}
-			}
-
-			if (kid_idx >= 0) {
-				// malloc is forbidden in signal handlers, but the space was previously reserved for large number
-				// of PIDs, therefore push_back does not initiate malloc
-				s_dead_pids.push_back(DeathStat(pid, kid_idx, status));
-				s_shm->is_alive[kid_idx] = false;
-			}
-		}
-
-		sem_post(&s_signal_sem);
-	}
 }
 
 void RdbInitializer::get_open_fds(set<int> &fds)

@@ -56,7 +56,7 @@ SEXP gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_inte
 
 		GIntervalsFetcher2D *initial_scope = NULL;
 		iu.convert_rintervs(_intervals, NULL, &initial_scope);
-		auto_ptr<GIntervalsFetcher2D> initial_scope_guard(initial_scope);
+		unique_ptr<GIntervalsFetcher2D> initial_scope_guard(initial_scope);
 
 		set<ChromPair> chrompairs_mask;
 		GIntervals2D all_genome_intervs2d;
@@ -68,7 +68,7 @@ SEXP gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_inte
 				chrompairs_mask.insert(ChromPair(iinterval->chromid1(), iinterval->chromid2()));
 		}
 
-		auto_ptr<GIntervalsFetcher2D> scope(initial_scope->create_masked_copy(chrompairs_mask));
+		unique_ptr<GIntervalsFetcher2D> scope(initial_scope->create_masked_copy(chrompairs_mask));
 		scope->sort();
 		scope->verify_no_overlaps(iu.get_chromkey());
 

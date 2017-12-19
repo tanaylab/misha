@@ -2,7 +2,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fstream>
-#include <ext/hash_map>
+#include <unordered_map>
 
 #include "HashFunc.h"
 #include "rdbinterval.h"
@@ -16,12 +16,12 @@
 using namespace std;
 using namespace rdb;
 
-typedef hash_map<pair<size_t, size_t>, double> Contacts;
+typedef unordered_map<pair<size_t, size_t>, double> Contacts;
 typedef pair<size_t, size_t> Chrom_pair;
 
-class Contact_chrom_files : public hash_map<Chrom_pair, BufferedFile *> {
+class Contact_chrom_files : public unordered_map<Chrom_pair, BufferedFile *> {
 public:
-	Contact_chrom_files() : hash_map<Chrom_pair, BufferedFile *>() {}
+	Contact_chrom_files() : unordered_map<Chrom_pair, BufferedFile *>() {}
 
 	~Contact_chrom_files() {
 		for (iterator ifile = begin(); ifile != end(); ++ifile) 
@@ -444,7 +444,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 				const Rectangles &subarenas = qtree_serializer1.get_subarenas();
 
 				for (size_t i = 0; i < subtrees_files.size(); ++i) {
-					sprintf(filename, "%s/.%d", dirname.c_str(), i);
+					sprintf(filename, "%s/.%ld", dirname.c_str(), i);
 					subtrees_files[i] = new BufferedFile();
 					if (subtrees_files[i]->open(filename, "w+")) 
 						verror("Opening an intermediate file %s: %s\n", filename, strerror(errno));

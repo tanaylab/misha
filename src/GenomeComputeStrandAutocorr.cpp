@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include <ext/hash_map>
+#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -150,7 +150,7 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 					}
 
 					while (num_nonempty_strs == NUM_COLS) {
-						hash_map<string, int>::iterator istr2chrom;
+						unordered_map<string, int>::iterator istr2chrom;
 						int chrom_idx;
 						int64_t coord;
 						char *endptr;

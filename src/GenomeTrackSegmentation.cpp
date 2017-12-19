@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cmath>
 #include <vector>
 
 #include "IncrementalWilcox.h"
@@ -14,12 +15,6 @@
 #include "TrackExpressionIterator.h"
 #include "TrackExpressionFixedBinIterator.h"
 #include "TrackExpressionScanner.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 using namespace rdb;
@@ -82,7 +77,7 @@ SEXP gsegment(SEXP _expr, SEXP _intervals, SEXP _minsegment, SEXP _maxz, SEXP _o
 		IntervUtils iu(_envir);
 		GIntervalsFetcher1D *intervals = NULL;
 		iu.convert_rintervs(_intervals, &intervals, NULL);
-		auto_ptr<GIntervalsFetcher1D> intervals_guard(intervals);
+		unique_ptr<GIntervalsFetcher1D> intervals_guard(intervals);
 		intervals->sort();
 		intervals->unify_overlaps();
 
@@ -163,7 +158,7 @@ SEXP gsegment(SEXP _expr, SEXP _intervals, SEXP _minsegment, SEXP _maxz, SEXP _o
 
 			double v = scanner.last_real(0);
 
-			if (!isnan(v)) {
+			if (!std::isnan(v)) {
 				// 1. fill first the current segment
 				if (wilcox.n1() < winsize) {
 					wilcox.update(numeric_limits<double>::quiet_NaN(), v, numeric_limits<double>::quiet_NaN(), numeric_limits<double>::quiet_NaN());

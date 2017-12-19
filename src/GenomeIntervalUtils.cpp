@@ -353,7 +353,7 @@ SEXP ginterv_intersectband(SEXP _intervs, SEXP _band, SEXP _intervals_set_out, S
 		IntervUtils iu(_envir);
 		GIntervalsFetcher2D *intervs = NULL;
 		iu.convert_rintervs(_intervs, NULL, &intervs);
-		auto_ptr<GIntervalsFetcher2D> intervs_guard(intervs);
+		unique_ptr<GIntervalsFetcher2D> intervs_guard(intervs);
 		intervs->sort();
 		intervs->verify_no_overlaps(iu.get_chromkey());
 
@@ -648,7 +648,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			if (!isString(_chrom) && !isFactor(_chrom) || length(_chrom) != 1)
 				verror("Chromosome argument is not a string");
 
-			auto_ptr<GenomeTrack1D> track;
+			unique_ptr<GenomeTrack1D> track;
 			GIntervals *intervals = NULL;
 
 			SEXP chrom_levels = getAttrib(_chrom, R_LevelsSymbol);
@@ -658,11 +658,11 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			string filename(trackpath + "/" + GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid));
 
 			if (track_type == GenomeTrack::SPARSE) {
-				track = auto_ptr<GenomeTrack1D>(new GenomeTrackSparse());
+				track = unique_ptr<GenomeTrack1D>(new GenomeTrackSparse());
 				((GenomeTrackSparse *)track.get())->init_read(filename.c_str(), chromid);
 				intervals = (GIntervals *)&((GenomeTrackSparse *)track.get())->get_intervals();
 			} else if (track_type == GenomeTrack::ARRAYS) {
-				track = auto_ptr<GenomeTrack1D>(new GenomeTrackArrays());
+				track = unique_ptr<GenomeTrack1D>(new GenomeTrackArrays());
 				((GenomeTrackArrays *)track.get())->init_read(filename.c_str(), chromid);
 				intervals = (GIntervals *)&((GenomeTrackArrays *)track.get())->get_intervals();
 			}
@@ -672,7 +672,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			if (!isString(_chrom1) && !isFactor(_chrom1) || length(_chrom1) != 1 || !isString(_chrom2) && !isFactor(_chrom2) || length(_chrom2) != 1)
 				verror("Chromosome argument is not a string");
 
-			auto_ptr<GenomeTrack2D> track;
+			unique_ptr<GenomeTrack2D> track;
 			GIntervals2D intervals;
 			size_t size = 0;
 
@@ -686,15 +686,15 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
 
 			if (track_type == GenomeTrack::RECTS) {
-				track = auto_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+				track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
 				((GenomeTrackRectsRects *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
 				size = ((GenomeTrackRectsRects *)track.get())->get_qtree().get_num_objs();
 			} else if (track_type == GenomeTrack::POINTS) {
-				track = auto_ptr<GenomeTrack2D>(new GenomeTrackRectsPoints(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+				track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsPoints(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
 				((GenomeTrackRectsPoints *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
 				size = ((GenomeTrackRectsPoints *)track.get())->get_qtree().get_num_objs();
 			} else if (track_type == GenomeTrack::COMPUTED) {
-				track = auto_ptr<GenomeTrack2D>(new GenomeTrackComputed(get_groot(_envir), iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+				track = unique_ptr<GenomeTrack2D>(new GenomeTrackComputed(get_groot(_envir), iu.get_track_chunk_size(), iu.get_track_num_chunks()));
 				((GenomeTrackComputed *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
 				size = ((GenomeTrackComputed *)track.get())->get_qtree().get_num_objs();
 			}

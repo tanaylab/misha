@@ -5,20 +5,15 @@
  *      Author: hoichman
  */
 
-#include "BinFinder.h"
+#include <cmath>
 
+#include "BinFinder.h"
 #include "rdbinterval.h"
 #include "rdbutils.h"
 #include "GenomeTrack.h"
 #include "GIntervalsBigSet1D.h"
 #include "GIntervalsBigSet2D.h"
 #include "TrackExpressionScanner.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 using namespace rdb;
@@ -140,8 +135,8 @@ SEXP gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_l
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals1d->unify_overlaps();
 		intervals2d->sort();
@@ -162,7 +157,7 @@ SEXP gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_l
 			for (; !scanner.isend(); scanner.next()) {
 				const GInterval &cur_interval = scanner.last_interval1d();
 				double val = scanner.last_real(0);
-				int cur_bin = isnan(val) ? -1 : bin_finder.val2bin(val);
+				int cur_bin = std::isnan(val) ? -1 : bin_finder.val2bin(val);
 
 				if (last_bin >= 0 && (cur_bin != last_bin || cur_interval.start != interval.end || cur_interval.chromid != interval.chromid))
 					gpartition_add_interval2res(interval, res_intervals, res_bins, last_bin + 1, bin_finder, include_lowest, intervset_out, chromstats, iu);
@@ -201,7 +196,7 @@ SEXP gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_l
 			for (; !scanner.isend(); scanner.next()) {
 				const GInterval2D &cur_interval = scanner.last_interval2d();
 				double val = scanner.last_real(0);
-				int cur_bin = isnan(val) ? -1 : bin_finder.val2bin(val);
+				int cur_bin = std::isnan(val) ? -1 : bin_finder.val2bin(val);
 
 				if (cur_bin >= 0)
 					gpartition_add_interval2res(cur_interval, res_intervals, res_bins, cur_bin + 1, bin_finder, include_lowest, intervset_out, chromstats, iu);

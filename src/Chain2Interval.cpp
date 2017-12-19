@@ -2,7 +2,7 @@
 #include <set>
 #include <string>
 #include <vector>
-#include <ext/hash_map>
+#include <unordered_map>
 
 #include "HashFunc.h"
 #include "BufferedFile.h"
@@ -10,7 +10,6 @@
 #include "rdbutils.h"
 #include "strutil.h"
 
-using namespace __gnu_cxx;
 using namespace std;
 using namespace rdb;
 
@@ -37,7 +36,7 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
 
 		ChainIntervals chain_intervs;
 		vector<string> fields(NUM_FIELDS);
-		hash_map<string, int> chrom2id; // used only for source chroms
+		unordered_map<string, int> chrom2id; // used only for source chroms
 		vector<string> id2chrom;        // used only for source chroms
 		vector<int64_t> chrom_sizes;    // used only for source chroms
 		int chrom[2] = { -1, -1 };
@@ -65,7 +64,7 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
 					TGLError("Chain file %s, line %ld: invalid file format", chainfname, lineno);
 
 				// CHROM1
-				hash_map<string, int>::const_iterator ichrom2id = chrom2id.find(fields[CHROM1]);
+				unordered_map<string, int>::const_iterator ichrom2id = chrom2id.find(fields[CHROM1]);
 				if (ichrom2id == chrom2id.end()) {
 					chrom[SRC] = id2chrom.size();
 					chrom2id[fields[CHROM1]] = chrom[SRC];

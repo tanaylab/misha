@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "GIntervals.h"
 
 void GIntervals::sort(bool (*cmp_function)(const GInterval &, const GInterval &))
@@ -5,7 +7,7 @@ void GIntervals::sort(bool (*cmp_function)(const GInterval &, const GInterval &)
 	// do not sort automatically, check first that the intervals are not sorted yet
 	for (iterator iinterv = begin() + 1; iinterv < end(); ++iinterv) {
 		if (cmp_function(*iinterv, *(iinterv - 1))) {
-			::sort(begin(), end(), cmp_function);
+			std::sort(begin(), end(), cmp_function);
 			break;
 		}
 	}

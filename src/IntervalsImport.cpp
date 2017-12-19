@@ -1,4 +1,4 @@
-#include <ext/hash_map>
+#include <unordered_map>
 
 #include "port.h"
 BASE_CC_FILE
@@ -13,7 +13,7 @@ using namespace std;
 using namespace rdb;
 
 typedef vector<string> Annots;
-typedef hash_map<string, Annots> Id2Annots;
+typedef unordered_map<string, Annots> Id2Annots;
 
 void read_annots_file(const char *annots_fname, Id2Annots &id2annots, int num_annots)
 {

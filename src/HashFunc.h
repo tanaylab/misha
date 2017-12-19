@@ -1,11 +1,7 @@
 #ifndef HASHFUNC_H_
 #define HASHFUNC_H_
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
 #include <functional>
-#else
-#include <ext/hash_fun.h>
-#endif
 
 #include <sys/param.h>
 #ifdef _BSD
@@ -14,13 +10,8 @@
 #include <byteswap.h>
 #endif
 
-namespace __gnu_cxx
+namespace std
 {
-	template<> struct hash<std::string>
-	{
-		size_t operator()(const std::string &s) const { return hash<const char *>()(s.c_str()); }
-	};
-
 	// This hash works for a pair of ids that can reach up to sizeof_t.
 	// Ideally we would like the hash to be:
 	//      v1 | bit_reverse(v2)

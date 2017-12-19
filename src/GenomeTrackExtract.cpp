@@ -99,8 +99,8 @@ SEXP gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_polic
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
@@ -306,8 +306,8 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());

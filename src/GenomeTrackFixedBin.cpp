@@ -1,17 +1,11 @@
 #include <errno.h>
-#include <math.h>
+#include <cmath>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include "TGLException.h"
 #include "GenomeTrackFixedBin.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 {
@@ -23,7 +17,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		if (read_next_bin(m_last_avg)) {
 			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
-			if (m_use_quantile && !isnan(m_last_avg))
+			if (m_use_quantile && !std::isnan(m_last_avg))
 				m_sp.add(m_last_avg);
 		} else
 			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
@@ -38,7 +32,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		if (read_next_bin(m_last_avg)) {
 			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
-			if (m_use_quantile && !isnan(m_last_avg))
+			if (m_use_quantile && !std::isnan(m_last_avg))
 				m_sp.add(m_last_avg);
 		} else
 			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
@@ -53,7 +47,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 		goto_bin(sbin);
 		for (int64_t bin = sbin; bin < ebin; ++bin) {
-			if (read_next_bin(v) && !isnan(v)) {
+			if (read_next_bin(v) && !std::isnan(v)) {
 				m_last_sum += v;
 				m_last_min = min(m_last_min, v);
 				m_last_max = max(m_last_max, v);
@@ -61,7 +55,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				if (m_functions[STDDEV])
 					mean_square_sum += v * v;
 
-				if (m_use_quantile && !isnan(v))
+				if (m_use_quantile && !std::isnan(v))
 					m_sp.add(v);
 
 				++num_vs;

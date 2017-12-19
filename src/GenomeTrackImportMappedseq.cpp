@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include <ext/hash_map>
+#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -93,7 +93,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 		IntervUtils iu(_envir);
 		GIntervals all_genome_intervs;
-		hash_map<string, int> str2chrom;
+		unordered_map<string, int> str2chrom;
 		int64_t genome_len = 0;
 
 		iu.get_all_genome_intervs(all_genome_intervs);
@@ -162,7 +162,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 					}
 
 					while (num_nonempty_strs == NUM_COLS) {
-						hash_map<string, int>::iterator istr2chrom;
+						unordered_map<string, int>::iterator istr2chrom;
 						int chrom_idx;
 						int64_t coord;
 						char *endptr;

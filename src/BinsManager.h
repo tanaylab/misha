@@ -1,6 +1,7 @@
 #ifndef BINSMANAGER_H_
 #define BINSMANAGER_H_
 
+#include <cmath>
 #include <vector>
 
 #include "BinFinder.h"
@@ -8,12 +9,6 @@
 
 #include <R.h>
 #include <Rinternals.h>
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 
@@ -46,7 +41,7 @@ inline int BinsManager::vals2idx(const vector<double> &vals) const
 	int res = 0;
 
 	for (vector<double>::const_iterator ival = vals.begin(); ival != vals.end(); ++ival) {
-		if (isnan(*ival))
+		if (std::isnan(*ival))
 			return -1;
 
 		int index = ival - vals.begin();

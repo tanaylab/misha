@@ -8,14 +8,8 @@
 #ifndef BINFINDER_H_
 #define BINFINDER_H_
 
-#include <math.h>
+#include <cmath>
 #include <vector>
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 #include "TGLException.h"
 
@@ -59,7 +53,7 @@ inline int BinFinder::val2bin(double val) const
 	if (m_include_lowest && val == m_breaks.front())
 		return 0;
 
-	if (isnan(val) || val <= m_breaks.front() || val > m_breaks.back())
+	if (std::isnan(val) || val <= m_breaks.front() || val > m_breaks.back())
 		return -1;
 
 	if (m_binsize) // are we using the same bin size for all bins?

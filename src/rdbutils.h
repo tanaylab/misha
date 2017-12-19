@@ -24,14 +24,7 @@
 
 #include "TGLException.h"
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
-
 using namespace std;
-using namespace __gnu_cxx;
 
 //------------------------------- UTILITY FUNCTIONS -------------------------------------
 
@@ -195,14 +188,6 @@ private:
 		LiveStat(pid_t _pid, int _index) : pid(_pid), index(_index) {}
 	};
 
-	struct DeathStat {
-		pid_t pid;
-		int   index;
-		int   status;
-
-		DeathStat(pid_t _pid, int _index, int _status) : pid(_pid), index(_index), status(_status) {}
-	};
-
 	struct Shm {
 		char          error_msg[10000];
 		size_t        res_offset;
@@ -218,17 +203,19 @@ private:
 		char          res;
 	};
 
-	struct SigchldBlocker {
-		SigchldBlocker() {
-			sigemptyset(&sigset);
-			sigaddset(&sigset, SIGCHLD);
-			sigprocmask(SIG_BLOCK, &sigset, NULL);
-		}
+    struct SigBlocker {
+        SigBlocker() {
+            sigemptyset(&sigset);
+            sigaddset(&sigset, SIGCHLD);
+            sigaddset(&sigset, SIGINT);
+            sigprocmask(SIG_BLOCK, &sigset, &oldsigset);
+        }
 
-		~SigchldBlocker() { sigprocmask(SIG_UNBLOCK, &sigset, NULL); }
+        ~SigBlocker() { sigprocmask(SIG_UNBLOCK, &sigset, NULL); }
 
-		sigset_t sigset;
-	};
+        sigset_t sigset;
+        sigset_t oldsigset;
+    };
 
 	// all delays are in milliseconds
 	static const int64_t        LAUNCH_DELAY;
@@ -242,13 +229,11 @@ private:
 	static size_t               s_max_mem_usage;
 	static bool                 s_is_kid;
 	static pid_t                s_parent_pid;
-	static sem_t                s_signal_sem;
 	static sem_t               *s_shm_sem;
 	static sem_t               *s_alloc_suspend_sem;
 
 	static int                  s_kid_index;
 	static vector<LiveStat>     s_running_pids;
-	static vector<DeathStat>    s_dead_pids;
 	static Shm                 *s_shm;
 
 	static struct sigaction     s_old_sigint_act;
@@ -272,6 +257,7 @@ private:
 	static void    get_open_fds(set<int> &fds);
 	static void    prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids);
 	static pid_t   launch_process();
+    static void    check_kids_state(bool ignore_errors);
 	static void    wait_for_kids(rdb::IntervUtils &iu);
 	static int64_t update_kids_mem_usage();
 	static int     get_num_kids() { return s_kid_index; }
@@ -318,7 +304,7 @@ private:
 	// 2. It has a delay of 3 seconds. Since the memory consumption check is resource intensive we do not want to increase the rate of checking
 	//    unless it is absolutely necessary.
 	// 
-	// The long delay between the checks creates an issue that child processes might bridge the memory limit during these 3 seconds. The issue
+	// The long delay between the checks creates an issue that child processes might breach the memory limit during these 3 seconds. The issue
 	// is especially likely to happen right after the processes are created: very frequently a freshly created process performs significant
 	// memory allocations that are required initiate its work. For example: each child process creates TrackExpressionScanner that might
 	// load the whole track chromosome into memory (for example if the iterator is a sparse track). Thus if 10 processes are spawned,

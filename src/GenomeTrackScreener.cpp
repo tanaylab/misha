@@ -85,8 +85,8 @@ SEXP gscreen(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEX
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals1d->unify_overlaps();
 		intervals2d->sort();
@@ -168,8 +168,8 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		GIntervalsFetcher1D *intervals1d = NULL;
 		GIntervalsFetcher2D *intervals2d = NULL;
 		iu.convert_rintervs(_intervals, &intervals1d, &intervals2d);
-		auto_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
-		auto_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
+		unique_ptr<GIntervalsFetcher1D> intervals1d_guard(intervals1d);
+		unique_ptr<GIntervalsFetcher2D> intervals2d_guard(intervals2d);
 		intervals1d->sort();
 		intervals1d->unify_overlaps();
 		intervals2d->sort();

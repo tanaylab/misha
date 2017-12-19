@@ -1389,7 +1389,12 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 		stop(sprintf("Directory %s already exists", groot), call. = F)
 
 	success <- FALSE
-	allgenome.old <- get("ALLGENOME")
+    allgenome.old <- NULL
+    groot.old <- NULL
+    if (exists("ALLGENOME"))
+	    allgenome.old <- get("ALLGENOME")
+    if (exists("GROOT"))
+        groot.old <- get("GROOT")
 
 	tryCatch({
 		dir.create(groot, showWarnings = F, recursive = TRUE, mode = "0777")
@@ -1419,6 +1424,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
     	rownames(intervals2d) <- 1 : nrow(intervals2d)
 
     	assign("ALLGENOME", list(intervals, intervals2d), envir = .GlobalEnv)
+    	assign("GROOT", groot, envir = .GlobalEnv)
 
 		if (!is.null(genes.file)) {
 			intervs <- gintervals.import_genes(genes.file, annots.file, annots.names)
@@ -1439,6 +1445,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 		success <- TRUE
 	}, finally = {
 		assign("ALLGENOME", allgenome.old, envir = .GlobalEnv)
+		assign("GROOT", groot.old, envir = .GlobalEnv)
 		if (!success)
 			unlink(groot, recursive = TRUE)
 	})

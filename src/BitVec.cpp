@@ -488,7 +488,7 @@ bool ds_bitvec::operator==(const ds_bitvec &other) const
 size_t ds_bitvec::hash() const 
 {
 	size_t sum = 0;
-	__gnu_cxx::hash<unsigned int> h;
+	std::hash<unsigned int> h;
 	for(vector<uint>::const_iterator i = bits.begin(); 
 	    i != bits.end(); 
 	    i++) {
@@ -500,10 +500,10 @@ bool equal_to<const ds_bitvec *>::operator()(const ds_bitvec *const &b1, const d
 	return((*b1) == (*b2));
 }
 
-size_t __gnu_cxx::hash<const ds_bitvec *>::operator()(const ds_bitvec * const &b) const {
+size_t std::hash<const ds_bitvec *>::operator()(const ds_bitvec * const &b) const {
 	return(b->hash());
 }
-size_t __gnu_cxx::hash<ds_bitvec *>::operator()(ds_bitvec * const &b) const {
+size_t std::hash<ds_bitvec *>::operator()(ds_bitvec * const &b) const {
 	return(b->hash());
 }
 
@@ -511,7 +511,7 @@ bool equal_to<ds_bitvec>::operator()(ds_bitvec const &b1, ds_bitvec const &b2) c
 	return(b1 == b2);
 }
 
-size_t __gnu_cxx::hash<ds_bitvec>::operator()(ds_bitvec const &b) const {
+size_t std::hash<ds_bitvec>::operator()(ds_bitvec const &b) const {
 	return(b.hash());
 }
 ostream &operator<<(ostream &out, const ds_bitvec &bv) {

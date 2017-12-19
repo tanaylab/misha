@@ -9,7 +9,7 @@
 #include <sys/timeb.h>
 
 #include <set>
-#include <ext/hash_set>
+#include <unordered_set>
 
 #include "port.h"
 

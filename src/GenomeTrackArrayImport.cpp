@@ -1,3 +1,4 @@
+#include <cmath>
 #include <list>
 #include <vector>
 
@@ -7,12 +8,6 @@
 
 #include "GenomeArraysCsv.h"
 #include "GenomeTrackArrays.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 using namespace rdb;
@@ -87,7 +82,7 @@ public:
 				float v1 = m_vals[slice];
 				float v2 = src2->m_vals[slice2];
 
-				if (v1 != v2 && !(isnan(v1) && isnan(v2)))
+				if (v1 != v2 && !(std::isnan(v1) && std::isnan(v2)))
 					verror("Non matching values (%g and %g) in column %s, interval (%s, %ld, %ld) contained in a %s %s and a %s %s",
 						   v2, v1, get_colnames()[slice].c_str(),
 						   m_chromkey.id2chrom(m_last_interval.chromid).c_str(), m_last_interval.start, m_last_interval.end,
@@ -248,7 +243,7 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 						if (idx2write == idx || iintervals[idx2write]->start == iintervals[idx]->start && iintervals[idx2write]->end == iintervals[idx]->end) {
 							const vector<float> &vals = sources[idx]->get_vals(iintervals[idx]);
 							for (unsigned i = 0; i < vals.size(); ++i) {
-								if (sources[idx]->check_writability(i) && !isnan(vals[i]))
+								if (sources[idx]->check_writability(i) && !std::isnan(vals[i]))
 									array_vals.push_back(GenomeTrackArrays::ArrayVal(vals[i], sources[idx]->get_array_idx(i)));
 							}
 

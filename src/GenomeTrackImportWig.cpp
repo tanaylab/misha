@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
@@ -6,12 +8,6 @@
 #include "GenomeTrackFixedBin.h"
 #include "GenomeTrackSparse.h"
 #include "Wig.h"
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifndef isnan
-#define isnan ::isnan
-#endif
-#endif
 
 using namespace std;
 using namespace rdb;
@@ -123,7 +119,7 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 						} else
 							v = defvalue;
 
-						if (!isnan(v)) {
+						if (!std::isnan(v)) {
 							sum += v;
 							++num_non_nans;
 						}

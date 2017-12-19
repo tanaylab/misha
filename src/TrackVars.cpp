@@ -14,7 +14,7 @@ struct TrackIdxVal {
 
 typedef list<TrackIdxVal> TrackIdxVals;
 
-typedef hash_map<string, TrackIdxVals> AttrsMap;
+typedef unordered_map<string, TrackIdxVals> AttrsMap;
 
 struct SortAttrs {
 	bool operator()(AttrsMap::const_iterator iattr1,  AttrsMap::const_iterator iattr2) {
@@ -75,7 +75,7 @@ SEXP gget_tracks_attrs(SEXP _tracks, SEXP _attrs, SEXP _envir)
 		vector<AttrsMap::const_iterator> sorted_attrs;
 
 		if (isNull(_attrs)) {
-			for (hash_map<string, TrackIdxVals>::const_iterator iattr = attrs.begin(); iattr != attrs.end(); ++iattr) 
+			for (unordered_map<string, TrackIdxVals>::const_iterator iattr = attrs.begin(); iattr != attrs.end(); ++iattr) 
 				sorted_attrs.push_back(iattr);
 			sort(sorted_attrs.begin(), sorted_attrs.end(), SortAttrs());
 		} else {

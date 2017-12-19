@@ -8,7 +8,7 @@
 #ifndef STATQUADTREECACHED_H_
 #define STATQUADTREECACHED_H_
 
-#include <ext/hash_map>
+#include <unordered_map>
 #include <list>
 #include <vector>
 
@@ -170,9 +170,9 @@ private:
 		int64_t   m_quad_ptr;
 	};
 
-	typedef list<Chunk>                                  Chunks;
-	typedef hash_map<int64_t, typename Chunks::iterator> Fpos2ichunk;
-	typedef vector<int64_t>                              Stacked_chunks_fpos;
+	typedef list<Chunk>                                       Chunks;
+	typedef unordered_map<int64_t, typename Chunks::iterator> Fpos2ichunk;
+	typedef vector<int64_t>                                   Stacked_chunks_fpos;
 
 	int64_t             m_chunk_size;
 	int64_t             m_max_num_chunks;

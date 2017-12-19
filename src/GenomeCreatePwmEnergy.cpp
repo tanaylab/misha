@@ -16,7 +16,6 @@ BASE_CC_FILE
 #include "rdbutils.h"
 
 using namespace std;
-using namespace __gnu_cxx;
 using namespace rdb;
 
 extern "C" {
