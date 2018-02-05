@@ -2676,7 +2676,7 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL) {
 	if (is.character(chain))
 		chain.intervs <- gintervals.load_chain(chain)
 	else
-		chain.intervs <- f
+		chain.intervs <- chain
 	
 	.gcall("gintervs_liftover", intervals, chain.intervs, new.env(parent = parent.frame()))
 }
