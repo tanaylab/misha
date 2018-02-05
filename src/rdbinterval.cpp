@@ -1256,13 +1256,16 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 {
 	tgt_intervs.clear();
 
+//for (auto i = begin(); i < end(); ++i)
+//printf("chrom %d, coord %ld\n", i->chromid_src, i->start_src);
+
 	if (empty())
 		return end();
 
 	if (front().chromid_src > src_interval.chromid || front().chromid_src == src_interval.chromid && front().start_src >= src_interval.end)
 		return begin();
 
-	if (back().chromid_src < src_interval.chromid || front().chromid_src == src_interval.chromid && back().start_src + back().end - back().start <= src_interval.start)
+	if (back().chromid_src < src_interval.chromid || back().chromid_src == src_interval.chromid && back().start_src + back().end - back().start <= src_interval.start)
 		return end() - 1;
 
 	if (check_first_overlap_src(hint, src_interval))
