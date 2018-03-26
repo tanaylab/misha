@@ -1,5 +1,5 @@
 #ifndef TRACKEXPRESSIONCARTESIANGRIDITERATOR_H_
-#define TRACKEXPRESSIONGCARTESIANRIDITERATOR_H_
+#define TRACKEXPRESSIONCARTESIANGRIDITERATOR_H_
 
 #include "GenomeChromKey.h"
 #include "GenomeTrackRects.h"
@@ -31,7 +31,7 @@ protected:
 		GridPoint() : chromid(-1), coord(-1), min_expansion(0), max_expansion(0) {}
 		GridPoint(int _chromid, int64_t _coord) : chromid(_chromid), coord(_coord), min_expansion(0), max_expansion(0) {}
 
-		bool operator<(const GridPoint &o) const { return chromid < o.chromid || chromid == o.chromid && coord < o.coord; }
+		bool operator<(const GridPoint &o) const { return chromid < o.chromid || (chromid == o.chromid && coord < o.coord); }
 		bool operator==(const GridPoint &o) const { return chromid == o.chromid && coord == o.coord; }
 	};
 

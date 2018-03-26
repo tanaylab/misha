@@ -18,7 +18,7 @@ typedef unordered_map<string, TrackIdxVals> AttrsMap;
 
 struct SortAttrs {
 	bool operator()(AttrsMap::const_iterator iattr1,  AttrsMap::const_iterator iattr2) {
-		return iattr1->second.size() > iattr2->second.size() || iattr1->second.size() == iattr2->second.size() && iattr1->first < iattr2->first;
+		return iattr1->second.size() > iattr2->second.size() || (iattr1->second.size() == iattr2->second.size() && iattr1->first < iattr2->first);
 	}
 };
 
@@ -95,7 +95,7 @@ SEXP gget_tracks_attrs(SEXP _tracks, SEXP _attrs, SEXP _envir)
 			SET_STRING_ELT(rrow_names, itrack, STRING_ELT(_tracks, itrack));
 
 		for (size_t i = 0; i < sorted_attrs.size(); ++i) {
-			SET_VECTOR_ELT(rattrs, i, (rattr = allocVector(STRSXP, length(_tracks))));
+            rprotect(rattr = allocVector(STRSXP, length(_tracks)));
 
 			for (int itrack = 0; itrack < length(_tracks); ++itrack) 
 				SET_STRING_ELT(rattr, itrack, mkChar(""));
@@ -104,6 +104,7 @@ SEXP gget_tracks_attrs(SEXP _tracks, SEXP _attrs, SEXP _envir)
 				SET_STRING_ELT(rattr, iattr->trackidx, mkChar(iattr->val.c_str()));
 
 			SET_STRING_ELT(rcol_names, i, mkChar(sorted_attrs[i]->first.c_str()));
+            SET_VECTOR_ELT(rattrs, i, rattr);
 		}
 
 		return rattrs;

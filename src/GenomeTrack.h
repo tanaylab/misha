@@ -59,7 +59,8 @@ public:
 
 	static const pair<int, int> get_chromid_2d(const GenomeChromKey &chromkey, const string &filename);
 
-protected:
+//protected:
+public:
 	static const bool IS_1D_TRACK[NUM_TYPES];
 
 	BufferedFile m_bfile;

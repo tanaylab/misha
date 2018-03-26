@@ -191,10 +191,10 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
 		}
 
-		if (intervset_out.empty() && iu.distribute_task(0, (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D))) ||
-			!intervset_out.empty() && iu.distribute_task(is_1d_iterator ?
+		if ((intervset_out.empty() && iu.distribute_task(0, (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)))) ||
+			(!intervset_out.empty() && iu.distribute_task(is_1d_iterator ?
 														 sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() :
-														 sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size(), 0)) 
+														 sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size(), 0)) )
 		{ // child process
 			TrackExprScanner scanner(iu);
 

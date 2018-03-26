@@ -19,7 +19,7 @@ bool TrackExpressionIntervals2DIterator::begin(const GenomeChromKey &chromkey, c
 	m_intersected_objs_indices.clear();
 	m_iintersection = m_intersection.end();
 
-	if (m_intervals->empty() || m_scope->isend())
+    if (m_intervals->empty() || !m_scope->size())
 		end();
 
 	return next();

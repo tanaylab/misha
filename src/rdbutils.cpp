@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <memory>
 #include <new>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -22,6 +23,11 @@
 	#define _POSIX_C_SOURCE 199309
 	#include <time.h>
 	#undef _POSIX_C_SOURCE
+#endif
+
+#if defined(__APPLE__)
+    #include <libproc.h>
+    #include <sys/proc_info.h>
 #endif
 
 #include "rdbinterval.h"
@@ -206,13 +212,13 @@ RdbInitializer::~RdbInitializer()
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
 		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
 
-		// close all file descriptors opened during the session
-		set<int> open_fds;
-		get_open_fds(open_fds);
-		for (set<int>::const_iterator ifd = open_fds.begin(); ifd != open_fds.end(); ++ifd) {
-			if (m_old_open_fds.find(*ifd) == m_old_open_fds.end())
-				close(*ifd);
-		}
+        // close all file descriptors opened during the session
+        set<int> open_fds;
+        get_open_fds(open_fds);
+        for (set<int>::const_iterator ifd = open_fds.begin(); ifd != open_fds.end(); ++ifd) {
+            if (m_old_open_fds.find(*ifd) == m_old_open_fds.end())
+                close(*ifd);
+        }
 
 		umask(m_old_umask);
 
@@ -330,10 +336,16 @@ pid_t RdbInitializer::launch_process()
 
 		SEXP r_multitasking_stdout = GetOption(install("gmultitasking_stdout"), R_NilValue);
 
-		if (!isLogical(r_multitasking_stdout) || !(int)LOGICAL(r_multitasking_stdout)[0])
-			fclose(stdout);
-		fclose(stderr);
-		fclose(stdin);
+		if (!isLogical(r_multitasking_stdout) || !(int)LOGICAL(r_multitasking_stdout)[0]) {
+            if (!freopen("/dev/null", "w", stdout))
+                verror("Failed to open /dev/null");
+        }
+
+        if (!freopen("/dev/null", "w", stderr))
+            verror("Failed to open /dev/null");
+
+        if (!freopen("/dev/null", "r", stdin))
+            verror("Failed to open /dev/null");
 
 		int64_t delta_mem_usage = get_unique_mem_usage(getpid()) - s_shm->mem_usage[s_kid_index];
 		s_shm->mem_usage[s_kid_index] += delta_mem_usage;
@@ -361,6 +373,7 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
 
         for (vector<LiveStat>::iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid) {
             if (ipid->pid == pid) {
+                kid_idx = ipid->index;
                 swap(*ipid, s_running_pids.back());
                 s_running_pids.pop_back();
 
@@ -379,6 +392,7 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
                     }
                     s_shm->untouchable_kid_idx = untouchable_kid_idx;
                 }
+                s_shm->num_kids_running--;
                 break;
             }
         }
@@ -509,7 +523,7 @@ void RdbInitializer::handle_error(const char *msg)
 			SemLocker sl(s_shm_sem);
 			if (!s_shm->error_msg[0]) { // write an error message only if there were no error messages before
 				strncpy(s_shm->error_msg, msg, sizeof(s_shm->error_msg));
-				s_shm->error_msg[sizeof(s_shm->error_msg)] = '\0';
+				s_shm->error_msg[sizeof(s_shm->error_msg) - 1] = '\0';
 			}
 		}
 		exit(1);
@@ -559,18 +573,70 @@ void RdbInitializer::sigchld_handler(int)
 
 void RdbInitializer::get_open_fds(set<int> &fds)
 {
+#if defined(__APPLE__)
+    // This absolutely irrational code with all those funny reallocations and multiplication by 32 (haeh?) was inherited from here:
+    //      https://opensource.apple.com/source/Libc/Libc-825.26/darwin/proc_listpidspath.c.auto.html
+    // 
+    // It would be much more logical to call proc_pidinfo twice: the first time to get buf size and the second time to get the list
+    // of file descriptors. And indeed some internet sources advice to do that. However what is rational does not work and gives some
+    // 240 open file descriptors most of them are not vnodes at all. And even some of those who are vnodes, are complete junk. Smells
+    // like a memory leak. Probably the multiplication by 32 is really needed.
+    //
+    // All these problems come from the simple reason there is not manual for proc_pidinfo. Go figure why...
+	int	buf_used;
+    int fds_size = 0;
+    int num_fds;
+    unique_ptr<char[]> buf;
+
+	// get list of open file descriptors
+	buf_used = proc_pidinfo(getpid(), PROC_PIDLISTFDS, 0, NULL, 0);
+	if (buf_used <= 0)
+        return;
+
+	while (1) {
+		if (buf_used > fds_size) {
+			// if we need to allocate [more] space
+			while (buf_used > fds_size)
+				fds_size += (sizeof(struct proc_fdinfo) * 32);
+
+            buf = unique_ptr<char[]>(new char[fds_size]);
+		}
+
+		buf_used = proc_pidinfo(getpid(), PROC_PIDLISTFDS, 0, buf.get(), fds_size);
+		if (buf_used <= 0)
+            return;
+
+		if ((buf_used + sizeof(struct proc_fdinfo)) >= fds_size) {
+			// if not enough room in the buffer for an extra fd
+			buf_used = fds_size + sizeof(struct proc_fdinfo);
+			continue;
+		}
+
+		num_fds = buf_used / sizeof(struct proc_fdinfo);
+		break;
+	}
+
+    struct proc_fdinfo *fdinfo = (struct proc_fdinfo *)buf.get();
+    for (int i = 0; i < num_fds; ++i) {
+        if (fdinfo[i].proc_fdtype == PROX_FDTYPE_VNODE)
+            fds.insert(fdinfo[i].proc_fd);
+    }
+#else
 	DIR *dir = opendir("/proc/self/fd");
 	struct dirent *dirp;
 
 	fds.clear();
-	while ((dirp = readdir(dir))) {
-		char *endptr;
-		int fd = strtol(dirp->d_name, &endptr, 10);
-		if (!*endptr && fd != dirfd(dir)) // name is a number (it can be also ".", "..", whatever...)
-			fds.insert(fd);
-	}
+    if (dir) {
+    	while ((dirp = readdir(dir))) {
+    		char *endptr;
+    		int fd = strtol(dirp->d_name, &endptr, 10);
+    		if (!*endptr && fd != dirfd(dir)) // name is a number (it can be also ".", "..", whatever...)
+    			fds.insert(fd);
+    	}
 
-	closedir(dir);
+        closedir(dir);
+    }
+#endif
 }
 
 void RdbInitializer::vdebug_print(const char *fmt, ...)
@@ -671,8 +737,18 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 	struct dirent *dirp;
 
 	while ((dirp = readdir(dir))) {
-		if (dirp->d_type == DT_REG && !strncmp(dirp->d_name, CHROM_FILE_PREFIX, CHROM_FILE_PREFIX_LEN))
-			chrom_files.push_back(dirp->d_name);
+		if (!strncmp(dirp->d_name, CHROM_FILE_PREFIX, CHROM_FILE_PREFIX_LEN)) {
+            if (dirp->d_type == DT_REG)
+                chrom_files.push_back(dirp->d_name);
+            else if (dirp->d_type == DT_UNKNOWN) {
+                struct stat sbuf;
+                char filename[PATH_MAX];
+
+                snprintf(filename, sizeof(filename), "%s/%s", dirname, dirp->d_name);
+                if (!stat(filename, &sbuf) && S_ISREG(sbuf.st_mode))
+                    chrom_files.push_back(dirp->d_name);
+            }
+        }
 	}
 
 	closedir(dir);
@@ -870,8 +946,8 @@ SEXP rdb::get_rvector_col(SEXP v, const char *colname, const char *varname, bool
 	SEXP colnames = getAttrib(v, R_NamesSymbol);
 
 	if (!isVector(v) ||
-		length(v) && (!isString(colnames) || length(colnames) != length(v)) ||
-		!length(v) && !isNull(colnames))
+		(length(v) && (!isString(colnames) || length(colnames) != length(v))) ||
+		(!length(v) && !isNull(colnames)))
 		verror("Invalid format of %s", varname);
 
 	int numcols = isNull(colnames) ? 0 : length(colnames);

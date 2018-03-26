@@ -38,9 +38,9 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 		SEXP expr_vals;
 		rprotect(expr_vals = allocVector(REALSXP, values[iexpr].size()));
-		SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
 		for (unsigned i = 0; i < values[iexpr].size(); ++i)
 			REAL(expr_vals)[i] = values[iexpr][i];
+        SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
 	}
 
 	SEXP col_names = getAttrib(answer, R_NamesSymbol);
@@ -566,9 +566,9 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 				SEXP expr_vals;
 				rprotect(expr_vals = allocVector(REALSXP, values[iexpr].size()));
-				SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
 				for (unsigned i = 0; i < values[iexpr].size(); ++i)
 					REAL(expr_vals)[i] = values[iexpr][i];
+                SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
 			}
 
 			SEXP ids;

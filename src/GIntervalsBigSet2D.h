@@ -56,7 +56,7 @@ public:
 	virtual bool next();
 	virtual bool next_in_chrom();
 
-	virtual bool isend() const { return m_iter_index < 0 || m_iter_index >= m_size; }
+	virtual bool isend() const { return m_iter_index == -1 || m_iter_index >= m_size; }
 	virtual bool isend_chrom() const { return m_iinterval >= m_intervals.end() || m_cur_chromid != m_iter_chromid; }
 
 	virtual GIntervals2D::const_iterator get_chrom_begin() const { return m_intervals.begin(); }

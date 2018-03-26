@@ -64,13 +64,13 @@ public:
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%d, %ld, %ld) (%d, %ld, %ld)", chromid1(), start1(), end1(), chromid2(), start2(), end2());
+		sprintf(str, "(%d, %lld, %lld) (%d, %lld, %lld)", chromid1(), start1(), end1(), chromid2(), start2(), end2());
 		return str;
 	}
 
 	char *debug_str(const GenomeChromKey &chromkey) const {
 		static char str[200];
-		sprintf(str, "(%s, %ld, %ld) (%s, %ld, %ld)", chromkey.id2chrom(chromid1()).c_str(), start1(), end1(), chromkey.id2chrom(chromid2()).c_str(), start2(), end2());
+		sprintf(str, "(%s, %lld, %lld) (%s, %lld, %lld)", chromkey.id2chrom(chromid1()).c_str(), start1(), end1(), chromkey.id2chrom(chromid2()).c_str(), start2(), end2());
 		return str;
 	}
 
@@ -88,7 +88,7 @@ struct ChromPair {
 	ChromPair(const ChromPair &obj) : chromid1(obj.chromid1), chromid2(obj.chromid2) {}
 
 	bool operator==(const ChromPair &obj) const { return chromid1 == obj.chromid1 && chromid2 == obj.chromid2; }
-	bool operator<(const ChromPair &obj) const { return chromid1 < obj.chromid1 || chromid1 == obj.chromid1 && chromid2 < obj.chromid2; }
+	bool operator<(const ChromPair &obj) const { return chromid1 < obj.chromid1 || (chromid1 == obj.chromid1 && chromid2 < obj.chromid2); }
 
 	int chromid1;
 	int chromid2;
@@ -99,7 +99,7 @@ struct ChromPair {
 
 inline bool GInterval2D::operator<(const GInterval2D &interv) const
 {
-	return chromid1() < interv.chromid1() || chromid1() == interv.chromid1() && chromid2() < interv.chromid2();
+	return chromid1() < interv.chromid1() || (chromid1() == interv.chromid1() && chromid2() < interv.chromid2());
 }
 
 inline void GInterval2D::set(int _chromid1, int64_t _start1, int64_t _end1, int _chromid2, int64_t _start2, int64_t _end2, void *_udata)

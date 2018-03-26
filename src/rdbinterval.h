@@ -59,7 +59,7 @@ struct ChainInterval : public GInterval {
 	};
 
 	bool operator<(const ChainInterval &interv) const {
-		return chromid < interv.chromid || chromid == interv.chromid && start < interv.start || chromid == interv.chromid && start == interv.start && end < interv.end;
+		return chromid < interv.chromid || (chromid == interv.chromid && start < interv.start) || (chromid == interv.chromid && start == interv.start && end < interv.end);
 	}
 
 	static const char *COL_NAMES[NUM_COLS];
@@ -258,15 +258,15 @@ private:
 	GIntervalsFetcher1D          *m_kid_intervals1d;
 	GIntervalsFetcher2D          *m_kid_intervals2d;
 	mutable int                   m_multitasking;
-	mutable uint64_t              m_max_data_size;
-	mutable uint64_t              m_max_mem_usage;
-	mutable uint64_t              m_big_intervals_size;
-	mutable uint64_t              m_max_processes;
-	mutable uint64_t              m_max_processes2core;
-	mutable uint64_t              m_min_scope4process;
-	mutable uint64_t              m_quantile_edge_data_size;
-	mutable uint64_t              m_track_chunk_size;
-	mutable uint64_t              m_track_num_chunks;
+	mutable uint64_t              m_max_data_size{0};
+	mutable uint64_t              m_max_mem_usage{0};
+	mutable uint64_t              m_big_intervals_size{0};
+	mutable uint64_t              m_max_processes{0};
+	mutable uint64_t              m_max_processes2core{0};
+	mutable uint64_t              m_min_scope4process{0};
+	mutable uint64_t              m_quantile_edge_data_size{0};
+	mutable uint64_t              m_track_chunk_size{0};
+	mutable uint64_t              m_track_num_chunks{0};
 
 	SEXP get_rallgenome1d() const { return VECTOR_ELT(m_allgenome, 0); }
 	SEXP get_rallgenome2d() const { return VECTOR_ELT(m_allgenome, 1); }
@@ -279,19 +279,19 @@ private:
 
 inline bool rdb::ChainInterval::SrcCompare::operator()(const ChainInterval &obj1, const ChainInterval &obj2) const
 {
-	return obj1.chromid_src < obj2.chromid_src || obj1.chromid_src == obj2.chromid_src && obj1.start_src < obj2.start_src;
+	return obj1.chromid_src < obj2.chromid_src || (obj1.chromid_src == obj2.chromid_src && obj1.start_src < obj2.start_src);
 }
 
 inline bool rdb::ChainInterval::SetCompare::operator()(const ChainInterval &obj1, const ChainInterval &obj2) const
 {
-	return obj1.chromid < obj2.chromid || obj1.chromid == obj2.chromid && obj1.start < obj2.start ||
-		obj1.chromid == obj2.chromid && obj1.start == obj2.start && obj1.end < obj2.end;
+	return obj1.chromid < obj2.chromid || (obj1.chromid == obj2.chromid && obj1.start < obj2.start) ||
+		(obj1.chromid == obj2.chromid && obj1.start == obj2.start && obj1.end < obj2.end);
 }
 
 inline string rdb::ChainInterval::tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const
 {
 	char buf[1000];
-	sprintf(buf, "(%s, %ld, %ld) <- (%s, %ld)", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src);
+	sprintf(buf, "(%s, %lld, %lld) <- (%s, %lld)", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src);
 	return string(buf);
 }
 

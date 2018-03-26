@@ -20,10 +20,8 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 	size_t numvals = res_vals.size() / numcols;
 	vector<SEXP> rvals(numcols);
 
-	for (int icol = 0; icol < numcols; ++icol) {
+	for (int icol = 0; icol < numcols; ++icol)
 		rprotect(rvals[icol] = allocVector(REALSXP, numvals));
-		SET_VECTOR_ELT(answer, GInterval::NUM_COLS + icol, rvals[icol]);
-	}
 
 	int rownum = 0;
 	for (vector<float>::const_iterator ival = res_vals.begin(); ival != res_vals.end(); ++rownum) {
@@ -45,6 +43,9 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 		SET_VECTOR_ELT(answer, GInterval::NUM_COLS + numcols, ids);
 		SET_STRING_ELT(colnames, GInterval::NUM_COLS + numcols, mkChar("intervalID"));
 	}
+
+    for (int icol = 0; icol < numcols; ++icol)
+        SET_VECTOR_ELT(answer, GInterval::NUM_COLS + icol, rvals[icol]);
 
 	return answer;
 }
@@ -145,7 +146,7 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 			if (vals.size() != numcols) 
 				verror("Number of sliced values (%ld) does not match the number of columns (%d)", vals.size(), numcols);
 
-			progress.report(max(sparse_itr.get_cur_scope_idx() - scope_idx, 0L));
+			progress.report(max((int64_t)(sparse_itr.get_cur_scope_idx() - scope_idx), (int64_t)0));
 			check_interrupt();
 			scope_idx = sparse_itr.get_cur_scope_idx();
 			const GInterval &scope_interval = sparse_itr.last_scope_interval();

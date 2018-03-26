@@ -87,11 +87,8 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 
 	colnames = getAttrib(answer, R_NamesSymbol);
 
-	for (unsigned icol = 0; icol < NUM_COLS; ++icol) {
+	for (unsigned icol = 0; icol < NUM_COLS; ++icol)
 		rprotect(rsummary[icol] = allocVector(REALSXP, num_intervs));
-		SET_VECTOR_ELT(answer, num_interv_cols + icol, rsummary[icol]);
-		SET_STRING_ELT(colnames, num_interv_cols + icol, mkChar(IntervalSummaryColNames[icol]));
-	}
 
 	for (unsigned i = 0; i < num_intervs; i++) {
 		REAL(rsummary[TOTAL_BINS])[i] = summaries[i].num_bins;
@@ -102,6 +99,11 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 		REAL(rsummary[MEAN])[i] = summaries[i].num_non_nan_bins ? summaries[i].get_mean() : numeric_limits<double>::quiet_NaN();
 		REAL(rsummary[STDEV])[i] = summaries[i].num_non_nan_bins > 1 ? summaries[i].get_stdev() : numeric_limits<double>::quiet_NaN();
 	}
+
+    for (unsigned icol = 0; icol < NUM_COLS; ++icol) {
+        SET_VECTOR_ELT(answer, num_interv_cols + icol, rsummary[icol]);
+        SET_STRING_ELT(colnames, num_interv_cols + icol, mkChar(IntervalSummaryColNames[icol]));
+    }
 
 	return answer;
 }
@@ -473,6 +475,7 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 		rprotect(dimname = allocVector(STRSXP, NUM_COLS));
 		for (unsigned i = 0; i < NUM_COLS; i++)
 			SET_STRING_ELT(dimname, i, mkChar(IntervalSummaryColNames[i]));
+
 		SET_VECTOR_ELT(dimnames, bins_manager.get_num_bin_finders(), dimname);
 		INTEGER(dim)[bins_manager.get_num_bin_finders()] = NUM_COLS;
 

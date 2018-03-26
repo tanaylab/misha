@@ -75,8 +75,8 @@ bool TrackExpressionTrackRectsIterator::next()
 
 		string track_filename = m_track_dir + "/" + GenomeTrack::get_2d_filename(*m_chromkey, m_chromid1, m_chromid2);
 
-		if (m_band.is_non_empty_area() && m_chromid1 != m_chromid2 || !m_scope->size(m_chromid1, m_chromid2) ||
-			access(track_filename.c_str(), R_OK) < 0 && errno == ENOENT)
+		if ((m_band.is_non_empty_area() && m_chromid1 != m_chromid2) || !m_scope->size(m_chromid1, m_chromid2) ||
+			(access(track_filename.c_str(), R_OK) < 0 && errno == ENOENT))
 		{
 			m_track = NULL;
 			continue;

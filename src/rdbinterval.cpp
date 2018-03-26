@@ -36,14 +36,6 @@ IntervUtils::IntervUtils(SEXP envir)
 	m_envir = envir;
 	m_num_planned_kids = 0;
 	m_multitasking = -1;
-	m_max_data_size = 0;
-	m_max_mem_usage = 0;
-	m_max_processes = 0;
-	m_max_processes2core = 0;
-	m_min_scope4process = 0;
-	m_quantile_edge_data_size = 0;
-	m_track_chunk_size = 0;
-	m_track_num_chunks = 0;
 	m_kid_intervals1d = NULL;
 	m_kid_intervals2d = NULL;
 
@@ -201,7 +193,7 @@ unsigned IntervUtils::get_rintervs_type_mask(SEXP rintervals, const char *error_
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval::COL_NAMES[i - 1], GInterval::COL_NAMES[i]);
 		}
 
-		if (!isReal(starts) && !isInteger(starts) || !isReal(ends) && !isInteger(ends) || strands != R_NilValue && !isReal(strands) && !isInteger(strands))
+		if ((!isReal(starts) && !isInteger(starts)) || (!isReal(ends) && !isInteger(ends)) || (strands != R_NilValue && !isReal(strands) && !isInteger(strands)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
 
 	} else if (type == INTERVS2D) {
@@ -215,7 +207,7 @@ unsigned IntervUtils::get_rintervs_type_mask(SEXP rintervals, const char *error_
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval2D::COL_NAMES[i - 1], GInterval2D::COL_NAMES[i]);
 		}
 
-		if (!isReal(starts1) && !isInteger(starts1) || !isReal(ends1) && !isInteger(ends1) || !isReal(starts2) && !isInteger(starts2) || !isReal(ends2) && !isInteger(ends2))
+		if ((!isReal(starts1) && !isInteger(starts1)) || (!isReal(ends1) && !isInteger(ends1)) || (!isReal(starts2) && !isInteger(starts2)) || (!isReal(ends2) && !isInteger(ends2)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
 	} else
 		verror("%sUnexpected intervals type", error_msg_prefix);
@@ -411,9 +403,9 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		}
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if (isFactor(chroms) && INTEGER(chroms)[i] < 0 ||
-				isReal(starts) && std::isnan(REAL(starts)[i]) || isReal(ends) && std::isnan(REAL(ends)[i]) ||
-				strands != R_NilValue && isReal(strands) && std::isnan(REAL(strands)[i]))
+			if ((isFactor(chroms) && INTEGER(chroms)[i] < 0) ||
+				(isReal(starts) && std::isnan(REAL(starts)[i])) || (isReal(ends) && std::isnan(REAL(ends)[i])) ||
+				(strands != R_NilValue && isReal(strands) && std::isnan(REAL(strands)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
 			const char *chrom = isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
@@ -456,10 +448,10 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		unsigned num_intervals = (unsigned)length(starts1);
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if (isFactor(chroms1) && INTEGER(chroms1)[i] < 0 ||
-				isReal(starts1) && std::isnan(REAL(starts1)[i]) || isReal(ends1) && std::isnan(REAL(ends1)[i]) ||
-				isFactor(chroms2) && INTEGER(chroms2)[i] < 0 ||
-				isReal(starts2) && std::isnan(REAL(starts2)[i]) || isReal(ends2) && std::isnan(REAL(ends2)[i]))
+			if ((isFactor(chroms1) && INTEGER(chroms1)[i] < 0) ||
+				(isReal(starts1) && std::isnan(REAL(starts1)[i])) || (isReal(ends1) && std::isnan(REAL(ends1)[i])) ||
+				(isFactor(chroms2) && INTEGER(chroms2)[i] < 0) ||
+				(isReal(starts2) && std::isnan(REAL(starts2)[i])) || (isReal(ends2) && std::isnan(REAL(ends2)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
 			const char *chrom1 = isString(chroms1) ? CHAR(STRING_ELT(chroms1, i)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(chroms1)[i] - 1));
@@ -497,17 +489,12 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher1D *intervals, unsigned num_c
 	SEXP col_names;
 
 	rprotect(answer = allocVector(VECSXP, num_cols));
-
-	SET_VECTOR_ELT(answer, GInterval::CHROM, (chroms_idx = allocVector(INTSXP, intervals->size())));
-	SET_VECTOR_ELT(answer, GInterval::START, (starts = allocVector(REALSXP, intervals->size())));
-	SET_VECTOR_ELT(answer, GInterval::END, (ends = allocVector(REALSXP, intervals->size())));
-
-	setAttrib(chroms_idx, R_LevelsSymbol, (chroms = allocVector(STRSXP, num_chroms)));
-	setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
-
-	setAttrib(answer, R_NamesSymbol, (col_names = allocVector(STRSXP, num_cols)));
-	setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-	setAttrib(answer, R_RowNamesSymbol, (row_names = allocVector(INTSXP, intervals->size())));
+    rprotect(chroms_idx = allocVector(INTSXP, intervals->size()));
+    rprotect(starts = allocVector(REALSXP, intervals->size()));
+    rprotect(ends = allocVector(REALSXP, intervals->size()));
+    rprotect(chroms = allocVector(STRSXP, num_chroms));
+    rprotect(col_names = allocVector(STRSXP, num_cols));
+    rprotect(row_names = allocVector(INTSXP, intervals->size()));
 
 	for (intervals->begin_iter(); !intervals->isend(); intervals->next()) {
 		const GInterval &interval = intervals->cur_interval();
@@ -524,6 +511,17 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher1D *intervals, unsigned num_c
 
 	for (int i = 0; i < GInterval::NUM_COLS; i++)
 		SET_STRING_ELT(col_names, i, mkChar(GInterval::COL_NAMES[i]));
+
+    setAttrib(chroms_idx, R_LevelsSymbol, chroms);
+    setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+
+    SET_VECTOR_ELT(answer, GInterval::CHROM, chroms_idx);
+    SET_VECTOR_ELT(answer, GInterval::START, starts);
+    SET_VECTOR_ELT(answer, GInterval::END, ends);
+
+    setAttrib(answer, R_NamesSymbol, col_names);
+    setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
+    setAttrib(answer, R_RowNamesSymbol, row_names);
 
 	return answer;
 }
@@ -543,22 +541,17 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher2D *intervals, unsigned num_c
 	SEXP col_names;
 
 	rprotect(answer = allocVector(VECSXP, num_cols));
-
-	SET_VECTOR_ELT(answer, GInterval2D::CHROM1, (chroms_idx1 = allocVector(INTSXP, intervals->size())));
-	SET_VECTOR_ELT(answer, GInterval2D::START1, (starts1 = allocVector(REALSXP, intervals->size())));
-	SET_VECTOR_ELT(answer, GInterval2D::END1, (ends1 = allocVector(REALSXP, intervals->size())));
-	SET_VECTOR_ELT(answer, GInterval2D::CHROM2, (chroms_idx2 = allocVector(INTSXP, intervals->size())));
-	SET_VECTOR_ELT(answer, GInterval2D::START2, (starts2 = allocVector(REALSXP, intervals->size())));
-	SET_VECTOR_ELT(answer, GInterval2D::END2, (ends2 = allocVector(REALSXP, intervals->size())));
-
-	setAttrib(chroms_idx1, R_LevelsSymbol, (chroms1 = allocVector(STRSXP, num_chroms)));
-	setAttrib(chroms_idx1, R_ClassSymbol, mkString("factor"));
-	setAttrib(chroms_idx2, R_LevelsSymbol, (chroms2 = allocVector(STRSXP, num_chroms)));
-	setAttrib(chroms_idx2, R_ClassSymbol, mkString("factor"));
-
-	setAttrib(answer, R_NamesSymbol, (col_names = allocVector(STRSXP, num_cols)));
-	setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-	setAttrib(answer, R_RowNamesSymbol, (row_names = allocVector(INTSXP, intervals->size())));
+    rprotect(chroms1 = allocVector(STRSXP, num_chroms));
+    rprotect(starts1 = allocVector(REALSXP, intervals->size()));
+    rprotect(ends1 = allocVector(REALSXP, intervals->size()));
+    rprotect(chroms_idx1 = allocVector(INTSXP, intervals->size()));
+    rprotect(chroms_idx2 = allocVector(INTSXP, intervals->size()));
+    rprotect(starts2 = allocVector(REALSXP, intervals->size()));
+    rprotect(ends2 = allocVector(REALSXP, intervals->size()));
+    rprotect(chroms1 = allocVector(STRSXP, num_chroms));
+    rprotect(chroms2 = allocVector(STRSXP, num_chroms));
+    rprotect(col_names = allocVector(STRSXP, num_cols));
+    rprotect(row_names = allocVector(INTSXP, intervals->size()));
 
 	for (intervals->begin_iter(); !intervals->isend(); intervals->next()) {
 		const GInterval2D &interval = intervals->cur_interval();
@@ -566,22 +559,39 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher2D *intervals, unsigned num_c
 
 		INTEGER(chroms_idx1)[index] = interval.chromid1() + 1;
 		REAL(starts1)[index] = interval.start1();
-		REAL(ends1)[index] = interval.end1();
-		INTEGER(chroms_idx2)[index] = interval.chromid2() + 1;
-		REAL(starts2)[index] = interval.start2();
-		REAL(ends2)[index] = interval.end2();
+        REAL(ends1)[index] = interval.end1();
+        INTEGER(chroms_idx2)[index] = interval.chromid2() + 1;
+        REAL(starts2)[index] = interval.start2();
+        REAL(ends2)[index] = interval.end2();
 		INTEGER(row_names)[index] = index + 1;
 	}
 
-	for (unsigned id = 0; id < (unsigned)num_chroms; ++id) {
-		SET_STRING_ELT(chroms1, id, mkChar(m_chrom_key.id2chrom(id).c_str()));
-		SET_STRING_ELT(chroms2, id, mkChar(m_chrom_key.id2chrom(id).c_str()));
-	}
+    for (unsigned id = 0; id < (unsigned)num_chroms; ++id) {
+        SET_STRING_ELT(chroms1, id, mkChar(m_chrom_key.id2chrom(id).c_str()));
+        SET_STRING_ELT(chroms2, id, mkChar(m_chrom_key.id2chrom(id).c_str()));
+    }
 
-	for (int i = 0; i < GInterval2D::NUM_COLS; i++)
-		SET_STRING_ELT(col_names, i, mkChar(GInterval2D::COL_NAMES[i]));
+    for (int i = 0; i < GInterval2D::NUM_COLS; i++)
+        SET_STRING_ELT(col_names, i, mkChar(GInterval2D::COL_NAMES[i]));
 
-	return answer;
+
+    setAttrib(chroms_idx1, R_LevelsSymbol, chroms1);
+    setAttrib(chroms_idx1, R_ClassSymbol, mkString("factor"));
+    setAttrib(chroms_idx2, R_LevelsSymbol, chroms2);
+    setAttrib(chroms_idx2, R_ClassSymbol, mkString("factor"));
+
+    SET_VECTOR_ELT(answer, GInterval2D::CHROM1, chroms_idx1);
+    SET_VECTOR_ELT(answer, GInterval2D::START1, starts1);
+    SET_VECTOR_ELT(answer, GInterval2D::END1, ends1);
+    SET_VECTOR_ELT(answer, GInterval2D::CHROM2, chroms_idx2);
+    SET_VECTOR_ELT(answer, GInterval2D::START2, starts2);
+    SET_VECTOR_ELT(answer, GInterval2D::END2, ends2);
+
+    setAttrib(answer, R_NamesSymbol, col_names);
+    setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
+    setAttrib(answer, R_RowNamesSymbol, row_names);
+
+    return answer;
 }
 
 void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_intervs, vector<string> &src_id2chrom)
@@ -619,7 +629,7 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 	unordered_map<string, int> src_chrom2id;
 
 	for (unsigned i = 0; i < intervs.size(); i++) {
-		if (isFactor(src_chroms) && INTEGER(src_chroms)[i] < 0 || isReal(src_starts) && std::isnan(REAL(src_starts)[i]))
+		if ((isFactor(src_chroms) && INTEGER(src_chroms)[i] < 0) || (isReal(src_starts) && std::isnan(REAL(src_starts)[i])))
 			verror("Invalid format of interval at index %d", i + 1);
 
 		const char *src_chrom = isString(src_chroms) ? CHAR(STRING_ELT(src_chroms, i)) : CHAR(STRING_ELT(src_chrom_levels, INTEGER(src_chroms)[i] - 1));
@@ -654,11 +664,9 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 	SEXP col_names = getAttrib(answer, R_NamesSymbol);
 	unsigned num_src_chroms = src_id2chrom.size();
 
-	SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, (src_chroms_idx = allocVector(INTSXP, chain_intervs.size())));
-	SET_VECTOR_ELT(answer, ChainInterval::START_SRC, (src_starts = allocVector(REALSXP, chain_intervs.size())));
-
-	setAttrib(src_chroms_idx, R_LevelsSymbol, (src_chroms = allocVector(STRSXP, num_src_chroms)));
-	setAttrib(src_chroms_idx, R_ClassSymbol, mkString("factor"));
+    rprotect(src_chroms_idx = allocVector(INTSXP, chain_intervs.size()));
+    rprotect(src_starts = allocVector(REALSXP, chain_intervs.size()));
+    rprotect(src_chroms = allocVector(STRSXP, num_src_chroms));
 
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval) {
 		INTEGER(src_chroms_idx)[iinterval - chain_intervs.begin()] = iinterval->chromid_src + 1;
@@ -671,6 +679,12 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 	for (int i = 0; i < ChainInterval::NUM_COLS; i++)
 		SET_STRING_ELT(col_names, i, mkChar(ChainInterval::COL_NAMES[i]));
 
+    setAttrib(src_chroms_idx, R_LevelsSymbol, src_chroms);
+    setAttrib(src_chroms_idx, R_ClassSymbol, mkString("factor"));
+
+    SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, src_chroms_idx);
+    SET_VECTOR_ELT(answer, ChainInterval::START_SRC, src_starts);
+
 	return answer;
 }
 
@@ -679,7 +693,7 @@ DiagonalBand IntervUtils::convert_band(SEXP rband)
 	if (isNull(rband))
 		return DiagonalBand();
 
-	if (!isReal(rband) && !isInteger(rband) || length(rband) != 2)
+	if ((!isReal(rband) && !isInteger(rband)) || length(rband) != 2)
 		verror("Invalid format of band argument");
 
 	int d1 = isReal(rband) ? (int)(REAL(rband)[0] > 0 ? REAL(rband)[0] + 0.5 : REAL(rband)[0] - 0.5) : INTEGER(rband)[0];
@@ -693,19 +707,21 @@ DiagonalBand IntervUtils::convert_band(SEXP rband)
 
 SEXP IntervUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
 {
-	SEXP answer;
-	SEXP row_names;
+	SEXP answer, row_names, col_names;
+
 	rprotect(answer = allocVector(VECSXP, numcols));
-
-	if (attrs_src != R_NilValue) 
-		copyMostAttrib(attrs_src, answer);
-
-	setAttrib(answer, R_NamesSymbol, allocVector(STRSXP, numcols));
-	setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-	setAttrib(answer, R_RowNamesSymbol, (row_names = allocVector(INTSXP, numrows)));
+    rprotect(col_names = allocVector(STRSXP, numcols));
+    rprotect(row_names = allocVector(INTSXP, numrows));
 
 	for (int i = 0; i < numrows; ++i)
 		INTEGER(row_names)[i] = i + 1;
+
+    if (attrs_src != R_NilValue) 
+        copyMostAttrib(attrs_src, answer);
+
+    setAttrib(answer, R_NamesSymbol, col_names);
+    setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
+    setAttrib(answer, R_RowNamesSymbol, row_names);
 
 	return answer;
 }
@@ -715,9 +731,9 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 	SEXP src_class = getAttrib(src, R_ClassSymbol);
 
 	if (isNull(src_class) || !isString(src_class) ||
-		!(length(src_class) == 1 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "data.frame")) &&
+		(!(length(src_class) == 1 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "data.frame")) &&
 		!(length(src_class) == 3 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "tbl_df")  &&
-		  !strcmp(CHAR(STRING_ELT(src_class, 1)), "tbl") && !strcmp(CHAR(STRING_ELT(src_class, 2)), "data.frame")))
+          !strcmp(CHAR(STRING_ELT(src_class, 1)), "tbl") && !strcmp(CHAR(STRING_ELT(src_class, 2)), "data.frame"))))
 		verror("Copied object is not a data frame or tibble");
 
 	if (length(tgt) < length(src) + tgt_col_offset)
@@ -738,15 +754,18 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 		SEXP src_col = VECTOR_ELT(src, col);
 		SEXP tgt_col;
 
+        rprotect(tgt_col = allocVector(TYPEOF(src_col), numrows));
+
 		if (!isInteger(src_col) && !isReal(src_col) && !isLogical(src_col) && !isString(src_col) && !isFactor(src_col))
 			verror("Unsupported type found in a data frame: %s", type2char(TYPEOF(src_col)));
 
-		SET_VECTOR_ELT(tgt, col + tgt_col_offset, (tgt_col = allocVector(TYPEOF(src_col), numrows)));
 		copyMostAttrib(src_col, tgt_col);
 		SET_STRING_ELT(tgt_colnames, col + tgt_col_offset, STRING_ELT(src_colnames, col));
 		src_cols[col] = src_col;
 		tgt_cols[col + tgt_col_offset] = tgt_col;
-	}
+
+        SET_VECTOR_ELT(tgt, col + tgt_col_offset, tgt_col);
+    }
 }
 
 void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)
@@ -811,7 +830,7 @@ void IntervUtils::set_data_frame_val_nan(const vector<SEXP> &tgt_cols, int tgt_r
 void IntervUtils::restrict_bins(int64_t maxbins, GIntervals &intervals, unsigned binsize) const
 {
 	for (GIntervals::const_iterator iinterval = intervals.begin(); iinterval != intervals.end(); ++iinterval) {
-		int64_t bins = max(0L, (int64_t)ceil(iinterval->end / binsize) - (int64_t)(iinterval->start / binsize));
+		int64_t bins = max((int64_t)0, (int64_t)ceil(iinterval->end / binsize) - (int64_t)(iinterval->start / binsize));
 
 		if (bins > maxbins)
 			verror("The interval %s [%ld, %ld) covers too wide range of samples that might cause memory allocation failure.\n"
@@ -1012,7 +1031,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 	if (scope1d && !scope1d->size() && scope2d && !scope2d->size()) 
 		return 0;
 
-	if (scope1d && scope1d->size() && scope2d && scope2d->size() || !scope1d && !scope2d) 
+	if ((scope1d && scope1d->size() && scope2d && scope2d->size()) || (!scope1d && !scope2d)) 
 		verror("Cannot determine iterator policy");
 
 	int num_cores = max(1, (int)sysconf(_SC_NPROCESSORS_ONLN));
@@ -1262,10 +1281,10 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 	if (empty())
 		return end();
 
-	if (front().chromid_src > src_interval.chromid || front().chromid_src == src_interval.chromid && front().start_src >= src_interval.end)
+	if (front().chromid_src > src_interval.chromid || (front().chromid_src == src_interval.chromid && front().start_src >= src_interval.end))
 		return begin();
 
-	if (back().chromid_src < src_interval.chromid || back().chromid_src == src_interval.chromid && back().start_src + back().end - back().start <= src_interval.start)
+	if (back().chromid_src < src_interval.chromid || (back().chromid_src == src_interval.chromid && back().start_src + back().end - back().start <= src_interval.start))
 		return end() - 1;
 
 	if (check_first_overlap_src(hint, src_interval))
@@ -1285,8 +1304,7 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 			return add2tgt(imid_interval, src_interval, tgt_intervs);
 
 		// is mid_interval < interval?
-		if (imid_interval->chromid_src < src_interval.chromid ||
-				imid_interval->chromid_src == src_interval.chromid && imid_interval->start_src < src_interval.start)
+		if (imid_interval->chromid_src < src_interval.chromid || (imid_interval->chromid_src == src_interval.chromid && imid_interval->start_src < src_interval.start))
 			istart_interval = imid_interval;
 		else
 			iend_interval = imid_interval;

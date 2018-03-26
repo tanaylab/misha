@@ -47,7 +47,7 @@ static double get_bin_tranformed_value(unsigned numexpr, bool force_binning, SEX
 	if (nan)
 		value = numeric_limits<double>::quiet_NaN();
 	else {
-		if (index < 0 || (int)index >= length(lookup_table))
+		if ((int)index >= length(lookup_table))
 			verror("Internal error: index %d is out of range", index);
 
 		value = isReal(lookup_table) ? REAL(lookup_table)[index] : INTEGER(lookup_table)[index];
@@ -74,9 +74,11 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 
 	SEXP rvals;
 	rprotect(rvals = allocVector(REALSXP, values.size()));
-	SET_VECTOR_ELT(answer, num_interv_cols + VALUE, rvals);
-	for (unsigned i = 0; i < values.size(); ++i)
-		REAL(rvals)[i] = values[i];
+
+    for (unsigned i = 0; i < values.size(); ++i)
+        REAL(rvals)[i] = values[i];
+
+    SET_VECTOR_ELT(answer, num_interv_cols + VALUE, rvals);
 
 	SEXP col_names = getAttrib(answer, R_NamesSymbol);
 	SET_STRING_ELT(col_names, num_interv_cols + VALUE, mkChar("value"));

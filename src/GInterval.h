@@ -65,13 +65,13 @@ struct GInterval : public Segment {
 
 	char *debug_str(const GenomeChromKey &chromkey) const {
 		static char str[200];
-		sprintf(str, "(%s, %ld, %ld)", chromkey.id2chrom(chromid).c_str(), start, end);
+		sprintf(str, "(%s, %lld, %lld)", chromkey.id2chrom(chromid).c_str(), start, end);
 		return str;
 	}
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%d, %ld, %ld)", chromid, start, end);
+		sprintf(str, "(%d, %lld, %lld)", chromid, start, end);
 		return str;
 	}
 };
@@ -81,7 +81,7 @@ struct GInterval : public Segment {
 
 inline bool GInterval::operator<(const GInterval &interv) const
 {
-	return chromid < interv.chromid || chromid == interv.chromid && start < interv.start;
+	return chromid < interv.chromid || (chromid == interv.chromid && start < interv.start);
 }
 
 template <class T> void *GInterval::cast2udata(T v)

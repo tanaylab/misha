@@ -212,14 +212,14 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 
 	for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         if (m_eval_exprs[iexpr] != R_NilValue) {
-    		SEXP res = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
+            SEXP res = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
 
-    		if (length(res) != (int)m_eval_buf_limit) {
-    			runprotect(res);
-    			define_r_vars(1);
-    			break;
-    		}
-    		runprotect(res);
+            if (length(res) != (int)m_eval_buf_limit) {
+                runprotect(res);
+                define_r_vars(1);
+                break;
+            }
+            runprotect(res);
         }
 	}
 
@@ -270,28 +270,28 @@ bool TrackExprScanner::eval_next()
 		m_eval_buf_idx = 0;
 		if (m_expr_itr->is_1d()) {
 			for (m_eval_buf_size = 0; m_eval_buf_size < m_eval_buf_limit; ++m_eval_buf_size) {
-				if (m_expr_itr->isend()) {
-					for (unsigned i = m_eval_buf_size; i < m_eval_buf_limit; ++i) {
-						m_1d.expr_itr_intervals_chroms[i] = 1;
-						m_1d.expr_itr_intervals_starts[i] = -1.;
-						m_1d.expr_itr_intervals_ends[i] = -1.;
-					}
-					break;
-				}
+                if (m_expr_itr->isend()) {
+                    for (unsigned i = m_eval_buf_size; i < m_eval_buf_limit; ++i) {
+                        m_1d.expr_itr_intervals_chroms[i] = 1;
+                        m_1d.expr_itr_intervals_starts[i] = -1.;
+                        m_1d.expr_itr_intervals_ends[i] = -1.;
+                    }
+                    break;
+                }
 
-				const GInterval &interval = ((TrackExpression1DIterator *)m_expr_itr)->last_interval();
+                const GInterval &interval = ((TrackExpression1DIterator *)m_expr_itr)->last_interval();
 
-				m_1d.expr_itr_intervals[m_eval_buf_size] = interval;
-				m_1d.expr_itr_scope_intervals[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->last_scope_interval();
-				m_1d.expr_itr_intervals_chroms[m_eval_buf_size] = interval.chromid + 1;
-				m_1d.expr_itr_intervals_starts[m_eval_buf_size] = (double)interval.start;
-				m_1d.expr_itr_intervals_ends[m_eval_buf_size] = (double)interval.end;
-				m_1d.cur_chromid = interval.chromid;
+                m_1d.expr_itr_intervals[m_eval_buf_size] = interval;
+                m_1d.expr_itr_scope_intervals[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->last_scope_interval();
+                m_1d.expr_itr_intervals_chroms[m_eval_buf_size] = interval.chromid + 1;
+                m_1d.expr_itr_intervals_starts[m_eval_buf_size] = (double)interval.start;
+                m_1d.expr_itr_intervals_ends[m_eval_buf_size] = (double)interval.end;
+                m_1d.cur_chromid = interval.chromid;
 
-				m_expr_itr_scope_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx();
-				m_expr_itr_scope_chrom_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_chrom_idx();
-				m_expr_vars.set_vars(interval, m_eval_buf_size);
-				m_expr_itr->next();
+                m_expr_itr_scope_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx();
+                m_expr_itr_scope_chrom_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_chrom_idx();
+                m_expr_vars.set_vars(interval, m_eval_buf_size);
+                m_expr_itr->next();
 			}
 		}
 		else {
@@ -328,24 +328,24 @@ bool TrackExprScanner::eval_next()
 			}
 		}
 
-		check_interrupt();
+        check_interrupt();
 
-		for (unsigned iexpr = 0; iexpr < m_eval_exprs.size(); ++iexpr) {
+        for (unsigned iexpr = 0; iexpr < m_eval_exprs.size(); ++iexpr) {
             if (m_eval_exprs[iexpr] != R_NilValue) {
                 runprotect(m_eval_bufs[iexpr]);
-    			m_eval_bufs[iexpr] = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
-    			if (length(m_eval_bufs[iexpr]) != (int)m_eval_buf_limit)
-    				verror("Evaluation of expression \"%s\" produces a vector of size %d while expecting size %d",
-    						m_track_exprs[iexpr].c_str(), length(m_eval_bufs[iexpr]), m_eval_buf_limit);
-    			if (isReal(m_eval_bufs[iexpr]))
-    				m_eval_doubles[iexpr] = REAL(m_eval_bufs[iexpr]);
-    			else if (isLogical(m_eval_bufs[iexpr])) 
-    				m_eval_ints[iexpr] = LOGICAL(m_eval_bufs[iexpr]);
-    			else
-    				verror("Evaluation of expression \"%s\" produces a vector of unsupported type %s",
-    						m_track_exprs[iexpr].c_str(), type2char(TYPEOF(m_eval_bufs[iexpr])));
+                m_eval_bufs[iexpr] = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
+                if (length(m_eval_bufs[iexpr]) != (int)m_eval_buf_limit)
+                    verror("Evaluation of expression \"%s\" produces a vector of size %d while expecting size %d",
+                            m_track_exprs[iexpr].c_str(), length(m_eval_bufs[iexpr]), m_eval_buf_limit);
+                if (isReal(m_eval_bufs[iexpr]))
+                    m_eval_doubles[iexpr] = REAL(m_eval_bufs[iexpr]);
+                else if (isLogical(m_eval_bufs[iexpr]))
+                    m_eval_ints[iexpr] = LOGICAL(m_eval_bufs[iexpr]);
+                else
+                    verror("Evaluation of expression \"%s\" produces a vector of unsupported type %s",
+                            m_track_exprs[iexpr].c_str(), type2char(TYPEOF(m_eval_bufs[iexpr])));
             }
-		}
+        }
 
 		report_progress();
 	}
@@ -362,39 +362,39 @@ void TrackExprScanner::report_progress()
 {
 	m_num_evals += m_eval_buf_size;
 	if (m_num_evals > (size_t)m_report_step && m_do_report_progress) {
-		uint64_t curclock = get_cur_clock();
-		double delta = curclock - m_last_report_clock;
+        uint64_t curclock = get_cur_clock();
+        double delta = curclock - m_last_report_clock;
 
-		if (delta)
-			m_report_step = (int)(m_report_step * (REPORT_INTERVAL / delta) + .5);
-		else
-			m_report_step *= 10;
+        if (delta)
+            m_report_step = (int)(m_report_step * (REPORT_INTERVAL / delta) + .5);
+        else
+            m_report_step *= 10;
 
-		if (delta > MIN_REPORT_INTERVAL) {
-			if (m_last_progress_reported < 0 && m_eval_buf_limit == 1)
-				Rprintf("Warning: track expression(s) cannot be evaluated as a vector. Run-times might be slow.\n");
+        if (delta > MIN_REPORT_INTERVAL) {
+            if (m_last_progress_reported < 0 && m_eval_buf_limit == 1)
+                Rprintf("Warning: track expression(s) cannot be evaluated as a vector. Run-times might be slow.\n");
 
-			int progress;
+            int progress;
 
-			if (m_expr_itr->is_1d())
-				progress = !((TrackExpression1DIterator *)m_expr_itr)->get_scope()->size() ? 0 :
-					(int)(100. * (((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx()) / ((TrackExpression1DIterator *)m_expr_itr)->get_scope()->size());
-			else
-				progress = !((TrackExpression2DIterator *)m_expr_itr)->get_scope()->size() ? 0 :
-					(int)(100. * (((TrackExpression2DIterator *)m_expr_itr)->get_cur_scope_idx()) / ((TrackExpression2DIterator *)m_expr_itr)->get_scope()->size());
+            if (m_expr_itr->is_1d())
+                progress = !((TrackExpression1DIterator *)m_expr_itr)->get_scope()->size() ? 0 :
+                    (int)(100. * (((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx()) / ((TrackExpression1DIterator *)m_expr_itr)->get_scope()->size());
+            else
+                progress = !((TrackExpression2DIterator *)m_expr_itr)->get_scope()->size() ? 0 :
+                    (int)(100. * (((TrackExpression2DIterator *)m_expr_itr)->get_cur_scope_idx()) / ((TrackExpression2DIterator *)m_expr_itr)->get_scope()->size());
 
-			progress = max(progress, m_last_progress_reported);  // in 2D scope idx can sometimes go backward
-			if (progress != 100) {
-				if (progress != m_last_progress_reported) {
-					Rprintf("%d%%...", progress);
-					update_progress(progress);
-				} else
-					Rprintf(".");
-				m_last_progress_reported = progress;
-			}
-			m_num_evals = 0;
-			m_last_report_clock = curclock;
-		}
+            progress = max(progress, m_last_progress_reported);  // in 2D scope idx can sometimes go backward
+            if (progress != 100) {
+                if (progress != m_last_progress_reported) {
+                    Rprintf("%d%%...", progress);
+                    update_progress(progress);
+                } else
+                    Rprintf(".");
+                m_last_progress_reported = progress;
+            }
+            m_num_evals = 0;
+            m_last_report_clock = curclock;
+        }
 	}
 }
 
@@ -429,6 +429,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP rtrack_
 	// initiate the expression iterator
 	delete m_expr_itr;
 	m_expr_itr = create_expr_iterator(iterator_policy, m_expr_vars, m_track_exprs, scope1d, scope2d, m_1d.intervals, m_2d.intervals, m_band, call_begin);
+    return m_expr_itr;
 }
 
 TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterator, const TrackExpressionVars &vars, const vector<string> &track_exprs,
@@ -464,7 +465,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 		SEXP rexpansion1 = VECTOR_ELT(giterator, 2);
 		SEXP rexpansion2 = VECTOR_ELT(giterator, 3);
 
-		if (!isReal(rexpansion1) && !isInteger(rexpansion1) || !isNull(rexpansion2) && !isReal(rexpansion2) && !isInteger(rexpansion2))
+		if ((!isReal(rexpansion1) && !isInteger(rexpansion1)) || (!isNull(rexpansion2) && !isReal(rexpansion2) && !isInteger(rexpansion2)))
 			verror("Invalid format of cartesian grid iterator");
 
 		vector<int64_t> expansion1(length(rexpansion1));
@@ -482,7 +483,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 
 		SEXP rband_idx = VECTOR_ELT(giterator, 4);
 
-		if (!isReal(rband_idx) && !isInteger(rband_idx) || length(rband_idx) != 3)
+		if ((!isReal(rband_idx) && !isInteger(rband_idx)) || length(rband_idx) != 3)
 			verror("Invalid format of cartesian grid iterator");
 
 		int64_t min_band_idx = isReal(rband_idx) ? (int64_t)REAL(rband_idx)[0] : INTEGER(rband_idx)[0];
@@ -508,8 +509,8 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 				((TrackExpressionBigSet2DIterator *)expr_itr)->begin(intervset, meta, *scope2d, band, m_iu.get_max_data_size());
 		}
 		runprotect(meta);
-	} else if (isVector(giterator) && !isString(giterator) ||
-			   isString(giterator) && length(giterator) == 1 && !m_iu.track_exists(CHAR(STRING_ELT(giterator, 0))))
+	} else if ((isVector(giterator) && !isString(giterator)) ||
+			   (isString(giterator) && length(giterator) == 1 && !m_iu.track_exists(CHAR(STRING_ELT(giterator, 0)))))
 	{   // giterator == intervals
 		unsigned intervs_type_mask;
 		if (m_iu.convert_rintervs(giterator, &intervals1d, &intervals2d, true, NULL, "", &intervs_type_mask)) {
@@ -598,12 +599,12 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 
 					chromids.insert(chromid);
 					if (track_type == GenomeTrack::FIXED_BIN) {
-						gtrack_fbin.init_read((trackpath + "/" + *ifilename).c_str(), chromid);
-						int64_t expected_num_bins = (int64_t)ceil(all_genome_intervs[chromid].end / (double)gtrack_fbin.get_bin_size());
+                        gtrack_fbin.init_read((trackpath + "/" + *ifilename).c_str(), chromid);
+                        int64_t expected_num_bins = (int64_t)ceil(all_genome_intervs[chromid].end / (double)gtrack_fbin.get_bin_size());
 
-						if (gtrack_fbin.get_num_samples() != expected_num_bins)
-							verror("Number of bins in track %s, chrom %s do not match the chromosome size (expecting: %ld, reading: %ld)",
-									itrack_name->c_str(), m_iu.get_chromkey().id2chrom(chromid).c_str(), expected_num_bins, gtrack_fbin.get_num_samples());
+                        if (gtrack_fbin.get_num_samples() != expected_num_bins)
+                            verror("Number of bins in track %s, chrom %s do not match the chromosome size (expecting: %ld, reading: %ld)",
+                                    itrack_name->c_str(), m_iu.get_chromkey().id2chrom(chromid).c_str(), expected_num_bins, gtrack_fbin.get_num_samples());
 					}
 
 					if (ifilename == filenames.begin()) {

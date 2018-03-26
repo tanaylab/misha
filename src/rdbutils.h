@@ -15,6 +15,8 @@
 #include <semaphore.h>
 #include <signal.h>
 #include <time.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include "rdbinterval.h"
 #include "Thread.h"
@@ -175,6 +177,7 @@ public:
 
 	static bool   is_kid() { return s_is_kid; }
 	static int    get_kid_idx() { return s_kid_index; }
+    static void   get_open_fds(set<int> &fds);
 
 	// allows to safely write to stdout even from a child process
 	// (before doing so please make sure launch_process() does not close stdout)
@@ -254,7 +257,6 @@ private:
 	static void    out_of_memory();
 	static void    sigint_handler(int);
 	static void    sigchld_handler(int);
-	static void    get_open_fds(set<int> &fds);
 	static void    prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids);
 	static pid_t   launch_process();
     static void    check_kids_state(bool ignore_errors);
@@ -340,7 +342,7 @@ private:
 	friend void rdb::verror(const char *fmt, ...);
 	friend void rdb::prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids);
 	friend pid_t rdb::launch_process();
-	friend void rdb::wait_for_kids(IntervUtils &iu);
+	friend void rdb::wait_for_kids(rdb::IntervUtils &iu);
 	friend int rdb::get_num_kids();
 	friend void rdb::update_progress(unsigned char progress);
 	friend void rdb::update_res_data_size(size_t size);
@@ -374,7 +376,7 @@ inline bool rdb::is_time_elapsed(int64_t delay_msec, const struct timespec &star
 	struct timespec t2;
 	set_abs_timeout(delay_msec, t1);
 	clock_gettime(CLOCK_REALTIME, &t2);
-	return t2.tv_sec > t1.tv_sec || t2.tv_sec == t1.tv_sec && t2.tv_nsec > t1.tv_nsec;
+	return t2.tv_sec > t1.tv_sec || (t2.tv_sec == t1.tv_sec && t2.tv_nsec > t1.tv_nsec);
 }
 
 inline string rdb::track2attrs_path(SEXP envir, const string &trackname) {
@@ -442,8 +444,8 @@ inline void RdbInitializer::report_alloc(int64_t bytes)
 					s_shm->num_kids_running--;
 					s_shm->num_kids_suspended++;
 				}
-	//vdebug_print("%*s%d (%d): SUSPENDING on ALLOC %ld, total: %ld, running: %ld, suspended: %ld\n", s_kid_index + 1, "", (int)s_kid_index, (int)getpid(), bytes,
-	//s_shm->total_mem_usage, s_shm->num_kids_running, s_shm->num_kids_suspended);
+//vdebug_print("%*s%d (%d): SUSPENDING on ALLOC %ld, total: %ld, running: %ld, suspended: %ld\n", s_kid_index + 1, "", (int)s_kid_index, (int)getpid(), bytes,
+//s_shm->total_mem_usage, s_shm->num_kids_running, s_shm->num_kids_suspended);
 
 				while (sem_wait(s_alloc_suspend_sem) < 0 && errno == EINTR)
 					;

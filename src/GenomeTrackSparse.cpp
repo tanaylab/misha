@@ -62,7 +62,7 @@ void GenomeTrackSparse::read_file_into_mem()
 
 		interval.chromid = m_chromid;
 
-		if (interval.start < 0 || interval.start >= interval.end || i && interval.start < m_intervals[i - 1].end)
+		if (interval.start < 0 || interval.start >= interval.end || (i && interval.start < m_intervals[i - 1].end))
 			TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s", m_bfile.file_name().c_str());
 	}
 

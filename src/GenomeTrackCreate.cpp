@@ -160,12 +160,12 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 				GenomeTrackFixedBin gtrack;
 
 				for (; !scanner.isend(); scanner.next()) {
-					if (cur_chromid != scanner.last_interval1d().chromid) {
-						cur_chromid = scanner.last_interval1d().chromid;
-						sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
-						gtrack.init_write(filename, ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size(), cur_chromid);
-					}
-					gtrack.write_next_bin(scanner.last_real(0));
+                    if (cur_chromid != scanner.last_interval1d().chromid) {
+                        cur_chromid = scanner.last_interval1d().chromid;
+                        sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
+                        gtrack.init_write(filename, ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size(), cur_chromid);
+                    }
+                    gtrack.write_next_bin(scanner.last_real(0));
 				}
 			} else if (itr_type == TrackExpressionIteratorBase::INTERVALS1D) {
 				int cur_chromid = -1;

@@ -226,7 +226,7 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 
 				for (unsigned idx = 1; idx < sources.size(); ++idx) {
 					if (iintervals[idx2write] == sources[idx2write]->get_intervals().end() ||
-						iintervals[idx] != sources[idx]->get_intervals().end() && iintervals[idx2write]->start > iintervals[idx]->start)
+						(iintervals[idx] != sources[idx]->get_intervals().end() && iintervals[idx2write]->start > iintervals[idx]->start))
 						idx2write = idx;
 				}
 
@@ -240,7 +240,7 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 
 					if (iintervals[idx] != sources[idx]->get_intervals().end()) {
 						// write the interval
-						if (idx2write == idx || iintervals[idx2write]->start == iintervals[idx]->start && iintervals[idx2write]->end == iintervals[idx]->end) {
+						if (idx2write == idx || (iintervals[idx2write]->start == iintervals[idx]->start && iintervals[idx2write]->end == iintervals[idx]->end)) {
 							const vector<float> &vals = sources[idx]->get_vals(iintervals[idx]);
 							for (unsigned i = 0; i < vals.size(); ++i) {
 								if (sources[idx]->check_writability(i) && !std::isnan(vals[i]))

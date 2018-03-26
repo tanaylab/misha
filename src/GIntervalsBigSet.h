@@ -17,8 +17,8 @@ public:
 
 protected:
 	GIntervalsBigSet() : m_iu(NULL) {}
-	GIntervalsBigSet(const GIntervalsBigSet &) {}
-	GIntervalsBigSet &operator=(const GIntervalsBigSet &) {}
+	GIntervalsBigSet(const GIntervalsBigSet &) = delete;
+	GIntervalsBigSet &operator=(const GIntervalsBigSet &) = delete;
 
 	IntervUtils *m_iu;
 	string       m_intervset;

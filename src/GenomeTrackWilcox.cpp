@@ -153,7 +153,7 @@ void GenomeTrackSlidingWilcox::set_next_sample(double v)
 
 	if (std::isnan(m_queue[m_center]) || z > m_maxz) {
 		if (m_start_coord != -1) {
-			int64_t start = max(0L, m_start_coord - m_winsize_aside[SMALL] * m_binsize);
+			int64_t start = max((int64_t)0, m_start_coord - m_winsize_aside[SMALL] * m_binsize);
 			int64_t end = m_center_coord + m_winsize_aside[SMALL] * m_binsize;
 
 			if (m_intervals.empty() || m_intervals.back().chromid != m_chromid || m_intervals.back().end < start)

@@ -48,7 +48,7 @@ struct NNRes {
 
 	bool operator<(const NNRes &o) const {
 		return dist < o.dist ||
-			dist == o.dist && obj.v < o.obj.v;
+			(dist == o.dist && obj.v < o.obj.v);
 //		(obj.x1 < o.obj.x1 ||
 //							   obj.x1 == o.obj.x1 && (obj.x2 < o.obj.x2 ||
 //													  (obj.x2 == o.obj.x2 && obj.y1 < o.obj.y1 ||
@@ -91,7 +91,7 @@ struct NNSegmentRes {
 
 	bool operator<(const NNSegmentRes &o) const {
 		return dist < o.dist ||
-			dist == o.dist && obj.v < o.obj.v;
+			(dist == o.dist && obj.v < o.obj.v);
 //		(obj.start < o.obj.start ||
 //							   obj.start == o.obj.start && (obj.end < o.obj.end ||
 //															(obj.end == o.obj.end && obj.v < o.obj.v)));
@@ -268,9 +268,9 @@ SEXP gtest_segment_finder(SEXP _envir) {
 				if (r1.size() < max_nearest_neighbors) {
 					printf("\t%ld Query: %s\n", iquery - queries.begin(), iquery->debug_str());
 					for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j)
-						printf("\tSegment finder: %s, dist: %ld\n", r1[j].obj.debug_str(), r1[j].dist);
+						printf("\tSegment finder: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
 					for (size_t j = 0; j < min(r2.size(), (size_t)max_nearest_neighbors); ++j)
-						printf("\tPlain:          %s, dist: %ld\n", r2[j].obj.debug_str(), r2[j].dist);
+						printf("\tPlain:          %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 					getchar();
 					check_interrupt();
 				}
@@ -279,8 +279,8 @@ SEXP gtest_segment_finder(SEXP _envir) {
 					if (!(r1[j] == r2[j])) {
 						printf("\t%ld Query: %s\n", iquery - queries.begin(), iquery->debug_str());
 						for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j) {
-							printf("\tSegment finder: %s, dist: %ld\n", r1[j].obj.debug_str(), r1[j].dist);
-							printf("\tPlain:          %s, dist: %ld\n", r2[j].obj.debug_str(), r2[j].dist);
+							printf("\tSegment finder: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
+							printf("\tPlain:          %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 						}
 						getchar();
 						check_interrupt();
@@ -637,7 +637,7 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //		}
 //		printf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
-		printf("Rects: %ld\n", qtree.get_num_objs());
+		printf("Rects: %llu\n", qtree.get_num_objs());
 		check_interrupt();
 //
 //		printf("Converting quad tree to cached quad tree\n");
@@ -931,17 +931,17 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 				sort(r2.begin(), r2.end());
 				if (r1.size() < max_nearest_neighbors) {
 					for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j)
-						printf("\tQuad-tree: %s, dist: %ld\n", r1[j].obj.debug_str(), r1[j].dist);
+						printf("\tQuad-tree: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
 					for (size_t j = 0; j < min(r2.size(), (size_t)max_nearest_neighbors); ++j)
-						printf("\tPlain:     %s, dist: %ld\n", r2[j].obj.debug_str(), r2[j].dist);
+						printf("\tPlain:     %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 					getchar();
 					check_interrupt();
 				}
 
 				for (size_t j = 0; j < r1.size(); ++j) {
 					if (!(r1[j] == r2[j])) {
-						printf("\tQuad-tree: %s, dist: %ld\n", r1[j].obj.debug_str(), r1[j].dist);
-						printf("\tPlain: %s, dist: %ld\n", r2[j].obj.debug_str(), r2[j].dist);
+						printf("\tQuad-tree: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
+						printf("\tPlain: %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 						getchar();
 						check_interrupt();
 					}

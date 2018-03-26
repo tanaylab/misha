@@ -79,7 +79,7 @@ void GIntervals2D::begin_chrom_iter(int chromid1, int chromid2)
 	m_cur_chromid2 = chromid2;
 	m_iter_chrom_index = 0;
 
-	if (chromid1 >= m_num_chroms || chromid2 >= m_num_chroms && chromid1 >= m_num_chroms - 1) 
+	if (chromid1 >= m_num_chroms || (chromid2 >= m_num_chroms && chromid1 >= m_num_chroms - 1))
 		m_iinterval = end();
 	else if (chromid2 >= m_num_chroms) 
 		m_iinterval = m_chrom2itr[chroms2idx(chromid1 + 1, 0)];

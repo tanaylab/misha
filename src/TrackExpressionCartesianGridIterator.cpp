@@ -135,8 +135,8 @@ bool TrackExpressionCartesianGridIterator::next()
 
 		int delta_idx = (m_igpoint[0] - m_gpoints[0].begin()) - (m_igpoint[1] - m_gpoints[1].begin());
 		if (m_iexpansion[0] == m_expansion[0].end() ||
-				m_igpoint[0]->chromid != m_igpoint[1]->chromid && (m_band.is_non_empty_area() || m_use_band_idx_limit) ||
-				m_use_band_idx_limit && (delta_idx < m_min_band_idx || delta_idx > m_max_band_idx))
+				(m_igpoint[0]->chromid != m_igpoint[1]->chromid && (m_band.is_non_empty_area() || m_use_band_idx_limit)) ||
+				(m_use_band_idx_limit && (delta_idx < m_min_band_idx || delta_idx > m_max_band_idx)))
 		{
 			m_iexpansion[0] = m_expansion[0].begin() + 1;
 			m_iexpansion[1] = m_expansion[1].begin() + 1;
@@ -165,7 +165,7 @@ bool TrackExpressionCartesianGridIterator::next()
 			m_chromid[0] = m_igpoint[0]->chromid;
 			m_chromid[1] = m_igpoint[1]->chromid;
 
-			if (m_scope_chromid[0] < m_chromid[0] || m_scope_chromid[0] == m_chromid[0] && m_scope_chromid[1] < m_chromid[1]) {
+			if (m_scope_chromid[0] < m_chromid[0] || (m_scope_chromid[0] == m_chromid[0] && m_scope_chromid[1] < m_chromid[1])) {
 				m_scope_chromid[0] = m_chromid[0];
 				m_scope_chromid[1] = m_chromid[1];
 				m_scope->begin_chrom_iter(m_scope_chromid[0], m_scope_chromid[1]);

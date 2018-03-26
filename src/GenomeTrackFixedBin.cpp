@@ -78,23 +78,23 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 {
 	m_cur_coord = 0;
 
-	if (m_bfile.open(filename, mode))
-		TGLError<GenomeTrackFixedBin>("%s", strerror(errno));
+    if (m_bfile.open(filename, mode))
+        TGLError<GenomeTrackFixedBin>("%s", strerror(errno));
 
-	if (m_bfile.read(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size)) {
-		if (m_bfile.error())
-			TGLError<GenomeTrackFixedBin>("Failed to read a dense track file %s: %s", filename, strerror(errno));
-		TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
-	}
+    if (m_bfile.read(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size)) {
+        if (m_bfile.error())
+            TGLError<GenomeTrackFixedBin>("Failed to read a dense track file %s: %s", filename, strerror(errno));
+        TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
+    }
 
-	// determine the number of samples in the file
-	double num_samples = (m_bfile.file_size() - m_bfile.tell()) / (double)sizeof(float);
+    // determine the number of samples in the file
+    double num_samples = (m_bfile.file_size() - m_bfile.tell()) / (double)sizeof(float);
 
-	if (m_bin_size <= 0 || num_samples != (int64_t)num_samples)
-		TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
+    if (m_bin_size <= 0 || num_samples != (int64_t)num_samples)
+        TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
 
-	m_num_samples = (int64_t)num_samples;
-	m_chromid = chromid;
+    m_num_samples = (int64_t)num_samples;
+    m_chromid = chromid;
 }
 
 void GenomeTrackFixedBin::init_write(const char *filename, unsigned bin_size, int chromid)
