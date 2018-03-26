@@ -57,7 +57,7 @@ void GIntervals::unify_overlaps(bool unify_touching_intervals)
 	size_t cur_idx = 0;
 
 	for (size_t i = 1; i < size(); i++) {
-		if (operator[](cur_idx).chromid != operator[](i).chromid || operator[](cur_idx).end < operator[](i).start || !unify_touching_intervals && operator[](cur_idx).end == operator[](i).start)
+		if (operator[](cur_idx).chromid != operator[](i).chromid || operator[](cur_idx).end < operator[](i).start || (!unify_touching_intervals && operator[](cur_idx).end == operator[](i).start))
 			operator[](++cur_idx) = operator[](i);
 		// unite overlapping intervals
 		else if (operator[](cur_idx).end < operator[](i).end)

@@ -170,7 +170,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 			int64_t coord1 = (start1 + end1) / 2;
 			int64_t coord2 = (start2 + end2) / 2;
 
-			if (chromid1 > chromid2 || chromid1 == chromid2 && coord1 > coord2) {
+			if (chromid1 > chromid2 || (chromid1 == chromid2 && coord1 > coord2)) {
 				swap(chromid1, chromid2);
 				swap(coord1, coord2);
 			}
@@ -333,7 +333,7 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 			if (*endptr)
 				verror("Error reading contacts file %s, line %ld: invalid %s", contacts_fname, lineno, CONTACTS_COLS[COL_COUNT]);
 
-			if (chromids[fend1] > chromids[fend2] || chromids[fend1] == chromids[fend2] && coords[fend1] > coords[fend2])
+			if (chromids[fend1] > chromids[fend2] || (chromids[fend1] == chromids[fend2] && coords[fend1] > coords[fend2]))
 				swap(fend1, fend2);
 
 			Chrom_pair chrom_pair(chromids[fend1], chromids[fend2]);

@@ -24,8 +24,8 @@ struct IntervNeighbor {
 	bool operator<(const IntervNeighbor &o) const {
 		return
 			id1 < o.id1 ||
-			id1 == o.id1 && llabs(dist) < llabs(o.dist) ||
-			id1 == o.id1 && llabs(dist) == llabs(o.dist) && id2 < o.id2;
+			(id1 == o.id1 && llabs(dist) < llabs(o.dist)) ||
+			(id1 == o.id1 && llabs(dist) == llabs(o.dist) && id2 < o.id2);
 	}
 };
 
@@ -40,8 +40,8 @@ struct IntervNeighbor2D {
 	bool operator<(const IntervNeighbor2D &o) const {
 		return
 			id1 < o.id1 ||
-			id1 == o.id1 && llabs(dist1 + dist2) < llabs(o.dist1 + o.dist2) ||
-			id1 == o.id1 && llabs(dist1 + dist2) == llabs(o.dist1 + o.dist2) && id2 == o.id2;
+			(id1 == o.id1 && llabs(dist1 + dist2) < llabs(o.dist1 + o.dist2)) ||
+			(id1 == o.id1 && llabs(dist1 + dist2) == llabs(o.dist1 + o.dist2) && id2 == o.id2);
 	}
 };
 
@@ -97,7 +97,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			int64_t maxdist = max(llabs(distance_start), llabs(distance_end));
 			int64_t mindist = min(llabs(distance_start), llabs(distance_end));
 
-			if (intervals1d[0].empty() || intervals1d[1].empty() && !na_if_notfound) 
+			if (intervals1d[0].empty() || (intervals1d[1].empty() && !na_if_notfound))
 				return R_NilValue;
 
 			vector<IntervNeighbor> result;
@@ -123,7 +123,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 					}
 				}
 
-				if (distance_start > 0 && distance_end > 0 || distance_start < 0 && distance_end < 0) {
+				if ((distance_start > 0 && distance_end > 0) || (distance_start < 0 && distance_end < 0)) {
 					Segment excluded_area(iinterv->start - mindist + 1, iinterv->end + mindist - 1);
 					inn.begin(*iinterv, excluded_area);
 				} else
@@ -212,7 +212,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			if (distance_start2 > distance_end2)
 				verror("mindist2 exceeds maxdist2");
 
-			if (intervals2d[0].empty() || intervals2d[1].empty() && !na_if_notfound || distance_end1 < 0 || distance_end2 < 0)
+			if (intervals2d[0].empty() || (intervals2d[1].empty() && !na_if_notfound) || distance_end1 < 0 || distance_end2 < 0)
 				return R_NilValue;
 
 			vector<IntervNeighbor2D> result;

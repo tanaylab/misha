@@ -54,7 +54,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 	if (!isNull(gvtracks) && !isSymbol(gvtracks)) { 
 		SEXP gwds = getAttrib(gvtracks, R_NamesSymbol);
 
-		if (!isVector(gvtracks) || length(gvtracks) && !isString(gwds) || length(gwds) != length(gvtracks))
+		if (!isVector(gvtracks) || (length(gvtracks) && !isString(gwds)) || length(gwds) != length(gvtracks))
 			verror("Invalid format of GVTRACKS variable.\n"
 				   "To continue working with virtual tracks please remove this variable from the environment.");
 
@@ -65,7 +65,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 				vtracks = VECTOR_ELT(gvtracks, i);
 				SEXP vtracknames = getAttrib(vtracks, R_NamesSymbol);
 
-				if (!isVector(vtracks) || length(vtracks) && !isString(vtracknames) || length(vtracknames) != length(vtracks))
+				if (!isVector(vtracks) || (length(vtracks) && !isString(vtracknames)) || length(vtracknames) != length(vtracks))
 					verror("Invalid format of GVTRACKS variable.\n"
 				           "To continue working with virtual tracks please remove this variable from the environment.");
 
@@ -412,9 +412,9 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 	int ifunc;
 	for (ifunc = 0; ifunc < Track_var::NUM_FUNCS; ++ifunc) {
 		if (!strcmp(func.c_str(), Track_var::FUNC_NAMES[ifunc])) {
-			if (GenomeTrack::is_1d(track_type) && (ifunc == Track_var::WEIGHTED_SUM || ifunc == Track_var::OCCUPIED_AREA) ||
-					GenomeTrack::is_2d(track_type) && (ifunc == Track_var::REG_NEAREST || ifunc == Track_var::STDDEV || ifunc == Track_var::SUM || ifunc == Track_var::QUANTILE) ||
-					track_type != GenomeTrack::FIXED_BIN && (ifunc == Track_var::PV || ifunc == Track_var::PV_MIN || ifunc == Track_var::PV_MAX))
+			if ((GenomeTrack::is_1d(track_type) && (ifunc == Track_var::WEIGHTED_SUM || ifunc == Track_var::OCCUPIED_AREA)) ||
+					(GenomeTrack::is_2d(track_type) && (ifunc == Track_var::REG_NEAREST || ifunc == Track_var::STDDEV || ifunc == Track_var::SUM || ifunc == Track_var::QUANTILE)) ||
+					(track_type != GenomeTrack::FIXED_BIN && (ifunc == Track_var::PV || ifunc == Track_var::PV_MIN || ifunc == Track_var::PV_MAX)))
 				verror("Virtual track %s: function %s is not supported by %s tracks", vtrack.c_str(), func.c_str(), GenomeTrack::TYPE_NAMES[track_type]);
 
 			if (ifunc == Track_var::QUANTILE) {
@@ -660,10 +660,10 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		try {
 			string filename(track2path(m_iu.get_env(), itrack_n_imdf->name) + "/" + GenomeTrack::get_1d_filename(m_iu.get_chromkey(), interval.chromid));
 
-			delete itrack_n_imdf->track;
+            delete itrack_n_imdf->track;
 			if (itrack_n_imdf->type == GenomeTrack::FIXED_BIN) {
-				itrack_n_imdf->track = new GenomeTrackFixedBin;
-				((GenomeTrackFixedBin *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid);
+                itrack_n_imdf->track = new GenomeTrackFixedBin;
+                ((GenomeTrackFixedBin *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid);
 			} else if (itrack_n_imdf->type == GenomeTrack::SPARSE) {
 				itrack_n_imdf->track = new GenomeTrackSparse;
 				((GenomeTrackSparse *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid);
@@ -695,7 +695,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 			verror("%s\n", e.msg());
 		}
 	}
-	register_track_functions();
+    register_track_functions();
 }
 
 void TrackExpressionVars::start_chrom(const GInterval2D &interval)
@@ -753,15 +753,15 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 
 void TrackExpressionVars::set_vars(const GInterval &interval, unsigned idx)
 {
-	if (m_interval1d.chromid != interval.chromid)
-		start_chrom(interval);
+    if (m_interval1d.chromid != interval.chromid)
+        start_chrom(interval);
 
 	m_interval1d = interval;
 
-	for (Iterator_modifiers1D::iterator iimdf = m_imdfs1d.begin(); iimdf != m_imdfs1d.end(); ++iimdf)
-		iimdf->transform(interval, m_iu.get_chromkey());
+    for (Iterator_modifiers1D::iterator iimdf = m_imdfs1d.begin(); iimdf != m_imdfs1d.end(); ++iimdf)
+        iimdf->transform(interval, m_iu.get_chromkey());
 
-	set_vars(idx);
+    set_vars(idx);
 }
 
 void TrackExpressionVars::set_vars(const GInterval2D &interval, const DiagonalBand &band, unsigned idx)

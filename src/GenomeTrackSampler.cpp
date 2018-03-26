@@ -28,7 +28,7 @@ SEXP gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_poli
 		if (!isString(_expr) || length(_expr) != 1)
 			verror("Expression argument is not a string");
 
-		if (!isReal(_num_samples) && !isInteger(_num_samples) || length(_num_samples) != 1)
+		if ((!isReal(_num_samples) && !isInteger(_num_samples)) || length(_num_samples) != 1)
 			verror("Number of samples argument must be a number");
 
 		if (isReal(_num_samples) && (double)REAL(_num_samples)[0] != (double)(int)REAL(_num_samples)[0]) 

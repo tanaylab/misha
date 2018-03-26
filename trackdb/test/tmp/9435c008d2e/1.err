@@ -1,0 +1,1122 @@
+bash: module: line 1: syntax error: unexpected end of file
+bash: error importing function definition for `BASH_FUNC_module'
+bash: ml: line 1: syntax error: unexpected end of file
+bash: error importing function definition for `BASH_FUNC_ml'
+Loading required package: bindrcpp
+Loading required package: sc5mc
+Loading required package: gpatterns
+
+Attaching package: ‘gpatterns’
+
+The following objects are masked _by_ ‘.GlobalEnv’:
+
+    fread, qqv
+
+Joining, by = "index1"
+Joining, by = "index2"
+Joining, by = c("index1", "index2", "illumina_index", "lib")
+0.00reads [00:00, ?reads/s]23.1Kreads [00:00, 230Kreads/s]68.2Kreads [00:00, 270Kreads/s]116Kreads [00:00, 310Kreads/s] 162Kreads [00:00, 345Kreads/s]209Kreads [00:00, 375Kreads/s]258Kreads [00:00, 401Kreads/s]305Kreads [00:00, 421Kreads/s]366Kreads [00:00, 464Kreads/s]442Kreads [00:00, 525Kreads/s]518Kreads [00:01, 580Kreads/s]593Kreads [00:01, 621Kreads/s]666Kreads [00:01, 650Kreads/s]741Kreads [00:01, 677Kreads/s]816Kreads [00:01, 697Kreads/s]891Kreads [00:01, 712Kreads/s]966Kreads [00:01, 723Kreads/s]
+0.00reads [00:00, ?reads/s]30.5Kreads [00:00, 304Kreads/s]103Kreads [00:00, 368Kreads/s] 181Kreads [00:00, 437Kreads/s]259Kreads [00:00, 505Kreads/s]336Kreads [00:00, 562Kreads/s]415Kreads [00:00, 616Kreads/s]494Kreads [00:00, 659Kreads/s]571Kreads [00:00, 688Kreads/s]647Kreads [00:00, 708Kreads/s]722Kreads [00:01, 721Kreads/s]798Kreads [00:01, 732Kreads/s]874Kreads [00:01, 740Kreads/s]952Kreads [00:01, 751Kreads/s]
+0.00reads [00:00, ?reads/s]33.5Kreads [00:00, 334Kreads/s]72.5Kreads [00:00, 349Kreads/s]107Kreads [00:00, 347Kreads/s] 149Kreads [00:00, 367Kreads/s]194Kreads [00:00, 388Kreads/s]237Kreads [00:00, 400Kreads/s]279Kreads [00:00, 405Kreads/s]322Kreads [00:00, 412Kreads/s]365Kreads [00:00, 418Kreads/s]408Kreads [00:01, 422Kreads/s]451Kreads [00:01, 425Kreads/s]494Kreads [00:01, 426Kreads/s]537Kreads [00:01, 427Kreads/s]587Kreads [00:01, 445Kreads/s]631Kreads [00:01, 441Kreads/s]686Kreads [00:01, 468Kreads/s]735Kreads [00:01, 474Kreads/s]784Kreads [00:01, 481Kreads/s]837Kreads [00:01, 493Kreads/s]887Kreads [00:02, 489Kreads/s]936Kreads [00:02, 468Kreads/s]983Kreads [00:02, 464Kreads/s]
+0.00reads [00:00, ?reads/s]48.7Kreads [00:00, 487Kreads/s]106Kreads [00:00, 511Kreads/s] 164Kreads [00:00, 528Kreads/s]221Kreads [00:00, 542Kreads/s]278Kreads [00:00, 550Kreads/s]334Kreads [00:00, 552Kreads/s]384Kreads [00:00, 535Kreads/s]437Kreads [00:00, 532Kreads/s]487Kreads [00:00, 515Kreads/s]537Kreads [00:01, 486Kreads/s]585Kreads [00:01, 475Kreads/s]634Kreads [00:01, 479Kreads/s]682Kreads [00:01, 481Kreads/s]740Kreads [00:01, 507Kreads/s]791Kreads [00:01, 505Kreads/s]845Kreads [00:01, 513Kreads/s]899Kreads [00:01, 520Kreads/s]956Kreads [00:01, 537Kreads/s]
+0.00reads [00:00, ?reads/s]48.2Kreads [00:00, 482Kreads/s]102Kreads [00:00, 498Kreads/s] 158Kreads [00:00, 516Kreads/s]203Kreads [00:00, 492Kreads/s]241Kreads [00:00, 415Kreads/s]282Kreads [00:00, 415Kreads/s]320Kreads [00:00, 361Kreads/s]374Kreads [00:00, 400Kreads/s]432Kreads [00:00, 442Kreads/s]486Kreads [00:01, 467Kreads/s]539Kreads [00:01, 486Kreads/s]596Kreads [00:01, 507Kreads/s]654Kreads [00:01, 528Kreads/s]711Kreads [00:01, 539Kreads/s]770Kreads [00:01, 552Kreads/s]828Kreads [00:01, 562Kreads/s]885Kreads [00:01, 543Kreads/s]943Kreads [00:01, 555Kreads/s]999Kreads [00:01, 543Kreads/s]
+0.00reads [00:00, ?reads/s]38.7Kreads [00:00, 387Kreads/s]86.5Kreads [00:00, 410Kreads/s]136Kreads [00:00, 433Kreads/s] 186Kreads [00:00, 449Kreads/s]236Kreads [00:00, 463Kreads/s]289Kreads [00:00, 482Kreads/s]345Kreads [00:00, 503Kreads/s]403Kreads [00:00, 524Kreads/s]463Kreads [00:00, 543Kreads/s]519Kreads [00:01, 549Kreads/s]578Kreads [00:01, 561Kreads/s]636Kreads [00:01, 566Kreads/s]692Kreads [00:01, 564Kreads/s]752Kreads [00:01, 573Kreads/s]809Kreads [00:01, 572Kreads/s]866Kreads [00:01, 572Kreads/s]925Kreads [00:01, 576Kreads/s]982Kreads [00:01, 571Kreads/s]
+0.00reads [00:00, ?reads/s]11.7Kreads [00:00, 117Kreads/s]64.9Kreads [00:00, 153Kreads/s]119Kreads [00:00, 195Kreads/s] 172Kreads [00:00, 241Kreads/s]224Kreads [00:00, 287Kreads/s]277Kreads [00:00, 333Kreads/s]334Kreads [00:00, 381Kreads/s]386Kreads [00:00, 414Kreads/s]443Kreads [00:00, 451Kreads/s]497Kreads [00:01, 466Kreads/s]548Kreads [00:01, 261Kreads/s]588Kreads [00:02, 89.1Kreads/s]635Kreads [00:02, 118Kreads/s] 684Kreads [00:02, 153Kreads/s]732Kreads [00:02, 191Kreads/s]773Kreads [00:03, 181Kreads/s]807Kreads [00:03, 160Kreads/s]834Kreads [00:03, 173Kreads/s]860Kreads [00:03, 184Kreads/s]886Kreads [00:03, 201Kreads/s]911Kreads [00:06, 24.7Kreads/s]929Kreads [00:08, 15.1Kreads/s]941Kreads [00:09, 17.2Kreads/s]959Kreads [00:09, 23.6Kreads/s]971Kreads [00:09, 30.7Kreads/s]1000Kreads [00:09, 41.9Kreads/s]
+0.00reads [00:00, ?reads/s]41.9Kreads [00:00, 419Kreads/s]110Kreads [00:00, 474Kreads/s] 173Kreads [00:00, 513Kreads/s]240Kreads [00:00, 552Kreads/s]306Kreads [00:00, 580Kreads/s]375Kreads [00:00, 609Kreads/s]443Kreads [00:00, 629Kreads/s]512Kreads [00:00, 645Kreads/s]580Kreads [00:00, 655Kreads/s]645Kreads [00:01, 655Kreads/s]712Kreads [00:01, 658Kreads/s]780Kreads [00:01, 665Kreads/s]849Kreads [00:01, 673Kreads/s]917Kreads [00:01, 676Kreads/s]985Kreads [00:01, 674Kreads/s]
+0.00reads [00:00, ?reads/s]40.8Kreads [00:00, 408Kreads/s]76.7Kreads [00:00, 392Kreads/s]102Kreads [00:00, 338Kreads/s] 123Kreads [00:00, 243Kreads/s]157Kreads [00:00, 265Kreads/s]199Kreads [00:00, 298Kreads/s]234Kreads [00:00, 313Kreads/s]266Kreads [00:00, 315Kreads/s]298Kreads [00:01, 265Kreads/s]325Kreads [00:04, 25.1Kreads/s]345Kreads [00:06, 19.2Kreads/s]359Kreads [00:06, 20.1Kreads/s]370Kreads [00:07, 22.3Kreads/s]378Kreads [00:08, 11.7Kreads/s]384Kreads [00:08, 12.0Kreads/s]389Kreads [00:09, 13.3Kreads/s]392Kreads [00:09, 14.2Kreads/s]395Kreads [00:09, 16.0Kreads/s]398Kreads [00:09, 18.3Kreads/s]402Kreads [00:09, 21.6Kreads/s]409Kreads [00:09, 27.1Kreads/s]417Kreads [00:09, 34.1Kreads/s]425Kreads [00:10, 41.4Kreads/s]436Kreads [00:10, 50.6Kreads/s]460Kreads [00:10, 66.4Kreads/s]497Kreads [00:10, 87.9Kreads/s]541Kreads [00:10, 116Kreads/s] 588Kreads [00:10, 150Kreads/s]621Kreads [00:11, 106Kreads/s]646Kreads [00:11, 128Kreads/s]684Kreads [00:11, 160Kreads/s]735Kreads [00:11, 201Kreads/s]791Kreads [00:11, 249Kreads/s]840Kreads [00:11, 292Kreads/s]894Kreads [00:11, 339Kreads/s]951Kreads [00:11, 386Kreads/s]
+0.00reads [00:00, ?reads/s]71.3Kreads [00:00, 713Kreads/s]141Kreads [00:00, 707Kreads/s] 209Kreads [00:00, 701Kreads/s]281Kreads [00:00, 706Kreads/s]348Kreads [00:00, 694Kreads/s]417Kreads [00:00, 694Kreads/s]486Kreads [00:00, 690Kreads/s]553Kreads [00:00, 687Kreads/s]618Kreads [00:00, 669Kreads/s]686Kreads [00:01, 671Kreads/s]755Kreads [00:01, 679Kreads/s]825Kreads [00:01, 685Kreads/s]897Kreads [00:01, 693Kreads/s]965Kreads [00:01, 684Kreads/s]
+0.00reads [00:00, ?reads/s]1.69Kreads [00:00, 11.8Kreads/s]2.04Kreads [00:00, 2.93Kreads/s]4.05Kreads [00:00, 3.93Kreads/s]4.84Kreads [00:02, 1.02Kreads/s]5.41Kreads [00:04, 544reads/s]  5.81Kreads [00:05, 686reads/s]7.63Kreads [00:05, 963reads/s]8.39Kreads [00:05, 1.12Kreads/s]8.98Kreads [00:05, 1.23Kreads/s]9.44Kreads [00:06, 1.38Kreads/s]9.82Kreads [00:06, 1.58Kreads/s]10.2Kreads [00:06, 1.78Kreads/s]10.5Kreads [00:06, 1.95Kreads/s]10.8Kreads [00:06, 1.96Kreads/s]11.0Kreads [00:06, 2.03Kreads/s]11.3Kreads [00:07, 2.05Kreads/s]11.5Kreads [00:07, 2.12Kreads/s]11.8Kreads [00:07, 2.17Kreads/s]12.0Kreads [00:07, 2.23Kreads/s]12.3Kreads [00:07, 2.29Kreads/s]12.5Kreads [00:07, 2.32Kreads/s]12.8Kreads [00:07, 2.37Kreads/s]13.0Kreads [00:07, 2.36Kreads/s]13.3Kreads [00:07, 2.49Kreads/s]13.5Kreads [00:07, 2.22Kreads/s]14.3Kreads [00:08, 2.81Kreads/s]16.8Kreads [00:08, 3.82Kreads/s]17.8Kreads [00:08, 4.04Kreads/s]18.6Kreads [00:08, 3.36Kreads/s]19.3Kreads [00:09, 3.11Kreads/s]19.8Kreads [00:09, 2.99Kreads/s]20.3Kreads [00:09, 2.98Kreads/s]20.7Kreads [00:09, 3.00Kreads/s]21.1Kreads [00:09, 2.98Kreads/s]21.4Kreads [00:09, 3.05Kreads/s]21.8Kreads [00:09, 3.05Kreads/s]22.1Kreads [00:09, 3.17Kreads/s]22.5Kreads [00:10, 3.39Kreads/s]23.0Kreads [00:10, 3.73Kreads/s]23.4Kreads [00:10, 3.74Kreads/s]23.9Kreads [00:10, 3.86Kreads/s]24.3Kreads [00:10, 3.99Kreads/s]24.7Kreads [00:10, 3.86Kreads/s]25.1Kreads [00:10, 3.81Kreads/s]25.5Kreads [00:10, 3.94Kreads/s]25.9Kreads [00:10, 3.94Kreads/s]26.3Kreads [00:10, 3.90Kreads/s]26.7Kreads [00:11, 3.78Kreads/s]27.2Kreads [00:11, 3.90Kreads/s]27.7Kreads [00:11, 4.18Kreads/s]28.1Kreads [00:11, 4.26Kreads/s]28.5Kreads [00:11, 4.23Kreads/s]29.0Kreads [00:11, 4.22Kreads/s]29.4Kreads [00:11, 4.12Kreads/s]29.8Kreads [00:11, 4.08Kreads/s]30.2Kreads [00:11, 4.07Kreads/s]30.6Kreads [00:12, 4.08Kreads/s]31.1Kreads [00:12, 4.30Kreads/s]31.6Kreads [00:12, 4.51Kreads/s]32.2Kreads [00:12, 4.78Kreads/s]32.7Kreads [00:12, 4.92Kreads/s]33.3Kreads [00:12, 5.02Kreads/s]33.8Kreads [00:12, 4.98Kreads/s]34.3Kreads [00:12, 4.98Kreads/s]34.9Kreads [00:12, 5.29Kreads/s]35.8Kreads [00:12, 6.07Kreads/s]36.7Kreads [00:13, 6.56Kreads/s]37.9Kreads [00:13, 7.65Kreads/s]39.2Kreads [00:13, 8.64Kreads/s]40.1Kreads [00:13, 8.54Kreads/s]41.1Kreads [00:13, 8.51Kreads/s]42.3Kreads [00:13, 9.20Kreads/s]43.2Kreads [00:13, 8.07Kreads/s]44.3Kreads [00:13, 8.60Kreads/s]46.6Kreads [00:13, 10.5Kreads/s]52.2Kreads [00:14, 13.9Kreads/s]64.2Kreads [00:14, 18.9Kreads/s]82.5Kreads [00:14, 25.9Kreads/s]109Kreads [00:14, 35.5Kreads/s] 141Kreads [00:14, 48.4Kreads/s]200Kreads [00:14, 66.8Kreads/s]243Kreads [00:14, 89.6Kreads/s]309Kreads [00:14, 121Kreads/s] 378Kreads [00:14, 161Kreads/s]444Kreads [00:14, 208Kreads/s]506Kreads [00:15, 260Kreads/s]572Kreads [00:15, 317Kreads/s]636Kreads [00:15, 373Kreads/s]703Kreads [00:15, 431Kreads/s]771Kreads [00:15, 484Kreads/s]835Kreads [00:15, 522Kreads/s]902Kreads [00:15, 560Kreads/s]968Kreads [00:15, 586Kreads/s]
+0.00reads [00:00, ?reads/s]70.5Kreads [00:00, 704Kreads/s]144Kreads [00:00, 712Kreads/s] 217Kreads [00:00, 717Kreads/s]286Kreads [00:00, 711Kreads/s]355Kreads [00:00, 703Kreads/s]425Kreads [00:00, 702Kreads/s]497Kreads [00:00, 707Kreads/s]569Kreads [00:00, 711Kreads/s]636Kreads [00:00, 696Kreads/s]704Kreads [00:01, 692Kreads/s]773Kreads [00:01, 691Kreads/s]846Kreads [00:01, 703Kreads/s]918Kreads [00:01, 705Kreads/s]988Kreads [00:01, 702Kreads/s]
+0.00reads [00:00, ?reads/s]1.90Kreads [00:00, 18.9Kreads/s]2.47Kreads [00:00, 11.0Kreads/s]6.85Kreads [00:00, 14.1Kreads/s]8.51Kreads [00:00, 12.3Kreads/s]10.3Kreads [00:00, 13.4Kreads/s]11.9Kreads [00:00, 13.8Kreads/s]19.9Kreads [00:00, 18.3Kreads/s]27.4Kreads [00:00, 23.6Kreads/s]39.2Kreads [00:01, 31.0Kreads/s]45.8Kreads [00:01, 33.8Kreads/s]51.7Kreads [00:01, 30.5Kreads/s]56.6Kreads [00:01, 25.5Kreads/s]60.5Kreads [00:01, 26.8Kreads/s]64.2Kreads [00:02, 14.8Kreads/s]76.5Kreads [00:02, 20.1Kreads/s]93.8Kreads [00:02, 27.4Kreads/s]115Kreads [00:02, 37.1Kreads/s] 147Kreads [00:02, 50.0Kreads/s]169Kreads [00:02, 65.0Kreads/s]196Kreads [00:02, 84.1Kreads/s]217Kreads [00:03, 97.2Kreads/s]240Kreads [00:03, 118Kreads/s] 260Kreads [00:03, 125Kreads/s]294Kreads [00:03, 154Kreads/s]317Kreads [00:03, 165Kreads/s]358Kreads [00:03, 202Kreads/s]386Kreads [00:03, 165Kreads/s]414Kreads [00:03, 186Kreads/s]438Kreads [00:08, 17.7Kreads/s]455Kreads [00:08, 20.0Kreads/s]468Kreads [00:08, 26.3Kreads/s]483Kreads [00:09, 34.9Kreads/s]497Kreads [00:09, 45.0Kreads/s]532Kreads [00:09, 61.0Kreads/s]555Kreads [00:09, 78.1Kreads/s]601Kreads [00:09, 104Kreads/s] 646Kreads [00:09, 135Kreads/s]695Kreads [00:09, 173Kreads/s]742Kreads [00:09, 213Kreads/s]782Kreads [00:09, 222Kreads/s]834Kreads [00:09, 269Kreads/s]879Kreads [00:10, 305Kreads/s]921Kreads [00:10, 327Kreads/s]962Kreads [00:10, 318Kreads/s]1000Kreads [00:10, 185Kreads/s]
+0.00reads [00:00, ?reads/s]41.3Kreads [00:00, 413Kreads/s]80.2Kreads [00:00, 406Kreads/s]125Kreads [00:00, 418Kreads/s] 170Kreads [00:00, 428Kreads/s]207Kreads [00:00, 407Kreads/s]249Kreads [00:00, 412Kreads/s]293Kreads [00:00, 420Kreads/s]332Kreads [00:00, 409Kreads/s]390Kreads [00:00, 448Kreads/s]453Kreads [00:01, 491Kreads/s]515Kreads [00:01, 524Kreads/s]575Kreads [00:01, 545Kreads/s]632Kreads [00:01, 551Kreads/s]693Kreads [00:01, 566Kreads/s]757Kreads [00:01, 587Kreads/s]818Kreads [00:01, 594Kreads/s]880Kreads [00:01, 599Kreads/s]940Kreads [00:01, 570Kreads/s]
+0.00reads [00:00, ?reads/s]2.12Kreads [00:00, 19.3Kreads/s]2.69Kreads [00:00, 6.37Kreads/s]8.25Kreads [00:00, 8.65Kreads/s]10.2Kreads [00:00, 9.74Kreads/s]11.9Kreads [00:00, 9.92Kreads/s]13.9Kreads [00:00, 11.7Kreads/s]15.9Kreads [00:00, 13.2Kreads/s]17.6Kreads [00:01, 13.1Kreads/s]19.2Kreads [00:01, 13.8Kreads/s]21.1Kreads [00:01, 14.8Kreads/s]22.7Kreads [00:01, 11.7Kreads/s]25.3Kreads [00:01, 13.9Kreads/s]28.5Kreads [00:01, 16.7Kreads/s]31.6Kreads [00:01, 19.3Kreads/s]35.0Kreads [00:01, 22.1Kreads/s]38.3Kreads [00:02, 24.3Kreads/s]41.1Kreads [00:02, 18.5Kreads/s]44.7Kreads [00:02, 21.6Kreads/s]48.4Kreads [00:02, 24.7Kreads/s]51.7Kreads [00:02, 26.6Kreads/s]54.8Kreads [00:02, 26.9Kreads/s]60.0Kreads [00:02, 31.2Kreads/s]63.5Kreads [00:02, 26.3Kreads/s]66.6Kreads [00:03, 22.9Kreads/s]69.3Kreads [00:03, 23.7Kreads/s]72.0Kreads [00:03, 23.2Kreads/s]77.4Kreads [00:03, 28.0Kreads/s]81.4Kreads [00:03, 30.5Kreads/s]84.9Kreads [00:04, 12.6Kreads/s]87.5Kreads [00:04, 9.65Kreads/s]89.6Kreads [00:04, 8.70Kreads/s]91.2Kreads [00:05, 8.32Kreads/s]92.6Kreads [00:05, 7.74Kreads/s]93.7Kreads [00:05, 7.39Kreads/s]94.7Kreads [00:05, 7.15Kreads/s]95.6Kreads [00:05, 6.50Kreads/s]96.4Kreads [00:05, 6.34Kreads/s]97.2Kreads [00:06, 5.93Kreads/s]97.8Kreads [00:06, 5.99Kreads/s]98.5Kreads [00:06, 6.19Kreads/s]99.2Kreads [00:06, 6.06Kreads/s]99.8Kreads [00:06, 6.06Kreads/s]101Kreads [00:06, 6.48Kreads/s] 101Kreads [00:06, 6.42Kreads/s]102Kreads [00:06, 6.26Kreads/s]103Kreads [00:06, 6.16Kreads/s]103Kreads [00:07, 5.96Kreads/s]104Kreads [00:07, 6.83Kreads/s]105Kreads [00:07, 6.51Kreads/s]106Kreads [00:07, 6.05Kreads/s]106Kreads [00:07, 5.94Kreads/s]107Kreads [00:07, 5.81Kreads/s]108Kreads [00:07, 5.47Kreads/s]108Kreads [00:07, 5.67Kreads/s]109Kreads [00:08, 6.39Kreads/s]110Kreads [00:08, 6.50Kreads/s]111Kreads [00:08, 6.73Kreads/s]111Kreads [00:08, 7.15Kreads/s]112Kreads [00:08, 7.01Kreads/s]113Kreads [00:08, 7.29Kreads/s]114Kreads [00:08, 7.20Kreads/s]114Kreads [00:08, 7.11Kreads/s]115Kreads [00:08, 6.93Kreads/s]116Kreads [00:08, 7.15Kreads/s]117Kreads [00:09, 7.82Kreads/s]118Kreads [00:09, 8.29Kreads/s]120Kreads [00:09, 10.3Kreads/s]124Kreads [00:09, 13.2Kreads/s]128Kreads [00:09, 16.5Kreads/s]135Kreads [00:09, 21.4Kreads/s]149Kreads [00:09, 28.7Kreads/s]166Kreads [00:09, 38.2Kreads/s]176Kreads [00:10, 18.9Kreads/s]186Kreads [00:11, 24.8Kreads/s]197Kreads [00:11, 32.4Kreads/s]206Kreads [00:11, 26.3Kreads/s]213Kreads [00:11, 30.0Kreads/s]223Kreads [00:11, 37.9Kreads/s]238Kreads [00:11, 48.8Kreads/s]272Kreads [00:12, 65.7Kreads/s]299Kreads [00:12, 84.8Kreads/s]329Kreads [00:12, 108Kreads/s] 372Kreads [00:12, 139Kreads/s]429Kreads [00:12, 180Kreads/s]492Kreads [00:12, 230Kreads/s]556Kreads [00:12, 284Kreads/s]621Kreads [00:12, 342Kreads/s]687Kreads [00:12, 400Kreads/s]753Kreads [00:12, 453Kreads/s]820Kreads [00:13, 502Kreads/s]887Kreads [00:13, 542Kreads/s]955Kreads [00:13, 577Kreads/s]
+0.00reads [00:00, ?reads/s]39.0Kreads [00:00, 390Kreads/s]107Kreads [00:00, 447Kreads/s] 175Kreads [00:00, 498Kreads/s]241Kreads [00:00, 538Kreads/s]309Kreads [00:00, 574Kreads/s]375Kreads [00:00, 598Kreads/s]444Kreads [00:00, 622Kreads/s]508Kreads [00:00, 628Kreads/s]577Kreads [00:00, 643Kreads/s]648Kreads [00:01, 662Kreads/s]718Kreads [00:01, 674Kreads/s]789Kreads [00:01, 685Kreads/s]860Kreads [00:01, 693Kreads/s]930Kreads [00:01, 694Kreads/s]
+0.00reads [00:00, ?reads/s]1.80Kreads [00:00, 17.2Kreads/s]4.39Kreads [00:00, 18.9Kreads/s]5.49Kreads [00:00, 14.5Kreads/s]6.55Kreads [00:00, 9.70Kreads/s]7.45Kreads [00:00, 4.90Kreads/s]8.15Kreads [00:01, 3.39Kreads/s]8.70Kreads [00:01, 3.01Kreads/s]9.16Kreads [00:01, 2.44Kreads/s]9.53Kreads [00:01, 2.46Kreads/s]9.87Kreads [00:02, 2.21Kreads/s]10.2Kreads [00:02, 2.08Kreads/s]10.4Kreads [00:02, 2.04Kreads/s]10.7Kreads [00:02, 2.13Kreads/s]10.9Kreads [00:02, 2.24Kreads/s]11.2Kreads [00:02, 2.23Kreads/s]11.4Kreads [00:02, 2.09Kreads/s]11.6Kreads [00:02, 1.82Kreads/s]11.8Kreads [00:03, 1.91Kreads/s]12.0Kreads [00:03, 1.83Kreads/s]12.2Kreads [00:03, 1.73Kreads/s]12.4Kreads [00:03, 1.54Kreads/s]12.6Kreads [00:03, 1.60Kreads/s]12.8Kreads [00:03, 1.68Kreads/s]13.0Kreads [00:03, 1.66Kreads/s]13.2Kreads [00:03, 1.66Kreads/s]13.4Kreads [00:04, 1.68Kreads/s]13.5Kreads [00:04, 1.65Kreads/s]13.8Kreads [00:04, 1.79Kreads/s]14.0Kreads [00:04, 1.90Kreads/s]14.2Kreads [00:04, 2.04Kreads/s]14.6Kreads [00:04, 2.30Kreads/s]14.8Kreads [00:04, 2.31Kreads/s]15.1Kreads [00:04, 2.18Kreads/s]15.3Kreads [00:04, 2.31Kreads/s]15.7Kreads [00:04, 2.53Kreads/s]16.0Kreads [00:05, 2.63Kreads/s]16.4Kreads [00:05, 3.00Kreads/s]16.9Kreads [00:05, 3.33Kreads/s]17.3Kreads [00:05, 3.49Kreads/s]17.8Kreads [00:05, 3.86Kreads/s]18.2Kreads [00:05, 4.00Kreads/s]18.7Kreads [00:05, 4.08Kreads/s]19.2Kreads [00:05, 4.37Kreads/s]19.7Kreads [00:05, 4.45Kreads/s]20.2Kreads [00:06, 4.59Kreads/s]25.1Kreads [00:06, 6.30Kreads/s]29.1Kreads [00:06, 8.42Kreads/s]31.5Kreads [00:06, 8.43Kreads/s]33.5Kreads [00:06, 7.05Kreads/s]35.0Kreads [00:07, 6.75Kreads/s]36.3Kreads [00:07, 5.29Kreads/s]37.3Kreads [00:07, 4.41Kreads/s]38.1Kreads [00:08, 3.85Kreads/s]38.7Kreads [00:08, 3.64Kreads/s]39.2Kreads [00:08, 3.70Kreads/s]39.7Kreads [00:08, 3.68Kreads/s]40.5Kreads [00:08, 4.33Kreads/s]41.4Kreads [00:08, 5.10Kreads/s]42.2Kreads [00:08, 5.70Kreads/s]42.9Kreads [00:09, 5.16Kreads/s]43.5Kreads [00:09, 4.98Kreads/s]44.0Kreads [00:09, 4.51Kreads/s]44.5Kreads [00:09, 4.37Kreads/s]45.0Kreads [00:09, 4.43Kreads/s]45.5Kreads [00:09, 4.40Kreads/s]46.0Kreads [00:09, 4.23Kreads/s]46.4Kreads [00:09, 3.99Kreads/s]46.8Kreads [00:09, 3.80Kreads/s]47.2Kreads [00:10, 3.77Kreads/s]47.6Kreads [00:10, 3.74Kreads/s]48.0Kreads [00:10, 3.67Kreads/s]48.3Kreads [00:10, 3.65Kreads/s]48.7Kreads [00:10, 3.65Kreads/s]49.1Kreads [00:10, 3.61Kreads/s]49.5Kreads [00:10, 3.68Kreads/s]49.8Kreads [00:10, 3.62Kreads/s]50.3Kreads [00:10, 3.81Kreads/s]50.7Kreads [00:11, 3.95Kreads/s]51.2Kreads [00:11, 4.15Kreads/s]51.7Kreads [00:11, 4.42Kreads/s]52.4Kreads [00:11, 4.89Kreads/s]53.0Kreads [00:11, 5.25Kreads/s]53.8Kreads [00:11, 5.74Kreads/s]54.4Kreads [00:11, 5.79Kreads/s]55.0Kreads [00:11, 5.22Kreads/s]55.5Kreads [00:11, 5.09Kreads/s]56.1Kreads [00:12, 4.92Kreads/s]56.6Kreads [00:12, 4.99Kreads/s]57.4Kreads [00:12, 5.61Kreads/s]58.4Kreads [00:12, 6.45Kreads/s]59.5Kreads [00:12, 7.35Kreads/s]61.1Kreads [00:12, 8.78Kreads/s]62.2Kreads [00:12, 7.54Kreads/s]63.1Kreads [00:12, 6.83Kreads/s]63.9Kreads [00:13, 6.69Kreads/s]64.7Kreads [00:13, 6.61Kreads/s]65.4Kreads [00:13, 6.78Kreads/s]66.3Kreads [00:13, 7.21Kreads/s]68.0Kreads [00:13, 8.70Kreads/s]70.1Kreads [00:13, 10.5Kreads/s]74.6Kreads [00:13, 13.7Kreads/s]76.9Kreads [00:13, 13.4Kreads/s]78.8Kreads [00:13, 14.4Kreads/s]80.7Kreads [00:14, 15.1Kreads/s]83.3Kreads [00:14, 17.2Kreads/s]85.8Kreads [00:14, 18.9Kreads/s]90.6Kreads [00:14, 23.1Kreads/s]95.4Kreads [00:14, 27.3Kreads/s]103Kreads [00:14, 34.0Kreads/s] 108Kreads [00:14, 30.5Kreads/s]112Kreads [00:14, 24.0Kreads/s]116Kreads [00:15, 22.8Kreads/s]119Kreads [00:15, 25.3Kreads/s]122Kreads [00:15, 25.1Kreads/s]125Kreads [00:15, 22.5Kreads/s]133Kreads [00:15, 28.4Kreads/s]139Kreads [00:15, 34.1Kreads/s]152Kreads [00:15, 43.8Kreads/s]168Kreads [00:15, 55.9Kreads/s]195Kreads [00:16, 73.4Kreads/s]251Kreads [00:16, 99.3Kreads/s]318Kreads [00:16, 133Kreads/s] 382Kreads [00:16, 175Kreads/s]450Kreads [00:16, 225Kreads/s]516Kreads [00:16, 280Kreads/s]584Kreads [00:16, 340Kreads/s]654Kreads [00:16, 402Kreads/s]723Kreads [00:16, 460Kreads/s]793Kreads [00:16, 513Kreads/s]866Kreads [00:17, 564Kreads/s]938Kreads [00:17, 601Kreads/s]
+0.00reads [00:00, ?reads/s]42.7Kreads [00:00, 427Kreads/s]119Kreads [00:00, 492Kreads/s] 197Kreads [00:00, 553Kreads/s]268Kreads [00:00, 593Kreads/s]340Kreads [00:00, 625Kreads/s]414Kreads [00:00, 657Kreads/s]493Kreads [00:00, 690Kreads/s]568Kreads [00:00, 707Kreads/s]638Kreads [00:00, 696Kreads/s]711Kreads [00:01, 708Kreads/s]789Kreads [00:01, 727Kreads/s]867Kreads [00:01, 743Kreads/s]942Kreads [00:01, 729Kreads/s]
+0.00reads [00:00, ?reads/s]3.78Kreads [00:00, 33.3Kreads/s]12.1Kreads [00:00, 40.6Kreads/s]18.8Kreads [00:00, 46.1Kreads/s]25.0Kreads [00:00, 49.8Kreads/s]61.7Kreads [00:00, 67.2Kreads/s]105Kreads [00:00, 90.1Kreads/s] 145Kreads [00:00, 117Kreads/s] 183Kreads [00:00, 148Kreads/s]227Kreads [00:00, 185Kreads/s]262Kreads [00:02, 50.7Kreads/s]286Kreads [00:05, 22.8Kreads/s]304Kreads [00:05, 30.7Kreads/s]321Kreads [00:05, 39.9Kreads/s]337Kreads [00:05, 47.3Kreads/s]352Kreads [00:05, 59.2Kreads/s]366Kreads [00:05, 72.0Kreads/s]380Kreads [00:06, 71.7Kreads/s]392Kreads [00:06, 68.6Kreads/s]403Kreads [00:06, 56.3Kreads/s]412Kreads [00:06, 63.7Kreads/s]421Kreads [00:08, 15.6Kreads/s]427Kreads [00:09, 11.4Kreads/s]432Kreads [00:09, 9.23Kreads/s]435Kreads [00:10, 6.79Kreads/s]437Kreads [00:10, 6.50Kreads/s]439Kreads [00:11, 6.21Kreads/s]441Kreads [00:11, 6.54Kreads/s]442Kreads [00:11, 7.01Kreads/s]443Kreads [00:11, 7.15Kreads/s]444Kreads [00:11, 7.86Kreads/s]445Kreads [00:12, 8.13Kreads/s]446Kreads [00:12, 8.02Kreads/s]448Kreads [00:12, 9.73Kreads/s]452Kreads [00:12, 12.4Kreads/s]454Kreads [00:12, 14.2Kreads/s]456Kreads [00:12, 15.6Kreads/s]458Kreads [00:12, 15.5Kreads/s]460Kreads [00:12, 17.1Kreads/s]463Kreads [00:12, 19.0Kreads/s]466Kreads [00:13, 22.0Kreads/s]470Kreads [00:13, 24.6Kreads/s]473Kreads [00:13, 20.5Kreads/s]476Kreads [00:13, 23.2Kreads/s]479Kreads [00:13, 22.9Kreads/s]482Kreads [00:13, 24.6Kreads/s]485Kreads [00:13, 27.3Kreads/s]488Kreads [00:13, 24.3Kreads/s]491Kreads [00:14, 17.2Kreads/s]493Kreads [00:14, 18.5Kreads/s]496Kreads [00:14, 20.1Kreads/s]499Kreads [00:14, 22.9Kreads/s]503Kreads [00:14, 25.5Kreads/s]506Kreads [00:14, 23.7Kreads/s]508Kreads [00:14, 22.2Kreads/s]512Kreads [00:14, 25.5Kreads/s]515Kreads [00:15, 24.2Kreads/s]519Kreads [00:15, 27.5Kreads/s]523Kreads [00:15, 30.9Kreads/s]527Kreads [00:15, 28.5Kreads/s]531Kreads [00:15, 32.0Kreads/s]538Kreads [00:15, 37.4Kreads/s]542Kreads [00:15, 34.3Kreads/s]546Kreads [00:15, 34.7Kreads/s]558Kreads [00:15, 44.3Kreads/s]599Kreads [00:16, 60.5Kreads/s]638Kreads [00:16, 81.0Kreads/s]669Kreads [00:16, 104Kreads/s] 694Kreads [00:16, 120Kreads/s]737Kreads [00:16, 153Kreads/s]766Kreads [00:16, 177Kreads/s]799Kreads [00:16, 206Kreads/s]834Kreads [00:16, 235Kreads/s]867Kreads [00:16, 257Kreads/s]902Kreads [00:17, 279Kreads/s]937Kreads [00:17, 297Kreads/s]972Kreads [00:17, 312Kreads/s]
+0.00reads [00:00, ?reads/s]39.3Kreads [00:00, 392Kreads/s]103Kreads [00:00, 444Kreads/s] 167Kreads [00:00, 488Kreads/s]227Kreads [00:00, 517Kreads/s]290Kreads [00:00, 546Kreads/s]355Kreads [00:00, 573Kreads/s]419Kreads [00:00, 592Kreads/s]482Kreads [00:00, 604Kreads/s]545Kreads [00:00, 612Kreads/s]607Kreads [00:01, 613Kreads/s]671Kreads [00:01, 620Kreads/s]734Kreads [00:01, 625Kreads/s]797Kreads [00:01, 622Kreads/s]860Kreads [00:01, 625Kreads/s]922Kreads [00:01, 623Kreads/s]984Kreads [00:01, 619Kreads/s]
+0.00reads [00:00, ?reads/s]1.43Kreads [00:00, 12.1Kreads/s]1.79Kreads [00:00, 1.56Kreads/s]2.06Kreads [00:01, 1.38Kreads/s]2.28Kreads [00:01, 1.19Kreads/s]2.47Kreads [00:01, 624reads/s]  2.60Kreads [00:02, 457reads/s]2.71Kreads [00:02, 385reads/s]3.33Kreads [00:02, 535reads/s]3.73Kreads [00:03, 706reads/s]3.98Kreads [00:03, 848reads/s]5.64Kreads [00:03, 1.18Kreads/s]8.06Kreads [00:03, 1.64Kreads/s]9.10Kreads [00:03, 1.84Kreads/s]9.90Kreads [00:04, 1.83Kreads/s]10.5Kreads [00:04, 1.87Kreads/s]11.0Kreads [00:04, 1.88Kreads/s]11.4Kreads [00:05, 2.04Kreads/s]11.8Kreads [00:05, 1.90Kreads/s]12.1Kreads [00:05, 2.04Kreads/s]12.4Kreads [00:05, 2.33Kreads/s]12.8Kreads [00:05, 2.57Kreads/s]13.1Kreads [00:05, 2.77Kreads/s]13.4Kreads [00:05, 2.68Kreads/s]13.9Kreads [00:05, 2.95Kreads/s]14.2Kreads [00:06, 3.06Kreads/s]14.5Kreads [00:06, 2.96Kreads/s]14.9Kreads [00:06, 3.19Kreads/s]15.4Kreads [00:06, 3.41Kreads/s]15.7Kreads [00:06, 3.34Kreads/s]16.1Kreads [00:06, 3.55Kreads/s]16.5Kreads [00:06, 3.69Kreads/s]16.9Kreads [00:06, 3.72Kreads/s]17.3Kreads [00:06, 3.58Kreads/s]17.7Kreads [00:06, 3.56Kreads/s]18.0Kreads [00:07, 3.19Kreads/s]18.4Kreads [00:07, 3.22Kreads/s]18.7Kreads [00:07, 3.08Kreads/s]19.0Kreads [00:07, 3.11Kreads/s]19.4Kreads [00:07, 3.03Kreads/s]19.7Kreads [00:07, 3.16Kreads/s]20.0Kreads [00:07, 2.86Kreads/s]20.4Kreads [00:07, 2.99Kreads/s]20.7Kreads [00:08, 2.85Kreads/s]21.0Kreads [00:08, 2.65Kreads/s]21.3Kreads [00:08, 2.74Kreads/s]21.6Kreads [00:08, 2.72Kreads/s]21.8Kreads [00:08, 2.63Kreads/s]22.1Kreads [00:08, 2.32Kreads/s]22.3Kreads [00:08, 2.18Kreads/s]22.6Kreads [00:08, 2.08Kreads/s]22.8Kreads [00:08, 1.94Kreads/s]23.1Kreads [00:09, 2.09Kreads/s]23.3Kreads [00:09, 2.03Kreads/s]23.5Kreads [00:09, 1.98Kreads/s]23.7Kreads [00:09, 1.92Kreads/s]23.9Kreads [00:09, 1.82Kreads/s]24.1Kreads [00:09, 1.86Kreads/s]24.3Kreads [00:09, 1.79Kreads/s]24.5Kreads [00:09, 1.81Kreads/s]24.7Kreads [00:09, 1.83Kreads/s]24.9Kreads [00:10, 1.81Kreads/s]25.0Kreads [00:10, 1.65Kreads/s]25.3Kreads [00:10, 1.74Kreads/s]25.6Kreads [00:10, 2.05Kreads/s]25.9Kreads [00:10, 2.09Kreads/s]26.3Kreads [00:10, 2.51Kreads/s]26.6Kreads [00:10, 2.52Kreads/s]26.9Kreads [00:10, 2.42Kreads/s]27.2Kreads [00:10, 2.44Kreads/s]27.5Kreads [00:11, 2.41Kreads/s]27.7Kreads [00:11, 2.45Kreads/s]28.0Kreads [00:11, 2.53Kreads/s]28.3Kreads [00:11, 2.51Kreads/s]28.7Kreads [00:11, 2.83Kreads/s]29.0Kreads [00:11, 2.91Kreads/s]29.3Kreads [00:11, 2.85Kreads/s]29.7Kreads [00:11, 2.97Kreads/s]30.1Kreads [00:11, 3.25Kreads/s]30.5Kreads [00:12, 2.88Kreads/s]30.8Kreads [00:12, 2.97Kreads/s]31.1Kreads [00:12, 3.00Kreads/s]31.4Kreads [00:12, 3.04Kreads/s]31.8Kreads [00:12, 2.82Kreads/s]32.2Kreads [00:12, 3.04Kreads/s]32.6Kreads [00:12, 3.41Kreads/s]33.0Kreads [00:12, 2.71Kreads/s]33.3Kreads [00:13, 2.59Kreads/s]33.6Kreads [00:13, 2.72Kreads/s]33.9Kreads [00:13, 2.73Kreads/s]34.2Kreads [00:13, 2.72Kreads/s]34.5Kreads [00:13, 2.42Kreads/s]34.7Kreads [00:13, 2.41Kreads/s]35.0Kreads [00:13, 2.22Kreads/s]35.2Kreads [00:13, 2.18Kreads/s]35.7Kreads [00:14, 2.53Kreads/s]35.9Kreads [00:14, 2.35Kreads/s]36.2Kreads [00:14, 2.39Kreads/s]36.6Kreads [00:14, 2.66Kreads/s]36.8Kreads [00:14, 2.58Kreads/s]37.2Kreads [00:14, 2.78Kreads/s]37.5Kreads [00:14, 2.79Kreads/s]37.8Kreads [00:14, 2.39Kreads/s]38.0Kreads [00:14, 2.38Kreads/s]38.3Kreads [00:15, 2.44Kreads/s]38.6Kreads [00:15, 2.53Kreads/s]38.8Kreads [00:15, 2.46Kreads/s]39.5Kreads [00:15, 3.02Kreads/s]40.2Kreads [00:15, 3.56Kreads/s]40.9Kreads [00:15, 4.11Kreads/s]41.8Kreads [00:15, 4.79Kreads/s]42.4Kreads [00:15, 5.18Kreads/s]43.2Kreads [00:15, 5.76Kreads/s]43.9Kreads [00:16, 5.84Kreads/s]44.9Kreads [00:16, 6.67Kreads/s]45.7Kreads [00:16, 6.69Kreads/s]46.4Kreads [00:16, 6.38Kreads/s]47.1Kreads [00:16, 6.28Kreads/s]47.7Kreads [00:16, 5.35Kreads/s]48.4Kreads [00:16, 5.54Kreads/s]49.0Kreads [00:16, 5.45Kreads/s]49.6Kreads [00:16, 5.65Kreads/s]50.2Kreads [00:17, 5.21Kreads/s]50.7Kreads [00:17, 4.91Kreads/s]51.5Kreads [00:17, 5.43Kreads/s]52.1Kreads [00:17, 4.88Kreads/s]52.7Kreads [00:17, 5.30Kreads/s]53.3Kreads [00:17, 5.40Kreads/s]53.9Kreads [00:17, 5.46Kreads/s]54.5Kreads [00:17, 5.41Kreads/s]55.1Kreads [00:17, 5.71Kreads/s]55.7Kreads [00:18, 5.53Kreads/s]56.3Kreads [00:18, 4.91Kreads/s]57.1Kreads [00:18, 5.53Kreads/s]57.7Kreads [00:18, 5.10Kreads/s]58.2Kreads [00:18, 4.09Kreads/s]58.7Kreads [00:18, 3.56Kreads/s]59.1Kreads [00:18, 3.59Kreads/s]59.5Kreads [00:19, 3.64Kreads/s]59.9Kreads [00:19, 3.03Kreads/s]60.2Kreads [00:19, 2.84Kreads/s]60.5Kreads [00:19, 2.89Kreads/s]60.8Kreads [00:19, 2.56Kreads/s]61.1Kreads [00:19, 2.49Kreads/s]61.4Kreads [00:19, 2.31Kreads/s]61.7Kreads [00:19, 2.58Kreads/s]62.0Kreads [00:20, 2.69Kreads/s]62.3Kreads [00:20, 2.64Kreads/s]62.6Kreads [00:20, 2.58Kreads/s]62.9Kreads [00:20, 2.61Kreads/s]63.1Kreads [00:20, 2.63Kreads/s]63.4Kreads [00:20, 2.66Kreads/s]63.8Kreads [00:20, 2.81Kreads/s]64.2Kreads [00:20, 3.16Kreads/s]64.6Kreads [00:20, 3.33Kreads/s]65.0Kreads [00:21, 3.34Kreads/s]65.4Kreads [00:21, 3.51Kreads/s]65.8Kreads [00:21, 3.63Kreads/s]66.2Kreads [00:21, 3.77Kreads/s]66.7Kreads [00:21, 3.90Kreads/s]67.1Kreads [00:21, 3.61Kreads/s]67.5Kreads [00:21, 3.74Kreads/s]68.1Kreads [00:21, 4.14Kreads/s]68.5Kreads [00:21, 4.13Kreads/s]69.0Kreads [00:21, 4.32Kreads/s]69.5Kreads [00:22, 4.40Kreads/s]69.9Kreads [00:22, 4.00Kreads/s]70.3Kreads [00:22, 4.01Kreads/s]70.7Kreads [00:22, 3.87Kreads/s]71.1Kreads [00:22, 3.88Kreads/s]71.7Kreads [00:22, 4.24Kreads/s]72.2Kreads [00:22, 4.56Kreads/s]72.7Kreads [00:22, 4.52Kreads/s]73.3Kreads [00:22, 4.90Kreads/s]73.9Kreads [00:23, 4.98Kreads/s]74.7Kreads [00:23, 5.54Kreads/s]75.4Kreads [00:23, 5.94Kreads/s]76.2Kreads [00:23, 6.53Kreads/s]77.3Kreads [00:23, 7.36Kreads/s]78.3Kreads [00:23, 7.96Kreads/s]79.7Kreads [00:23, 9.12Kreads/s]81.1Kreads [00:23, 10.2Kreads/s]82.2Kreads [00:23, 9.97Kreads/s]83.3Kreads [00:24, 9.90Kreads/s]84.3Kreads [00:24, 9.58Kreads/s]85.3Kreads [00:24, 9.27Kreads/s]86.3Kreads [00:24, 9.36Kreads/s]87.2Kreads [00:24, 9.36Kreads/s]88.2Kreads [00:24, 9.15Kreads/s]89.1Kreads [00:24, 8.92Kreads/s]90.6Kreads [00:24, 10.1Kreads/s]92.1Kreads [00:24, 11.2Kreads/s]93.3Kreads [00:24, 11.4Kreads/s]94.5Kreads [00:25, 10.9Kreads/s]95.8Kreads [00:25, 11.4Kreads/s]97.0Kreads [00:25, 11.3Kreads/s]98.1Kreads [00:25, 11.2Kreads/s]99.4Kreads [00:25, 11.7Kreads/s]101Kreads [00:25, 13.1Kreads/s] 103Kreads [00:25, 14.4Kreads/s]105Kreads [00:25, 15.7Kreads/s]107Kreads [00:25, 17.1Kreads/s]109Kreads [00:26, 18.1Kreads/s]111Kreads [00:26, 15.0Kreads/s]113Kreads [00:26, 12.8Kreads/s]114Kreads [00:26, 10.8Kreads/s]116Kreads [00:26, 11.0Kreads/s]117Kreads [00:26, 10.8Kreads/s]118Kreads [00:26, 11.7Kreads/s]120Kreads [00:26, 12.3Kreads/s]121Kreads [00:27, 12.1Kreads/s]122Kreads [00:27, 11.5Kreads/s]124Kreads [00:27, 12.1Kreads/s]128Kreads [00:27, 15.5Kreads/s]133Kreads [00:27, 19.7Kreads/s]137Kreads [00:27, 23.2Kreads/s]141Kreads [00:27, 26.6Kreads/s]147Kreads [00:27, 31.2Kreads/s]154Kreads [00:27, 37.4Kreads/s]160Kreads [00:27, 42.6Kreads/s]173Kreads [00:28, 53.4Kreads/s]185Kreads [00:28, 64.2Kreads/s]196Kreads [00:28, 72.6Kreads/s]207Kreads [00:28, 81.0Kreads/s]223Kreads [00:28, 95.7Kreads/s]248Kreads [00:28, 117Kreads/s] 281Kreads [00:28, 146Kreads/s]324Kreads [00:28, 181Kreads/s]373Kreads [00:28, 224Kreads/s]427Kreads [00:28, 271Kreads/s]466Kreads [00:29, 300Kreads/s]522Kreads [00:29, 348Kreads/s]581Kreads [00:29, 396Kreads/s]638Kreads [00:29, 436Kreads/s]695Kreads [00:29, 470Kreads/s]754Kreads [00:29, 501Kreads/s]813Kreads [00:29, 524Kreads/s]870Kreads [00:29, 537Kreads/s]928Kreads [00:29, 549Kreads/s]985Kreads [00:30, 543Kreads/s]
+0.00reads [00:00, ?reads/s]38.3Kreads [00:00, 382Kreads/s]103Kreads [00:00, 436Kreads/s] 167Kreads [00:00, 482Kreads/s]228Kreads [00:00, 513Kreads/s]288Kreads [00:00, 538Kreads/s]339Kreads [00:00, 529Kreads/s]393Kreads [00:00, 530Kreads/s]460Kreads [00:00, 567Kreads/s]528Kreads [00:00, 597Kreads/s]595Kreads [00:01, 616Kreads/s]664Kreads [00:01, 637Kreads/s]735Kreads [00:01, 658Kreads/s]807Kreads [00:01, 673Kreads/s]874Kreads [00:01, 675Kreads/s]944Kreads [00:01, 681Kreads/s]
+0.00reads [00:00, ?reads/s]1.84Kreads [00:00, 13.0Kreads/s]2.23Kreads [00:01, 1.00Kreads/s]3.48Kreads [00:01, 1.36Kreads/s]3.91Kreads [00:01, 1.68Kreads/s]4.68Kreads [00:01, 2.18Kreads/s]5.19Kreads [00:02, 2.10Kreads/s]10.8Kreads [00:02, 2.94Kreads/s]12.6Kreads [00:02, 3.31Kreads/s]14.1Kreads [00:02, 3.23Kreads/s]15.2Kreads [00:03, 2.71Kreads/s]16.0Kreads [00:03, 2.50Kreads/s]16.6Kreads [00:04, 2.66Kreads/s]17.2Kreads [00:04, 2.50Kreads/s]17.6Kreads [00:04, 2.78Kreads/s]18.1Kreads [00:04, 2.52Kreads/s]18.4Kreads [00:04, 2.69Kreads/s]18.8Kreads [00:05, 2.31Kreads/s]19.1Kreads [00:05, 2.30Kreads/s]19.3Kreads [00:05, 2.27Kreads/s]19.6Kreads [00:05, 2.32Kreads/s]19.9Kreads [00:05, 2.35Kreads/s]20.1Kreads [00:05, 2.35Kreads/s]20.4Kreads [00:05, 2.40Kreads/s]20.6Kreads [00:05, 2.41Kreads/s]20.9Kreads [00:05, 2.50Kreads/s]21.3Kreads [00:06, 2.71Kreads/s]21.6Kreads [00:06, 2.72Kreads/s]21.8Kreads [00:06, 2.73Kreads/s]22.2Kreads [00:06, 2.95Kreads/s]22.5Kreads [00:06, 2.93Kreads/s]22.8Kreads [00:06, 2.59Kreads/s]23.3Kreads [00:06, 2.98Kreads/s]23.7Kreads [00:06, 3.04Kreads/s]24.0Kreads [00:06, 2.83Kreads/s]24.3Kreads [00:07, 2.55Kreads/s]24.7Kreads [00:07, 2.85Kreads/s]25.0Kreads [00:07, 2.65Kreads/s]25.3Kreads [00:07, 2.82Kreads/s]25.6Kreads [00:07, 2.72Kreads/s]26.0Kreads [00:07, 2.94Kreads/s]26.3Kreads [00:07, 2.99Kreads/s]26.7Kreads [00:07, 3.18Kreads/s]27.1Kreads [00:07, 2.96Kreads/s]27.4Kreads [00:08, 2.74Kreads/s]27.6Kreads [00:08, 2.64Kreads/s]28.0Kreads [00:08, 2.79Kreads/s]28.3Kreads [00:08, 2.77Kreads/s]28.8Kreads [00:08, 3.21Kreads/s]29.1Kreads [00:08, 3.08Kreads/s]29.6Kreads [00:08, 3.42Kreads/s]30.0Kreads [00:08, 3.57Kreads/s]30.4Kreads [00:08, 3.64Kreads/s]30.8Kreads [00:09, 3.53Kreads/s]31.2Kreads [00:09, 3.47Kreads/s]31.5Kreads [00:09, 3.20Kreads/s]31.9Kreads [00:09, 3.21Kreads/s]32.4Kreads [00:09, 3.68Kreads/s]32.8Kreads [00:09, 3.78Kreads/s]33.2Kreads [00:09, 2.89Kreads/s]33.6Kreads [00:10, 2.75Kreads/s]33.9Kreads [00:10, 2.72Kreads/s]34.3Kreads [00:10, 2.96Kreads/s]34.8Kreads [00:10, 3.35Kreads/s]35.2Kreads [00:10, 3.53Kreads/s]36.3Kreads [00:10, 4.40Kreads/s]36.9Kreads [00:10, 4.53Kreads/s]37.4Kreads [00:10, 4.70Kreads/s]38.0Kreads [00:10, 4.92Kreads/s]38.5Kreads [00:11, 4.56Kreads/s]39.1Kreads [00:11, 4.82Kreads/s]39.7Kreads [00:11, 5.03Kreads/s]40.3Kreads [00:11, 5.15Kreads/s]40.8Kreads [00:11, 4.57Kreads/s]41.3Kreads [00:11, 4.46Kreads/s]41.9Kreads [00:11, 4.81Kreads/s]42.4Kreads [00:11, 4.46Kreads/s]42.9Kreads [00:11, 4.27Kreads/s]43.3Kreads [00:12, 4.22Kreads/s]44.2Kreads [00:12, 4.95Kreads/s]44.7Kreads [00:12, 4.58Kreads/s]45.2Kreads [00:12, 3.99Kreads/s]45.7Kreads [00:12, 3.88Kreads/s]46.7Kreads [00:12, 4.78Kreads/s]47.3Kreads [00:12, 4.85Kreads/s]47.9Kreads [00:12, 4.43Kreads/s]48.4Kreads [00:13, 3.82Kreads/s]48.9Kreads [00:13, 3.80Kreads/s]49.3Kreads [00:13, 3.84Kreads/s]49.7Kreads [00:13, 3.79Kreads/s]50.1Kreads [00:13, 3.44Kreads/s]50.6Kreads [00:13, 3.75Kreads/s]51.1Kreads [00:13, 3.95Kreads/s]51.5Kreads [00:13, 3.68Kreads/s]51.9Kreads [00:14, 3.74Kreads/s]52.3Kreads [00:14, 3.52Kreads/s]52.6Kreads [00:14, 3.37Kreads/s]53.1Kreads [00:14, 3.59Kreads/s]53.6Kreads [00:14, 4.00Kreads/s]54.3Kreads [00:14, 4.55Kreads/s]54.8Kreads [00:14, 4.53Kreads/s]63.8Kreads [00:14, 6.33Kreads/s]68.1Kreads [00:14, 8.52Kreads/s]71.8Kreads [00:15, 11.1Kreads/s]75.3Kreads [00:15, 7.58Kreads/s]77.8Kreads [00:16, 8.08Kreads/s]82.8Kreads [00:16, 10.8Kreads/s]96.0Kreads [00:16, 14.9Kreads/s]111Kreads [00:16, 20.4Kreads/s] 120Kreads [00:16, 26.5Kreads/s]130Kreads [00:16, 34.1Kreads/s]139Kreads [00:17, 22.2Kreads/s]146Kreads [00:18, 16.2Kreads/s]151Kreads [00:18, 11.9Kreads/s]155Kreads [00:19, 9.95Kreads/s]158Kreads [00:19, 9.70Kreads/s]160Kreads [00:19, 9.54Kreads/s]163Kreads [00:19, 11.9Kreads/s]165Kreads [00:20, 10.4Kreads/s]167Kreads [00:20, 9.78Kreads/s]168Kreads [00:20, 9.52Kreads/s]170Kreads [00:20, 11.5Kreads/s]172Kreads [00:20, 12.4Kreads/s]174Kreads [00:20, 13.2Kreads/s]176Kreads [00:20, 15.8Kreads/s]178Kreads [00:21, 15.6Kreads/s]180Kreads [00:21, 14.4Kreads/s]182Kreads [00:21, 15.3Kreads/s]184Kreads [00:21, 15.7Kreads/s]185Kreads [00:21, 16.1Kreads/s]187Kreads [00:21, 16.6Kreads/s]189Kreads [00:21, 14.9Kreads/s]192Kreads [00:21, 17.4Kreads/s]195Kreads [00:21, 19.7Kreads/s]197Kreads [00:22, 20.4Kreads/s]199Kreads [00:22, 21.0Kreads/s]202Kreads [00:22, 23.4Kreads/s]209Kreads [00:22, 28.8Kreads/s]212Kreads [00:22, 28.8Kreads/s]216Kreads [00:22, 26.0Kreads/s]219Kreads [00:22, 22.5Kreads/s]228Kreads [00:22, 28.9Kreads/s]235Kreads [00:23, 35.1Kreads/s]240Kreads [00:23, 35.1Kreads/s]248Kreads [00:23, 42.2Kreads/s]260Kreads [00:23, 52.5Kreads/s]278Kreads [00:23, 66.5Kreads/s]297Kreads [00:23, 82.6Kreads/s]319Kreads [00:23, 102Kreads/s] 353Kreads [00:23, 129Kreads/s]415Kreads [00:23, 169Kreads/s]480Kreads [00:23, 217Kreads/s]548Kreads [00:24, 273Kreads/s]610Kreads [00:24, 328Kreads/s]673Kreads [00:24, 384Kreads/s]741Kreads [00:24, 441Kreads/s]808Kreads [00:24, 492Kreads/s]876Kreads [00:24, 536Kreads/s]940Kreads [00:24, 558Kreads/s]
+0.00reads [00:00, ?reads/s]40.8Kreads [00:00, 407Kreads/s]108Kreads [00:00, 462Kreads/s] 178Kreads [00:00, 514Kreads/s]241Kreads [00:00, 545Kreads/s]304Kreads [00:00, 568Kreads/s]370Kreads [00:00, 593Kreads/s]437Kreads [00:00, 614Kreads/s]506Kreads [00:00, 633Kreads/s]572Kreads [00:00, 642Kreads/s]640Kreads [00:01, 653Kreads/s]711Kreads [00:01, 670Kreads/s]781Kreads [00:01, 679Kreads/s]853Kreads [00:01, 689Kreads/s]922Kreads [00:01, 672Kreads/s]991Kreads [00:01, 677Kreads/s]
+0.00reads [00:00, ?reads/s]4.47Kreads [00:00, 43.6Kreads/s]5.78Kreads [00:00, 24.4Kreads/s]13.0Kreads [00:00, 29.9Kreads/s]15.7Kreads [00:00, 24.8Kreads/s]39.5Kreads [00:00, 33.8Kreads/s]47.9Kreads [00:01, 27.0Kreads/s]62.3Kreads [00:01, 35.7Kreads/s]71.0Kreads [00:02, 20.2Kreads/s]77.4Kreads [00:02, 14.8Kreads/s]82.2Kreads [00:03, 8.21Kreads/s]85.6Kreads [00:04, 6.62Kreads/s]88.2Kreads [00:05, 6.45Kreads/s]90.1Kreads [00:05, 5.56Kreads/s]91.6Kreads [00:05, 5.84Kreads/s]92.9Kreads [00:05, 6.14Kreads/s]94.0Kreads [00:06, 6.57Kreads/s]95.0Kreads [00:06, 6.04Kreads/s]95.8Kreads [00:06, 5.43Kreads/s]96.5Kreads [00:06, 5.52Kreads/s]97.4Kreads [00:06, 6.19Kreads/s]98.2Kreads [00:06, 5.52Kreads/s]98.8Kreads [00:07, 4.69Kreads/s]99.4Kreads [00:07, 4.79Kreads/s]100Kreads [00:07, 5.14Kreads/s] 101Kreads [00:07, 5.24Kreads/s]101Kreads [00:07, 5.62Kreads/s]102Kreads [00:07, 4.87Kreads/s]102Kreads [00:07, 4.54Kreads/s]103Kreads [00:07, 3.90Kreads/s]103Kreads [00:08, 3.78Kreads/s]104Kreads [00:08, 3.90Kreads/s]104Kreads [00:08, 3.99Kreads/s]105Kreads [00:08, 3.92Kreads/s]105Kreads [00:08, 4.01Kreads/s]106Kreads [00:08, 4.33Kreads/s]106Kreads [00:08, 4.36Kreads/s]107Kreads [00:08, 4.00Kreads/s]107Kreads [00:08, 4.24Kreads/s]108Kreads [00:09, 4.41Kreads/s]108Kreads [00:09, 4.36Kreads/s]108Kreads [00:09, 3.91Kreads/s]109Kreads [00:09, 4.08Kreads/s]109Kreads [00:09, 3.97Kreads/s]110Kreads [00:09, 4.18Kreads/s]110Kreads [00:09, 4.65Kreads/s]111Kreads [00:09, 3.83Kreads/s]111Kreads [00:10, 3.62Kreads/s]114Kreads [00:10, 4.88Kreads/s]121Kreads [00:10, 6.77Kreads/s]124Kreads [00:10, 8.69Kreads/s]127Kreads [00:10, 10.8Kreads/s]132Kreads [00:10, 14.2Kreads/s]136Kreads [00:10, 12.6Kreads/s]139Kreads [00:11, 14.2Kreads/s]141Kreads [00:11, 15.3Kreads/s]144Kreads [00:11, 13.1Kreads/s]146Kreads [00:11, 9.81Kreads/s]147Kreads [00:11, 10.1Kreads/s]155Kreads [00:11, 13.8Kreads/s]162Kreads [00:12, 18.0Kreads/s]166Kreads [00:12, 17.6Kreads/s]170Kreads [00:12, 17.2Kreads/s]173Kreads [00:12, 20.4Kreads/s]176Kreads [00:12, 21.1Kreads/s]183Kreads [00:12, 26.4Kreads/s]205Kreads [00:12, 35.9Kreads/s]228Kreads [00:13, 48.1Kreads/s]241Kreads [00:13, 54.2Kreads/s]256Kreads [00:13, 67.0Kreads/s]291Kreads [00:13, 88.4Kreads/s]311Kreads [00:13, 106Kreads/s] 332Kreads [00:13, 124Kreads/s]352Kreads [00:13, 136Kreads/s]375Kreads [00:13, 155Kreads/s]407Kreads [00:13, 184Kreads/s]452Kreads [00:14, 223Kreads/s]514Kreads [00:14, 276Kreads/s]583Kreads [00:14, 336Kreads/s]651Kreads [00:14, 397Kreads/s]721Kreads [00:14, 457Kreads/s]792Kreads [00:14, 511Kreads/s]861Kreads [00:14, 554Kreads/s]931Kreads [00:14, 592Kreads/s]998Kreads [00:14, 605Kreads/s]
+0.00reads [00:00, ?reads/s]42.0Kreads [00:00, 420Kreads/s]111Kreads [00:00, 476Kreads/s] 179Kreads [00:00, 523Kreads/s]244Kreads [00:00, 556Kreads/s]313Kreads [00:00, 590Kreads/s]385Kreads [00:00, 623Kreads/s]457Kreads [00:00, 650Kreads/s]528Kreads [00:00, 668Kreads/s]597Kreads [00:00, 674Kreads/s]668Kreads [00:01, 683Kreads/s]739Kreads [00:01, 691Kreads/s]809Kreads [00:01, 694Kreads/s]878Kreads [00:01, 679Kreads/s]949Kreads [00:01, 688Kreads/s]
+0.00reads [00:00, ?reads/s]8.08Kreads [00:00, 74.5Kreads/s]10.3Kreads [00:00, 8.34Kreads/s]12.0Kreads [00:01, 5.53Kreads/s]13.2Kreads [00:01, 5.21Kreads/s]14.2Kreads [00:02, 4.04Kreads/s]15.0Kreads [00:02, 3.75Kreads/s]15.7Kreads [00:02, 3.60Kreads/s]16.2Kreads [00:02, 3.61Kreads/s]16.7Kreads [00:02, 3.48Kreads/s]17.1Kreads [00:02, 3.68Kreads/s]17.6Kreads [00:03, 3.35Kreads/s]18.0Kreads [00:03, 3.55Kreads/s]18.5Kreads [00:03, 3.90Kreads/s]19.0Kreads [00:03, 4.11Kreads/s]19.4Kreads [00:03, 3.90Kreads/s]19.8Kreads [00:03, 3.76Kreads/s]20.3Kreads [00:03, 3.90Kreads/s]20.9Kreads [00:03, 4.39Kreads/s]21.5Kreads [00:03, 4.79Kreads/s]22.2Kreads [00:04, 5.31Kreads/s]23.2Kreads [00:04, 6.10Kreads/s]24.6Kreads [00:04, 7.39Kreads/s]25.7Kreads [00:04, 8.14Kreads/s]26.8Kreads [00:04, 8.63Kreads/s]27.7Kreads [00:04, 8.47Kreads/s]29.0Kreads [00:04, 9.36Kreads/s]30.3Kreads [00:04, 10.1Kreads/s]31.4Kreads [00:04, 8.74Kreads/s]32.3Kreads [00:05, 8.38Kreads/s]33.2Kreads [00:05, 7.30Kreads/s]34.0Kreads [00:05, 6.61Kreads/s]34.7Kreads [00:05, 6.71Kreads/s]35.6Kreads [00:05, 7.09Kreads/s]36.3Kreads [00:05, 6.45Kreads/s]37.0Kreads [00:05, 6.15Kreads/s]37.7Kreads [00:05, 6.47Kreads/s]38.4Kreads [00:06, 6.50Kreads/s]39.1Kreads [00:06, 6.59Kreads/s]40.7Kreads [00:06, 7.96Kreads/s]42.6Kreads [00:06, 9.61Kreads/s]45.0Kreads [00:06, 11.7Kreads/s]46.5Kreads [00:06, 11.6Kreads/s]48.2Kreads [00:06, 12.7Kreads/s]49.7Kreads [00:06, 12.9Kreads/s]55.1Kreads [00:06, 16.7Kreads/s]58.4Kreads [00:07, 19.5Kreads/s]61.2Kreads [00:07, 18.5Kreads/s]63.7Kreads [00:07, 19.6Kreads/s]66.1Kreads [00:07, 18.0Kreads/s]68.2Kreads [00:07, 17.7Kreads/s]70.8Kreads [00:07, 19.5Kreads/s]73.4Kreads [00:07, 20.8Kreads/s]75.6Kreads [00:07, 18.5Kreads/s]78.4Kreads [00:08, 20.5Kreads/s]81.5Kreads [00:08, 22.9Kreads/s]84.0Kreads [00:08, 20.7Kreads/s]86.6Kreads [00:08, 21.9Kreads/s]88.9Kreads [00:08, 20.9Kreads/s]91.1Kreads [00:08, 16.5Kreads/s]93.0Kreads [00:08, 13.1Kreads/s]94.6Kreads [00:09, 12.2Kreads/s]96.0Kreads [00:09, 12.3Kreads/s]102Kreads [00:09, 16.2Kreads/s] 105Kreads [00:09, 11.9Kreads/s]109Kreads [00:09, 14.9Kreads/s]116Kreads [00:09, 19.5Kreads/s]126Kreads [00:10, 25.7Kreads/s]137Kreads [00:10, 33.3Kreads/s]152Kreads [00:10, 43.5Kreads/s]174Kreads [00:10, 57.3Kreads/s]187Kreads [00:10, 42.2Kreads/s]211Kreads [00:10, 56.0Kreads/s]225Kreads [00:11, 63.5Kreads/s]238Kreads [00:11, 46.7Kreads/s]247Kreads [00:11, 54.8Kreads/s]264Kreads [00:11, 68.6Kreads/s]285Kreads [00:11, 85.8Kreads/s]299Kreads [00:11, 87.9Kreads/s]319Kreads [00:12, 106Kreads/s] 357Kreads [00:12, 135Kreads/s]404Kreads [00:12, 172Kreads/s]462Kreads [00:12, 218Kreads/s]518Kreads [00:12, 266Kreads/s]577Kreads [00:12, 319Kreads/s]636Kreads [00:12, 369Kreads/s]695Kreads [00:12, 416Kreads/s]753Kreads [00:12, 454Kreads/s]812Kreads [00:12, 488Kreads/s]868Kreads [00:13, 498Kreads/s]936Kreads [00:13, 542Kreads/s]
+0.00reads [00:00, ?reads/s]77.2Kreads [00:00, 772Kreads/s]150Kreads [00:00, 759Kreads/s] 219Kreads [00:00, 737Kreads/s]289Kreads [00:00, 725Kreads/s]365Kreads [00:00, 735Kreads/s]442Kreads [00:00, 744Kreads/s]516Kreads [00:00, 743Kreads/s]587Kreads [00:00, 733Kreads/s]663Kreads [00:00, 740Kreads/s]741Kreads [00:01, 752Kreads/s]816Kreads [00:01, 752Kreads/s]890Kreads [00:01, 739Kreads/s]963Kreads [00:01, 728Kreads/s]
+0.00reads [00:00, ?reads/s]176reads [00:00, 1.15Kreads/s]211reads [00:00, 375reads/s]  242reads [00:00, 345reads/s]275reads [00:00, 302reads/s]303reads [00:00, 294reads/s]1.16Kreads [00:00, 414reads/s]2.52Kreads [00:00, 584reads/s]3.09Kreads [00:01, 797reads/s]7.42Kreads [00:01, 1.13Kreads/s]9.03Kreads [00:02, 1.24Kreads/s]10.2Kreads [00:02, 1.64Kreads/s]11.2Kreads [00:02, 2.02Kreads/s]12.1Kreads [00:02, 2.33Kreads/s]12.8Kreads [00:02, 2.76Kreads/s]15.6Kreads [00:03, 3.77Kreads/s]16.8Kreads [00:03, 3.75Kreads/s]26.6Kreads [00:03, 5.27Kreads/s]30.1Kreads [00:04, 5.33Kreads/s]32.7Kreads [00:04, 5.66Kreads/s]34.7Kreads [00:04, 7.04Kreads/s]37.5Kreads [00:04, 9.06Kreads/s]39.7Kreads [00:06, 3.90Kreads/s]41.3Kreads [00:06, 3.12Kreads/s]57.0Kreads [00:06, 4.42Kreads/s]67.0Kreads [00:06, 6.20Kreads/s]73.8Kreads [00:09, 4.19Kreads/s]78.7Kreads [00:09, 5.71Kreads/s]83.2Kreads [00:11, 5.22Kreads/s]91.7Kreads [00:11, 7.26Kreads/s]96.5Kreads [00:11, 8.72Kreads/s]100Kreads [00:11, 10.4Kreads/s] 104Kreads [00:11, 10.6Kreads/s]106Kreads [00:11, 12.9Kreads/s]109Kreads [00:12, 11.0Kreads/s]111Kreads [00:12, 9.91Kreads/s]113Kreads [00:12, 10.3Kreads/s]114Kreads [00:12, 10.4Kreads/s]116Kreads [00:12, 11.5Kreads/s]117Kreads [00:13, 11.0Kreads/s]118Kreads [00:13, 11.4Kreads/s]120Kreads [00:13, 9.99Kreads/s]121Kreads [00:13, 9.44Kreads/s]122Kreads [00:13, 9.97Kreads/s]123Kreads [00:13, 10.2Kreads/s]124Kreads [00:13, 10.3Kreads/s]125Kreads [00:13, 8.96Kreads/s]126Kreads [00:14, 8.91Kreads/s]135Kreads [00:14, 12.2Kreads/s]139Kreads [00:14, 12.4Kreads/s]158Kreads [00:14, 17.2Kreads/s]173Kreads [00:14, 23.4Kreads/s]183Kreads [00:14, 25.1Kreads/s]191Kreads [00:15, 22.0Kreads/s]197Kreads [00:15, 23.2Kreads/s]201Kreads [00:16, 19.3Kreads/s]205Kreads [00:16, 19.6Kreads/s]209Kreads [00:16, 22.7Kreads/s]212Kreads [00:16, 23.0Kreads/s]220Kreads [00:16, 29.0Kreads/s]224Kreads [00:16, 27.7Kreads/s]244Kreads [00:16, 37.3Kreads/s]254Kreads [00:16, 45.6Kreads/s]274Kreads [00:17, 59.4Kreads/s]311Kreads [00:17, 79.3Kreads/s]362Kreads [00:17, 106Kreads/s] 425Kreads [00:17, 142Kreads/s]485Kreads [00:17, 184Kreads/s]546Kreads [00:17, 232Kreads/s]608Kreads [00:17, 286Kreads/s]668Kreads [00:17, 339Kreads/s]732Kreads [00:17, 395Kreads/s]795Kreads [00:17, 445Kreads/s]856Kreads [00:18, 483Kreads/s]918Kreads [00:18, 518Kreads/s]980Kreads [00:18, 546Kreads/s]
+0.00reads [00:00, ?reads/s]36.2Kreads [00:00, 362Kreads/s]98.3Kreads [00:00, 414Kreads/s]162Kreads [00:00, 463Kreads/s] 223Kreads [00:00, 498Kreads/s]286Kreads [00:00, 532Kreads/s]351Kreads [00:00, 563Kreads/s]418Kreads [00:00, 589Kreads/s]482Kreads [00:00, 606Kreads/s]543Kreads [00:00, 607Kreads/s]605Kreads [00:01, 611Kreads/s]672Kreads [00:01, 626Kreads/s]739Kreads [00:01, 639Kreads/s]806Kreads [00:01, 647Kreads/s]870Kreads [00:01, 632Kreads/s]934Kreads [00:01, 634Kreads/s]
+0.00reads [00:00, ?reads/s]2.22Kreads [00:00, 16.8Kreads/s]2.72Kreads [00:00, 4.03Kreads/s]12.6Kreads [00:00, 5.66Kreads/s]15.9Kreads [00:00, 7.52Kreads/s]19.1Kreads [00:00, 9.18Kreads/s]21.9Kreads [00:01, 10.8Kreads/s]24.4Kreads [00:01, 13.0Kreads/s]34.3Kreads [00:01, 17.5Kreads/s]40.2Kreads [00:01, 22.2Kreads/s]46.9Kreads [00:01, 27.6Kreads/s]52.3Kreads [00:01, 25.1Kreads/s]56.7Kreads [00:02, 18.6Kreads/s]60.2Kreads [00:02, 17.3Kreads/s]63.0Kreads [00:02, 15.1Kreads/s]65.4Kreads [00:02, 9.75Kreads/s]67.7Kreads [00:03, 11.7Kreads/s]76.2Kreads [00:03, 15.8Kreads/s]80.2Kreads [00:03, 17.2Kreads/s]83.6Kreads [00:03, 16.0Kreads/s]86.3Kreads [00:03, 15.1Kreads/s]88.7Kreads [00:04, 12.6Kreads/s]90.6Kreads [00:04, 11.7Kreads/s]92.3Kreads [00:04, 10.0Kreads/s]93.6Kreads [00:04, 6.75Kreads/s]94.7Kreads [00:05, 5.85Kreads/s]95.6Kreads [00:05, 4.23Kreads/s]97.0Kreads [00:05, 5.31Kreads/s]97.8Kreads [00:05, 4.94Kreads/s]98.7Kreads [00:05, 5.55Kreads/s]99.4Kreads [00:06, 4.30Kreads/s]100Kreads [00:06, 4.58Kreads/s] 101Kreads [00:06, 3.32Kreads/s]103Kreads [00:06, 4.45Kreads/s]104Kreads [00:06, 4.59Kreads/s]105Kreads [00:07, 3.08Kreads/s]105Kreads [00:07, 3.54Kreads/s]112Kreads [00:07, 4.94Kreads/s]116Kreads [00:07, 6.71Kreads/s]119Kreads [00:07, 8.15Kreads/s]121Kreads [00:08, 5.96Kreads/s]123Kreads [00:08, 6.88Kreads/s]128Kreads [00:08, 9.27Kreads/s]131Kreads [00:08, 11.7Kreads/s]134Kreads [00:09, 9.15Kreads/s]136Kreads [00:09, 5.74Kreads/s]137Kreads [00:10, 5.82Kreads/s]139Kreads [00:10, 5.28Kreads/s]140Kreads [00:10, 5.05Kreads/s]141Kreads [00:10, 4.64Kreads/s]141Kreads [00:11, 4.23Kreads/s]142Kreads [00:11, 4.70Kreads/s]143Kreads [00:11, 4.98Kreads/s]143Kreads [00:11, 4.91Kreads/s]144Kreads [00:11, 5.57Kreads/s]146Kreads [00:11, 7.19Kreads/s]147Kreads [00:11, 6.22Kreads/s]148Kreads [00:12, 5.18Kreads/s]149Kreads [00:12, 4.21Kreads/s]150Kreads [00:12, 4.03Kreads/s]150Kreads [00:12, 4.19Kreads/s]151Kreads [00:12, 4.41Kreads/s]151Kreads [00:12, 4.91Kreads/s]152Kreads [00:13, 5.50Kreads/s]153Kreads [00:13, 6.43Kreads/s]154Kreads [00:13, 7.21Kreads/s]156Kreads [00:13, 8.57Kreads/s]163Kreads [00:13, 11.7Kreads/s]168Kreads [00:13, 15.0Kreads/s]171Kreads [00:13, 16.7Kreads/s]190Kreads [00:13, 23.0Kreads/s]212Kreads [00:13, 31.4Kreads/s]223Kreads [00:14, 38.9Kreads/s]234Kreads [00:14, 47.5Kreads/s]255Kreads [00:14, 61.9Kreads/s]269Kreads [00:14, 69.8Kreads/s]288Kreads [00:14, 86.0Kreads/s]314Kreads [00:14, 108Kreads/s] 344Kreads [00:14, 133Kreads/s]387Kreads [00:14, 168Kreads/s]438Kreads [00:14, 211Kreads/s]497Kreads [00:14, 261Kreads/s]545Kreads [00:15, 302Kreads/s]603Kreads [00:15, 353Kreads/s]664Kreads [00:15, 404Kreads/s]727Kreads [00:15, 453Kreads/s]789Kreads [00:15, 492Kreads/s]851Kreads [00:15, 524Kreads/s]914Kreads [00:15, 553Kreads/s]974Kreads [00:15, 560Kreads/s]
+0.00reads [00:00, ?reads/s]39.3Kreads [00:00, 393Kreads/s]88.9Kreads [00:00, 419Kreads/s]138Kreads [00:00, 439Kreads/s] 187Kreads [00:00, 451Kreads/s]236Kreads [00:00, 463Kreads/s]297Kreads [00:00, 499Kreads/s]360Kreads [00:00, 531Kreads/s]422Kreads [00:00, 557Kreads/s]486Kreads [00:00, 578Kreads/s]550Kreads [00:01, 595Kreads/s]615Kreads [00:01, 612Kreads/s]684Kreads [00:01, 632Kreads/s]753Kreads [00:01, 649Kreads/s]821Kreads [00:01, 659Kreads/s]887Kreads [00:01, 656Kreads/s]953Kreads [00:01, 532Kreads/s]
+0.00reads [00:00, ?reads/s]3.79Kreads [00:00, 37.3Kreads/s]4.91Kreads [00:00, 15.4Kreads/s]6.33Kreads [00:00, 15.0Kreads/s]7.83Kreads [00:00, 14.8Kreads/s]9.04Kreads [00:00, 5.82Kreads/s]10.5Kreads [00:01, 7.05Kreads/s]11.5Kreads [00:01, 4.20Kreads/s]12.3Kreads [00:01, 4.21Kreads/s]14.7Kreads [00:01, 5.55Kreads/s]15.8Kreads [00:02, 3.28Kreads/s]16.6Kreads [00:02, 2.69Kreads/s]17.3Kreads [00:03, 2.06Kreads/s]20.5Kreads [00:03, 2.85Kreads/s]21.7Kreads [00:04, 2.35Kreads/s]22.8Kreads [00:04, 3.06Kreads/s]23.8Kreads [00:04, 3.28Kreads/s]24.5Kreads [00:04, 3.29Kreads/s]25.3Kreads [00:05, 3.97Kreads/s]26.8Kreads [00:05, 5.07Kreads/s]27.9Kreads [00:05, 6.01Kreads/s]28.8Kreads [00:05, 6.26Kreads/s]29.8Kreads [00:05, 6.98Kreads/s]30.7Kreads [00:05, 5.11Kreads/s]31.4Kreads [00:05, 4.58Kreads/s]32.0Kreads [00:06, 3.29Kreads/s]32.5Kreads [00:06, 3.38Kreads/s]33.0Kreads [00:06, 3.49Kreads/s]33.4Kreads [00:06, 3.67Kreads/s]34.1Kreads [00:06, 4.22Kreads/s]34.6Kreads [00:06, 4.28Kreads/s]35.0Kreads [00:06, 4.18Kreads/s]37.5Kreads [00:07, 5.58Kreads/s]38.9Kreads [00:07, 6.73Kreads/s]40.1Kreads [00:07, 7.72Kreads/s]42.0Kreads [00:07, 9.30Kreads/s]43.3Kreads [00:07, 5.64Kreads/s]44.3Kreads [00:08, 4.11Kreads/s]45.1Kreads [00:08, 3.57Kreads/s]45.8Kreads [00:08, 3.37Kreads/s]46.3Kreads [00:08, 3.35Kreads/s]46.8Kreads [00:09, 3.54Kreads/s]47.8Kreads [00:09, 4.38Kreads/s]50.9Kreads [00:09, 5.89Kreads/s]57.0Kreads [00:09, 8.09Kreads/s]59.8Kreads [00:09, 9.84Kreads/s]62.4Kreads [00:09, 8.66Kreads/s]64.4Kreads [00:10, 9.26Kreads/s]68.8Kreads [00:10, 12.1Kreads/s]71.4Kreads [00:10, 11.2Kreads/s]73.4Kreads [00:10, 11.0Kreads/s]75.2Kreads [00:10, 11.2Kreads/s]78.6Kreads [00:10, 14.0Kreads/s]81.2Kreads [00:10, 16.2Kreads/s]83.4Kreads [00:11, 13.7Kreads/s]93.7Kreads [00:11, 18.5Kreads/s]98.1Kreads [00:11, 18.2Kreads/s]102Kreads [00:11, 16.8Kreads/s] 105Kreads [00:12, 10.9Kreads/s]107Kreads [00:12, 9.77Kreads/s]109Kreads [00:12, 10.7Kreads/s]112Kreads [00:12, 13.3Kreads/s]115Kreads [00:12, 16.1Kreads/s]117Kreads [00:13, 13.1Kreads/s]119Kreads [00:13, 14.6Kreads/s]124Kreads [00:13, 18.5Kreads/s]127Kreads [00:13, 17.6Kreads/s]131Kreads [00:13, 20.3Kreads/s]133Kreads [00:13, 18.3Kreads/s]136Kreads [00:14, 15.9Kreads/s]139Kreads [00:14, 19.2Kreads/s]148Kreads [00:14, 25.0Kreads/s]152Kreads [00:14, 26.6Kreads/s]156Kreads [00:14, 28.0Kreads/s]160Kreads [00:14, 30.0Kreads/s]163Kreads [00:14, 31.0Kreads/s]167Kreads [00:14, 28.4Kreads/s]170Kreads [00:14, 27.1Kreads/s]173Kreads [00:15, 28.4Kreads/s]176Kreads [00:15, 29.2Kreads/s]181Kreads [00:15, 33.2Kreads/s]189Kreads [00:15, 40.0Kreads/s]203Kreads [00:15, 50.9Kreads/s]225Kreads [00:15, 66.2Kreads/s]247Kreads [00:15, 83.7Kreads/s]272Kreads [00:15, 105Kreads/s] 304Kreads [00:15, 131Kreads/s]361Kreads [00:15, 170Kreads/s]425Kreads [00:16, 218Kreads/s]490Kreads [00:16, 273Kreads/s]555Kreads [00:16, 331Kreads/s]621Kreads [00:16, 389Kreads/s]686Kreads [00:16, 441Kreads/s]751Kreads [00:16, 489Kreads/s]817Kreads [00:16, 530Kreads/s]882Kreads [00:16, 560Kreads/s]948Kreads [00:16, 587Kreads/s]
+0.00reads [00:00, ?reads/s]38.1Kreads [00:00, 381Kreads/s]106Kreads [00:00, 438Kreads/s] 175Kreads [00:00, 493Kreads/s]243Kreads [00:00, 537Kreads/s]313Kreads [00:00, 577Kreads/s]384Kreads [00:00, 612Kreads/s]457Kreads [00:00, 643Kreads/s]521Kreads [00:00, 639Kreads/s]591Kreads [00:00, 657Kreads/s]663Kreads [00:01, 674Kreads/s]735Kreads [00:01, 687Kreads/s]809Kreads [00:01, 702Kreads/s]879Kreads [00:01, 689Kreads/s]949Kreads [00:01, 692Kreads/s]
+0.00reads [00:00, ?reads/s]1.44Kreads [00:00, 11.0Kreads/s]1.77Kreads [00:00, 2.33Kreads/s]2.36Kreads [00:00, 2.78Kreads/s]2.70Kreads [00:01, 820reads/s]  2.94Kreads [00:01, 1.01Kreads/s]9.36Kreads [00:01, 1.44Kreads/s]11.4Kreads [00:02, 1.84Kreads/s]15.9Kreads [00:02, 2.58Kreads/s]18.4Kreads [00:02, 3.15Kreads/s]20.2Kreads [00:03, 3.87Kreads/s]21.8Kreads [00:03, 4.66Kreads/s]23.2Kreads [00:03, 5.76Kreads/s]24.5Kreads [00:03, 5.04Kreads/s]28.7Kreads [00:03, 6.83Kreads/s]30.7Kreads [00:04, 6.52Kreads/s]32.2Kreads [00:04, 6.43Kreads/s]33.5Kreads [00:04, 5.59Kreads/s]34.5Kreads [00:04, 4.86Kreads/s]36.2Kreads [00:04, 6.16Kreads/s]37.3Kreads [00:05, 6.13Kreads/s]42.5Kreads [00:05, 8.30Kreads/s]45.8Kreads [00:05, 10.7Kreads/s]48.3Kreads [00:06, 6.14Kreads/s]50.0Kreads [00:06, 5.94Kreads/s]51.5Kreads [00:06, 4.74Kreads/s]52.5Kreads [00:07, 4.46Kreads/s]57.7Kreads [00:07, 6.13Kreads/s]59.8Kreads [00:07, 7.35Kreads/s]61.7Kreads [00:08, 5.26Kreads/s]63.1Kreads [00:08, 3.88Kreads/s]64.1Kreads [00:08, 3.97Kreads/s]65.0Kreads [00:09, 4.60Kreads/s]65.8Kreads [00:09, 3.50Kreads/s]66.5Kreads [00:09, 3.10Kreads/s]68.4Kreads [00:09, 4.14Kreads/s]69.4Kreads [00:09, 4.27Kreads/s]70.2Kreads [00:10, 4.10Kreads/s]70.8Kreads [00:10, 3.96Kreads/s]72.2Kreads [00:10, 5.05Kreads/s]73.1Kreads [00:10, 5.23Kreads/s]76.5Kreads [00:10, 7.01Kreads/s]78.5Kreads [00:10, 8.64Kreads/s]80.1Kreads [00:11, 6.09Kreads/s]81.4Kreads [00:11, 5.42Kreads/s]83.0Kreads [00:11, 6.76Kreads/s]84.2Kreads [00:11, 5.66Kreads/s]85.2Kreads [00:12, 4.99Kreads/s]85.9Kreads [00:12, 4.25Kreads/s]86.6Kreads [00:12, 4.34Kreads/s]87.2Kreads [00:12, 4.37Kreads/s]88.6Kreads [00:12, 5.52Kreads/s]90.5Kreads [00:12, 6.95Kreads/s]91.6Kreads [00:13, 6.60Kreads/s]92.5Kreads [00:13, 5.53Kreads/s]93.3Kreads [00:13, 5.60Kreads/s]94.0Kreads [00:13, 5.83Kreads/s]94.7Kreads [00:13, 5.75Kreads/s]95.8Kreads [00:13, 6.62Kreads/s]96.5Kreads [00:13, 6.66Kreads/s]97.3Kreads [00:14, 5.72Kreads/s]97.9Kreads [00:14, 5.33Kreads/s]101Kreads [00:14, 7.00Kreads/s] 102Kreads [00:14, 4.86Kreads/s]103Kreads [00:15, 4.27Kreads/s]103Kreads [00:15, 3.74Kreads/s]104Kreads [00:15, 3.30Kreads/s]105Kreads [00:15, 3.55Kreads/s]106Kreads [00:15, 4.47Kreads/s]106Kreads [00:15, 4.28Kreads/s]107Kreads [00:16, 4.62Kreads/s]111Kreads [00:16, 6.30Kreads/s]113Kreads [00:16, 5.10Kreads/s]114Kreads [00:16, 4.75Kreads/s]117Kreads [00:16, 6.35Kreads/s]119Kreads [00:17, 6.95Kreads/s]132Kreads [00:17, 9.69Kreads/s]137Kreads [00:17, 10.2Kreads/s]141Kreads [00:17, 11.8Kreads/s]148Kreads [00:17, 15.7Kreads/s]153Kreads [00:18, 10.2Kreads/s]156Kreads [00:19, 7.58Kreads/s]158Kreads [00:19, 7.15Kreads/s]160Kreads [00:20, 6.67Kreads/s]162Kreads [00:20, 7.44Kreads/s]163Kreads [00:20, 7.38Kreads/s]168Kreads [00:20, 9.84Kreads/s]170Kreads [00:20, 10.7Kreads/s]178Kreads [00:20, 14.4Kreads/s]184Kreads [00:20, 18.6Kreads/s]188Kreads [00:21, 14.1Kreads/s]191Kreads [00:21, 14.9Kreads/s]194Kreads [00:21, 15.1Kreads/s]196Kreads [00:21, 15.6Kreads/s]199Kreads [00:22, 17.7Kreads/s]201Kreads [00:22, 19.1Kreads/s]205Kreads [00:22, 21.9Kreads/s]209Kreads [00:22, 26.1Kreads/s]219Kreads [00:22, 33.5Kreads/s]225Kreads [00:22, 38.7Kreads/s]237Kreads [00:22, 48.5Kreads/s]250Kreads [00:22, 59.3Kreads/s]258Kreads [00:22, 52.5Kreads/s]268Kreads [00:23, 60.6Kreads/s]276Kreads [00:23, 64.5Kreads/s]288Kreads [00:23, 75.2Kreads/s]302Kreads [00:23, 87.5Kreads/s]321Kreads [00:23, 104Kreads/s] 340Kreads [00:23, 121Kreads/s]365Kreads [00:23, 143Kreads/s]401Kreads [00:23, 174Kreads/s]454Kreads [00:23, 218Kreads/s]510Kreads [00:23, 267Kreads/s]569Kreads [00:24, 319Kreads/s]629Kreads [00:24, 372Kreads/s]690Kreads [00:24, 421Kreads/s]749Kreads [00:24, 461Kreads/s]809Kreads [00:24, 495Kreads/s]871Kreads [00:24, 527Kreads/s]935Kreads [00:24, 556Kreads/s]995Kreads [00:24, 561Kreads/s]
+0.00reads [00:00, ?reads/s]63.0Kreads [00:00, 630Kreads/s]126Kreads [00:00, 631Kreads/s] 187Kreads [00:00, 623Kreads/s]249Kreads [00:00, 622Kreads/s]314Kreads [00:00, 630Kreads/s]378Kreads [00:00, 633Kreads/s]444Kreads [00:00, 641Kreads/s]507Kreads [00:00, 640Kreads/s]571Kreads [00:00, 637Kreads/s]636Kreads [00:01, 643Kreads/s]703Kreads [00:01, 649Kreads/s]768Kreads [00:01, 651Kreads/s]833Kreads [00:01, 565Kreads/s]891Kreads [00:01, 540Kreads/s]946Kreads [00:01, 522Kreads/s]999Kreads [00:01, 510Kreads/s]
+0.00reads [00:00, ?reads/s]976reads [00:00, 9.35Kreads/s]1.39Kreads [00:00, 4.46Kreads/s]1.65Kreads [00:00, 3.00Kreads/s]5.48Kreads [00:00, 4.14Kreads/s]7.74Kreads [00:00, 5.48Kreads/s]12.5Kreads [00:00, 7.45Kreads/s]14.9Kreads [00:01, 7.13Kreads/s]16.9Kreads [00:01, 8.81Kreads/s]18.8Kreads [00:01, 7.51Kreads/s]20.8Kreads [00:01, 9.18Kreads/s]22.6Kreads [00:01, 10.8Kreads/s]24.4Kreads [00:02, 9.47Kreads/s]31.0Kreads [00:02, 12.7Kreads/s]33.8Kreads [00:02, 13.0Kreads/s]36.6Kreads [00:02, 15.4Kreads/s]39.1Kreads [00:02, 11.0Kreads/s]41.0Kreads [00:03, 7.97Kreads/s]42.5Kreads [00:03, 6.68Kreads/s]43.7Kreads [00:03, 6.18Kreads/s]44.7Kreads [00:04, 4.83Kreads/s]48.7Kreads [00:04, 6.54Kreads/s]50.4Kreads [00:04, 6.87Kreads/s]53.0Kreads [00:04, 8.77Kreads/s]54.8Kreads [00:04, 9.97Kreads/s]56.4Kreads [00:04, 7.56Kreads/s]57.8Kreads [00:05, 6.74Kreads/s]58.8Kreads [00:05, 5.24Kreads/s]59.7Kreads [00:05, 5.33Kreads/s]61.3Kreads [00:05, 6.65Kreads/s]62.3Kreads [00:06, 4.81Kreads/s]63.1Kreads [00:06, 3.80Kreads/s]63.8Kreads [00:06, 3.98Kreads/s]64.9Kreads [00:06, 4.95Kreads/s]65.7Kreads [00:06, 5.29Kreads/s]66.4Kreads [00:06, 5.27Kreads/s]67.8Kreads [00:07, 6.45Kreads/s]68.7Kreads [00:07, 6.95Kreads/s]71.6Kreads [00:07, 8.98Kreads/s]73.1Kreads [00:07, 7.98Kreads/s]76.3Kreads [00:07, 10.3Kreads/s]78.1Kreads [00:07, 8.43Kreads/s]79.5Kreads [00:08, 7.52Kreads/s]82.1Kreads [00:08, 9.53Kreads/s]85.0Kreads [00:08, 11.8Kreads/s]87.0Kreads [00:08, 8.15Kreads/s]88.4Kreads [00:09, 7.00Kreads/s]89.6Kreads [00:09, 6.97Kreads/s]90.7Kreads [00:09, 6.95Kreads/s]92.0Kreads [00:09, 8.08Kreads/s]93.6Kreads [00:09, 9.48Kreads/s]95.2Kreads [00:09, 10.7Kreads/s]96.5Kreads [00:09, 9.67Kreads/s]97.7Kreads [00:10, 6.06Kreads/s]98.9Kreads [00:10, 7.09Kreads/s]99.9Kreads [00:10, 5.83Kreads/s]105Kreads [00:10, 7.90Kreads/s] 107Kreads [00:11, 6.37Kreads/s]108Kreads [00:11, 4.69Kreads/s]109Kreads [00:11, 3.99Kreads/s]110Kreads [00:12, 4.48Kreads/s]114Kreads [00:12, 6.09Kreads/s]116Kreads [00:12, 7.39Kreads/s]120Kreads [00:12, 9.74Kreads/s]122Kreads [00:12, 8.27Kreads/s]124Kreads [00:13, 8.23Kreads/s]126Kreads [00:13, 7.38Kreads/s]127Kreads [00:13, 6.30Kreads/s]128Kreads [00:13, 6.40Kreads/s]129Kreads [00:13, 6.21Kreads/s]130Kreads [00:13, 6.36Kreads/s]130Kreads [00:14, 5.61Kreads/s]131Kreads [00:14, 5.67Kreads/s]132Kreads [00:14, 6.10Kreads/s]135Kreads [00:14, 8.01Kreads/s]138Kreads [00:14, 10.3Kreads/s]140Kreads [00:14, 10.8Kreads/s]141Kreads [00:15, 8.53Kreads/s]143Kreads [00:15, 7.56Kreads/s]144Kreads [00:15, 7.14Kreads/s]145Kreads [00:15, 6.76Kreads/s]146Kreads [00:15, 6.18Kreads/s]147Kreads [00:15, 6.72Kreads/s]148Kreads [00:15, 7.40Kreads/s]149Kreads [00:16, 8.10Kreads/s]150Kreads [00:16, 8.63Kreads/s]151Kreads [00:16, 9.89Kreads/s]156Kreads [00:16, 13.0Kreads/s]167Kreads [00:16, 17.7Kreads/s]172Kreads [00:16, 21.2Kreads/s]177Kreads [00:16, 25.6Kreads/s]184Kreads [00:16, 31.8Kreads/s]190Kreads [00:16, 31.1Kreads/s]206Kreads [00:17, 41.1Kreads/s]214Kreads [00:17, 37.9Kreads/s]231Kreads [00:17, 49.4Kreads/s]241Kreads [00:17, 44.1Kreads/s]249Kreads [00:17, 46.9Kreads/s]256Kreads [00:17, 49.6Kreads/s]263Kreads [00:18, 48.1Kreads/s]269Kreads [00:18, 47.0Kreads/s]274Kreads [00:18, 43.7Kreads/s]283Kreads [00:18, 51.4Kreads/s]289Kreads [00:18, 51.6Kreads/s]295Kreads [00:18, 53.8Kreads/s]301Kreads [00:18, 51.6Kreads/s]307Kreads [00:18, 46.1Kreads/s]312Kreads [00:19, 45.9Kreads/s]316Kreads [00:19, 46.2Kreads/s]321Kreads [00:19, 47.0Kreads/s]329Kreads [00:19, 53.4Kreads/s]337Kreads [00:19, 59.2Kreads/s]347Kreads [00:19, 66.5Kreads/s]362Kreads [00:19, 80.2Kreads/s]372Kreads [00:19, 70.6Kreads/s]382Kreads [00:19, 77.0Kreads/s]398Kreads [00:20, 92.0Kreads/s]412Kreads [00:20, 102Kreads/s] 433Kreads [00:20, 121Kreads/s]475Kreads [00:20, 153Kreads/s]510Kreads [00:20, 185Kreads/s]575Kreads [00:20, 235Kreads/s]640Kreads [00:20, 291Kreads/s]700Kreads [00:20, 344Kreads/s]765Kreads [00:20, 401Kreads/s]832Kreads [00:20, 456Kreads/s]895Kreads [00:21, 497Kreads/s]961Kreads [00:21, 536Kreads/s]
+0.00reads [00:00, ?reads/s]42.3Kreads [00:00, 423Kreads/s]113Kreads [00:00, 481Kreads/s] 179Kreads [00:00, 523Kreads/s]245Kreads [00:00, 559Kreads/s]316Kreads [00:00, 595Kreads/s]383Kreads [00:00, 618Kreads/s]455Kreads [00:00, 644Kreads/s]519Kreads [00:00, 643Kreads/s]587Kreads [00:00, 654Kreads/s]659Kreads [00:01, 672Kreads/s]730Kreads [00:01, 685Kreads/s]799Kreads [00:01, 686Kreads/s]868Kreads [00:01, 674Kreads/s]936Kreads [00:01, 677Kreads/s]
+0.00reads [00:00, ?reads/s]430reads [00:00, 2.94Kreads/s]519reads [00:00, 944reads/s]  727reads [00:00, 1.13Kreads/s]937reads [00:00, 1.30Kreads/s]7.54Kreads [00:00, 1.84Kreads/s]9.56Kreads [00:00, 2.46Kreads/s]11.4Kreads [00:01, 2.54Kreads/s]12.7Kreads [00:01, 2.94Kreads/s]13.8Kreads [00:02, 3.34Kreads/s]16.0Kreads [00:02, 4.48Kreads/s]44.9Kreads [00:02, 6.36Kreads/s]71.3Kreads [00:02, 8.99Kreads/s]92.4Kreads [00:02, 12.6Kreads/s]112Kreads [00:02, 17.5Kreads/s] 130Kreads [00:03, 16.7Kreads/s]142Kreads [00:05, 12.8Kreads/s]151Kreads [00:06, 11.2Kreads/s]158Kreads [00:08, 6.75Kreads/s]163Kreads [00:08, 6.91Kreads/s]166Kreads [00:08, 8.87Kreads/s]169Kreads [00:09, 9.05Kreads/s]172Kreads [00:09, 7.14Kreads/s]174Kreads [00:10, 5.62Kreads/s]175Kreads [00:10, 4.97Kreads/s]176Kreads [00:10, 4.59Kreads/s]177Kreads [00:11, 4.28Kreads/s]178Kreads [00:11, 4.78Kreads/s]179Kreads [00:11, 3.70Kreads/s]179Kreads [00:11, 3.39Kreads/s]180Kreads [00:12, 3.06Kreads/s]180Kreads [00:12, 3.08Kreads/s]181Kreads [00:12, 3.16Kreads/s]181Kreads [00:12, 3.22Kreads/s]181Kreads [00:12, 3.10Kreads/s]182Kreads [00:12, 2.97Kreads/s]182Kreads [00:12, 3.03Kreads/s]183Kreads [00:12, 3.26Kreads/s]183Kreads [00:12, 3.82Kreads/s]184Kreads [00:13, 4.09Kreads/s]184Kreads [00:13, 4.28Kreads/s]185Kreads [00:13, 4.72Kreads/s]185Kreads [00:13, 4.83Kreads/s]186Kreads [00:13, 4.47Kreads/s]186Kreads [00:13, 3.92Kreads/s]187Kreads [00:13, 3.82Kreads/s]187Kreads [00:13, 3.87Kreads/s]188Kreads [00:14, 3.82Kreads/s]188Kreads [00:14, 4.18Kreads/s]189Kreads [00:14, 4.67Kreads/s]189Kreads [00:14, 5.12Kreads/s]191Kreads [00:14, 6.08Kreads/s]193Kreads [00:14, 7.93Kreads/s]195Kreads [00:14, 8.42Kreads/s]196Kreads [00:14, 6.53Kreads/s]197Kreads [00:15, 6.50Kreads/s]199Kreads [00:15, 8.35Kreads/s]202Kreads [00:15, 10.4Kreads/s]204Kreads [00:15, 12.5Kreads/s]220Kreads [00:15, 17.2Kreads/s]226Kreads [00:15, 19.6Kreads/s]236Kreads [00:15, 26.0Kreads/s]245Kreads [00:15, 33.0Kreads/s]253Kreads [00:16, 25.3Kreads/s]259Kreads [00:16, 30.4Kreads/s]265Kreads [00:17, 18.3Kreads/s]269Kreads [00:17, 15.6Kreads/s]272Kreads [00:17, 17.5Kreads/s]275Kreads [00:17, 18.4Kreads/s]287Kreads [00:17, 24.6Kreads/s]302Kreads [00:17, 32.8Kreads/s]314Kreads [00:18, 41.9Kreads/s]325Kreads [00:18, 51.7Kreads/s]335Kreads [00:18, 41.6Kreads/s]343Kreads [00:18, 38.6Kreads/s]353Kreads [00:18, 47.3Kreads/s]366Kreads [00:18, 58.7Kreads/s]379Kreads [00:18, 70.3Kreads/s]395Kreads [00:19, 84.3Kreads/s]412Kreads [00:19, 99.5Kreads/s]432Kreads [00:19, 117Kreads/s] 467Kreads [00:19, 146Kreads/s]516Kreads [00:19, 185Kreads/s]578Kreads [00:19, 235Kreads/s]639Kreads [00:19, 288Kreads/s]702Kreads [00:19, 344Kreads/s]765Kreads [00:19, 397Kreads/s]828Kreads [00:19, 447Kreads/s]889Kreads [00:20, 486Kreads/s]950Kreads [00:20, 518Kreads/s]
+0.00reads [00:00, ?reads/s]38.1Kreads [00:00, 381Kreads/s]105Kreads [00:00, 438Kreads/s] 172Kreads [00:00, 489Kreads/s]240Kreads [00:00, 533Kreads/s]309Kreads [00:00, 571Kreads/s]378Kreads [00:00, 602Kreads/s]447Kreads [00:00, 627Kreads/s]514Kreads [00:00, 638Kreads/s]582Kreads [00:00, 651Kreads/s]649Kreads [00:01, 656Kreads/s]717Kreads [00:01, 663Kreads/s]785Kreads [00:01, 668Kreads/s]851Kreads [00:01, 665Kreads/s]921Kreads [00:01, 674Kreads/s]989Kreads [00:01, 677Kreads/s]
+0.00reads [00:00, ?reads/s]2.37Kreads [00:00, 23.7Kreads/s]4.37Kreads [00:00, 22.2Kreads/s]5.45Kreads [00:00, 11.1Kreads/s]8.45Kreads [00:00, 13.6Kreads/s]10.6Kreads [00:00, 15.2Kreads/s]12.3Kreads [00:00, 9.88Kreads/s]13.6Kreads [00:01, 7.81Kreads/s]14.7Kreads [00:01, 7.61Kreads/s]15.9Kreads [00:01, 8.44Kreads/s]16.9Kreads [00:01, 6.37Kreads/s]17.8Kreads [00:01, 6.11Kreads/s]18.5Kreads [00:01, 6.13Kreads/s]19.3Kreads [00:02, 4.37Kreads/s]20.6Kreads [00:02, 5.45Kreads/s]21.4Kreads [00:02, 5.81Kreads/s]22.2Kreads [00:02, 5.77Kreads/s]23.4Kreads [00:02, 6.88Kreads/s]24.3Kreads [00:02, 6.81Kreads/s]25.1Kreads [00:03, 6.08Kreads/s]26.8Kreads [00:03, 7.51Kreads/s]27.8Kreads [00:03, 6.19Kreads/s]28.7Kreads [00:03, 6.73Kreads/s]29.5Kreads [00:03, 5.77Kreads/s]30.2Kreads [00:03, 5.82Kreads/s]31.9Kreads [00:03, 7.19Kreads/s]32.8Kreads [00:04, 6.49Kreads/s]38.7Kreads [00:04, 8.81Kreads/s]40.8Kreads [00:04, 7.88Kreads/s]42.6Kreads [00:04, 7.20Kreads/s]43.9Kreads [00:04, 7.96Kreads/s]45.5Kreads [00:05, 9.25Kreads/s]47.1Kreads [00:05, 10.6Kreads/s]48.5Kreads [00:05, 10.5Kreads/s]50.8Kreads [00:05, 12.4Kreads/s]52.4Kreads [00:06, 5.02Kreads/s]53.6Kreads [00:06, 5.65Kreads/s]56.4Kreads [00:06, 7.41Kreads/s]57.9Kreads [00:06, 7.67Kreads/s]59.3Kreads [00:06, 6.23Kreads/s]60.3Kreads [00:06, 6.99Kreads/s]63.2Kreads [00:07, 8.97Kreads/s]64.7Kreads [00:07, 7.53Kreads/s]65.9Kreads [00:07, 8.18Kreads/s]68.7Kreads [00:07, 10.3Kreads/s]70.4Kreads [00:07, 11.0Kreads/s]72.6Kreads [00:07, 12.8Kreads/s]74.3Kreads [00:08, 9.06Kreads/s]76.4Kreads [00:08, 10.8Kreads/s]77.9Kreads [00:08, 9.42Kreads/s]79.3Kreads [00:08, 10.2Kreads/s]80.6Kreads [00:08, 10.8Kreads/s]81.9Kreads [00:08, 9.69Kreads/s]83.0Kreads [00:08, 8.77Kreads/s]84.0Kreads [00:09, 8.36Kreads/s]89.2Kreads [00:09, 11.1Kreads/s]91.3Kreads [00:09, 10.5Kreads/s]93.0Kreads [00:09, 9.36Kreads/s]94.5Kreads [00:09, 9.96Kreads/s]95.9Kreads [00:09, 10.0Kreads/s]97.4Kreads [00:10, 10.9Kreads/s]98.7Kreads [00:10, 11.2Kreads/s]100Kreads [00:10, 11.5Kreads/s] 101Kreads [00:10, 11.3Kreads/s]102Kreads [00:10, 11.3Kreads/s]104Kreads [00:10, 7.68Kreads/s]105Kreads [00:10, 8.60Kreads/s]106Kreads [00:11, 7.55Kreads/s]109Kreads [00:11, 9.83Kreads/s]111Kreads [00:11, 7.70Kreads/s]112Kreads [00:11, 7.06Kreads/s]115Kreads [00:11, 8.96Kreads/s]117Kreads [00:11, 10.7Kreads/s]119Kreads [00:11, 13.0Kreads/s]124Kreads [00:12, 16.3Kreads/s]126Kreads [00:13, 6.37Kreads/s]128Kreads [00:13, 7.78Kreads/s]130Kreads [00:13, 8.75Kreads/s]132Kreads [00:13, 10.2Kreads/s]133Kreads [00:13, 5.52Kreads/s]134Kreads [00:14, 5.23Kreads/s]135Kreads [00:14, 3.87Kreads/s]136Kreads [00:14, 4.70Kreads/s]137Kreads [00:14, 4.95Kreads/s]138Kreads [00:15, 5.78Kreads/s]139Kreads [00:15, 5.83Kreads/s]141Kreads [00:15, 7.41Kreads/s]142Kreads [00:15, 6.24Kreads/s]143Kreads [00:15, 7.18Kreads/s]144Kreads [00:15, 5.17Kreads/s]145Kreads [00:16, 4.64Kreads/s]146Kreads [00:16, 5.71Kreads/s]147Kreads [00:16, 5.36Kreads/s]148Kreads [00:16, 6.32Kreads/s]149Kreads [00:16, 5.60Kreads/s]150Kreads [00:16, 6.29Kreads/s]152Kreads [00:16, 7.91Kreads/s]153Kreads [00:17, 7.43Kreads/s]154Kreads [00:17, 6.56Kreads/s]155Kreads [00:17, 7.46Kreads/s]158Kreads [00:17, 9.70Kreads/s]160Kreads [00:17, 8.31Kreads/s]161Kreads [00:17, 9.20Kreads/s]166Kreads [00:17, 12.0Kreads/s]170Kreads [00:18, 15.2Kreads/s]172Kreads [00:18, 12.9Kreads/s]174Kreads [00:18, 14.3Kreads/s]178Kreads [00:18, 17.2Kreads/s]180Kreads [00:18, 16.4Kreads/s]188Kreads [00:18, 21.5Kreads/s]194Kreads [00:18, 26.7Kreads/s]199Kreads [00:19, 28.8Kreads/s]205Kreads [00:19, 33.9Kreads/s]210Kreads [00:19, 27.3Kreads/s]215Kreads [00:19, 31.8Kreads/s]229Kreads [00:19, 41.4Kreads/s]239Kreads [00:19, 50.6Kreads/s]247Kreads [00:19, 51.6Kreads/s]255Kreads [00:19, 57.2Kreads/s]271Kreads [00:20, 70.5Kreads/s]280Kreads [00:20, 76.1Kreads/s]302Kreads [00:20, 94.3Kreads/s]332Kreads [00:20, 119Kreads/s] 365Kreads [00:20, 147Kreads/s]412Kreads [00:20, 185Kreads/s]470Kreads [00:20, 233Kreads/s]529Kreads [00:20, 284Kreads/s]588Kreads [00:20, 336Kreads/s]647Kreads [00:20, 386Kreads/s]709Kreads [00:21, 435Kreads/s]771Kreads [00:21, 478Kreads/s]836Kreads [00:21, 519Kreads/s]901Kreads [00:21, 554Kreads/s]962Kreads [00:21, 556Kreads/s]
+0.00reads [00:00, ?reads/s]43.0Kreads [00:00, 430Kreads/s]117Kreads [00:00, 492Kreads/s] 185Kreads [00:00, 537Kreads/s]255Kreads [00:00, 577Kreads/s]327Kreads [00:00, 612Kreads/s]395Kreads [00:00, 631Kreads/s]464Kreads [00:00, 648Kreads/s]528Kreads [00:00, 646Kreads/s]598Kreads [00:00, 661Kreads/s]668Kreads [00:01, 672Kreads/s]738Kreads [00:01, 681Kreads/s]806Kreads [00:01, 681Kreads/s]874Kreads [00:01, 678Kreads/s]942Kreads [00:01, 598Kreads/s]
+0.00reads [00:00, ?reads/s]7.77Kreads [00:00, 70.8Kreads/s]9.89Kreads [00:00, 10.1Kreads/s]11.5Kreads [00:01, 5.19Kreads/s]12.7Kreads [00:01, 4.01Kreads/s]13.6Kreads [00:02, 2.59Kreads/s]14.3Kreads [00:02, 2.86Kreads/s]15.6Kreads [00:02, 3.71Kreads/s]16.4Kreads [00:03, 3.32Kreads/s]17.0Kreads [00:03, 2.62Kreads/s]17.5Kreads [00:03, 2.53Kreads/s]17.9Kreads [00:03, 2.35Kreads/s]18.2Kreads [00:04, 1.93Kreads/s]18.5Kreads [00:04, 1.85Kreads/s]18.8Kreads [00:04, 1.90Kreads/s]19.9Kreads [00:04, 2.54Kreads/s]20.4Kreads [00:04, 2.63Kreads/s]21.2Kreads [00:04, 3.24Kreads/s]21.7Kreads [00:04, 3.25Kreads/s]22.2Kreads [00:05, 2.95Kreads/s]22.6Kreads [00:05, 2.63Kreads/s]23.3Kreads [00:05, 3.21Kreads/s]23.8Kreads [00:05, 2.89Kreads/s]24.2Kreads [00:05, 2.63Kreads/s]24.5Kreads [00:05, 2.41Kreads/s]24.8Kreads [00:06, 2.42Kreads/s]25.1Kreads [00:06, 2.30Kreads/s]25.5Kreads [00:06, 2.71Kreads/s]26.4Kreads [00:06, 3.39Kreads/s]26.9Kreads [00:06, 3.67Kreads/s]27.3Kreads [00:06, 3.36Kreads/s]27.7Kreads [00:06, 3.16Kreads/s]28.4Kreads [00:06, 3.66Kreads/s]28.8Kreads [00:07, 3.16Kreads/s]31.5Kreads [00:07, 4.27Kreads/s]33.6Kreads [00:07, 5.60Kreads/s]34.9Kreads [00:07, 5.61Kreads/s]36.0Kreads [00:08, 3.64Kreads/s]36.8Kreads [00:08, 2.58Kreads/s]37.4Kreads [00:08, 2.39Kreads/s]37.9Kreads [00:09, 2.18Kreads/s]38.3Kreads [00:09, 1.89Kreads/s]38.7Kreads [00:09, 1.85Kreads/s]38.9Kreads [00:09, 1.99Kreads/s]39.3Kreads [00:09, 2.25Kreads/s]39.8Kreads [00:10, 2.71Kreads/s]40.9Kreads [00:10, 3.50Kreads/s]42.4Kreads [00:10, 4.52Kreads/s]43.4Kreads [00:10, 5.35Kreads/s]44.3Kreads [00:10, 4.85Kreads/s]45.0Kreads [00:10, 3.30Kreads/s]45.6Kreads [00:11, 3.82Kreads/s]46.2Kreads [00:11, 3.44Kreads/s]46.7Kreads [00:11, 2.72Kreads/s]47.1Kreads [00:11, 2.37Kreads/s]48.3Kreads [00:11, 3.12Kreads/s]48.9Kreads [00:12, 2.95Kreads/s]50.6Kreads [00:12, 3.92Kreads/s]53.4Kreads [00:12, 5.26Kreads/s]54.7Kreads [00:12, 4.46Kreads/s]55.8Kreads [00:12, 5.28Kreads/s]59.4Kreads [00:12, 7.10Kreads/s]61.5Kreads [00:12, 8.81Kreads/s]63.3Kreads [00:13, 6.99Kreads/s]64.8Kreads [00:13, 5.15Kreads/s]65.9Kreads [00:14, 5.05Kreads/s]66.8Kreads [00:14, 5.01Kreads/s]67.6Kreads [00:14, 5.69Kreads/s]69.1Kreads [00:14, 6.91Kreads/s]70.0Kreads [00:14, 6.29Kreads/s]70.9Kreads [00:14, 5.35Kreads/s]71.7Kreads [00:14, 5.99Kreads/s]72.5Kreads [00:15, 5.54Kreads/s]73.9Kreads [00:15, 6.76Kreads/s]74.8Kreads [00:15, 6.38Kreads/s]77.3Kreads [00:15, 8.19Kreads/s]78.6Kreads [00:15, 8.68Kreads/s]80.7Kreads [00:15, 10.5Kreads/s]82.1Kreads [00:16, 7.33Kreads/s]84.0Kreads [00:16, 8.96Kreads/s]85.4Kreads [00:16, 7.38Kreads/s]87.3Kreads [00:16, 9.02Kreads/s]88.7Kreads [00:16, 9.09Kreads/s]91.2Kreads [00:16, 11.2Kreads/s]92.8Kreads [00:16, 11.5Kreads/s]95.3Kreads [00:16, 13.6Kreads/s]97.0Kreads [00:17, 9.87Kreads/s]98.4Kreads [00:17, 8.99Kreads/s]101Kreads [00:17, 11.0Kreads/s] 102Kreads [00:17, 10.4Kreads/s]104Kreads [00:17, 12.2Kreads/s]106Kreads [00:17, 11.4Kreads/s]109Kreads [00:18, 13.9Kreads/s]111Kreads [00:18, 14.8Kreads/s]112Kreads [00:18, 14.8Kreads/s]114Kreads [00:18, 16.0Kreads/s]119Kreads [00:18, 19.9Kreads/s]122Kreads [00:18, 16.7Kreads/s]124Kreads [00:18, 17.1Kreads/s]126Kreads [00:19, 15.4Kreads/s]128Kreads [00:19, 15.6Kreads/s]130Kreads [00:19, 12.2Kreads/s]132Kreads [00:19, 14.3Kreads/s]134Kreads [00:19, 15.2Kreads/s]136Kreads [00:19, 16.9Kreads/s]139Kreads [00:19, 19.0Kreads/s]141Kreads [00:19, 18.5Kreads/s]145Kreads [00:19, 21.5Kreads/s]147Kreads [00:20, 17.0Kreads/s]149Kreads [00:20, 15.6Kreads/s]151Kreads [00:20, 15.7Kreads/s]154Kreads [00:20, 18.7Kreads/s]157Kreads [00:20, 16.8Kreads/s]163Kreads [00:20, 21.6Kreads/s]166Kreads [00:20, 23.1Kreads/s]170Kreads [00:21, 25.2Kreads/s]173Kreads [00:21, 26.6Kreads/s]176Kreads [00:21, 24.8Kreads/s]181Kreads [00:21, 29.6Kreads/s]187Kreads [00:21, 34.8Kreads/s]192Kreads [00:21, 33.8Kreads/s]207Kreads [00:21, 44.2Kreads/s]217Kreads [00:21, 52.4Kreads/s]225Kreads [00:21, 52.5Kreads/s]232Kreads [00:22, 52.6Kreads/s]249Kreads [00:22, 66.4Kreads/s]265Kreads [00:22, 80.7Kreads/s]283Kreads [00:22, 96.8Kreads/s]300Kreads [00:22, 111Kreads/s] 325Kreads [00:22, 133Kreads/s]354Kreads [00:22, 158Kreads/s]387Kreads [00:22, 187Kreads/s]431Kreads [00:22, 227Kreads/s]490Kreads [00:23, 278Kreads/s]525Kreads [00:23, 22.7Kreads/s]
+0.00reads [00:00, ?reads/s]68.3Kreads [00:00, 683Kreads/s]135Kreads [00:00, 678Kreads/s] 204Kreads [00:00, 681Kreads/s]272Kreads [00:00, 681Kreads/s]339Kreads [00:00, 679Kreads/s]408Kreads [00:00, 681Kreads/s]477Kreads [00:00, 682Kreads/s]525Kreads [00:00, 680Kreads/s]
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+
+gzip: stdout: Stale file handle
+Traceback (most recent call last):
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 332, in <module>
+    sys.exit(main(sys.argv))
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 59, in main
+    writer.write(ids, seqs, quals, mapping)
+  File "/net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py", line 141, in write
+    target.writelines(id + ['\n', seq, '\n+\n', qual, '\n'])
+IOError: [Errno 32] Broken pipe
+0.00reads [00:00, ?reads/s]
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+
+gzip: stdout: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle
+gzip: write error: Stale file handle

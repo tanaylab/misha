@@ -27,14 +27,15 @@ void GIntervalsMeta::save_meta(const char *path, SEXP stats, SEXP zeroline)
 	SEXP colnames;
 
 	rprotect(meta = allocVector(VECSXP, NUM_META_FIELDS));
+    rprotect(colnames = allocVector(STRSXP, NUM_META_FIELDS));
 
 	SET_VECTOR_ELT(meta, STATS_FIELD, stats);
 	SET_VECTOR_ELT(meta, ZEROLINE_FIELD, zeroline);
 
-	setAttrib(meta, R_NamesSymbol, (colnames = allocVector(STRSXP, NUM_META_FIELDS)));
-
 	for (int i = 0; i < NUM_META_FIELDS; ++i) 
 		SET_STRING_ELT(colnames, i, mkChar(META_FIELD_NAMES[i]));
+
+    setAttrib(meta, R_NamesSymbol, colnames);
 
 	string filename(path);
 	filename += "/.meta";

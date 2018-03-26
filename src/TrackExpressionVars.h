@@ -69,13 +69,13 @@ public:
 
     struct Track_n_imdf {
         string               name;
-        GenomeTrack         *track;
+        GenomeTrack         *track{NULL};
         GenomeTrack::Type    type;
         vector<unsigned>     slice;
         GenomeTrackArrays::SliceFunctions slice_func;
         double               slice_percentile;
-        Iterator_modifier1D *imdf1d;
-        Iterator_modifier2D *imdf2d;
+        Iterator_modifier1D *imdf1d{NULL};
+        Iterator_modifier2D *imdf2d{NULL};
     };
 
     typedef vector<Track_n_imdf> Track_n_imdfs;
@@ -176,7 +176,7 @@ inline bool TrackExpressionVars::Iterator_modifier1D::operator==(const Iterator_
 inline void TrackExpressionVars::Iterator_modifier1D::transform(const GInterval &interv, const GenomeChromKey &chromkey)
 {
 	interval.chromid = interv.chromid;
-	interval.start = max(interv.start + sshift, 0L);
+	interval.start = max(interv.start + sshift, (decltype(interv.start + sshift))0);
 	interval.end = min(interv.end + eshift, (int64_t)chromkey.get_chrom_size(interv.chromid));
 	interval.strand = interv.strand;
 	out_of_range = interval.start >= interval.end;
@@ -196,9 +196,9 @@ inline bool TrackExpressionVars::Iterator_modifier2D::operator==(const Iterator_
 
 inline void TrackExpressionVars::Iterator_modifier2D::transform(const GInterval2D &interv, const GenomeChromKey &chromkey)
 {
-	int64_t start1 = max(interv.start1() + sshift1, 0L);
+	int64_t start1 = max(interv.start1() + sshift1, (decltype(interv.start1() + sshift1))0);
 	int64_t end1 = min(interv.end1() + eshift1, (int64_t)chromkey.get_chrom_size(interv.chromid1()));
-	int64_t start2 = max(interv.start2() + sshift2, 0L);
+	int64_t start2 = max(interv.start2() + sshift2, (decltype(interv.start2() + sshift2))0);
 	int64_t end2 = min(interv.end2() + eshift2, (int64_t)chromkey.get_chrom_size(interv.chromid2()));
 	interval.set(interv.chromid1(), start1, end1, interv.chromid2(), start2, end2);
 	out_of_range = start1 >= end1 || start2 >= end2;

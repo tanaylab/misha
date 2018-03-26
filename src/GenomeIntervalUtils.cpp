@@ -29,7 +29,7 @@ struct ImportedInterval {
 
 	ImportedInterval(const GInterval &_interv, const vector<int64_t> &_origin_ids) : interv(_interv), origin_ids(_origin_ids) {}
 
-	bool operator<(const ImportedInterval &obj) const { return interv.chromid < obj.interv.chromid || interv.chromid == obj.interv.chromid && interv.start < obj.interv.start; }
+	bool operator<(const ImportedInterval &obj) const { return interv.chromid < obj.interv.chromid || (interv.chromid == obj.interv.chromid && interv.start < obj.interv.start); }
 };
 
 typedef std::vector<ImportedInterval> ImportedIntervals;
@@ -180,11 +180,11 @@ SEXP gintervintersect(SEXP _intervs1, SEXP _intervs2, SEXP _envir)
 		intervs2d[0].verify_no_overlaps(iu.get_chromkey());
 		intervs2d[1].verify_no_overlaps(iu.get_chromkey());
 
-		if (intervs[0].empty() && intervs2d[0].empty() || intervs[1].empty() && intervs2d[1].empty())
+		if ((intervs[0].empty() && intervs2d[0].empty()) || (intervs[1].empty() && intervs2d[1].empty()))
 			return R_NilValue;
 
-		if (!intervs[0].empty() && intervs[1].empty() || intervs[0].empty() && !intervs[1].empty() ||
-				!intervs2d[0].empty() && intervs2d[1].empty() || intervs2d[0].empty() && !intervs2d[1].empty())
+		if ((!intervs[0].empty() && intervs[1].empty()) || (intervs[0].empty() && !intervs[1].empty()) ||
+            (!intervs2d[0].empty() && intervs2d[1].empty()) || (intervs2d[0].empty() && !intervs2d[1].empty()))
 			verror("Cannot intersect 1D intervals with 2D intervals");
 
 		if (!intervs[0].empty()) {
@@ -206,8 +206,8 @@ SEXP gintervintersect(SEXP _intervs1, SEXP _intervs2, SEXP _envir)
 
 		GIntervals2D::const_iterator interv1 = intervs2d[0].begin();
 		GIntervals2D::const_iterator interv2 = intervs2d[1].begin();
-		Rectangles      intersection;
-		vector<size_t>  intersected_objs_indices;
+		Rectangles       intersection;
+		vector<uint64_t> intersected_objs_indices;
 
 		while (interv1 != intervs2d[0].end() && interv2 != intervs2d[1].end()) {
 			RectsQuadTree qtree(0, 0, iu.get_chromkey().get_chrom_size(interv1->chromid1()), iu.get_chromkey().get_chrom_size(interv1->chromid2()));
@@ -263,76 +263,76 @@ SEXP gintervdiff(SEXP _intervs1, SEXP _intervs2, SEXP _envir)
 SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
 {
 	try {
-		RdbInitializer rdb_init;
+        RdbInitializer rdb_init;
 
-		if (!isLogical(_unify_touching_intervals) || length(_unify_touching_intervals) != 1)
-			verror("unify_touching_intervals argument is not logical");
+        if (!isLogical(_unify_touching_intervals) || xlength(_unify_touching_intervals) != 1)
+            verror("unify_touching_intervals argument is not logical");
 
-		bool unify_touching_intervals = LOGICAL(_unify_touching_intervals)[0] == 1;
-		IntervUtils iu(_envir);
-		GIntervals intervs;
-		GIntervals2D intervs2d;
-		iu.convert_rintervs(_intervs, &intervs, &intervs2d);
+        bool unify_touching_intervals = LOGICAL(_unify_touching_intervals)[0] == 1;
+        IntervUtils iu(_envir);
+        GIntervals intervs;
+        GIntervals2D intervs2d;
+        iu.convert_rintervs(_intervs, &intervs, &intervs2d);
 
-		if (!intervs2d.empty()) {
-			intervs2d.sort();
-			intervs2d.verify_no_overlaps(iu.get_chromkey());
+        if (!intervs2d.empty()) {
+            intervs2d.sort();
+            intervs2d.verify_no_overlaps(iu.get_chromkey());
 
-			SEXP old2new_mapping;
+            SEXP old2new_mapping;
 
-			rprotect(old2new_mapping = allocVector(REALSXP, intervs2d.size()));
+            rprotect(old2new_mapping = allocVector(REALSXP, intervs2d.size()));
 
-			for (GIntervals2D::const_iterator interv = intervs2d.begin(); interv != intervs2d.end(); ++interv)
-				REAL(old2new_mapping)[interv - intervs2d.begin()] = ((int64_t)interv->udata()) + 1;
+            for (GIntervals2D::const_iterator interv = intervs2d.begin(); interv != intervs2d.end(); ++interv)
+                REAL(old2new_mapping)[interv - intervs2d.begin()] = ((int64_t)interv->udata()) + 1;
 
 			SEXP answer = iu.convert_intervs(&intervs2d);
 			setAttrib(answer, install("mapping"), old2new_mapping);
 			return answer;
 		}
 
-		if (intervs.empty())
-			return R_NilValue;
+        if (intervs.empty())
+            return R_NilValue;
 
-		ImportedIntervals imported_intervs;
-		vector<int64_t> origin_ids(1);
-		imported_intervs.reserve(intervs.size());
-		for (size_t interv = 0; interv < intervs.size(); ++interv) {
-			origin_ids[0] = interv;
-			imported_intervs.push_back(ImportedInterval(intervs[interv], origin_ids));
-		}
+        ImportedIntervals imported_intervs;
+        vector<int64_t> origin_ids(1);
+        imported_intervs.reserve(intervs.size());
+        for (size_t interv = 0; interv < intervs.size(); ++interv) {
+            origin_ids[0] = interv;
+            imported_intervs.push_back(ImportedInterval(intervs[interv], origin_ids));
+        }
 
-		sort(imported_intervs.begin(), imported_intervs.end());
-		size_t cur_idx = 0;
+        sort(imported_intervs.begin(), imported_intervs.end());
+        size_t cur_idx = 0;
 
-		for (size_t i = 1; i < imported_intervs.size(); i++) {
-			if (imported_intervs[cur_idx].interv.chromid != imported_intervs[i].interv.chromid ||
-					imported_intervs[cur_idx].interv.end < imported_intervs[i].interv.start ||
-					!unify_touching_intervals && imported_intervs[cur_idx].interv.end == imported_intervs[i].interv.start)
-				imported_intervs[++cur_idx] = imported_intervs[i];
-			// unite overlapping intervals
-			else {
-				if (imported_intervs[cur_idx].interv.end < imported_intervs[i].interv.end)
-					imported_intervs[cur_idx].interv.end = imported_intervs[i].interv.end;
-				imported_intervs[cur_idx].origin_ids.push_back(imported_intervs[i].origin_ids.front());
-			}
-		}
-		imported_intervs.erase(imported_intervs.begin() + cur_idx + 1, imported_intervs.end());
+        for (size_t i = 1; i < imported_intervs.size(); i++) {
+            if (imported_intervs[cur_idx].interv.chromid != imported_intervs[i].interv.chromid ||
+                    imported_intervs[cur_idx].interv.end < imported_intervs[i].interv.start ||
+                    (!unify_touching_intervals && imported_intervs[cur_idx].interv.end == imported_intervs[i].interv.start))
+                imported_intervs[++cur_idx] = imported_intervs[i];
+            // unite overlapping intervals
+            else {
+                if (imported_intervs[cur_idx].interv.end < imported_intervs[i].interv.end)
+                    imported_intervs[cur_idx].interv.end = imported_intervs[i].interv.end;
+                imported_intervs[cur_idx].origin_ids.push_back(imported_intervs[i].origin_ids.front());
+            }
+        }
+        imported_intervs.erase(imported_intervs.begin() + cur_idx + 1, imported_intervs.end());
 
-		// pack the result
-		SEXP old2new_mapping;
+        // pack the result
+        SEXP old2new_mapping;
 
-		rprotect(old2new_mapping = allocVector(REALSXP, intervs.size()));
-		intervs.clear();
+        rprotect(old2new_mapping = allocVector(REALSXP, intervs.size()));
+        intervs.clear();
 
-		for (ImportedIntervals::const_iterator iimported_interv = imported_intervs.begin(); iimported_interv != imported_intervs.end(); ++iimported_interv) {
-			intervs.push_back(iimported_interv->interv);
-			for (vector<int64_t>::const_iterator iid = iimported_interv->origin_ids.begin(); iid != iimported_interv->origin_ids.end(); ++iid)
-				REAL(old2new_mapping)[*iid] = (iimported_interv - imported_intervs.begin()) + 1;
-		}
+        for (ImportedIntervals::const_iterator iimported_interv = imported_intervs.begin(); iimported_interv != imported_intervs.end(); ++iimported_interv) {
+            intervs.push_back(iimported_interv->interv);
+            for (vector<int64_t>::const_iterator iid = iimported_interv->origin_ids.begin(); iid != iimported_interv->origin_ids.end(); ++iid)
+                REAL(old2new_mapping)[*iid] = (iimported_interv - imported_intervs.begin()) + 1;
+        }
 
-		SEXP answer = iu.convert_intervs(&intervs);
-		setAttrib(answer, install("mapping"), old2new_mapping);
-		return answer;
+        SEXP answer = iu.convert_intervs(&intervs);
+        setAttrib(answer, install("mapping"), old2new_mapping);
+        return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
 	}
@@ -435,9 +435,7 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 		if (intervs1d.size()) {
 			GIntervalsBigSet1D::ChromStat chromstat = GIntervalsBigSet1D::get_chrom_stat(&intervs1d).second;
 			rprotect(answer = allocVector(VECSXP, GIntervalsBigSet1D::NUM_STAT_COLS - 1));
-
-			setAttrib(answer, R_NamesSymbol, (colnames = allocVector(STRSXP, GIntervalsBigSet1D::NUM_STAT_COLS - 1)));
-			setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
+            rprotect(colnames = allocVector(STRSXP, GIntervalsBigSet1D::NUM_STAT_COLS - 1));
 
 			vector<int> idx2ridx(GIntervalsBigSet1D::NUM_STAT_COLS);
 			int colidx = 0;
@@ -449,30 +447,49 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 				}
 			}
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::SIZE_COL], allocVector(REALSXP, 1));
-			REAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::SIZE_COL]))[0] = chromstat.size;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.size));
+    			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::SIZE_COL], rexp);
+            }
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_OVERLAP_SIZE_COL], allocVector(REALSXP, 1));
-			REAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_OVERLAP_SIZE_COL]))[0] = chromstat.unified_overlap_size;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.unified_overlap_size));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_OVERLAP_SIZE_COL], rexp);
+            }
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_TOUCHING_SIZE_COL], allocVector(REALSXP, 1));
-			REAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_TOUCHING_SIZE_COL]))[0] = chromstat.unified_touching_size;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.unified_touching_size));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_TOUCHING_SIZE_COL], rexp);
+            }
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::RANGE_COL], allocVector(REALSXP, 1));
-			REAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::RANGE_COL]))[0] = chromstat.range;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.range));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::RANGE_COL], rexp);
+            }
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_OVERLAP_RANGE_COL], allocVector(REALSXP, 1));
-			REAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_OVERLAP_RANGE_COL]))[0] = chromstat.unified_overlap_range;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.unified_overlap_range));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_OVERLAP_RANGE_COL], rexp);
+            }
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::CONTAINS_OVERLAPS_COL], allocVector(LGLSXP, 1));
-			LOGICAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::CONTAINS_OVERLAPS_COL]))[0] = chromstat.contains_overlaps;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.contains_overlaps));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::CONTAINS_OVERLAPS_COL], allocVector(LGLSXP, 1));
+            }
+
+            setAttrib(answer, R_NamesSymbol, colnames);
+            setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
 		} else {
 			GIntervalsBigSet2D::ChromStat chromstat = GIntervalsBigSet2D::get_chrom_stat(&intervs2d, iu).second;
 
 			rprotect(answer = allocVector(VECSXP, GIntervalsBigSet2D::NUM_STAT_COLS - 2));
-
-			setAttrib(answer, R_NamesSymbol, (colnames = allocVector(STRSXP, GIntervalsBigSet2D::NUM_STAT_COLS - 2)));
-			setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
+            rprotect(colnames = allocVector(STRSXP, GIntervalsBigSet2D::NUM_STAT_COLS - 2));
 
 			vector<int> idx2ridx(GIntervalsBigSet2D::NUM_STAT_COLS);
 			int colidx = 0;
@@ -484,18 +501,31 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 				}
 			}
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::SIZE_COL], allocVector(REALSXP, 1));
-			REAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::SIZE_COL]))[0] = chromstat.size;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.size));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::SIZE_COL], rexp);
+            }
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::SURFACE_COL], allocVector(REALSXP, 1));
-			REAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::SURFACE_COL]))[0] = chromstat.surface;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.surface));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::SURFACE_COL], rexp);
+            }
 
-			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::CONTAINS_OVERLAPS_COL], allocVector(LGLSXP, 1));
-			LOGICAL(VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::CONTAINS_OVERLAPS_COL]))[0] = chromstat.contains_overlaps;
+            {
+                SEXP rexp;
+                rprotect(rexp = ScalarReal(chromstat.contains_overlaps));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::CONTAINS_OVERLAPS_COL], rexp);
+            }
+
+            setAttrib(answer, R_NamesSymbol, colnames);
+            setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
 		}
 
-		setAttrib(answer, R_RowNamesSymbol, (rownames = allocVector(INTSXP, 1)));
-		INTEGER(rownames)[0] = 1;
+        rprotect(rownames = allocVector(INTSXP, 1));
+        INTEGER(rownames)[0] = 1;
+		setAttrib(answer, R_RowNamesSymbol, rownames);
 
 		return answer;
 	} catch (TGLException &e) {
@@ -542,13 +572,10 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 			SEXP chroms, chroms_idx, sizes, col_names;
 
 			rprotect(answer = allocVector(VECSXP, NUM_COLS));
-
-			SET_VECTOR_ELT(answer, CHROM, (chroms_idx = allocVector(INTSXP, num_non_zero_chroms)));
-			SET_VECTOR_ELT(answer, SIZE, (sizes = allocVector(INTSXP, num_non_zero_chroms)));
-
-			setAttrib(answer, R_NamesSymbol, (col_names = allocVector(STRSXP, NUM_COLS)));
-			setAttrib(chroms_idx, R_LevelsSymbol, (chroms = allocVector(STRSXP, num_chroms)));
-			setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+            rprotect(chroms_idx = allocVector(INTSXP, num_non_zero_chroms));
+            rprotect(sizes = allocVector(INTSXP, num_non_zero_chroms));
+            rprotect(col_names = allocVector(STRSXP, NUM_COLS));
+            rprotect(chroms = allocVector(STRSXP, num_chroms));
 
 			size_t idx = 0;
 
@@ -564,6 +591,13 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 
 			SET_STRING_ELT(col_names, CHROM, mkChar("chrom"));
 			SET_STRING_ELT(col_names, SIZE, mkChar("size"));
+
+            setAttrib(answer, R_NamesSymbol, col_names);
+            setAttrib(chroms_idx, R_LevelsSymbol, chroms);
+            setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+
+            SET_VECTOR_ELT(answer, CHROM, chroms_idx);
+            SET_VECTOR_ELT(answer, SIZE, sizes);
 		} else {
 			chrom_sizes.resize(num_chroms * num_chroms);
 			for (size_t chromid1 = 0; chromid1 < num_chroms; ++chromid1) {
@@ -581,16 +615,12 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 			SEXP chroms1, chroms2, chroms_idx1, chroms_idx2, sizes, col_names;
 
 			rprotect(answer = allocVector(VECSXP, NUM_COLS));
-
-			SET_VECTOR_ELT(answer, CHROM1, (chroms_idx1 = allocVector(INTSXP, num_non_zero_chroms)));
-			SET_VECTOR_ELT(answer, CHROM2, (chroms_idx2 = allocVector(INTSXP, num_non_zero_chroms)));
-			SET_VECTOR_ELT(answer, SIZE, (sizes = allocVector(INTSXP, num_non_zero_chroms)));
-
-			setAttrib(answer, R_NamesSymbol, (col_names = allocVector(STRSXP, NUM_COLS)));
-			setAttrib(chroms_idx1, R_LevelsSymbol, (chroms1 = allocVector(STRSXP, num_chroms)));
-			setAttrib(chroms_idx1, R_ClassSymbol, mkString("factor"));
-			setAttrib(chroms_idx2, R_LevelsSymbol, (chroms2 = allocVector(STRSXP, num_chroms)));
-			setAttrib(chroms_idx2, R_ClassSymbol, mkString("factor"));
+            rprotect(chroms_idx1 = allocVector(INTSXP, num_non_zero_chroms));
+            rprotect(chroms_idx2 = allocVector(INTSXP, num_non_zero_chroms));
+            rprotect(sizes = allocVector(INTSXP, num_non_zero_chroms));
+            rprotect(col_names = allocVector(STRSXP, NUM_COLS));
+            rprotect(chroms1 = allocVector(STRSXP, num_chroms));
+            rprotect(chroms2 = allocVector(STRSXP, num_chroms));
 
 			size_t idx = 0;
 
@@ -612,14 +642,26 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 			SET_STRING_ELT(col_names, CHROM1, mkChar("chrom1"));
 			SET_STRING_ELT(col_names, CHROM2, mkChar("chrom2"));
 			SET_STRING_ELT(col_names, SIZE, mkChar("size"));
+
+            setAttrib(answer, R_NamesSymbol, col_names);
+            setAttrib(chroms_idx1, R_LevelsSymbol, chroms1);
+            setAttrib(chroms_idx1, R_ClassSymbol, mkString("factor"));
+            setAttrib(chroms_idx2, R_LevelsSymbol, chroms2);
+            setAttrib(chroms_idx2, R_ClassSymbol, mkString("factor"));
+
+            SET_VECTOR_ELT(answer, CHROM1, chroms_idx1);
+            SET_VECTOR_ELT(answer, CHROM2, chroms_idx2);
+            SET_VECTOR_ELT(answer, SIZE, sizes);
 		}
 
 		SEXP row_names;
-		setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-		setAttrib(answer, R_RowNamesSymbol, (row_names = allocVector(INTSXP, num_non_zero_chroms)));
+        rprotect(row_names = allocVector(INTSXP, num_non_zero_chroms));
 
 		for (int i = 0; i < num_non_zero_chroms; ++i) 
 			INTEGER(row_names)[i] = i + 1;
+
+        setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
+        setAttrib(answer, R_RowNamesSymbol, row_names);
 
 		return answer;
 	} catch (TGLException &e) {
@@ -645,7 +687,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			verror("Track of type %s cannot be used in place of an intervals set", GenomeTrack::TYPE_NAMES[track_type]);
 
 		if (track_type == GenomeTrack::SPARSE  || track_type == GenomeTrack::ARRAYS) {
-			if (!isString(_chrom) && !isFactor(_chrom) || length(_chrom) != 1)
+			if ((!isString(_chrom) && !isFactor(_chrom)) || length(_chrom) != 1)
 				verror("Chromosome argument is not a string");
 
 			unique_ptr<GenomeTrack1D> track;
@@ -669,7 +711,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 
 			return iu.convert_intervs(intervals);
 		} else if (track_type == GenomeTrack::RECTS || track_type == GenomeTrack::POINTS || track_type == GenomeTrack::COMPUTED) {
-			if (!isString(_chrom1) && !isFactor(_chrom1) || length(_chrom1) != 1 || !isString(_chrom2) && !isFactor(_chrom2) || length(_chrom2) != 1)
+			if ((!isString(_chrom1) && !isFactor(_chrom1)) || length(_chrom1) != 1 || (!isString(_chrom2) && !isFactor(_chrom2)) || length(_chrom2) != 1)
 				verror("Chromosome argument is not a string");
 
 			unique_ptr<GenomeTrack2D> track;

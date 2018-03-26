@@ -35,10 +35,10 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		if (!isString(_infile) || length(_infile) != 1)
 			verror("File argument is not a string");
 
-		if (length(_pileup) != 1 || (!isReal(_pileup) || REAL(_pileup)[0] != (int)REAL(_pileup)[0]) && !isInteger(_pileup))
+		if (length(_pileup) != 1 || ((!isReal(_pileup) || REAL(_pileup)[0] != (int)REAL(_pileup)[0]) && !isInteger(_pileup)))
 			verror("Pileup argument is not an integer");
 
-		if (length(_binsize) != 1 || (!isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !isInteger(_binsize))
+		if (length(_binsize) != 1 || ((!isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !isInteger(_binsize)))
 			verror("Binsize argument is not an integer");
 
 		if (!isNull(_cols_order) && (length(_cols_order) != NUM_COLS || (!isReal(_cols_order) && !isInteger(_cols_order))))
@@ -247,7 +247,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							continue;
 						}
 
-						int64_t from_coord = max(strand ? *icoord - pileup : *icoord, 0L);
+						int64_t from_coord = max(strand ? *icoord - pileup : *icoord, (int64_t)0);
 						int64_t to_coord = min(strand ? *icoord : *icoord + pileup, all_genome_intervs[ichrom].end);
 						int64_t from_bin = (int64_t)(from_coord / binsize);
 						int64_t to_bin = (int64_t)ceil(to_coord / binsize) - 1;
@@ -324,16 +324,12 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		int64_t total_dups = 0;
 
 		rprotect(chrom_stat = allocVector(VECSXP, 3));
-		SET_VECTOR_ELT(chrom_stat, 0, (chroms_idx = allocVector(INTSXP, num_chroms)));
-		SET_VECTOR_ELT(chrom_stat, 1, (mapped = allocVector(REALSXP, num_chroms)));
-		SET_VECTOR_ELT(chrom_stat, 2, (dups = allocVector(REALSXP, num_chroms)));
-
-		setAttrib(chroms_idx, R_LevelsSymbol, (chroms = allocVector(STRSXP, num_chroms)));
-		setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
-
-		setAttrib(chrom_stat, R_NamesSymbol, (col_names = allocVector(STRSXP, 3)));
-		setAttrib(chrom_stat, R_ClassSymbol, mkString("data.frame"));
-		setAttrib(chrom_stat, R_RowNamesSymbol, (row_names = allocVector(INTSXP, num_chroms)));
+        rprotect(chroms_idx = allocVector(INTSXP, num_chroms));
+        rprotect(mapped = allocVector(REALSXP, num_chroms));
+        rprotect(dups = allocVector(REALSXP, num_chroms));
+        rprotect(chroms = allocVector(STRSXP, num_chroms));
+        rprotect(col_names = allocVector(STRSXP, 3));
+        rprotect(row_names = allocVector(INTSXP, num_chroms));
 
 		for (unsigned i = 0; i < num_chroms; i++) {
 			INTEGER(chroms_idx)[i] = all_genome_intervs[i].chromid + 1;
@@ -349,6 +345,17 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		SET_STRING_ELT(col_names, 0, mkChar("chrom"));
 		SET_STRING_ELT(col_names, 1, mkChar("mapped"));
 		SET_STRING_ELT(col_names, 2, mkChar("dups"));
+
+        setAttrib(chroms_idx, R_LevelsSymbol, chroms);
+        setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+
+        SET_VECTOR_ELT(chrom_stat, 0, chroms_idx);
+        SET_VECTOR_ELT(chrom_stat, 1, mapped);
+        SET_VECTOR_ELT(chrom_stat, 2, dups);
+
+        setAttrib(chrom_stat, R_NamesSymbol, col_names);
+        setAttrib(chrom_stat, R_ClassSymbol, mkString("data.frame"));
+        setAttrib(chrom_stat, R_RowNamesSymbol, row_names);
 
 		rprotect(total_stat = allocVector(REALSXP, 4));
 		REAL(total_stat)[0] = total_mapped + total_unmapped + total_dups;

@@ -65,7 +65,7 @@ bool TrackExpressionBigSet2DIterator::next()
 		else if (!m_scope->get_next_chroms(&m_chromid1, &m_chromid2))
 			break;
 
-		if (m_band.is_non_empty_area() && m_chromid1 != m_chromid2 || !m_scope->size(m_chromid1, m_chromid2) || !m_bigset.size(m_chromid1, m_chromid2)) {
+		if ((m_band.is_non_empty_area() && m_chromid1 != m_chromid2) || !m_scope->size(m_chromid1, m_chromid2) || !m_bigset.size(m_chromid1, m_chromid2)) {
 			m_bigset_started = false;
 			continue;
 		}

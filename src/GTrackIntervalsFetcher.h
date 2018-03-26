@@ -18,8 +18,8 @@ public:
 
 protected:
 	GTrackIntervalsFetcher() : m_iu(NULL) {}
-	GTrackIntervalsFetcher(const GTrackIntervalsFetcher &) {}
-	GTrackIntervalsFetcher &operator=(const GTrackIntervalsFetcher &) {}
+	GTrackIntervalsFetcher(const GTrackIntervalsFetcher &) = delete;
+	GTrackIntervalsFetcher &operator=(const GTrackIntervalsFetcher &) = delete;
 
 	IntervUtils *m_iu;
 	string       m_track_name;

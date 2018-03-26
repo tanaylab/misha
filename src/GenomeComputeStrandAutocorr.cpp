@@ -36,19 +36,19 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 		if (!isString(_chrom) || length(_chrom) != 1)
 			verror("chrom argument is not a string");
 
-		if (length(_binsize) != 1 || (!isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !isInteger(_binsize))
+		if (length(_binsize) != 1 || ((!isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !isInteger(_binsize)))
 			verror("binsize argument is not an integer");
 
-		if (length(_maxread) != 1 || (!isReal(_maxread) || REAL(_maxread)[0] != (int)REAL(_maxread)[0]) && !isInteger(_maxread))
+		if (length(_maxread) != 1 || ((!isReal(_maxread) || REAL(_maxread)[0] != (int)REAL(_maxread)[0]) && !isInteger(_maxread)))
 			verror("maxread argument is not an integer");
 
 		if (length(_cols_order) != NUM_COLS || (!isReal(_cols_order) && !isInteger(_cols_order)))
 			verror("cols.order argument must be a vector with %d numeric values", NUM_COLS);
 
-		if (length(_min_coord) != 1 || (!isReal(_min_coord) || REAL(_min_coord)[0] != (int)REAL(_min_coord)[0]) && !isInteger(_min_coord))
+		if (length(_min_coord) != 1 || ((!isReal(_min_coord) || REAL(_min_coord)[0] != (int)REAL(_min_coord)[0]) && !isInteger(_min_coord)))
 			verror("min_coord argument is not an integer");
 
-		if (length(_max_coord) != 1 || (!isReal(_max_coord) || REAL(_max_coord)[0] != (int)REAL(_max_coord)[0]) && !isInteger(_max_coord))
+		if (length(_max_coord) != 1 || ((!isReal(_max_coord) || REAL(_max_coord)[0] != (int)REAL(_max_coord)[0]) && !isInteger(_max_coord)))
 			verror("max_coord argument is not an integer");
 
 		if (isReal(_cols_order)) {
@@ -125,7 +125,7 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 		size_t min_idx = (size_t)(max_off + min_coord / binsize);
 		size_t max_idx = (size_t)(max_coord / binsize - max_off - 1);
 
-		if (min_idx >= forward.size() || max_idx < 0)
+		if (min_idx >= forward.size() || (int64_t)max_idx < 0)
 			verror("Not enough data to calculate auto correlation.");
 
 		Progress_reporter progress;
@@ -237,6 +237,9 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 		SEXP bin_stat;
 		SEXP bin_idx;
 		SEXP corr;
+        SEXP row_names;
+        SEXP total_stat_names;
+        SEXP rnames;
 		SEXP answer;
 
 		rprotect(total_stat = allocVector(REALSXP, 4));
@@ -244,27 +247,37 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 		REAL(total_stat)[1] = std_f;
 		REAL(total_stat)[2] = mean_r;
 		REAL(total_stat)[3] = std_r;
-		setAttrib(total_stat, R_NamesSymbol, allocVector(STRSXP, 3));
-		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 0, mkChar("Forward mean"));
-		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 1, mkChar("Forward stdev"));
-		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 2, mkChar("Reverse mean"));
-		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 3, mkChar("Reverse stdev"));
+
+        rprotect(total_stat_names = allocVector(STRSXP, 4));
+        SET_STRING_ELT(total_stat_names, 0, mkChar("Forward mean"));
+        SET_STRING_ELT(total_stat_names, 1, mkChar("Forward stdev"));
+        SET_STRING_ELT(total_stat_names, 2, mkChar("Reverse mean"));
+        SET_STRING_ELT(total_stat_names, 3, mkChar("Reverse stdev"));
+        setAttrib(total_stat, R_NamesSymbol, total_stat_names);
 
 		rprotect(bin_stat = allocVector(VECSXP, 2));
-		SET_VECTOR_ELT(bin_stat, 0, (bin_idx = allocVector(REALSXP, max_off - min_off)));
-		SET_VECTOR_ELT(bin_stat, 1, (corr = allocVector(REALSXP, max_off - min_off)));
-		setAttrib(bin_stat, R_RowNamesSymbol, allocVector(INTSXP, max_off - min_off));
+        rprotect(bin_idx = allocVector(REALSXP, max_off - min_off));
+        rprotect(corr = allocVector(REALSXP, max_off - min_off));
+        rprotect(row_names = allocVector(INTSXP, max_off - min_off));
+        rprotect(rnames = allocVector(STRSXP, 2));
+        rprotect(answer = allocVector(VECSXP, 2));
+
 		for (int off = min_off; off < max_off; off++) {
 			REAL(bin_idx)[off - min_off] = off;
 			REAL(corr)[off - min_off] = (tot_fr[off - min_off] / (double)count - mean_f * mean_r) / (std_f * std_r);
-			INTEGER(getAttrib(bin_stat, R_RowNamesSymbol))[off - min_off] = off - min_off + 1;
+			INTEGER(row_names)[off - min_off] = off - min_off + 1;
 		}
-		setAttrib(bin_stat, R_ClassSymbol, mkString("data.frame"));
-		setAttrib(bin_stat, R_NamesSymbol, allocVector(STRSXP, 2));
-		SET_STRING_ELT(getAttrib(bin_stat, R_NamesSymbol), 0, mkChar("bin"));
-		SET_STRING_ELT(getAttrib(bin_stat, R_NamesSymbol), 1, mkChar("corr"));
 
-		rprotect(answer = allocVector(VECSXP, 2));
+        SET_VECTOR_ELT(bin_stat, 0, bin_idx);
+        SET_VECTOR_ELT(bin_stat, 1, corr);
+
+        SET_STRING_ELT(rnames, 0, mkChar("bin"));
+        SET_STRING_ELT(rnames, 1, mkChar("corr"));
+
+        setAttrib(bin_stat, R_RowNamesSymbol, row_names);
+		setAttrib(bin_stat, R_NamesSymbol, rnames);
+        setAttrib(bin_stat, R_ClassSymbol, mkString("data.frame"));
+
 		SET_VECTOR_ELT(answer, 0, total_stat);
 		SET_VECTOR_ELT(answer, 1, bin_stat);
 

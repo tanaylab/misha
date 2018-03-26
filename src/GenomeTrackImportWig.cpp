@@ -25,10 +25,10 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 		if (!isString(_wig) || length(_wig) != 1)
 			verror("Wig argument is not a string");
 
-		if (!isReal(_binsize) && !isInteger(_binsize) || length(_binsize) != 1)
+		if ((!isReal(_binsize) && !isInteger(_binsize)) || length(_binsize) != 1)
 			verror("Binsize argument is not a number");
 
-		if (!isReal(_defvalue) && !isInteger(_defvalue) || length(_defvalue) != 1)
+		if ((!isReal(_defvalue) && !isInteger(_defvalue)) || length(_defvalue) != 1)
 			verror("Defvalue argument is not a number");
 
 		const char *track = CHAR(STRING_ELT(_track, 0));

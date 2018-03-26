@@ -136,8 +136,8 @@ void GenomeTrackArrays::read_intervals_map()
 
 			interval.chromid = m_chromid;
 
-			if (interval.start < 0 || interval.start >= interval.end || i && interval.start < m_intervals[i - 1].end ||
-				m_vals_pos[i] < 0 || m_vals_pos[i] >= m_bfile.file_size() || i && m_vals_pos[i - 1] >= m_vals_pos[i])
+			if (interval.start < 0 || interval.start >= interval.end || (i && interval.start < m_intervals[i - 1].end) ||
+				m_vals_pos[i] < 0 || m_vals_pos[i] >= m_bfile.file_size() || (i && m_vals_pos[i - 1] >= m_vals_pos[i]))
 				TGLError<GenomeTrackArrays>("Invalid format of %s track file %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str());
 		}
 	}
@@ -478,5 +478,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 	default:
 		TGLError<GenomeTrackArrays>("Unrecognized slice function");
 	}
+
+    return numeric_limits<float>::quiet_NaN();
 }
 

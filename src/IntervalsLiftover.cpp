@@ -96,12 +96,13 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _envir)
 		SEXP rsrc_indices;
 		SEXP col_names = getAttrib(answer, R_NamesSymbol);
 
-		SET_VECTOR_ELT(answer, num_interv_cols, (rsrc_indices = allocVector(INTSXP, src_indices.size())));
+        rprotect(rsrc_indices = allocVector(INTSXP, src_indices.size()));
 
 		for (vector<int>::const_iterator iindex = src_indices.begin(); iindex != src_indices.end(); ++iindex)
 			INTEGER(rsrc_indices)[iindex - src_indices.begin()] = *iindex;
 
 		SET_STRING_ELT(col_names, num_interv_cols, mkChar("intervalID"));
+        SET_VECTOR_ELT(answer, num_interv_cols, rsrc_indices);
 
 		return answer;
 

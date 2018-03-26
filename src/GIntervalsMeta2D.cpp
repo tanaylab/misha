@@ -104,12 +104,12 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 	SEXP rstat;
 	SEXP colnames;
 	SEXP rownames;
-	SEXP chroms1, chroms2, chroms_idx1, chroms_idx2;
+	SEXP chroms1, chroms2, chroms_idx1, chroms_idx2, rsize, rsurface, roverlaps;
 
 	rprotect(rstat = allocVector(VECSXP, NUM_STAT_COLS));
-
-	setAttrib(rstat, R_NamesSymbol, (colnames = allocVector(STRSXP, NUM_STAT_COLS)));
-	setAttrib(rstat, R_ClassSymbol, mkString("data.frame"));
+    rprotect(colnames = allocVector(STRSXP, NUM_STAT_COLS));
+    rprotect(chroms1 = allocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
+    rprotect(chroms2 = allocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
 
 	for (int i = 0; i < NUM_STAT_COLS; i++)
 		SET_STRING_ELT(colnames, i, mkChar(STAT_COL_NAMES[i]));
@@ -120,19 +120,14 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 			++num_nonempty_chroms;
 	}
 
-	SET_VECTOR_ELT(rstat, CHROM1_COL, (chroms_idx1 = allocVector(INTSXP, num_nonempty_chroms)));
-	SET_VECTOR_ELT(rstat, CHROM2_COL, (chroms_idx2 = allocVector(INTSXP, num_nonempty_chroms)));
-	SET_VECTOR_ELT(rstat, SIZE_COL, allocVector(REALSXP, num_nonempty_chroms));
-	SET_VECTOR_ELT(rstat, SURFACE_COL, allocVector(REALSXP, num_nonempty_chroms));
-	SET_VECTOR_ELT(rstat, CONTAINS_OVERLAPS_COL, allocVector(LGLSXP, num_nonempty_chroms));
+    rprotect(chroms_idx1 = allocVector(INTSXP, num_nonempty_chroms));
+    rprotect(chroms_idx2 = allocVector(INTSXP, num_nonempty_chroms));
+    rprotect(rsize = allocVector(REALSXP, num_nonempty_chroms));
+    rprotect(rsurface = allocVector(REALSXP, num_nonempty_chroms));
+    rprotect(roverlaps = allocVector(LGLSXP, num_nonempty_chroms));
+    rprotect(rownames = allocVector(INTSXP, num_nonempty_chroms));
 
-	setAttrib(rstat, R_RowNamesSymbol, (rownames = allocVector(INTSXP, num_nonempty_chroms)));
-	setAttrib(chroms_idx1, R_LevelsSymbol, (chroms1 = allocVector(STRSXP, iu.get_chromkey().get_num_chroms())));
-	setAttrib(chroms_idx2, R_LevelsSymbol, (chroms2 = allocVector(STRSXP, iu.get_chromkey().get_num_chroms())));
-	setAttrib(chroms_idx1, R_ClassSymbol, mkString("factor"));
-	setAttrib(chroms_idx2, R_ClassSymbol, mkString("factor"));
-
-	for (unsigned id = 0; id < (unsigned)iu.get_chromkey().get_num_chroms(); ++id) {
+    for (unsigned id = 0; id < (unsigned)iu.get_chromkey().get_num_chroms(); ++id) {
 		SET_STRING_ELT(chroms1, id, mkChar(iu.id2chrom(id).c_str()));
 		SET_STRING_ELT(chroms2, id, mkChar(iu.id2chrom(id).c_str()));
 	}
@@ -147,13 +142,28 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 
 			INTEGER(chroms_idx1)[res_index] = chromid1 + 1;
 			INTEGER(chroms_idx2)[res_index] = chromid2 + 1;
-			REAL(VECTOR_ELT(rstat, SIZE_COL))[res_index] = chromstat.size;
-			REAL(VECTOR_ELT(rstat, SURFACE_COL))[res_index] = chromstat.surface;
-			LOGICAL(VECTOR_ELT(rstat, CONTAINS_OVERLAPS_COL))[res_index] = chromstat.contains_overlaps;
+			REAL(rsize)[res_index] = chromstat.size;
+			REAL(rsurface)[res_index] = chromstat.surface;
+			LOGICAL(roverlaps)[res_index] = chromstat.contains_overlaps;
 			INTEGER(rownames)[res_index] = res_index + 1;
 			++res_index;
 		}
 	}
+
+    setAttrib(rstat, R_RowNamesSymbol, rownames);
+    setAttrib(chroms_idx1, R_LevelsSymbol, chroms1);
+    setAttrib(chroms_idx2, R_LevelsSymbol, chroms2);
+    setAttrib(chroms_idx1, R_ClassSymbol, mkString("factor"));
+    setAttrib(chroms_idx2, R_ClassSymbol, mkString("factor"));
+
+    SET_VECTOR_ELT(rstat, CHROM1_COL, chroms_idx1);
+    SET_VECTOR_ELT(rstat, CHROM2_COL, chroms_idx2);
+    SET_VECTOR_ELT(rstat, SIZE_COL, rsize);
+    SET_VECTOR_ELT(rstat, SURFACE_COL, rsurface);
+    SET_VECTOR_ELT(rstat, CONTAINS_OVERLAPS_COL, roverlaps);
+
+    setAttrib(rstat, R_NamesSymbol, colnames);
+    setAttrib(rstat, R_ClassSymbol, mkString("data.frame"));
 
 	GIntervalsMeta::save_meta(path, rstat, zeroline);
 }

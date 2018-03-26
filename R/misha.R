@@ -528,7 +528,7 @@
 						res <<- c(res, list(loaded_intervs))
 						if (as.integer(difftime(Sys.time(), t, units="secs")) > 3) {
 							t <<- Sys.time()
-							percentage <- as.integer(100 * match(chrom, meta$stats$chrom) / nrow(meta$stats$chrom))
+							percentage <- as.integer(100 * match(chrom, meta$stats$chrom) / length(meta$stats$chrom))
 							if (progress && percentage < 100 && progress.percentage != percentage) {
 								cat(sprintf("%d%%...", percentage))
 								progress.percentage <<- percentage

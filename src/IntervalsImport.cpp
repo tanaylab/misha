@@ -257,23 +257,20 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 			SEXP chroms, chroms_idx, starts, ends, strands;
 			SEXP row_names;
 			SEXP col_names;
+            vector<SEXP> rannots(num_annots);
 
 			rprotect(rintervs = allocVector(VECSXP, GInterval::NUM_COLS + num_annots + 1));
-			SET_VECTOR_ELT(answer, iintervs_set, rintervs);
+            rprotect(chroms_idx = allocVector(INTSXP, intervs_size));
+            rprotect(starts = allocVector(REALSXP, intervs_size));
+            rprotect(ends = allocVector(REALSXP, intervs_size));
+            rprotect(strands = allocVector(REALSXP, intervs_size));
 
-			SET_VECTOR_ELT(rintervs, GInterval::CHROM, (chroms_idx = allocVector(INTSXP, intervs_size)));
-			SET_VECTOR_ELT(rintervs, GInterval::START, (starts = allocVector(REALSXP, intervs_size)));
-			SET_VECTOR_ELT(rintervs, GInterval::END, (ends = allocVector(REALSXP, intervs_size)));
-			SET_VECTOR_ELT(rintervs, GInterval::NUM_COLS, (strands = allocVector(REALSXP, intervs_size)));
-			for (int iannot = 0; iannot < num_annots; ++iannot) 
-				SET_VECTOR_ELT(rintervs, GInterval::NUM_COLS + 1 + iannot, allocVector(STRSXP, intervs_size));
+            for (int iannot = 0; iannot < num_annots; ++iannot) 
+                rannots[iannot] = allocVector(STRSXP, intervs_size);
 
-			setAttrib(chroms_idx, R_LevelsSymbol, (chroms = allocVector(STRSXP, num_chroms)));
-			setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
-
-			setAttrib(rintervs, R_NamesSymbol, (col_names = allocVector(STRSXP, GInterval::NUM_COLS + num_annots + 1)));
-			setAttrib(rintervs, R_ClassSymbol, mkString("data.frame"));
-			setAttrib(rintervs, R_RowNamesSymbol, (row_names = allocVector(INTSXP, intervs_size)));
+            rprotect(chroms = allocVector(STRSXP, num_chroms));
+            rprotect(col_names = allocVector(STRSXP, GInterval::NUM_COLS + num_annots + 1));
+            rprotect(row_names = allocVector(INTSXP, intervs_size));
 
 			intervs_size = 0;
 			last_interv = intervs.front();
@@ -306,7 +303,7 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 							}
 						}
 
-						SET_STRING_ELT(VECTOR_ELT(rintervs, GInterval::NUM_COLS + 1 + iannot), intervs_size, mkChar(annot.c_str()));
+						SET_STRING_ELT(rannots[iannot], intervs_size, mkChar(annot.c_str()));
 					}
 
 					intervs_size++;
@@ -349,7 +346,23 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 				SET_STRING_ELT(col_names, i + GInterval::NUM_COLS + 1, STRING_ELT(_annots_names, i));
 
 			SET_STRING_ELT(answer_col_names, iintervs_set, mkChar(intervs_sets_names[iintervs_set]));
-		}
+
+            SET_VECTOR_ELT(rintervs, GInterval::CHROM, chroms_idx);
+            SET_VECTOR_ELT(rintervs, GInterval::START, starts);
+            SET_VECTOR_ELT(rintervs, GInterval::END, ends);
+            SET_VECTOR_ELT(rintervs, GInterval::NUM_COLS, strands);
+            for (int iannot = 0; iannot < num_annots; ++iannot) 
+                SET_VECTOR_ELT(rintervs, GInterval::NUM_COLS + 1 + iannot, rannots[iannot]);
+
+            setAttrib(chroms_idx, R_LevelsSymbol, chroms);
+            setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+
+            setAttrib(rintervs, R_NamesSymbol, col_names);
+            setAttrib(rintervs, R_ClassSymbol, mkString("data.frame"));
+            setAttrib(rintervs, R_RowNamesSymbol, row_names);
+
+            SET_VECTOR_ELT(answer, iintervs_set, rintervs);
+        }
 
 		return answer;
 	} catch (TGLException &e) {

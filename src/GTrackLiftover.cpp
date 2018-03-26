@@ -2,7 +2,6 @@
 BASE_CC_FILE
 
 #include <cmath>
-#include <error.h>
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -36,7 +35,7 @@ public:
 	}
 
 	void write_interval(const GInterval &interval, float val) {
-		if ((std::isnan(val) && std::isnan(m_last_val) || val == m_last_val) && m_last_interval.end == interval.start)
+		if (((std::isnan(val) && std::isnan(m_last_val)) || val == m_last_val) && m_last_interval.end == interval.start)
 			m_last_interval.end = interval.end;
 		else {
 			flush();
