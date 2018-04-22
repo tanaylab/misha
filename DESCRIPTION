@@ -1,14 +1,14 @@
 Package: misha
 Type: Package
 Title: Toolkit for analysis of genomic data
-Version: 4.0.0
+Version: 4.0.1
 Depends: utils
 SystemRequirements: GNU make
-Date: 2018-03-26
+Date: 2018-04-04
 Author: Misha Hoichman
 Maintainer: Misha Hoichman <misha@hoichman.com>
 Description: Toolkit for analysis of genomic data
 License: GPL-2
 LazyLoad: yes
 NeedsCompilation: yes
-Packaged: 2018-03-26 17:13:23 UTC; hoichman
+Packaged: 2018-04-04 14:37:27 UTC; hoichman

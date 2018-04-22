@@ -2,7 +2,7 @@
 #include <iterator>
 
 #include "BinFinder.h"
-
+#include "RandomShuffle.h"
 #include "rdbinterval.h"
 #include "rdbutils.h"
 #include "TrackExpressionScanner.h"
@@ -72,7 +72,8 @@ SEXP gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_poli
 
 		// The samples need to be reshuffled since sampler does not guarantee random order.
 		// myrandom is used instead of default std::rnd() because we initialize the seed by calling srand48 in rdbinterval.cpp
-		random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size(), myrandom);
+        tgs_random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size());
+//		random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size(), myrandom);
 
 		return answer;
 	} catch (TGLException &e) {
