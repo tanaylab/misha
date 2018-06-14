@@ -46,7 +46,7 @@ SEXP gcreate_test_computer2d_track(SEXP _track, SEXP _prob_skip_chrom, SEXP _max
 
 		for (size_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
 			for (size_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
-				if (drand48() < prob_skip_chrom) {
+				if (unif_rand() < prob_skip_chrom) {
 					progress.report(1);
 					continue;
 				}
@@ -62,13 +62,13 @@ SEXP gcreate_test_computer2d_track(SEXP _track, SEXP _prob_skip_chrom, SEXP _max
 				qtree.reset(0, 0, maxx, maxy);
 				qtree.set_uptr(gtrack.get_computer());
 
-				int num_rects = (int)(1 + drand48() * max_rects);
+				int num_rects = (int)(1 + unif_rand() * max_rects);
 				for (int i = 0; i < num_rects; ++i) {
 					while (1) {
-						int64_t x1 = (int64_t)(drand48() * (maxx - 2));
-						int64_t y1 = (int64_t)(drand48() * (maxy - 2));
-						int64_t x2 = min((int64_t)(x1 + 1 + max_rect_size * drand48()), (int64_t)maxx);
-						int64_t y2 = min((int64_t)(y1 + 1 + max_rect_size * drand48()), (int64_t)maxy);
+						int64_t x1 = (int64_t)(unif_rand() * (maxx - 2));
+						int64_t y1 = (int64_t)(unif_rand() * (maxy - 2));
+						int64_t x2 = min((int64_t)(x1 + 1 + max_rect_size * unif_rand()), (int64_t)maxx);
+						int64_t y2 = min((int64_t)(y1 + 1 + max_rect_size * unif_rand()), (int64_t)maxy);
 						ComputedQuadTree::ValueType rect(x1, y1, x2, y2, (x1 + x2 + y1 + y2) % 10000000);
 						if (!qtree.do_intersect(rect)) {
 							qtree.insert(rect);

@@ -46,7 +46,7 @@ public:
 	const vector<T> &lowest_vals() const { return m_extreme_vals[LOWEST]; }
 	const vector<T> &highest_vals() const { return m_extreme_vals[HIGHEST]; }
 
-	size_t add(const T &sample); // adds a sample, returns the number of samples inserted so far
+	size_t add(const T &sample, double (*rnd_func)()); // adds a sample, returns the number of samples inserted so far
 
 	size_t stream_size() const { return m_stream_sampler.stream_size(); }
 	const T get_percentile(double percentile, bool &is_estimated);
@@ -123,7 +123,7 @@ void StreamPercentiler<T>::reset()
 }
 
 template <class T>
-size_t StreamPercentiler<T>::add(const T &sample)
+size_t StreamPercentiler<T>::add(const T &sample, double (*rnd_func)())
 {
 	m_stream_sealed = false;
 
@@ -151,7 +151,7 @@ size_t StreamPercentiler<T>::add(const T &sample)
 		}
 	}
 
-	size_t num_samples = m_stream_sampler.add(sample);
+	size_t num_samples = m_stream_sampler.add(sample, rnd_func);
 
 	if (m_heaps_activated) {
 		for (int i = 0; i < NUM_EXTREMES; ++i) {

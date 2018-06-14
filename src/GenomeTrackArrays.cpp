@@ -367,7 +367,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 			{
 				m_slice_sp.reset();
 				for (ArrayVals::const_iterator iarray_val = m_array_vals.begin(); iarray_val != m_array_vals.end(); ++iarray_val)
-					m_slice_sp.add(iarray_val->val);
+					m_slice_sp.add(iarray_val->val, s_rnd_func);
 				bool is_estimated;
 				return m_slice_sp.get_percentile(m_slice_percentile, is_estimated);
 			}
@@ -463,7 +463,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
 				if (!std::isnan(v))
-					m_slice_sp.add(v);
+					m_slice_sp.add(v, s_rnd_func);
 				if (m_array_hints[islice] >= m_array_vals.size())
 					break;
 			}

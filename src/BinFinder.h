@@ -24,14 +24,17 @@ public:
 	enum Errors { BAD_NUM_BREAKS, NOT_UNIQUE_BREAKS, UNSORTED_BREAKS };
 
 	BinFinder() {}
-	BinFinder(const std::vector<double> &breaks, bool include_lowest = false) { init(breaks, include_lowest); }
-	BinFinder(const double *breaks, unsigned num_breaks, bool include_lowest = false) { init(breaks, num_breaks, include_lowest); }
+	BinFinder(const std::vector<double> &breaks, bool include_lowest = false, bool right = true) { init(breaks, include_lowest, right); }
+	BinFinder(const double *breaks, unsigned num_breaks, bool include_lowest = false, bool right = true) { init(breaks, num_breaks, include_lowest, right); }
 
 	// Given x1, x2, x3, x4 as breaks the range is split to (x1,x2], (x2,x3], (x3,x4]
 	// This is complient with R's "cut" function.
 	// The breaks must be sorted and unique. There must be 2 or more breaks.
-	void init(const std::vector<double> &breaks, bool include_lowest = false) { init(&*breaks.begin(), (unsigned)breaks.size(), include_lowest); }
-	void init(const double *breaks, unsigned num_breaks, bool include_lowest = false);
+    // If right=false, then the break intervals are closed from the left: [x1,x2), [x2,x3), [x3,x4).
+    // If include_lowest=true and right=true, then the first interval is closed from both sides: [x1,x2].
+    // If include_lowest=true and right=false, then the last interval is closed from both sides: [x3,x4].
+	void init(const std::vector<double> &breaks, bool include_lowest = false, bool right = true) { init(&*breaks.begin(), (unsigned)breaks.size(), include_lowest, right); }
+	void init(const double *breaks, unsigned num_breaks, bool include_lowest = false, bool right = true);
 
 	// returns the bin or -1 if the value is out of range
 	int val2bin(double val) const;
@@ -43,6 +46,7 @@ private:
 	std::vector<double> m_breaks;
 	double              m_binsize;  // 0 if binsize is not the same for all the bins
 	bool                m_include_lowest;
+    bool                m_right;
 };
 
 
@@ -50,29 +54,55 @@ private:
 
 inline int BinFinder::val2bin(double val) const
 {
-	if (m_include_lowest && val == m_breaks.front())
-		return 0;
+    if (m_right) {
+    	if (m_include_lowest && val == m_breaks.front())
+    		return 0;
 
-	if (std::isnan(val) || val <= m_breaks.front() || val > m_breaks.back())
-		return -1;
+    	if (std::isnan(val) || val <= m_breaks.front() || val > m_breaks.back())
+    		return -1;
 
-	if (m_binsize) // are we using the same bin size for all bins?
-		return std::min((int)ceil((val - m_breaks.front()) / (double)m_binsize) - 1, (int)get_numbins() - 1);
+    	if (m_binsize) // are we using the same bin size for all bins?
+    		return std::min((int)ceil((val - m_breaks.front()) / (double)m_binsize) - 1, (int)get_numbins() - 1);
 
-	// perform binary search
-	unsigned start_bin = 0;
-	unsigned end_bin = get_numbins();
+    	// perform binary search
+    	unsigned start_bin = 0;
+    	unsigned end_bin = get_numbins();
 
-	while (end_bin - start_bin > 1) {
-		unsigned middle_bin = (start_bin + end_bin) / 2;
+    	while (end_bin - start_bin > 1) {
+    		unsigned middle_bin = (start_bin + end_bin) / 2;
 
-		if (val <= m_breaks[middle_bin])
-			end_bin = middle_bin;
-		else
-			start_bin = middle_bin;
-	}
+    		if (val <= m_breaks[middle_bin])
+    			end_bin = middle_bin;
+    		else
+    			start_bin = middle_bin;
+    	}
 
-	return start_bin;
+    	return start_bin;
+    }
+
+    if (m_include_lowest && val == m_breaks.back())
+        return m_breaks.size() - 2;
+
+    if (std::isnan(val) || val < m_breaks.front() || val >= m_breaks.back())
+        return -1;
+
+    if (m_binsize) // are we using the same bin size for all bins?
+        return (int)(val - m_breaks.front()) / m_binsize;
+
+    // perform binary search
+    unsigned start_bin = 0;
+    unsigned end_bin = get_numbins();
+
+    while (end_bin - start_bin > 1) {
+        unsigned middle_bin = (start_bin + end_bin) / 2;
+
+        if (val < m_breaks[middle_bin])
+            end_bin = middle_bin;
+        else
+            start_bin = middle_bin;
+    }
+
+    return start_bin;
 }
 
 #endif /* BINFINDER_H_ */

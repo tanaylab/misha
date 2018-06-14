@@ -18,7 +18,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
 			if (m_use_quantile && !std::isnan(m_last_avg))
-				m_sp.add(m_last_avg);
+				m_sp.add(m_last_avg, s_rnd_func);
 		} else
 			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
 		return;
@@ -33,7 +33,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
 			if (m_use_quantile && !std::isnan(m_last_avg))
-				m_sp.add(m_last_avg);
+				m_sp.add(m_last_avg, s_rnd_func);
 		} else
 			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
 	} else {
@@ -56,7 +56,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 					mean_square_sum += v * v;
 
 				if (m_use_quantile && !std::isnan(v))
-					m_sp.add(v);
+					m_sp.add(v, s_rnd_func);
 
 				++num_vs;
 			}

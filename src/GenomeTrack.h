@@ -43,6 +43,8 @@ public:
 
 	const string &file_name() const { return m_bfile.file_name(); }
 
+    static void set_rnd_func(double (*rnd_func)()) { s_rnd_func = rnd_func; }
+
 	static Type get_type(const char *track_dir, const GenomeChromKey &chromkey, bool return_obsolete_types = false);
 
 	static void load_attrs(const char *track, const char *filename, TrackAttrs &attrs);
@@ -62,6 +64,8 @@ public:
 //protected:
 public:
 	static const bool IS_1D_TRACK[NUM_TYPES];
+
+    static double (*s_rnd_func)();
 
 	BufferedFile m_bfile;
 	Type         m_type;

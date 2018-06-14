@@ -28,9 +28,6 @@
 	options(gpv.middle.precision = 10^(-4))
 	options(gpv.edge.precision = 10^(-9))
 
-	# if grnd.seed==0, the seed is determined internally in a random manner
-	options(grnd.seed = 1)
-
 	options(gtrack.chunk.size = 100000)
 	options(gtrack.num.chunks = 0)
 

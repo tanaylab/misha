@@ -76,7 +76,7 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 				mean_square_sum += v * v;
 
 			if (m_use_quantile)
-				m_sp.add(v);
+				m_sp.add(v, s_rnd_func);
 
 			++num_vs;
 		}

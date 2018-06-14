@@ -7,13 +7,14 @@
 
 #include "BinFinder.h"
 
-void BinFinder::init(const double *breaks, unsigned num_breaks, bool include_lowest)
+void BinFinder::init(const double *breaks, unsigned num_breaks, bool include_lowest, bool right)
 {
 	if (num_breaks < 2)
 		TGLError<BinFinder>(BAD_NUM_BREAKS, "Invalid number of breaks %d", num_breaks);
 
 	m_binsize = breaks[1] - breaks[0];
 	m_include_lowest = include_lowest;
+    m_right = right;
 
 	m_breaks.clear();
 	m_breaks.reserve(num_breaks);

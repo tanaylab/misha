@@ -45,39 +45,39 @@
 using namespace std;
 using namespace rdb;
 
-// A hack into R to change the default error report mechanism.
+//// A hack into R to change the default error report mechanism.
+////
+//// Surely this an ugly hack! R_GlobalContext is an internal object managed by R. Its type is not even exposed. RCNTXT structure is defined
+//// in an internal header file (src/include/Defn.h) that we cannot access. We copied the definition of it from there and changed it a bit
+//// to compile.
 //
-// Surely this an ugly hack! R_GlobalContext is an internal object managed by R. Its type is not even exposed. RCNTXT structure is defined
-// in an internal header file (src/include/Defn.h) that we cannot access. We copied the definition of it from there and changed it a bit
-// to compile.
-
-typedef struct RCNTXT {
-    struct RCNTXT *nextcontext;	/* The next context up the chain */
-    int callflag;		/* The context "type" */
-    sigjmp_buf cjmpbuf;		/* C stack and register information */
-    int cstacktop;		/* Top of the pointer protection stack */
-    int evaldepth;	        /* evaluation depth at inception */
-    SEXP promargs;		/* Promises supplied to closure */
-    SEXP callfun;		/* The closure called */
-    SEXP sysparent;		/* environment the closure was called from */
-    SEXP call;			/* The call that effected this context*/
-    SEXP cloenv;		/* The environment */
-    SEXP conexit;		/* Interpreted "on.exit" code */
-    void (*cend)(void *);	/* C "on.exit" thunk */
-    void *cenddata;		/* data for C "on.exit" thunk */
-    void *vmax;		        /* top of R_alloc stack */
-    int intsusp;                /* interrupts are suspended */
-    SEXP handlerstack;          /* condition handler stack */
-    SEXP restartstack;          /* stack of available restarts */
-    struct RPRSTACK *prstack;   /* stack of pending promises */
-#ifdef BYTECODE
-    SEXP *nodestack;
-# ifdef BC_INT_STACK
-    IStackval *intstack;
-# endif
-#endif
-    SEXP srcref;	        /* The source line in effect */
-} RCNTXT, *context;
+//typedef struct RCNTXT {
+//    struct RCNTXT *nextcontext; /* The next context up the chain */
+//    int callflag;       /* The context "type" */
+//    sigjmp_buf cjmpbuf;     /* C stack and register information */
+//    int cstacktop;      /* Top of the pointer protection stack */
+//    int evaldepth;          /* evaluation depth at inception */
+//    SEXP promargs;      /* Promises supplied to closure */
+//    SEXP callfun;       /* The closure called */
+//    SEXP sysparent;     /* environment the closure was called from */
+//    SEXP call;          /* The call that effected this context*/
+//    SEXP cloenv;        /* The environment */
+//    SEXP conexit;       /* Interpreted "on.exit" code */
+//    void (*cend)(void *);   /* C "on.exit" thunk */
+//    void *cenddata;     /* data for C "on.exit" thunk */
+//    void *vmax;             /* top of R_alloc stack */
+//    int intsusp;                /* interrupts are suspended */
+//    SEXP handlerstack;          /* condition handler stack */
+//    SEXP restartstack;          /* stack of available restarts */
+//    struct RPRSTACK *prstack;   /* stack of pending promises */
+//#ifdef BYTECODE
+//    SEXP *nodestack;
+//# ifdef BC_INT_STACK
+//    IStackval *intstack;
+//# endif
+//#endif
+//    SEXP srcref;            /* The source line in effect */
+//} RCNTXT, *context;
 
 static const char *CHROM_FILE_PREFIX = "chr";
 static const unsigned CHROM_FILE_PREFIX_LEN = strlen(CHROM_FILE_PREFIX);
@@ -148,15 +148,15 @@ RdbInitializer::RdbInitializer()
 		get_open_fds(m_old_open_fds);
 	}
 
-	// Default error message that error() function generates includes the caller ("Error in long-blalalalalalala: ...")
-	// To prevent the caller to be printed we simply screw it up.
-	// (This ugly hack was made after learning verrorcall_dflt() function in R source code (error.c).)
-	RCNTXT *c = (RCNTXT *)R_GlobalContext;
-	if (c) {
-		c->call = R_NilValue;
-		if (c->nextcontext)
-			c->nextcontext->call = R_NilValue;
-	}
+//  // Default error message that error() function generates includes the caller ("Error in long-blalalalalalala: ...")
+//  // To prevent the caller to be printed we simply screw it up.
+//  // (This ugly hack was made after learning verrorcall_dflt() function in R source code (error.c).)
+//  RCNTXT *c = (RCNTXT *)R_GlobalContext;
+//  if (c) {
+//  	c->call = R_NilValue;
+//  	if (c->nextcontext)
+//  		c->nextcontext->call = R_NilValue;
+//  }
 
 	s_ref_count++;
 
@@ -528,7 +528,7 @@ void RdbInitializer::handle_error(const char *msg)
 		}
 		exit(1);
 	} else
-		error(msg);
+		errorcall(R_NilValue, msg);
 }
 
 void *RdbInitializer::allocate_res(size_t res_num_records)
@@ -698,7 +698,7 @@ SEXP rdb::rprotect(SEXP &expr)
 void rdb::runprotect(int count)
 {
 	if (RdbInitializer::s_protect_counter < count)
-		error("Number of calls to unprotect exceeds the number of calls to protect\n");
+		errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
 	UNPROTECT(count);
 	RdbInitializer::s_protect_counter -= count;
 }
@@ -707,7 +707,7 @@ void rdb::runprotect(SEXP &expr)
 {
 	if (expr != R_NilValue) {
 		if (RdbInitializer::s_protect_counter < 1)
-			error("Number of calls to unprotect exceeds the number of calls to protect\n");
+			errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
 		UNPROTECT_PTR(expr);
 		expr = R_NilValue;
 		RdbInitializer::s_protect_counter--;

@@ -179,8 +179,6 @@ SEXP gtest_segment_finder(SEXP _envir) {
 	try {
 		RdbInitializer rdb_init;
 
-		srand48(0);
-
 		int start, end;
 
 		int maxcoord = 100000000;
@@ -198,8 +196,8 @@ SEXP gtest_segment_finder(SEXP _envir) {
 
 		printf("Generating queries\n");
 		for (int i = 0; i < num_queries; i++) {
-			start = (int64_t)(drand48() * maxcoord);
-			end = (int64_t)min(start + 1 + max_query_size * drand48(), (double)maxcoord);
+			start = (int64_t)(unif_rand() * maxcoord);
+			end = (int64_t)min(start + 1 + max_query_size * unif_rand(), (double)maxcoord);
 			queries.push_back(Segment(start, end));
 		}
 
@@ -210,8 +208,8 @@ SEXP gtest_segment_finder(SEXP _envir) {
 
 		printf("Generating segments\n");
 		for (int i = 0; i < num_segments; i++) {
-			start = (int64_t)(drand48() * maxcoord);
-			end = min((int64_t)(start + 1 + max_segment_size * drand48()), (int64_t)maxcoord);
+			start = (int64_t)(unif_rand() * maxcoord);
+			end = min((int64_t)(start + 1 + max_segment_size * unif_rand()), (int64_t)maxcoord);
 			SegmentVal sv(Segment(start, end), i);
 			sf.insert(sv);
 			segments.push_back(sv);
@@ -490,7 +488,7 @@ SEXP gtest_create_2d(SEXP _track, SEXP _max_chrom_rects, SEXP _max_rect_size, SE
 			if (gtrack.opened())
 				gtrack.write(qtree);
 
-			if (drand48() > 0.2) { // skip creation some of the chromosome pairs
+			if (unif_rand() > 0.2) { // skip creation some of the chromosome pairs
 				chromid1 = igenome->chromid1();
 				chromid2 = igenome->chromid2();
 
@@ -501,16 +499,16 @@ SEXP gtest_create_2d(SEXP _track, SEXP _max_chrom_rects, SEXP _max_rect_size, SE
 				sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 				gtrack.init_write(filename, chromid1, chromid2);
 
-				int num_rects = (int)(drand48() * max_num_rects) + 1;
+				int num_rects = (int)(unif_rand() * max_num_rects) + 1;
 				int64_t x1, x2, y1, y2;
 
 				for (int i = 0; i < num_rects; i++) {
 					while (1) {
 						check_interrupt();
-						x1 = (int64_t)(drand48() * maxx);
-						y1 = (int64_t)(drand48() * maxy);
-						x2 = min((int64_t)(x1 + 1 + max_rect_size * drand48()), (int64_t)maxx);
-						y2 = min((int64_t)(y1 + 1 + max_rect_size * drand48()), (int64_t)maxy);
+						x1 = (int64_t)(unif_rand() * maxx);
+						y1 = (int64_t)(unif_rand() * maxy);
+						x2 = min((int64_t)(x1 + 1 + max_rect_size * unif_rand()), (int64_t)maxx);
+						y2 = min((int64_t)(y1 + 1 + max_rect_size * unif_rand()), (int64_t)maxy);
 						RectsQuadTree::ValueType rect(x1, y1, x2, y2, i);
 						if (!qtree.do_intersect(rect)) {
 							qtree.insert(rect);
@@ -539,8 +537,6 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 
 	try {
 		RdbInitializer rdb_init;
-
-		srand48(0);
 
 		RectsQuadTree qtree;
 		RectsQuadTreeCached cqtree;
@@ -581,14 +577,14 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 
 		printf("Generating queries\n");
 		for (int i = 0; i < num_queries; i++) {
-			x1 = (int64_t)(drand48() * maxcoord);
-			y1 = (int64_t)(drand48() * maxcoord);
-			x2 = (int64_t)min(x1 + 1 + max_query_size * drand48(), (double)maxcoord);
-			y2 = (int64_t)min(y1 + 1 + max_query_size * drand48(), (double)maxcoord);
+			x1 = (int64_t)(unif_rand() * maxcoord);
+			y1 = (int64_t)(unif_rand() * maxcoord);
+			x2 = (int64_t)min(x1 + 1 + max_query_size * unif_rand(), (double)maxcoord);
+			y2 = (int64_t)min(y1 + 1 + max_query_size * unif_rand(), (double)maxcoord);
 			queries.push_back(Rectangle(x1, y1, x2, y2));
 
-			d1 = (int64_t)(x1 - y1 + max_query_size * (2 * drand48() - 1));
-			d2 = (int64_t)(x2 - y2 + max_query_size * (2 * drand48() - 1));
+			d1 = (int64_t)(x1 - y1 + max_query_size * (2 * unif_rand() - 1));
+			d2 = (int64_t)(x2 - y2 + max_query_size * (2 * unif_rand() - 1));
 			bands.push_back(DiagonalBand(min(d1, d2), max(d1, d2)));
 		}
 
@@ -596,10 +592,10 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 		printf("Generating rects\n");
 		for (int i = 0; i < num_rects; i++) {
 			while (1) {
-				x1 = (int64_t)(drand48() * maxcoord);
-				y1 = (int64_t)(drand48() * maxcoord);
-				x2 = min((int64_t)(x1 + 1 + max_rect_size * drand48()), (int64_t)maxcoord);
-				y2 = min((int64_t)(y1 + 1 + max_rect_size * drand48()), (int64_t)maxcoord);
+				x1 = (int64_t)(unif_rand() * maxcoord);
+				y1 = (int64_t)(unif_rand() * maxcoord);
+				x2 = min((int64_t)(x1 + 1 + max_rect_size * unif_rand()), (int64_t)maxcoord);
+				y2 = min((int64_t)(y1 + 1 + max_rect_size * unif_rand()), (int64_t)maxcoord);
 				RectsQuadTree::ValueType rect(x1, y1, x2, y2, i);
 				if (!qtree.do_intersect(rect)) {
 					qtree.insert(rect);
@@ -1227,9 +1223,9 @@ SEXP _gcreate_arrays_track(SEXP _track, SEXP _minsize, SEXP _maxsize, SEXP _expr
 				created_chromids.insert(cur_chromid);
 			}
 
-			unsigned array_size = minsize + (int)(drand48() * (maxsize - minsize + 1));
+			unsigned array_size = minsize + (int)(unif_rand() * (maxsize - minsize + 1));
 			for (unsigned i = 0; i < array_size; ++i) {
-				unsigned idx = (unsigned)(drand48() * (maxsize - i));
+				unsigned idx = (unsigned)(unif_rand() * (maxsize - i));
 				swap(array_vals[idx + i], array_vals[i]);
 				array_vals[i].val = array_vals[i].idx + counter * 100;
 			}
