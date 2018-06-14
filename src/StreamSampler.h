@@ -33,7 +33,7 @@ public:
 	size_t          cur_reservoir_size() const { return m_samples.size(); }
 	size_t          stream_size() const { return m_stream_size; }
 
-	size_t          add(const T &sample); // returns the number of samples inserted so far
+	size_t          add(const T &sample, double (*rnd_func)()); // returns the number of samples inserted so far
 
 private:
 	vector<T> m_samples;
@@ -69,11 +69,11 @@ void StreamSampler<T>::reset()
 }
 
 template <class T>
-size_t StreamSampler<T>::add(const T &sample) {
+size_t StreamSampler<T>::add(const T &sample, double (*rnd_func)()) {
 	if (m_samples.size() < m_reservoir_size)
 		m_samples.push_back(sample);
-	else if (drand48() * (m_stream_size + 1) < m_reservoir_size)
-		m_samples[(size_t)(drand48() * m_reservoir_size)] = sample;
+	else if (rnd_func() * (m_stream_size + 1) < m_reservoir_size)
+		m_samples[(size_t)(rnd_func() * m_reservoir_size)] = sample;
 	return (int64_t)++m_stream_size;
 }
 

@@ -566,16 +566,14 @@ By default track expressions, track names, virtual tracks and interval sets are 
 Please beware of the consequences of using interactive mode as it creates a bunch of new variables in R environment. Though collision with the existing variables is checked at the time of the call to \texttt{gset\_input\_mode}, yet nothing prevents the user to modify the value of the auxiliary variables later. This might cause unexpected behaviour in some of the package functions. Also the auxiliary variables are automatically undefined once the interactive mode is switched off. User who mistakenly uses auxiliary variables to store the data might therefore accidentially loose it. 
 
 \section{Random Algorithms}
-Various functions in the library make use of pseudo-random number generator that requires a \emph{seed} - an integer value that determines the particular sequence of the pseudo-random numbers. Thus two identical calls to a function might produce different results if the function uses pseudo-random number generator and the seed has been altered between the calls. Similarly the two calls will generate identical results if the seed did not change between the calls. The value of the seed is controlled by an option \texttt{grnd.seed}. Any integer number can be used as a seed. The default is \emph{1}. However if \texttt{grnd.seed} is set to \emph{0} the actual value of the seed is picked up randomly by the function itself.
-A good example is \texttt{gquantiles} function. If the input set is very large \texttt{gquantiles} starts randomally sampling the data.
+Various functions in the library such as \texttt{gsample} make use of pseudo-random number generator. Each time the function is invoked the series of random numbers might differ. Hence two identical calls might produce different results. To guarantee reproducible results call \texttt{set.seed} before invoking the function.
 
 \begin{verbatim}
-> options(grnd.seed = 1) # seed=1: next two calls will always produce identical results
-> r1 <- gquantiles("largetrack", percentile = 0.5)
-> r2 <- gquantiles("largetrack", percentile = 0.5)
-> options(grnd.seed = 0) # seed=0: gquantiles sets the seed randomly; results can differ
-> r1 <- gquantiles("largetrack", percentile = 0.5)
-> r2 <- gquantiles("largetrack", percentile = 0.5)
+> set.seed(1)
+> r1 <- gsample("dense_track", 10)
+> r2 <- gsample("dense_track", 10)  # r2 differs from r1
+> set.seed(1)
+> r3 <- gsample("dense_track", 10)  # r3 == r1
 \end{verbatim}
 
 \section{Multitasking}

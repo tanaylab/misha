@@ -232,9 +232,6 @@ public:
 
 	const GenomeChromKey &get_chromkey() const { return m_chrom_key; }
 
-	// initializes random seed according to grnd.seed option
-	static void init_rnd_seed();
-
 	bool track_exists(const char *track_name);
 
 	// returns the number of parallel processes that would be open by distribute_task or 0 if scope is empty

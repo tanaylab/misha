@@ -438,7 +438,7 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 	}
 
 	if (ifunc >= Track_var::NUM_FUNCS)
-		verror("Virtual track %s: invalid function %s used for with a track", vtrack.c_str(), func.c_str());
+        verror("Virtual track %s: invalid function %s used for a virtual track", vtrack.c_str(), func.c_str());
 
 	return var;
 }

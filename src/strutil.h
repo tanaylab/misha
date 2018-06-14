@@ -1,9 +1,13 @@
 #ifndef util_strutil_h
 #define util_strutil_h 1
 
-#include <vector>
+#include <iostream>
 #include <string>
+#include <vector>
+
 #include "BufferedFile.h"
+
+using namespace std;
 
 // If you know how many fields you're expecting, pass it via estimated_num_fields and split_line() will run twice faster
 

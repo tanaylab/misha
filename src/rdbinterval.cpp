@@ -65,7 +65,7 @@ IntervUtils::IntervUtils(SEXP envir)
 		}
 	}
 
-	init_rnd_seed();
+    GenomeTrack::set_rnd_func(unif_rand);
 }
 
 IntervUtils::~IntervUtils()
@@ -74,28 +74,6 @@ IntervUtils::~IntervUtils()
 		delete *iinterv;
 	for (vector<GIntervalsFetcher2D *>::iterator iinterv = m_kids_intervals2d.begin(); iinterv != m_kids_intervals2d.end(); ++iinterv) 
 		delete *iinterv;
-}
-
-void IntervUtils::init_rnd_seed()
-{
-	SEXP r_rnd_seed = GetOption(install("grnd.seed"), R_NilValue);
-	uint64_t rnd_seed;
-
-	if (isReal(r_rnd_seed))
-		rnd_seed = (uint64_t)REAL(r_rnd_seed)[0];
-	else if (isInteger(r_rnd_seed))
-		rnd_seed = INTEGER(r_rnd_seed)[0];
-	else
-		rnd_seed = 0;
-
-	if (!rnd_seed) {
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		// for better randomness combine global time in seconds with the lower 12 bits of current microseconds
-		rnd_seed = (time(NULL) << 12) | (tv.tv_usec & 0xfff);
-	}
-
-	srand48(rnd_seed);
 }
 
 bool IntervUtils::track_exists(const char *track_name)

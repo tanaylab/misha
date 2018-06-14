@@ -24,8 +24,6 @@ The following options are available for the package. Use 'options' function to a
     gmin.scope4process \tab 10000 \tab Minimal scope range (for 2D: surface) assigned to a \cr
     \tab \tab process in multitasking mode. \cr
     gbuf.size \tab 1000 \tab Size of track expression values buffer. \cr
-    grnd.seed \tab 1 \tab Seed value for pseudo-random number generator. If '0' seed is set \cr
-    \tab \tab randomally. \cr
     gtrack.chunk.size \tab 100000 \tab Chunk size in bytes of a 2D track. If '0' chunk size is unlimited. \cr
     gtrack.num.chunks \tab 0 \tab Maximal number of 2D track chunks simultaneously stored in \cr
     \tab \tab memory.\cr

@@ -12,11 +12,6 @@ using namespace rdb;
 
 typedef iterator_traits<double *> traits;
 
-static traits::difference_type myrandom(traits::difference_type i)
-{
-	return (traits::difference_type)(drand48() * i);
-}
-
 extern "C" {
 
 SEXP gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _envir)
@@ -53,7 +48,7 @@ SEXP gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_poli
 		StreamSampler<double> sampler(num_samples, true);
 
 		for (scanner.begin(_expr, intervals1d, intervals2d, _iterator_policy, _band); !scanner.isend(); scanner.next()) {
-			sampler.add(scanner.last_real(0));
+			sampler.add(scanner.last_real(0), unif_rand);
 			iu.verify_max_data_size(sampler.samples().size(), "Result");
 		}
 
@@ -71,9 +66,7 @@ SEXP gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_poli
 		}
 
 		// The samples need to be reshuffled since sampler does not guarantee random order.
-		// myrandom is used instead of default std::rnd() because we initialize the seed by calling srand48 in rdbinterval.cpp
-        tgs_random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size());
-//		random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size(), myrandom);
+        tgs_random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size(), unif_rand);
 
 		return answer;
 	} catch (TGLException &e) {

@@ -143,7 +143,7 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 					(*itrack)->m_mean_square_sum += v * v;
 
 				if ((*itrack)->m_use_quantile)
-					(*itrack)->m_sp.add(v);
+					(*itrack)->m_sp.add(v, s_rnd_func);
 
 				++(*itrack)->m_num_vs;
 			}

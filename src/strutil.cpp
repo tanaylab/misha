@@ -1,6 +1,7 @@
-#include "port.h"
-BASE_CC_FILE
+#include "TGLException.h"
 #include "strutil.h"
+
+using namespace std;
 
 int split_line_by_space_chars(istream &in, vector<string> &fields, int estimated_num_fields)
 {
@@ -272,7 +273,7 @@ int get_one_field(istream &in, string &field, char delim, int num, bool eat_line
 int count_match(const string &targ, const string &mot)
 {
 	int count = 0;
-	uint4 pos = targ.find(mot, 0);
+	uint32_t pos = targ.find(mot, 0);
 	while(pos != string::npos) {
 		pos = targ.find(mot, pos + 1);
 		count++;
@@ -289,14 +290,14 @@ void read_int_table(istream &in, int width, vector<vector<int> > &data)
 		if(fields.size() == 0) {
 			return;
 		}
-		ASSERT(fields.size() == width, "Bad table width (" << fields.size() << " instead " << width << ") when parsing int table");
+		TGLAssert(fields.size() == width, "Bad table width (%d instead %d) when parsing int table", fields.size(), width);
 		data.resize(row + 1, vector<int>(width));
 		vector<int>::iterator dt = data[row].begin();
 		vector<string>::const_iterator inp = fields.begin();
 		while(inp != fields.end()) {
 			char *fin;
 			*dt = strtol((*inp).c_str(), &fin, 0);
-			ASSERT((fin - (*inp).c_str()) == inp->size(), "Cannot parse int at row " << row << " col " << inp-fields.begin());
+			TGLAssert((fin - (*inp).c_str()) == inp->size(), "Cannot parse int at row %d col %d", row, inp-fields.begin());
 			dt++;
 			inp++;
 		}
@@ -313,14 +314,14 @@ void read_float_table(istream &in, int width, vector<vector<float> > &data)
 		if(fields.size() == 0) {
 			return;
 		}
-		ASSERT(fields.size() == width, "Bad table width (" << fields.size() << " instead " << width << ") when parsing float table");
+		TGLAssert(fields.size() == width, "Bad table width (%d instead %d) when parsing float table", fields.size(), width);
 		data.resize(row + 1, vector<float>(width));
 		vector<float>::iterator dt = data[row].begin();
 		vector<string>::const_iterator inp = fields.begin();
 		while(inp != fields.end()) {
 			char *fin;
 			*dt = strtof((*inp).c_str(), &fin);
-			ASSERT((fin - (*inp).c_str()) == inp->size(), "Cannot parse float at row " << row << " col " << inp-fields.begin());
+			TGLAssert((fin - (*inp).c_str()) == inp->size(), "Cannot parse float at row %d col %d", row, inp-fields.begin());
 			dt++;
 			inp++;
 		}
@@ -336,7 +337,7 @@ void read_string_table(istream &in, int width, vector<vector<string> > &data){
 		if(fields.size() == 0) {
 			return;
 		}
-		ASSERT(fields.size() == width, "Bad table width (" << fields.size() << " instead " << width << ") when parsing string table");
+		TGLAssert(fields.size() == width, "Bad table width (%d instead %d) when parsing string table", fields.size(), width);
 		data.resize(row + 1, vector<string>(width));
 		vector<string>::iterator dt = data[row].begin();
 		vector<string>::const_iterator inp = fields.begin();
@@ -368,7 +369,7 @@ void read_float_table_with_rowname(istream &in, vector<vector<float> > &data, ve
 		if(width == -1) {
 			width = fields.size() - 1;
 		}
-		ASSERT(fields.size() == width + with_header ? 1 : 0, "Bad table width (" << fields.size() << " instead " << width << ") at row " << row << " of float table");
+		TGLAssert(fields.size() == width + with_header ? 1 : 0, "Bad table width (%d instead %d) at row %d of float table", fields.size(), width, row);
 		data.resize(row + 1);
 		data[row].resize(width);
 		vector<float>::iterator dt = data[row].begin();
@@ -380,7 +381,7 @@ void read_float_table_with_rowname(istream &in, vector<vector<float> > &data, ve
 				*dt = na_value;
 			} else {
     			*dt = strtof((*inp).c_str(), &fin);
-    			ASSERT((fin - (*inp).c_str()) == inp->size(), "Cannot parse float at row " << row << " col " << inp-fields.begin());
+    			TGLAssert((fin - (*inp).c_str()) == inp->size(), "Cannot parse float at row %d col %d", fields.size(), inp-fields.begin());
 			}
     		dt++;
 			inp++;
