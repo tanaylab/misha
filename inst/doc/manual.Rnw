@@ -566,7 +566,7 @@ By default track expressions, track names, virtual tracks and interval sets are 
 Please beware of the consequences of using interactive mode as it creates a bunch of new variables in R environment. Though collision with the existing variables is checked at the time of the call to \texttt{gset\_input\_mode}, yet nothing prevents the user to modify the value of the auxiliary variables later. This might cause unexpected behaviour in some of the package functions. Also the auxiliary variables are automatically undefined once the interactive mode is switched off. User who mistakenly uses auxiliary variables to store the data might therefore accidentially loose it. 
 
 \section{Random Algorithms}
-Various functions in the library such as \texttt{gsample} make use of pseudo-random number generator. Each time the function is invoked the series of random numbers might differ. Hence two identical calls might produce different results. To guarantee reproducible results call \texttt{set.seed} before invoking the function.
+Various functions in the library such as \texttt{gsample} make use of pseudo-random number generator. Each time the function is invoked a unique series of random numbers is issued. Hence two identical calls might produce different results. To guarantee reproducible results call \texttt{set.seed} before invoking the function.
 
 \begin{verbatim}
 > set.seed(1)
