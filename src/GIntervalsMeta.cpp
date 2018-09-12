@@ -26,8 +26,8 @@ void GIntervalsMeta::save_meta(const char *path, SEXP stats, SEXP zeroline)
 	SEXP meta;
 	SEXP colnames;
 
-	rprotect(meta = allocVector(VECSXP, NUM_META_FIELDS));
-    rprotect(colnames = allocVector(STRSXP, NUM_META_FIELDS));
+	rprotect(meta = RSaneAllocVector(VECSXP, NUM_META_FIELDS));
+    rprotect(colnames = RSaneAllocVector(STRSXP, NUM_META_FIELDS));
 
 	SET_VECTOR_ELT(meta, STATS_FIELD, stats);
 	SET_VECTOR_ELT(meta, ZEROLINE_FIELD, zeroline);

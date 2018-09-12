@@ -88,7 +88,7 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 	colnames = getAttrib(answer, R_NamesSymbol);
 
 	for (unsigned icol = 0; icol < NUM_COLS; ++icol)
-		rprotect(rsummary[icol] = allocVector(REALSXP, num_intervs));
+		rprotect(rsummary[icol] = RSaneAllocVector(REALSXP, num_intervs));
 
 	for (unsigned i = 0; i < num_intervs; i++) {
 		REAL(rsummary[TOTAL_BINS])[i] = summaries[i].num_bins;
@@ -139,8 +139,8 @@ SEXP gtracksummary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _ban
 		SEXP answer;
 		SEXP colnames;
 
-		rprotect(answer = allocVector(REALSXP, NUM_COLS));
-		rprotect(colnames = allocVector(STRSXP, NUM_COLS));
+		rprotect(answer = RSaneAllocVector(REALSXP, NUM_COLS));
+		rprotect(colnames = RSaneAllocVector(STRSXP, NUM_COLS));
 
 		REAL(answer)[TOTAL_BINS] = summary.num_bins;
 		REAL(answer)[TOTAL_NAN_BINS] = summary.num_bins - summary.num_non_nan_bins;
@@ -158,7 +158,9 @@ SEXP gtracksummary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _ban
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -208,8 +210,8 @@ SEXP gtracksummary_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy,
 			SEXP answer;
 			SEXP colnames;
 
-			rprotect(answer = allocVector(REALSXP, NUM_COLS));
-			rprotect(colnames = allocVector(STRSXP, NUM_COLS));
+			rprotect(answer = RSaneAllocVector(REALSXP, NUM_COLS));
+			rprotect(colnames = RSaneAllocVector(STRSXP, NUM_COLS));
 
 			REAL(answer)[TOTAL_BINS] = summary.num_bins;
 			REAL(answer)[TOTAL_NAN_BINS] = summary.num_bins - summary.num_non_nan_bins;
@@ -228,7 +230,9 @@ SEXP gtracksummary_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy,
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	rreturn(R_NilValue);
 }
@@ -408,7 +412,9 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -455,7 +461,7 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 
 		// pack the answer
 		SEXP answer, dim, dimnames;
-		rprotect(answer = allocVector(REALSXP, totalbins * NUM_COLS));
+		rprotect(answer = RSaneAllocVector(REALSXP, totalbins * NUM_COLS));
 
 		for (unsigned i = 0; i < totalbins; i++) {
 			REAL(answer)[totalbins * TOTAL_NAN_BINS + i] = summaries[i].num_bins - summaries[i].num_non_nan_bins;
@@ -467,12 +473,12 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 			REAL(answer)[totalbins * STDEV + i] = summaries[i].num_non_nan_bins > 1 ? summaries[i].get_stdev() : numeric_limits<double>::quiet_NaN();
 		}
 
-		rprotect(dim = allocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));
-		rprotect(dimnames = allocVector(VECSXP, bins_manager.get_num_bin_finders() + 1));
+		rprotect(dim = RSaneAllocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));
+		rprotect(dimnames = RSaneAllocVector(VECSXP, bins_manager.get_num_bin_finders() + 1));
 		bins_manager.set_dims(dim, dimnames);
 
 		SEXP dimname;
-		rprotect(dimname = allocVector(STRSXP, NUM_COLS));
+		rprotect(dimname = RSaneAllocVector(STRSXP, NUM_COLS));
 		for (unsigned i = 0; i < NUM_COLS; i++)
 			SET_STRING_ELT(dimname, i, mkChar(IntervalSummaryColNames[i]));
 
@@ -484,7 +490,9 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

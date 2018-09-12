@@ -86,16 +86,16 @@ SEXP gget_tracks_attrs(SEXP _tracks, SEXP _attrs, SEXP _envir)
 		SEXP rattrs, rattr;
 		SEXP rrow_names, rcol_names;
 
-		rprotect(rattrs = allocVector(VECSXP, sorted_attrs.size()));
+		rprotect(rattrs = RSaneAllocVector(VECSXP, sorted_attrs.size()));
 		setAttrib(rattrs, R_ClassSymbol, mkString("data.frame"));
-		setAttrib(rattrs, R_NamesSymbol, (rcol_names = allocVector(STRSXP, sorted_attrs.size())));
-		setAttrib(rattrs, R_RowNamesSymbol, (rrow_names = allocVector(STRSXP, length(_tracks))));
+		setAttrib(rattrs, R_NamesSymbol, (rcol_names = RSaneAllocVector(STRSXP, sorted_attrs.size())));
+		setAttrib(rattrs, R_RowNamesSymbol, (rrow_names = RSaneAllocVector(STRSXP, length(_tracks))));
 
 		for (int itrack = 0; itrack < length(_tracks); ++itrack)
 			SET_STRING_ELT(rrow_names, itrack, STRING_ELT(_tracks, itrack));
 
 		for (size_t i = 0; i < sorted_attrs.size(); ++i) {
-            rprotect(rattr = allocVector(STRSXP, length(_tracks)));
+            rprotect(rattr = RSaneAllocVector(STRSXP, length(_tracks)));
 
 			for (int itrack = 0; itrack < length(_tracks); ++itrack) 
 				SET_STRING_ELT(rattr, itrack, mkChar(""));
@@ -110,7 +110,9 @@ SEXP gget_tracks_attrs(SEXP _tracks, SEXP _attrs, SEXP _envir)
 		return rattrs;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -209,7 +211,9 @@ SEXP gset_tracks_attrs(SEXP _attrs, SEXP _replace, SEXP _read_only_attrs, SEXP _
 		progress.report_last();
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

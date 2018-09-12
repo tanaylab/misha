@@ -24,7 +24,7 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 
 		vector<char> buf;
 		SEXP answer;
-		rprotect(answer = allocVector(STRSXP, intervals->size()));
+		rprotect(answer = RSaneAllocVector(STRSXP, intervals->size()));
 
 		uint64_t seqlen = 0;
 		GenomeSeqFetch seqfetch;
@@ -41,7 +41,9 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

@@ -56,7 +56,7 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 
 	for (unsigned ipercentile = 0; ipercentile < percentiles.size(); ++ipercentile) {
 		SEXP percentile_vals;
-		rprotect(percentile_vals = allocVector(REALSXP, num_intervs));
+		rprotect(percentile_vals = RSaneAllocVector(REALSXP, num_intervs));
 		for (size_t iinterv = 0; iinterv < num_intervs; ++iinterv)
 			REAL(percentile_vals)[iinterv] = quantiles[iinterv * percentiles.size() + ipercentile];
 		SET_VECTOR_ELT(answer, num_interv_cols + ipercentile, percentile_vals);
@@ -156,8 +156,8 @@ SEXP gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_p
 		SEXP answer;
 		SEXP colnames;
 
-		rprotect(answer = allocVector(REALSXP, percentiles.size()));
-		rprotect(colnames = allocVector(STRSXP, percentiles.size()));
+		rprotect(answer = RSaneAllocVector(REALSXP, percentiles.size()));
+		rprotect(colnames = RSaneAllocVector(STRSXP, percentiles.size()));
 
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
@@ -173,7 +173,9 @@ SEXP gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_p
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -352,8 +354,8 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		SEXP answer;
 		SEXP colnames;
 
-		rprotect(answer = allocVector(REALSXP, percentiles.size()));
-		rprotect(colnames = allocVector(STRSXP, percentiles.size()));
+		rprotect(answer = RSaneAllocVector(REALSXP, percentiles.size()));
+		rprotect(colnames = RSaneAllocVector(STRSXP, percentiles.size()));
 
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
@@ -369,7 +371,9 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		rreturn(answer);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	rreturn(R_NilValue);
 }
 
@@ -592,7 +596,9 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -918,7 +924,9 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		rreturn(answer);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	rreturn(R_NilValue);
 }
 
@@ -1029,7 +1037,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 
 		// pack the answer
 		SEXP answer, dim, dimnames;
-		rprotect(answer = allocVector(REALSXP, totalbins * percentiles.size()));
+		rprotect(answer = RSaneAllocVector(REALSXP, totalbins * percentiles.size()));
 
 		for (unsigned i = 0; i < totalbins; i++) {
 			unsigned offset = i * percentiles.size();
@@ -1038,12 +1046,12 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 				REAL(answer)[totalbins * ip->index + i] = medians[offset + ip->index];
 		}
 
-		rprotect(dim = allocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));
-		rprotect(dimnames = allocVector(VECSXP, bins_manager.get_num_bin_finders() + 1));
+		rprotect(dim = RSaneAllocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));
+		rprotect(dimnames = RSaneAllocVector(VECSXP, bins_manager.get_num_bin_finders() + 1));
 		bins_manager.set_dims(dim, dimnames);
 
 		SEXP dimname;
-		rprotect(dimname = allocVector(STRSXP, percentiles.size()));
+		rprotect(dimname = RSaneAllocVector(STRSXP, percentiles.size()));
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
@@ -1058,7 +1066,9 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

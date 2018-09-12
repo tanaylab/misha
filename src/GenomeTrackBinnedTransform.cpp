@@ -73,7 +73,7 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 	}
 
 	SEXP rvals;
-	rprotect(rvals = allocVector(REALSXP, values.size()));
+	rprotect(rvals = RSaneAllocVector(REALSXP, values.size()));
 
     for (unsigned i = 0; i < values.size(); ++i)
         REAL(rvals)[i] = values[i];
@@ -85,7 +85,7 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 
 	if (interv_ids) {
 		SEXP ids;
-		rprotect(ids = allocVector(INTSXP, interv_ids->size()));
+		rprotect(ids = RSaneAllocVector(INTSXP, interv_ids->size()));
 		for (vector<unsigned>::const_iterator iid = interv_ids->begin(); iid != interv_ids->end(); ++iid)
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, num_interv_cols + ID, ids);
@@ -428,7 +428,9 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -568,7 +570,9 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

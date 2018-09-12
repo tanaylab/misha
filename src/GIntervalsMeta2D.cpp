@@ -106,10 +106,10 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 	SEXP rownames;
 	SEXP chroms1, chroms2, chroms_idx1, chroms_idx2, rsize, rsurface, roverlaps;
 
-	rprotect(rstat = allocVector(VECSXP, NUM_STAT_COLS));
-    rprotect(colnames = allocVector(STRSXP, NUM_STAT_COLS));
-    rprotect(chroms1 = allocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
-    rprotect(chroms2 = allocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
+	rprotect(rstat = RSaneAllocVector(VECSXP, NUM_STAT_COLS));
+    rprotect(colnames = RSaneAllocVector(STRSXP, NUM_STAT_COLS));
+    rprotect(chroms1 = RSaneAllocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
+    rprotect(chroms2 = RSaneAllocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
 
 	for (int i = 0; i < NUM_STAT_COLS; i++)
 		SET_STRING_ELT(colnames, i, mkChar(STAT_COL_NAMES[i]));
@@ -120,12 +120,12 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 			++num_nonempty_chroms;
 	}
 
-    rprotect(chroms_idx1 = allocVector(INTSXP, num_nonempty_chroms));
-    rprotect(chroms_idx2 = allocVector(INTSXP, num_nonempty_chroms));
-    rprotect(rsize = allocVector(REALSXP, num_nonempty_chroms));
-    rprotect(rsurface = allocVector(REALSXP, num_nonempty_chroms));
-    rprotect(roverlaps = allocVector(LGLSXP, num_nonempty_chroms));
-    rprotect(rownames = allocVector(INTSXP, num_nonempty_chroms));
+    rprotect(chroms_idx1 = RSaneAllocVector(INTSXP, num_nonempty_chroms));
+    rprotect(chroms_idx2 = RSaneAllocVector(INTSXP, num_nonempty_chroms));
+    rprotect(rsize = RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rprotect(rsurface = RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rprotect(roverlaps = RSaneAllocVector(LGLSXP, num_nonempty_chroms));
+    rprotect(rownames = RSaneAllocVector(INTSXP, num_nonempty_chroms));
 
     for (unsigned id = 0; id < (unsigned)iu.get_chromkey().get_num_chroms(); ++id) {
 		SET_STRING_ELT(chroms1, id, mkChar(iu.id2chrom(id).c_str()));

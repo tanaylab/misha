@@ -47,7 +47,7 @@ void BinsManager::set_dims(SEXP dim, SEXP dimnames) const
 		int numbins = bin_finder.get_numbins();
 		INTEGER(dim)[i] = numbins;
 		SEXP dimname;
-		rprotect(dimname = allocVector(STRSXP, numbins));
+		rprotect(dimname = RSaneAllocVector(STRSXP, numbins));
 
 		for (int j = 0; j < numbins; j++) {
 			char buf[10000];

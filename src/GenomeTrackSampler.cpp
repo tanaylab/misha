@@ -57,7 +57,7 @@ SEXP gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_poli
 
 		SEXP answer;
 
-		rprotect(answer = allocVector(REALSXP, sampler.samples().size()));
+		rprotect(answer = RSaneAllocVector(REALSXP, sampler.samples().size()));
 		double *vals = REAL(answer);
 
 		for (vector<double>::const_iterator ival = sampler.samples().begin(); ival != sampler.samples().end(); ++ival) {
@@ -71,7 +71,9 @@ SEXP gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_poli
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

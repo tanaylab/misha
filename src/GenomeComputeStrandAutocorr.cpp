@@ -242,25 +242,25 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
         SEXP rnames;
 		SEXP answer;
 
-		rprotect(total_stat = allocVector(REALSXP, 4));
+		rprotect(total_stat = RSaneAllocVector(REALSXP, 4));
 		REAL(total_stat)[0] = mean_f;
 		REAL(total_stat)[1] = std_f;
 		REAL(total_stat)[2] = mean_r;
 		REAL(total_stat)[3] = std_r;
 
-        rprotect(total_stat_names = allocVector(STRSXP, 4));
+        rprotect(total_stat_names = RSaneAllocVector(STRSXP, 4));
         SET_STRING_ELT(total_stat_names, 0, mkChar("Forward mean"));
         SET_STRING_ELT(total_stat_names, 1, mkChar("Forward stdev"));
         SET_STRING_ELT(total_stat_names, 2, mkChar("Reverse mean"));
         SET_STRING_ELT(total_stat_names, 3, mkChar("Reverse stdev"));
         setAttrib(total_stat, R_NamesSymbol, total_stat_names);
 
-		rprotect(bin_stat = allocVector(VECSXP, 2));
-        rprotect(bin_idx = allocVector(REALSXP, max_off - min_off));
-        rprotect(corr = allocVector(REALSXP, max_off - min_off));
-        rprotect(row_names = allocVector(INTSXP, max_off - min_off));
-        rprotect(rnames = allocVector(STRSXP, 2));
-        rprotect(answer = allocVector(VECSXP, 2));
+		rprotect(bin_stat = RSaneAllocVector(VECSXP, 2));
+        rprotect(bin_idx = RSaneAllocVector(REALSXP, max_off - min_off));
+        rprotect(corr = RSaneAllocVector(REALSXP, max_off - min_off));
+        rprotect(row_names = RSaneAllocVector(INTSXP, max_off - min_off));
+        rprotect(rnames = RSaneAllocVector(STRSXP, 2));
+        rprotect(answer = RSaneAllocVector(VECSXP, 2));
 
 		for (int off = min_off; off < max_off; off++) {
 			REAL(bin_idx)[off - min_off] = off;
@@ -284,7 +284,9 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

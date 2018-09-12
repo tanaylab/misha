@@ -161,9 +161,9 @@ void GIntervalsMeta1D::save_meta(const char *path, SEXP zeroline, const vector<C
 	SEXP chroms, chroms_idx;
     SEXP rsize, roverlap_size, rtouching_size, rrange, roverlap_range, roverlaps;
 
-	rprotect(rstat = allocVector(VECSXP, NUM_STAT_COLS));
+	rprotect(rstat = RSaneAllocVector(VECSXP, NUM_STAT_COLS));
 
-	setAttrib(rstat, R_NamesSymbol, (colnames = allocVector(STRSXP, NUM_STAT_COLS)));
+	setAttrib(rstat, R_NamesSymbol, (colnames = RSaneAllocVector(STRSXP, NUM_STAT_COLS)));
 	setAttrib(rstat, R_ClassSymbol, mkString("data.frame"));
 
 	for (int i = 0; i < NUM_STAT_COLS; i++)
@@ -175,15 +175,15 @@ void GIntervalsMeta1D::save_meta(const char *path, SEXP zeroline, const vector<C
 			++num_nonempty_chroms;
 	}
 
-    rprotect(chroms_idx = allocVector(INTSXP, num_nonempty_chroms));
-    rprotect(rsize = allocVector(REALSXP, num_nonempty_chroms));
-    rprotect(roverlap_size = allocVector(REALSXP, num_nonempty_chroms));
-    rprotect(rtouching_size = allocVector(REALSXP, num_nonempty_chroms));
-    rprotect(rrange = allocVector(REALSXP, num_nonempty_chroms));
-    rprotect(roverlap_range = allocVector(REALSXP, num_nonempty_chroms));
-    rprotect(roverlaps = allocVector(LGLSXP, num_nonempty_chroms));
-    rprotect(rownames = allocVector(INTSXP, num_nonempty_chroms));
-    rprotect(chroms = allocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
+    rprotect(chroms_idx = RSaneAllocVector(INTSXP, num_nonempty_chroms));
+    rprotect(rsize = RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rprotect(roverlap_size = RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rprotect(rtouching_size = RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rprotect(rrange = RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rprotect(roverlap_range = RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rprotect(roverlaps = RSaneAllocVector(LGLSXP, num_nonempty_chroms));
+    rprotect(rownames = RSaneAllocVector(INTSXP, num_nonempty_chroms));
+    rprotect(chroms = RSaneAllocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
 
 	for (unsigned id = 0; id < (unsigned)iu.get_chromkey().get_num_chroms(); ++id)
 		SET_STRING_ELT(chroms, id, mkChar(iu.id2chrom(id).c_str()));

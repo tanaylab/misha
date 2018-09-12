@@ -40,8 +40,8 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 		if (type == GenomeTrack::FIXED_BIN) {
 			enum { BINSIZE = NUM_COLS, NUM_FIXED_BIN_COLS };
 
-			rprotect(answer = allocVector(VECSXP, NUM_FIXED_BIN_COLS));
-			rprotect(names = allocVector(STRSXP, NUM_FIXED_BIN_COLS));
+			rprotect(answer = RSaneAllocVector(VECSXP, NUM_FIXED_BIN_COLS));
+			rprotect(names = RSaneAllocVector(STRSXP, NUM_FIXED_BIN_COLS));
 
 			GenomeTrackFixedBin gtrack;
 			GIntervals all_genome_intervs;
@@ -56,8 +56,8 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 			SET_VECTOR_ELT(answer, BINSIZE, rbinsize);
 			SET_STRING_ELT(names, BINSIZE, mkChar("bin.size"));
 		} else {
-			rprotect(answer = allocVector(VECSXP, NUM_COLS));
-			rprotect(names = allocVector(STRSXP, NUM_COLS));
+			rprotect(answer = RSaneAllocVector(VECSXP, NUM_COLS));
+			rprotect(names = RSaneAllocVector(STRSXP, NUM_COLS));
 		}
 
         rprotect(rtype = mkString(GenomeTrack::TYPE_NAMES[type]));
@@ -89,7 +89,9 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

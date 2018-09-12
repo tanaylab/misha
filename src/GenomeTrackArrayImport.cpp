@@ -279,7 +279,7 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 
 		SEXP answer;
 		unsigned colidx = 0;
-		rprotect(answer = allocVector(STRSXP, totcols));
+		rprotect(answer = RSaneAllocVector(STRSXP, totcols));
 		for (Sources::const_iterator isrc = sources.begin(); isrc != sources.end(); ++isrc) {
 			const vector<string> &colnames = (*isrc)->get_colnames();
 
@@ -292,7 +292,9 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

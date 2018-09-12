@@ -62,7 +62,7 @@ SEXP gfind_tracks_n_intervals(SEXP _dir, SEXP _envir)
 		SEXP rtracks;
 		SEXP rintervs;
 
-		rprotect(rtracks = allocVector(STRSXP, tracks.size()));
+		rprotect(rtracks = RSaneAllocVector(STRSXP, tracks.size()));
 		for (vector<string>::iterator itrack = tracks.begin(); itrack < tracks.end(); ++itrack) {
 			itrack->resize(itrack->size() - rdb::TRACK_FILE_EXT.size());
 			for (size_t pos = itrack->find_first_of('/'); pos != string::npos; pos = itrack->find_first_of('/', pos + 1))
@@ -70,7 +70,7 @@ SEXP gfind_tracks_n_intervals(SEXP _dir, SEXP _envir)
 			SET_STRING_ELT(rtracks, itrack - tracks.begin(), mkChar(itrack->c_str() + strlen(dir) + 1));
 		}
 
-		rprotect(rintervs = allocVector(STRSXP, intervs.size()));
+		rprotect(rintervs = RSaneAllocVector(STRSXP, intervs.size()));
 		for (vector<string>::iterator iinterv = intervs.begin(); iinterv < intervs.end(); ++iinterv) {
 			iinterv->resize(iinterv->size() - rdb::INTERV_FILE_EXT.size());
 			for (size_t pos = iinterv->find_first_of('/'); pos != string::npos; pos = iinterv->find_first_of('/', pos + 1))
@@ -78,14 +78,16 @@ SEXP gfind_tracks_n_intervals(SEXP _dir, SEXP _envir)
 			SET_STRING_ELT(rintervs, iinterv - intervs.begin(), mkChar(iinterv->c_str() + strlen(dir) + 1));
 		}
 
-		rprotect(answer = allocVector(VECSXP, 2));
+		rprotect(answer = RSaneAllocVector(VECSXP, 2));
 		SET_VECTOR_ELT(answer, 0, rtracks);
 		SET_VECTOR_ELT(answer, 1, rintervs);
 
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

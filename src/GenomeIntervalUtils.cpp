@@ -90,7 +90,9 @@ SEXP grbind(SEXP _objs, SEXP _envir)
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -120,7 +122,7 @@ SEXP gintervsort(SEXP _intervs, SEXP _envir)
 			SEXP answer = iu.convert_intervs(&intervs, GInterval::NUM_COLS + 1);
 			SEXP strands;
 
-			rprotect(strands = allocVector(INTSXP, intervs.size()));
+			rprotect(strands = RSaneAllocVector(INTSXP, intervs.size()));
 			for (GIntervals::const_iterator interv = intervs.begin(); interv != intervs.end(); ++interv)
 				INTEGER(strands)[interv - intervs.begin()] = interv->strand;
 
@@ -133,7 +135,9 @@ SEXP gintervsort(SEXP _intervs, SEXP _envir)
 		return iu.convert_intervs(&intervs2d);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -156,7 +160,9 @@ SEXP gintervunion(SEXP _intervs1, SEXP _intervs2, SEXP _envir)
 		return iu.convert_intervs(&res_intervs);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -233,7 +239,9 @@ SEXP gintervintersect(SEXP _intervs1, SEXP _intervs2, SEXP _envir)
 		return iu.convert_intervs(&res_intervs);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -256,7 +264,9 @@ SEXP gintervdiff(SEXP _intervs1, SEXP _intervs2, SEXP _envir)
 		return iu.convert_intervs(&res_intervs);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -280,7 +290,7 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
 
             SEXP old2new_mapping;
 
-            rprotect(old2new_mapping = allocVector(REALSXP, intervs2d.size()));
+            rprotect(old2new_mapping = RSaneAllocVector(REALSXP, intervs2d.size()));
 
             for (GIntervals2D::const_iterator interv = intervs2d.begin(); interv != intervs2d.end(); ++interv)
                 REAL(old2new_mapping)[interv - intervs2d.begin()] = ((int64_t)interv->udata()) + 1;
@@ -321,7 +331,7 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
         // pack the result
         SEXP old2new_mapping;
 
-        rprotect(old2new_mapping = allocVector(REALSXP, intervs.size()));
+        rprotect(old2new_mapping = RSaneAllocVector(REALSXP, intervs.size()));
         intervs.clear();
 
         for (ImportedIntervals::const_iterator iimported_interv = imported_intervs.begin(); iimported_interv != imported_intervs.end(); ++iimported_interv) {
@@ -335,7 +345,9 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
         return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -412,7 +424,9 @@ SEXP ginterv_intersectband(SEXP _intervs, SEXP _band, SEXP _intervals_set_out, S
 		GIntervalsBigSet2D::end_save_plain_intervals(intervset_out.c_str(), iu, chromstats);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -434,8 +448,8 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 
 		if (intervs1d.size()) {
 			GIntervalsBigSet1D::ChromStat chromstat = GIntervalsBigSet1D::get_chrom_stat(&intervs1d).second;
-			rprotect(answer = allocVector(VECSXP, GIntervalsBigSet1D::NUM_STAT_COLS - 1));
-            rprotect(colnames = allocVector(STRSXP, GIntervalsBigSet1D::NUM_STAT_COLS - 1));
+			rprotect(answer = RSaneAllocVector(VECSXP, GIntervalsBigSet1D::NUM_STAT_COLS - 1));
+            rprotect(colnames = RSaneAllocVector(STRSXP, GIntervalsBigSet1D::NUM_STAT_COLS - 1));
 
 			vector<int> idx2ridx(GIntervalsBigSet1D::NUM_STAT_COLS);
 			int colidx = 0;
@@ -480,7 +494,7 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
             {
                 SEXP rexp;
                 rprotect(rexp = ScalarReal(chromstat.contains_overlaps));
-                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::CONTAINS_OVERLAPS_COL], allocVector(LGLSXP, 1));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::CONTAINS_OVERLAPS_COL], RSaneAllocVector(LGLSXP, 1));
             }
 
             setAttrib(answer, R_NamesSymbol, colnames);
@@ -488,8 +502,8 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 		} else {
 			GIntervalsBigSet2D::ChromStat chromstat = GIntervalsBigSet2D::get_chrom_stat(&intervs2d, iu).second;
 
-			rprotect(answer = allocVector(VECSXP, GIntervalsBigSet2D::NUM_STAT_COLS - 2));
-            rprotect(colnames = allocVector(STRSXP, GIntervalsBigSet2D::NUM_STAT_COLS - 2));
+			rprotect(answer = RSaneAllocVector(VECSXP, GIntervalsBigSet2D::NUM_STAT_COLS - 2));
+            rprotect(colnames = RSaneAllocVector(STRSXP, GIntervalsBigSet2D::NUM_STAT_COLS - 2));
 
 			vector<int> idx2ridx(GIntervalsBigSet2D::NUM_STAT_COLS);
 			int colidx = 0;
@@ -523,14 +537,16 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
             setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
 		}
 
-        rprotect(rownames = allocVector(INTSXP, 1));
+        rprotect(rownames = RSaneAllocVector(INTSXP, 1));
         INTEGER(rownames)[0] = 1;
 		setAttrib(answer, R_RowNamesSymbol, rownames);
 
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -571,11 +587,11 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 
 			SEXP chroms, chroms_idx, sizes, col_names;
 
-			rprotect(answer = allocVector(VECSXP, NUM_COLS));
-            rprotect(chroms_idx = allocVector(INTSXP, num_non_zero_chroms));
-            rprotect(sizes = allocVector(INTSXP, num_non_zero_chroms));
-            rprotect(col_names = allocVector(STRSXP, NUM_COLS));
-            rprotect(chroms = allocVector(STRSXP, num_chroms));
+			rprotect(answer = RSaneAllocVector(VECSXP, NUM_COLS));
+            rprotect(chroms_idx = RSaneAllocVector(INTSXP, num_non_zero_chroms));
+            rprotect(sizes = RSaneAllocVector(INTSXP, num_non_zero_chroms));
+            rprotect(col_names = RSaneAllocVector(STRSXP, NUM_COLS));
+            rprotect(chroms = RSaneAllocVector(STRSXP, num_chroms));
 
 			size_t idx = 0;
 
@@ -614,13 +630,13 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 
 			SEXP chroms1, chroms2, chroms_idx1, chroms_idx2, sizes, col_names;
 
-			rprotect(answer = allocVector(VECSXP, NUM_COLS));
-            rprotect(chroms_idx1 = allocVector(INTSXP, num_non_zero_chroms));
-            rprotect(chroms_idx2 = allocVector(INTSXP, num_non_zero_chroms));
-            rprotect(sizes = allocVector(INTSXP, num_non_zero_chroms));
-            rprotect(col_names = allocVector(STRSXP, NUM_COLS));
-            rprotect(chroms1 = allocVector(STRSXP, num_chroms));
-            rprotect(chroms2 = allocVector(STRSXP, num_chroms));
+			rprotect(answer = RSaneAllocVector(VECSXP, NUM_COLS));
+            rprotect(chroms_idx1 = RSaneAllocVector(INTSXP, num_non_zero_chroms));
+            rprotect(chroms_idx2 = RSaneAllocVector(INTSXP, num_non_zero_chroms));
+            rprotect(sizes = RSaneAllocVector(INTSXP, num_non_zero_chroms));
+            rprotect(col_names = RSaneAllocVector(STRSXP, NUM_COLS));
+            rprotect(chroms1 = RSaneAllocVector(STRSXP, num_chroms));
+            rprotect(chroms2 = RSaneAllocVector(STRSXP, num_chroms));
 
 			size_t idx = 0;
 
@@ -655,7 +671,7 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 		}
 
 		SEXP row_names;
-        rprotect(row_names = allocVector(INTSXP, num_non_zero_chroms));
+        rprotect(row_names = RSaneAllocVector(INTSXP, num_non_zero_chroms));
 
 		for (int i = 0; i < num_non_zero_chroms; ++i) 
 			INTEGER(row_names)[i] = i + 1;
@@ -666,7 +682,9 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -750,7 +768,9 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
