@@ -21,7 +21,7 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 	vector<SEXP> rvals(numcols);
 
 	for (int icol = 0; icol < numcols; ++icol)
-		rprotect(rvals[icol] = allocVector(REALSXP, numvals));
+		rprotect(rvals[icol] = RSaneAllocVector(REALSXP, numvals));
 
 	int rownum = 0;
 	for (vector<float>::const_iterator ival = res_vals.begin(); ival != res_vals.end(); ++rownum) {
@@ -37,7 +37,7 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 
 	if (interv_ids) {
 		SEXP ids;
-		rprotect(ids = allocVector(INTSXP, interv_ids->size()));
+		rprotect(ids = RSaneAllocVector(INTSXP, interv_ids->size()));
 		for (vector<unsigned>::const_iterator iid = interv_ids->begin(); iid != interv_ids->end(); ++iid)
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, GInterval::NUM_COLS + numcols, ids);
@@ -192,7 +192,9 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 		GIntervalsBigSet1D::end_save(intervset_out.c_str(), zeroline, iu, chromstats);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

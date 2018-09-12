@@ -466,13 +466,13 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher1D *intervals, unsigned num_c
 	SEXP row_names;
 	SEXP col_names;
 
-	rprotect(answer = allocVector(VECSXP, num_cols));
-    rprotect(chroms_idx = allocVector(INTSXP, intervals->size()));
-    rprotect(starts = allocVector(REALSXP, intervals->size()));
-    rprotect(ends = allocVector(REALSXP, intervals->size()));
-    rprotect(chroms = allocVector(STRSXP, num_chroms));
-    rprotect(col_names = allocVector(STRSXP, num_cols));
-    rprotect(row_names = allocVector(INTSXP, intervals->size()));
+	rprotect(answer = RSaneAllocVector(VECSXP, num_cols));
+    rprotect(chroms_idx = RSaneAllocVector(INTSXP, intervals->size()));
+    rprotect(starts = RSaneAllocVector(REALSXP, intervals->size()));
+    rprotect(ends = RSaneAllocVector(REALSXP, intervals->size()));
+    rprotect(chroms = RSaneAllocVector(STRSXP, num_chroms));
+    rprotect(col_names = RSaneAllocVector(STRSXP, num_cols));
+    rprotect(row_names = RSaneAllocVector(INTSXP, intervals->size()));
 
 	for (intervals->begin_iter(); !intervals->isend(); intervals->next()) {
 		const GInterval &interval = intervals->cur_interval();
@@ -518,18 +518,18 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher2D *intervals, unsigned num_c
 	SEXP row_names;
 	SEXP col_names;
 
-	rprotect(answer = allocVector(VECSXP, num_cols));
-    rprotect(chroms1 = allocVector(STRSXP, num_chroms));
-    rprotect(starts1 = allocVector(REALSXP, intervals->size()));
-    rprotect(ends1 = allocVector(REALSXP, intervals->size()));
-    rprotect(chroms_idx1 = allocVector(INTSXP, intervals->size()));
-    rprotect(chroms_idx2 = allocVector(INTSXP, intervals->size()));
-    rprotect(starts2 = allocVector(REALSXP, intervals->size()));
-    rprotect(ends2 = allocVector(REALSXP, intervals->size()));
-    rprotect(chroms1 = allocVector(STRSXP, num_chroms));
-    rprotect(chroms2 = allocVector(STRSXP, num_chroms));
-    rprotect(col_names = allocVector(STRSXP, num_cols));
-    rprotect(row_names = allocVector(INTSXP, intervals->size()));
+	rprotect(answer = RSaneAllocVector(VECSXP, num_cols));
+    rprotect(chroms1 = RSaneAllocVector(STRSXP, num_chroms));
+    rprotect(starts1 = RSaneAllocVector(REALSXP, intervals->size()));
+    rprotect(ends1 = RSaneAllocVector(REALSXP, intervals->size()));
+    rprotect(chroms_idx1 = RSaneAllocVector(INTSXP, intervals->size()));
+    rprotect(chroms_idx2 = RSaneAllocVector(INTSXP, intervals->size()));
+    rprotect(starts2 = RSaneAllocVector(REALSXP, intervals->size()));
+    rprotect(ends2 = RSaneAllocVector(REALSXP, intervals->size()));
+    rprotect(chroms1 = RSaneAllocVector(STRSXP, num_chroms));
+    rprotect(chroms2 = RSaneAllocVector(STRSXP, num_chroms));
+    rprotect(col_names = RSaneAllocVector(STRSXP, num_cols));
+    rprotect(row_names = RSaneAllocVector(INTSXP, intervals->size()));
 
 	for (intervals->begin_iter(); !intervals->isend(); intervals->next()) {
 		const GInterval2D &interval = intervals->cur_interval();
@@ -642,9 +642,9 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 	SEXP col_names = getAttrib(answer, R_NamesSymbol);
 	unsigned num_src_chroms = src_id2chrom.size();
 
-    rprotect(src_chroms_idx = allocVector(INTSXP, chain_intervs.size()));
-    rprotect(src_starts = allocVector(REALSXP, chain_intervs.size()));
-    rprotect(src_chroms = allocVector(STRSXP, num_src_chroms));
+    rprotect(src_chroms_idx = RSaneAllocVector(INTSXP, chain_intervs.size()));
+    rprotect(src_starts = RSaneAllocVector(REALSXP, chain_intervs.size()));
+    rprotect(src_chroms = RSaneAllocVector(STRSXP, num_src_chroms));
 
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval) {
 		INTEGER(src_chroms_idx)[iinterval - chain_intervs.begin()] = iinterval->chromid_src + 1;
@@ -687,9 +687,9 @@ SEXP IntervUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
 {
 	SEXP answer, row_names, col_names;
 
-	rprotect(answer = allocVector(VECSXP, numcols));
-    rprotect(col_names = allocVector(STRSXP, numcols));
-    rprotect(row_names = allocVector(INTSXP, numrows));
+	rprotect(answer = RSaneAllocVector(VECSXP, numcols));
+    rprotect(col_names = RSaneAllocVector(STRSXP, numcols));
+    rprotect(row_names = RSaneAllocVector(INTSXP, numrows));
 
 	for (int i = 0; i < numrows; ++i)
 		INTEGER(row_names)[i] = i + 1;
@@ -732,7 +732,7 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 		SEXP src_col = VECTOR_ELT(src, col);
 		SEXP tgt_col;
 
-        rprotect(tgt_col = allocVector(TYPEOF(src_col), numrows));
+        rprotect(tgt_col = RSaneAllocVector(TYPEOF(src_col), numrows));
 
 		if (!isInteger(src_col) && !isReal(src_col) && !isLogical(src_col) && !isString(src_col) && !isFactor(src_col))
 			verror("Unsupported type found in a data frame: %s", type2char(TYPEOF(src_col)));

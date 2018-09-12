@@ -28,7 +28,7 @@ static SEXP build_rintervals_wilcox(const vector<IntervalPval> &res_intervals, G
 	SEXP answer = iu.convert_intervs(&out_intervals, IntervalPval::NUM_COLS, false);
 	SEXP pvals;
 
-	rprotect(pvals = allocVector(REALSXP, res_intervals.size()));
+	rprotect(pvals = RSaneAllocVector(REALSXP, res_intervals.size()));
 	for (unsigned i = 0; i < res_intervals.size(); i++)
 		REAL(pvals)[i] = res_intervals[i].minpval;
 

@@ -109,7 +109,7 @@ SEXP gvectors(SEXP _n, SEXP _variant, SEXP _envir) {
 		int variant = isReal(_variant) ? REAL(_variant)[0] : INTEGER(_variant)[0];
 		SEXP answer;
 
-		rprotect(answer = allocVector(REALSXP, n));
+		rprotect(answer = RSaneAllocVector(REALSXP, n));
 
 		switch (variant) {
 		case 0:
@@ -151,7 +151,9 @@ SEXP gvectors(SEXP _n, SEXP _variant, SEXP _envir) {
 //		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -295,7 +297,9 @@ SEXP gtest_segment_finder(SEXP _envir) {
 		}
  	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 
 }
@@ -313,7 +317,9 @@ SEXP gtest_cached_qtree(SEXP _envir) {
 		cqtree.debug_print_tree();
  	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 
 }
@@ -435,7 +441,9 @@ SEXP gtest_eitan(SEXP _envir) {
 //		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -454,7 +462,9 @@ SEXP gtest_bands(SEXP _envir) {
 		Rprintf("intersected area: %ld\n", band.intersected_area(r));
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -527,7 +537,9 @@ SEXP gtest_create_2d(SEXP _track, SEXP _max_chrom_rects, SEXP _max_rect_size, SE
 		progress.report_last();
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }
@@ -1129,7 +1141,9 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 		printf("Comparison done\n");
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -1167,7 +1181,9 @@ SEXP gtest_percentiles(SEXP _percentile, SEXP _vals, SEXP _rnd_sampling_buf_size
 //		Rprintf("\n\n");
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -1248,7 +1264,7 @@ printf("\n");
 			}
 		}
 
-		SEXP colnames = allocVector(STRSXP, maxsize);
+		SEXP colnames = RSaneAllocVector(STRSXP, maxsize);
 		for (int i = 0; i < maxsize; i++) {
 			char buf[100];
 			sprintf(buf, "col%d", i);
@@ -1258,7 +1274,9 @@ printf("\n");
 		return colnames;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }
@@ -1269,7 +1287,7 @@ SEXP _gtest_error_recovery(SEXP _fname, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		SEXP test_val = allocVector(REALSXP, 2);
+		SEXP test_val = RSaneAllocVector(REALSXP, 2);
 		REAL(test_val)[0] = 35;
 		REAL(test_val)[1] = 73;
 		RSaneSerialize(test_val, "aaaa4");
@@ -1283,7 +1301,9 @@ SEXP _gtest_error_recovery(SEXP _fname, SEXP _envir)
 		return R_NilValue;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

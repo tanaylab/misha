@@ -55,7 +55,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		vector< vector<double> > vals(num_track_exprs);
 
 		SEXP rinterv_id;
-		rprotect(rinterv_id = allocVector(INTSXP, 1));
+		rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
 		defineVar(install("GAPPLY.INTERVID"), rinterv_id, findVar(install(".GlobalEnv"), _envir));
 
 		GIntervals last_intervals1d;
@@ -101,7 +101,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 					size_t num_vals = vals.front().size();
 
 					runprotect(rvars[iexpr]);
-					rprotect(rvars[iexpr] = allocVector(REALSXP, num_vals));
+					rprotect(rvars[iexpr] = RSaneAllocVector(REALSXP, num_vals));
 					rarg = CDR(rarg);
 					SETCAR(rarg, rvars[iexpr]);
 
@@ -144,16 +144,16 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		SEXP row_names;
 		SEXP rvals;
 
-		rprotect(answer = allocVector(VECSXP, num_old_cols + 1));
-		rprotect(col_names = allocVector(STRSXP, num_old_cols + 1));
+		rprotect(answer = RSaneAllocVector(VECSXP, num_old_cols + 1));
+		rprotect(col_names = RSaneAllocVector(STRSXP, num_old_cols + 1));
 
 		for (int i = 0; i < num_old_cols; i++) {
 			SET_VECTOR_ELT(answer, i, VECTOR_ELT(_intervals, i));
 			SET_STRING_ELT(col_names, i, STRING_ELT(old_colnames, i));
 		}
 
-		rprotect(row_names = allocVector(INTSXP, result.size()));
-		rprotect(rvals = allocVector(REALSXP, result.size()));
+		rprotect(row_names = RSaneAllocVector(INTSXP, result.size()));
+		rprotect(rvals = RSaneAllocVector(REALSXP, result.size()));
 		for (unsigned i = 0; i < result.size(); i++) {
 			INTEGER(row_names)[i] = i + 1;
 			REAL(rvals)[scanner.get_iterator()->is_1d() ? iu.get_orig_interv_idx(intervals1d[i]) : iu.get_orig_interv_idx(intervals2d[i])] = result[i];
@@ -169,7 +169,9 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -218,7 +220,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			vector< vector<double> > vals(num_track_exprs);
 
 			SEXP rinterv_id;
-			rprotect(rinterv_id = allocVector(INTSXP, 1));
+			rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
 			defineVar(install("GAPPLY.INTERVID"), rinterv_id, findVar(install(".GlobalEnv"), _envir));
 
 			GIntervals last_intervals1d;
@@ -264,7 +266,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 						size_t num_vals = vals.front().size();
 
 						runprotect(rvars[iexpr]);
-						rprotect(rvars[iexpr] = allocVector(REALSXP, num_vals));
+						rprotect(rvars[iexpr] = RSaneAllocVector(REALSXP, num_vals));
 						rarg = CDR(rarg);
 						SETCAR(rarg, rvars[iexpr]);
 
@@ -331,16 +333,16 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			SEXP row_names;
 			SEXP rvals;
 
-			rprotect(answer = allocVector(VECSXP, num_old_cols + 1));
-			rprotect(col_names = allocVector(STRSXP, num_old_cols + 1));
+			rprotect(answer = RSaneAllocVector(VECSXP, num_old_cols + 1));
+			rprotect(col_names = RSaneAllocVector(STRSXP, num_old_cols + 1));
 
 			for (int i = 0; i < num_old_cols; i++) {
 				SET_VECTOR_ELT(answer, i, VECTOR_ELT(_intervals, i));
 				SET_STRING_ELT(col_names, i, STRING_ELT(old_colnames, i));
 			}
 
-			rprotect(row_names = allocVector(INTSXP, result.size()));
-			rprotect(rvals = allocVector(REALSXP, result.size()));
+			rprotect(row_names = RSaneAllocVector(INTSXP, result.size()));
+			rprotect(rvals = RSaneAllocVector(REALSXP, result.size()));
 			for (unsigned i = 0; i < result.size(); i++) {
 				INTEGER(row_names)[i] = i + 1;
 				REAL(rvals)[intervals2d.empty() ? iu.get_orig_interv_idx(intervals1d[i]) : iu.get_orig_interv_idx(intervals2d[i])] = result[i];
@@ -356,7 +358,9 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	rreturn(R_NilValue);
 }
 

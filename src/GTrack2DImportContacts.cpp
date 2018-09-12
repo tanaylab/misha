@@ -549,7 +549,9 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 		progress.report_last();
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

@@ -25,7 +25,7 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 	SEXP bins;
 
 	answer = iu.convert_intervs(&res_intervals, Interval::NUM_COLS + 1, false);
-	rprotect(bins = allocVector(REALSXP, res_bins.size()));
+	rprotect(bins = RSaneAllocVector(REALSXP, res_bins.size()));
 	for (unsigned i = 0; i < res_bins.size(); i++)
 		REAL(bins)[i] = res_bins[i];
 
@@ -35,7 +35,7 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 
 	SEXP range;
 	int numbins = bin_finder.get_numbins();
-	rprotect(range = allocVector(STRSXP, numbins));
+	rprotect(range = RSaneAllocVector(STRSXP, numbins));
 	for (int bin = 0; bin < numbins; bin++) {
 		char buf[10000];
 
@@ -217,7 +217,9 @@ SEXP gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_l
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

@@ -37,7 +37,7 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 
 	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 		SEXP expr_vals;
-		rprotect(expr_vals = allocVector(REALSXP, values[iexpr].size()));
+		rprotect(expr_vals = RSaneAllocVector(REALSXP, values[iexpr].size()));
 		for (unsigned i = 0; i < values[iexpr].size(); ++i)
 			REAL(expr_vals)[i] = values[iexpr][i];
         SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
@@ -53,7 +53,7 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 
 	if (interv_ids) {
 		SEXP ids;
-		rprotect(ids = allocVector(INTSXP, interv_ids->size()));
+		rprotect(ids = RSaneAllocVector(INTSXP, interv_ids->size()));
 		for (vector<unsigned>::const_iterator iid = interv_ids->begin(); iid != interv_ids->end(); ++iid)
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
@@ -266,7 +266,9 @@ SEXP gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_polic
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -565,14 +567,14 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 				SEXP expr_vals;
-				rprotect(expr_vals = allocVector(REALSXP, values[iexpr].size()));
+				rprotect(expr_vals = RSaneAllocVector(REALSXP, values[iexpr].size()));
 				for (unsigned i = 0; i < values[iexpr].size(); ++i)
 					REAL(expr_vals)[i] = values[iexpr][i];
                 SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
 			}
 
 			SEXP ids;
-			rprotect(ids = allocVector(INTSXP, interv_ids.size()));
+			rprotect(ids = RSaneAllocVector(INTSXP, interv_ids.size()));
 			for (vector<unsigned>::const_iterator iid = interv_ids.begin(); iid != interv_ids.end(); ++iid)
 				INTEGER(ids)[iid - interv_ids.begin()] = *iid;
 			SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
@@ -590,7 +592,9 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	rreturn(R_NilValue);
 }
 

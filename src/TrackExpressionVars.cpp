@@ -643,12 +643,12 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 void TrackExpressionVars::define_r_vars(unsigned size)
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ivar++) {
-		rprotect(ivar->rvar = allocVector(REALSXP, size));
+		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
 		defineVar(install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
 		ivar->var = REAL(ivar->rvar);
 	}
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ivar++) {
-		rprotect(ivar->rvar = allocVector(REALSXP, size));
+		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
 		defineVar(install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
 		ivar->var = REAL(ivar->rvar);
 	}

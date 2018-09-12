@@ -118,7 +118,9 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 			verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }
@@ -221,7 +223,9 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	rreturn(R_NilValue);
 }

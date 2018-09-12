@@ -112,6 +112,9 @@ void RSaneSerialize(SEXP rexp, const char *fname);
 SEXP RSaneUnserialize(FILE *fp);
 SEXP RSaneUnserialize(const char *fname);
 
+// Same as above: replaces allocVector which can fail on memory allocation and then R makes a longmp, skipping all the destructors
+SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
+
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 
 void prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids);
@@ -248,13 +251,11 @@ private:
 
 	mode_t                      m_old_umask;
 	TGLException::Error_handler m_old_error_handler;
-	new_handler                 m_old_new_handler;
 	unsigned                    m_old_protect_count;
 	set<int>                    m_old_open_fds;
 
 	static string  get_shm_sem_name();
 	static string  get_alloc_suspend_sem_name();
-	static void    out_of_memory();
 	static void    sigint_handler(int);
 	static void    sigchld_handler(int);
 	static void    prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids);

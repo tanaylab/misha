@@ -58,21 +58,23 @@ SEXP gtrackdist(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _include_
 
 		// pack the answer
 		SEXP answer, dim, dimnames;
-		rprotect(answer = allocVector(REALSXP, totalbins));
+		rprotect(answer = RSaneAllocVector(REALSXP, totalbins));
 		double *panswer = REAL(answer);
 
 		for (unsigned i = 0; i < totalbins; i++)
 			panswer[i] = distribution[i];
 
-		rprotect(dim = allocVector(INTSXP, numexpr));
-		rprotect(dimnames = allocVector(VECSXP, numexpr));
+		rprotect(dim = RSaneAllocVector(INTSXP, numexpr));
+		rprotect(dimnames = RSaneAllocVector(VECSXP, numexpr));
 		bins_manager.set_dims(dim, dimnames);
 		setAttrib(answer, R_DimSymbol, dim);
 		setAttrib(answer, R_DimNamesSymbol, dimnames);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -135,14 +137,14 @@ SEXP gtrackdist_multitask(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP
 
 			// pack the answer
 			SEXP answer, dim, dimnames;
-			rprotect(answer = allocVector(REALSXP, totalbins));
+			rprotect(answer = RSaneAllocVector(REALSXP, totalbins));
 			double *panswer = REAL(answer);
 
 			for (unsigned i = 0; i < totalbins; i++)
 				panswer[i] = distribution[i];
 
-			rprotect(dim = allocVector(INTSXP, numexpr));
-			rprotect(dimnames = allocVector(VECSXP, numexpr));
+			rprotect(dim = RSaneAllocVector(INTSXP, numexpr));
+			rprotect(dimnames = RSaneAllocVector(VECSXP, numexpr));
 			bins_manager.set_dims(dim, dimnames);
 			setAttrib(answer, R_DimSymbol, dim);
 			setAttrib(answer, R_DimNamesSymbol, dimnames);
@@ -150,7 +152,9 @@ SEXP gtrackdist_multitask(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	rreturn(R_NilValue);
 }

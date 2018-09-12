@@ -1,0 +1,24 @@
+---
+output:
+  md_document:
+    variant: markdown_github
+---
+
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "README-"
+)
+```
+
+# misha
+
+The misha package is intended to help users to efficiently analyze genomic data achieved from various experiments.
+
+## Installation
+```{r, eval=FALSE}
+install.packages('misha', repos=c(getOption('repos'), 'https://tanaylab.bitbucket.io/repo'))
+```
+

@@ -96,7 +96,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _envir)
 		SEXP rsrc_indices;
 		SEXP col_names = getAttrib(answer, R_NamesSymbol);
 
-        rprotect(rsrc_indices = allocVector(INTSXP, src_indices.size()));
+        rprotect(rsrc_indices = RSaneAllocVector(INTSXP, src_indices.size()));
 
 		for (vector<int>::const_iterator iindex = src_indices.begin(); iindex != src_indices.end(); ++iindex)
 			INTEGER(rsrc_indices)[iindex - src_indices.begin()] = *iindex;
@@ -108,7 +108,9 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _envir)
 
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

@@ -175,7 +175,9 @@ SEXP gtrackconvert(SEXP _src_track, SEXP _tgt_track, SEXP _envir)
 		progress.report_last();
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }
@@ -193,7 +195,9 @@ SEXP gtrack_create_meta(SEXP _track, SEXP _envir)
 		GTrackIntervalsFetcher::create_track_meta(track_str, iu);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

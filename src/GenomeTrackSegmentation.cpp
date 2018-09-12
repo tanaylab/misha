@@ -260,7 +260,9 @@ SEXP gsegment(SEXP _expr, SEXP _intervals, SEXP _minsegment, SEXP _maxz, SEXP _o
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

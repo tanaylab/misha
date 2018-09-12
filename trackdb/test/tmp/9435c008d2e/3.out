@@ -1,6 +1,0 @@
-2017-10-11 13:40:00 INFO::doing hamming 1
-2017-10-11 13:40:02 INFO::removed 0 ambiguous barcodes
-2017-10-11 13:40:02 INFO::doing hamming 1
-2017-10-11 13:40:03 INFO::removed 0 ambiguous barcodes
-2017-10-11 13:40:05 INFO::writing to /net/mraid14/export/tgdata/users/aviezerl/proj/sc5mC/db/batches/BATCH25/PZM00021/fastq/ZMillu8/raw/split/indexes/ZMillu8_S2_L003_001_indexes.tsv
-2017-10-11 13:40:06 INFO::running /net/mraid14/export/tgdata/users/aviezerl/tools/R/3.4/gpatterns/import/map_fastq.py -r1 <(gzip -d -c /net/mraid14/export/tgdata/users/aviezerl/proj/sc5mC/db/batches/BATCH25/PZM00021/fastq/ZMillu8/raw/ZMillu8_S2_L003_R1_001.fastq.gz) -r2 <(gzip -d -c /net/mraid14/export/tgdata/users/aviezerl/proj/sc5mC/db/batches/BATCH25/PZM00021/fastq/ZMillu8/raw/ZMillu8_S2_L003_R2_001.fastq.gz) -i /net/mraid14/export/tgdata/users/aviezerl/proj/sc5mC/db/batches/BATCH25/PZM00021/fastq/ZMillu8/raw/split/indexes/ZMillu8_S2_L003_001_indexes.tsv

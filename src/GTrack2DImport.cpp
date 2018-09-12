@@ -293,7 +293,9 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

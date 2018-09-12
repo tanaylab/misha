@@ -323,13 +323,13 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		int64_t total_mapped = 0;
 		int64_t total_dups = 0;
 
-		rprotect(chrom_stat = allocVector(VECSXP, 3));
-        rprotect(chroms_idx = allocVector(INTSXP, num_chroms));
-        rprotect(mapped = allocVector(REALSXP, num_chroms));
-        rprotect(dups = allocVector(REALSXP, num_chroms));
-        rprotect(chroms = allocVector(STRSXP, num_chroms));
-        rprotect(col_names = allocVector(STRSXP, 3));
-        rprotect(row_names = allocVector(INTSXP, num_chroms));
+		rprotect(chrom_stat = RSaneAllocVector(VECSXP, 3));
+        rprotect(chroms_idx = RSaneAllocVector(INTSXP, num_chroms));
+        rprotect(mapped = RSaneAllocVector(REALSXP, num_chroms));
+        rprotect(dups = RSaneAllocVector(REALSXP, num_chroms));
+        rprotect(chroms = RSaneAllocVector(STRSXP, num_chroms));
+        rprotect(col_names = RSaneAllocVector(STRSXP, 3));
+        rprotect(row_names = RSaneAllocVector(INTSXP, num_chroms));
 
 		for (unsigned i = 0; i < num_chroms; i++) {
 			INTEGER(chroms_idx)[i] = all_genome_intervs[i].chromid + 1;
@@ -357,18 +357,18 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
         setAttrib(chrom_stat, R_ClassSymbol, mkString("data.frame"));
         setAttrib(chrom_stat, R_RowNamesSymbol, row_names);
 
-		rprotect(total_stat = allocVector(REALSXP, 4));
+		rprotect(total_stat = RSaneAllocVector(REALSXP, 4));
 		REAL(total_stat)[0] = total_mapped + total_unmapped + total_dups;
 		REAL(total_stat)[1] = total_mapped;
 		REAL(total_stat)[2] = total_unmapped;
 		REAL(total_stat)[3] = total_dups;
-		setAttrib(total_stat, R_NamesSymbol, allocVector(STRSXP, 3));
+		setAttrib(total_stat, R_NamesSymbol, RSaneAllocVector(STRSXP, 3));
 		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 0, mkChar("total"));
 		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 1, mkChar("total.mapped"));
 		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 2, mkChar("total.unmapped"));
 		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 3, mkChar("total.dups"));
 
-		rprotect(answer = allocVector(VECSXP, 2));
+		rprotect(answer = RSaneAllocVector(VECSXP, 2));
 
 		SET_VECTOR_ELT(answer, 0, total_stat);
 		SET_VECTOR_ELT(answer, 1, chrom_stat);
@@ -376,7 +376,9 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

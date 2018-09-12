@@ -145,7 +145,7 @@ SEXP gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_inte
 
 		// pack the answer
 		SEXP answer, dim, dimnames, dimname;
-		rprotect(answer = allocVector(REALSXP, 2 * bin_finder.get_numbins()));
+		rprotect(answer = RSaneAllocVector(REALSXP, 2 * bin_finder.get_numbins()));
 		double *panswer = REAL(answer);
 
 		for (unsigned i = 0; i < bin_finder.get_numbins(); i++) {
@@ -153,18 +153,18 @@ SEXP gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_inte
 			panswer[i + bin_finder.get_numbins()] = inter_domain_dist[i];
 		}
 
-		rprotect(dim = allocVector(INTSXP, 2));
-		rprotect(dimnames = allocVector(VECSXP, 2));
+		rprotect(dim = RSaneAllocVector(INTSXP, 2));
+		rprotect(dimnames = RSaneAllocVector(VECSXP, 2));
 
 		SEXP breaks_sets;
-		rprotect(breaks_sets = allocVector(VECSXP, 1));
+		rprotect(breaks_sets = RSaneAllocVector(VECSXP, 1));
 		SET_VECTOR_ELT(breaks_sets, 0, _breaks);
 
 		BinsManager bins_manager(breaks_sets, _include_lowest);
 		bins_manager.set_dims(dim, dimnames);
 		INTEGER(dim)[1] = 2;
 
-		rprotect(dimname = allocVector(STRSXP, 2));
+		rprotect(dimname = RSaneAllocVector(STRSXP, 2));
 		SET_STRING_ELT(dimname, 0, mkChar("intra"));
 		SET_STRING_ELT(dimname, 1, mkChar("inter"));
 		SET_VECTOR_ELT(dimnames, 1, dimname);
@@ -174,7 +174,9 @@ SEXP gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_inte
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	rreturn(R_NilValue);
 }
 

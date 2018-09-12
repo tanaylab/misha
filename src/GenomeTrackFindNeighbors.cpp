@@ -169,7 +169,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 			iu.define_data_frame_cols(_intervs1, src_cols1, answer, tgt_cols, 0);
 			iu.define_data_frame_cols(_intervs2, src_cols2, answer, tgt_cols, length(_intervs1));
-			rprotect(rdists = allocVector(REALSXP, result.size()));
+			rprotect(rdists = RSaneAllocVector(REALSXP, result.size()));
 
 			for (size_t i = 0; i < result.size(); ++i) {
 				const IntervNeighbor &r = result[i];
@@ -293,8 +293,8 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 			iu.define_data_frame_cols(_intervs1, src_cols1, answer, tgt_cols, 0);
 			iu.define_data_frame_cols(_intervs2, src_cols2, answer, tgt_cols, length(_intervs1));
-			rprotect(rdists1 = allocVector(REALSXP, result.size()));
-			rprotect(rdists2 = allocVector(REALSXP, result.size()));
+			rprotect(rdists1 = RSaneAllocVector(REALSXP, result.size()));
+			rprotect(rdists2 = RSaneAllocVector(REALSXP, result.size()));
 
 			for (size_t i = 0; i < result.size(); ++i) {
 				const IntervNeighbor2D &r = result[i];
@@ -322,7 +322,9 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

@@ -147,7 +147,9 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 		progress.report_last();
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -285,7 +287,9 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	rreturn(R_NilValue);
 }
 

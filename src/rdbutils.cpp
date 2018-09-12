@@ -127,9 +127,6 @@ RdbInitializer::RdbInitializer()
 
 		m_old_error_handler = TGLException::set_error_handler(TGLException::throw_error_handler);
 
-		// install out of memory handler
-		m_old_new_handler = set_new_handler(out_of_memory);
-
 		struct sigaction new_act;
 
 		// install a new SIGINT handler
@@ -203,10 +200,6 @@ RdbInitializer::~RdbInitializer()
 		}
 
 		TGLException::set_error_handler(m_old_error_handler);
-
-		// install old out of memory handler
-		if (m_old_new_handler)
-			set_new_handler(m_old_new_handler);
 
 		// install old signal handlers
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
@@ -550,13 +543,6 @@ void *RdbInitializer::allocate_res(size_t res_num_records)
 	return &s_shm->res + s_shm->kid_res_offset[s_kid_index];
 }
 
-void RdbInitializer::out_of_memory()
-{
-    if (!s_is_kid)
-        Rprintf("\nOut of memory\n");
-	verror("Out of memory\n");
-}
-
 void RdbInitializer::sigint_handler(int)
 {
 	++s_sigint_fired;
@@ -850,7 +836,7 @@ SEXP rdb::run_in_R(const char *command, SEXP envir)
 	SEXP parsed_expr;
 	ParseStatus status;
 
-	rprotect(expr = allocVector(STRSXP, 1));
+	rprotect(expr = RSaneAllocVector(STRSXP, 1));
 	SET_STRING_ELT(expr, 0, mkChar(command));
 	rprotect(parsed_expr = R_ParseVector(expr, -1, &status, R_NilValue));
 	if (status != PARSE_OK)
@@ -863,7 +849,6 @@ struct RSaneSerializeData {
 	SEXP  rexp;
 	FILE *fp;
 };
-
 
 static void RSaneSeserializeCallback(void *_data)
 {
@@ -939,6 +924,30 @@ SEXP rdb::RSaneUnserialize(const char *fname)
 
 	fclose(fp);
 	return retv;
+}
+
+struct RSaneAllocVectorData {
+    SEXPTYPE type;
+    R_xlen_t len;
+    SEXP     retv;
+};
+
+static void RSaneAllocVectorCallback(void *_data)
+{
+	RSaneAllocVectorData *data = (RSaneAllocVectorData *)_data;
+    data->retv = allocVector(data->type, data->len);
+}
+
+SEXP rdb::RSaneAllocVector(SEXPTYPE type, R_xlen_t len)
+{
+    RSaneAllocVectorData data;
+
+    data.type = type;
+    data.len = len;
+    Rboolean ok = R_ToplevelExec(RSaneAllocVectorCallback, &data);
+    if (!ok)
+        verror("Allocation failed");
+    return data.retv;
 }
 
 SEXP rdb::get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing)

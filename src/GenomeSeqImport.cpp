@@ -70,7 +70,9 @@ SEXP gseqimport(SEXP _fasta, SEXP _seq, SEXP _envir)
 		return R_NilValue;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 

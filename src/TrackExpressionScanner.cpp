@@ -172,7 +172,7 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 	for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         if (!m_expr_vars.var(m_track_exprs[iexpr].c_str())) {   // track expression is not a virtual track
     		SEXP expr;
-    		rprotect(expr = allocVector(STRSXP, 1));
+    		rprotect(expr = RSaneAllocVector(STRSXP, 1));
     		SET_STRING_ELT(expr, 0, mkChar(m_track_exprs[iexpr].c_str()));
 
     		// parse R expression

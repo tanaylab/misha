@@ -226,8 +226,8 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 
 		SEXP answer;
 		SEXP answer_col_names;
-		rprotect(answer = allocVector(VECSXP, NUM_INTERVS_SETS));
-		setAttrib(answer, R_NamesSymbol, (answer_col_names = allocVector(STRSXP, NUM_INTERVS_SETS)));
+		rprotect(answer = RSaneAllocVector(VECSXP, NUM_INTERVS_SETS));
+		setAttrib(answer, R_NamesSymbol, (answer_col_names = RSaneAllocVector(STRSXP, NUM_INTERVS_SETS)));
 
 		for (int iintervs_set = 0; iintervs_set < NUM_INTERVS_SETS; ++iintervs_set) {
 			GIntervals &intervs = *intervs_sets[iintervs_set];
@@ -259,18 +259,18 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 			SEXP col_names;
             vector<SEXP> rannots(num_annots);
 
-			rprotect(rintervs = allocVector(VECSXP, GInterval::NUM_COLS + num_annots + 1));
-            rprotect(chroms_idx = allocVector(INTSXP, intervs_size));
-            rprotect(starts = allocVector(REALSXP, intervs_size));
-            rprotect(ends = allocVector(REALSXP, intervs_size));
-            rprotect(strands = allocVector(REALSXP, intervs_size));
+			rprotect(rintervs = RSaneAllocVector(VECSXP, GInterval::NUM_COLS + num_annots + 1));
+            rprotect(chroms_idx = RSaneAllocVector(INTSXP, intervs_size));
+            rprotect(starts = RSaneAllocVector(REALSXP, intervs_size));
+            rprotect(ends = RSaneAllocVector(REALSXP, intervs_size));
+            rprotect(strands = RSaneAllocVector(REALSXP, intervs_size));
 
             for (int iannot = 0; iannot < num_annots; ++iannot) 
-                rannots[iannot] = allocVector(STRSXP, intervs_size);
+                rannots[iannot] = RSaneAllocVector(STRSXP, intervs_size);
 
-            rprotect(chroms = allocVector(STRSXP, num_chroms));
-            rprotect(col_names = allocVector(STRSXP, GInterval::NUM_COLS + num_annots + 1));
-            rprotect(row_names = allocVector(INTSXP, intervs_size));
+            rprotect(chroms = RSaneAllocVector(STRSXP, num_chroms));
+            rprotect(col_names = RSaneAllocVector(STRSXP, GInterval::NUM_COLS + num_annots + 1));
+            rprotect(row_names = RSaneAllocVector(INTSXP, intervs_size));
 
 			intervs_size = 0;
 			last_interv = intervs.front();
@@ -367,7 +367,9 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 
 	return R_NilValue;
 }

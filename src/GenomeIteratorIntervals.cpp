@@ -103,7 +103,9 @@ SEXP giterator_intervals(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEX
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
@@ -124,7 +126,9 @@ SEXP gcheck_iterator(SEXP _iterator_policy, SEXP _envir)
 		TrackExpressionIteratorBase *expr_itr_base = scanner.create_expr_iterator(R_NilValue, &scope1d, &scope2d, _iterator_policy, R_NilValue);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
-	}
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
 	return R_NilValue;
 }
 
