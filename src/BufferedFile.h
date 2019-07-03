@@ -7,6 +7,9 @@
 #include <algorithm>
 #include <string>
 #include <vector>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #ifndef _FILE_OFFSET_BITS
 #define _FILE_OFFSET_BITS 64
@@ -18,8 +21,10 @@ public:
 	BufferedFile(unsigned bufsize) { init(1024); }
 	~BufferedFile();
 
-	// returns 0 on success, -1 on failure
-	int open(const char *path, const char *mode);
+	// returns 0 on success, -1 on failure.
+    // if lock is true, fcntl lock is acquired according to the mode (see: fcntl, F_SETLKW);
+    // file is unlocked on close() or destructor.
+	int open(const char *path, const char *mode, bool lock = false);
 
 	// see fclose for return value
 	int close();
@@ -48,6 +53,11 @@ public:
 	const std::string &file_name() const { return m_filename; }
 
 	int64_t file_size() const { return m_file_size; }
+
+    // truncates the file beyond the current position
+    int truncate();
+
+    int stat(struct stat *fs) { return fstat(fileno(m_fp), fs); }
 
 	// in case of error throws an exception
 	static int64_t file_size(const char *path);
@@ -107,36 +117,6 @@ inline void BufferedFile::init(unsigned bufsize) {
 	m_sbuf_pos = 0;
 	m_ebuf_pos = 0;
 	m_buf = new char[m_bufsize];
-}
-
-inline int BufferedFile::open(const char *path, const char *mode)
-{
-	close();
-	m_filename = path;
-	m_fp = fopen(path, mode);
-	if (m_fp) {
-		m_eof = false;
-		m_virt_pos = m_phys_pos = 0;
-		m_sbuf_pos = m_ebuf_pos = 0;
-
-		fseeko(m_fp, 0, SEEK_END);
-		m_file_size = ftello(m_fp);
-		fseeko(m_fp, 0, SEEK_SET);
-		return 0;
-	}
-	return -1;
-}
-
-inline int BufferedFile::close()
-{
-	if (m_fp) {
-		int retv = fclose(m_fp);
-		m_fp = NULL;
-		m_eof = true;
-		m_phys_pos = -1;
-		return retv;
-	}
-	return 0;
 }
 
 inline int BufferedFile::getc()

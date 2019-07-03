@@ -38,7 +38,7 @@ extern const string TRACK_FILE_EXT;
 extern const string INTERV_FILE_EXT;
 
 // should be used instead of R_CheckUserInterrupt. Throws exception if the command is interrupted.
-void check_interrupt() throw (TGLException);
+void check_interrupt();
 
 // adds timeout to the time that is already in req
 void set_abs_timeout(int64_t delay_msec, struct timespec &req);
@@ -333,7 +333,7 @@ private:
 	// After "untouchable" process dies, the next one is selected by choosing the process with the highest memory consumption.
 	static void report_alloc(int64_t bytes);
 
-	friend void rdb::check_interrupt() throw (TGLException);
+	friend void rdb::check_interrupt();
 	friend SEXP rdb::rprotect(SEXP &expr);
 	friend void rdb::runprotect(int count);
 	friend void rdb::runprotect(SEXP &expr);
