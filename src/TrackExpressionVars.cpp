@@ -24,9 +24,9 @@ using namespace rdb;
 TrackExpressionVars::TrackExpressionVars(rdb::IntervUtils &iu) :
 	m_iu(iu)
 {
-	m_imdfs1d.reserve(1000);
-	m_imdfs2d.reserve(1000);
-	m_track_n_imdfs.reserve(1000);
+	m_imdfs1d.reserve(10000);
+	m_imdfs2d.reserve(10000);
+	m_track_n_imdfs.reserve(10000);
 	m_groot = get_groot(m_iu.get_env());
 }
 

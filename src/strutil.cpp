@@ -290,14 +290,14 @@ void read_int_table(istream &in, int width, vector<vector<int> > &data)
 		if(fields.size() == 0) {
 			return;
 		}
-		TGLAssert(fields.size() == width, "Bad table width (%d instead %d) when parsing int table", fields.size(), width);
+		TGLAssert((int)fields.size() == width, "Bad table width (%d instead %d) when parsing int table", fields.size(), width);
 		data.resize(row + 1, vector<int>(width));
 		vector<int>::iterator dt = data[row].begin();
 		vector<string>::const_iterator inp = fields.begin();
 		while(inp != fields.end()) {
 			char *fin;
 			*dt = strtol((*inp).c_str(), &fin, 0);
-			TGLAssert((fin - (*inp).c_str()) == inp->size(), "Cannot parse int at row %d col %d", row, inp-fields.begin());
+			TGLAssert((fin - (*inp).c_str()) == (int)inp->size(), "Cannot parse int at row %d col %d", row, inp-fields.begin());
 			dt++;
 			inp++;
 		}
@@ -314,14 +314,14 @@ void read_float_table(istream &in, int width, vector<vector<float> > &data)
 		if(fields.size() == 0) {
 			return;
 		}
-		TGLAssert(fields.size() == width, "Bad table width (%d instead %d) when parsing float table", fields.size(), width);
+		TGLAssert((int)fields.size() == width, "Bad table width (%d instead %d) when parsing float table", fields.size(), width);
 		data.resize(row + 1, vector<float>(width));
 		vector<float>::iterator dt = data[row].begin();
 		vector<string>::const_iterator inp = fields.begin();
 		while(inp != fields.end()) {
 			char *fin;
 			*dt = strtof((*inp).c_str(), &fin);
-			TGLAssert((fin - (*inp).c_str()) == inp->size(), "Cannot parse float at row %d col %d", row, inp-fields.begin());
+			TGLAssert((fin - (*inp).c_str()) == (int)inp->size(), "Cannot parse float at row %d col %d", row, inp-fields.begin());
 			dt++;
 			inp++;
 		}
@@ -337,12 +337,11 @@ void read_string_table(istream &in, int width, vector<vector<string> > &data){
 		if(fields.size() == 0) {
 			return;
 		}
-		TGLAssert(fields.size() == width, "Bad table width (%d instead %d) when parsing string table", fields.size(), width);
+		TGLAssert((int)fields.size() == width, "Bad table width (%d instead %d) when parsing string table", fields.size(), width);
 		data.resize(row + 1, vector<string>(width));
 		vector<string>::iterator dt = data[row].begin();
 		vector<string>::const_iterator inp = fields.begin();
 		while(inp != fields.end()) {
-			char *fin;
 			*dt = *inp;
 			dt++;
 			inp++;
@@ -369,7 +368,7 @@ void read_float_table_with_rowname(istream &in, vector<vector<float> > &data, ve
 		if(width == -1) {
 			width = fields.size() - 1;
 		}
-		TGLAssert(fields.size() == width + with_header ? 1 : 0, "Bad table width (%d instead %d) at row %d of float table", fields.size(), width, row);
+		TGLAssert((int)fields.size() == width + with_header ? 1 : 0, "Bad table width (%d instead %d) at row %d of float table", fields.size(), width, row);
 		data.resize(row + 1);
 		data[row].resize(width);
 		vector<float>::iterator dt = data[row].begin();
@@ -381,7 +380,7 @@ void read_float_table_with_rowname(istream &in, vector<vector<float> > &data, ve
 				*dt = na_value;
 			} else {
     			*dt = strtof((*inp).c_str(), &fin);
-    			TGLAssert((fin - (*inp).c_str()) == inp->size(), "Cannot parse float at row %d col %d", fields.size(), inp-fields.begin());
+    			TGLAssert((fin - (*inp).c_str()) == (int)inp->size(), "Cannot parse float at row %d col %d", fields.size(), inp-fields.begin());
 			}
     		dt++;
 			inp++;

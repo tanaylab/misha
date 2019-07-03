@@ -44,9 +44,9 @@ public:
 
 private:
 	std::vector<double> m_breaks;
-	double              m_binsize;  // 0 if binsize is not the same for all the bins
-	bool                m_include_lowest;
-    bool                m_right;
+	double              m_binsize{0};  // 0 if binsize is not the same for all the bins
+	bool                m_include_lowest{false};
+    bool                m_right{true};
 };
 
 

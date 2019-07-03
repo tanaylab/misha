@@ -638,7 +638,7 @@ void RdbInitializer::vdebug_print(const char *fmt, ...)
 	printf("%s", buf);
 }
 
-void rdb::check_interrupt() throw (TGLException)
+void rdb::check_interrupt()
 {
 	if (RdbInitializer::s_sigint_fired)
 		TGLError("Command interrupted!");
