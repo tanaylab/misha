@@ -227,83 +227,83 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 		SEXP answer;
 		SEXP answer_col_names;
 		rprotect(answer = RSaneAllocVector(VECSXP, NUM_INTERVS_SETS));
-		setAttrib(answer, R_NamesSymbol, (answer_col_names = RSaneAllocVector(STRSXP, NUM_INTERVS_SETS)));
+        rprotect(answer_col_names = RSaneAllocVector(STRSXP, NUM_INTERVS_SETS));
 
 		for (int iintervs_set = 0; iintervs_set < NUM_INTERVS_SETS; ++iintervs_set) {
 			GIntervals &intervs = *intervs_sets[iintervs_set];
 
-			if (intervs.empty()) {
-				SET_VECTOR_ELT(answer, iintervs_set, R_NilValue);
-				continue;
-			}
+            if (intervs.empty()) {
+                SET_VECTOR_ELT(answer, iintervs_set, R_NilValue);
+                continue;
+            }
 
-			intervs.sort();
+            intervs.sort();
 
 			// determine the number of intervals after unification (but do not unify them)
 			int intervs_size = 1;
 			GInterval last_interv = intervs.front();
 
-			for (GIntervals::const_iterator iinterv = intervs.begin() + 1; iinterv < intervs.end(); ++iinterv) {
-				if (last_interv.chromid != iinterv->chromid || last_interv.end <= iinterv->start) {
-					intervs_size++;
-					last_interv = *iinterv;
-				} else if (last_interv.end < iinterv->end)
-					last_interv.end = iinterv->end;
-			}
+            for (GIntervals::const_iterator iinterv = intervs.begin() + 1; iinterv < intervs.end(); ++iinterv) {
+                if (last_interv.chromid != iinterv->chromid || last_interv.end <= iinterv->start) {
+                    intervs_size++;
+                    last_interv = *iinterv;
+                } else if (last_interv.end < iinterv->end)
+                    last_interv.end = iinterv->end;
+            }
 
 			// add the intervals to the answer
 			unsigned num_chroms = iu.get_chromkey().get_num_chroms();
-			SEXP rintervs;
-			SEXP chroms, chroms_idx, starts, ends, strands;
-			SEXP row_names;
-			SEXP col_names;
+            SEXP rintervs;
+            SEXP chroms, chroms_idx, starts, ends, strands;
+            SEXP row_names;
+            SEXP col_names;
             vector<SEXP> rannots(num_annots);
 
-			rprotect(rintervs = RSaneAllocVector(VECSXP, GInterval::NUM_COLS + num_annots + 1));
+            rprotect(rintervs = RSaneAllocVector(VECSXP, GInterval::NUM_COLS + num_annots + 1));
             rprotect(chroms_idx = RSaneAllocVector(INTSXP, intervs_size));
             rprotect(starts = RSaneAllocVector(REALSXP, intervs_size));
             rprotect(ends = RSaneAllocVector(REALSXP, intervs_size));
             rprotect(strands = RSaneAllocVector(REALSXP, intervs_size));
 
-            for (int iannot = 0; iannot < num_annots; ++iannot) 
-                rannots[iannot] = RSaneAllocVector(STRSXP, intervs_size);
+            for (int iannot = 0; iannot < num_annots; ++iannot)
+                rprotect(rannots[iannot] = RSaneAllocVector(STRSXP, intervs_size));
 
             rprotect(chroms = RSaneAllocVector(STRSXP, num_chroms));
             rprotect(col_names = RSaneAllocVector(STRSXP, GInterval::NUM_COLS + num_annots + 1));
             rprotect(row_names = RSaneAllocVector(INTSXP, intervs_size));
 
-			intervs_size = 0;
+            intervs_size = 0;
 			last_interv = intervs.front();
 			GIntervals::const_iterator first_overlap = intervs.begin();
 			vector< set<string> > annots_set(num_annots); // used to eliminate identical values in overlapping intervals
 
 			for (int iannot = 0; iannot < num_annots; ++iannot) {
-				if (first_overlap->udata) 
-					annots_set[iannot].insert((*(const Annots *)first_overlap->udata)[iannot]);
-			}
+                if (first_overlap->udata && !(*(const Annots *)first_overlap->udata)[iannot].empty())
+                    annots_set[iannot].insert((*(const Annots *)first_overlap->udata)[iannot]);
+            }
 
 			for (GIntervals::const_iterator iinterv = intervs.begin() + 1; ; ++iinterv) {
 				if (iinterv >= intervs.end() || last_interv.chromid != iinterv->chromid || last_interv.end <= iinterv->start) {
-					INTEGER(chroms_idx)[intervs_size] = last_interv.chromid + 1;
-					REAL(starts)[intervs_size] = last_interv.start;
-					REAL(ends)[intervs_size] = last_interv.end;
-					REAL(strands)[intervs_size] = last_interv.strand;
-					INTEGER(row_names)[intervs_size] = intervs_size + 1;
+                    INTEGER(chroms_idx)[intervs_size] = last_interv.chromid + 1;
+                    REAL(starts)[intervs_size] = last_interv.start;
+                    REAL(ends)[intervs_size] = last_interv.end;
+                    REAL(strands)[intervs_size] = last_interv.strand;
+                    INTEGER(row_names)[intervs_size] = intervs_size + 1;
 
 					for (int iannot = 0; iannot < num_annots; ++iannot) {
 						set<string> &annots = annots_set[iannot];
 						string annot;
 
-						for (set<string>::const_iterator itr = annots.begin(); itr != annots.end(); ++itr) {
-							if (itr == annots.begin()) 
-								annot = *itr;
-							else {
-								annot += ";";
-								annot += *itr;
-							}
-						}
+                        for (set<string>::const_iterator itr = annots.begin(); itr != annots.end(); ++itr) {
+                            if (itr == annots.begin())
+                                annot = *itr;
+                            else {
+                                annot += ";";
+                                annot += *itr;
+                            }
+                        }
 
-						SET_STRING_ELT(rannots[iannot], intervs_size, mkChar(annot.c_str()));
+                        SET_STRING_ELT(rannots[iannot], intervs_size, mkChar(annot.c_str()));
 					}
 
 					intervs_size++;
@@ -311,47 +311,47 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 					if (iinterv >= intervs.end()) 
 						break;
 
-					last_interv = *iinterv;
-					first_overlap = iinterv;
+                    last_interv = *iinterv;
+                    first_overlap = iinterv;
 
-					for (int iannot = 0; iannot < num_annots; ++iannot) {
-						set<string> &annots = annots_set[iannot];
-						annots.clear();
-						if (iinterv->udata) 
-							annots.insert((*(const Annots *)iinterv->udata)[iannot]);
-					}
+                    for (int iannot = 0; iannot < num_annots; ++iannot) {
+                        set<string> &annots = annots_set[iannot];
+                        annots.clear();
+                        if (iinterv->udata && !(*(const Annots *)iinterv->udata)[iannot].empty())
+                            annots.insert((*(const Annots *)iinterv->udata)[iannot]);
+                    }
 				} else {
-					if (last_interv.strand != iinterv->strand)
-						last_interv.strand = 0;
+                    if (last_interv.strand != iinterv->strand)
+                        last_interv.strand = 0;
 
-					if (last_interv.end < iinterv->end)
-						last_interv.end = iinterv->end;
+                    if (last_interv.end < iinterv->end)
+                        last_interv.end = iinterv->end;
 
-					for (int iannot = 0; iannot < num_annots; ++iannot) {
-						if (iinterv->udata) 
-							annots_set[iannot].insert((*(const Annots *)iinterv->udata)[iannot]);
-					}
+                    for (int iannot = 0; iannot < num_annots; ++iannot) {
+                        if (iinterv->udata && !(*(const Annots *)iinterv->udata)[iannot].empty())
+                            annots_set[iannot].insert((*(const Annots *)iinterv->udata)[iannot]);
+                    }
 				}
 			}
 
-			for (unsigned id = 0; id < (unsigned)num_chroms; ++id)
-				SET_STRING_ELT(chroms, id, mkChar(iu.id2chrom(id).c_str()));
+            for (unsigned id = 0; id < (unsigned)num_chroms; ++id)
+                SET_STRING_ELT(chroms, id, mkChar(iu.id2chrom(id).c_str()));
 
-			for (int i = 0; i < GInterval::NUM_COLS; i++)
-				SET_STRING_ELT(col_names, i, mkChar(GInterval::COL_NAMES[i]));
+            for (int i = 0; i < GInterval::NUM_COLS; i++)
+                SET_STRING_ELT(col_names, i, mkChar(GInterval::COL_NAMES[i]));
 
-			SET_STRING_ELT(col_names, GInterval::NUM_COLS, mkChar("strand"));
+            SET_STRING_ELT(col_names, GInterval::NUM_COLS, mkChar("strand"));
 
-			for (int i = 0; i < num_annots; ++i) 
-				SET_STRING_ELT(col_names, i + GInterval::NUM_COLS + 1, STRING_ELT(_annots_names, i));
+            for (int i = 0; i < num_annots; ++i)
+                SET_STRING_ELT(col_names, i + GInterval::NUM_COLS + 1, STRING_ELT(_annots_names, i));
 
-			SET_STRING_ELT(answer_col_names, iintervs_set, mkChar(intervs_sets_names[iintervs_set]));
+            SET_STRING_ELT(answer_col_names, iintervs_set, mkChar(intervs_sets_names[iintervs_set]));
 
             SET_VECTOR_ELT(rintervs, GInterval::CHROM, chroms_idx);
             SET_VECTOR_ELT(rintervs, GInterval::START, starts);
             SET_VECTOR_ELT(rintervs, GInterval::END, ends);
             SET_VECTOR_ELT(rintervs, GInterval::NUM_COLS, strands);
-            for (int iannot = 0; iannot < num_annots; ++iannot) 
+            for (int iannot = 0; iannot < num_annots; ++iannot)
                 SET_VECTOR_ELT(rintervs, GInterval::NUM_COLS + 1 + iannot, rannots[iannot]);
 
             setAttrib(chroms_idx, R_LevelsSymbol, chroms);
@@ -363,6 +363,7 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 
             SET_VECTOR_ELT(answer, iintervs_set, rintervs);
         }
+        setAttrib(answer, R_NamesSymbol, answer_col_names);
 
 		return answer;
 	} catch (TGLException &e) {
