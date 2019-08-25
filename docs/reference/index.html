@@ -75,6 +75,13 @@
 <li>
   <a href="../reference/index.html">Reference</a>
 </li>
+<li>
+  <a href="../articles/manual.pdf">
+    <span class="fa fa-road"></span>
+     
+    User Manual
+  </a>
+</li>
       </ul>
       
       <ul class="nav navbar-nav navbar-right">
@@ -105,335 +112,11 @@
     <tbody>
       <tr>
         <th colspan="2">
-          <h2 id="section-all-functions" class="hasAnchor"><a href="#section-all-functions" class="anchor"></a>All functions</h2>
-          <p class="section-desc"></p>
+          <h2 id="section-track-functions" class="hasAnchor"><a href="#section-track-functions" class="anchor"></a>Track functions</h2>
+          <p class="section-desc"><p>Functions to manipulate and create tracks</p></p>
         </th>
       </tr>
       <tr>
-        
-        <td>
-          <p><code><a href="gbins.quantiles.html">gbins.quantiles</a></code> </p>
-        </td>
-        <td><p>Calculates quantiles of a track expression for bins</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gbins.summary.html">gbins.summary</a></code> </p>
-        </td>
-        <td><p>Calculates summary statistics of a track expression for bins</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gcis_decay.html">gcis_decay()</a></code> </p>
-        </td>
-        <td><p>Calculates distribution of contact distances</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gcluster.run.html">gcluster.run()</a></code> </p>
-        </td>
-        <td><p>Runs R commands on a cluster</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gcompute_strands_autocorr.html">gcompute_strands_autocorr()</a></code> </p>
-        </td>
-        <td><p>Computes auto-correlation between the strands for a file of mapped sequences</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdb.create.html">gdb.create()</a></code> </p>
-        </td>
-        <td><p>Creates a new Genomic Database</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdb.get_readonly_attrs.html">gdb.get_readonly_attrs()</a></code> </p>
-        </td>
-        <td><p>Returns a list of read-only track attributes</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdb.init.html">gdb.init()</a></code> <code><a href="gdb.init.html">gdb.init_examples()</a></code> </p>
-        </td>
-        <td><p>Initializes connection with Genomic Database</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdb.reload.html">gdb.reload()</a></code> </p>
-        </td>
-        <td><p>Reloads database from the disk</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdb.set_readonly_attrs.html">gdb.set_readonly_attrs()</a></code> </p>
-        </td>
-        <td><p>Sets read-only track attributes</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdir.cd.html">gdir.cd()</a></code> </p>
-        </td>
-        <td><p>Changes current working directory in Genomic Database</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdir.create.html">gdir.create()</a></code> </p>
-        </td>
-        <td><p>Creates a new directory in Genomic Database</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdir.cwd.html">gdir.cwd()</a></code> </p>
-        </td>
-        <td><p>Returns the current working directory in Genomic Database</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdir.rm.html">gdir.rm()</a></code> </p>
-        </td>
-        <td><p>Deletes a directory from Genomic Database</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gdist.html">gdist</a></code> </p>
-        </td>
-        <td><p>Calculates distribution of track expressions</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gextract.html">gextract</a></code> </p>
-        </td>
-        <td><p>Returns evaluated track expression</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.2d.html">gintervals.2d()</a></code> </p>
-        </td>
-        <td><p>Creates a set of 2D intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.2d.all.html">gintervals.2d.all()</a></code> </p>
-        </td>
-        <td><p>Returns 2D intervals that cover the whole genome</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.2d.band_intersect.html">gintervals.2d.band_intersect()</a></code> </p>
-        </td>
-        <td><p>Intersects two-dimenstional intervals with a band</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.html">gintervals()</a></code> </p>
-        </td>
-        <td><p>Creates a set of 1D intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.all.html">gintervals.all()</a></code> </p>
-        </td>
-        <td><p>Returns 1D intervals that cover the whole genome</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.canonic.html">gintervals.canonic()</a></code> </p>
-        </td>
-        <td><p>Converts intervals to canonic form</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.chrom_sizes.html">gintervals.chrom_sizes()</a></code> </p>
-        </td>
-        <td><p>Returns number of intervals per chromosome</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.diff.html">gintervals.diff()</a></code> </p>
-        </td>
-        <td><p>Calculates difference of two intervals sets</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.exists.html">gintervals.exists()</a></code> </p>
-        </td>
-        <td><p>Tests for a named intervals set existence</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.force_range.html">gintervals.force_range()</a></code> </p>
-        </td>
-        <td><p>Limits intervals to chromosomal range</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.import_genes.html">gintervals.import_genes()</a></code> </p>
-        </td>
-        <td><p>Imports genes and annotations from files</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.intersect.html">gintervals.intersect()</a></code> </p>
-        </td>
-        <td><p>Calculates an intersection of two sets of intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.is.bigset.html">gintervals.is.bigset()</a></code> </p>
-        </td>
-        <td><p>Tests for big intervals set</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.liftover.html">gintervals.liftover()</a></code> </p>
-        </td>
-        <td><p>Converts intervals from another assembly</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.load.html">gintervals.load()</a></code> </p>
-        </td>
-        <td><p>Loads a named intervals set</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.load_chain.html">gintervals.load_chain()</a></code> </p>
-        </td>
-        <td><p>Loads assembly conversion table from a chain file</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.ls.html">gintervals.ls()</a></code> </p>
-        </td>
-        <td><p>Returns a list of named intervals sets</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.mapply.html">gintervals.mapply</a></code> </p>
-        </td>
-        <td><p>Applies a function to values of track expressions</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.neighbors.html">gintervals.neighbors()</a></code> </p>
-        </td>
-        <td><p>Finds neighbors between two sets of intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.quantiles.html">gintervals.quantiles()</a></code> </p>
-        </td>
-        <td><p>Calculates quantiles of a track expression for intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.rbind.html">gintervals.rbind</a></code> </p>
-        </td>
-        <td><p>Combines several sets of intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.rm.html">gintervals.rm()</a></code> </p>
-        </td>
-        <td><p>Deletes a named intervals set</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.save.html">gintervals.save()</a></code> </p>
-        </td>
-        <td><p>Creates a named intervals set</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.summary.html">gintervals.summary()</a></code> </p>
-        </td>
-        <td><p>Calculates summary statistics of track expression for intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.union.html">gintervals.union()</a></code> </p>
-        </td>
-        <td><p>Calculates a union of two sets of intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gintervals.update.html">gintervals.update()</a></code> </p>
-        </td>
-        <td><p>Updates a named intervals set</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="giterator.cartesian_grid.html">giterator.cartesian_grid()</a></code> </p>
-        </td>
-        <td><p>Creates a cartesian-grid iterator</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="giterator.intervals.html">giterator.intervals()</a></code> </p>
-        </td>
-        <td><p>Returns iterator intervals</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="glookup.html">glookup</a></code> </p>
-        </td>
-        <td><p>Returns values from a lookup table based on track expression</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gpartition.html">gpartition()</a></code> </p>
-        </td>
-        <td><p>Partitions the values of track expression</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gquantiles.html">gquantiles()</a></code> </p>
-        </td>
-        <td><p>Calculates quantiles of a track expression</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gsample.html">gsample()</a></code> </p>
-        </td>
-        <td><p>Returns samples from the values of track expression</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gscreen.html">gscreen()</a></code> </p>
-        </td>
-        <td><p>Finds intervals that match track expression</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gsegment.html">gsegment()</a></code> </p>
-        </td>
-        <td><p>Divides track expression into segments</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gseq.extract.html">gseq.extract()</a></code> </p>
-        </td>
-        <td><p>Returns DNA sequences</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gset_input_mode.html">gset_input_mode()</a></code> </p>
-        </td>
-        <td><p>Sets input mode and auto-completion for track expressions, track names, virtual tracks and interval sets</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gsummary.html">gsummary()</a></code> </p>
-        </td>
-        <td><p>Calculates summary statistics of track expression</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="gtraceback.html">gtraceback()</a></code> </p>
-        </td>
-        <td><p>Prints call stack of the last uncaught error</p></td>
-      </tr><tr>
         
         <td>
           <p><code><a href="gtrack.2d.create.html">gtrack.2d.create()</a></code> </p>
@@ -613,7 +296,15 @@
           <p><code><a href="gtrack.var.set.html">gtrack.var.set()</a></code> </p>
         </td>
         <td><p>Assigns value to a track variable</p></td>
-      </tr><tr>
+      </tr>
+    </tbody><tbody>
+      <tr>
+        <th colspan="2">
+          <h2 id="section-virtual-track-functions" class="hasAnchor"><a href="#section-virtual-track-functions" class="anchor"></a>Virtual track functions</h2>
+          <p class="section-desc"><p>Functions to manipulate and create virtual tracks</p></p>
+        </th>
+      </tr>
+      <tr>
         
         <td>
           <p><code><a href="gvtrack.array.slice.html">gvtrack.array.slice()</a></code> </p>
@@ -634,15 +325,15 @@
       </tr><tr>
         
         <td>
-          <p><code><a href="gvtrack.iterator.2d.html">gvtrack.iterator.2d()</a></code> </p>
-        </td>
-        <td><p>Defines modification rules for a two-dimensional iterator in a virtual track</p></td>
-      </tr><tr>
-        
-        <td>
           <p><code><a href="gvtrack.iterator.html">gvtrack.iterator()</a></code> </p>
         </td>
         <td><p>Defines modification rules for a one-dimensional iterator in a virtual track</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gvtrack.iterator.2d.html">gvtrack.iterator.2d()</a></code> </p>
+        </td>
+        <td><p>Defines modification rules for a two-dimensional iterator in a virtual track</p></td>
       </tr><tr>
         
         <td>
@@ -655,6 +346,368 @@
           <p><code><a href="gvtrack.rm.html">gvtrack.rm()</a></code> </p>
         </td>
         <td><p>Deletes a virtual track</p></td>
+      </tr>
+    </tbody><tbody>
+      <tr>
+        <th colspan="2">
+          <h2 id="section-intervals-functions" class="hasAnchor"><a href="#section-intervals-functions" class="anchor"></a>Intervals functions</h2>
+          <p class="section-desc"><p>Functions to manipulate and create intervals</p></p>
+        </th>
+      </tr>
+      <tr>
+        
+        <td>
+          <p><code><a href="gintervals.html">gintervals()</a></code> </p>
+        </td>
+        <td><p>Creates a set of 1D intervals</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.2d.html">gintervals.2d()</a></code> </p>
+        </td>
+        <td><p>Creates a set of 2D intervals</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.2d.all.html">gintervals.2d.all()</a></code> </p>
+        </td>
+        <td><p>Returns 2D intervals that cover the whole genome</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.2d.band_intersect.html">gintervals.2d.band_intersect()</a></code> </p>
+        </td>
+        <td><p>Intersects two-dimenstional intervals with a band</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.all.html">gintervals.all()</a></code> </p>
+        </td>
+        <td><p>Returns 1D intervals that cover the whole genome</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.canonic.html">gintervals.canonic()</a></code> </p>
+        </td>
+        <td><p>Converts intervals to canonic form</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.chrom_sizes.html">gintervals.chrom_sizes()</a></code> </p>
+        </td>
+        <td><p>Returns number of intervals per chromosome</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.diff.html">gintervals.diff()</a></code> </p>
+        </td>
+        <td><p>Calculates difference of two intervals sets</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.exists.html">gintervals.exists()</a></code> </p>
+        </td>
+        <td><p>Tests for a named intervals set existence</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.force_range.html">gintervals.force_range()</a></code> </p>
+        </td>
+        <td><p>Limits intervals to chromosomal range</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.import_genes.html">gintervals.import_genes()</a></code> </p>
+        </td>
+        <td><p>Imports genes and annotations from files</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.intersect.html">gintervals.intersect()</a></code> </p>
+        </td>
+        <td><p>Calculates an intersection of two sets of intervals</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.is.bigset.html">gintervals.is.bigset()</a></code> </p>
+        </td>
+        <td><p>Tests for big intervals set</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.liftover.html">gintervals.liftover()</a></code> </p>
+        </td>
+        <td><p>Converts intervals from another assembly</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.load.html">gintervals.load()</a></code> </p>
+        </td>
+        <td><p>Loads a named intervals set</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.load_chain.html">gintervals.load_chain()</a></code> </p>
+        </td>
+        <td><p>Loads assembly conversion table from a chain file</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.ls.html">gintervals.ls()</a></code> </p>
+        </td>
+        <td><p>Returns a list of named intervals sets</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.mapply.html">gintervals.mapply</a></code> </p>
+        </td>
+        <td><p>Applies a function to values of track expressions</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.neighbors.html">gintervals.neighbors()</a></code> </p>
+        </td>
+        <td><p>Finds neighbors between two sets of intervals</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.quantiles.html">gintervals.quantiles()</a></code> </p>
+        </td>
+        <td><p>Calculates quantiles of a track expression for intervals</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.rbind.html">gintervals.rbind</a></code> </p>
+        </td>
+        <td><p>Combines several sets of intervals</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.rm.html">gintervals.rm()</a></code> </p>
+        </td>
+        <td><p>Deletes a named intervals set</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.save.html">gintervals.save()</a></code> </p>
+        </td>
+        <td><p>Creates a named intervals set</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.summary.html">gintervals.summary()</a></code> </p>
+        </td>
+        <td><p>Calculates summary statistics of track expression for intervals</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.union.html">gintervals.union()</a></code> </p>
+        </td>
+        <td><p>Calculates a union of two sets of intervals</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gintervals.update.html">gintervals.update()</a></code> </p>
+        </td>
+        <td><p>Updates a named intervals set</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="giterator.cartesian_grid.html">giterator.cartesian_grid()</a></code> </p>
+        </td>
+        <td><p>Creates a cartesian-grid iterator</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="giterator.intervals.html">giterator.intervals()</a></code> </p>
+        </td>
+        <td><p>Returns iterator intervals</p></td>
+      </tr>
+    </tbody><tbody>
+      <tr>
+        <th colspan="2">
+          <h2 id="section-data-manipulation-functions" class="hasAnchor"><a href="#section-data-manipulation-functions" class="anchor"></a>Data manipulation functions</h2>
+          <p class="section-desc"><p>Data manipulation functions</p></p>
+        </th>
+      </tr>
+      <tr>
+        
+        <td>
+          <p><code><a href="gdist.html">gdist</a></code> </p>
+        </td>
+        <td><p>Calculates distribution of track expressions</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gbins.quantiles.html">gbins.quantiles</a></code> </p>
+        </td>
+        <td><p>Calculates quantiles of a track expression for bins</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gbins.summary.html">gbins.summary</a></code> </p>
+        </td>
+        <td><p>Calculates summary statistics of a track expression for bins</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gcis_decay.html">gcis_decay()</a></code> </p>
+        </td>
+        <td><p>Calculates distribution of contact distances</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gcompute_strands_autocorr.html">gcompute_strands_autocorr()</a></code> </p>
+        </td>
+        <td><p>Computes auto-correlation between the strands for a file of mapped sequences</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gextract.html">gextract</a></code> </p>
+        </td>
+        <td><p>Returns evaluated track expression</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="glookup.html">glookup</a></code> </p>
+        </td>
+        <td><p>Returns values from a lookup table based on track expression</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gpartition.html">gpartition()</a></code> </p>
+        </td>
+        <td><p>Partitions the values of track expression</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gquantiles.html">gquantiles()</a></code> </p>
+        </td>
+        <td><p>Calculates quantiles of a track expression</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gsample.html">gsample()</a></code> </p>
+        </td>
+        <td><p>Returns samples from the values of track expression</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gscreen.html">gscreen()</a></code> </p>
+        </td>
+        <td><p>Finds intervals that match track expression</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gsegment.html">gsegment()</a></code> </p>
+        </td>
+        <td><p>Divides track expression into segments</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gseq.extract.html">gseq.extract()</a></code> </p>
+        </td>
+        <td><p>Returns DNA sequences</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gsummary.html">gsummary()</a></code> </p>
+        </td>
+        <td><p>Calculates summary statistics of track expression</p></td>
+      </tr>
+    </tbody><tbody>
+      <tr>
+        <th colspan="2">
+          <h2 id="section-database-functions" class="hasAnchor"><a href="#section-database-functions" class="anchor"></a>Database functions</h2>
+          <p class="section-desc"><p>Database functions</p></p>
+        </th>
+      </tr>
+      <tr>
+        
+        <td>
+          <p><code><a href="gdb.create.html">gdb.create()</a></code> </p>
+        </td>
+        <td><p>Creates a new Genomic Database</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gdb.get_readonly_attrs.html">gdb.get_readonly_attrs()</a></code> </p>
+        </td>
+        <td><p>Returns a list of read-only track attributes</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gdb.init.html">gdb.init()</a></code> <code><a href="gdb.init.html">gdb.init_examples()</a></code> </p>
+        </td>
+        <td><p>Initializes connection with Genomic Database</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gdb.reload.html">gdb.reload()</a></code> </p>
+        </td>
+        <td><p>Reloads database from the disk</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gdb.set_readonly_attrs.html">gdb.set_readonly_attrs()</a></code> </p>
+        </td>
+        <td><p>Sets read-only track attributes</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gdir.cd.html">gdir.cd()</a></code> </p>
+        </td>
+        <td><p>Changes current working directory in Genomic Database</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gdir.create.html">gdir.create()</a></code> </p>
+        </td>
+        <td><p>Creates a new directory in Genomic Database</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gdir.cwd.html">gdir.cwd()</a></code> </p>
+        </td>
+        <td><p>Returns the current working directory in Genomic Database</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gdir.rm.html">gdir.rm()</a></code> </p>
+        </td>
+        <td><p>Deletes a directory from Genomic Database</p></td>
+      </tr>
+    </tbody><tbody>
+      <tr>
+        <th colspan="2">
+          <h2 id="section-other-functions" class="hasAnchor"><a href="#section-other-functions" class="anchor"></a>Other functions</h2>
+          <p class="section-desc"><p>Other</p></p>
+        </th>
+      </tr>
+      <tr>
+        
+        <td>
+          <p><code><a href="misha-package.html">misha-package</a></code> </p>
+        </td>
+        <td><p>Toolkit for analysis of genomic data</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gcluster.run.html">gcluster.run()</a></code> </p>
+        </td>
+        <td><p>Runs R commands on a cluster</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gset_input_mode.html">gset_input_mode()</a></code> </p>
+        </td>
+        <td><p>Sets input mode and auto-completion for track expressions, track names, virtual tracks and interval sets</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="gtraceback.html">gtraceback()</a></code> </p>
+        </td>
+        <td><p>Prints call stack of the last uncaught error</p></td>
       </tr><tr>
         
         <td>
@@ -667,12 +720,6 @@
           <p><code><a href="gwilcox.html">gwilcox()</a></code> </p>
         </td>
         <td><p>Calculates Wilcoxon test on sliding windows over track expression</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="misha-package.html">misha-package</a></code> </p>
-        </td>
-        <td><p>Toolkit for analysis of genomic data</p></td>
       </tr>
     </tbody>
     </table>
@@ -681,7 +728,12 @@
   <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
     <h2>Contents</h2>
     <ul class="nav nav-pills nav-stacked">
-      <li><a href="#section-all-functions">All functions</a></li>
+      <li><a href="#section-track-functions">Track functions</a></li>
+      <li><a href="#section-virtual-track-functions">Virtual track functions</a></li>
+      <li><a href="#section-intervals-functions">Intervals functions</a></li>
+      <li><a href="#section-data-manipulation-functions">Data manipulation functions</a></li>
+      <li><a href="#section-database-functions">Database functions</a></li>
+      <li><a href="#section-other-functions">Other functions</a></li>
     </ul>
   </div>
 </div>
