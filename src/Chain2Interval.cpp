@@ -223,7 +223,7 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
 			// the intervals overlap
 
 			if (iinterv1->chromid == iinterv2->chromid && iinterv1->end > iinterv2->start) {
-				// wipe the overlapping part
+				// wipe the overlapping part 
 				int64_t tgt_end1 = iinterv1->end;
 
 				// concatenate interv1
