@@ -86,7 +86,7 @@ public:
         static const char *FUNC_NAMES[NUM_FUNCS];
 
         string              var_name;
-        SEXP                rvar;
+        SEXP                rvar{R_NilValue};
         double             *var;
         Val_func            val_func;
         double              percentile;

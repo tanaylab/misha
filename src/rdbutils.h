@@ -69,6 +69,12 @@ void runprotect(vector<SEXP> &exprs);
 // Call runprotect_all if you wish to unprotect all object that are still protected
 void runprotect_all();
 
+struct SEXPCleaner {
+    SEXPCleaner(SEXP &_var) : var(&_var) {}
+    ~SEXPCleaner() { runprotect(*var); }
+    SEXP *var;
+};
+
 void get_chrom_files(const char *dirname, vector<string> &chrom_files);
 
 const char *get_groot(SEXP envir);

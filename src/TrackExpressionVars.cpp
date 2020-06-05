@@ -32,6 +32,10 @@ TrackExpressionVars::TrackExpressionVars(rdb::IntervUtils &iu) :
 
 TrackExpressionVars::~TrackExpressionVars()
 {
+	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ivar++)
+		runprotect(ivar->rvar);
+	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ivar++)
+		runprotect(ivar->rvar);
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 		delete itrack_n_imdf->track;
 }
@@ -40,23 +44,25 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 {
 	enum { TRACK, VTRACK, NUM_VAR_TYPES };
 
-	SEXP rtracknames[NUM_VAR_TYPES];
+	SEXP rtracknames[NUM_VAR_TYPES] = { R_NilValue, R_NilValue };
 	SEXP gvtracks = R_NilValue;
 	SEXP vtracks = R_NilValue;
 
 	// retrieve track names
 	rprotect(rtracknames[TRACK] = findVar(install("GTRACKS"), m_iu.get_env()));
+	SEXPCleaner rtracknames_track_cleaner(rtracknames[TRACK]);
 
 	// retrieve virtual track names (it's more complex since virtual track names are burried in a list of lists)
 	rtracknames[VTRACK] = R_NilValue;
 	rprotect(gvtracks = findVar(install("GVTRACKS"), m_iu.get_env()));
+	SEXPCleaner gvtracks_cleaner(gvtracks);
 
 	if (!isNull(gvtracks) && !isSymbol(gvtracks)) { 
 		SEXP gwds = getAttrib(gvtracks, R_NamesSymbol);
 
 		if (!isVector(gvtracks) || (length(gvtracks) && !isString(gwds)) || length(gwds) != length(gvtracks))
 			verror("Invalid format of GVTRACKS variable.\n"
-				   "To continue working with virtual tracks please remove this variable from the environment.");
+				"To continue working with virtual tracks please remove this variable from the environment.");
 
 		const char *gwd = get_gwd(m_iu.get_env());
 
@@ -67,7 +73,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 				if (!isVector(vtracks) || (length(vtracks) && !isString(vtracknames)) || length(vtracknames) != length(vtracks))
 					verror("Invalid format of GVTRACKS variable.\n"
-				           "To continue working with virtual tracks please remove this variable from the environment.");
+						"To continue working with virtual tracks please remove this variable from the environment.");
 
 				rtracknames[VTRACK] = vtracknames;
 			}
@@ -629,6 +635,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 			}
 
 			rprotect(val = RSaneUnserialize(pv_fname.c_str()));
+			SEXPCleaner val_cleaner(val);
 			SEXP breaks = getAttrib(val, install("breaks"));
 
 			if (breaks == R_NilValue || !isReal(breaks) || length(breaks) != length(val))

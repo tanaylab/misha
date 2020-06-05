@@ -172,6 +172,8 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 	for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         if (!m_expr_vars.var(m_track_exprs[iexpr].c_str())) {   // track expression is not a virtual track
     		SEXP expr;
+			SEXPCleaner expr_cleaner(expr);
+
     		rprotect(expr = RSaneAllocVector(STRSXP, 1));
     		SET_STRING_ELT(expr, 0, mkChar(m_track_exprs[iexpr].c_str()));
 
@@ -182,7 +184,6 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
     		if (status != PARSE_OK)
     			verror("R parsing of expression \"%s\" failed", m_track_exprs[iexpr].c_str());
     		m_eval_exprs[iexpr] = VECTOR_ELT(parsed_expr, 0);
-    		runprotect(expr);
         }
 	}
 }
@@ -556,6 +557,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 		if (find(track_names.begin(), track_names.end(), iter_val) == track_names.end()) {
 			if (isString(giterator)) {
 				SEXP all_track_names;
+				SEXPCleaner all_track_names_cleaner(all_track_names);
 
 				rprotect(all_track_names = findVar(install("GTRACKS"), m_iu.get_env()));
 				if (isString(all_track_names)) {
