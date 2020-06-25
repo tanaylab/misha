@@ -93,7 +93,7 @@ GenomeTrackSlidingWilcox::GenomeTrackSlidingWilcox(bool one_tailed, What2find wh
 		m_winsize[i] = 2 * m_winsize_aside[i] + 1;
 		if (m_winsize[i] < IncrementalWilcox::MIN_RELIABLE_WINSIZE)
 			verror("Window of size %d containes too few samples (%d) to run Wilcoxon test", winsize_in_coord[i], m_winsize[i]);
-//Rprintf("winsize[%d] = %d\n", i, m_winsize[i]);
+//REprintf("winsize[%d] = %d\n", i, m_winsize[i]);
 	}
 
 	m_queue.resize(m_winsize[LARGE], numeric_limits<double>::quiet_NaN());
@@ -138,7 +138,7 @@ void GenomeTrackSlidingWilcox::set_next_sample(double v)
 	m_tail[SMALL] = (m_tail[SMALL] + 1) % m_winsize[LARGE];
 	m_center = (m_center + 1) % m_winsize[LARGE];
 
-//Rprintf("peak = %g, coord = %d\n", m_queue[m_center], (int)m_center_coord);
+//REprintf("peak = %g, coord = %d\n", m_queue[m_center], (int)m_center_coord);
 	m_wilcox.update(old_v[LARGE], new_v[LARGE], old_v[SMALL], new_v[SMALL]);
 	double z;
 
@@ -148,7 +148,7 @@ void GenomeTrackSlidingWilcox::set_next_sample(double v)
 		z = m_wilcox.z_lows();
 	else
 		z = m_wilcox.z();
-//Rprintf("z = %g\n", z);
+//REprintf("z = %g\n", z);
 //debug_slide(old_v, new_v);
 
 	if (std::isnan(m_queue[m_center]) || z > m_maxz) {
@@ -202,12 +202,12 @@ void GenomeTrackSlidingWilcox::debug_slide(double *old_v, double *new_v)
 		if (!std::isnan(new_v[i]))
 			q[i].push_back(new_v[i]);
 
-		Rprintf("Q[%d] =", i);
+		REprintf("Q[%d] =", i);
 		for (deque<double>::iterator iq = q[i].begin(); iq != q[i].end(); ++iq)
-			Rprintf(" %g", *iq);
-		Rprintf("\n");
+			REprintf(" %g", *iq);
+		REprintf("\n");
 	}
-	Rprintf("\n");
+	REprintf("\n");
 }
 
 

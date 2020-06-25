@@ -183,7 +183,7 @@ static bool file_exists(const char * filename)
 
 double TechnicalComputer2D::compute(const Rectangle &rectangle, const DiagonalBand *band)
 {
-//	printf("tech pcomputer called\n");
+//	fprintf(stderr, "tech pcomputer called\n");
 
 	if ( (rectangle.x1 >= rectangle.x2) || (rectangle.y1 >= rectangle.y2) )
         return 0;
@@ -252,7 +252,7 @@ double TechnicalComputer2D::compute(const Rectangle &rectangle, const DiagonalBa
         return 0;
 
     // cout << "start1=" << start1 << " end1=" << end1 << " start2=" << start2 << " end2=" << end2 << endl;
-    //printf("prior=%e\n", m_prior);
+    //fprintf(stderr, "prior=%e\n", m_prior);
 
     double result = 0;
     for (int i1 = start1; i1 < end1; i1++) {
@@ -264,7 +264,7 @@ double TechnicalComputer2D::compute(const Rectangle &rectangle, const DiagonalBa
             int f1 = (int)m_track1[mi].get_vals()[i1] - 1;
             int f2 = (int)m_track2[mi].get_vals()[i2] - 1;
             value *= m_matrix[mi][f1][f2];
-            // printf("f1=%d, f2=%d, factor=%.10f   ////", f1, f2, m_matrix[mi][f1][f2]);
+            // fprintf(stderr, "f1=%d, f2=%d, factor=%.10f   ////", f1, f2, m_matrix[mi][f1][f2]);
         }
         // cout << endl;
         result += value;

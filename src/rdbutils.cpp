@@ -465,12 +465,12 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 
             progress = progress / get_num_kids();
             if (progress < 100 && progress != last_progress)
-                Rprintf("%d%%...", progress); 
+                REprintf("%d%%...", progress); 
             else {
                 if (last_progress == -1) 
-                    Rprintf("0%%...");
+                    REprintf("0%%...");
                 else
-                    Rprintf(".");
+                    REprintf(".");
             }
             last_progress = progress;
             clock_gettime(CLOCK_REALTIME, &last_progress_time);
@@ -484,7 +484,7 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
     }
 
 	if (last_progress >= 0) 
-		Rprintf("100%%\n");
+		REprintf("100%%\n");
 }
 
 int64_t RdbInitializer::update_kids_mem_usage()
@@ -550,7 +550,7 @@ void RdbInitializer::sigint_handler(int)
 	// Normally this condition should be always true since the kid installs the default handler for SIGINT.
 	// However due to race condition the old handler might still be in use.
 	if (getpid() == s_parent_pid)
-		printf("CTL-C!\n");
+		REprintf("CTL-C!\n");
 }
 
 void RdbInitializer::sigchld_handler(int)
@@ -635,7 +635,7 @@ void RdbInitializer::vdebug_print(const char *fmt, ...)
 	va_end(ap);
 
 	SemLocker sl(s_shm_sem);
-	printf("%s", buf);
+	REprintf("%s", buf);
 }
 
 void rdb::check_interrupt()
@@ -833,7 +833,8 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 SEXP rdb::run_in_R(const char *command, SEXP envir)
 {
 	SEXP expr;
-	SEXP parsed_expr;
+	SEXP parsed_expr = R_NilValue;
+    SEXPCleaner parsed_expr_cleaner(parsed_expr);
 	ParseStatus status;
 
 	rprotect(expr = RSaneAllocVector(STRSXP, 1));

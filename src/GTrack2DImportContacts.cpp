@@ -77,7 +77,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 	int64_t start1, start2, end1, end2;
 	float val;
 
-	Rprintf("Reading input file(s)...\n");
+	REprintf("Reading input file(s)...\n");
 
 	int64_t infiles_size_sum = 0;
 	for (int ifile = 0; ifile < length(_files); ++ifile) {
@@ -191,7 +191,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 
 			write_contact(*icontact_chrom_file->second, coord1, coord2, val);
 //if ((start1 + end1) / 2 == 183256 && (start2 + end2) / 2 == 214179)
-//printf("writing %g to %s\n", val, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
+//REprintf("writing %g to %s\n", val, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 		}
 	}
 	progress.report_last();
@@ -224,7 +224,7 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 	fends_cols_total = read_header(fends_file, fends_fname, "fragment ends", FENDS_COLS, NUM_FENDS_COLS, fends_col_idx);
 
 	// read fends file
-	Rprintf("Reading fends file...\n");
+	REprintf("Reading fends file...\n");
 
 	vector<int> chromids;
 	vector<int64_t> coords;
@@ -284,7 +284,7 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 	progress.report_last();
 
 	// STEP 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
-	Rprintf("Reading contacts...\n");
+	REprintf("Reading contacts...\n");
 
 	progress.init(contacts_files_size_sum, 10000000);
 
@@ -402,7 +402,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 		for (Contact_chrom_files::iterator ifile = contact_chrom_files.begin(); ifile != contact_chrom_files.end(); ++ifile)
 			ifile->second->close();
 
-		Rprintf("Writing the track...\n");
+		REprintf("Writing the track...\n");
 		progress.init(contact_chrom_files.size(), 1);
 
 		for (Contact_chrom_files::iterator icontact_chrom_file = contact_chrom_files.begin(); icontact_chrom_file != contact_chrom_files.end(); ++icontact_chrom_file) {

@@ -86,7 +86,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 		// 3. Split the intervals of a chromosome pair to binary files - each holding contacts of a subtree. We assume that we will be able to hold in the memory the contacts of one subtree.
 		// 4. Read the contacts of a subtree and insert them to StatQuadTreeCachedSerializer.
 
-		Rprintf("Reading input file(s)...\n");
+		REprintf("Reading input file(s)...\n");
 
 		int64_t infiles_size_sum = 0;
 		for (int ifile = 0; ifile < length(_files); ++ifile) {
@@ -198,7 +198,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 		for (BinIntervalsFiles::iterator ifile = bin_intervals_files.begin(); ifile != bin_intervals_files.end(); ++ifile)
 			ifile->second->close();
 
-		Rprintf("Writing the track...\n");
+		REprintf("Writing the track...\n");
 		progress.init(bin_intervals_files.size(), 1);
 
 		for (BinIntervalsFiles::iterator ifile = bin_intervals_files.begin(); ifile != bin_intervals_files.end(); ++ifile) {

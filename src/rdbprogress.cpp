@@ -56,13 +56,13 @@ void Progress_reporter::report(uint64_t delta_steps_done)
 			int progress = m_maxsteps ? (int)(100. * m_numsteps / m_maxsteps) : 0;
 
 			if (m_last_progress_reported < 0 && !m_report_prefix.empty())
-				Rprintf("%s", m_report_prefix.c_str());
+				REprintf("%s", m_report_prefix.c_str());
 
 			if (progress != m_last_progress_reported) {
-				Rprintf("%d%%...", progress);
+				REprintf("%d%%...", progress);
 				update_progress(progress);
 			} else
-				Rprintf(".");
+				REprintf(".");
 			m_last_progress_reported = progress;
 			m_numsteps_from_last_report = 0;
 			m_last_report_clock = curclock;
@@ -75,9 +75,9 @@ void Progress_reporter::report_last()
 {
 	if (m_last_progress_reported >= 0) {
 		if (m_last_progress_reported != 100)
-			Rprintf("100%%\n");
+			REprintf("100%%\n");
 		else
-			Rprintf("\n");
+			REprintf("\n");
 	}
 	update_progress(100);
 }

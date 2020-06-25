@@ -902,39 +902,39 @@ void StatQuadTreeCached<T, Size>::debug_print_tree()
 {
 	if (!empty())
 		debug_print_tree(m_root_chunk, m_root_chunk.top_node, 0);
-	printf("Objs: %llu\n", m_num_objs);
+	fprintf(stderr, "Objs: %llu\n", m_num_objs);
 }
 
 template <class T, class Size>
 void StatQuadTreeCached<T, Size>::debug_print_tree(const Chunk &chunk, NodeBase *node_base, unsigned depth)
 {
 	Rectangle arena;
-	printf("\n%*sArena: %s\n", depth * 2, "", node_base->arena.debug_str());
-	printf("%*sIs leaf?: %d\n", (depth + 1) * 2, "", node_base->is_leaf);
-	printf("%*sArea occupied: %lld\n", (depth + 1) * 2, "", node_base->stat.occupied_area);
-	printf("%*sAvg: %g\tMin: %g\tMax: %g\n", (depth + 1) * 2, "", node_base->stat.occupied_area / (double)node_base->stat.weighted_sum, node_base->stat.min_val, node_base->stat.max_val);
+	fprintf(stderr, "\n%*sArena: %s\n", depth * 2, "", node_base->arena.debug_str());
+	fprintf(stderr, "%*sIs leaf?: %d\n", (depth + 1) * 2, "", node_base->is_leaf);
+	fprintf(stderr, "%*sArea occupied: %lld\n", (depth + 1) * 2, "", node_base->stat.occupied_area);
+	fprintf(stderr, "%*sAvg: %g\tMin: %g\tMax: %g\n", (depth + 1) * 2, "", node_base->stat.occupied_area / (double)node_base->stat.weighted_sum, node_base->stat.min_val, node_base->stat.max_val);
 
 	if (node_base->is_leaf) {
 		Leaf *leaf = (Leaf *)node_base;
 		Obj *objs = get_objs(leaf);
 
-		printf("%*sKids: %d\n", (depth + 1) * 2, "", leaf->num_objs);
+		fprintf(stderr, "%*sKids: %d\n", (depth + 1) * 2, "", leaf->num_objs);
 		for (unsigned i = 0; i < leaf->num_objs; ++i) {
-			printf("%*s%s", (depth + 2) * 2, "", objs[i].obj.debug_str());
-			printf("\n");
+			fprintf(stderr, "%*s%s", (depth + 2) * 2, "", objs[i].obj.debug_str());
+			fprintf(stderr, "\n");
 		}
 	} else {
 		Node *node = (Node *)node_base;
 		for (int iquad = 0; iquad < NUM_QUADS; ++iquad) {
 			QuadRetriever qr(this, chunk, node->kid_ptr[iquad]);
 			if (iquad == NW)
-				printf("%*sNW node\n", (depth + 1) * 2, "");
+				fprintf(stderr, "%*sNW node\n", (depth + 1) * 2, "");
 			else if (iquad == NE)
-				printf("%*sNE node\n", (depth + 1) * 2, "");
+				fprintf(stderr, "%*sNE node\n", (depth + 1) * 2, "");
 			else if (iquad == SW)
-				printf("%*sSW node\n", (depth + 1) * 2, "");
+				fprintf(stderr, "%*sSW node\n", (depth + 1) * 2, "");
 			else
-				printf("%*sSE node\n", (depth + 1) * 2, "");
+				fprintf(stderr, "%*sSE node\n", (depth + 1) * 2, "");
 			debug_print_tree(qr.chunk(), qr.quad(), depth + 1);
 		}
 	}

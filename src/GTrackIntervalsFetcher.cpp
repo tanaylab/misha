@@ -41,7 +41,7 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 	if (track_type == GenomeTrack::FIXED_BIN)
 		verror("Track %s is of type %s which cannot be used as a substitute for an intervals set", track_name, GenomeTrack::TYPE_NAMES[track_type]);
 
-	Rprintf("Preparing the track %s to be used as an intervals set...\n", track_name);
+	REprintf("Preparing the track %s to be used as an intervals set...\n", track_name);
 
 	if (track_type == GenomeTrack::SPARSE || track_type == GenomeTrack::ARRAYS) {
 		vector<GIntervalsMeta1D::ChromStat> chromstats(iu.get_chromkey().get_num_chroms());
@@ -119,5 +119,5 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		GIntervalsMeta2D::save_plain_intervals_meta(trackpath.c_str(), chromstats, iu);
 		progress.report_last();
 	}
-	Rprintf("Track %s is modified and ready to be used as an intervals set.\n", track_name);
+	REprintf("Track %s is modified and ready to be used as an intervals set.\n", track_name);
 }

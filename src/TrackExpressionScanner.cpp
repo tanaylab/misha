@@ -171,7 +171,7 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 
 	for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         if (!m_expr_vars.var(m_track_exprs[iexpr].c_str())) {   // track expression is not a virtual track
-    		SEXP expr;
+    		SEXP expr = R_NilValue;
 			SEXPCleaner expr_cleaner(expr);
 
     		rprotect(expr = RSaneAllocVector(STRSXP, 1));
@@ -251,9 +251,9 @@ bool TrackExprScanner::next()
 	// did we start reporting progress?
 	if (m_last_progress_reported >= 0) {
 		if (m_last_progress_reported != 100)
-			Rprintf("100%%\n");
+			REprintf("100%%\n");
 		else
-			Rprintf("\n");
+			REprintf("\n");
 	}
 	update_progress(100);
 
@@ -373,7 +373,7 @@ void TrackExprScanner::report_progress()
 
         if (delta > MIN_REPORT_INTERVAL) {
             if (m_last_progress_reported < 0 && m_eval_buf_limit == 1)
-                Rprintf("Warning: track expression(s) cannot be evaluated as a vector. Run-times might be slow.\n");
+                REprintf("Warning: track expression(s) cannot be evaluated as a vector. Run-times might be slow.\n");
 
             int progress;
 
@@ -387,10 +387,10 @@ void TrackExprScanner::report_progress()
             progress = max(progress, m_last_progress_reported);  // in 2D scope idx can sometimes go backward
             if (progress != 100) {
                 if (progress != m_last_progress_reported) {
-                    Rprintf("%d%%...", progress);
+                    REprintf("%d%%...", progress);
                     update_progress(progress);
                 } else
-                    Rprintf(".");
+                    REprintf(".");
                 m_last_progress_reported = progress;
             }
             m_num_evals = 0;

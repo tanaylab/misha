@@ -260,20 +260,20 @@ void SegmentFinder<T>::insert(Node *node, unsigned depth, const T &obj)
 template <class T>
 void SegmentFinder<T>::debug_print_tree(Node *node, unsigned depth) const
 {
-	printf("\n%*sArena: %s\n", depth * 2, "", node->arena.debug_str());
-	printf("%*sObjs: %ld\n", (depth + 1) * 2, "", node->objs.size());
+	fprintf(stderr, "\n%*sArena: %s\n", depth * 2, "", node->arena.debug_str());
+	fprintf(stderr, "%*sObjs: %ld\n", (depth + 1) * 2, "", node->objs.size());
 	for (typename vector<T>::const_iterator iobj = node->objs.begin(); iobj < node->objs.end(); ++iobj) {
-		printf("%*s%s", (depth + 2) * 2, "", iobj->debug_str());
-		printf("\n");
+		fprintf(stderr, "%*s%s", (depth + 2) * 2, "", iobj->debug_str());
+		fprintf(stderr, "\n");
 	}
 
 	if (node->left) {
-		printf("%*sLEFT node\n", (depth + 1) * 2, "");
+		fprintf(stderr, "%*sLEFT node\n", (depth + 1) * 2, "");
 		debug_print_tree(node->left, depth + 1);
 	}
 
 	if (node->right) {
-		printf("%*sRIGHT node\n", (depth + 1) * 2, "");
+		fprintf(stderr, "%*sRIGHT node\n", (depth + 1) * 2, "");
 		debug_print_tree(node->right, depth + 1);
 	}
 }

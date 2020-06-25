@@ -196,7 +196,7 @@ SEXP gtest_segment_finder(SEXP _envir) {
 
 		clock_t cl = clock();
 
-		printf("Generating queries\n");
+		REprintf("Generating queries\n");
 		for (int i = 0; i < num_queries; i++) {
 			start = (int64_t)(unif_rand() * maxcoord);
 			end = (int64_t)min(start + 1 + max_query_size * unif_rand(), (double)maxcoord);
@@ -206,9 +206,9 @@ SEXP gtest_segment_finder(SEXP _envir) {
 //queries.push_back(Segment(49992229, 50000329));
 //queries.push_back(Segment(49992220, 49992240));
 //queries.push_back(Segment(49999999, 50000001));
-//printf("Distance: %ld\n", queries.back().dist2segment(Segment(49992229, 50000329)));
+//REprintf("Distance: %ld\n", queries.back().dist2segment(Segment(49992229, 50000329)));
 
-		printf("Generating segments\n");
+		REprintf("Generating segments\n");
 		for (int i = 0; i < num_segments; i++) {
 			start = (int64_t)(unif_rand() * maxcoord);
 			end = min((int64_t)(start + 1 + max_segment_size * unif_rand()), (int64_t)maxcoord);
@@ -217,17 +217,17 @@ SEXP gtest_segment_finder(SEXP _envir) {
 			segments.push_back(sv);
 
 			if (i && i % 10000 == 0) {
-				printf("%d segments generated\n", i);
+				REprintf("%d segments generated\n", i);
 				check_interrupt();
 			}
 		}
-		printf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+		REprintf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
 //		sf.debug_print_tree();
 
 		cl = clock();
 
-		printf("Running nearest neighbor queries on segment finder\n");
+		REprintf("Running nearest neighbor queries on segment finder\n");
 		{
 			cl = clock();
 			vector<NNSegmentRes> r1;
@@ -239,7 +239,7 @@ SEXP gtest_segment_finder(SEXP _envir) {
 				int nearest_neighbors = 0;
 
 				r1.clear();
-//				printf("\tQuery: %s\n", iquery->debug_str());
+//				REprintf("\tQuery: %s\n", iquery->debug_str());
 				for (inn.begin(*iquery); !inn.is_end(); inn.next()) {
 					NNSegmentRes res;
 					res.obj = *inn;
@@ -250,7 +250,7 @@ SEXP gtest_segment_finder(SEXP _envir) {
 							break;
 					}
 					r1.push_back(res);
-//					printf("\tr size %ld, %s, dist: %ld\n",
+//					REprintf("\tr size %ld, %s, dist: %ld\n",
 //						   r1.size(), res.obj.debug_str(), res.obj.dist2segment(*iquery));
 				}
 
@@ -266,21 +266,21 @@ SEXP gtest_segment_finder(SEXP _envir) {
 				sort(r1.begin(), r1.end());
 				sort(r2.begin(), r2.end());
 				if (r1.size() < max_nearest_neighbors) {
-					printf("\t%ld Query: %s\n", iquery - queries.begin(), iquery->debug_str());
+					REprintf("\t%ld Query: %s\n", iquery - queries.begin(), iquery->debug_str());
 					for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j)
-						printf("\tSegment finder: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
+						REprintf("\tSegment finder: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
 					for (size_t j = 0; j < min(r2.size(), (size_t)max_nearest_neighbors); ++j)
-						printf("\tPlain:          %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
+						REprintf("\tPlain:          %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 					getchar();
 					check_interrupt();
 				}
 
 				for (size_t j = 0; j < r1.size(); ++j) {
 					if (!(r1[j] == r2[j])) {
-						printf("\t%ld Query: %s\n", iquery - queries.begin(), iquery->debug_str());
+						REprintf("\t%ld Query: %s\n", iquery - queries.begin(), iquery->debug_str());
 						for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j) {
-							printf("\tSegment finder: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
-							printf("\tPlain:          %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
+							REprintf("\tSegment finder: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
+							REprintf("\tPlain:          %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 						}
 						getchar();
 						check_interrupt();
@@ -288,12 +288,12 @@ SEXP gtest_segment_finder(SEXP _envir) {
 				}
 
 				if (i && i % 100 == 0) {
-					printf("%d nearest neighbor queries done\n", i);
+					REprintf("%d nearest neighbor queries done\n", i);
 					check_interrupt();
 				}
 			}
 
-			printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+			REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 		}
  	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -348,7 +348,7 @@ SEXP gtest_eitan(SEXP _envir) {
 		vector<string> fields;
 
 		clock_t cl = clock();
-		printf("Inserting rects to quad tree\n");
+		REprintf("Inserting rects to quad tree\n");
 		string chrstr("chr");
 		split_line(file, fields);
 		for (unsigned i = 0; ; i++) {
@@ -368,13 +368,13 @@ SEXP gtest_eitan(SEXP _envir) {
 				qtree[chrom2 * num_chroms + chrom1].insert(RectsQuadTree::ValueType(coord1, coord1 + 1, coord2, coord2 + 1, 0));
 
 			if (i && i % 100000 == 0) {
-				printf("%d rects inserted to quad tree\n", i);
+				REprintf("%d rects inserted to quad tree\n", i);
 				check_interrupt();
 			}
 		}
-		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
-		printf("Serializing quad tree\n");
+		REprintf("Serializing quad tree\n");
 		cl = clock();
 		for (unsigned chrom1 = 0; chrom1 < num_chroms; chrom1++) {
 			for (unsigned chrom2 = chrom1; chrom2 < num_chroms; chrom2++) {
@@ -387,9 +387,9 @@ SEXP gtest_eitan(SEXP _envir) {
 				file.close();
 			}
 		}
-		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
-		printf("Unserializing quad tree\n");
+		REprintf("Unserializing quad tree\n");
 		cl = clock();
 		for (unsigned chrom1 = 0; chrom1 < num_chroms; chrom1++) {
 			for (unsigned chrom2 = chrom1; chrom2 < num_chroms; chrom2++) {
@@ -402,7 +402,7 @@ SEXP gtest_eitan(SEXP _envir) {
 				qtree2.unserialize(file);
 			}
 		}
-		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
 		const unsigned query_size = 50000;
 		RectsQuadTree::Stat s;
@@ -415,7 +415,7 @@ SEXP gtest_eitan(SEXP _envir) {
 				uint64_t chrom2_size = chromkey.get_chrom_size(chrom2);
 				const RectsQuadTree &qt = qtree[chrom1 * num_chroms + chrom2];
 
-				Rprintf("%s vs %s\t%ld objs\t%ld queries\n", chromkey.id2chrom(chrom1).c_str(), chromkey.id2chrom(chrom2).c_str(), qt.get_num_objs(), num_queries);
+				REprintf("%s vs %s\t%ld objs\t%ld queries\n", chromkey.id2chrom(chrom1).c_str(), chromkey.id2chrom(chrom2).c_str(), qt.get_num_objs(), num_queries);
 
 				for (uint64_t x = 0; x < chrom1_size; x += query_size) {
 					for (uint64_t y = 0; y < chrom2_size; y += query_size) {
@@ -425,20 +425,20 @@ SEXP gtest_eitan(SEXP _envir) {
 				}
 			}
 		}
-		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
-		Rprintf("Num queries: %ld\n", num_queries);
+		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+		REprintf("Num queries: %ld\n", num_queries);
 
-//		printf("Running quad tree queries\n");
+//		REprintf("Running quad tree queries\n");
 //		cl = clock();
 //		for (int i = 0; i < num_queries; i++) {
 //			StatQuadTree<Point_n_val>::Stat &s = results2[i];
 //			qtree.get_stat(queries[i], s);
 //			if (i && i % 10000 == 0) {
-//				printf("%d quad tree queries done\n", i);
+//				REprintf("%d quad tree queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
@@ -455,11 +455,11 @@ SEXP gtest_bands(SEXP _envir) {
 
 		DiagonalBand band(-20, -10);
 		Rectangle r(0, 0, 100, 100);
-		Rprintf("intersects: %d\n", band.do_intersect(r));
-		Rprintf("contains: %d\n", band.do_contain(r));
+		REprintf("intersects: %d\n", band.do_intersect(r));
+		REprintf("contains: %d\n", band.do_contain(r));
 		band.shrink2intersected(r);
-		Rprintf("shrinked rect: %s\n", r.debug_str());
-		Rprintf("intersected area: %ld\n", band.intersected_area(r));
+		REprintf("shrinked rect: %s\n", r.debug_str());
+		REprintf("intersected area: %ld\n", band.intersected_area(r));
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
@@ -575,9 +575,9 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //qtree.insert(RectsQuadTree::ValueType(1000, 2000, 4000, 6000, 17));
 //RectsQuadTree::Stat ss;
 //qtree.get_stat(Rectangle(1100, 2100, 3900, 5900), ss);
-//printf("area %ld, avg %g\n", ss.occupied_area, ss.avg_val);
+//REprintf("area %ld, avg %g\n", ss.occupied_area, ss.avg_val);
 //qtree.get_stat(Rectangle(3000, 3000, 5000, 7000), ss);
-//printf("area %ld, avg %g\n", ss.occupied_area, ss.avg_val);
+//REprintf("area %ld, avg %g\n", ss.occupied_area, ss.avg_val);
 //verror("stamn");
 
 		vector<Rectangle> queries;
@@ -587,7 +587,7 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 		vector<RectsQuadTreeCached::Stat> results3(num_queries);
 		vector<RectsQuadTreeCached::Stat> results4(num_queries);
 
-		printf("Generating queries\n");
+		REprintf("Generating queries\n");
 		for (int i = 0; i < num_queries; i++) {
 			x1 = (int64_t)(unif_rand() * maxcoord);
 			y1 = (int64_t)(unif_rand() * maxcoord);
@@ -601,7 +601,7 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 		}
 
 		clock_t cl = clock();
-		printf("Generating rects\n");
+		REprintf("Generating rects\n");
 		for (int i = 0; i < num_rects; i++) {
 			while (1) {
 				x1 = (int64_t)(unif_rand() * maxcoord);
@@ -627,49 +627,49 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 			}
 
 			if (i && i % 10000 == 0) {
-				printf("%d rects generated\n", i);
+				REprintf("%d rects generated\n", i);
 				check_interrupt();
 			}
 		}
-		printf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+		REprintf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
-//		printf("Inserting rects to quad tree\n");
+//		REprintf("Inserting rects to quad tree\n");
 //		cl = clock();
 //		for (int i = 0; i < rects.size(); ++i) {
-////Rprintf("\tRECT %d: %s\n", i, rects[i].debug_str());
+////REprintf("\tRECT %d: %s\n", i, rects[i].debug_str());
 //			qtree.insert(rects[i]);
 //			if (i && i % 10000 == 0) {
-//				printf("%d rects inserted to quad tree\n", i);
+//				REprintf("%d rects inserted to quad tree\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
-		printf("Rects: %llu\n", qtree.get_num_objs());
+		REprintf("Rects: %llu\n", qtree.get_num_objs());
 		check_interrupt();
 //
-//		printf("Converting quad tree to cached quad tree\n");
-//////printf("===============QUAD TREE================\n");
+//		REprintf("Converting quad tree to cached quad tree\n");
+//////REprintf("===============QUAD TREE================\n");
 //////qtree.debug_print_tree();
-//////printf("\n\n");
+//////REprintf("\n\n");
 //		cl = clock();
 //		int signature = 0x12345678;
 //		cqtree_file.open("2dtrack_cached", "w");
 //		cqtree_file.write(&signature, sizeof(signature));
 //		cqtree.serialize(cqtree_file, qtree);
 //		cqtree_file.close();
-//		printf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //		check_interrupt();
 ////
 //////return R_NilValue;
 //		cqtree_file.open("2dtrack_cached", "r");
 //		int s;
 //		cqtree_file.read(&s, sizeof(signature));
-//		Rprintf("signature OK: %d\n", signature == s);
+//		REprintf("signature OK: %d\n", signature == s);
 //		cqtree.unserialize(cqtree_file);
 
 // .Call("gtest_quadtree_rect", new.env(parent = parent.frame()), silent = TRUE)
-//		printf("Constructing cached HUGE quad tree via serializer\n");
+//		REprintf("Constructing cached HUGE quad tree via serializer\n");
 //		cl = clock();
 //		int num_subtrees = 64;
 //		int dim = sqrt(num_subtrees);
@@ -686,27 +686,27 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //					cqtree_serializer.insert(r);
 //				}
 //check_interrupt();
-//printf("Subtree [%ld, %ld] generated\n", i, j);
+//REprintf("Subtree [%ld, %ld] generated\n", i, j);
 //			}
 //		}
 //
 //		cqtree_serializer.end();
 //
 //		cqtree_file2.close();
-//		printf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //		check_interrupt();
 //
 //		cqtree_file2.open("2dtrack_cached_serializer", "r");
 //		cqtree_file2.read(&s, sizeof(signature));
-//		Rprintf("signature OK: %d\n", signature == s);
+//		REprintf("signature OK: %d\n", signature == s);
 //		cqtree2.unserialize(cqtree_file2);
 //return R_NilValue;
 
 
-//		printf("Constructing cached quad tree via serializer\n");
-//////printf("===============QUAD TREE================\n");
+//		REprintf("Constructing cached quad tree via serializer\n");
+//////REprintf("===============QUAD TREE================\n");
 //////qtree.debug_print_tree();
-//////printf("\n\n");
+//////REprintf("\n\n");
 //		cl = clock();
 //		int num_subtrees = 64;
 //		cqtree_file2.open("2dtrack_cached_serializer", "w");
@@ -731,12 +731,12 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //		cqtree_serializer.end();
 //
 //		cqtree_file2.close();
-//		printf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //		check_interrupt();
 //
 //		cqtree_file2.open("2dtrack_cached_serializer", "r");
 //		cqtree_file2.read(&s, sizeof(signature));
-//		Rprintf("signature OK: %d\n", signature == s);
+//		REprintf("signature OK: %d\n", signature == s);
 //		cqtree2.unserialize(cqtree_file2);
 
 
@@ -744,31 +744,31 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //cqtree.debug_print_tree();
 
 //		{
-//			printf("Cached quad tree1:\n");
+//			REprintf("Cached quad tree1:\n");
 //			RectsQuadTreeCached::Iterator icqtree(&cqtree);
 //			int num_objs = 0;
 //			for (icqtree.begin(); !icqtree.is_end(); icqtree.next()) {
 //				num_objs++;
-//				Rprintf("  %s\n", icqtree->debug_str());
-//				Rprintf("  Containing quad: %s\n", icqtree.containing_quad().debug_str());
+//				REprintf("  %s\n", icqtree->debug_str());
+//				REprintf("  Containing quad: %s\n", icqtree.containing_quad().debug_str());
 //			}
-//			Rprintf("Num objs: %d\n", num_objs);
+//			REprintf("Num objs: %d\n", num_objs);
 //		}
 //
 //		{
-//			printf("Cached quad tree2:\n");
+//			REprintf("Cached quad tree2:\n");
 //			RectsQuadTreeCached::Iterator icqtree(&cqtree2);
 //			int num_objs = 0;
 //			for (icqtree.begin(); !icqtree.is_end(); icqtree.next()) {
 //				num_objs++;
-//				Rprintf("  %s\n", icqtree->debug_str());
-//				Rprintf("  Containing quad: %s\n", icqtree.containing_quad().debug_str());
+//				REprintf("  %s\n", icqtree->debug_str());
+//				REprintf("  Containing quad: %s\n", icqtree.containing_quad().debug_str());
 //			}
-//			Rprintf("Num objs: %d\n", num_objs);
+//			REprintf("Num objs: %d\n", num_objs);
 //		}
 
 
-//		printf("Running intersect queries\n");
+//		REprintf("Running intersect queries\n");
 //		cl = clock();
 //		vector<unsigned> v1;
 //		vector<unsigned> v2;
@@ -785,25 +785,25 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //			sort(v1.begin(), v1.end());
 //			sort(v2.begin(), v2.end());
 //			if (v1 != v2) {
-//				Rprintf("Query %d %s\n", i, queries[i].debug_str());
-//				Rprintf("Plain:\n");
+//				REprintf("Query %d %s\n", i, queries[i].debug_str());
+//				REprintf("Plain:\n");
 //				for (unsigned i = 0; i < v1.size(); i++)
-//					Rprintf("  %d. %s\n", v1[i], rects[v1[i]].debug_str());
-//				Rprintf("Quad-tree:\n");
+//					REprintf("  %d. %s\n", v1[i], rects[v1[i]].debug_str());
+//				REprintf("Quad-tree:\n");
 //				for (unsigned i = 0; i < v2.size(); i++)
-//					Rprintf("  %d. %s\n", v2[i], rects[v2[i]].debug_str());
+//					REprintf("  %d. %s\n", v2[i], rects[v2[i]].debug_str());
 //				getchar();
 //				check_interrupt();
 //			}
 //
 //			if (i && i % 10000 == 0) {
-//				printf("%d intersect queries done\n", i);
+//				REprintf("%d intersect queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
-//		printf("Running intersect with bands queries\n");
+//		REprintf("Running intersect with bands queries\n");
 //		cl = clock();
 //		vector<unsigned> v1;
 //		vector<unsigned> v2;
@@ -831,33 +831,33 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //			sort(intersection1.begin(), intersection1.end(), sort_rects);
 //			sort(intersection2.begin(), intersection2.end(), sort_rects);
 //			if (v1 != v2 || intersection1 != intersection2) {
-//				Rprintf("Query %d %s\n", i, queries[i].debug_str());
-//				Rprintf("Bands %ld, %ld\n", bands[i].d1, bands[i].d2);
-//				Rprintf("Plain (%ld, %ld):\n", v1.size(), intersection1.size());
+//				REprintf("Query %d %s\n", i, queries[i].debug_str());
+//				REprintf("Bands %ld, %ld\n", bands[i].d1, bands[i].d2);
+//				REprintf("Plain (%ld, %ld):\n", v1.size(), intersection1.size());
 //				for (unsigned idx = 0; idx < v1.size(); idx++) {
-//					Rprintf("  %d. %s\n", idx, intersection1[idx].debug_str());
-//					Rprintf("  %d. %s. Intersects with band? %d\n", v1[idx], rects[v1[idx]].debug_str(), bands[i].do_intersect(rects[v1[idx]]));
+//					REprintf("  %d. %s\n", idx, intersection1[idx].debug_str());
+//					REprintf("  %d. %s. Intersects with band? %d\n", v1[idx], rects[v1[idx]].debug_str(), bands[i].do_intersect(rects[v1[idx]]));
 //				}
-//				Rprintf("Quad-tree (%ld, %ld):\n", v2.size(), intersection2.size());
+//				REprintf("Quad-tree (%ld, %ld):\n", v2.size(), intersection2.size());
 //				for (unsigned idx = 0; idx < v2.size(); idx++) {
-//					Rprintf("  %d. %s\n", idx, intersection2[idx].debug_str());
-//					Rprintf("  %d. %s\n", v2[idx], rects[v2[idx]].debug_str());
+//					REprintf("  %d. %s\n", idx, intersection2[idx].debug_str());
+//					REprintf("  %d. %s\n", v2[idx], rects[v2[idx]].debug_str());
 //					Rectangle r(queries[i].intersect(rects[v2[idx]]));
 //					bands[i].shrink2intersected(r);
-//					Rprintf("shrinked: %s\n", r.debug_str());
+//					REprintf("shrinked: %s\n", r.debug_str());
 //				}
 //				getchar();
 //				check_interrupt();
 //			}
 //
 //			if (i && i % 10000 == 0) {
-//				printf("%d intersect queries done\n", i);
+//				REprintf("%d intersect queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
-//		printf("Running do intersect queries\n");
+//		REprintf("Running do intersect queries\n");
 //		cl = clock();
 //		for (int i = 0; i < num_queries; i++) {
 //			bool r1 = false;
@@ -871,7 +871,7 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //			bool r2 = qtree.do_intersect(queries[i]);
 
 //			if (r1 != r2) {
-//				Rprintf("Query %s: %d vs. %d\n", queries[i].debug_str(), r1, r2);
+//				REprintf("Query %s: %d vs. %d\n", queries[i].debug_str(), r1, r2);
 //				getchar();
 //				check_interrupt();
 //			}
@@ -879,7 +879,7 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //			bool r3 = cqtree.do_intersect(queries[i]);
 //
 //			if (r2 != r3) {
-//				Rprintf("Query %s: %d vs. %d\n", queries[i].debug_str(), r2, r3);
+//				REprintf("Query %s: %d vs. %d\n", queries[i].debug_str(), r2, r3);
 //				getchar();
 //				check_interrupt();
 //			}
@@ -887,19 +887,19 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //			bool r4 = cqtree2.do_intersect(queries[i]);
 //
 //			if (r3 != r4) {
-//				Rprintf("Query %s: %d vs. %d\n", queries[i].debug_str(), r3, r4);
+//				REprintf("Query %s: %d vs. %d\n", queries[i].debug_str(), r3, r4);
 //				getchar();
 //				check_interrupt();
 //			}
 //
 //			if (i && i % 10000 == 0) {
-//				printf("%d do intersect queries done\n", i);
+//				REprintf("%d do intersect queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
-		printf("Running nearest neighbor queries\n");
+		REprintf("Running nearest neighbor queries\n");
 		{
 			cl = clock();
 			vector<NNRes> r1;
@@ -911,7 +911,7 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 				int nearest_neighbors = 0;
 
 				r1.clear();
-//				printf("\tQuery: %s\n", iquery->debug_str());
+//				REprintf("\tQuery: %s\n", iquery->debug_str());
 				for (inn.begin(*iquery); !inn.is_end(); inn.next()) {
 					NNRes res;
 					res.obj = *inn;
@@ -922,7 +922,7 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 							break;
 					}
 					r1.push_back(res);
-//					printf("\tr size %ld, %s, xdist: %ld, ydist: %ld, dist: %ld\n",
+//					REprintf("\tr size %ld, %s, xdist: %ld, ydist: %ld, dist: %ld\n",
 //						   r1.size(), res.obj.debug_str(), res.obj.xdist(*iquery), res.obj.ydist(*iquery), res.obj.manhattan_dist(*iquery));
 				}
 
@@ -939,32 +939,32 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 				sort(r2.begin(), r2.end());
 				if (r1.size() < max_nearest_neighbors) {
 					for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j)
-						printf("\tQuad-tree: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
+						REprintf("\tQuad-tree: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
 					for (size_t j = 0; j < min(r2.size(), (size_t)max_nearest_neighbors); ++j)
-						printf("\tPlain:     %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
+						REprintf("\tPlain:     %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 					getchar();
 					check_interrupt();
 				}
 
 				for (size_t j = 0; j < r1.size(); ++j) {
 					if (!(r1[j] == r2[j])) {
-						printf("\tQuad-tree: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
-						printf("\tPlain: %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
+						REprintf("\tQuad-tree: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
+						REprintf("\tPlain: %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 						getchar();
 						check_interrupt();
 					}
 				}
 
 				if (i && i % 100 == 0) {
-					printf("%d nearest neighbor queries done\n", i);
+					REprintf("%d nearest neighbor queries done\n", i);
 					check_interrupt();
 				}
 			}
 
-			printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+			REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 		}
 
-//		printf("Running stat plain queries\n");
+//		REprintf("Running stat plain queries\n");
 //		cl = clock();
 //		for (int i = 0; i < num_queries; i++) {
 //			RectsQuadTree::Stat &s = results1[i];
@@ -982,49 +982,49 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //				}
 //			}
 //			if (i && i % 10000 == 0) {
-//				printf("%d plain queries done\n", i);
+//				REprintf("%d plain queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
-//		printf("Running stat quad tree queries\n");
+//		REprintf("Running stat quad tree queries\n");
 //		cl = clock();
 //		for (int i = 0; i < num_queries; i++) {
 //			RectsQuadTree::Stat &s = results2[i];
 //			qtree.get_stat(queries[i], s);
 //			if (i && i % 10000 == 0) {
-//				printf("%d quad tree queries done\n", i);
+//				REprintf("%d quad tree queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
-//		printf("Running stat cached quad tree queries\n");
+//		REprintf("Running stat cached quad tree queries\n");
 //		cl = clock();
 //		for (int i = 0; i < num_queries; i++) {
 //			RectsQuadTreeCached::Stat &s = results3[i];
 //			cqtree.get_stat(queries[i], s);
 //			if (i && i % 10000 == 0) {
-//				printf("%d cached quad tree queries done\n", i);
+//				REprintf("%d cached quad tree queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
-//		printf("Running stat cached quad tree + serializer queries\n");
+//		REprintf("Running stat cached quad tree + serializer queries\n");
 //		cl = clock();
 //		for (int i = 0; i < num_queries; i++) {
 //			RectsQuadTreeCached::Stat &s = results4[i];
 //			cqtree2.get_stat(queries[i], s);
 //			if (i && i % 10000 == 0) {
-//				printf("%d cached quad tree queries + serializer done\n", i);
+//				REprintf("%d cached quad tree queries + serializer done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
-//		printf("Running stat plain queries with bands\n");
+//		REprintf("Running stat plain queries with bands\n");
 //		cl = clock();
 //		for (int i = 0; i < num_queries; i++) {
 //			RectsQuadTree::Stat &s = results1[i];
@@ -1046,28 +1046,28 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //				}
 //			}
 //			if (i && i % 10000 == 0) {
-//				printf("%d plain queries done\n", i);
+//				REprintf("%d plain queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
-//		printf("Running stat cached quad tree queries with bands\n");
+//		REprintf("Running stat cached quad tree queries with bands\n");
 //		cl = clock();
 //		for (int i = 0; i < num_queries; i++) {
 //			RectsQuadTreeCached::Stat &s = results3[i];
 //			cqtree.get_stat(queries[i], bands[i], s);
 ////if (i == 232)
-////printf("(%d) cached %ld %g, %g, %g\n", i, s.occupied_area, s.weighted_sum, s.max_val, s.min_val);
+////REprintf("(%d) cached %ld %g, %g, %g\n", i, s.occupied_area, s.weighted_sum, s.max_val, s.min_val);
 //			if (i && i % 100000 == 0) {
-//				printf("%d cached quad tree queries done\n", i);
+//				REprintf("%d cached quad tree queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 
 
-//		printf("Serializing quad tree\n");
+//		REprintf("Serializing quad tree\n");
 //		cl = clock();
 //		BufferedFile file;
 //
@@ -1077,23 +1077,23 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //		RectsQuadTree qtree2;
 //		file.open("2dtrack", "r");
 //		qtree2.unserialize(file);
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
-//		printf("Running unserialized quad tree queries\n");
+//		REprintf("Running unserialized quad tree queries\n");
 //		cl = clock();
 //
 //		for (int i = 0; i < num_queries; i++) {
 //			RectsQuadTree::Stat &s = results1[i];
 //			qtree2.get_stat(queries[i], s);
 //			if (i && i % 10000 == 0) {
-//				printf("%d quad tree queries done\n", i);
+//				REprintf("%d quad tree queries done\n", i);
 //				check_interrupt();
 //			}
 //		}
-//		printf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
+//		REprintf(" %.2g secs\n", (clock() - cl) / (double)CLOCKS_PER_SEC);
 //
 
-//		printf("Comparing results\n");
+//		REprintf("Comparing results\n");
 //int num_nans = 0;
 //		for (int i = 0; i < num_queries; i++) {
 //			RectsQuadTree::Stat &s1 = results1[i];
@@ -1105,7 +1105,7 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //					(fabs(s1.weighted_sum - s2.weighted_sum) > 0.0000001 || s1.min_val != s2.min_val || s1.max_val != s2.max_val || s1.occupied_area != s2.occupied_area))
 //			{
 //				check_interrupt();
-//				printf("(%d) Not equal %ld %g, %g, %g   vs.     %ld %g, %g, %g\n", i, s1.occupied_area, s1.weighted_sum, s1.max_val, s1.min_val, s2.occupied_area, s2.weighted_sum, s2.max_val, s2.min_val);
+//				REprintf("(%d) Not equal %ld %g, %g, %g   vs.     %ld %g, %g, %g\n", i, s1.occupied_area, s1.weighted_sum, s1.max_val, s1.min_val, s2.occupied_area, s2.weighted_sum, s2.max_val, s2.min_val);
 //				getchar();
 //			}
 //
@@ -1116,13 +1116,13 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //					(fabs(s1.weighted_sum - s3.weighted_sum) > 0.0000001 || s1.min_val != s3.min_val || s1.max_val != s3.max_val || s1.occupied_area != s3.occupied_area))
 //			{
 //				check_interrupt();
-//				printf("(%d) Not equal %ld %g, %g, %g   vs.     %ld %g, %g, %g\n", i, s1.occupied_area, s1.weighted_sum, s1.max_val, s1.min_val, s3.occupied_area, s3.weighted_sum, s3.max_val, s3.min_val);
+//				REprintf("(%d) Not equal %ld %g, %g, %g   vs.     %ld %g, %g, %g\n", i, s1.occupied_area, s1.weighted_sum, s1.max_val, s1.min_val, s3.occupied_area, s3.weighted_sum, s3.max_val, s3.min_val);
 //				getchar();
 //			}
 
 //			if (memcmp(&s2, &s3, sizeof(s3))) {
 //				check_interrupt();
-//				printf("(%d) Not equal %ld %g, %g, %g   vs.     %ld %g, %g, %g\n", i, s2.occupied_area, s2.weighted_sum, s2.max_val, s2.min_val, s3.occupied_area, s3.weighted_sum, s3.max_val, s3.min_val);
+//				REprintf("(%d) Not equal %ld %g, %g, %g   vs.     %ld %g, %g, %g\n", i, s2.occupied_area, s2.weighted_sum, s2.max_val, s2.min_val, s3.occupied_area, s3.weighted_sum, s3.max_val, s3.min_val);
 //				getchar();
 //			}
 
@@ -1131,14 +1131,14 @@ SEXP gtest_quadtree_rect(SEXP _envir) {
 //					(fabs(s4.weighted_sum - s3.weighted_sum) > 0.0000001 || s4.min_val != s3.min_val || s4.max_val != s3.max_val || s4.occupied_area != s3.occupied_area))
 //			{
 //				check_interrupt();
-//				printf("(%d) Not equal %ld %g, %g, %g   vs.     %ld %g, %g, %g\n", i, s4.occupied_area, s4.weighted_sum, s4.max_val, s4.min_val, s3.occupied_area, s3.weighted_sum, s3.max_val, s3.min_val);
+//				REprintf("(%d) Not equal %ld %g, %g, %g   vs.     %ld %g, %g, %g\n", i, s4.occupied_area, s4.weighted_sum, s4.max_val, s4.min_val, s3.occupied_area, s3.weighted_sum, s3.max_val, s3.min_val);
 //				getchar();
 //			}
 //		}
-//printf("Nans: %d (%d)\n", num_nans, int(100 * num_nans / (double)num_queries + .5));
+//REprintf("Nans: %d (%d)\n", num_nans, int(100 * num_nans / (double)num_queries + .5));
 
 
-		printf("Comparison done\n");
+		REprintf("Comparison done\n");
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
@@ -1157,28 +1157,28 @@ SEXP gtest_percentiles(SEXP _percentile, SEXP _vals, SEXP _rnd_sampling_buf_size
 //
 //		bool estimation;
 //
-//		Rprintf("Percentile: %g\n", sp.get_percentile(REAL(_percentile)[0], estimation));
-//		Rprintf("Is estimation: %d\n", estimation);
-//		Rprintf("\n");
-//		Rprintf("Stream size: %ld\n", sp.m_stream_sampler.stream_size());
-//		Rprintf("Reserv size: %ld\n", sp.m_stream_sampler.reservoir_size());
+//		REprintf("Percentile: %g\n", sp.get_percentile(REAL(_percentile)[0], estimation));
+//		REprintf("Is estimation: %d\n", estimation);
+//		REprintf("\n");
+//		REprintf("Stream size: %ld\n", sp.m_stream_sampler.stream_size());
+//		REprintf("Reserv size: %ld\n", sp.m_stream_sampler.reservoir_size());
 //		for (size_t i = 0; i < sp.m_stream_sampler.samples().size(); i++) {
-//			Rprintf("%g ", sp.m_stream_sampler.samples()[i]);
+//			REprintf("%g ", sp.m_stream_sampler.samples()[i]);
 //		}
-//		Rprintf("\n\n");
+//		REprintf("\n\n");
 //
-//		Rprintf("Lowest heap size: %ld\n", sp.m_extreme_vals[0].size());
+//		REprintf("Lowest heap size: %ld\n", sp.m_extreme_vals[0].size());
 //		for (size_t i = 0; i < sp.m_extreme_vals[0].size(); i++) {
-//			Rprintf("%g ", sp.m_extreme_vals[0][i]);
+//			REprintf("%g ", sp.m_extreme_vals[0][i]);
 //		}
-//		Rprintf("\n\n");
+//		REprintf("\n\n");
 //
 //
-//		Rprintf("Highest heap size: %ld\n", sp.m_extreme_vals[1].size());
+//		REprintf("Highest heap size: %ld\n", sp.m_extreme_vals[1].size());
 //		for (size_t i = 0; i < sp.m_extreme_vals[1].size(); i++) {
-//			Rprintf("%g ", sp.m_extreme_vals[1][i]);
+//			REprintf("%g ", sp.m_extreme_vals[1][i]);
 //		}
-//		Rprintf("\n\n");
+//		REprintf("\n\n");
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
@@ -1248,8 +1248,8 @@ SEXP _gcreate_arrays_track(SEXP _track, SEXP _minsize, SEXP _maxsize, SEXP _expr
 			sort(array_vals.begin(), array_vals.begin() + array_size);
 if (counter < 10) {
 for (GenomeTrackArrays::ArrayVals::const_iterator iarray_val = array_vals.begin(); iarray_val != array_vals.begin() + array_size; ++iarray_val)
-printf("%d-%d ", iarray_val->idx, (int)iarray_val->val);
-printf("\n");
+REprintf("%d-%d ", iarray_val->idx, (int)iarray_val->val);
+REprintf("\n");
 }
 			gtrack.write_next_interval(scanner.last_interval1d(), array_vals.begin(), array_vals.begin() + array_size);
 
@@ -1294,9 +1294,9 @@ SEXP _gtest_error_recovery(SEXP _fname, SEXP _envir)
 
 		SEXP rval = RSaneUnserialize(CHAR(STRING_ELT(_fname, 0)));
 
-		printf("After2...\n");
+		REprintf("After2...\n");
 		if (isReal(rval))
-			printf("Val = %g\n", REAL(rval)[0]);
+			REprintf("Val = %g\n", REAL(rval)[0]);
 
 		return R_NilValue;
 	} catch (TGLException &e) {

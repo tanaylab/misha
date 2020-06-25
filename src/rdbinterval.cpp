@@ -1094,7 +1094,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 //int idx = 0;
 //for (vector<GIntervalsFetcher1D *>::iterator i = m_kids_intervals1d.begin(); i != m_kids_intervals1d.end(); ++i){
 //GIntervalsFetcher1D *fetcher = *i;
-//printf("Kid %d:\n", ++idx);
+//REprintf("Kid %d:\n", ++idx);
 //GIntervals all_genome;
 //get_all_genome_intervs(all_genome);
 //
@@ -1102,11 +1102,11 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 //for (GIntervals::const_iterator iinterv = all_genome.begin(); iinterv != all_genome.end(); ++iinterv) {
 //int64_t chrom_range = fetcher->range(iinterv->chromid);
 //if (chrom_range) {
-//printf("\t%s\trange %ld\n", id2chrom(iinterv->chromid).c_str(), chrom_range);
+//REprintf("\t%s\trange %ld\n", id2chrom(iinterv->chromid).c_str(), chrom_range);
 //total_range += chrom_range;
 //}
 //}
-//printf("total range: %ld\n\n", total_range);
+//REprintf("total range: %ld\n\n", total_range);
 //}
 
 	} else if (scope2d && scope2d->size()) {
@@ -1184,7 +1184,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 //int idx = 0;
 //for (vector<GIntervalsFetcher2D *>::iterator i = m_kids_intervals2d.begin(); i != m_kids_intervals2d.end(); ++i){
 //GIntervalsFetcher2D *fetcher = *i;
-//printf("Kid %d:\n", ++idx);
+//REprintf("Kid %d:\n", ++idx);
 //GIntervals2D all_genome;
 //get_all_genome_intervs(all_genome);
 //
@@ -1193,10 +1193,10 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 //double chrom_surface = fetcher->surface(iinterv->chromid1(), iinterv->chromid2());
 //if (chrom_surface) {
 //total_surface += chrom_surface;
-//printf("\t%s\t%s\tsurface %g\n", id2chrom(iinterv->chromid1()).c_str(), id2chrom(iinterv->chromid2()).c_str(), chrom_surface);
+//REprintf("\t%s\t%s\tsurface %g\n", id2chrom(iinterv->chromid1()).c_str(), id2chrom(iinterv->chromid2()).c_str(), chrom_surface);
 //}
 //}
-//printf("total_surface: %g\n\n", total_surface);
+//REprintf("total_surface: %g\n\n", total_surface);
 //}
 	}
 
@@ -1254,7 +1254,7 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 	tgt_intervs.clear();
 
 //for (auto i = begin(); i < end(); ++i)
-//printf("chrom %d, coord %ld\n", i->chromid_src, i->start_src);
+//REprintf("chrom %d, coord %ld\n", i->chromid_src, i->start_src);
 
 	if (empty())
 		return end();

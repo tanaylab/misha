@@ -764,34 +764,34 @@ template <class T, class Size>
 void StatQuadTree<T, Size>::debug_print_tree() const
 {
 	debug_print_tree(m_nodes.front(), 0);
-	printf("Objs: %ld\n", m_objs.size());
-	printf("Nodes: %ld\n", m_nodes.size());
-	printf("Obj ptrs: %ld\n", m_obj_ptrs.size());
-	printf("Free chunks: %ld\n", m_obj_ptrs_free_chunks.size());
+	fprintf(stderr, "Objs: %ld\n", m_objs.size());
+	fprintf(stderr, "Nodes: %ld\n", m_nodes.size());
+	fprintf(stderr, "Obj ptrs: %ld\n", m_obj_ptrs.size());
+	fprintf(stderr, "Free chunks: %ld\n", m_obj_ptrs_free_chunks.size());
 }
 
 template <class T, class Size>
 void StatQuadTree<T, Size>::debug_print_tree(const Node &node, unsigned depth) const
 {
-	printf("\n%*sArena: %s\n", depth * 2, "", node.arena.debug_str());
-	printf("%*sIs leaf?: %d\n", (depth + 1) * 2, "", node.is_leaf);
-	printf("%*sArea occupied: %ld\n", (depth + 1) * 2, "", node.stat.occupied_area);
-	printf("%*sAvg: %g\tMin: %g\tMax: %g\n", (depth + 1) * 2, "", node.stat.occupied_area / (double)node.stat.weighted_sum, node.stat.min_val, node.stat.max_val);
+	fprintf(stderr, "\n%*sArena: %s\n", depth * 2, "", node.arena.debug_str());
+	fprintf(stderr, "%*sIs leaf?: %d\n", (depth + 1) * 2, "", node.is_leaf);
+	fprintf(stderr, "%*sArea occupied: %ld\n", (depth + 1) * 2, "", node.stat.occupied_area);
+	fprintf(stderr, "%*sAvg: %g\tMin: %g\tMax: %g\n", (depth + 1) * 2, "", node.stat.occupied_area / (double)node.stat.weighted_sum, node.stat.min_val, node.stat.max_val);
 
 	if (node.is_leaf) {
-		printf("%*sKids: %ld, %ld, %ld\n", (depth + 1) * 2, "", node.leaf.obj_ptr_start_idx, node.leaf.obj_ptr_end_idx, node.leaf.obj_ptr_end_idx - node.leaf.obj_ptr_start_idx);
+		fprintf(stderr, "%*sKids: %ld, %ld, %ld\n", (depth + 1) * 2, "", node.leaf.obj_ptr_start_idx, node.leaf.obj_ptr_end_idx, node.leaf.obj_ptr_end_idx - node.leaf.obj_ptr_start_idx);
 		for (uint64_t i = node.leaf.obj_ptr_start_idx; i < node.leaf.obj_ptr_end_idx; ++i) {
-			printf("%*s%s", (depth + 2) * 2, "", m_objs[m_obj_ptrs[i]].debug_str());
-			printf("\n");
+			fprintf(stderr, "%*s%s", (depth + 2) * 2, "", m_objs[m_obj_ptrs[i]].debug_str());
+			fprintf(stderr, "\n");
 		}
 	} else {
-		printf("%*sNW node\n", (depth + 1) * 2, "");
+		fprintf(stderr, "%*sNW node\n", (depth + 1) * 2, "");
 		debug_print_tree(m_nodes[node.node.kid_idx[NW]], depth + 1);
-		printf("%*sNE node\n", (depth + 1) * 2, "");
+		fprintf(stderr, "%*sNE node\n", (depth + 1) * 2, "");
 		debug_print_tree(m_nodes[node.node.kid_idx[NE]], depth + 1);
-		printf("%*sSE node\n", (depth + 1) * 2, "");
+		fprintf(stderr, "%*sSE node\n", (depth + 1) * 2, "");
 		debug_print_tree(m_nodes[node.node.kid_idx[SE]], depth + 1);
-		printf("%*sSW node\n", (depth + 1) * 2, "");
+		fprintf(stderr, "%*sSW node\n", (depth + 1) * 2, "");
 		debug_print_tree(m_nodes[node.node.kid_idx[SW]], depth + 1);
 	}
 }
