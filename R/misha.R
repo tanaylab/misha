@@ -3651,7 +3651,7 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
 			tracks <- trackstr
 	}
 
-	if (!is.null(attrs))
+	if (!is.null(tracks))
 	    tracks <- unique(tracks)
 	if (!is.null(attrs))
 	    attrs <- unique(attrs)

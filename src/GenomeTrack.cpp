@@ -199,7 +199,7 @@ void GenomeTrack::save_attrs(const char *track, const char *filename, const Trac
 
 	for (TrackAttrs::const_iterator iattr = attrs.begin(); iattr != attrs.end(); ++iattr) {
 		if (iattr->first.empty())
-				TGLError<GenomeTrack>(BAD_ATTRS, "Track %s: attribute name is an empty string", track); 
+			TGLError<GenomeTrack>(BAD_ATTRS, "Track %s: attribute name is an empty string", track); 
 	}
 
 	BufferedFile bfile;

@@ -27,7 +27,7 @@ Track attribute value.
 \examples{
 gdb.init_examples()
 gtrack.attr.set("sparse_track", "test_attr", "value")
-gtrack.attr.get("sparse_track", "test_var")
+gtrack.attr.get("sparse_track", "test_attr")
 gtrack.attr.set("sparse_track", "test_attr", "")
 }
 \keyword{ ~attr }

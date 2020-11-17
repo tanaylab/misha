@@ -287,7 +287,7 @@ Though both track attributes and track variables can be used to store meta-data 
   Single value modification & \texttt{gtrack.attr.set} & \texttt{gtrack.var.set} \\
   Bulk value retrieval & \texttt{gtrack.attr.export} & --- \\
   Bulk value modification & \texttt{gtrack.attr.import} & --- \\
-  Object names retrieval & \texttt{gtrack.attr.import} & \texttt{gtrack.var.ls} \\
+  Object names retrieval & \texttt{gtrack.attr.export} & \texttt{gtrack.var.ls} \\
   Object removal & \texttt{gtrack.attr.set} with an empty string & \texttt{gtrack.var.rm} \\
   Search by value & \texttt{gtrack.ls} & --- \\
   \hline

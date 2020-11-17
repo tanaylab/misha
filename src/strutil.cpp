@@ -273,7 +273,7 @@ int get_one_field(istream &in, string &field, char delim, int num, bool eat_line
 int count_match(const string &targ, const string &mot)
 {
 	int count = 0;
-	uint32_t pos = targ.find(mot, 0);
+	string::size_type pos = targ.find(mot, 0);
 	while(pos != string::npos) {
 		pos = targ.find(mot, pos + 1);
 		count++;

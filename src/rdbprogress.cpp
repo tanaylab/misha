@@ -5,7 +5,7 @@
  *      Author: hoichman
  */
 
-#include <sys/timeb.h>
+#include <sys/time.h>
 
 #include "rdbutils.h"
 
@@ -32,9 +32,9 @@ void Progress_reporter::init(uint64_t maxsteps, uint64_t init_report_step, uint6
 
 uint64_t Progress_reporter::get_cur_clock()
 {
-	struct timeb tp;
-	ftime(&tp);
-	return tp.time * 1000 + tp.millitm;
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
 void Progress_reporter::report(uint64_t delta_steps_done)
