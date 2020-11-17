@@ -22,6 +22,6 @@ The misha package is intended to help users to efficiently analyze genomic data 
 
 ## Installation
 ```{r, eval=FALSE}
-install.packages('misha', repos=c(getOption('repos'), 'https://tanaylab.github.io/repo'))
+remotes::install_github("tanaylab/misha")
 ```
 
