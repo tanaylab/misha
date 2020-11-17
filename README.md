@@ -14,5 +14,5 @@ Installation
 ------------
 
 ``` r
-install.packages('misha', repos=c(getOption('repos'), 'https://tanaylab.github.io/repo'))
+remotes::install_github("tanaylab/misha")
 ```
