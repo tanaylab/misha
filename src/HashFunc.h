@@ -22,38 +22,28 @@
 
 namespace std
 {
-	// This hash works for a pair of ids that can reach up to sizeof_t.
 	// Ideally we would like the hash to be:
-	//      v1 | bit_reverse(v2)
+	//      v1 ^ bit_reverse(v2)
 	// Yet bit_reverse requires quite some computational effort. So our hash is:
-	//      little_edian(v1) | big_endian(v2)
-	template<> struct hash< std::pair<uint64_t, uint64_t> >
+	//      little_endian(v1) ^ big_endian(v2)
+	template<> struct hash<std::pair<uint64_t, uint64_t>>
 	{
-		uint64_t operator()(const std::pair<uint64_t, uint64_t> &v) const {
+		size_t operator()(const std::pair<uint64_t, uint64_t> &v) const {
 #if (__WORDSIZE == 64)
 			return v.first ^ BSWAP_64(v.second);
 #else
-			return v.first ^ BSWAP_32(v.second);
+			return (v.first & 0xffff) ^ BSWAP_32(v.second & 0xffff);
 #endif
 		}
 	};
 
 
-    // This hash works for a pair of ids that can reach up to sizeof_t.
-    // Ideally we would like the hash to be:
-    //      v1 | bit_reverse(v2)
-    // Yet bit_reverse requires quite some computational effort. So our hash is:
-    //      little_edian(v1) | big_endian(v2)
-    template<> struct hash< std::pair<unsigned, unsigned> >
-    {
-        size_t operator()(const std::pair<size_t, size_t> &v) const {
-#if (__WORDSIZE == 64)
-            return v.first | (v.second << 32);
-#else
-            return v.first ^ BSWAP_32(v.second);
-#endif
-        }
-    };
+	template<> struct hash<std::pair<uint32_t, uint32_t>>
+	{
+		size_t operator()(const std::pair<uint32_t, uint32_t> &v) const {
+			return v.first ^ BSWAP_32(v.second);
+		}
+	};
 }
 
 #endif /* HASHFUNC_H_ */

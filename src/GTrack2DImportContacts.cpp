@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -16,8 +17,8 @@
 using namespace std;
 using namespace rdb;
 
-typedef unordered_map<pair<size_t, size_t>, double> Contacts;
-typedef pair<size_t, size_t> Chrom_pair;
+typedef unordered_map<pair<uint64_t, uint64_t>, double> Contacts;
+typedef pair<uint32_t, uint32_t> Chrom_pair;
 
 class Contact_chrom_files : public unordered_map<Chrom_pair, BufferedFile *> {
 public:
@@ -504,7 +505,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 					if (subtree_file.error()) 
 						verror("Reading file %s: %s\n", subtree_file.file_name().c_str(), strerror(errno));
 
-					pair<size_t, size_t> key(coord1, coord2);
+					pair<uint64_t, uint64_t> key(coord1, coord2);
 					Contacts::iterator icontact = contacts.find(key);
 
 					if (icontact == contacts.end())

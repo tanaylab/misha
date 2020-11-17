@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -15,7 +16,7 @@
 using namespace std;
 using namespace rdb;
 
-typedef pair<size_t, size_t> Chrom_pair;
+typedef pair<uint32_t, uint32_t> Chrom_pair;
 
 class BinIntervalsFiles : public unordered_map<Chrom_pair, BufferedFile *> {
 public:
