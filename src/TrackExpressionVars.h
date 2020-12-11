@@ -29,7 +29,7 @@ using namespace std;
 class TrackExpressionVars {
 public:
     struct Binned_pv {
-        double    *bins;
+   		vector<double> bins;
         BinFinder  binfinder;
     };
 

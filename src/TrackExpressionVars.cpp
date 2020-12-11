@@ -21,6 +21,7 @@ const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Int
 
 using namespace rdb;
 
+
 TrackExpressionVars::TrackExpressionVars(rdb::IntervUtils &iu) :
 	m_iu(iu)
 {
@@ -642,7 +643,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 			if (breaks == R_NilValue || !isReal(breaks) || length(breaks) != length(val))
 				verror("File %s is in invalid format.", pv_fname.c_str());
 
-			pv.bins = REAL(val);
+			pv.bins.assign(REAL(val), REAL(val) + length(val));
 			pv.binfinder.init(REAL(breaks), length(breaks));
 		}
 	}
@@ -849,7 +850,6 @@ void TrackExpressionVars::set_vars(unsigned idx)
 
 				if (ivar->requires_pv) {
 					double val = ivar->var[idx];
-
 					if (!std::isnan(val)) {
 						int bin = ivar->pv_binned.binfinder.val2bin(val);
 						if (bin < 0) {
