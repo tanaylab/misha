@@ -87,7 +87,7 @@ inline int BinFinder::val2bin(double val) const
         return -1;
 
     if (m_binsize) // are we using the same bin size for all bins?
-        return (int)(val - m_breaks.front()) / m_binsize;
+        return (int)((val - m_breaks.front()) / m_binsize);
 
     // perform binary search
     unsigned start_bin = 0;
