@@ -1,0 +1,6 @@
+^push_misha_manual$
+^README\.Rmd$
+^_pkgdown\.yml$
+^\.travis\.yml$
+^regression\.R$
+^inst/trackdb/test/\.db\.cache$
