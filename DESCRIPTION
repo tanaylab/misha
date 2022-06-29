@@ -17,3 +17,9 @@ Packaged: 2020-12-11 07:49:48 UTC; hoichman
 Authors@R: person("Misha", "Hoichman", email = "misha@hoichman.com", role = c("aut", "cre"))
 BugReports: https://github.com/tanaylab/misha/issues
 RoxygenNote: 7.1.2
+Suggests: 
+    dplyr,
+    glue,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
