@@ -32,7 +32,7 @@
 #'
 #'
 #' @name misha-package
-#' @useDynLib naryn
+#' @useDynLib misha
 #' @aliases misha-package misha
 #' @docType package
 #' @keywords package
