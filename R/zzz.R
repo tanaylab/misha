@@ -1,17 +1,5 @@
 .onLoad <- function(lib, pkg) {
-}
-
-.onAttach <- function(lib, pkg) {
     Sys.umask("0002")
-
-    assign(".GFUNCS", getNamespaceExports("misha"), envir = .GlobalEnv)
-    assign("GITERATOR.INTERVALS", NULL, envir = .GlobalEnv)
-
-    if (R.Version()$major >= 3) {
-        assign(".GLIBDIR", path.package("misha"), envir = .GlobalEnv)
-    } else {
-        assign(".GLIBDIR", .path.package("misha"), envir = .GlobalEnv)
-    }
 
     options(.ginteractive = FALSE)
     options(.gautocompletion = FALSE)
@@ -33,10 +21,27 @@
     options(gtrack.num.chunks = 0)
 
     # set the groot to samples dir
-    gdb.init_examples()
+    if (!exists("GROOT", envir = .GlobalEnv)) {
+        gdb.init_examples()
+    }
+}
+
+.onAttach <- function(lib, pkg) {
+    assign(".GFUNCS", getNamespaceExports("misha"), envir = .GlobalEnv)
+    assign("GITERATOR.INTERVALS", NULL, envir = .GlobalEnv)
+
+    if (R.Version()$major >= 3) {
+        assign(".GLIBDIR", path.package("misha"), envir = .GlobalEnv)
+    } else {
+        assign(".GLIBDIR", .path.package("misha"), envir = .GlobalEnv)
+    }
 }
 
 .onDetach <- function(lib) {
+
+}
+
+.onUnload <- function(lib) {
     if (exists(".GFUNCS", envir = .GlobalEnv)) {
         remove(".GFUNCS", envir = .GlobalEnv)
     }

@@ -1,0 +1,5 @@
+gtrack.info("test.fixedbin")
+gtrack.info("test.sparse")
+gtrack.info("test.array")
+gtrack.info("test.rects")
+gtrack.info("test.computed2d")
