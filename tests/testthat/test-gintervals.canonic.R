@@ -18,8 +18,8 @@ test_that("gintervals.canonic works (2)", {
             chrom2 = c("chr1", "chr5"),
             start2 = c(0, 0),
             end2 = c(247249719, 180857866)
-        ), ignore_attr = TRUE       
+        ),
+        ignore_attr = TRUE
     )
     expect_error(gintervals.canonic(rbind(gintervals.2d(5), gintervals.2d(1), gintervals.2d(1))))
 })
-

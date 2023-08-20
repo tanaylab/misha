@@ -25,15 +25,25 @@ gsummary("test.computed2d")
 }
 {
     max.data.size <- getOption("gmax.data.size")
-    options(gmax.data.size=150)
-    r<-try({ gsummary("test.generated_1d_1", "test.generated_1d_2") }, silent = T)
+    options(gmax.data.size = 150)
+    r <- try(
+        {
+            gsummary("test.generated_1d_1", "test.generated_1d_2")
+        },
+        silent = T
+    )
     options(gmax.data.size = max.data.size)
     r
 }
 {
     max.data.size <- getOption("gmax.data.size")
-    options(gmax.data.size=15000)
-    r<-try({ gsummary("test.generated_2d_6", "test.generated_2d_5") }, silent = T)
+    options(gmax.data.size = 15000)
+    r <- try(
+        {
+            gsummary("test.generated_2d_6", "test.generated_2d_5")
+        },
+        silent = T
+    )
     options(gmax.data.size = max.data.size)
     r
 }

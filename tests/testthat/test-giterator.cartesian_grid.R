@@ -14,9 +14,9 @@ test_that("gterator.cartesian_grid works with band", {
 })
 
 test_that("gterator.cartesian_grid works with band (1d)", {
-    intervs1 <- gscreen("test.sparse>1 & test.sparse<1.2", gintervals(c(1,2,3)))
+    intervs1 <- gscreen("test.sparse>1 & test.sparse<1.2", gintervals(c(1, 2, 3)))
     itr <- giterator.cartesian_grid(intervs1, c(-100000, -50000, -10000, 20000, 700000))
-    expect_regression(giterator.intervals("1", ALLGENOME, iterator = itr, band = c(-20000, 30000)), "giterator.cartesian_grid.band.1d")    
+    expect_regression(giterator.intervals("1", ALLGENOME, iterator = itr, band = c(-20000, 30000)), "giterator.cartesian_grid.band.1d")
 })
 
 test_that("gterator.cartesian_grid works with min.band.idx", {
@@ -27,4 +27,3 @@ test_that("gterator.cartesian_grid works with min.band.idx", {
     expect_regression(giterator.intervals("1", "test.generated_2d_5", iterator = itr), "giterator.cartesian_grid.min.band.idx.2")
     expect_regression(giterator.intervals("1", ALLGENOME, iterator = itr, band = c(-20000, 30000)), "giterator.cartesian_grid.min.band.idx.3")
 })
-

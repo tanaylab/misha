@@ -3,23 +3,23 @@ gtrack.array.extract("test.array", NULL, gintervals(c(1, 2)))
 gtrack.array.extract("test.array", c("col1", "col3", "col5"), gintervals(c(1, 2)))
 {
     gtrack.array.extract("test.array", NULL, gintervals(c(1, 2)), file = "tmpresfile")
-	r <- read.table("tmpresfile", sep = "	", nrows = 1000)
-	unlink("tmpresfile")
-	r
+    r <- read.table("tmpresfile", sep = "	", nrows = 1000)
+    unlink("tmpresfile")
+    r
 }
 {
     gtrack.array.extract("test.array", c("col1", "col3", "col5"), gintervals(c(1, 2)), file = "tmpresfile")
-	r <- read.table("tmpresfile", sep = "	", nrows = 1000)
-	unlink("tmpresfile")
-	r
+    r <- read.table("tmpresfile", sep = "	", nrows = 1000)
+    unlink("tmpresfile")
+    r
 }
 {
-    gintervals.rm("test.testintervs", force=T)
-    intervs <- gscreen("test.fixedbin>0.2", gintervals(c(2,4,5,10)))
-    intervs <- intervs[sample(nrow(intervs)),]
-    try(gtrack.array.extract("test.array", c("col1", "col3", "col5"), intervals, intervals.set.out="test.testintervs"), silent=T)
+    gintervals.rm("test.testintervs", force = T)
+    intervs <- gscreen("test.fixedbin>0.2", gintervals(c(2, 4, 5, 10)))
+    intervs <- intervs[sample(nrow(intervs)), ]
+    try(gtrack.array.extract("test.array", c("col1", "col3", "col5"), intervals, intervals.set.out = "test.testintervs"), silent = T)
     r <- gintervals.load("test.testintervs")
-    gintervals.rm("test.testintervs", force=T)
+    gintervals.rm("test.testintervs", force = T)
     r
 }
 

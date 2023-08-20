@@ -1,5 +1,3 @@
-
-
 {
     v <- 17
     r <- gcluster.run(2 + 3, gsummary("test.fixedbin+v+qwe"), 3 + 4, 4 + 5, gsummary("test.sparse-v"), gsummary("test.rects*v"))
