@@ -1,14 +1,16 @@
 Type: Package
 Package: misha
 Title: Toolkit for analysis of genomic data
-Version: 4.1.1
+Version: 4.2.0
 Date: 2020-12-11
 Authors@R: c(
     person("Misha", "Hoichman", , "misha@hoichman.com", role = "aut"),
     person("Aviezer", "Lifshitz", , "aviezer.lifshitz@weizmann.ac.il", role = c("aut", "cre"))
   )
-Description: A toolkit for analysis of genomic data. The 'misha'
-    package implements an efficient data structure for storing genomic data, and provides a set of functions for data extraction, manipulation and analysis.
+Description: A toolkit for analysis of genomic data. The 'misha' package
+    implements an efficient data structure for storing genomic data, and
+    provides a set of functions for data extraction, manipulation and
+    analysis.
 License: MIT + file LICENSE
 URL: https://tanaylab.github.io/misha/
 BugReports: https://github.com/tanaylab/misha/issues

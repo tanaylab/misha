@@ -1,4 +1,4 @@
-# misha 4.1.1 
+# misha 4.2.0
 
 * Use roxygen2 for documentation
 * fix: wrong bins assignment in BinFinder.h (this code was never accessible from the R API)
