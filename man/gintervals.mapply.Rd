@@ -74,11 +74,12 @@ gintervals.mapply(
     max, "dense_track",
     gintervals(c(1, 2), 0, 10000)
 )
-gintervals.mapply(function(x, y) {
-    max(x + y)
-}, "dense_track",
-"sparse_track", gintervals(c(1, 2), 0, 10000),
-iterator = "sparse_track"
+gintervals.mapply(
+    function(x, y) {
+        max(x + y)
+    }, "dense_track",
+    "sparse_track", gintervals(c(1, 2), 0, 10000),
+    iterator = "sparse_track"
 )
 
 }

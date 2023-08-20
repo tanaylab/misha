@@ -1,5 +1,3 @@
-
-
 #' Toolkit for analysis of genomic data
 #'
 #' 'misha' package is intended to help users to efficiently analyze genomic

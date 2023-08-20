@@ -9,7 +9,7 @@ test_that("gcis_decay works", {
     src <- gextract("test.sparse", gintervals(c(1, 2, 3, 4, 5)))
     expect_regression(gcis_decay("test.rects", (0:20) * 1000, src, domain), "gcis_decay.1")
     src <- domain
-    expect_regression(gcis_decay("test.rects", (0:20) * 1000, src, domain), "gcis_decay.2")    
+    expect_regression(gcis_decay("test.rects", (0:20) * 1000, src, domain), "gcis_decay.2")
 })
 
 test_that("gcompute_strands_autocorr works", {

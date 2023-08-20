@@ -1,61 +1,60 @@
-
 {
-    gtrack.rm("aaaaaaaaaaaaa.bbbbbbbbbbb", force=T)
+    gtrack.rm("aaaaaaaaaaaaa.bbbbbbbbbbb", force = T)
     gtrack.create("aaaaaaaaaaaaa.bbbbbbbbbbb", "", "test.fixedbin")
     r <- gextract("aaaaaaaaaaaaa.bbbbbbbbbbb", gintervals(c(1, 2), 0, 1000000))
-    gtrack.rm("aaaaaaaaaaaaa.bbbbbbbbbbb", force=T)
+    gtrack.rm("aaaaaaaaaaaaa.bbbbbbbbbbb", force = T)
     r
 }
 {
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     gtrack.create("test.tmptrack", "", "test.fixedbin+1")
     r <- gextract("test.tmptrack", gintervals(c(1, 2), 0, 1000000))
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     r
 }
 {
-    gtrack.rm("test.tmptrack", force=T)
-    gtrack.create("test.tmptrack", "", "test.fixedbin+1", iterator="test.sparse")
+    gtrack.rm("test.tmptrack", force = T)
+    gtrack.create("test.tmptrack", "", "test.fixedbin+1", iterator = "test.sparse")
     r <- gextract("test.tmptrack", gintervals(c(1, 2), 0, 1000000))
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     r
 }
 {
-    gtrack.rm("test.tmptrack", force=T)
-    gtrack.create("test.tmptrack", "", "test.fixedbin+1", iterator="test.array")
+    gtrack.rm("test.tmptrack", force = T)
+    gtrack.create("test.tmptrack", "", "test.fixedbin+1", iterator = "test.array")
     r <- gextract("test.tmptrack", gintervals(c(1, 2), 0, 1000000))
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     r
 }
 {
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     gtrack.create("test.tmptrack", "", "test.rects+10")
     r <- gextract("test.tmptrack", gintervals.2d(chroms1 = c(2, 3), chroms2 = c(2, 4)))
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     r
 }
 {
     intervs <- giterator.intervals("test.sparse", gintervals(c(1, 3, 4)))
-    gtrack.rm("test.tmptrack", force=T)
-    gtrack.create("test.tmptrack", "", "test.fixedbin+1", iterator=intervs)
+    gtrack.rm("test.tmptrack", force = T)
+    gtrack.create("test.tmptrack", "", "test.fixedbin+1", iterator = intervs)
     r <- gextract("test.tmptrack", gintervals(c(1, 2), 0, 1000000))
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     r
 }
 {
     intervs <- giterator.intervals("test.array", gintervals(c(1, 3, 4)))
-    gtrack.rm("test.tmptrack", force=T)
-    gtrack.create("test.tmptrack", "", "test.fixedbin+1", iterator=intervs)
+    gtrack.rm("test.tmptrack", force = T)
+    gtrack.create("test.tmptrack", "", "test.fixedbin+1", iterator = intervs)
     r <- gextract("test.tmptrack", gintervals(c(1, 2), 0, 1000000))
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     r
 }
 {
     intervs <- giterator.intervals("test.rects", gintervals.2d(chroms1 = c(2, 3, 5), chroms2 = c(2, 4, 7)))
-    gtrack.rm("test.tmptrack", force=T)
-    gtrack.create("test.tmptrack", "", "test.rects+10", iterator=intervs)
+    gtrack.rm("test.tmptrack", force = T)
+    gtrack.create("test.tmptrack", "", "test.rects+10", iterator = intervs)
     r <- gextract("test.tmptrack", gintervals.2d(chroms1 = c(2, 3, 3), chroms2 = c(2, 3, 4)))
-    gtrack.rm("test.tmptrack", force=T)
+    gtrack.rm("test.tmptrack", force = T)
     r
 }
 
