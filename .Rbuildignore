@@ -4,3 +4,4 @@
 ^\.travis\.yml$
 ^regression\.R$
 ^inst/trackdb/test/\.db\.cache$
+^LICENSE\.md$
