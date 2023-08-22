@@ -87,11 +87,11 @@ const string rdb::INTERV_FILE_EXT = ".interv";
 const int64_t        RdbInitializer::LAUNCH_DELAY = 50; // in msec
 const int64_t        RdbInitializer::MEM_SYNC_DELAY = 100;
 const int64_t        RdbInitializer::REPORT_INTERVAL_DELAY = 3000;
-size_t               RdbInitializer::s_shm_size;
-size_t               RdbInitializer::s_res_const_size;
-size_t               RdbInitializer::s_res_var_size;
-size_t               RdbInitializer::s_max_res_size;
-size_t               RdbInitializer::s_max_mem_usage;
+uint64_t               RdbInitializer::s_shm_size;
+uint64_t               RdbInitializer::s_res_const_size;
+uint64_t               RdbInitializer::s_res_var_size;
+uint64_t               RdbInitializer::s_max_res_size;
+uint64_t               RdbInitializer::s_max_mem_usage;
 bool                 RdbInitializer::s_is_kid = false;
 pid_t                RdbInitializer::s_parent_pid = 0;
 sem_t               *RdbInitializer::s_shm_sem = SEM_FAILED;
@@ -237,7 +237,7 @@ string RdbInitializer::get_alloc_suspend_sem_name()
 	return buf;
 }
 
-void RdbInitializer::prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids)
+void RdbInitializer::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids)
 {
 	if (num_planned_kids > MAX_KIDS) 
 		verror("Too many child processes");
@@ -425,7 +425,7 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 
         if (s_res_var_size) {
             // update of data_size is atomic => don't use a semaphore
-            size_t res_num_records = 0;
+            uint64_t res_num_records = 0;
 
             for (int i = 0; i < get_num_kids(); ++i)
                 res_num_records += s_shm->kid_res_num_records[i];
@@ -498,7 +498,7 @@ int64_t RdbInitializer::update_kids_mem_usage()
 	int64_t total_mem_usage = 0;
 
 	for (vector<LiveStat>::const_iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid) {
-		size_t mem_usage = get_unique_mem_usage(ipid->pid);
+		uint64_t mem_usage = get_unique_mem_usage(ipid->pid);
 
 		if (mem_usage) {
 			s_shm->mem_usage[ipid->index] = mem_usage;
@@ -528,7 +528,7 @@ void RdbInitializer::handle_error(const char *msg)
 		errorcall(R_NilValue, msg);
 }
 
-void *RdbInitializer::allocate_res(size_t res_num_records)
+void *RdbInitializer::allocate_res(uint64_t res_num_records)
 {
 	if (!s_is_kid)
 		verror("allocate_res() cannot be called by parent process");

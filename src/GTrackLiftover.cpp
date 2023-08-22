@@ -84,7 +84,7 @@ private:
 	void write_last_interval() {
 		static const int RECORD_SIZE = sizeof(m_last_interval.start) + sizeof(m_last_interval.end) + sizeof(m_last_val);
 
-		size_t size = 0;
+		uint64_t size = 0;
 		size += m_bfile.write(&m_last_interval.start, sizeof(m_last_interval.start));
 		size += m_bfile.write(&m_last_interval.end, sizeof(m_last_interval.end));
 		size += m_bfile.write(&m_last_val, sizeof(m_last_val));
@@ -122,7 +122,7 @@ public:
 	void write_interval(const GInterval &interval1, const GInterval &interval2, float val) {
 		static const int RECORD_SIZE = sizeof(interval1.start) + sizeof(interval2.start) + sizeof(interval1.end) + sizeof(interval2.end) + sizeof(val);
 
-		size_t size = 0;
+		uint64_t size = 0;
 		size += m_bfile.write(&interval1.start, sizeof(interval1.start));
 		size += m_bfile.write(&interval1.end, sizeof(interval1.end));
 		size += m_bfile.write(&interval2.start, sizeof(interval2.start));
@@ -291,7 +291,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 					const vector<float> &vals = src_track.get_vals();
 					ChainIntervals::const_iterator hint = chain_intervs.begin();
 
-					for (size_t i = 0; i < src_intervals.size(); ++i) {
+					for (uint64_t i = 0; i < src_intervals.size(); ++i) {
 						hint = chain_intervs.map_interval(src_intervals[i], tgt_intervals, hint);
 						for (GIntervals::const_iterator iinterv = tgt_intervals.begin(); iinterv != tgt_intervals.end(); ++iinterv)
 							buffered_intervs[iinterv->chromid].write_interval(*iinterv, vals[i]);

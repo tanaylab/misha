@@ -28,7 +28,7 @@ namespace std
 	//      little_endian(v1) ^ big_endian(v2)
 	template<> struct hash<std::pair<uint64_t, uint64_t>>
 	{
-		size_t operator()(const std::pair<uint64_t, uint64_t> &v) const {
+		uint64_t operator()(const std::pair<uint64_t, uint64_t> &v) const {
 #if (__WORDSIZE == 64)
 			return v.first ^ BSWAP_64(v.second);
 #else
@@ -40,7 +40,7 @@ namespace std
 
 	template<> struct hash<std::pair<uint32_t, uint32_t>>
 	{
-		size_t operator()(const std::pair<uint32_t, uint32_t> &v) const {
+		uint64_t operator()(const std::pair<uint32_t, uint32_t> &v) const {
 			return v.first ^ BSWAP_32(v.second);
 		}
 	};

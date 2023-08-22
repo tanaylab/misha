@@ -48,10 +48,10 @@ SEXP grbind(SEXP _objs, SEXP _envir)
 			verror("Argument for grbind is not a list");
 
 		SEXP answer;
-		size_t numrows = 0;
-		size_t numcols = 0;
+		uint64_t numrows = 0;
+		uint64_t numcols = 0;
 
-		for (size_t i = 0; i < (size_t)length(_objs); ++i) {
+		for (uint64_t i = 0; i < (uint64_t)length(_objs); ++i) {
 			SEXP obj = VECTOR_ELT(_objs, i);
 			SEXP src_class = getAttrib(obj, R_ClassSymbol);
 
@@ -74,11 +74,11 @@ SEXP grbind(SEXP _objs, SEXP _envir)
 		vector<SEXP> tgt_cols;
 		iu.define_data_frame_cols(VECTOR_ELT(_objs, 0), src_cols, answer, tgt_cols, 0);
 
-		size_t tgtrow = 0;
+		uint64_t tgtrow = 0;
 
-		for (int i = 0; i < (size_t)length(_objs); ++i) {
+		for (int i = 0; i < (uint64_t)length(_objs); ++i) {
 			SEXP obj = VECTOR_ELT(_objs, i);
-			size_t srcnumrows = length(VECTOR_ELT(obj, 0));
+			uint64_t srcnumrows = length(VECTOR_ELT(obj, 0));
 
 			for (int j = 0; j < length(obj); ++j) 
 				src_cols[j] = VECTOR_ELT(obj, j);
@@ -306,15 +306,15 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
         ImportedIntervals imported_intervs;
         vector<int64_t> origin_ids(1);
         imported_intervs.reserve(intervs.size());
-        for (size_t interv = 0; interv < intervs.size(); ++interv) {
+        for (uint64_t interv = 0; interv < intervs.size(); ++interv) {
             origin_ids[0] = interv;
             imported_intervs.push_back(ImportedInterval(intervs[interv], origin_ids));
         }
 
         sort(imported_intervs.begin(), imported_intervs.end());
-        size_t cur_idx = 0;
+        uint64_t cur_idx = 0;
 
-        for (size_t i = 1; i < imported_intervs.size(); i++) {
+        for (uint64_t i = 1; i < imported_intervs.size(); i++) {
             if (imported_intervs[cur_idx].interv.chromid != imported_intervs[i].interv.chromid ||
                     imported_intervs[cur_idx].interv.end < imported_intervs[i].interv.start ||
                     (!unify_touching_intervals && imported_intervs[cur_idx].interv.end == imported_intervs[i].interv.start))
@@ -568,14 +568,14 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 			verror("Dual intervals are not supported");
 
 		vector<uint64_t> chrom_sizes;
-		size_t num_chroms = iu.get_chromkey().get_num_chroms();
+		uint64_t num_chroms = iu.get_chromkey().get_num_chroms();
 		int num_non_zero_chroms = 0;
 		SEXP answer;
 
 		if (intervs_type_mask & IntervUtils::INTERVS1D) { // do not use intervals1d.size() as the intervals might be empty and
 														  // we still want to return chrom sizes that are not NULL
 			chrom_sizes.resize(num_chroms);
-			for (size_t chromid = 0; chromid < num_chroms; ++chromid) {
+			for (uint64_t chromid = 0; chromid < num_chroms; ++chromid) {
 				uint64_t chrom_size = intervals1d.size(chromid);
 				if (chrom_size) {
 					chrom_sizes[chromid] = chrom_size;
@@ -593,9 +593,9 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
             rprotect(col_names = RSaneAllocVector(STRSXP, NUM_COLS));
             rprotect(chroms = RSaneAllocVector(STRSXP, num_chroms));
 
-			size_t idx = 0;
+			uint64_t idx = 0;
 
-			for (size_t chromid = 0; chromid < num_chroms; ++chromid) {
+			for (uint64_t chromid = 0; chromid < num_chroms; ++chromid) {
 				SET_STRING_ELT(chroms, chromid, mkChar(iu.get_chromkey().id2chrom(chromid).c_str()));
 
 				if (chrom_sizes[chromid]) {
@@ -616,8 +616,8 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
             SET_VECTOR_ELT(answer, SIZE, sizes);
 		} else {
 			chrom_sizes.resize(num_chroms * num_chroms);
-			for (size_t chromid1 = 0; chromid1 < num_chroms; ++chromid1) {
-				for (size_t chromid2 = 0; chromid2 < num_chroms; ++chromid2) {
+			for (uint64_t chromid1 = 0; chromid1 < num_chroms; ++chromid1) {
+				for (uint64_t chromid2 = 0; chromid2 < num_chroms; ++chromid2) {
 					uint64_t chrom_size = intervals2d.size(chromid1, chromid2);
 					if (chrom_size) {
 						chrom_sizes[chromid1 * num_chroms + chromid2] = chrom_size;
@@ -638,13 +638,13 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
             rprotect(chroms1 = RSaneAllocVector(STRSXP, num_chroms));
             rprotect(chroms2 = RSaneAllocVector(STRSXP, num_chroms));
 
-			size_t idx = 0;
+			uint64_t idx = 0;
 
-			for (size_t chromid1 = 0; chromid1 < num_chroms; ++chromid1) {
+			for (uint64_t chromid1 = 0; chromid1 < num_chroms; ++chromid1) {
 				SET_STRING_ELT(chroms1, chromid1, mkChar(iu.get_chromkey().id2chrom(chromid1).c_str()));
 				SET_STRING_ELT(chroms2, chromid1, mkChar(iu.get_chromkey().id2chrom(chromid1).c_str()));
 
-				for (size_t chromid2 = 0; chromid2 < num_chroms; ++chromid2) {
+				for (uint64_t chromid2 = 0; chromid2 < num_chroms; ++chromid2) {
 					uint64_t chrom_size = chrom_sizes[chromid1 * num_chroms + chromid2];
 					if (chrom_size) {
 						INTEGER(chroms_idx1)[idx] = chromid1 + 1;
@@ -734,7 +734,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 
 			unique_ptr<GenomeTrack2D> track;
 			GIntervals2D intervals;
-			size_t size = 0;
+			uint64_t size = 0;
 
 			SEXP chrom_levels1 = getAttrib(_chrom1, R_LevelsSymbol);
 			SEXP chrom_levels2 = getAttrib(_chrom2, R_LevelsSymbol);

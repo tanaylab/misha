@@ -10,7 +10,7 @@ const int GenomeTrackArrays::RECORD_SIZE = 2 * sizeof(int64_t) + sizeof(long);
 GenomeTrackArrays::GenomeTrackArrays() :
 	GenomeTrack1D(ARRAYS),
 	m_master_obj(NULL),
-	m_last_array_vals_idx((size_t)-1),
+	m_last_array_vals_idx((uint64_t)-1),
 	m_loaded(false),
 	m_is_writing(false),
 	m_slice_function(S_AVG),
@@ -72,12 +72,12 @@ void GenomeTrackArrays::finish_writing()
 
 	// write the number of intervals
 	m_bfile.seek(m_intervals_pos, SEEK_SET);
-	size_t num_intervals = m_intervals.size();
+	uint64_t num_intervals = m_intervals.size();
 	m_bfile.write(&num_intervals, sizeof(num_intervals));
 
 	// write the intervals
 	for (GIntervals::const_iterator iinterv = m_intervals.begin(); iinterv != m_intervals.end(); ++iinterv) {
-		size_t size = 0;
+		uint64_t size = 0;
 		size += m_bfile.write(&iinterv->start, sizeof(iinterv->start));
 		size += m_bfile.write(&iinterv->end, sizeof(iinterv->end));
 		size += m_bfile.write(&m_vals_pos[iinterv - m_intervals.begin()], sizeof(m_vals_pos.front()));
@@ -111,7 +111,7 @@ void GenomeTrackArrays::read_intervals_map()
 		if (m_bfile.seek(m_intervals_pos, SEEK_SET))
 			TGLError<GenomeTrackArrays>("Failed to read %s track file %s: %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str(), strerror(errno));
 
-		size_t num_intervals;
+		uint64_t num_intervals;
 		if (m_bfile.read(&num_intervals, sizeof(num_intervals)) != sizeof(num_intervals)) {
 			if (m_bfile.error())
 				TGLError<GenomeTrackArrays>("Failed to read %s track file %s: %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str(), strerror(errno));
@@ -256,7 +256,7 @@ const GIntervals &GenomeTrackArrays::get_intervals()
 	return m_intervals;
 }
 
-void GenomeTrackArrays::read_array_vals(size_t idx)
+void GenomeTrackArrays::read_array_vals(uint64_t idx)
 {
 	if (m_last_array_vals_idx != idx) {
 		m_last_array_vals_idx = idx;
@@ -301,12 +301,12 @@ void GenomeTrackArrays::get_sliced_vals(GIntervals::const_iterator iinterval, ve
 			vals[iarray_val->idx] = iarray_val->val;
 		}
 	} else {
-		for (size_t islice = 0; islice < m_slice.size(); ++islice)
+		for (uint64_t islice = 0; islice < m_slice.size(); ++islice)
 			vals.push_back(get_array_val(islice));
 	}
 }
 
-float GenomeTrackArrays::get_sliced_val(size_t idx)
+float GenomeTrackArrays::get_sliced_val(uint64_t idx)
 {
 	if (m_master_obj)
 		m_master_obj->read_array_vals(idx);
@@ -382,7 +382,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 		{
 			double sum = 0;
 			double N = 0;
-			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
+			for (uint64_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
 				if (!std::isnan(v)) {
 					sum += v;
@@ -396,7 +396,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 	case S_MIN:
 		{
 			float s_min = numeric_limits<float>::max();
-			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
+			for (uint64_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
 				if (!std::isnan(v))
 					s_min = min(v, s_min);
@@ -408,7 +408,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 	case S_MAX:
 		{
 			float s_max = -numeric_limits<float>::max();
-			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
+			for (uint64_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
 				if (!std::isnan(v))
 					s_max = max(v, s_max);
@@ -425,7 +425,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 			double sum = 0;
 			double N = 0;
 
-			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
+			for (uint64_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
 				if (!std::isnan(v)) {
 					++N;
@@ -446,7 +446,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 		{
 			double sum = 0;
 			double N = 0;
-			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
+			for (uint64_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
 				if (!std::isnan(v)) {
 					sum += v;
@@ -460,7 +460,7 @@ float GenomeTrackArrays::get_sliced_val(size_t idx)
 	case S_QUANTILE:
 		{
 			m_slice_sp.reset();
-			for (size_t islice = 0; islice < m_slice.size(); ++islice) {
+			for (uint64_t islice = 0; islice < m_slice.size(); ++islice) {
 				float v = get_array_val(islice);
 				if (!std::isnan(v))
 					m_slice_sp.add(v, s_rnd_func);

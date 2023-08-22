@@ -56,9 +56,9 @@ public:
 	virtual GIntervals::const_iterator get_chrom_begin() const { return m_intervals.begin(); }
 	virtual GIntervals::const_iterator get_chrom_end() const { return m_intervals.end(); }
 
-	virtual size_t iter_index() const { return m_iter_index; }
+	virtual uint64_t iter_index() const { return m_iter_index; }
 
-	virtual size_t iter_chrom_index() const { return m_iter_chrom_index; }
+	virtual uint64_t iter_chrom_index() const { return m_iter_chrom_index; }
 
 	virtual const GInterval &cur_interval() const { return *m_iinterval; }
 
@@ -73,8 +73,8 @@ private:
 	GIntervals::const_iterator m_iinterval;
 	int                        m_cur_chromid;
 	int                        m_iter_chrom;
-	size_t                     m_iter_index;
-	size_t                     m_iter_chrom_index;
+	uint64_t                     m_iter_index;
+	uint64_t                     m_iter_chrom_index;
 	Compare_t                  m_compare;
 	bool                       m_do_sort;
 	bool                       m_do_unify_overlaps;

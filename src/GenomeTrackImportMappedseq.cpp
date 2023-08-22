@@ -235,7 +235,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 				GenomeTrackFixedBin gtrack;
 				gtrack.init_write(filename, (unsigned)binsize, all_genome_intervs[ichrom].chromid);
 
-				vector<float> trackvals((size_t)ceil(all_genome_intervs[ichrom].end / binsize), 0);
+				vector<float> trackvals((uint64_t)ceil(all_genome_intervs[ichrom].end / binsize), 0);
 
 				for (int strand = 0; strand < 2; strand++) {
 					vector<int64_t> &cur_coords = coords[strand * num_chroms + ichrom];

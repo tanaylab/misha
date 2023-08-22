@@ -23,7 +23,7 @@ public:
 	int           chrom2id(const char *chrom) const;
 	const string &id2chrom(int id) const;
 	uint64_t      get_chrom_size(int id) const;
-	size_t        get_num_chroms() const { return m_id2chrom.size(); }
+	uint64_t        get_num_chroms() const { return m_id2chrom.size(); }
 
 	void read_chroms_sizes_file(const char *fname);
 

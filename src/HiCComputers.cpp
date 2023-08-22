@@ -39,7 +39,7 @@ static void binary_search(const GIntervals& ints, int chromid, int64_t coord, bo
 
 static void write_string(BufferedFile& bfile, string str)
 {
-	size_t size = str.size();
+	uint64_t size = str.size();
     bfile.write(&size, sizeof(size));
     if (bfile.write(&*str.begin(), sizeof(char)*size) != size)
 		TGLError("Writing string failed, file: %s", bfile.file_name().c_str());
@@ -47,7 +47,7 @@ static void write_string(BufferedFile& bfile, string str)
 
 static void read_string(BufferedFile& bfile, string& str)
 {
-	size_t size;
+	uint64_t size;
     bfile.read(&size, sizeof(size));
 
     str.resize(size);

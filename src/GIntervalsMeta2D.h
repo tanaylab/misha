@@ -14,7 +14,7 @@ public:
 
 	struct ChromStat {
 		bool    contains_overlaps;
-		size_t  size;
+		uint64_t  size;
 		double  surface;
 
 		ChromStat() : contains_overlaps(false), size(0), surface(0.) {}
@@ -32,9 +32,9 @@ public:
 
 	//-------------------------------- GIntervalsFetcher2D interface -----------------------------------
 
-	virtual size_t size() const { return m_size; }
+	virtual uint64_t size() const { return m_size; }
 
-	virtual size_t size(int chromid1, int chromid2) const { return m_chroms2size[chroms2idx(chromid1, chromid2)]; }
+	virtual uint64_t size(int chromid1, int chromid2) const { return m_chroms2size[chroms2idx(chromid1, chromid2)]; }
 
 	virtual int num_chrom_pairs() const;
 
@@ -48,7 +48,7 @@ protected:
 	vector<int64_t>              m_orig_chroms2size;
 	vector<double>               m_surfaces;
 	vector<bool>                 m_contains_overlaps;
-	size_t                       m_size;
+	uint64_t                       m_size;
 	double                       m_surface;
 	GenomeChromKey              *m_chromkey;
 

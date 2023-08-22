@@ -407,8 +407,8 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 		progress.init(contact_chrom_files.size(), 1);
 
 		for (Contact_chrom_files::iterator icontact_chrom_file = contact_chrom_files.begin(); icontact_chrom_file != contact_chrom_files.end(); ++icontact_chrom_file) {
-			size_t chromid1 = icontact_chrom_file->first.first;
-			size_t chromid2 = icontact_chrom_file->first.second;
+			uint64_t chromid1 = icontact_chrom_file->first.first;
+			uint64_t chromid2 = icontact_chrom_file->first.second;
 			BufferedFile &infile = *icontact_chrom_file->second;
 
 			// STAGE 2: Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
@@ -444,7 +444,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			if (num_subtrees > 1) {
 				const Rectangles &subarenas = qtree_serializer1.get_subarenas();
 
-				for (size_t i = 0; i < subtrees_files.size(); ++i) {
+				for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
 					snprintf(filename, sizeof(filename), "%s/.%ld", dirname.c_str(), i);
 					subtrees_files[i] = new BufferedFile();
 					if (subtrees_files[i]->open(filename, "w+")) 
@@ -483,14 +483,14 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 					check_interrupt();
 				}
 
-				for (size_t i = 0; i < subtrees_files.size(); ++i)
+				for (uint64_t i = 0; i < subtrees_files.size(); ++i)
 					subtrees_files[i]->seek(0, SEEK_SET);
 
 				infile.close();
 				unlink(infile.file_name().c_str());
 			}
 
-			for (size_t i = 0; i < num_subtrees; ++i) {
+			for (uint64_t i = 0; i < num_subtrees; ++i) {
 				BufferedFile &subtree_file = num_subtrees == 1 ? infile : *subtrees_files[i];
 				Contacts contacts;
 

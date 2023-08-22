@@ -94,7 +94,7 @@ SEXP gget_tracks_attrs(SEXP _tracks, SEXP _attrs, SEXP _envir)
 		for (int itrack = 0; itrack < length(_tracks); ++itrack)
 			SET_STRING_ELT(rrow_names, itrack, STRING_ELT(_tracks, itrack));
 
-		for (size_t i = 0; i < sorted_attrs.size(); ++i) {
+		for (uint64_t i = 0; i < sorted_attrs.size(); ++i) {
             rprotect(rattr = RSaneAllocVector(STRSXP, length(_tracks)));
 
 			for (int itrack = 0; itrack < length(_tracks); ++itrack) 

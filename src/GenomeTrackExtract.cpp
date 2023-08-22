@@ -167,7 +167,7 @@ SEXP gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_polic
 			vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
 			GInterval last_scope_interval1d;
 			GInterval2D last_scope_interval2d;
-			size_t size;
+			uint64_t size;
 			char error_prefix[1000];
 
 			if (is_1d_iterator)
@@ -298,7 +298,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 
 		const char *filename = isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
 		unsigned num_exprs = (unsigned)length(_exprs);
-		size_t num_intervals;
+		uint64_t num_intervals;
 		GIntervals out_intervals1d;
 		GIntervals2D out_intervals2d;
 		vector<unsigned> interv_ids;
@@ -391,7 +391,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				TrackExprScanner scanner(iu);
 				GInterval last_scope_interval1d;
 				GInterval2D last_scope_interval2d;
-				size_t size;
+				uint64_t size;
 				char error_prefix[1000];
 
 				scanner.begin(_exprs, kid_intervals1d, kid_intervals2d, _iterator_policy, _band);

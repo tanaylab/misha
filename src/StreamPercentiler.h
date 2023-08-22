@@ -30,32 +30,32 @@ private:
 
 public:
 	StreamPercentiler() { init(0, 0, 0, false); }
-	StreamPercentiler(size_t rnd_sampling_buf_size, size_t lowest_vals_buf_size = 0, size_t highest_vals_buf_size = 0, bool do_reserve = false);
+	StreamPercentiler(uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size = 0, uint64_t highest_vals_buf_size = 0, bool do_reserve = false);
 
-	void init(size_t rnd_sampling_buf_size, size_t lowest_vals_buf_size = 0, size_t highest_vals_buf_size = 0, bool do_reserve = false);
-	void init_with_swap(size_t stream_size, vector<T> &samples, vector<T> &lowest_vals, vector<T> &highest_vals);
+	void init(uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size = 0, uint64_t highest_vals_buf_size = 0, bool do_reserve = false);
+	void init_with_swap(uint64_t stream_size, vector<T> &samples, vector<T> &lowest_vals, vector<T> &highest_vals);
 
 	void reset();
 
-	size_t max_rnd_sampling_buf_size() const { return m_stream_sampler.max_reservoir_size(); }
-	size_t cur_rnd_sampling_buf_size() const { return m_stream_sampler.cur_reservoir_size(); }
-	size_t lowest_vals_buf_size() const { return m_extreme_vals_buf_size[LOWEST]; }
-	size_t highest_vals_buf_size() const { return m_extreme_vals_buf_size[HIGHEST]; }
+	uint64_t max_rnd_sampling_buf_size() const { return m_stream_sampler.max_reservoir_size(); }
+	uint64_t cur_rnd_sampling_buf_size() const { return m_stream_sampler.cur_reservoir_size(); }
+	uint64_t lowest_vals_buf_size() const { return m_extreme_vals_buf_size[LOWEST]; }
+	uint64_t highest_vals_buf_size() const { return m_extreme_vals_buf_size[HIGHEST]; }
 
 	const vector<T> &samples() const { return m_stream_sampler.samples(); }
 	const vector<T> &lowest_vals() const { return m_extreme_vals[LOWEST]; }
 	const vector<T> &highest_vals() const { return m_extreme_vals[HIGHEST]; }
 
-	size_t add(const T &sample, double (*rnd_func)()); // adds a sample, returns the number of samples inserted so far
+	uint64_t add(const T &sample, double (*rnd_func)()); // adds a sample, returns the number of samples inserted so far
 
-	size_t stream_size() const { return m_stream_sampler.stream_size(); }
+	uint64_t stream_size() const { return m_stream_sampler.stream_size(); }
 	const T get_percentile(double percentile, bool &is_estimated);
 
 private:
 	typedef bool (*Compare_t)(const T &, const T &);
 
 	StreamSampler<T> m_stream_sampler;
-	size_t           m_extreme_vals_buf_size[NUM_EXTREMES];
+	uint64_t           m_extreme_vals_buf_size[NUM_EXTREMES];
 	Compare_t        m_compare_f[NUM_EXTREMES];
 	vector<T>        m_extreme_vals[NUM_EXTREMES];
 	bool             m_stream_sealed;
@@ -69,13 +69,13 @@ private:
 //------------------------------ IMPLEMENTATION ----------------------------------------
 
 template <class T>
-StreamPercentiler<T>::StreamPercentiler(size_t rnd_sampling_buf_size, size_t lowest_vals_buf_size, size_t highest_vals_buf_size, bool do_reserve)
+StreamPercentiler<T>::StreamPercentiler(uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size, uint64_t highest_vals_buf_size, bool do_reserve)
 {
 	init(rnd_sampling_buf_size, lowest_vals_buf_size, highest_vals_buf_size, do_reserve);
 }
 
 template <class T>
-void StreamPercentiler<T>::init(size_t rnd_sampling_buf_size, size_t lowest_vals_buf_size, size_t highest_vals_buf_size, bool do_reserve)
+void StreamPercentiler<T>::init(uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size, uint64_t highest_vals_buf_size, bool do_reserve)
 {
 	m_stream_sampler.init(rnd_sampling_buf_size, do_reserve);
 	m_extreme_vals_buf_size[LOWEST] = lowest_vals_buf_size;
@@ -94,7 +94,7 @@ void StreamPercentiler<T>::init(size_t rnd_sampling_buf_size, size_t lowest_vals
 }
 
 template <class T>
-void StreamPercentiler<T>::init_with_swap(size_t stream_size, vector<T> &samples, vector<T> &lowest_vals, vector<T> &highest_vals)
+void StreamPercentiler<T>::init_with_swap(uint64_t stream_size, vector<T> &samples, vector<T> &lowest_vals, vector<T> &highest_vals)
 {
 	sort(samples.begin(), samples.end());
 	sort(lowest_vals.begin(), lowest_vals.end());
@@ -123,7 +123,7 @@ void StreamPercentiler<T>::reset()
 }
 
 template <class T>
-size_t StreamPercentiler<T>::add(const T &sample, double (*rnd_func)())
+uint64_t StreamPercentiler<T>::add(const T &sample, double (*rnd_func)())
 {
 	m_stream_sealed = false;
 
@@ -151,7 +151,7 @@ size_t StreamPercentiler<T>::add(const T &sample, double (*rnd_func)())
 		}
 	}
 
-	size_t num_samples = m_stream_sampler.add(sample, rnd_func);
+	uint64_t num_samples = m_stream_sampler.add(sample, rnd_func);
 
 	if (m_heaps_activated) {
 		for (int i = 0; i < NUM_EXTREMES; ++i) {
@@ -193,8 +193,8 @@ const T StreamPercentiler<T>::get_percentile(double percentile, bool &is_estimat
 
 	if (m_stream_sampler.stream_size() <= m_stream_sampler.max_reservoir_size()) {
 		double index = (m_stream_sampler.stream_size() - 1) * percentile;
-		size_t index1 = (size_t)floor(index);
-		size_t index2 = (size_t)ceil(index);
+		uint64_t index1 = (uint64_t)floor(index);
+		uint64_t index2 = (uint64_t)ceil(index);
 		double weight = index - index1;
 		is_estimated = false;
 		return m_stream_sampler.samples()[index1] * (1 - weight) + m_stream_sampler.samples()[index2] * weight;
@@ -202,8 +202,8 @@ const T StreamPercentiler<T>::get_percentile(double percentile, bool &is_estimat
 
 	if (m_heaps_activated) {
 		double index = (m_stream_sampler.stream_size() - 1) * percentile;
-		size_t index1 = (size_t)floor(index);
-		size_t index2 = (size_t)ceil(index);
+		uint64_t index1 = (uint64_t)floor(index);
+		uint64_t index2 = (uint64_t)ceil(index);
 		double weight = index - index1;
 		T v1, v2;
 
@@ -215,7 +215,7 @@ const T StreamPercentiler<T>::get_percentile(double percentile, bool &is_estimat
 			v1 = m_extreme_vals[HIGHEST][index1 - m_stream_sampler.stream_size() + m_extreme_vals[HIGHEST].size()];
 		else {
 			is_estimated = true;
-			v1 = m_stream_sampler.samples()[(size_t)floor((m_stream_sampler.max_reservoir_size() - 1) * percentile)];
+			v1 = m_stream_sampler.samples()[(uint64_t)floor((m_stream_sampler.max_reservoir_size() - 1) * percentile)];
 		}
 
 		if (index2 < m_extreme_vals[LOWEST].size())
@@ -224,15 +224,15 @@ const T StreamPercentiler<T>::get_percentile(double percentile, bool &is_estimat
 			v2 = m_extreme_vals[HIGHEST][index2 - m_stream_sampler.stream_size() + m_extreme_vals[HIGHEST].size()];
 		else {
 			is_estimated = true;
-			v2 = m_stream_sampler.samples()[(size_t)ceil((m_stream_sampler.max_reservoir_size() - 1) * percentile)];
+			v2 = m_stream_sampler.samples()[(uint64_t)ceil((m_stream_sampler.max_reservoir_size() - 1) * percentile)];
 		}
 
 		return v1 * (1 - weight) + v2 * weight;
 	}
 
 	double index = (m_stream_sampler.max_reservoir_size() - 1) * percentile;
-	size_t index1 = (size_t)floor(index);
-	size_t index2 = (size_t)ceil(index);
+	uint64_t index1 = (uint64_t)floor(index);
+	uint64_t index2 = (uint64_t)ceil(index);
 	double weight = index - index1;
 	is_estimated = true;
 	return m_stream_sampler.samples()[index1] * (1 - weight) + m_stream_sampler.samples()[index2] * weight;

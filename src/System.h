@@ -10,6 +10,6 @@
 // Note: this function has high run-time cost since it needs to open and to parse system files.
 // 
 // !!!! COMPATIBILITY: only Linux, on other platforms returns 0. !!!!
-size_t get_unique_mem_usage(pid_t pid = 0);
+uint64_t get_unique_mem_usage(pid_t pid = 0);
 
 #endif

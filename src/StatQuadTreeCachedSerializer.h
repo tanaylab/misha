@@ -81,7 +81,7 @@ private:
 	int                      m_cur_qtree_idx;
 	vector<T>                m_border_objs;
 	vector<Size>             m_border_obj_ids;
-	vector< vector<size_t> > m_border_obj_ptrs;
+	vector< vector<uint64_t> > m_border_obj_ptrs;
 
 	int idx2dto1d(int i, int j) const { return i + m_num_subtrees_sqrt * j; }
 	Rectangle &subarena(int i, int j) { return m_subarenas[idx2dto1d(i, j)]; }
@@ -276,7 +276,7 @@ void StatQuadTreeCachedSerializer<T, Size>::seal_qtree()
 	for (uint64_t i = 0; i < num_unique_objs; ++i) 
 		local2global_id[i] = i + m_cur_id_offset;
 
-	for (vector<size_t>::const_iterator iptr = m_border_obj_ptrs[m_cur_qtree_idx].begin(); iptr != m_border_obj_ptrs[m_cur_qtree_idx].end(); ++iptr) {
+	for (vector<uint64_t>::const_iterator iptr = m_border_obj_ptrs[m_cur_qtree_idx].begin(); iptr != m_border_obj_ptrs[m_cur_qtree_idx].end(); ++iptr) {
 		if (m_border_obj_ids[*iptr] == -1) { // object hasn't been added yet to any quad tree
 			m_border_obj_ids[*iptr] = m_cur_id_offset + num_unique_objs;
 			++num_unique_objs;

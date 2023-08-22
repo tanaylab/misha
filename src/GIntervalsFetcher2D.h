@@ -22,10 +22,10 @@ public:
 	virtual GIntervalsFetcher2D *create_masked_copy(const set<ChromPair> &chrompairs_mask) const = 0;
 
 	// returns number of intervals in the intervals set
-	virtual size_t size() const = 0;
+	virtual uint64_t size() const = 0;
 
 	// returns number of intervals for the given chromosome pair (intervals must be sorted)
-	virtual size_t size(int chromid1, int chromid2) const = 0;
+	virtual uint64_t size(int chromid1, int chromid2) const = 0;
 
 	// returns number of unique chromosomes pairs appearing in the intervals
 	virtual int num_chrom_pairs() const = 0;

@@ -61,8 +61,8 @@ void GIntervalsMeta1D::init(const char *name, SEXP meta, const GenomeChromKey &c
 		m_chrom2unified_touching_size[chromid] = unified_touching_size;
 		m_chrom2range[chromid] = range;
 		m_chrom2unified_overlap_range[chromid] = unified_overlap_range;
-		m_size += (size_t)size;
-		m_range += (size_t)range;
+		m_size += (uint64_t)size;
+		m_range += (uint64_t)range;
 		m_contains_overlaps |= LOGICAL(contains_overlaps)[i];
 	}
 
@@ -97,8 +97,8 @@ void GIntervalsMeta1D::init_masked_copy(GIntervalsMeta1D *obj, const set<int> &c
 		obj->m_chrom2unified_touching_size[chromid] = m_chrom2unified_touching_size[chromid];
 		obj->m_chrom2range[chromid] = m_chrom2range[chromid];
 		obj->m_chrom2unified_overlap_range[chromid] = m_chrom2unified_overlap_range[chromid];
-		obj->m_size += (size_t)m_chrom2size[chromid];
-		obj->m_range += (size_t)m_chrom2range[chromid];
+		obj->m_size += (uint64_t)m_chrom2size[chromid];
+		obj->m_range += (uint64_t)m_chrom2range[chromid];
 		obj->m_contains_overlaps |= m_chrom2size[chromid] != m_chrom2unified_overlap_size[chromid];
 	}
 }
@@ -151,7 +151,7 @@ void GIntervalsMeta1D::save_plain_intervals_meta(const char *path, const vector<
 
 void GIntervalsMeta1D::save_meta(const char *path, SEXP zeroline, const vector<ChromStat> &chromstats, const IntervUtils &iu)
 {
-	size_t num_intervals = 0;
+	uint64_t num_intervals = 0;
 	for (vector<ChromStat>::const_iterator istat = chromstats.begin(); istat < chromstats.end(); ++istat)
 		num_intervals += istat->size;
 

@@ -28,11 +28,11 @@ public:
 	unsigned get_bin_size() const { return m_bin_size; }
 	int64_t  get_num_samples() const { return m_num_samples; }
 
-	void goto_bin(size_t bin);
+	void goto_bin(uint64_t bin);
 
 	bool read_next_bin(float &val);
 	void write_next_bin(float val);
-	void write_next_bins(float *vals, size_t num_vals);
+	void write_next_bins(float *vals, uint64_t num_vals);
 
 protected:
 	unsigned  m_bin_size;
@@ -45,7 +45,7 @@ protected:
 
 //------------------------------ IMPLEMENTATION ------------------------------------
 
-inline void GenomeTrackFixedBin::goto_bin(size_t bin)
+inline void GenomeTrackFixedBin::goto_bin(uint64_t bin)
 {
 	if (m_bfile.seek((long)(bin * sizeof(float) + sizeof(m_bin_size)), SEEK_SET))
 		TGLError<GenomeTrackFixedBin>("Failed to seek a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
@@ -79,9 +79,9 @@ inline void GenomeTrackFixedBin::write_next_bin(float val)
 	m_cur_coord += m_bin_size;
 }
 
-inline void GenomeTrackFixedBin::write_next_bins(float *vals, size_t num_vals)
+inline void GenomeTrackFixedBin::write_next_bins(float *vals, uint64_t num_vals)
 {
-	size_t size = sizeof(vals[0]) * num_vals;
+	uint64_t size = sizeof(vals[0]) * num_vals;
 	if (m_bfile.write(vals, size) != size) {
 		if (m_bfile.error())
 			TGLError<GenomeTrackFixedBin>("Failed to write a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));

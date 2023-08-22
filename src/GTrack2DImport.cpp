@@ -235,7 +235,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			if (num_subtrees > 1) {
 				const Rectangles &subarenas = are_all_points ? points_serializer.get_subarenas() : rects_serializer.get_subarenas();
 
-				for (size_t i = 0; i < subtrees_files.size(); ++i) {
+				for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
 					snprintf(filename, sizeof(filename), "%s/.%ld", dirname.c_str(), i);
 					subtrees_files[i] = new BufferedFile();
 					if (subtrees_files[i]->open(filename, "w+")) 
@@ -256,7 +256,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 					check_interrupt();
 				}
 
-				for (size_t i = 0; i < subtrees_files.size(); ++i)
+				for (uint64_t i = 0; i < subtrees_files.size(); ++i)
 					subtrees_files[i]->seek(0, SEEK_SET);
 
 				infile.close();
@@ -264,7 +264,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			}
 
 			// Stage 4: Read the contacts of a subtree and insert them to StatQuadTreeCachedSerializer.
-			for (size_t i = 0; i < num_subtrees; ++i) {
+			for (uint64_t i = 0; i < num_subtrees; ++i) {
 				BufferedFile &subtree_file = num_subtrees == 1 ? infile : *subtrees_files[i];
 
 				while (1) {

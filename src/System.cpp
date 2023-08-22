@@ -7,9 +7,9 @@
 #include "port.h"
 #include "strutil.h"
 
-size_t get_unique_mem_usage(pid_t pid)
+uint64_t get_unique_mem_usage(pid_t pid)
 {
-	size_t mem_usage = 0;
+	uint64_t mem_usage = 0;
 	BufferedFile bf;
 	char filename[100];
 	vector<string> fields;

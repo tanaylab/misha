@@ -362,7 +362,7 @@ bool TrackExprScanner::eval_next()
 void TrackExprScanner::report_progress()
 {
 	m_num_evals += m_eval_buf_size;
-	if (m_num_evals > (size_t)m_report_step && m_do_report_progress) {
+	if (m_num_evals > (uint64_t)m_report_step && m_do_report_progress) {
         uint64_t curclock = get_cur_clock();
         double delta = curclock - m_last_report_clock;
 
