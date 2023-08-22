@@ -399,7 +399,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
 #' @examples
 #'
 #' old.names <- gtrack.array.get_colnames("array_track")
-#' new.names <- paste("modified", old.colnames, sep = "_")
+#' new.names <- paste("modified", old.names, sep = "_")
 #' gtrack.array.set_colnames("array_track", new.names)
 #' gtrack.array.get_colnames("array_track")
 #' gtrack.array.set_colnames("array_track", old.names)
