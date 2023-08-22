@@ -466,7 +466,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             seq.files <- paste("chr", chroms, ".seq", sep = "")
             seq.files <- paste(paste(groot, "seq", sep = "/"), seq.files, sep = "/")
             chrom.sizes <- data.frame(chrom = chroms, size = file.info(seq.files)$size)
-            write.table(chrom.sizes, paste(groot, "chrom_sizes.txt", sep = "/"), quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE)
+            utils::write.table(chrom.sizes, paste(groot, "chrom_sizes.txt", sep = "/"), quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE)
 
             # before calling gintervals.import_genes new ALLGENOME must be set
             intervals <- data.frame(
