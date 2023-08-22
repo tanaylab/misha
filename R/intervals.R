@@ -1578,12 +1578,13 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #' physical memory.
 #'
 #' @param FUN function to apply, found via ‘match.fun’
-#' @param expr track expressions whose values are used as arguments for 'FUN'
+#' @param ... track expressions whose values are used as arguments for 'FUN'
 #' @param intervals intervals for which track expressions are calculated
 #' @param enable.gapply.intervals if 'TRUE', then a variable 'GAPPLY.INTERVALS'
 #' is available
 #' @param iterator track expression iterator. If 'NULL' iterator is determined
 #' implicitly based on track expressions.
+#' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputed
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing intervals
@@ -1894,6 +1895,7 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
 #' intervals is altered as they are sorted by chromosome (or chromosomes pair -
 #' for 2D).
 #'
+#' @param ... intervals sets to combine
 #' @param intervals intervals set
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputed
@@ -2055,8 +2057,8 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
 #'
 #' This function saves 'intervals' as a named intervals set.
 #'
-#' @param intervals.set name of an intervals set
-#' @param intervals intervals
+#' @param intervals.set.out name of the new intervals set
+#' @param intervals intervals to save
 #' @return None.
 #' @seealso \code{\link{gintervals.rm}}, \code{\link{gintervals.load}},
 #' \code{\link{gintervals.exists}}, \code{\link{gintervals.ls}},

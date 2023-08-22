@@ -11,7 +11,7 @@ gtrack.array.import(track = NULL, description = NULL, ...)
 
 \item{description}{a character string description}
 
-\item{src}{array track or name of a tab-delimited file}
+\item{...}{array track or name of a tab-delimited file}
 }
 \value{
 None.

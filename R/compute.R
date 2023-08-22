@@ -107,8 +107,7 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 #' an individual value can be accessed by [i1,i2,...,iN] notation, where 'i1'
 #' is the first track and 'iN' is the last track expression.
 #'
-#' @param expr track expression
-#' @param breaks breaks that determine the bin
+#' @param ... pairs of 'expr', 'breaks' where 'expr' is a track expression and the breaks determine the bin
 #' @param intervals genomic scope for which the function is applied
 #' @param include.lowest if 'TRUE', the lowest value of the range determined by
 #' breaks is included
@@ -199,7 +198,7 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
 #' evaluated expressions. By default the column names match the track
 #' expressions.
 #'
-#' @param expr track expression
+#' @param ... track expression
 #' @param intervals genomic scope for which the function is applied
 #' @param colnames sets the columns names in the returned value. If 'NULL'
 #' names are set to track expression.
@@ -478,8 +477,7 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
 #'
 #' @param lookup_table a multi-dimensional array containing the values that are
 #' returned by the function
-#' @param expr track expression
-#' @param breaks breaks that determine the bin
+#' @param ... pairs of 'expr', 'breaks' where 'expr' is a track expression and the breaks determine the bin
 #' @param intervals genomic scope for which the function is applied
 #' @param include.lowest if 'TRUE', the lowest value of the range determined by
 #' breaks is included
@@ -944,8 +942,7 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
 #' If 'include.lowest' is 'TRUE' the the lowest value will be included in the
 #' first interval, i.e. in [x1, x2].
 #'
-#' @param bin_expr a track expression that determines the bin
-#' @param breaks breaks that define the bins
+#' @param ... pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See \code{\link{gdist}}.
 #' @param expr track expression for which quantiles are calculated
 #' @param percentiles an array of percentiles of quantiles in [0, 1] range
 #' @param intervals genomic scope for which the function is applied.
@@ -1018,8 +1015,7 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
 #' If 'include.lowest' is 'TRUE' the the lowest value will be included in the
 #' first interval, i.e. in [x1, x2].
 #'
-#' @param bin_expr a track expression that determines the bin
-#' @param breaks breaks that define the bins
+#' @param ... pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See \code{\link{gdist}}.
 #' @param expr track expression for which summary statistics is calculated
 #' @param intervals genomic scope for which the function is applied
 #' @param include.lowest if 'TRUE', the lowest value of the range determined by

@@ -291,7 +291,7 @@ gtrack.array.get_colnames <- function(track = NULL) {
 #'
 #' @param track name of the newly created track
 #' @param description a character string description
-#' @param src array track or name of a tab-delimited file
+#' @param ... array track or name of a tab-delimited file
 #' @return None.
 #' @seealso \code{\link{gextract}}, \code{\link{gtrack.array.extract}},
 #' \code{\link{gtrack.array.set_colnames}}, \code{\link{gtrack.rm}},
@@ -390,7 +390,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
 #' This sets the column names of an array track.
 #'
 #' @param track track name
-#' @param track vector of column names
+#' @param names vector of column names
 #' @return None.
 #' @seealso \code{\link{gtrack.array.get_colnames}},
 #' \code{\link{gtrack.array.extract}}, \code{\link{gvtrack.array.slice}},

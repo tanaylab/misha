@@ -15,6 +15,8 @@ gbins.quantiles(
 )
 }
 \arguments{
+\item{...}{pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See \code{\link{gdist}}.}
+
 \item{expr}{track expression for which quantiles are calculated}
 
 \item{percentiles}{an array of percentiles of quantiles in [0, 1] range}
@@ -28,10 +30,6 @@ breaks is included}
 implicitly based on track expressions.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
-
-\item{bin_expr}{a track expression that determines the bin}
-
-\item{breaks}{breaks that define the bins}
 }
 \value{
 Multi-dimensional array representing quantiles for each percentile

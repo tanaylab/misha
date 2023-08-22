@@ -14,6 +14,8 @@ gbins.summary(
 )
 }
 \arguments{
+\item{...}{pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See \code{\link{gdist}}.}
+
 \item{expr}{track expression for which summary statistics is calculated}
 
 \item{intervals}{genomic scope for which the function is applied}
@@ -25,10 +27,6 @@ breaks is included}
 implicitly based on track expressions.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
-
-\item{bin_expr}{a track expression that determines the bin}
-
-\item{breaks}{breaks that define the bins}
 }
 \value{
 Multi-dimensional array representing summary statistics for each

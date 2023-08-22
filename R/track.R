@@ -943,8 +943,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
 #' @param description a character string description
 #' @param lookup_table a multi-dimensional array containing the values that are
 #' returned by the function
-#' @param expr track expression
-#' @param breaks breaks that determine the bin
+#' @param ... pairs of track expressions and breaks
 #' @param include.lowest if 'TRUE', the lowest value of the range determined by
 #' breaks is included
 #' @param force.binning if 'TRUE', the values smaller than the minimal break

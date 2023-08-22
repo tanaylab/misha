@@ -13,6 +13,8 @@ gdist(
 )
 }
 \arguments{
+\item{...}{pairs of 'expr', 'breaks' where 'expr' is a track expression and the breaks determine the bin}
+
 \item{intervals}{genomic scope for which the function is applied}
 
 \item{include.lowest}{if 'TRUE', the lowest value of the range determined by
@@ -22,10 +24,6 @@ breaks is included}
 implicitly based on track expressions.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
-
-\item{expr}{track expression}
-
-\item{breaks}{breaks that determine the bin}
 }
 \value{
 N-dimensional vector where N is the number of 'expr'-'breaks' pairs.

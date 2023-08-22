@@ -7,6 +7,11 @@ virtual tracks and interval sets}
 \usage{
 gset_input_mode(autocompletion = FALSE, interactive = FALSE)
 }
+\arguments{
+\item{interactive}{if 'TRUE' interactive mode is switched on}
+
+\item{autoompletion}{if 'TRUE' auto-completion is switched on}
+}
 \value{
 None.
 }

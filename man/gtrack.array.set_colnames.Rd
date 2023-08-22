@@ -7,7 +7,9 @@
 gtrack.array.set_colnames(track = NULL, names = NULL)
 }
 \arguments{
-\item{track}{vector of column names}
+\item{track}{track name}
+
+\item{names}{vector of column names}
 }
 \value{
 None.

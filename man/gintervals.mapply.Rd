@@ -17,6 +17,8 @@ gintervals.mapply(
 \arguments{
 \item{FUN}{function to apply, found via ‘match.fun’}
 
+\item{...}{track expressions whose values are used as arguments for 'FUN'}
+
 \item{intervals}{intervals for which track expressions are calculated}
 
 \item{enable.gapply.intervals}{if 'TRUE', then a variable 'GAPPLY.INTERVALS'
@@ -25,10 +27,10 @@ is available}
 \item{iterator}{track expression iterator. If 'NULL' iterator is determined
 implicitly based on track expressions.}
 
+\item{band}{track expression band. If 'NULL' no band is used.}
+
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputed}
-
-\item{expr}{track expressions whose values are used as arguments for 'FUN'}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a data frame representing intervals
