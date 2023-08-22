@@ -756,7 +756,7 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gsegment", exprstr, intervals, minsegment, qnorm(maxpval), onetailed, .iterator, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gsegment", exprstr, intervals, minsegment, stats::qnorm(maxpval), onetailed, .iterator, intervals.set.out, new.env(parent = parent.frame()))
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
