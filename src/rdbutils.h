@@ -26,6 +26,8 @@
 
 #include "TGLException.h"
 
+#define MISHA_EXIT_SIG SIGTERM
+
 using namespace std;
 
 //------------------------------- UTILITY FUNCTIONS -------------------------------------
@@ -167,8 +169,9 @@ template<typename T> void unpack_data(void *&ptr, T &data, size_t n) {
 }
 
 #define MAX_KIDS 1000
-#define rreturn(retv) { if (RdbInitializer::is_kid()) exit(0); return(retv); }
+#define rreturn(retv) { if (RdbInitializer::is_kid()) rexit(); return(retv); }
 
+void rexit();
 
 // Define RdbInitializer instance in your main function that is called by R.
 // RdbInitializer should be defined inside "try-catch" statement that catches TGLException.
@@ -363,6 +366,20 @@ private:
 
 
 // ------------------------------- IMPLEMENTATION --------------------------------
+
+inline void rexit() {
+	if (RdbInitializer::is_kid()){
+		// Normally we should have called exit() here. However "R CMD check"
+		// doesn't like calls to exit/abort/etc because they end R session
+		// itself. It prints a warning message and packages with warning
+		// messages cannot be submitted to CRAN. Yet the child process MUST end
+		// the R sessions, that's the whole point. Solution? Send a signal to
+		// itself. Fortunately "R CMD check" allows signals.
+		kill(getpid(), MISHA_EXIT_SIG);
+	} else {
+		rdb::verror("rexit is called from parent process");
+	}
+}
 
 inline void rdb::set_abs_timeout(int64_t delay_msec, struct timespec &req)
 {

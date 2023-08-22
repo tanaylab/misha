@@ -1,5 +1,4 @@
 #include "port.h"
-BASE_CC_FILE
 
 #include <memory>
 

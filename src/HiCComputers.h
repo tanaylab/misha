@@ -56,7 +56,7 @@ public:
 	void serialize(BufferedFile& bfile);
 	void unserialize(BufferedFile& bfile);
 
-	void dump();
+	void dump(ostream &out);
 
     // filenames are relative to trackdb
     void set_fend_track(const char* track_fn1, const char* track_fn2);
@@ -88,7 +88,7 @@ public:
 	void serialize(BufferedFile& bfile);
 	void unserialize(BufferedFile& bfile);
 
-	void dump();
+	void dump(ostream &out);
 
     void set_prior(double prior);
 

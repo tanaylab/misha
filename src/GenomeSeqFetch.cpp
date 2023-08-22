@@ -1,7 +1,6 @@
 #include <errno.h>
 
 #include "port.h"
-BASE_CC_FILE
 
 #include "GenomeSeqFetch.h"
 

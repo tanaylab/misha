@@ -122,7 +122,7 @@ public:
 		m_back_id(-1),
 		m_size(0)
 	{
-		cerr << "RaList with " << id_space_size << endl;
+		// cerr << "RaList with " << id_space_size << endl;
 	}
 
 private:
