@@ -511,7 +511,7 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 					if (cur_chromid != scanner.last_interval1d().chromid) {
 						cur_chromid = scanner.last_interval1d().chromid;
 						created_chromids.insert(cur_chromid);
-						sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(cur_chromid).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(cur_chromid).c_str());
 
 						if (itr_type == TrackExpressionIteratorBase::FIXED_BIN)
 							fixed_bin_track.init_write(filename, ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size(), cur_chromid);
@@ -531,7 +531,7 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 					// some of the chromosome could be previously skipped; we still must create them even if they are empty
 					for (GIntervals::const_iterator iinterv = all_genome_intervs1d.begin(); iinterv != all_genome_intervs1d.end(); ++iinterv) {
 						if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
-							sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(iinterv->chromid).c_str());
+							snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(iinterv->chromid).c_str());
 							sparse_track.init_write(filename, iinterv->chromid);
 						}
 					}
@@ -551,7 +551,7 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 
 						cur_chromid1 = interv.chromid1();
 						cur_chromid2 = interv.chromid2();
-						sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
 
 						qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(cur_chromid1), iu.get_chromkey().get_chrom_size(cur_chromid2));
 						gtrack.init_write(filename, cur_chromid1, cur_chromid2);

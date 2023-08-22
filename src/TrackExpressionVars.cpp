@@ -623,7 +623,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 				SEXP rretv;
 
 				REprintf("Preparing track %s for percentiles queries\n", ivar->track_n_imdf->name.c_str());
-				sprintf(command,
+				snprintf(command, sizeof(command),
 						"{ "
 						"	.ginteractive = getOption(\".ginteractive\")\n"
 						"	tryCatch({\n"

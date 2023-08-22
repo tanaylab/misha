@@ -1,6 +1,7 @@
 #ifndef SEGMENT_H_INCLUDED
 #define SEGMENT_H_INCLUDED
 
+#include <inttypes.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -43,9 +44,10 @@ struct Segment {
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%lld - %lld)", start, end);
+		snprintf(str, sizeof(str), "(%" PRId64 " - %" PRId64 ")", start, end);
 		return str;
 	}
+
 };
 
 #pragma pack(pop)

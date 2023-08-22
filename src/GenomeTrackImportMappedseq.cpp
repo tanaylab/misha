@@ -228,7 +228,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 		for (unsigned ichrom = 0; ichrom < num_chroms; ichrom++) {
 			char filename[FILENAME_MAX];
-			sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(all_genome_intervs[ichrom].chromid).c_str());
+			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(all_genome_intervs[ichrom].chromid).c_str());
 
 			// dense track
 			if (pileup) {

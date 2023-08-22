@@ -226,14 +226,14 @@ RdbInitializer::~RdbInitializer()
 string RdbInitializer::get_shm_sem_name()
 {
 	char buf[100];
-	sprintf(buf, "misha-shm-%d", (int)getpid());
+	snprintf(buf, sizeof(buf), "misha-shm-%d", (int)getpid());
 	return buf;
 }
 
 string RdbInitializer::get_alloc_suspend_sem_name()
 {
 	char buf[100];
-	sprintf(buf, "misha-alloc-suspend-%d", (int)getpid());
+	snprintf(buf, sizeof(buf), "misha-alloc-suspend-%d", (int)getpid());
 	return buf;
 }
 
@@ -631,7 +631,7 @@ void RdbInitializer::vdebug_print(const char *fmt, ...)
 	char buf[1000];
 
 	va_start(ap, fmt);
-	vsprintf(buf, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
 	SemLocker sl(s_shm_sem);
@@ -651,7 +651,7 @@ void rdb::rerror(const char *fmt, ...)
 	char buf[1000];
 
 	va_start(ap, fmt);
-	vsprintf(buf, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
 	RdbInitializer::handle_error(buf);
@@ -663,7 +663,7 @@ void rdb::verror(const char *fmt, ...)
 	char buf[1000];
 
 	va_start(ap, fmt);
-	vsprintf(buf, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
 	if (RdbInitializer::s_ref_count)

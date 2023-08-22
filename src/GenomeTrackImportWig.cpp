@@ -92,7 +92,7 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 				iinterv_end = data.end();
 			}
 
-			sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 
 			if (binsize) {  // Fixed-bin track
 				GenomeTrackFixedBin gtrack;

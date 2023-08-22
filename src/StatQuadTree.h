@@ -8,10 +8,12 @@
 #ifndef QUADTREE_H_
 #define QUADTREE_H_
 
+#include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
+
 #include <algorithm>
 #include <limits>
-#include <math.h>
 #include <queue>
 #include <vector>
 
@@ -40,9 +42,10 @@ struct Rectangle_val : public Rectangle {
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%lld - %lld) (%lld - %lld) %g", x1, x2, y1, y2, (double)v);
+		snprintf(str, sizeof(str), "(%" PRId64 " - %" PRId64 ") (%" PRId64 " - %" PRId64 ") %g", x1, x2, y1, y2, (double)v);
 		return str;
 	}
+
 };
 
 //----------------------------------------- Point_val ---------------------------------------
@@ -60,7 +63,7 @@ struct Point_val : public Point {
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%ld - %ld) %g", x, y, (double)v);
+		snprintf(str, sizeof(str), "(%ld - %ld) %g", x, y, (double)v);
 		return str;
 	}
 };
