@@ -46,7 +46,7 @@ gtrack.2d.create(
     "test_rects", "Test 2d track", intervs,
     runif(dim(intervs)[1], 1, 100)
 )
-gextract("test_rects", ALLGENOME)
+gextract("test_rects", .misha$ALLGENOME)
 gtrack.rm("test_rects", force = TRUE)
 
 }

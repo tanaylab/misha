@@ -38,7 +38,7 @@ gtrack.create_sparse(
     "test_sparse", "Test track", intervs,
     1:dim(intervs)[1]
 )
-gextract("test_sparse", ALLGENOME)
+gextract("test_sparse", .misha$ALLGENOME)
 gtrack.rm("test_sparse", force = TRUE)
 
 }

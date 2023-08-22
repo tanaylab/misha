@@ -447,7 +447,7 @@
 // 	return R_NilValue;
 // }
 
-// // .Call("gtest_quadtree_rect", new.env(parent = parent.frame()), silent = TRUE)
+// // .Call("gtest_quadtree_rect", .misha_env(), silent = TRUE)
 
 // SEXP gtest_bands(SEXP _envir) {
 // 	try {
@@ -668,7 +668,7 @@
 // //		REprintf("signature OK: %d\n", signature == s);
 // //		cqtree.unserialize(cqtree_file);
 
-// // .Call("gtest_quadtree_rect", new.env(parent = parent.frame()), silent = TRUE)
+// // .Call("gtest_quadtree_rect", .misha_env(), silent = TRUE)
 // //		REprintf("Constructing cached HUGE quad tree via serializer\n");
 // //		cl = clock();
 // //		int num_subtrees = 64;

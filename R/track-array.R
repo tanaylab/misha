@@ -36,7 +36,7 @@
     res
 }
 
-.gtrack.create_test_arrays <- function(track, minsize, maxsize, intervals = get("ALLGENOME"), iterator = NULL) {
+.gtrack.create_test_arrays <- function(track, minsize, maxsize, intervals = get("ALLGENOME", envir = .misha), iterator = NULL) {
     if (is.null(substitute(track))) {
         stop("Usage: .gtrack.create_test_arrays(track, expr, iterator = NULL, band = NULL)", call. = F)
     }
@@ -44,11 +44,11 @@
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
     direxisted <- file.exists(trackdir)
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -56,7 +56,7 @@
     success <- FALSE
     tryCatch(
         {
-            colnames <- .gcall("_gcreate_arrays_track", trackstr, minsize, maxsize, "1", intervals, .iterator, new.env(parent = parent.frame()), silent = TRUE)
+            colnames <- .gcall("_gcreate_arrays_track", trackstr, minsize, maxsize, "1", intervals, .iterator, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             .gtrack.array.set_colnames(trackstr, colnames, FALSE)
             .gtrack.attr.set(trackstr, "created.by", ".gtrack.create_test_arrays", T)
@@ -77,7 +77,7 @@
 .gtrack.array.get_colnames <- function(trackstr) {
     .gcheckroot()
 
-    if (is.na(match(trackstr, get("GTRACKS")))) {
+    if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s does not exist", trackstr), call. = F)
     }
 
@@ -85,7 +85,7 @@
         stop("gtrack.array.get_colnames can only be applied to array tracks", call. = F)
     }
 
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
     filename <- paste(trackdir, ".colnames", sep = "/")
 
     if (!file.exists(filename)) {
@@ -101,7 +101,7 @@
 .gtrack.array.set_colnames <- function(trackstr, names, check_num_cols) {
     .gcheckroot()
 
-    if (is.na(match(trackstr, get("GTRACKS")))) {
+    if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s does not exist", trackstr), call. = F)
     }
 
@@ -135,7 +135,7 @@
     colnames <- as.integer(1:length(names))
     names(colnames) <- names
 
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
     filename <- paste(trackdir, ".colnames", sep = "/")
     f <- file(filename, "wb")
     serialize(colnames, f)
@@ -211,7 +211,7 @@ gtrack.array.extract <- function(track = NULL, slice = NULL, intervals = NULL, f
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("garrayextract", trackstr, slice$slice, slice$colnames, file, intervals, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("garrayextract", trackstr, slice$slice, slice$colnames, file, intervals, intervals.set.out, .misha_env())
 
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
@@ -313,13 +313,13 @@ gtrack.array.get_colnames <- function(track = NULL) {
 #' )
 #'
 #' gtrack.array.import("test_track1", "Test array track 1", f1, f2)
-#' gtrack.array.extract("test_track1", NULL, ALLGENOME)
+#' gtrack.array.extract("test_track1", NULL, .misha$ALLGENOME)
 #'
 #' gtrack.array.import(
 #'     "test_track2", "Test array track 2",
 #'     "test_track1", f3
 #' )
-#' gtrack.array.extract("test_track2", NULL, ALLGENOME)
+#' gtrack.array.extract("test_track2", NULL, .misha$ALLGENOME)
 #'
 #' gtrack.rm("test_track1", TRUE)
 #' gtrack.rm("test_track2", TRUE)
@@ -340,7 +340,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     for (src in args) {
         src <- do.call(.gexpr2str, list(src), envir = parent.frame())
         srcs <- c(srcs, src)
-        if (is.na(match(src, get("GTRACKS")))) {
+        if (is.na(match(src, get("GTRACKS", envir = .misha)))) {
             colnames[[length(colnames) + 1]] <- as.character(NULL)
         } else {
             if (.gcall_noninteractive(gtrack.info, src)$type != "array") {
@@ -350,11 +350,11 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
         }
     }
 
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
     direxisted <- file.exists(trackdir)
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -362,7 +362,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     success <- FALSE
     tryCatch(
         {
-            colnames <- .gcall("garrays_import", trackstr, srcs, colnames, new.env(parent = parent.frame()), silent = TRUE)
+            colnames <- .gcall("garrays_import", trackstr, srcs, colnames, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             .gtrack.array.set_colnames(trackstr, colnames, FALSE)
             created.by <- sprintf("gtrack.array.import(\"%s\", description, src = c(\"%s\"))", trackstr, paste(srcs, collapse = "\", \""))

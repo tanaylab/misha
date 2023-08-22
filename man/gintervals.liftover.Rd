@@ -31,7 +31,7 @@ resulted intervals it indicates the index of the original interval.
 \examples{
 
 gdb.init_examples()
-chainfile <- paste(GROOT, "data/test.chain", sep = "/")
+chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
 intervs <- data.frame(
     chrom = "chr25", start = c(0, 7000),
     end = c(6000, 20000)

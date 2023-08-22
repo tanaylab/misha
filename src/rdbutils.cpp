@@ -325,20 +325,23 @@ pid_t RdbInitializer::launch_process()
 		s_is_kid = true;
 
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
-		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
-
+		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);		
+		
 		SEXP r_multitasking_stdout = GetOption(install("gmultitasking_stdout"), R_NilValue);
 
-		if (!isLogical(r_multitasking_stdout) || !(int)LOGICAL(r_multitasking_stdout)[0]) {
-            if (!freopen("/dev/null", "w", stdout))
-                verror("Failed to open /dev/null");
+		int devnull;
+
+		if ((devnull = open("/dev/null", O_RDWR)) == -1){
+            verror("Failed to open /dev/null");
         }
 
-        if (!freopen("/dev/null", "w", stderr))
-            verror("Failed to open /dev/null");
+        if (!isLogical(r_multitasking_stdout) || !(int)LOGICAL(r_multitasking_stdout)[0]) {
+            dup2(devnull, STDOUT_FILENO);
+        }
 
-        if (!freopen("/dev/null", "r", stdin))
-            verror("Failed to open /dev/null");
+        dup2(devnull, STDIN_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        close(devnull);
 
 		int64_t delta_mem_usage = get_unique_mem_usage(getpid()) - s_shm->mem_usage[s_kid_index];
 		s_shm->mem_usage[s_kid_index] += delta_mem_usage;
@@ -370,8 +373,9 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
                 swap(*ipid, s_running_pids.back());
                 s_running_pids.pop_back();
 
-                if (!ignore_errors && !WIFEXITED(status))
+                if (!ignore_errors && !WIFEXITED(status) && WIFSIGNALED(status) && WTERMSIG(status) != MISHA_EXIT_SIG){
                     verror("Child process %d ended unexpectedly", (int)ipid->pid);
+				}
 
                 // choose a new untouchable kid: the one with maximal memory consumption
                 if (kid_idx == s_shm->untouchable_kid_idx && s_running_pids.size()) {
@@ -743,7 +747,7 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 const char *rdb::get_groot(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP groot = findVar(install("GROOT"), envir);
+	SEXP groot = findVar(install("GROOT"), findVar(install(".misha"), envir));
 
 	if (!isString(groot))
 		verror("GROOT variable does not exist");
@@ -754,7 +758,7 @@ const char *rdb::get_groot(SEXP envir)
 const char *rdb::get_gwd(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP gwd = findVar(install("GWD"), envir);
+	SEXP gwd = findVar(install("GWD"), findVar(install(".misha"), envir));
 
 	if (!isString(gwd))
 		verror("GWD variable does not exist");
@@ -765,7 +769,7 @@ const char *rdb::get_gwd(SEXP envir)
 const char *rdb::get_glib_dir(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP glibdir = findVar(install(".GLIBDIR"), envir);
+	SEXP glibdir = findVar(install(".GLIBDIR"), findVar(install(".misha"), envir));
 
 	if (!isString(glibdir))
 		verror(".GLIBDIR variable does not exist");

@@ -8,7 +8,7 @@ gbins.quantiles(
   ...,
   expr = NULL,
   percentiles = 0.5,
-  intervals = get("ALLGENOME"),
+  intervals = get("ALLGENOME", envir = .misha),
   include.lowest = FALSE,
   iterator = NULL,
   band = NULL

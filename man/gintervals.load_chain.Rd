@@ -26,7 +26,7 @@ returned by 'gintervals.load_chain'.
 \examples{
 
 gdb.init_examples()
-chainfile <- paste(GROOT, "data/test.chain", sep = "/")
+chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
 gintervals.load_chain(chainfile)
 
 }

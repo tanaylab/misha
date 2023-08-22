@@ -17,7 +17,7 @@ test_that("gdir.cd works (2)", {
     gdir.cd("test")
     r <- gdir.cwd()
     gdir.cd("..")
-    expect_equal(r, file.path(GROOT, "tracks", "test"))
+    expect_equal(r, file.path(.misha$GROOT, "tracks", "test"))
 })
 
 test_that("gdir creates and removes directory correctly", {

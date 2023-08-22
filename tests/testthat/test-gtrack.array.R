@@ -1,5 +1,5 @@
 test_that("Basic gtrack.array.extract functions", {
-    expect_error(gtrack.array.extract("test.fixedbin", NULL, ALLGENOME))
+    expect_error(gtrack.array.extract("test.fixedbin", NULL, .misha$ALLGENOME))
     expect_regression(gtrack.array.extract("test.array", NULL, gintervals(c(1, 2))), "gtrack_array_extract_array_intervals")
     expect_regression(gtrack.array.extract("test.array", c("col1", "col3", "col5"), gintervals(c(1, 2))), "gtrack_array_extract_array_cols_intervals")
 })
@@ -54,10 +54,10 @@ test_that("Import and extraction with gtrack.array", {
     gtrack.array.extract("test.array", c("col1", "col3"), gintervals(c(1, 2)), file = f3)
 
     gtrack.array.import("test_track1", "", f1, f2)
-    r1 <- gtrack.array.extract("test_track1", NULL, ALLGENOME)
+    r1 <- gtrack.array.extract("test_track1", NULL, .misha$ALLGENOME)
 
     gtrack.array.import("test_track2", "", "test_track1", f3)
-    r2 <- gtrack.array.extract("test_track2", NULL, ALLGENOME)
+    r2 <- gtrack.array.extract("test_track2", NULL, .misha$ALLGENOME)
 
     r <- list(r1 = r1, r2 = r2)
 

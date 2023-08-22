@@ -1,3 +1,9 @@
+#' An environment for storing the package global variables
+#'
+#' @keywords internal
+#' @export
+.misha <- new.env(parent = emptyenv())
+
 .onLoad <- function(lib, pkg) {
     Sys.umask("0002")
 
@@ -21,16 +27,16 @@
     options(gtrack.num.chunks = 0)
 
     # set the groot to samples dir
-    if (!exists("GROOT", envir = .GlobalEnv)) {
+    if (!exists("GROOT", envir = .misha)) {
         gdb.init_examples()
     }
 }
 
 .onAttach <- function(lib, pkg) {
-    assign(".GFUNCS", getNamespaceExports("misha"), envir = .GlobalEnv)
-    assign("GITERATOR.INTERVALS", NULL, envir = .GlobalEnv)
+    assign(".GFUNCS", getNamespaceExports("misha"), envir = .misha)
+    assign("GITERATOR.INTERVALS", NULL, envir = .misha)
 
-    assign(".GLIBDIR", path.package("misha"), envir = .GlobalEnv)
+    assign(".GLIBDIR", path.package("misha"), envir = .misha)
 }
 
 .onDetach <- function(lib) {
@@ -38,41 +44,41 @@
 }
 
 .onUnload <- function(lib) {
-    if (exists(".GFUNCS", envir = .GlobalEnv)) {
-        remove(".GFUNCS", envir = .GlobalEnv)
+    if (exists(".GFUNCS", envir = .misha)) {
+        remove(".GFUNCS", envir = .misha)
     }
 
-    if (exists(".GLIBDIR", envir = .GlobalEnv)) {
-        remove(".GLIBDIR", envir = .GlobalEnv)
+    if (exists(".GLIBDIR", envir = .misha)) {
+        remove(".GLIBDIR", envir = .misha)
     }
 
-    if (exists("ALLGENOME", envir = .GlobalEnv)) {
-        remove("ALLGENOME", envir = .GlobalEnv)
+    if (exists("ALLGENOME", envir = .misha)) {
+        remove("ALLGENOME", envir = .misha)
     }
 
-    if (exists("GINTERVID", envir = .GlobalEnv)) {
-        remove("GINTERVID", envir = .GlobalEnv)
+    if (exists("GINTERVID", envir = .misha)) {
+        remove("GINTERVID", envir = .misha)
     }
 
-    if (exists("GITERATOR.INTERVALS", envir = .GlobalEnv)) {
-        remove("GITERATOR.INTERVALS", envir = .GlobalEnv)
+    if (exists("GITERATOR.INTERVALS", envir = .misha)) {
+        remove("GITERATOR.INTERVALS", envir = .misha)
     }
 
-    if (exists("GROOT", envir = .GlobalEnv)) {
-        remove("GROOT", envir = .GlobalEnv)
+    if (exists("GROOT", envir = .misha)) {
+        remove("GROOT", envir = .misha)
     }
 
-    if (exists("GWD", envir = .GlobalEnv)) {
-        remove("GWD", envir = .GlobalEnv)
+    if (exists("GWD", envir = .misha)) {
+        remove("GWD", envir = .misha)
     }
 
-    if (exists("GTRACKS", envir = .GlobalEnv)) {
-        remove(list = get("GTRACKS"), envir = .GlobalEnv)
-        remove("GTRACKS", envir = .GlobalEnv)
+    if (exists("GTRACKS", envir = .misha)) {
+        remove(list = get("GTRACKS", envir = .misha), envir = .misha)
+        remove("GTRACKS", envir = .misha)
     }
 
-    if (exists("GINTERVS", envir = .GlobalEnv)) {
-        remove(list = get("GINTERVS"), envir = .GlobalEnv)
-        remove("GINTERVS", envir = .GlobalEnv)
+    if (exists("GINTERVS", envir = .misha)) {
+        remove(list = get("GINTERVS", envir = .misha), envir = .misha)
+        remove("GINTERVS", envir = .misha)
     }
 }

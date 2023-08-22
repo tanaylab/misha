@@ -42,7 +42,8 @@ IntervUtils::IntervUtils(SEXP envir)
 	m_kids_intervals1d.clear();
 	m_kids_intervals2d.clear();
 
-	m_allgenome = findVar(install("ALLGENOME"), m_envir);
+	
+	m_allgenome = findVar(install("ALLGENOME"), findVar(install(".misha"), m_envir));
 
 	if (isNull(m_allgenome))
 		verror("ALLGENOME variable does not exist");
@@ -80,7 +81,7 @@ bool IntervUtils::track_exists(const char *track_name)
 {
 	SEXP all_track_names;
 
-	rprotect(all_track_names = findVar(install("GTRACKS"), get_env()));
+	rprotect(all_track_names = findVar(install("GTRACKS"), findVar(install(".misha"), get_env())));
 	if (isString(all_track_names)) {
 		for (int i = 0; i < length(all_track_names); ++i) {
 			if (!strcmp(track_name, CHAR(STRING_ELT(all_track_names, i))))
@@ -314,7 +315,7 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		SEXP gintervs;
 		bool interv_found = false;
 
-		rprotect(gintervs = findVar(install("GINTERVS"), m_envir));
+		rprotect(gintervs = findVar(install("GINTERVS"), findVar(install(".misha"),m_envir)));
 		if (isString(gintervs)) {
 			for (int iinterv = 0; iinterv < length(gintervs); ++iinterv) {
 				const char *interv = CHAR(STRING_ELT(gintervs, iinterv));
@@ -340,7 +341,7 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		if (!stat(path.c_str(), &stat_res) && S_ISDIR(stat_res.st_mode))
 			verror("%s is a big intervals set. Big intervals sets are not supported by the function.", full_interv_name);
 		rprotect(rintervals = RSaneUnserialize(path.c_str()));
-	}
+        }
 
 	if (TYPEOF(rintervals) == PROMSXP) {
 		if (PRENV(rintervals) == R_NilValue)

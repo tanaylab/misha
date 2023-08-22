@@ -6,7 +6,7 @@ test_that("giterator.intervals works", {
     expect_regression(giterator.intervals("test.computed2d", gintervals.2d(chroms1 = c(6, 1, 5), chroms2 = c(8, 1, 9))), "giterator.intervals.5")
     expect_error(giterator.intervals(NULL, gintervals(c(2, 3))))
     expect_regression(giterator.intervals(NULL, gintervals(c(2, 3)), iterator = 120), "giterator.intervals.7")
-    expect_regression(giterator.intervals(NULL, ALLGENOME, iterator = "test.sparse"), "giterator.intervals.8")
+    expect_regression(giterator.intervals(NULL, .misha$ALLGENOME, iterator = "test.sparse"), "giterator.intervals.8")
     expect_regression(giterator.intervals(NULL, gintervals(c(2, 3)), iterator = "test.sparse"), "giterator.intervals.9")
     expect_regression(giterator.intervals(NULL, gintervals(c(2, 3)), iterator = "test.fixedbin"), "giterator.intervals.10")
     expect_regression(giterator.intervals("test.sparse", gintervals(c(1, 2), 0, 1000000)), "giterator.intervals.11")

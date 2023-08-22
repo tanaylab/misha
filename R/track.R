@@ -20,7 +20,7 @@
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
 
-    if (is.na(match(trackstr, get("GTRACKS")))) {
+    if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s does not exist", trackstr), call. = F)
     }
 
@@ -121,7 +121,7 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
     .gcheckroot()
 
     src.trackstr <- do.call(.gexpr2str, list(substitute(src.track)), envir = parent.frame())
-    if (is.na(match(src.trackstr, get("GTRACKS")))) {
+    if (is.na(match(src.trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s does not exist", src.trackstr), call. = F)
     }
 
@@ -129,7 +129,7 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
     if (is.null(substitute(tgt.track))) {
         tgt.trackstr <- paste(src.trackstr, "_converted", sep = "")
         counter <- 2
-        while (!is.na(match(tgt.trackstr, get("GTRACKS")))) {
+        while (!is.na(match(tgt.trackstr, get("GTRACKS", envir = .misha)))) {
             tgt.trackstr <- paste(src.trackstr, "_converted", counter, sep = "")
             counter <- counter + 1
         }
@@ -138,13 +138,13 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
         .gconfirmtrackcreate(tgt.trackstr)
     }
 
-    src.dirname <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", src.trackstr), sep = "/"))
-    tgt.dirname <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", tgt.trackstr), sep = "/"))
+    src.dirname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", src.trackstr), sep = "/"))
+    tgt.dirname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", tgt.trackstr), sep = "/"))
     success <- FALSE
 
     tryCatch(
         {
-            .gcall("gtrackconvert", src.trackstr, tgt.trackstr, new.env(parent = parent.frame()), silent = TRUE)
+            .gcall("gtrackconvert", src.trackstr, tgt.trackstr, .misha_env(), silent = TRUE)
 
             # copy all supplimentary data of a track (vars, etc.)
             if (!system(sprintf("cp -r -u %s/. %s", src.dirname, tgt.dirname))) {
@@ -228,11 +228,11 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
     direxisted <- file.exists(trackdir)
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -241,9 +241,9 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     tryCatch(
         {
             if (.ggetOption("gmultitasking")) {
-                .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, new.env(parent = parent.frame()), silent = TRUE)
+                .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env(), silent = TRUE)
             } else {
-                .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, new.env(parent = parent.frame()), silent = TRUE)
+                .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env(), silent = TRUE)
             }
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
@@ -308,11 +308,11 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
     direxisted <- file.exists(trackdir)
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -321,9 +321,9 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     tryCatch(
         {
             if (.ggetOption("gmultitasking")) {
-                .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, new.env(parent = parent.frame()), silent = TRUE)
+                .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, .misha_env(), silent = TRUE)
             } else {
-                .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, new.env(parent = parent.frame()), silent = TRUE)
+                .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, .misha_env(), silent = TRUE)
             }
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
@@ -374,7 +374,7 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
 #'     "test_sparse", "Test track", intervs,
 #'     1:dim(intervs)[1]
 #' )
-#' gextract("test_sparse", ALLGENOME)
+#' gextract("test_sparse", .misha$ALLGENOME)
 #' gtrack.rm("test_sparse", force = TRUE)
 #'
 #' @export gtrack.create_sparse
@@ -387,11 +387,11 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
     valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
     direxisted <- file.exists(trackdir)
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -399,7 +399,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_create_sparse", trackstr, intervals, values, new.env(parent = parent.frame()), silent = TRUE)
+            .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), T)
             .gtrack.attr.set(trackstr, "created.date", date(), T)
@@ -442,7 +442,7 @@ gtrack.exists <- function(track = NULL) {
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    !is.na(match(trackstr, get("GTRACKS")))
+    !is.na(match(trackstr, get("GTRACKS", envir = .misha)))
 }
 
 
@@ -489,11 +489,11 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
     direxisted <- file.exists(trackdir)
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -548,7 +548,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 cat("Converting to track...\n")
             }
 
-            .gcall("gtrackimportwig", trackstr, file, binsize, defval, new.env(parent = parent.frame()), silent = TRUE)
+            .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -629,11 +629,11 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
     direxisted <- file.exists(trackdir)
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -642,7 +642,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     success <- FALSE
     tryCatch(
         {
-            retv <- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, new.env(parent = parent.frame()), silent = TRUE)
+            retv <- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -740,7 +740,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 
     tryCatch(
         {
-            tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT"), "/downloads", sep = ""))
+            tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/downloads", sep = ""))
             if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
                 stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
             }
@@ -835,7 +835,7 @@ gtrack.info <- function(track = NULL) {
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gcall("gtrackinfo", trackstr, new.env(parent = parent.frame()))
+    .gcall("gtrackinfo", trackstr, .misha_env())
 }
 
 
@@ -868,11 +868,11 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
     direxisted <- file.exists(trackdir)
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -886,7 +886,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, new.env(parent = parent.frame()), silent = TRUE)
+            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             if (is.character(chain)) {
                 .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), T)
@@ -989,7 +989,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
     direxisted <- file.exists(trackdir)
 
     exprs <- c()
@@ -1002,7 +1002,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -1010,7 +1010,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_bintransform", trackstr, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, new.env(parent = parent.frame()), silent = TRUE)
+            .gcall("gtrack_bintransform", trackstr, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             created.by <- sprintf("gtrack.lookup(%s, description, lookup_table", trackstr)
             for (i in (1:length(exprs))) {
@@ -1083,7 +1083,7 @@ gtrack.ls <- function(..., ignore.case = FALSE, perl = FALSE, fixed = FALSE, use
     args <- as.list(substitute(list(...)))[-1L]
     args <- list(...)
 
-    tracks <- get("GTRACKS")
+    tracks <- get("GTRACKS", envir = .misha)
 
     if (is.null(tracks) || !length(tracks)) {
         return(NULL)
@@ -1106,7 +1106,7 @@ gtrack.ls <- function(..., ignore.case = FALSE, perl = FALSE, fixed = FALSE, use
 
         # filter out by attributes
         if (length(attrs)) {
-            attrs_table <- .gcall("gget_tracks_attrs", tracks, attrs, new.env(parent = parent.frame()))
+            attrs_table <- .gcall("gget_tracks_attrs", tracks, attrs, .misha_env())
             if (is.null(attrs_table)) {
                 return(NULL)
             }
@@ -1157,18 +1157,18 @@ gtrack.ls <- function(..., ignore.case = FALSE, perl = FALSE, fixed = FALSE, use
 #' @export gtrack.modify
 gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
     if (is.null(substitute(track)) || is.null(substitute(expr))) {
-        stop("Usage: gtrack.modify(track, expr, intervals = ALLGENOME)", call. = F)
+        stop("Usage: gtrack.modify(track, expr, intervals = .misha$ALLGENOME)", call. = F)
     }
     .gcheckroot()
 
     if (is.null(intervals)) {
-        intervals <- get("ALLGENOME")
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
 
-    .gcall("gtrack_modify", trackstr, exprstr, intervals, iterator = trackstr, new.env(parent = parent.frame()))
+    .gcall("gtrack_modify", trackstr, exprstr, intervals, iterator = trackstr, .misha_env())
 
     str <- sprintf("gtrack.modify(%s, %s, intervs)", trackstr, exprstr)
     created.by.str <- gtrack.attr.export(trackstr, "created.by")[1, 1]
@@ -1218,7 +1218,7 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
     trackname <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
 
     # check whether track appears among GTRACKS
-    if (is.na(match(trackname, get("GTRACKS")))) {
+    if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
         if (force) {
             return(invisible())
         }
@@ -1235,7 +1235,7 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        dirname <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackname), sep = "/"))
+        dirname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
 
         # remove the track
         unlink(dirname, recursive = TRUE)
@@ -1319,11 +1319,11 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
     direxisted <- file.exists(trackdir)
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    if (!is.na(match(trackstr, get("GTRACKS")))) {
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", trackstr), call. = F)
     }
 
@@ -1331,7 +1331,7 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
     success <- FALSE
     tryCatch(
         {
-            .gcall("gsmooth", trackstr, exprstr, winsize, weight_thr, smooth_nans, alg, .iterator, new.env(parent = parent.frame()), silent = TRUE)
+            .gcall("gsmooth", trackstr, exprstr, winsize, weight_thr, smooth_nans, alg, .iterator, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",

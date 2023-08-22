@@ -1,15 +1,15 @@
 .gtrack.var.exists <- function(trackname, varname) {
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackname), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
     filename <- paste(trackdir, "vars", varname, sep = "/")
     file.exists(filename)
 }
 
 .gtrack.var.get <- function(trackname, varname) {
-    if (is.na(match(trackname, get("GTRACKS")))) {
+    if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s does not exist", trackname), call. = F)
     }
 
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackname), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
     filename <- paste(trackdir, "vars", varname, sep = "/")
     if (!file.exists(filename)) {
         stop(sprintf("Track variable %s does not exist", varname), call. = F)
@@ -21,12 +21,12 @@
 }
 
 .gtrack.var.set <- function(trackname, varname, value) {
-    if (is.na(match(trackname, get("GTRACKS")))) {
+    if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s does not exist", trackname), call. = F)
     }
 
     # if vars directory does not exist, create it
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackname), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
     dirname <- paste(trackdir, "vars", sep = "/")
     if (!file.exists(dirname)) {
         dir.create(dirname, mode = "0777")
@@ -108,11 +108,11 @@ gtrack.var.ls <- function(track = NULL, pattern = "", ignore.case = FALSE, perl 
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
 
-    if (is.na(match(trackstr, get("GTRACKS")))) {
+    if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s does not exist", trackstr), call. = F)
     }
 
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
     dirname <- paste(trackdir, "vars", sep = "/")
     options(warn = -1) # disable warnings since dir() on non dir or non existing dir produces warnings
     invisible(files <- dir(dirname))
@@ -156,11 +156,11 @@ gtrack.var.rm <- function(track = NULL, var = NULL) {
     .gcheckroot()
 
     trackname <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    if (is.na(match(trackname, get("GTRACKS")))) {
+    if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s does not exist", trackname), call. = F)
     }
 
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", trackname), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
     filename <- paste(trackdir, "vars", var, sep = "/")
     invisible(file.remove(filename))
 }
