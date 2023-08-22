@@ -51,7 +51,7 @@ Set 'debug' argument to 'TRUE to allow additional report prints.
 argument specifies how R executable should be invoked.
 }
 \examples{
-
+\dontrun{
 gdb.init_examples()
 v <- 17
 gcluster.run(
@@ -62,6 +62,7 @@ gcluster.run(
     },
     gsummary("rects_track")
 )
+}
 
 }
 \keyword{~cluster}

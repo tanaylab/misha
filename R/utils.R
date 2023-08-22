@@ -415,7 +415,7 @@ gwget <- function(url = NULL, path = NULL) {
 #' command. }
 #' @keywords ~cluster
 #' @examples
-#'
+#' \dontrun{
 #' gdb.init_examples()
 #' v <- 17
 #' gcluster.run(
@@ -426,6 +426,7 @@ gwget <- function(url = NULL, path = NULL) {
 #'     },
 #'     gsummary("rects_track")
 #' )
+#' }
 #'
 #' @export gcluster.run
 gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R = "R") {
