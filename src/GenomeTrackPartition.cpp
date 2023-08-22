@@ -39,7 +39,7 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 	for (int bin = 0; bin < numbins; bin++) {
 		char buf[10000];
 
-		sprintf(buf, "%c%g, %g]", bin || !include_lowest ? '(' : '[', bin_finder.get_breaks()[bin], bin_finder.get_breaks()[bin + 1]);
+		snprintf(buf, sizeof(buf), "%c%g, %g]", bin || !include_lowest ? '(' : '[', bin_finder.get_breaks()[bin], bin_finder.get_breaks()[bin + 1]);
 		SET_STRING_ELT(range, bin, mkChar(buf));
 	}
 	setAttrib(answer, install("range"), range);

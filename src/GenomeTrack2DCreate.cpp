@@ -50,7 +50,7 @@ SEXP gtrack_create_track2d(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir
 
 				cur_chromid1 = iinterv->chromid1();
 				cur_chromid2 = iinterv->chromid2();
-				sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
 
 				qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(cur_chromid1), iu.get_chromkey().get_chrom_size(cur_chromid2));
 				gtrack.init_write(filename, cur_chromid1, cur_chromid2);

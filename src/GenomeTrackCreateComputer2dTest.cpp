@@ -52,7 +52,7 @@ SEXP gcreate_test_computer2d_track(SEXP _track, SEXP _prob_skip_chrom, SEXP _max
 				}
 
 				GenomeTrackComputed gtrack(get_groot(_envir), iu.get_track_chunk_size(), iu.get_track_num_chunks());
-				sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 				gtrack.init_write(filename, chromid1, chromid2);
 				gtrack.set_computer(new TestComputer2D(get_groot(_envir), chromid1, chromid2));
 

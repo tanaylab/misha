@@ -8,8 +8,10 @@
 #ifndef STATQUADTREECACHED_H_
 #define STATQUADTREECACHED_H_
 
-#include <unordered_map>
+#include <inttypes.h>
+
 #include <list>
+#include <unordered_map>
 #include <vector>
 
 #include "DiagonalBand.h"
@@ -911,7 +913,7 @@ void StatQuadTreeCached<T, Size>::debug_print_tree(const Chunk &chunk, NodeBase 
 	Rectangle arena;
 	fprintf(stderr, "\n%*sArena: %s\n", depth * 2, "", node_base->arena.debug_str());
 	fprintf(stderr, "%*sIs leaf?: %d\n", (depth + 1) * 2, "", node_base->is_leaf);
-	fprintf(stderr, "%*sArea occupied: %lld\n", (depth + 1) * 2, "", node_base->stat.occupied_area);
+	fprintf(stderr, "%*sArea occupied: %" PRId64 "\n", (depth + 1) * 2, "", node_base->stat.occupied_area);
 	fprintf(stderr, "%*sAvg: %g\tMin: %g\tMax: %g\n", (depth + 1) * 2, "", node_base->stat.occupied_area / (double)node_base->stat.weighted_sum, node_base->stat.min_val, node_base->stat.max_val);
 
 	if (node_base->is_leaf) {

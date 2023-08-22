@@ -14,7 +14,7 @@ size_t get_unique_mem_usage(pid_t pid)
 	char filename[100];
 	vector<string> fields;
 
-	sprintf(filename, "/proc/%ld/smaps", (long)pid);
+	snprintf(filename, sizeof(filename), "/proc/%ld/smaps", (long)pid);
 
 	// count only private dirty bytes under heap section
 	if (!bf.open(filename, "r")) {

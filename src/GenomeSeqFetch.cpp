@@ -11,7 +11,7 @@ void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromK
 		char filename[PATH_MAX];
 
 		m_cur_chromid = interval.chromid;
-		sprintf(filename, "%s/%s.seq", m_seqdir.c_str(), chromkey.id2chrom(interval.chromid).c_str());
+		snprintf(filename, sizeof(filename), "%s/%s.seq", m_seqdir.c_str(), chromkey.id2chrom(interval.chromid).c_str());
 		m_bfile.close();
 		m_bfile.open(filename, "rb");
 

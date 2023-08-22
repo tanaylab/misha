@@ -232,7 +232,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 			// create temporary files that contain unsorted target intervals and corresponding values
 			for (vector<BufferedIntervals>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
 				int chromid = ibuffered_interv - buffered_intervs.begin();
-				sprintf(filename, "%s/_%s", dirname.c_str(), iu.get_chromkey().id2chrom(chromid).c_str());
+				snprintf(filename, sizeof(filename), "%s/_%s", dirname.c_str(), iu.get_chromkey().id2chrom(chromid).c_str());
 				ibuffered_interv->open(filename, "w+", chromid);
 			}
 
@@ -244,11 +244,11 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 					float val;
 
 					try {
-						sprintf(filename, "%s/%s", src_track_dir, ichrom->c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
 						src_track.init_read(filename, chromid);
 						if (binsize > 0 && binsize != src_track.get_bin_size()) {
 							char filename2[FILENAME_MAX];
-							sprintf(filename2, "%s/%s", src_track_dir, (ichrom - 1)->c_str());
+							snprintf(filename2, sizeof(filename2), "%s/%s", src_track_dir, (ichrom - 1)->c_str());
 							TGLError("Binsize of track file %s differs from the binsize of track file %s (%d vs. %d)",
 									filename, filename2, src_track.get_bin_size(), binsize);
 						} else
@@ -281,7 +281,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 					int chromid = ichrom - src_id2chrom.begin();
 
 					try {
-						sprintf(filename, "%s/%s", src_track_dir, ichrom->c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
 						src_track.init_read(filename, chromid);
 					} catch (TGLException &) {  // some of source chroms might be missing, this is normal
 						progress.report(1);
@@ -317,7 +317,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 
 				sort(interv_vals.begin(), interv_vals.end());
 
-				sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 
 				if (src_track_type == GenomeTrack::FIXED_BIN) {
 					GenomeTrackFixedBin gtrack;
@@ -405,7 +405,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 					int chromid2 = ichrom2 - src_id2chrom.begin();
 
 					try {
-						sprintf(filename, "%s/%s-%s", src_track_dir, ichrom1->c_str(), ichrom2->c_str());
+						snprintf(filename, sizeof(filename), "%s/%s-%s", src_track_dir, ichrom1->c_str(), ichrom2->c_str());
 						src_track->init_read(filename, chromid1, chromid2);
 						if (!src_track->opened()) {
 							progress.report(1);
@@ -440,7 +440,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 								for (GIntervals::const_iterator iinterv2 = tgt_intervals[1].begin(); iinterv2 != tgt_intervals[1].end(); ++iinterv2) {
 									int idx = iinterv1->chromid * iu.get_chromkey().get_num_chroms() + iinterv2->chromid;
 									if (!buffered_intervs[idx].opened()) {
-										sprintf(filename, "%s/_%s-%s", dirname.c_str(), iu.get_chromkey().id2chrom(iinterv1->chromid).c_str(), iu.get_chromkey().id2chrom(iinterv2->chromid).c_str());
+										snprintf(filename, sizeof(filename), "%s/_%s-%s", dirname.c_str(), iu.get_chromkey().id2chrom(iinterv1->chromid).c_str(), iu.get_chromkey().id2chrom(iinterv2->chromid).c_str());
 										buffered_intervs[idx].open(filename, "w+", iinterv1->chromid, iinterv2->chromid);
 									}
 									buffered_intervs[idx].write_interval(*iinterv1, *iinterv2, iqtree->v);
@@ -466,7 +466,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 								for (GIntervals::const_iterator iinterv2 = tgt_intervals[1].begin(); iinterv2 != tgt_intervals[1].end(); ++iinterv2) {
 									int idx = iinterv1->chromid * iu.get_chromkey().get_num_chroms() + iinterv2->chromid;
 									if (!buffered_intervs[idx].opened()) {
-										sprintf(filename, "%s/_%s-%s", dirname.c_str(), iu.get_chromkey().id2chrom(iinterv1->chromid).c_str(), iu.get_chromkey().id2chrom(iinterv2->chromid).c_str());
+										snprintf(filename, sizeof(filename), "%s/_%s-%s", dirname.c_str(), iu.get_chromkey().id2chrom(iinterv1->chromid).c_str(), iu.get_chromkey().id2chrom(iinterv2->chromid).c_str());
 										buffered_intervs[idx].open(filename, "w+", iinterv1->chromid, iinterv2->chromid);
 									}
 									buffered_intervs[idx].write_interval(*iinterv1, *iinterv2, iqtree->v);
@@ -498,7 +498,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 					if (!qtree.empty()) {
 						GenomeTrackRectsRects gtrack(iu.get_track_chunk_size(), iu.get_track_num_chunks());
 
-						sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 						gtrack.init_write(filename, chromid1, chromid2);
 						gtrack.write(qtree);
 					}

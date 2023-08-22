@@ -8,7 +8,9 @@
 #ifndef RDBINTERVAL_H_
 #define RDBINTERVAL_H_
 
+#include <inttypes.h>
 #include <sys/types.h>
+
 #include <vector>
 
 using namespace std;
@@ -287,10 +289,11 @@ inline bool rdb::ChainInterval::SetCompare::operator()(const ChainInterval &obj1
 
 inline string rdb::ChainInterval::tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const
 {
-	char buf[1000];
-	sprintf(buf, "(%s, %lld, %lld) <- (%s, %lld)", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src);
-	return string(buf);
+    char buf[1000];
+    snprintf(buf, sizeof(buf), "(%s, %" PRId64 ", %" PRId64 ") <- (%s, %" PRId64 ")", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src);
+    return string(buf);
 }
+
 
 inline void rdb::ChainInterval::verify(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom, bool check_chrom_boundary) const
 {
