@@ -88,7 +88,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 			for (int itrack = 0; itrack < length(rtracknames[var_type]); ++itrack) {
 				string track = CHAR(STRING_ELT(rtracknames[var_type], itrack));
-				size_t pos = 0;
+				uint64_t pos = 0;
 
 				while ((pos = iexpr->find(track, pos)) != string::npos) {
 					if (is_var(*iexpr, pos, pos + track.size())) {

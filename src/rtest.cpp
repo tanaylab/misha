@@ -64,7 +64,7 @@
 
 // struct SegmentVal : public Segment{
 // 	SegmentVal() {}
-// 	SegmentVal(const Segment &segment, size_t _val) : Segment(segment), v(_val) {}
+// 	SegmentVal(const Segment &segment, uint64_t _val) : Segment(segment), v(_val) {}
 
 // //	Segment &operator=(const SegmentVal &o) {
 // //		*(Segment *)this = o;
@@ -72,7 +72,7 @@
 // //		return *this;
 // //	}
 // //
-// 	size_t v;
+// 	uint64_t v;
 
 // 	const char *debug_str() const {
 // 		static char buf[100];
@@ -267,18 +267,18 @@
 // 				sort(r2.begin(), r2.end());
 // 				if (r1.size() < max_nearest_neighbors) {
 // 					REprintf("\t%ld Query: %s\n", iquery - queries.begin(), iquery->debug_str());
-// 					for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j)
+// 					for (uint64_t j = 0; j < min(r1.size(), (uint64_t)max_nearest_neighbors); ++j)
 // 						REprintf("\tSegment finder: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
-// 					for (size_t j = 0; j < min(r2.size(), (size_t)max_nearest_neighbors); ++j)
+// 					for (uint64_t j = 0; j < min(r2.size(), (uint64_t)max_nearest_neighbors); ++j)
 // 						REprintf("\tPlain:          %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 // 					getchar();
 // 					check_interrupt();
 // 				}
 
-// 				for (size_t j = 0; j < r1.size(); ++j) {
+// 				for (uint64_t j = 0; j < r1.size(); ++j) {
 // 					if (!(r1[j] == r2[j])) {
 // 						REprintf("\t%ld Query: %s\n", iquery - queries.begin(), iquery->debug_str());
-// 						for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j) {
+// 						for (uint64_t j = 0; j < min(r1.size(), (uint64_t)max_nearest_neighbors); ++j) {
 // 							REprintf("\tSegment finder: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
 // 							REprintf("\tPlain:          %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 // 						}
@@ -677,8 +677,8 @@
 // //		cqtree_file2.write(&signature, sizeof(signature));
 // //		cqtree_serializer.begin(cqtree_file2, 0, 0, dim * maxcoord, dim * maxcoord, num_subtrees, 100000, 100, 9, 20);
 // //
-// //		for (size_t i = 0; i < dim; ++i) {
-// //			for (size_t j = 0; j < dim; ++j) {
+// //		for (uint64_t i = 0; i < dim; ++i) {
+// //			for (uint64_t j = 0; j < dim; ++j) {
 // //				for (vector<RectsQuadTree::ValueType>::const_iterator irect = rects.begin(); irect < rects.end(); ++irect) {
 // //					RectsQuadTree::ValueType r(irect->x1 + maxcoord * i, irect->y1 + maxcoord * j,
 // //											   irect->x2 + maxcoord * i, irect->y2 + maxcoord * j,
@@ -715,15 +715,15 @@
 // //		vector< vector<RectsQuadTree::ValueType> > subarenas_rects(num_subtrees);
 // //
 // //		const Rectangles &subarenas = cqtree_serializer.get_subarenas();
-// //		for (size_t i = 0; i < rects.size(); ++i) {
-// //			for (size_t j = 0; j < num_subtrees; ++j) {
+// //		for (uint64_t i = 0; i < rects.size(); ++i) {
+// //			for (uint64_t j = 0; j < num_subtrees; ++j) {
 // //				if (rects[i].do_intersect(subarenas[j])) {
 // //					 subarenas_rects[j].push_back(rects[i]);
 // //					 break;
 // //				}
 // //			}
 // //		}
-// //		for (size_t i = 0; i < num_subtrees; ++i) {
+// //		for (uint64_t i = 0; i < num_subtrees; ++i) {
 // //			for (vector<RectsQuadTree::ValueType>::const_iterator irect = subarenas_rects[i].begin(); irect != subarenas_rects[i].end(); ++irect)
 // //				cqtree_serializer.insert(*irect);
 // //		}
@@ -938,15 +938,15 @@
 // 				sort(r1.begin(), r1.end());
 // 				sort(r2.begin(), r2.end());
 // 				if (r1.size() < max_nearest_neighbors) {
-// 					for (size_t j = 0; j < min(r1.size(), (size_t)max_nearest_neighbors); ++j)
+// 					for (uint64_t j = 0; j < min(r1.size(), (uint64_t)max_nearest_neighbors); ++j)
 // 						REprintf("\tQuad-tree: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
-// 					for (size_t j = 0; j < min(r2.size(), (size_t)max_nearest_neighbors); ++j)
+// 					for (uint64_t j = 0; j < min(r2.size(), (uint64_t)max_nearest_neighbors); ++j)
 // 						REprintf("\tPlain:     %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
 // 					getchar();
 // 					check_interrupt();
 // 				}
 
-// 				for (size_t j = 0; j < r1.size(); ++j) {
+// 				for (uint64_t j = 0; j < r1.size(); ++j) {
 // 					if (!(r1[j] == r2[j])) {
 // 						REprintf("\tQuad-tree: %s, dist: %lld\n", r1[j].obj.debug_str(), r1[j].dist);
 // 						REprintf("\tPlain: %s, dist: %lld\n", r2[j].obj.debug_str(), r2[j].dist);
@@ -1162,20 +1162,20 @@
 // //		REprintf("\n");
 // //		REprintf("Stream size: %ld\n", sp.m_stream_sampler.stream_size());
 // //		REprintf("Reserv size: %ld\n", sp.m_stream_sampler.reservoir_size());
-// //		for (size_t i = 0; i < sp.m_stream_sampler.samples().size(); i++) {
+// //		for (uint64_t i = 0; i < sp.m_stream_sampler.samples().size(); i++) {
 // //			REprintf("%g ", sp.m_stream_sampler.samples()[i]);
 // //		}
 // //		REprintf("\n\n");
 // //
 // //		REprintf("Lowest heap size: %ld\n", sp.m_extreme_vals[0].size());
-// //		for (size_t i = 0; i < sp.m_extreme_vals[0].size(); i++) {
+// //		for (uint64_t i = 0; i < sp.m_extreme_vals[0].size(); i++) {
 // //			REprintf("%g ", sp.m_extreme_vals[0][i]);
 // //		}
 // //		REprintf("\n\n");
 // //
 // //
 // //		REprintf("Highest heap size: %ld\n", sp.m_extreme_vals[1].size());
-// //		for (size_t i = 0; i < sp.m_extreme_vals[1].size(); i++) {
+// //		for (uint64_t i = 0; i < sp.m_extreme_vals[1].size(); i++) {
 // //			REprintf("%g ", sp.m_extreme_vals[1][i]);
 // //		}
 // //		REprintf("\n\n");

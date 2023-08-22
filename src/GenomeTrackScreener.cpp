@@ -226,7 +226,7 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 
 				// pack the result into shared memory
 				if (intervset_out.empty()) {
-					size_t num_intervals = res_intervals1d.size();
+					uint64_t num_intervals = res_intervals1d.size();
 					void *result = allocate_res(num_intervals);
 
 					if (num_intervals)
@@ -246,7 +246,7 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 
 				// pack the result into shared memory
 				if (intervset_out.empty()) {
-					size_t num_intervals = res_intervals2d.size();
+					uint64_t num_intervals = res_intervals2d.size();
 					void *result = allocate_res(num_intervals);
 
 					if (num_intervals)
@@ -267,7 +267,7 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 				// collect results from kids
 				for (int i = 0; i < get_num_kids(); ++i) {
 					void *ptr = get_kid_res(i);
-					size_t num_intervals = get_kid_res_size(i);
+					uint64_t num_intervals = get_kid_res_size(i);
 
 					if (!num_intervals)
 						continue;

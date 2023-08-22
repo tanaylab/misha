@@ -37,8 +37,8 @@ SEXP gtrackconvert(SEXP _src_track, SEXP _tgt_track, SEXP _envir)
 		Progress_reporter progress;
 		progress.init(iu.get_chromkey().get_num_chroms() * iu.get_chromkey().get_num_chroms(), 1);
 
-		for (size_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
-			for (size_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
+		for (uint64_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
+			for (uint64_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
 				if (!bfile.open((src_trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2)).c_str(), "rb")) {
 					int format_signature;
 

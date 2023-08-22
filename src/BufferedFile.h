@@ -33,10 +33,10 @@ public:
 	int getc();
 
 	// see fread for return value
-	size_t read(void *ptr, size_t size);
+	uint64_t read(void *ptr, uint64_t size);
 
 	// see fwrite for return value
-	size_t write(const void *ptr, size_t size);
+	uint64_t write(const void *ptr, uint64_t size);
 
 	// see ftell for return value
 	int64_t tell() const { return m_virt_pos; }
@@ -131,7 +131,7 @@ inline int BufferedFile::getc()
 	return c;
 }
 
-inline size_t BufferedFile::read(void *ptr, size_t size)
+inline uint64_t BufferedFile::read(void *ptr, uint64_t size)
 {
 	// is the new read already cached?
 	if (m_virt_pos >= m_sbuf_pos && m_virt_pos + (long)size <= m_ebuf_pos) {
@@ -152,7 +152,7 @@ inline size_t BufferedFile::read(void *ptr, size_t size)
 
 	// if size is smaller than bufsize => cache the read
 	if (size <= m_bufsize) {
-		size_t bytes_read = fread(m_buf, 1, m_bufsize, m_fp);
+		uint64_t bytes_read = fread(m_buf, 1, m_bufsize, m_fp);
 
 		m_phys_pos = m_virt_pos + bytes_read;
 		m_sbuf_pos = m_virt_pos;
@@ -169,7 +169,7 @@ inline size_t BufferedFile::read(void *ptr, size_t size)
 	}
 
 	// make the read without caching
-	size_t bytes_read = fread(ptr, 1, size, m_fp);
+	uint64_t bytes_read = fread(ptr, 1, size, m_fp);
 	m_virt_pos += bytes_read;
 	m_phys_pos = m_virt_pos;
 	if (!bytes_read && feof(m_fp))
@@ -177,14 +177,14 @@ inline size_t BufferedFile::read(void *ptr, size_t size)
 	return bytes_read;
 }
 
-inline size_t BufferedFile::write(const void *ptr, size_t size)
+inline uint64_t BufferedFile::write(const void *ptr, uint64_t size)
 {
 	if (m_phys_pos != m_virt_pos) {
 		fseeko(m_fp, m_virt_pos, SEEK_SET);
 		m_phys_pos = m_virt_pos;
 	}
 
-	size_t retv = fwrite(ptr, 1, size, m_fp);
+	uint64_t retv = fwrite(ptr, 1, size, m_fp);
 
 	if (retv) {
 		// if the cached buffer overlaps the written region => trash the buffer

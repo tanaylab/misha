@@ -34,7 +34,7 @@ void GIntervalsBigSet1D::load_chrom(int chromid)
 			runprotect(rintervals);
 			
 			// set udata
-			size_t offset = 0;
+			uint64_t offset = 0;
 			for (int i = 0; i < chromid; ++i)
 				offset += m_orig_chrom2size[i];
 			for (GIntervals::iterator iinterval = m_intervals.begin(); iinterval < m_intervals.end(); ++iinterval) 

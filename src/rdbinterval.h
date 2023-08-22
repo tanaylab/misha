@@ -224,10 +224,10 @@ public:
 	void verify_max_data_size(uint64_t data_size, const char *data_name = "Result", bool check_all_kids = true);
 
 	// returns true if the intervals set should be saved in a big set
-	bool needs_bigset(size_t num_intervs) { return num_intervs > get_big_intervals_size(); }
+	bool needs_bigset(uint64_t num_intervs) { return num_intervs > get_big_intervals_size(); }
 
-	size_t get_orig_interv_idx(const GInterval &interval) const { return (size_t)interval.udata; }
-	size_t get_orig_interv_idx(const GInterval2D &interval) const { return (size_t)interval.udata(); }
+	uint64_t get_orig_interv_idx(const GInterval &interval) const { return (uint64_t)interval.udata; }
+	uint64_t get_orig_interv_idx(const GInterval2D &interval) const { return (uint64_t)interval.udata(); }
 
 	int chrom2id(const string &chrom) const { return m_chrom_key.chrom2id(chrom); }
 	const string &id2chrom(int id) const { return m_chrom_key.id2chrom(id); }
@@ -244,8 +244,8 @@ public:
 
 	// multi-tasking: divides intervals and forks child processes each with its own kid_intervals.
 	// Returns true if a child, false if a parent.
-	bool distribute_task(size_t res_const_size,    // data size in bytes for all the result
-						 size_t res_record_size);  // size in bytes per datum in the result
+	bool distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
+						 uint64_t res_record_size);  // size in bytes per datum in the result
 
 private:
 	GenomeChromKey                m_chrom_key;

@@ -59,7 +59,7 @@ private:
 #pragma pack(pop)
 
 	Node    *m_root;
-	size_t   m_num_objs;
+	uint64_t   m_num_objs;
 	unsigned m_max_depth;
 	unsigned m_max_node_objs;
 

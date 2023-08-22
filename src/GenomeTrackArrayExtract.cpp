@@ -17,7 +17,7 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 										  vector<unsigned> *interv_ids, int numcols, SEXP _colnames, IntervUtils &iu)
 {
 	SEXP answer = iu.convert_intervs(out_intervals, interv_ids ? GInterval::NUM_COLS + numcols + 1 : GInterval::NUM_COLS + numcols, false);
-	size_t numvals = res_vals.size() / numcols;
+	uint64_t numvals = res_vals.size() / numcols;
 	vector<SEXP> rvals(numcols);
 
 	for (int icol = 0; icol < numcols; ++icol)

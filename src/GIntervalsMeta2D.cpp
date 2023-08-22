@@ -51,7 +51,7 @@ void GIntervalsMeta2D::init(const char *name, SEXP meta, const GenomeChromKey &c
 		m_chroms2size[idx] = size;
 		m_surfaces[idx] = surface;
 		m_contains_overlaps[idx] = LOGICAL(contains_overlaps)[i];
-		m_size += (size_t)size;
+		m_size += (uint64_t)size;
 		m_surface += surface;
 	}
 
@@ -81,7 +81,7 @@ void GIntervalsMeta2D::init_masked_copy(GIntervalsMeta2D *obj, const set<ChromPa
 		obj->m_chroms2size[chromid] = m_chroms2size[chromid];
 		obj->m_contains_overlaps[chromid] = m_contains_overlaps[chromid];
 		obj->m_surfaces[chromid] = m_surfaces[chromid];
-		obj->m_size += (size_t)m_chroms2size[chromid];
+		obj->m_size += (uint64_t)m_chroms2size[chromid];
 		obj->m_surface += m_surfaces[chromid];
 	}
 }

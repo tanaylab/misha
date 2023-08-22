@@ -48,7 +48,7 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		Progress_reporter progress;
 		progress.init(iu.get_chromkey().get_num_chroms(), 1);
 
-		for (size_t chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); chromid++) {
+		for (uint64_t chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); chromid++) {
 			string filename(trackpath + "/" + GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid));
 
 			if (access(filename.c_str(), R_OK) && errno == ENOENT) {
@@ -79,8 +79,8 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		Progress_reporter progress;
 		progress.init(iu.get_chromkey().get_num_chroms() * iu.get_chromkey().get_num_chroms(), 1);
 
-		for (size_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
-			for (size_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
+		for (uint64_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
+			for (uint64_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
 				string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
 				unique_ptr<GenomeTrack2D> track;
 

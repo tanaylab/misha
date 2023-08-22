@@ -32,8 +32,8 @@ public:
 	virtual GIntervals2D::const_iterator get_chrom_begin() const;
 	virtual GIntervals2D::const_iterator get_chrom_end() const;
 
-	virtual size_t iter_index() const { return m_iter_index; }
-	virtual size_t iter_chrom_index() const { return m_iter_chrom_index; }
+	virtual uint64_t iter_index() const { return m_iter_index; }
+	virtual uint64_t iter_chrom_index() const { return m_iter_chrom_index; }
 
 	virtual const GInterval2D &cur_interval() const {
 		m_cur_interval = m_track->cur_interval();
@@ -49,9 +49,9 @@ protected:
 	Track              *m_track;
 	int                 m_cur_chromid;
 	int                 m_iter_chromid;
-	size_t              m_iter_index;
-	size_t              m_iter_chrom_index;
-	size_t              m_iter_orig_index;
+	uint64_t              m_iter_index;
+	uint64_t              m_iter_chrom_index;
+	uint64_t              m_iter_orig_index;
     mutable GInterval2D m_cur_interval;
 
 	void clear();

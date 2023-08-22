@@ -73,7 +73,7 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 {
 	SEXP answer, rsummary[NUM_COLS], colnames;
 	unsigned num_interv_cols;
-	size_t num_intervs;
+	uint64_t num_intervs;
 
 	if (intervals1d) {
 		num_interv_cols = GInterval::NUM_COLS;
@@ -261,7 +261,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 
 		scanner.begin(_expr, intervals1d, intervals2d, _iterator_policy, _band);
 
-		size_t num_intervals = scanner.get_iterator()->is_1d() ? intervals1d->size() : intervals2d->size();
+		uint64_t num_intervals = scanner.get_iterator()->is_1d() ? intervals1d->size() : intervals2d->size();
 		vector<IntervalSummary> summaries;
 
 		if (!num_intervals) 
@@ -302,7 +302,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 				float val = scanner.last_real(0);
 
 				if (cur_interval_idx != scanner.last_scope_idx()) {
-					size_t size;
+					uint64_t size;
 					char error_prefix[1000];
 
 					cur_interval_idx = scanner.last_scope_idx();

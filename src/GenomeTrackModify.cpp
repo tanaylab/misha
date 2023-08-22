@@ -57,7 +57,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 			}
 
 			if (last_interval.chromid != cur_interval.chromid || last_interval.end != cur_interval.start)
-				gtrack.goto_bin((size_t)(cur_interval.start / gtrack.get_bin_size()));
+				gtrack.goto_bin((uint64_t)(cur_interval.start / gtrack.get_bin_size()));
 
 			double val = scanner.last_real(0);
 			gtrack.write_next_bin(val);

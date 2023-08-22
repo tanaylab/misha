@@ -477,7 +477,7 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher1D *intervals, unsigned num_c
 
 	for (intervals->begin_iter(); !intervals->isend(); intervals->next()) {
 		const GInterval &interval = intervals->cur_interval();
-		size_t index = use_original_index ? get_orig_interv_idx(interval) : intervals->iter_index();
+		uint64_t index = use_original_index ? get_orig_interv_idx(interval) : intervals->iter_index();
 
 		INTEGER(chroms_idx)[index] = interval.chromid + 1;
 		REAL(starts)[index] = interval.start;
@@ -534,7 +534,7 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher2D *intervals, unsigned num_c
 
 	for (intervals->begin_iter(); !intervals->isend(); intervals->next()) {
 		const GInterval2D &interval = intervals->cur_interval();
-		size_t index = use_original_index ? get_orig_interv_idx(interval) : intervals->iter_index();
+		uint64_t index = use_original_index ? get_orig_interv_idx(interval) : intervals->iter_index();
 
 		INTEGER(chroms_idx1)[index] = interval.chromid1() + 1;
 		REAL(starts1)[index] = interval.start1();
@@ -749,7 +749,7 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 
 void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)
 {
-	for (size_t col = 0; col < src_cols.size(); ++col) {
+	for (uint64_t col = 0; col < src_cols.size(); ++col) {
 		SEXP src_col = src_cols[col];
 		SEXP tgt_col = tgt_cols[col + tgt_col_offset];
 
@@ -1205,10 +1205,10 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 	return m_num_planned_kids;
 }
 
-bool IntervUtils::distribute_task(size_t res_const_size,    // data size in bytes for all the result
-								  size_t res_record_size)   // size in bytes per datum in the result
+bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
+								  uint64_t res_record_size)   // size in bytes per datum in the result
 {
-	size_t max_res_size = get_max_data_size() * res_record_size + m_num_planned_kids * res_const_size;
+	uint64_t max_res_size = get_max_data_size() * res_record_size + m_num_planned_kids * res_const_size;
 
 	rdb::prepare4multitasking(res_const_size, res_record_size, max_res_size, get_max_mem_usage(), m_num_planned_kids);
 

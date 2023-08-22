@@ -77,7 +77,7 @@ private:
 
 	vector<string>  m_chroms;
 	int             m_last_progress_reported;
-	size_t          m_num_evals;
+	uint64_t          m_num_evals;
 	int             m_report_step;
 	uint64_t        m_last_report_clock;
 	SEXP            m_rexpr_itr_intervals;

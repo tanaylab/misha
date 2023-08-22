@@ -171,7 +171,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
 		GInterval last_scope_interval1d;
 		GInterval2D last_scope_interval2d;
-		size_t size;
+		uint64_t size;
 		char error_prefix[1000];
 
 		TrackExprScanner scanner(iu);
@@ -302,7 +302,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 					iu.verify_max_data_size(out_values.size(), "Result");
 				}
 
-				size_t num_intervals = scanner.get_iterator()->is_1d() ? out_intervals1d.size() : out_intervals2d.size();
+				uint64_t num_intervals = scanner.get_iterator()->is_1d() ? out_intervals1d.size() : out_intervals2d.size();
 
 				void *result = allocate_res(num_intervals);
 
@@ -323,7 +323,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 			// collect results from kids
 			for (int i = 0; i < get_num_kids(); ++i) {
 				void *ptr = get_kid_res(i);
-				size_t num_intervals = get_kid_res_size(i);
+				uint64_t num_intervals = get_kid_res_size(i);
 
 				if (!num_intervals)
 					continue;

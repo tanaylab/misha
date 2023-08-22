@@ -20,9 +20,9 @@ public:
 
 	virtual void seal();
 
-	virtual size_t size() const { return std::vector<GInterval2D>::size(); }
+	virtual uint64_t size() const { return std::vector<GInterval2D>::size(); }
 
-	virtual size_t size(int chromid1, int chromid2) const;
+	virtual uint64_t size(int chromid1, int chromid2) const;
 
 	virtual int num_chrom_pairs() const;
 
@@ -45,9 +45,9 @@ public:
 
 	virtual bool get_next_chroms(int *chromid1, int *chromid2);
 
-	virtual size_t iter_index() const { return m_iinterval - begin(); }
+	virtual uint64_t iter_index() const { return m_iinterval - begin(); }
 
-	virtual size_t iter_chrom_index() const { return m_iter_chrom_index; }
+	virtual uint64_t iter_chrom_index() const { return m_iter_chrom_index; }
 
 	virtual const GInterval2D &cur_interval() const { return *m_iinterval; }
 
@@ -57,7 +57,7 @@ public:
 
 private:
 	mutable const_iterator m_iinterval;
-	size_t                 m_iter_chrom_index;
+	uint64_t                 m_iter_chrom_index;
 	int                    m_cur_chromid1;
 	int                    m_cur_chromid2;
 	mutable int            m_num_chroms;
@@ -98,14 +98,14 @@ inline void GIntervals2D::seal()
 	m_iinterval = begin();
 }
 
-inline size_t GIntervals2D::size(int chromid1, int chromid2) const
+inline uint64_t GIntervals2D::size(int chromid1, int chromid2) const
 {
 	build_chrom_map();
 	if (chromid1 >= m_num_chroms || chromid2 >= m_num_chroms) 
 		return 0;
 
 	int idx = chroms2idx(chromid1, chromid2);
-	if ((size_t)idx == m_chrom2itr.size() - 1) 
+	if ((uint64_t)idx == m_chrom2itr.size() - 1) 
 		return end() - m_chrom2itr[idx];
 	return m_chrom2itr[idx + 1] - m_chrom2itr[idx];
 }

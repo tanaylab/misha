@@ -38,7 +38,7 @@ void GIntervalsBigSet2D::load_chrom(int chromid1, int chromid2)
 			runprotect(rintervals);
 
 			// set udata
-			size_t offset = 0;
+			uint64_t offset = 0;
 			int idx = chroms2idx(chromid1, chromid2);
 			for (int i = 0; i < idx; ++i)
 				offset += m_orig_chroms2size[i];

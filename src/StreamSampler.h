@@ -21,31 +21,31 @@ template <class T>
 class StreamSampler {
 public:
 	StreamSampler() { init(0, false); }
-	StreamSampler(size_t reservoir_size, bool do_reserve = false) { init(reservoir_size, do_reserve); }
+	StreamSampler(uint64_t reservoir_size, bool do_reserve = false) { init(reservoir_size, do_reserve); }
 
-	void init(size_t reservoir_size, bool do_reserve = false);
-	void init_with_swap(size_t stream_size, vector<T> &samples);
+	void init(uint64_t reservoir_size, bool do_reserve = false);
+	void init_with_swap(uint64_t stream_size, vector<T> &samples);
 	void reset();
 
 	const vector<T> &samples() const { return m_samples; }
 	vector<T>       &samples() { return m_samples; }
-	size_t          max_reservoir_size() const { return m_reservoir_size; }
-	size_t          cur_reservoir_size() const { return m_samples.size(); }
-	size_t          stream_size() const { return m_stream_size; }
+	uint64_t          max_reservoir_size() const { return m_reservoir_size; }
+	uint64_t          cur_reservoir_size() const { return m_samples.size(); }
+	uint64_t          stream_size() const { return m_stream_size; }
 
-	size_t          add(const T &sample, double (*rnd_func)()); // returns the number of samples inserted so far
+	uint64_t          add(const T &sample, double (*rnd_func)()); // returns the number of samples inserted so far
 
 private:
 	vector<T> m_samples;
-	size_t  m_reservoir_size;
-	size_t  m_stream_size;
+	uint64_t  m_reservoir_size;
+	uint64_t  m_stream_size;
 };
 
 
 //------------------------------ IMPLEMENTATION ----------------------------------------
 
 template <class T>
-void StreamSampler<T>::init(size_t reservoir_size, bool do_reserve)
+void StreamSampler<T>::init(uint64_t reservoir_size, bool do_reserve)
 {
 	m_reservoir_size = reservoir_size;
 	if (do_reserve)
@@ -54,7 +54,7 @@ void StreamSampler<T>::init(size_t reservoir_size, bool do_reserve)
 }
 
 template <class T>
-void StreamSampler<T>::init_with_swap(size_t stream_size, vector<T> &samples)
+void StreamSampler<T>::init_with_swap(uint64_t stream_size, vector<T> &samples)
 {
 	m_stream_size = stream_size;
 	m_reservoir_size = samples.size();
@@ -69,11 +69,11 @@ void StreamSampler<T>::reset()
 }
 
 template <class T>
-size_t StreamSampler<T>::add(const T &sample, double (*rnd_func)()) {
+uint64_t StreamSampler<T>::add(const T &sample, double (*rnd_func)()) {
 	if (m_samples.size() < m_reservoir_size)
 		m_samples.push_back(sample);
 	else if (rnd_func() * (m_stream_size + 1) < m_reservoir_size)
-		m_samples[(size_t)(rnd_func() * m_reservoir_size)] = sample;
+		m_samples[(uint64_t)(rnd_func() * m_reservoir_size)] = sample;
 	return (int64_t)++m_stream_size;
 }
 
