@@ -1,4 +1,7 @@
 library(testthat)
 library(misha)
 
-test_check("misha")
+if (identical(Sys.getenv("NOT_CRAN"), "true")) {
+    test_check("misha")
+}
+
