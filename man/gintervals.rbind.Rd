@@ -7,6 +7,8 @@
 gintervals.rbind(..., intervals.set.out = NULL)
 }
 \arguments{
+\item{...}{intervals sets to combine}
+
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputed}
 

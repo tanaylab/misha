@@ -15,6 +15,8 @@ gextract(
 )
 }
 \arguments{
+\item{...}{track expression}
+
 \item{intervals}{genomic scope for which the function is applied}
 
 \item{colnames}{sets the columns names in the returned value. If 'NULL'
@@ -30,8 +32,6 @@ tab-delimited format}
 
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputed}
-
-\item{expr}{track expression}
 }
 \value{
 If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with

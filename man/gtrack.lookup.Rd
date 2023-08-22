@@ -23,6 +23,8 @@ gtrack.lookup(
 \item{lookup_table}{a multi-dimensional array containing the values that are
 returned by the function}
 
+\item{...}{pairs of track expressions and breaks}
+
 \item{include.lowest}{if 'TRUE', the lowest value of the range determined by
 breaks is included}
 
@@ -35,10 +37,6 @@ the out-of-range values will produce NaN values.}
 implicitly based on track expressions.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
-
-\item{expr}{track expression}
-
-\item{breaks}{breaks that determine the bin}
 }
 \value{
 None.

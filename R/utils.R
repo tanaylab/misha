@@ -201,6 +201,9 @@
 #' interactive mode is switched off. User who mistakenly uses auxiliary
 #' variables to store the data might therefore accidentially loose it.
 #'
+#' @param autoompletion if 'TRUE' auto-completion is switched on
+#' @param interactive if 'TRUE' interactive mode is switched on
+#'
 #' @return None.
 #' @keywords ~autocompletion ~interactive ~quoted
 #' @examples

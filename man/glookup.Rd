@@ -19,6 +19,8 @@ glookup(
 \item{lookup_table}{a multi-dimensional array containing the values that are
 returned by the function}
 
+\item{...}{pairs of 'expr', 'breaks' where 'expr' is a track expression and the breaks determine the bin}
+
 \item{intervals}{genomic scope for which the function is applied}
 
 \item{include.lowest}{if 'TRUE', the lowest value of the range determined by
@@ -36,10 +38,6 @@ implicitly based on track expressions.}
 
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputed}
-
-\item{expr}{track expression}
-
-\item{breaks}{breaks that determine the bin}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a set of intervals with additional

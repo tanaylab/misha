@@ -7,9 +7,9 @@
 gintervals.save(intervals.set.out = NULL, intervals = NULL)
 }
 \arguments{
-\item{intervals}{intervals}
+\item{intervals.set.out}{name of the new intervals set}
 
-\item{intervals.set}{name of an intervals set}
+\item{intervals}{intervals to save}
 }
 \value{
 None.
