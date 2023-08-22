@@ -446,6 +446,11 @@ gtrack.exists <- function(track = NULL) {
 }
 
 
+get_bigWigToWig_bin <- function() {
+    dir <- tempdir()
+    utils::untar(system.file("bigWigToWig.tar.gz", package = "misha"), exdir = dir)
+    return(file.path(dir, "bigWigToWig"))
+}
 
 
 #' Creates a track from WIG / BigWig / BedGraph / tab-delimited file
@@ -533,7 +538,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 
                 file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = T))
                 file.converted <- paste(tmp.dirname, "/", file.noext, ".wig", sep = "")
-                if (system(paste(get(".GLIBDIR"), "/exec/bigWigToWig ", file, " ", file.converted, sep = ""))) {
+                if (system(get_bigWigToWig_bin(), file, " ", file.converted, sep = "")) {
                     stop("Command failed", call. = F)
                 }
                 file <- file.converted
