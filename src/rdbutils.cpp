@@ -519,7 +519,7 @@ void RdbInitializer::handle_error(const char *msg)
 				s_shm->error_msg[sizeof(s_shm->error_msg) - 1] = '\0';
 			}
 		}
-		exit(1);
+		rexit();
 	} else
 		errorcall(R_NilValue, msg);
 }

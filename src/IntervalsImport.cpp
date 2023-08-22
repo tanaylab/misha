@@ -1,7 +1,6 @@
 #include <unordered_map>
 
 #include "port.h"
-BASE_CC_FILE
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"

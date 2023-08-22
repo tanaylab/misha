@@ -1,5 +1,4 @@
 #include "port.h"
-BASE_CC_FILE
 #include "DnaPSSM.h"
 #include "Random.h"
 
@@ -43,7 +42,7 @@ void DnaProbVec::normalize_log()
        	log_sum_log(sum, m_logp[2]);
        	log_sum_log(sum, m_logp[3]);
 
-	cerr << "normalize, sum = " << sum << " 0 " << m_logp[0] << " 1 " << m_logp[1] << endl;
+	// cerr << "normalize, sum = " << sum << " 0 " << m_logp[0] << " 1 " << m_logp[1] << endl;
 
 	m_logp[0] -= sum;
 	m_logp[1] -= sum;
@@ -165,7 +164,7 @@ void DnaPSSM::calc_like_rc(const string &target, float &logp) const
 	logp = 0;
 	for(vector<DnaProbVec>::const_reverse_iterator p = m_chars.rbegin();
 	    p != m_chars.rend();
-	    p++) {
+	    p++) {		
 		char c;
 		switch(*i) {
 			case 'A': c = 'T';
@@ -705,7 +704,6 @@ void DnaPSSM::reset_prior(const vector<float> &prior)
 //currently assuming same length profiles
 float DnaPSSM::dot_product(DnaPSSM &arg)
 {
-	ASSERT(arg.size() == size(), "dot product support equal sized profiles, extend the code if you ment something else");
 	vector<DnaProbVec>::iterator j = arg.m_chars.begin();
 	float prod = 1;
 	for(vector<DnaProbVec>::iterator i = m_chars.begin();
@@ -717,8 +715,7 @@ float DnaPSSM::dot_product(DnaPSSM &arg)
 	return(prod);
 }
 float DnaPSSM::log_dot_product(DnaPSSM &arg)
-{
-	ASSERT(arg.size() == size(), "dot product support equal sized profiles, extend the code if you ment something else");
+{	
 	vector<DnaProbVec>::iterator j = arg.m_chars.begin();
 	float prod = 1;
 	for(vector<DnaProbVec>::iterator i = m_chars.begin();
@@ -826,7 +823,7 @@ string DnaPSSM::get_consensus() const
 
 ostream &operator<<(ostream &out, const DnaPSSM &pssm)
 {
-	cerr << "[" << pssm.get_min_range() << "," << pssm.get_max_range() << "] dir=" << pssm.is_bidirect() << endl;
+	// cerr << "[" << pssm.get_min_range() << "," << pssm.get_max_range() << "] dir=" << pssm.is_bidirect() << endl;
 	for(int i = 0; i < pssm.size(); i++) {
 		out << pssm[i];
 	}

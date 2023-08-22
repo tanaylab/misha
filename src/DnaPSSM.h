@@ -4,8 +4,9 @@
 /*=================================================
 =================================================*/
 
-#include <string>
 #include <list>
+#include <string>
+
 #include "RaList.h"
 
 class DnaProbVec {
@@ -62,10 +63,7 @@ public:
 		int ec = encode(c);
 		if(ec != -1) {
     		m_p[ec] = w;
-		} else {
-			cerr << "Set weight of PSSM with wrong character " << c;
-			exit(1);
-		}
+		} 
 	}
 
 	void reset_log_odds(float pa, float pc, float pg, float pt) {
