@@ -30,6 +30,7 @@
 #'
 #'
 #' @name misha-package
+#' @importFrom utils read.csv
 #' @useDynLib misha
 #' @aliases misha-package misha
 #' @docType package

@@ -30,11 +30,7 @@
     assign(".GFUNCS", getNamespaceExports("misha"), envir = .GlobalEnv)
     assign("GITERATOR.INTERVALS", NULL, envir = .GlobalEnv)
 
-    if (R.Version()$major >= 3) {
-        assign(".GLIBDIR", path.package("misha"), envir = .GlobalEnv)
-    } else {
-        assign(".GLIBDIR", .path.package("misha"), envir = .GlobalEnv)
-    }
+    assign(".GLIBDIR", path.package("misha"), envir = .GlobalEnv)
 }
 
 .onDetach <- function(lib) {
