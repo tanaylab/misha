@@ -255,57 +255,6 @@ gset_input_mode <- function(autocompletion = FALSE, interactive = FALSE) {
 
 
 
-#' Prints call stack of the last uncaught error
-#'
-#' Prints call stack of the last uncaught error in a friendly way.
-#'
-#' Similarly to 'traceback' this function prints the call stack of the last
-#' uncaught error. Yet 'gtraceback' does it in a more friendly way by omitting
-#' the calls that occurred inside the library.
-#'
-#' @param x see 'traceback'
-#' @param max.lines see 'traceback'
-#' @return See 'traceback'.
-#' @seealso \code{\link{traceback}}
-#' @keywords ~trace ~error ~exception
-#' @examples
-#'
-#' gdb.init_examples()
-#' f <- function() {
-#'     gscreen("blablabla")
-#' }
-#' f()
-#' gtraceback()
-#'
-#' @export gtraceback
-gtraceback <- function(x = NULL, max.lines = getOption("deparse.max.lines")) {
-    x <- NULL
-
-    if (is.null(x) && (exists(".Traceback", envir = baseenv()))) {
-        x <- get(".Traceback", envir = baseenv())
-    }
-
-    if (!is.null(x) && length(x) > 0) {
-        # get the call stack and concatenate all complex commands together
-        x <- sapply(x, paste, collapse = "")
-
-        # extract call stack function names
-        fnames <- gsub("^(\\S+)\\s*\\(.*\\)$", "\\1", x, perl = T)
-
-        # get the indices of lib functions
-        libindices <- which(fnames %in% get(".GFUNCS", envir = .misha))
-
-        # cut whatever comes after the first lib function
-        if (length(libindices) > 0) {
-            x <- get(".Traceback", envir = .misha)[libindices[length(libindices)]:length(get(".Traceback", envir = .misha))]
-        }
-    }
-
-    traceback(x, max.lines)
-}
-
-
-
 
 #' Downloads files from FTP server
 #'
