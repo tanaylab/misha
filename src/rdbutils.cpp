@@ -612,6 +612,17 @@ void RdbInitializer::get_open_fds(set<int> &fds)
             fds.insert(fdinfo[i].proc_fd);
     }
 #else
+
+#ifdef __sun
+    #ifdef __XOPEN_OR_POSIX
+        #define _dirfd(dir) (dir->d_fd)
+    #else
+        #define _dirfd(dir) (dir->dd_fd)
+    #endif
+#else
+    #define _dirfd(dir) dirfd(dir)
+#endif
+
 	DIR *dir = opendir("/proc/self/fd");
 	struct dirent *dirp;
 
@@ -620,7 +631,7 @@ void RdbInitializer::get_open_fds(set<int> &fds)
     	while ((dirp = readdir(dir))) {
     		char *endptr;
     		int fd = strtol(dirp->d_name, &endptr, 10);
-    		if (!*endptr && fd != dirfd(dir)) // name is a number (it can be also ".", "..", whatever...)
+    		if (!*endptr && fd != _dirfd(dir)) // name is a number (it can be also ".", "..", whatever...)
     			fds.insert(fd);
     	}
 
