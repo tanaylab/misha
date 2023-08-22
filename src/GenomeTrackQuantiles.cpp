@@ -67,7 +67,7 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 	for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 		char buf[100];
 
-		sprintf(buf, "%g", ip->percentile);
+		snprintf(buf, sizeof(buf), "%g", ip->percentile);
 		SET_STRING_ELT(colnames, num_interv_cols + ip->index, mkChar(buf));
 	}
 
@@ -164,7 +164,7 @@ SEXP gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_p
 
 			REAL(answer)[ip->index] = medians[ip->index];
 
-			sprintf(buf, "%g", ip->percentile);
+			snprintf(buf, sizeof(buf), "%g", ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, mkChar(buf));
 		}
 
@@ -362,7 +362,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 			REAL(answer)[ip->index] = medians[ip->index];
 
-			sprintf(buf, "%g", ip->percentile);
+			snprintf(buf, sizeof(buf), "%g", ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, mkChar(buf));
 		}
 
@@ -1055,7 +1055,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
-			sprintf(buf, "%g", ip->percentile);
+			snprintf(buf, sizeof(buf), "%g", ip->percentile);
 			SET_STRING_ELT(dimname, ip->index, mkChar(buf));
 		}
 		SET_VECTOR_ELT(dimnames, bins_manager.get_num_bin_finders(), dimname);

@@ -604,7 +604,9 @@ gdb.init <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 #' @rdname gdb.init
 #' @export
 gdb.init_examples <- function() {
-    gsetroot(system.file("trackdb/test", package = "misha"))
+    db_dir <- tempdir()
+    utils::untar(system.file("testdb.tar.gz", package = "misha"), exdir = db_dir)
+    gsetroot(file.path(db_dir, "trackdb/test"))
 }
 
 
