@@ -10,6 +10,12 @@
     res
 }
 
+.misha_env <- function() {
+    e <- new.env(parent = parent.frame(2))
+    assign(".misha", .misha, envir = e)
+    return(e)
+}
+
 .gcall_noninteractive <- function(FUN, ...) {
     .ginteractive <- .ggetOption(".ginteractive")
     tryCatch(
@@ -69,12 +75,12 @@
 .gundefine_autocompletion_vars <- function() {
     options(warn = -1) # disable warnings: some variables might be removed already by the user
 
-    if (exists("GTRACKS")) {
-        remove(list = get("GTRACKS"), envir = .GlobalEnv)
+    if (exists("GTRACKS", envir = .misha)) {
+        remove(list = get("GTRACKS", envir = .misha), envir = .GlobalEnv)
     }
 
-    if (exists("GINTERVS")) {
-        remove(list = get("GINTERVS"), envir = .GlobalEnv)
+    if (exists("GINTERVS", envir = .misha)) {
+        remove(list = get("GINTERVS", envir = .misha), envir = .GlobalEnv)
     }
 
 
@@ -118,7 +124,7 @@
     iterator.str <- do.call(.gexpr2str, list(substitute(iterator)), envir = parent.frame())
 
     if (typeof(iterator.str) == "character") {
-        if (!is.na(match(iterator.str, get("GTRACKS"))) || !is.na(match(iterator.str, get("GINTERVS")))) {
+        if (!is.na(match(iterator.str, get("GTRACKS", envir = .misha))) || !is.na(match(iterator.str, get("GINTERVS", envir = .misha)))) {
             return(iterator.str)
         }
     }
@@ -138,7 +144,7 @@
         stop("Cannot rbind objects: columns differ", call. = F)
     }
 
-    .gcall("grbind", objs, new.env(parent = parent.frame()))
+    .gcall("grbind", objs, .misha_env())
 }
 
 .gverify_max_data_size <- function(size, data_name = "Result", arguments = NULL) {
@@ -231,11 +237,11 @@ gset_input_mode <- function(autocompletion = FALSE, interactive = FALSE) {
         if (autocompletion) {
             tracks <- NULL
             intervals <- NULL
-            if (exists("GTRACKS")) {
-                tracks <- get("GTRACKS")
+            if (exists("GTRACKS", envir = .misha)) {
+                tracks <- get("GTRACKS", envir = .misha)
             }
-            if (exists("GINTERVS")) {
-                intervals <- get("GINTERVS")
+            if (exists("GINTERVS", envir = .misha)) {
+                intervals <- get("GINTERVS", envir = .misha)
             }
             .gdefine_autocompletion_vars(tracks, intervals, gvtrack.ls(), interactive)
         } else {
@@ -287,11 +293,11 @@ gtraceback <- function(x = NULL, max.lines = getOption("deparse.max.lines")) {
         fnames <- gsub("^(\\S+)\\s*\\(.*\\)$", "\\1", x, perl = T)
 
         # get the indices of lib functions
-        libindices <- which(fnames %in% get(".GFUNCS"))
+        libindices <- which(fnames %in% get(".GFUNCS", envir = .misha))
 
         # cut whatever comes after the first lib function
         if (length(libindices) > 0) {
-            x <- get(".Traceback")[libindices[length(libindices)]:length(get(".Traceback"))]
+            x <- get(".Traceback", envir = .misha)[libindices[length(libindices)]:length(get(".Traceback", envir = .misha))]
         }
     }
 
@@ -328,7 +334,7 @@ gwget <- function(url = NULL, path = NULL) {
 
     if (is.null(path)) {
         .gcheckroot()
-        path <- paste(get("GROOT"), "/downloads", sep = "")
+        path <- paste(get("GROOT", envir = .misha), "/downloads", sep = "")
         dir.create(path, showWarnings = F, recursive = T, mode = "0777")
     }
 
@@ -451,7 +457,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
 
     tryCatch(
         {
-            tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT"), "/tmp", sep = ""))
+            tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/tmp", sep = ""))
             if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
                 stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
             }
@@ -459,7 +465,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
             # save the environment + options
             # parent.frame() is the environment of the caller
             cat("Preparing for distribution...\n")
-            save(.GLIBDIR, file = paste(tmp.dirname, "libdir", sep = "/"))
+            save(.misha$.GLIBDIR, file = paste(tmp.dirname, "libdir", sep = "/"))
             vars <- ls(all.names = TRUE, envir = parent.frame())
             envir <- parent.frame()
             while (!identical(envir, .GlobalEnv)) {
@@ -485,7 +491,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
                     for (i in istart:iend) {
                         out.file <- sprintf("%s/%d.out", tmp.dirname, i)
                         err.file <- sprintf("%s/%d.err", tmp.dirname, i)
-                        script <- paste(get(".GLIBDIR"), "exec", "sgjob.sh", sep = "/")
+                        script <- paste(get(".GLIBDIR", envir = .misha), "exec", "sgjob.sh", sep = "/")
                         command <- sprintf(
                             "unset module; qsub -terse -S /bin/bash -o %s -e %s -V %s %s %d '%s' '%s'",
                             out.file, err.file, opt.flags, script, i, tmp.dirname, R

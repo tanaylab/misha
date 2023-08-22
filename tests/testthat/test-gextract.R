@@ -20,13 +20,13 @@ test_that("gextract with computed2d works", {
     expect_regression(gextract("test.computed2d", intervs), "gextract.computed2d.2")
 })
 
-test_that("gextract with ALLGENOME works", {
+test_that("gextract with .misha$ALLGENOME works", {
     withr::local_options(gmax.data.size = 1e9)
-    expect_regression(gextract("test.fixedbin", ALLGENOME), "gextract.allgenome.fixedbin")
-    expect_regression(gextract("test.sparse", ALLGENOME), "gextract.allgenome.sparse")
-    expect_regression(gextract("test.array", ALLGENOME), "gextract.allgenome.array")
-    expect_regression(gextract("test.rects", ALLGENOME), "gextract.allgenome.rects")
-    expect_regression(gextract("test.computed2d", ALLGENOME), "gextract.allgenome.computed2d")
+    expect_regression(gextract("test.fixedbin", .misha$ALLGENOME), "gextract.allgenome.fixedbin")
+    expect_regression(gextract("test.sparse", .misha$ALLGENOME), "gextract.allgenome.sparse")
+    expect_regression(gextract("test.array", .misha$ALLGENOME), "gextract.allgenome.array")
+    expect_regression(gextract("test.rects", .misha$ALLGENOME), "gextract.allgenome.rects")
+    expect_regression(gextract("test.computed2d", .misha$ALLGENOME), "gextract.allgenome.computed2d")
 })
 
 test_that("gextract with sparse track can save to a file", {
@@ -47,11 +47,11 @@ test_that("gextract with sparse track can save to a file", {
 
 test_that("gextract with specific intervals works", {
     withr::local_options(gmax.data.size = 1e9)
-    expect_regression(gextract("test.fixedbin", ALLGENOME), "gextract.allgenome.fixedbin")
-    expect_regression(gextract("test.sparse", ALLGENOME), "gextract.allgenome.sparse")
-    expect_regression(gextract("test.array", ALLGENOME), "gextract.allgenome.array")
-    expect_regression(gextract("test.rects", ALLGENOME), "gextract.allgenome.rects")
-    expect_regression(gextract("test.computed2d", ALLGENOME), "gextract.allgenome.computed2d")
+    expect_regression(gextract("test.fixedbin", .misha$ALLGENOME), "gextract.allgenome.fixedbin")
+    expect_regression(gextract("test.sparse", .misha$ALLGENOME), "gextract.allgenome.sparse")
+    expect_regression(gextract("test.array", .misha$ALLGENOME), "gextract.allgenome.array")
+    expect_regression(gextract("test.rects", .misha$ALLGENOME), "gextract.allgenome.rects")
+    expect_regression(gextract("test.computed2d", .misha$ALLGENOME), "gextract.allgenome.computed2d")
 })
 
 test_that("gextract iterators", {
@@ -60,11 +60,11 @@ test_that("gextract iterators", {
     expect_regression(gextract("test.array", gintervals(c(1, 2), 0, 1000000)), "gextract.63")
     expect_regression(gextract("test.rects", gintervals.2d(c(2, 3), 10000000, 50000000, c(2, 4), 30000000, 80000000)), "gextract.62")
     expect_error(gextract("test.rects", intervals = gintervals.2d(c(1), c(0, 50), c(100, 200), c(3), c(0, 50), c(400, 600))))
-    expect_error(gextract("test.rects", ALLGENOME, iterator = gintervals.2d(c(1), c(0, 50), c(100, 200), c(3), c(0, 50), c(400, 600))))
+    expect_error(gextract("test.rects", .misha$ALLGENOME, iterator = gintervals.2d(c(1), c(0, 50), c(100, 200), c(3), c(0, 50), c(400, 600))))
     expect_regression(gextract("test.rects_big_rects", gintervals.2d(c(1:20)), band = c(-1874356, 234560)), "gextract.59")
     expect_regression(gextract("test.computed2d", gintervals.2d(c(6, 8), 10000000, 50000000, c(1, 3), 30000000, 80000000)), "gextract.58")
     expect_error(gextract("test.computed2d", intervals = gintervals.2d(c(1), c(0, 50), c(100, 200), c(3), c(0, 50), c(400, 600))))
-    expect_error(gextract("test.computed2d", ALLGENOME, iterator = gintervals.2d(c(1), c(0, 50), c(100, 200), c(3), c(0, 50), c(400, 600))))
+    expect_error(gextract("test.computed2d", .misha$ALLGENOME, iterator = gintervals.2d(c(1), c(0, 50), c(100, 200), c(3), c(0, 50), c(400, 600))))
     expect_regression(gextract("test.computed2d", gintervals.2d(c(1:20)), band = c(-1874356, 234560)), "gextract.55")
     expect_regression(gextract("2 * test.fixedbin + 17", gintervals(c(1, 2), 0, 1000000)), "gextract.54")
     expect_regression(gextract("2 * test.sparse + 17", gintervals(c(1, 2), 0, 1000000)), "gextract.53")
@@ -142,7 +142,7 @@ test_that("gextract works with gscreen 2d", {
     expect_regression(gextract("test.computed2d", intervs1, iterator = intervs2), "gextract.gscreen.2d.computed2d")
 })
 
-test_that("gextract works with 2d ALLGENOME", {
+test_that("gextract works with 2d .misha$ALLGENOME", {
     intervs <- rbind(
         gintervals.2d(1, 10, 100, 1, 10, 100),
         gintervals.2d(1, 400, 500, 1, 400, 500),
@@ -155,7 +155,7 @@ test_that("gextract works with 2d ALLGENOME", {
         gintervals.2d(1, 1100, 1120, 1, 1100, 1120),
         gintervals.2d(1, 1000, 1100, 2, 1000, 1100)
     )
-    expect_regression(gextract("test.rects", intervals = ALLGENOME, iterator = intervs), "gextract.2d.ALLGENOME.rects")
+    expect_regression(gextract("test.rects", intervals = .misha$ALLGENOME, iterator = intervs), "gextract.2d.ALLGENOME.rects")
 })
 
 test_that("gextract with giterator.intervals works", {

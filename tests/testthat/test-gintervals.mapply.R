@@ -14,7 +14,7 @@ test_that("gintervals.mapply works", {
 
     expect_regression(gintervals.mapply(function(x) {
         max(x + 2, na.rm = TRUE)
-    }, "test.fixedbin", ALLGENOME), "gintervals.mapply.fixedbin.ALLGENOME")
+    }, "test.fixedbin", .misha$ALLGENOME), "gintervals.mapply.fixedbin.ALLGENOME")
 
     expect_regression(gintervals.mapply(function(x) {
         max(x + 2, na.rm = TRUE)
@@ -24,7 +24,7 @@ test_that("gintervals.mapply works", {
 test_that("gintervals.mapply fails with 1d function for 2d intervals", {
     expect_error(gintervals.mapply(function(x) {
         max(x + 2, na.rm = TRUE)
-    }, "test.rects", ALLGENOME, iterator = "test.rects"))
+    }, "test.rects", .misha$ALLGENOME, iterator = "test.rects"))
     expect_error(gintervals.mapply(function(x) {
         max(x + 2, na.rm = TRUE)
     }, "test.generated_2d_5", "test.bigintervs_2d_5"))
@@ -33,7 +33,7 @@ test_that("gintervals.mapply fails with 1d function for 2d intervals", {
 test_that("gintervals.mapply works with INTERVID", {
     expect_regression(gintervals.mapply(function(x) {
         as.numeric(GAPPLY.INTERVID)
-    }, "test.fixedbin", ALLGENOME), "gintervals.mapply.fixedbin.ALLGENOME.INTERVID")
+    }, "test.fixedbin", .misha$ALLGENOME), "gintervals.mapply.fixedbin.ALLGENOME.INTERVID")
 })
 
 test_that("gintervals.mapply works with intervals.set.out", {

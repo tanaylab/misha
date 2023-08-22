@@ -7,7 +7,7 @@
 
     numintervals <- nrow(intervals)
 
-    maxends <- get("ALLGENOME")[[1]]$end[match(as.character(intervals$chrom), get("ALLGENOME")[[1]]$chrom)]
+    maxends <- get("ALLGENOME", envir = .misha)[[1]]$end[match(as.character(intervals$chrom), get("ALLGENOME", envir = .misha)[[1]]$chrom)]
     maxidx <- intervals$end == -1
     intervals$end[maxidx] <- maxends[maxidx]
 
@@ -83,7 +83,7 @@
                         if (!is.null(intervals.set.out) && !is.null(res) && nrow(res) > 0) {
                             zeroline <<- res[0, ]
                             .gintervals.big.save(fullpath, res, chrom = chrom)
-                            stat <- .gcall("gintervals_stats", res, new.env(parent = parent.frame()))
+                            stat <- .gcall("gintervals_stats", res, .misha_env())
                             stats <<- rbind(stats, data.frame(chrom = chrom, stat))
                         }
                         if (as.integer(difftime(Sys.time(), t, units = "secs")) > 3) {
@@ -104,7 +104,7 @@
                         if (!is.null(intervals.set.out) && !is.null(res) && nrow(res) > 0) {
                             zeroline <<- res[0, ]
                             .gintervals.big.save(fullpath, res, chrom1 = chrom1, chrom2 = chrom2)
-                            stat <- .gcall("gintervals_stats", res, new.env(parent = parent.frame()))
+                            stat <- .gcall("gintervals_stats", res, .misha_env())
                             stats <<- rbind(stats, data.frame(chrom1 = chrom1, chrom2 = chrom2, stat))
                         }
                         if (as.integer(difftime(Sys.time(), t, units = "secs")) > 3) {
@@ -168,7 +168,7 @@
 }
 
 .gintervals.check_new_set <- function(intervals.set) {
-    if (!is.na(match(intervals.set, get("GINTERVS")))) {
+    if (!is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
         stop(sprintf("Intervals set %s already exists", intervals.set), call. = F)
     }
 
@@ -178,9 +178,9 @@
 
     path <- gsub(".", "/", intervals.set, fixed = T)
     path <- paste(path, ".interv", sep = "")
-    fullpath <- paste(get("GWD"), path, sep = "/")
+    fullpath <- paste(get("GWD", envir = .misha), path, sep = "/")
     dir <- dirname(path)
-    fulldir <- paste(get("GWD"), dir, sep = "/")
+    fulldir <- paste(get("GWD", envir = .misha), dir, sep = "/")
 
     if (!file.exists(fulldir)) {
         stop(sprintf("Directory %s does not exist", dir), call. = F)
@@ -190,7 +190,7 @@
         stop(sprintf("File %s already exists", path), call. = F)
     }
 
-    if (!is.na(match(intervals.set, get("GTRACKS")))) {
+    if (!is.na(match(intervals.set, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", intervals.set), call. = F)
     }
 
@@ -198,7 +198,7 @@
         stop(sprintf("Virtual track %s already exists", intervals.set), call. = F)
     }
 
-    if (.ggetOption(".gautocompletion", FALSE) && exists(intervals.set, envir = .GlobalEnv)) {
+    if (.ggetOption(".gautocompletion", FALSE) && exists(intervals.set, envir = .misha)) {
         stop(sprintf("Variable \"%s\" shadows the name of the new intervals set.\nPlease remove this variable from the environment or switch off autocompletion mode.", intervals.set), call. = F)
     }
 
@@ -211,7 +211,7 @@
     }
     .gcheckroot()
 
-    if (is.character(intervals.set) && length(intervals.set) == 1 && is.na(match(intervals.set, get("GINTERVS"))) && is.na(match(intervals.set, get("GTRACKS")))) {
+    if (is.character(intervals.set) && length(intervals.set) == 1 && is.na(match(intervals.set, get("GINTERVS", envir = .misha))) && is.na(match(intervals.set, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Intervals set %s does not exist", intervals.set), call. = F)
     }
 
@@ -422,7 +422,7 @@
 }
 
 .gintervals.load_file <- function(intervals.set, chrom = NULL, chrom1 = NULL, chrom2 = NULL) {
-    intervfname <- sprintf("%s.interv", paste(get("GWD"), gsub("\\.", "/", intervals.set), sep = "/"))
+    intervfname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
     if (!is.null(chrom)) {
         chrom <- .gchroms(chrom)
         intervfname <- sprintf("%s/%s", intervfname, chrom)
@@ -432,8 +432,8 @@
         intervfname <- sprintf("%s/%s-%s", intervfname, chrom1, chrom2)
     }
 
-    if (intervals.set %in% get("GTRACKS")) {
-        .gcall("gtrack_intervals_load", intervals.set, chrom, chrom1, chrom2, new.env(parent = parent.frame()))
+    if (intervals.set %in% get("GTRACKS", envir = .misha)) {
+        .gcall("gtrack_intervals_load", intervals.set, chrom, chrom1, chrom2, .misha_env())
     } else {
         if (file.exists(intervfname) || (is.null(chrom) && is.null(chrom1) && is.null(chrom2))) {
             f <- file(intervfname, "rb")
@@ -474,10 +474,10 @@
 
 .gintervals.is_bigset <- function(intervals.set, err_if_non_exist = T) {
     if (is.character(intervals.set) & length(intervals.set) == 1) {
-        if (intervals.set %in% get("GTRACKS")) {
-            intervfname <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", intervals.set), sep = "/"))
+        if (intervals.set %in% get("GTRACKS", envir = .misha)) {
+            intervfname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
         } else {
-            intervfname <- sprintf("%s.interv", paste(get("GWD"), gsub("\\.", "/", intervals.set), sep = "/"))
+            intervfname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
         }
         if (file.exists(intervfname)) {
             if (file.info(intervfname)$isdir) {
@@ -532,7 +532,7 @@
     # During this time the process might get interrupted leaving the intervals set in incomplete state.
     # Even though it's not fully transaction-safe, we prefer to create a temporary file and then move it hoping it's fast enough.
     path <- gsub(".", "/", intervals.set, fixed = T)
-    path <- paste(get("GWD"), path, sep = "/")
+    path <- paste(get("GWD", envir = .misha), path, sep = "/")
     path <- paste(path, ".interv", sep = "")
 
     intervals <- .gintervals.load(intervals.set)
@@ -564,14 +564,14 @@
     }
 
     path <- gsub(".", "/", intervals.set, fixed = T)
-    path <- paste(get("GWD"), path, sep = "/")
+    path <- paste(get("GWD", envir = .misha), path, sep = "/")
     path <- paste(path, ".interv", sep = "")
 
     tmpfilename <- tempfile(".", dirname(path)) # tmpdir = the parent directory of intervals set, otherwise rename might not work
     # (tmpdir might be at another file system)
     file.rename(path, tmpfilename)
-    gintervs <- get("GINTERVS")
-    assign("GINTERVS", gintervs[gintervs != intervals.set], envir = .GlobalEnv)
+    gintervs <- get("GINTERVS", envir = .misha)
+    assign("GINTERVS", gintervs[gintervs != intervals.set], envir = .misha)
     success <- FALSE
     tryCatch(
         {
@@ -585,7 +585,7 @@
                 gintervs <- c(gintervs, intervals.set)
                 gintervs <- unique(gintervs)
                 sort(gintervs)
-                assign("GINTERVS", gintervs, envir = .GlobalEnv)
+                assign("GINTERVS", gintervs, envir = .misha)
             }
             unlink(tmpfilename, recursive = TRUE)
         }
@@ -594,13 +594,13 @@
 
 .gintervals.big.meta <- function(intervals.set) {
     metafname <- ""
-    if (intervals.set %in% get("GTRACKS")) {
-        metafname <- sprintf("%s.track/.meta", paste(get("GWD"), gsub("\\.", "/", intervals.set), sep = "/"))
+    if (intervals.set %in% get("GTRACKS", envir = .misha)) {
+        metafname <- sprintf("%s.track/.meta", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
         if (!file.exists(metafname)) {
-            .gcall("gtrack_create_meta", intervals.set, new.env(parent = parent.frame()))
+            .gcall("gtrack_create_meta", intervals.set, .misha_env())
         }
     } else {
-        metafname <- sprintf("%s.interv/.meta", paste(get("GWD"), gsub("\\.", "/", intervals.set), sep = "/"))
+        metafname <- sprintf("%s.interv/.meta", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
     }
     f <- file(metafname, "rb")
     res <- unserialize(f)
@@ -700,7 +700,7 @@ gintervals <- function(chroms = NULL, starts = 0, ends = -1, strands = NULL) {
     .gcheckroot()
 
     intervals <- .gintervals(chroms, starts, ends, strands)
-    .gcall("gintervsort", intervals, new.env(parent = parent.frame()))
+    .gcall("gintervsort", intervals, .misha_env())
 }
 
 
@@ -763,7 +763,7 @@ gintervals.2d <- function(chroms1 = NULL, starts1 = 0, ends1 = -1, chroms2 = NUL
         chrom2 = intervals2$chrom, start2 = intervals2$start, end2 = intervals2$end
     )
 
-    .gcall("gintervsort", intervals, new.env(parent = parent.frame()))
+    .gcall("gintervsort", intervals, .misha_env())
 }
 
 
@@ -781,7 +781,7 @@ gintervals.2d <- function(chroms1 = NULL, starts1 = 0, ends1 = -1, chroms2 = NUL
 #' @export gintervals.2d.all
 gintervals.2d.all <- function() {
     .gcheckroot()
-    get("ALLGENOME")[[2]]
+    get("ALLGENOME", envir = .misha)[[2]]
 }
 
 
@@ -799,7 +799,7 @@ gintervals.2d.all <- function() {
 #' @export gintervals.all
 gintervals.all <- function() {
     .gcheckroot()
-    get("ALLGENOME")[[1]]
+    get("ALLGENOME", envir = .misha)[[1]]
 }
 
 
@@ -847,7 +847,7 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("ginterv_intersectband", intervals, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("ginterv_intersectband", intervals, band, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -954,7 +954,7 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
         stop("Usage: gintervals.canonic(intervals, unify_touching_intervals = TRUE)", call. = F)
     }
 
-    res <- .gcall("gintervcanonic", intervals, unify_touching_intervals, new.env(parent = parent.frame()))
+    res <- .gcall("gintervcanonic", intervals, unify_touching_intervals, .misha_env())
     res
 }
 
@@ -1004,7 +1004,7 @@ gintervals.diff <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
             intervals2 <- intervals[[2]]
-            chrom_res <- .gcall("gintervdiff", intervals1, intervals2, new.env(parent = parent.frame()))
+            chrom_res <- .gcall("gintervdiff", intervals1, intervals2, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
                     assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
@@ -1030,7 +1030,7 @@ gintervals.diff <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.
             retv <- 0
         } # suppress return value
     } else {
-        res <- .gcall("gintervdiff", intervals1, intervals2, new.env(parent = parent.frame()))
+        res <- .gcall("gintervdiff", intervals1, intervals2, .misha_env())
         res
     }
 }
@@ -1063,7 +1063,7 @@ gintervals.exists <- function(intervals.set = NULL) {
     .gcheckroot()
 
     intervals.set <- do.call(.gexpr2str, list(substitute(intervals.set)), envir = parent.frame())
-    !is.na(match(intervals.set, get("GINTERVS")))
+    !is.na(match(intervals.set, get("GINTERVS", envir = .misha)))
 }
 
 
@@ -1191,7 +1191,7 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
         stop("Usage: gintervals.import_genes(genes.file, annots.file = NULL, annots.names = NULL)", call. = F)
     }
 
-    tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT"), "/downloads", sep = ""))
+    tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/downloads", sep = ""))
     if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
         stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
     }
@@ -1227,7 +1227,7 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
                 }
             }
 
-            res <- .gcall("gintervals_import_genes", files[[1]], files[[2]], annots.names, new.env(parent = parent.frame()))
+            res <- .gcall("gintervals_import_genes", files[[1]], files[[2]], annots.names, .misha_env())
             res
         },
         finally = {
@@ -1283,7 +1283,7 @@ gintervals.intersect <- function(intervals1 = NULL, intervals2 = NULL, intervals
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
             intervals2 <- intervals[[2]]
-            chrom_res <- .gcall("gintervintersect", intervals1, intervals2, new.env(parent = parent.frame()))
+            chrom_res <- .gcall("gintervintersect", intervals1, intervals2, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
                     assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
@@ -1313,7 +1313,7 @@ gintervals.intersect <- function(intervals1 = NULL, intervals2 = NULL, intervals
             retv <- 0
         } # suppress return value
     } else {
-        res <- .gcall("gintervintersect", intervals1, intervals2, new.env(parent = parent.frame()))
+        res <- .gcall("gintervintersect", intervals1, intervals2, .misha_env())
         res
     }
 }
@@ -1355,7 +1355,7 @@ gintervals.chrom_sizes <- function(intervals = NULL) {
             res <- stats[, match(c("chrom1", "chrom2", "size"), colnames(stats))]
         }
     } else {
-        res <- .gcall("gintervals_chrom_sizes", .gintervals.load_ext(intervals), new.env(parent = parent.frame()))
+        res <- .gcall("gintervals_chrom_sizes", .gintervals.load_ext(intervals), .misha_env())
     }
 
     if (nrow(res) > 1) {
@@ -1422,7 +1422,7 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' @examples
 #'
 #' gdb.init_examples()
-#' chainfile <- paste(GROOT, "data/test.chain", sep = "/")
+#' chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
 #' intervs <- data.frame(
 #'     chrom = "chr25", start = c(0, 7000),
 #'     end = c(6000, 20000)
@@ -1442,7 +1442,7 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL) {
         chain.intervs <- chain
     }
 
-    .gcall("gintervs_liftover", intervals, chain.intervs, new.env(parent = parent.frame()))
+    .gcall("gintervs_liftover", intervals, chain.intervs, .misha_env())
 }
 
 
@@ -1502,7 +1502,7 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' @examples
 #'
 #' gdb.init_examples()
-#' chainfile <- paste(GROOT, "data/test.chain", sep = "/")
+#' chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
 #' gintervals.load_chain(chainfile)
 #'
 #' @export gintervals.load_chain
@@ -1510,7 +1510,7 @@ gintervals.load_chain <- function(file = NULL) {
     if (is.null(file)) {
         stop("Usage: gintervals.load_chain(file)", call. = F)
     }
-    .gcall("gchain2interv", file, new.env(parent = parent.frame()))
+    .gcall("gchain2interv", file, .misha_env())
 }
 
 
@@ -1539,7 +1539,7 @@ gintervals.load_chain <- function(file = NULL) {
 #' @export gintervals.ls
 gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     .gcheckroot()
-    grep(pattern, get("GINTERVS"), value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
+    grep(pattern, get("GINTERVS", envir = .misha), value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
 }
 
 
@@ -1608,7 +1608,7 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #'
 #' @export gintervals.mapply
 gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.intervals = F, iterator = NULL, band = NULL, intervals.set.out = NULL) {
-    assign("GINTERVID", -1, envir = .GlobalEnv)
+    assign("GINTERVID", -1, envir = .misha)
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(intervals) && length(args) < 2 || !is.null(intervals) && length(args) < 1) {
         stop("Usage: gintervals.mapply(FUN, [expr]+, intervals, enable.gapply.intervals = FALSE, iterator = NULL, intervals.set.out = NULL)", call. = F)
@@ -1627,8 +1627,8 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    if (exists("GAPPLY.INTERVALS")) {
-        remove(list = "GAPPLY.INTERVALS", envir = .GlobalEnv)
+    if (exists("GAPPLY.INTERVALS", envir = .misha)) {
+        remove(list = "GAPPLY.INTERVALS", envir = .misha)
     }
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
@@ -1638,7 +1638,7 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
 
         INTERVALS_FUN <- function(intervals, intervals.set.out, envir) {
             intervals <- intervals[[1]]
-            chrom_res <- .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, FALSE, new.env(parent = parent.frame()))
+            chrom_res <- .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, FALSE, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
                     assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
@@ -1665,9 +1665,9 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
         } # suppress return value
     } else {
         if (.ggetOption("gmultitasking")) {
-            .gcall("gmapply_multitask", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, TRUE, new.env(parent = parent.frame()))
+            .gcall("gmapply_multitask", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, TRUE, .misha_env())
         } else {
-            .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, TRUE, new.env(parent = parent.frame()))
+            .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, TRUE, .misha_env())
         }
     }
 }
@@ -1760,7 +1760,7 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
             intervals2 <- intervals[[2]]
-            chrom_res <- .gcall("gfind_neighbors", intervals1, intervals2, maxneighbors, mindist, maxdist, mindist1, maxdist1, mindist2, maxdist2, na.if.notfound, FALSE, new.env(parent = parent.frame()))
+            chrom_res <- .gcall("gfind_neighbors", intervals1, intervals2, maxneighbors, mindist, maxdist, mindist1, maxdist1, mindist2, maxdist2, na.if.notfound, FALSE, .misha_env())
             if (!is.null(chrom_res) && is.null(intervals.set.out)) {
                 assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
                 .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
@@ -1794,7 +1794,7 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
     } else {
         intervals1 <- .gintervals.load_ext(intervals1)
         intervals2 <- .gintervals.load_ext(intervals2)
-        res <- .gcall("gfind_neighbors", intervals1, intervals2, maxneighbors, mindist, maxdist, mindist1, maxdist1, mindist2, maxdist2, na.if.notfound, TRUE, new.env(parent = parent.frame()))
+        res <- .gcall("gfind_neighbors", intervals1, intervals2, maxneighbors, mindist, maxdist, mindist1, maxdist1, mindist2, maxdist2, na.if.notfound, TRUE, .misha_env())
         res
     }
 }
@@ -1852,9 +1852,9 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
     tryCatch(
         {
             if (.ggetOption("gmultitasking")) {
-                res <- .gcall("gintervals_quantiles_multitask", intervals, exprstr, percentiles, .iterator, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gintervals_quantiles_multitask", intervals, exprstr, percentiles, .iterator, band, intervals.set.out, .misha_env())
             } else {
-                res <- .gcall("gintervals_quantiles", intervals, exprstr, percentiles, .iterator, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gintervals_quantiles", intervals, exprstr, percentiles, .iterator, band, intervals.set.out, .misha_env())
             }
 
             if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
@@ -2018,7 +2018,7 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
     intervals.set <- do.call(.gexpr2str, list(substitute(intervals.set)), envir = parent.frame())
 
     # check whether intervals.set appears among GINTERVS
-    if (is.na(match(intervals.set, get("GINTERVS")))) {
+    if (is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
         if (force) {
             return(invisible())
         }
@@ -2035,7 +2035,7 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        fname <- sprintf("%s.interv", paste(get("GWD"), gsub("\\.", "/", intervals.set), sep = "/"))
+        fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
 
         # remove the intervals set
         unlink(fname, recursive = TRUE)
@@ -2171,13 +2171,13 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
         stop("Invalid format of intervals.set parameter", call. = F)
     }
 
-    if (is.na(match(intervals.set, get("GINTERVS")))) {
+    if (is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
         stop(sprintf("Intervals set %s does not exist", intervals.set), call. = F)
     }
 
     path <- gsub(".", "/", intervals.set, fixed = T)
     path <- paste(path, ".interv", sep = "")
-    fullpath <- paste(get("GWD"), path, sep = "/")
+    fullpath <- paste(get("GWD", envir = .misha), path, sep = "/")
 
     if (!is.null(intervals)) {
         if (!is.null(chrom)) {
@@ -2207,7 +2207,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
                 stats <- stats[-idx, ]
             }
             if (!is.null(intervals) && nrow(intervals)) {
-                stat <- .gcall("gintervals_stats", intervals, new.env(parent = parent.frame()))
+                stat <- .gcall("gintervals_stats", intervals, .misha_env())
                 stats <- rbind(stats, data.frame(chrom = chrom, stat))
                 stats <- stats[order(stats$chrom), ]
             }
@@ -2221,7 +2221,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
                 stats <- stats[-idx, ]
             }
             if (!is.null(intervals) && nrow(intervals)) {
-                stat <- .gcall("gintervals_stats", intervals, new.env(parent = parent.frame()))
+                stat <- .gcall("gintervals_stats", intervals, .misha_env())
                 stats <- rbind(stats, data.frame(chrom1 = chrom1, chrom2 = chrom2, stat))
                 stats <- stats[order(stats$chrom1, stats$chrom2), ]
             }
@@ -2334,7 +2334,7 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gintervals_summary", exprstr, intervals, .iterator, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gintervals_summary", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -2401,7 +2401,7 @@ gintervals.union <- function(intervals1 = NULL, intervals2 = NULL, intervals.set
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
             intervals2 <- intervals[[2]]
-            chrom_res <- .gcall("gintervunion", intervals1, intervals2, new.env(parent = parent.frame()))
+            chrom_res <- .gcall("gintervunion", intervals1, intervals2, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
                     assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
@@ -2441,7 +2441,7 @@ gintervals.union <- function(intervals1 = NULL, intervals2 = NULL, intervals.set
             retv <- 0
         } # suppress return value
     } else {
-        res <- .gcall("gintervunion", intervals1, intervals2, new.env(parent = parent.frame()))
+        res <- .gcall("gintervunion", intervals1, intervals2, .misha_env())
         res
     }
 }
@@ -2544,7 +2544,7 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
         band.idx = c(min.band.idx, max.band.idx, use.band.idx.limit)
     )
     class(r) <- "cartesian.grid"
-    .gcall("gcheck_iterator", r, new.env(parent = parent.frame()))
+    .gcall("gcheck_iterator", r, .misha_env())
     r
 }
 
@@ -2587,7 +2587,7 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
 #' giterator.intervals("dense_track", gintervals(1, 0, 200), 30)
 #'
 #' ## iterator is an intervals set named 'annotations'
-#' giterator.intervals("dense_track", ALLGENOME, "annotations")
+#' giterator.intervals("dense_track", .misha$ALLGENOME, "annotations")
 #'
 #' ## iterator is set implicitly to intervals of 'array_track' track
 #' giterator.intervals("array_track", gintervals(1, 0, 200))
@@ -2600,9 +2600,9 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
 #' )
 #'
 #' @export giterator.intervals
-giterator.intervals <- function(expr = NULL, intervals = get("ALLGENOME"), iterator = NULL, band = NULL, intervals.set.out = NULL) {
+giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) && is.null(substitute(iterator))) {
-        stop("Usage: giterator.intervals(expr = NULL, intervals = ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: giterator.intervals(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
     }
 
     if (is.null(substitute(expr))) {
@@ -2624,7 +2624,7 @@ giterator.intervals <- function(expr = NULL, intervals = get("ALLGENOME"), itera
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("giterator_intervals", exprstr, intervals, .iterator, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("giterator_intervals", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
 
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)

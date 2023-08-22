@@ -6,17 +6,17 @@
     idx <- substr(chroms, 1, 3) != "chr"
     chroms[idx] <- paste("chr", chroms[idx], sep = "")
 
-    indices <- match(chroms, get("ALLGENOME")[[1]]$chrom)
+    indices <- match(chroms, get("ALLGENOME", envir = .misha)[[1]]$chrom)
     err.chroms <- chroms[is.na(indices)]
     if (length(err.chroms) > 0) {
         stop(sprintf("Chromosome %s does not exist in the database", err.chroms[1]))
     }
-    get("ALLGENOME")[[1]]$chrom[indices] # return factor
+    get("ALLGENOME", envir = .misha)[[1]]$chrom[indices] # return factor
 }
 
 
 .gcheckroot <- function() {
-    if (!exists("GROOT", envir = .GlobalEnv) || !exists("ALLGENOME", envir = .GlobalEnv) || is.null(get("GROOT")) || is.null(get("ALLGENOME"))) {
+    if (!exists("GROOT", envir = .misha) || !exists("ALLGENOME", envir = .misha) || is.null(get("GROOT", envir = .misha)) || is.null(get("ALLGENOME", envir = .misha))) {
         stop("Database root directory is not set. Please call gdb.init().", call. = F)
     }
 }
@@ -24,7 +24,7 @@
 
 .gdir.cd <- function(dir, rescan) {
     oldwd <- getwd()
-    setwd(get("GWD"))
+    setwd(get("GWD", envir = .misha))
     tryCatch(
         {
             t <- .gfindtrackinpath(dir)
@@ -38,7 +38,7 @@
             if (.ggetOption(".gautocompletion", FALSE)) {
                 .gundefine_autocompletion_vars()
             }
-            assign("GWD", newwd, envir = .GlobalEnv)
+            assign("GWD", newwd, envir = .misha)
             setwd(oldwd)
             gdb.reload(rescan)
         },
@@ -60,12 +60,12 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 
     groot <- normalizePath(groot)
 
-    if (exists("GROOT") && exists("ALLGENOME") && !is.null(get("GROOT")) && !is.null(get("ALLGENOME")) && .ggetOption(".gautocompletion", FALSE)) {
+    if (exists("GROOT", envir = .misha) && exists("ALLGENOME", envir = .misha) && !is.null(get("GROOT", envir = .misha)) && !is.null(get("ALLGENOME", envir = .misha)) && .ggetOption(".gautocompletion", FALSE)) {
         .gundefine_autocompletion_vars()
     }
 
-    assign("ALLGENOME", NULL, envir = .GlobalEnv)
-    assign("GROOT", NULL, envir = .GlobalEnv)
+    assign("ALLGENOME", NULL, envir = .misha)
+    assign("GROOT", NULL, envir = .misha)
 
     chromsizes <- read.csv(paste(groot, "chrom_sizes.txt", sep = "/"), sep = "\t", header = F)
     colnames(chromsizes) <- c("chrom", "size")
@@ -91,9 +91,9 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
     rownames(intervals2d) <- 1:nrow(intervals2d)
 
-    assign("ALLGENOME", list(intervals, intervals2d), envir = .GlobalEnv)
-    assign("GROOT", groot, envir = .GlobalEnv)
-    assign("GWD", groot, envir = .GlobalEnv)
+    assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
+    assign("GROOT", groot, envir = .misha)
+    assign("GWD", groot, envir = .misha)
 
     success <- F
     tryCatch(
@@ -116,9 +116,9 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         },
         finally = {
             if (!success) {
-                assign("ALLGENOME", NULL, envir = .GlobalEnv)
-                assign("GROOT", NULL, envir = .GlobalEnv)
-                assign("GWD", NULL, envir = .GlobalEnv)
+                assign("ALLGENOME", NULL, envir = .misha)
+                assign("GROOT", NULL, envir = .misha)
+                assign("GWD", NULL, envir = .misha)
             }
         }
     )
@@ -160,7 +160,7 @@ gdir.cd <- function(dir = NULL) {
     }
 
     success <- FALSE
-    oldgwd <- get("GWD")
+    oldgwd <- get("GWD", envir = .misha)
 
     tryCatch(
         {
@@ -199,7 +199,7 @@ gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
     }
 
     oldwd <- getwd()
-    setwd(get("GWD"))
+    setwd(get("GWD", envir = .misha))
     tryCatch(
         {
             d <- dirname(dir)
@@ -246,7 +246,7 @@ gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
 #' @export gdir.cwd
 gdir.cwd <- function() {
     .gcheckroot()
-    get("GWD")
+    get("GWD", envir = .misha)
 }
 
 
@@ -275,7 +275,7 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
     }
 
     oldwd <- getwd()
-    setwd(get("GWD"))
+    setwd(get("GWD", envir = .misha))
     tryCatch(
         {
             if (!file.exists(dir)) {
@@ -298,7 +298,7 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
             answer <- "Y"
 
             if (recursive && !force) {
-                res <- .gcall("gfind_tracks_n_intervals", dir, new.env(parent = parent.frame()), silent = TRUE)
+                res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env(), silent = TRUE)
                 tracks <- res[[1]]
                 intervals <- res[[2]]
 
@@ -351,7 +351,7 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
 gdb.set_readonly_attrs <- function(attrs) {
     .gcheckroot()
 
-    filename <- paste(get("GROOT"), ".ro_attributes", sep = "/")
+    filename <- paste(get("GROOT", envir = .misha), ".ro_attributes", sep = "/")
 
     if (is.null(attrs)) {
         unlink(filename)
@@ -443,11 +443,11 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
     success <- FALSE
     allgenome.old <- NULL
     groot.old <- NULL
-    if (exists("ALLGENOME")) {
-        allgenome.old <- get("ALLGENOME")
+    if (exists("ALLGENOME", envir = .misha)) {
+        allgenome.old <- get("ALLGENOME", envir = .misha)
     }
-    if (exists("GROOT")) {
-        groot.old <- get("GROOT")
+    if (exists("GROOT", envir = .misha)) {
+        groot.old <- get("GROOT", envir = .misha)
     }
 
     tryCatch(
@@ -481,8 +481,8 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
             rownames(intervals2d) <- 1:nrow(intervals2d)
 
-            assign("ALLGENOME", list(intervals, intervals2d), envir = .GlobalEnv)
-            assign("GROOT", groot, envir = .GlobalEnv)
+            assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
+            assign("GROOT", groot, envir = .misha)
 
             if (!is.null(genes.file)) {
                 intervs <- gintervals.import_genes(genes.file, annots.file, annots.names)
@@ -504,8 +504,8 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             success <- TRUE
         },
         finally = {
-            assign("ALLGENOME", allgenome.old, envir = .GlobalEnv)
-            assign("GROOT", groot.old, envir = .GlobalEnv)
+            assign("ALLGENOME", allgenome.old, envir = .misha)
+            assign("GROOT", groot.old, envir = .misha)
             if (!success) {
                 unlink(groot, recursive = TRUE)
             }
@@ -533,7 +533,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 gdb.get_readonly_attrs <- function() {
     .gcheckroot()
 
-    filename <- paste(get("GROOT"), ".ro_attributes", sep = "/")
+    filename <- paste(get("GROOT", envir = .misha), ".ro_attributes", sep = "/")
     attrs <- NULL
     if (file.exists(filename)) {
         f <- file(filename, "rb")
@@ -574,8 +574,9 @@ gdb.get_readonly_attrs <- function() {
 #' auto-completion mode is switched on (see 'gset_input_method') the list of
 #' tracks and intervals sets is loaded and added as variables to the global
 #' environment allowing auto-completion of object names with <TAB> key. Also a
-#' few global variables are defined. These variables should not be modified by
-#' user.
+#' few variables are defined at an environment called \code{.misha}, and can be
+#' accessed using \code{.misha$variable}, e.g. \code{.misha$ALLGENOME}.
+#' These variables should not be modified by user.
 #'
 #' \tabular{ll}{ GROOT \tab Root directory of Genomic Database\cr GWD \tab
 #' Current working directory inside Genomic Database\cr GTRACKS \tab List of
@@ -628,7 +629,7 @@ gdb.init_examples <- function() {
 #' @keywords ~db
 #' @export gdb.reload
 gdb.reload <- function(rescan = TRUE) {
-    if (!exists("GROOT")) {
+    if (!exists("GROOT", envir = .misha)) {
         stop("gdb.init() must be called beforehand.", call. = F)
     }
 
@@ -636,18 +637,18 @@ gdb.reload <- function(rescan = TRUE) {
         .gundefine_autocompletion_vars()
     }
 
-    assign("GTRACKS", NULL, envir = .GlobalEnv)
-    assign("GINTERVS", NULL, envir = .GlobalEnv)
+    assign("GTRACKS", NULL, envir = .misha)
+    assign("GINTERVS", NULL, envir = .misha)
 
-    dir <- get("GWD")
+    dir <- get("GWD", envir = .misha)
 
     res <- ""
 
-    if (get("GWD") != paste(get("GROOT"), "tracks", sep = "/")) {
+    if (get("GWD", envir = .misha) != paste(get("GROOT", envir = .misha), "tracks", sep = "/")) {
         rescan <- TRUE
     }
 
-    db.filename <- paste(get("GROOT"), ".db.cache", sep = "/")
+    db.filename <- paste(get("GROOT", envir = .misha), ".db.cache", sep = "/")
 
     options(warn = -1) # disable warnings since dir() on non dir or non existing dir produces warnings
     if (!rescan) {
@@ -666,8 +667,8 @@ gdb.reload <- function(rescan = TRUE) {
     }
 
     if (rescan) {
-        res <- .gcall("gfind_tracks_n_intervals", dir, new.env(parent = parent.frame()), silent = TRUE)
-        if (get("GWD") == paste(get("GROOT"), "tracks", sep = "/")) {
+        res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env(), silent = TRUE)
+        if (get("GWD", envir = .misha) == paste(get("GROOT", envir = .misha), "tracks", sep = "/")) {
             try(
                 {
                     f <- file(db.filename, "wb")
@@ -693,12 +694,8 @@ gdb.reload <- function(rescan = TRUE) {
         stop("The following tracks exist also as intervals: ", paste(res, collapse = " "))
     }
 
-    if (.ggetOption(".gautocompletion", FALSE)) {
-        .gdefine_autocompletion_vars(tracks, intervals, gvtrack.ls(), .ggetOption(".ginteractive", FALSE))
-    }
-
-    assign("GTRACKS", tracks, envir = .GlobalEnv)
-    assign("GINTERVS", intervals, envir = .GlobalEnv)
+    assign("GTRACKS", tracks, envir = .misha)
+    assign("GINTERVS", intervals, envir = .misha)
 }
 
 
@@ -708,7 +705,7 @@ gdb.reload <- function(rescan = TRUE) {
     ro_attrs <- c("created.by", "created.date")
     .gcall_noninteractive(gdb.set_readonly_attrs, ro_attrs)
 
-    for (track in GTRACKS) {
+    for (track in .misha$GTRACKS) {
         for (attr in ro_attrs) {
             try(
                 {
@@ -727,7 +724,7 @@ gdb.reload <- function(rescan = TRUE) {
 .gdb.convert_tracks <- function() {
     .gcheckroot()
 
-    for (track in GTRACKS) {
+    for (track in .misha$GTRACKS) {
         try(
             {
                 retv <- try(.gcall_noninteractive(gtrack.info, track), silent = TRUE)
@@ -743,14 +740,14 @@ gdb.reload <- function(rescan = TRUE) {
 
 
 .gconfirmtrackcreate <- function(track) {
-    if (!is.na(match(track, get("GTRACKS")))) {
+    if (!is.na(match(track, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Track %s already exists", track), call. = F)
     }
 
     path <- gsub(".", "/", track, fixed = T)
     dir <- dirname(path)
-    fulldir <- paste(get("GWD"), dir, sep = "/")
-    fullpath <- sprintf("%s.track", paste(get("GWD"), path, sep = "/"))
+    fulldir <- paste(get("GWD", envir = .misha), dir, sep = "/")
+    fullpath <- sprintf("%s.track", paste(get("GWD", envir = .misha), path, sep = "/"))
 
     if (!file.exists(fulldir)) {
         stop(sprintf("Directory %s does not exist", dir), call. = F)
@@ -760,7 +757,7 @@ gdb.reload <- function(rescan = TRUE) {
         stop(sprintf("File %s already exists", path), call. = F)
     }
 
-    if (!is.na(match(track, get("GINTERVS")))) {
+    if (!is.na(match(track, get("GINTERVS", envir = .misha)))) {
         stop(sprintf("Interval %s already exists", track), call. = F)
     }
 
@@ -776,10 +773,10 @@ gdb.reload <- function(rescan = TRUE) {
 .gdb.add_track <- function(track) {
     .gcheckroot()
 
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", track), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", track), sep = "/"))
     if (file.exists(trackdir)) {
-        tracks <- sort(c(get("GTRACKS"), track))
-        intervals <- sort(get("GINTERVS"))
+        tracks <- sort(c(get("GTRACKS", envir = .misha), track))
+        intervals <- sort(get("GINTERVS", envir = .misha))
 
         res <- intersect(tracks, intervals)
         if (length(res) > 0) {
@@ -787,45 +784,45 @@ gdb.reload <- function(rescan = TRUE) {
         }
 
         if (.ggetOption(".gautocompletion", FALSE)) {
-            if (exists(track, envir = .GlobalEnv)) {
+            if (exists(track, envir = .misha)) {
                 stop(sprintf("Variable \"%s\" shadows the name of identically named track.\nPlease remove this variable from the environment or switch off autocompletion mode.", track), call. = F)
             }
 
             if (.ggetOption(".ginteractive", FALSE)) { # set track to NULL otherwise evaluation of track expression pmin(track, 2) will produce a string "2"
-                assign(track, NULL, envir = .GlobalEnv)
+                assign(track, NULL, envir = .misha)
             } else {
-                assign(track, track, envir = .GlobalEnv)
+                assign(track, track, envir = .misha)
             }
         }
 
-        assign("GTRACKS", tracks, envir = .GlobalEnv)
+        assign("GTRACKS", tracks, envir = .misha)
     }
 }
 
 .gdb.rm_track <- function(track) {
     .gcheckroot()
 
-    trackdir <- sprintf("%s.track", paste(get("GWD"), gsub("\\.", "/", track), sep = "/"))
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", track), sep = "/"))
     if (!file.exists(trackdir)) {
         if (.ggetOption(".gautocompletion", FALSE)) {
-            if (exists(track, envir = .GlobalEnv)) {
-                remove(list = track, envir = .GlobalEnv)
+            if (exists(track, envir = .misha)) {
+                remove(list = track, envir = .misha)
             }
         }
 
-        tracks <- get("GTRACKS")
+        tracks <- get("GTRACKS", envir = .misha)
         tracks <- tracks[tracks != track]
-        assign("GTRACKS", tracks, envir = .GlobalEnv)
+        assign("GTRACKS", tracks, envir = .misha)
     }
 }
 
 .gdb.add_intervals.set <- function(intervals.set) {
     .gcheckroot()
 
-    fname <- sprintf("%s.interv", paste(get("GWD"), gsub("\\.", "/", intervals.set), sep = "/"))
+    fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
     if (file.exists(fname)) {
-        tracks <- get("GTRACKS")
-        intervals <- sort(c(get("GINTERVS"), intervals.set))
+        tracks <- get("GTRACKS", envir = .misha)
+        intervals <- sort(c(get("GINTERVS", envir = .misha), intervals.set))
 
         res <- intersect(tracks, intervals)
         if (length(res) > 0) {
@@ -833,30 +830,30 @@ gdb.reload <- function(rescan = TRUE) {
         }
 
         if (.ggetOption(".gautocompletion", FALSE)) {
-            if (exists(intervals.set, envir = .GlobalEnv)) {
+            if (exists(intervals.set, envir = .misha)) {
                 stop(sprintf("Variable \"%s\" shadows the name of identically named intervals set.\nPlease remove this variable from the environment or switch off autocompletion mode.", intervals.set), call. = F)
             }
 
-            assign(intervals.set, intervals.set, envir = .GlobalEnv)
+            assign(intervals.set, intervals.set, envir = .misha)
         }
 
-        assign("GINTERVS", intervals, envir = .GlobalEnv)
+        assign("GINTERVS", intervals, envir = .misha)
     }
 }
 
 .gdb.rm_intervals.set <- function(intervals.set) {
     .gcheckroot()
 
-    fname <- sprintf("%s.interv", paste(get("GWD"), gsub("\\.", "/", intervals.set), sep = "/"))
+    fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
     if (!file.exists(fname)) {
         if (.ggetOption(".gautocompletion", FALSE)) {
-            if (exists(intervals.set, envir = .GlobalEnv)) {
-                remove(list = intervals.set, envir = .GlobalEnv)
+            if (exists(intervals.set, envir = .misha)) {
+                remove(list = intervals.set, envir = .misha)
             }
         }
 
-        intervals <- get("GINTERVS")
+        intervals <- get("GINTERVS", envir = .misha)
         intervals <- intervals[intervals != intervals.set]
-        assign("GINTERVS", intervals, envir = .GlobalEnv)
+        assign("GINTERVS", intervals, envir = .misha)
     }
 }

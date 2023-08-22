@@ -52,13 +52,13 @@ gtrack.array.extract("array_track", c("col1", "col3"),
 )
 
 gtrack.array.import("test_track1", "Test array track 1", f1, f2)
-gtrack.array.extract("test_track1", NULL, ALLGENOME)
+gtrack.array.extract("test_track1", NULL, .misha$ALLGENOME)
 
 gtrack.array.import(
     "test_track2", "Test array track 2",
     "test_track1", f3
 )
-gtrack.array.extract("test_track2", NULL, ALLGENOME)
+gtrack.array.extract("test_track2", NULL, .misha$ALLGENOME)
 
 gtrack.rm("test_track1", TRUE)
 gtrack.rm("test_track2", TRUE)

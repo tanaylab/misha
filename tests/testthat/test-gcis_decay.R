@@ -13,5 +13,5 @@ test_that("gcis_decay works", {
 })
 
 test_that("gcompute_strands_autocorr works", {
-    expect_regression(gcompute_strands_autocorr(file.path(GROOT, "s_7_export.txt"), 1, 50), "gcompute_strands_autocorr.1")
+    expect_regression(gcompute_strands_autocorr(file.path(.misha$GROOT, "s_7_export.txt"), 1, 50), "gcompute_strands_autocorr.1")
 })

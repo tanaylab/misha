@@ -46,8 +46,9 @@ Upon completion the connection is established with the database. If
 auto-completion mode is switched on (see 'gset_input_method') the list of
 tracks and intervals sets is loaded and added as variables to the global
 environment allowing auto-completion of object names with <TAB> key. Also a
-few global variables are defined. These variables should not be modified by
-user.
+few variables are defined at an environment called \code{.misha}, and can be
+accessed using \code{.misha$variable}, e.g. \code{.misha$ALLGENOME}.
+These variables should not be modified by user.
 
 \tabular{ll}{ GROOT \tab Root directory of Genomic Database\cr GWD \tab
 Current working directory inside Genomic Database\cr GTRACKS \tab List of

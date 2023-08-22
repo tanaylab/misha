@@ -60,7 +60,7 @@ auto-correlation given by bins. The size of the bin is indicated by
 \examples{
 
 gdb.init_examples()
-gcompute_strands_autocorr(paste(GROOT, "reads", sep = "/"),
+gcompute_strands_autocorr(paste(.misha$GROOT, "reads", sep = "/"),
     "chr1", 50,
     maxread = 300
 )

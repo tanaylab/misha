@@ -15,7 +15,7 @@ bool GIntervalsBigSet::isbig(const char *intervset, const IntervUtils &iu)
 	bool interv_found = false;
 	SEXP gintervs;
 
-	rprotect(gintervs = findVar(install("GINTERVS"), iu.get_env()));
+	rprotect(gintervs = findVar(install("GINTERVS"), findVar(install(".misha"), iu.get_env())));
 	for (int iinterv = 0; iinterv < length(gintervs); ++iinterv) {
 		const char *interv = CHAR(STRING_ELT(gintervs, iinterv));
 		if (!strcmp(intervset, interv)) {

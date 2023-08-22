@@ -111,7 +111,7 @@ void TrackExprScanner::define_r_vars(unsigned eval_buf_limit)
 		for (unsigned i = 0; i < m_eval_buf_limit; i++)
 			m_2d.expr_itr_intervals_chroms1[i] = m_2d.expr_itr_intervals_chroms2[i] = 1;
 	}
-	defineVar(install("GITERATOR.INTERVALS"), m_rexpr_itr_intervals, findVar(install(".GlobalEnv"), m_iu.get_env()));
+	defineVar(install("GITERATOR.INTERVALS"), m_rexpr_itr_intervals, findVar(install(".misha"), m_iu.get_env()));
 
     for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         const TrackExpressionVars::Track_var *var = m_expr_vars.var(m_track_exprs[iexpr].c_str());
@@ -559,7 +559,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 				SEXP all_track_names;
 				SEXPCleaner all_track_names_cleaner(all_track_names);
 
-				rprotect(all_track_names = findVar(install("GTRACKS"), m_iu.get_env()));
+				rprotect(all_track_names = findVar(install("GTRACKS"), findVar(install(".misha"), m_iu.get_env())));
 				if (isString(all_track_names)) {
 					int i;
 					for (i = 0; i < length(all_track_names); ++i) {
@@ -569,7 +569,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 					if (i >= length(all_track_names)) 
 						verror("Invalid iterator: %s is neither a name of a track nor a name of an intervals set", iter_val.c_str());
 				}
-			}
+                        }
 			track_names.push_back(iter_val);
 			track_types.push_back(GenomeTrack::get_type(track2path(m_iu.get_env(), iter_val).c_str(), m_iu.get_chromkey()));
 		}

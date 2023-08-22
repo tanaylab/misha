@@ -7,7 +7,7 @@
 gquantiles(
   expr = NULL,
   percentiles = 0.5,
-  intervals = get("ALLGENOME"),
+  intervals = get("ALLGENOME", envir = .misha),
   iterator = NULL,
   band = NULL
 )

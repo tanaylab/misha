@@ -14,7 +14,7 @@
         readonly_attrs <- gdb.get_readonly_attrs()
     }
 
-    .gcall("gset_tracks_attrs", table, remove.others, readonly_attrs, new.env(parent = parent.frame()))
+    .gcall("gset_tracks_attrs", table, remove.others, readonly_attrs, .misha_env())
 }
 
 
@@ -58,7 +58,7 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
 
     if (.ggetOption(".ginteractive", FALSE)) {
         trackstr <- do.call(.gexpr2str, list(substitute(tracks)), envir = parent.frame())
-        if (!is.na(match(trackstr, get("GTRACKS")))) {
+        if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
             tracks <- trackstr
         }
     }
@@ -71,15 +71,15 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
     }
 
     if (is.null(tracks)) {
-        tracks <- get("GTRACKS")
+        tracks <- get("GTRACKS", envir = .misha)
     } else {
-        idx <- which(!(tracks %in% get("GTRACKS")))[1]
+        idx <- which(!(tracks %in% get("GTRACKS", envir = .misha)))[1]
         if (!is.na(idx)) {
             stop(sprintf("Track %s does not exist", tracks[idx]), call. = F)
         }
     }
 
-    .gcall("gget_tracks_attrs", tracks, attrs, new.env(parent = parent.frame()))
+    .gcall("gget_tracks_attrs", tracks, attrs, .misha_env())
 }
 
 
@@ -135,7 +135,7 @@ gtrack.attr.import <- function(table = NULL, remove.others = FALSE) {
         stop("Invalid format of attributes table", call. = F)
     }
 
-    idx <- which(!(tracks %in% get("GTRACKS")))[1]
+    idx <- which(!(tracks %in% get("GTRACKS", envir = .misha)))[1]
     if (!is.na(idx)) {
         stop(sprintf("Track %s does not exist", tracks[idx]), call. = F)
     }

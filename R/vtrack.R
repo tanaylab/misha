@@ -15,13 +15,13 @@
         stop(sprintf("Virtual track %s does not exist", vtrackstr), call. = F)
     }
 
-    gwd <- get("GWD")
-    get("GVTRACKS")[[gwd]][[vtrackstr]]
+    gwd <- get("GWD", envir = .misha)
+    get("GVTRACKS", envir = .misha)[[gwd]][[vtrackstr]]
 }
 
 .gvtrack.set <- function(vtrackstr, var) {
-    if (exists("GVTRACKS", envir = .GlobalEnv)) {
-        gvtracks <- get("GVTRACKS")
+    if (exists("GVTRACKS", envir = .misha)) {
+        gvtracks <- get("GVTRACKS", envir = .misha)
     } else {
         gvtracks <- list()
     }
@@ -31,7 +31,7 @@
         stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = F)
     }
 
-    gwd <- get("GWD")
+    gwd <- get("GWD", envir = .misha)
     idx1 <- match(gwd, gwds)
     if (is.na(idx1)) {
         gwds <- c(gwds, gwd)
@@ -49,15 +49,15 @@
 
     idx2 <- match(vtrackstr, vtracknames)
     if (is.na(idx2)) {
-        if (!is.na(match(vtrackstr, get("GTRACKS")))) {
+        if (!is.na(match(vtrackstr, get("GTRACKS", envir = .misha)))) {
             stop(sprintf("Track %s already exists", vtrackstr), call. = F)
         }
 
-        if (!is.na(match(vtrackstr, get("GINTERVS")))) {
+        if (!is.na(match(vtrackstr, get("GINTERVS", envir = .misha)))) {
             stop(sprintf("Interval %s already exists", vtrackstr), call. = F)
         }
 
-        if (.ggetOption(".gautocompletion", FALSE) && exists(vtrackstr, envir = .GlobalEnv)) {
+        if (.ggetOption(".gautocompletion", FALSE) && exists(vtrackstr, envir = .misha)) {
             stop(sprintf("Variable \"%s\" shadows the name of identically named virtual track.\nPlease remove this variable from the environment or switch off autocompletion mode.", vtrackstr), call. = F)
         }
 
@@ -77,8 +77,8 @@
 
     success <- F
     old.gvtracks <- NULL
-    if (exists("GVTRACKS", envir = .GlobalEnv)) {
-        old.gvtracks <- get("GVTRACKS")
+    if (exists("GVTRACKS", envir = .misha)) {
+        old.gvtracks <- get("GVTRACKS", envir = .misha)
     }
 
     success <- F
@@ -87,15 +87,15 @@
             if (.ggetOption(".gautocompletion", FALSE)) {
                 .gundefine_autocompletion_vars()
             }
-            assign("GVTRACKS", gvtracks, envir = .GlobalEnv)
+            assign("GVTRACKS", gvtracks, envir = .misha)
             if (.ggetOption(".gautocompletion", FALSE)) {
-                .gdefine_autocompletion_vars(get("GTRACKS"), get("GINTERVS"), gvtrack.ls(), .ggetOption(".ginteractive", FALSE))
+                .gdefine_autocompletion_vars(get("GTRACKS", envir = .misha), get("GINTERVS", envir = .misha), gvtrack.ls(), .ggetOption(".ginteractive", FALSE))
             }
             success <- T
         },
         finally = {
             if (!success && .ggetOption(".gautocompletion", FALSE)) {
-                .gdefine_autocompletion_vars(get("GTRACKS"), get("GINTERVS"), gvtrack.ls(), .ggetOption(".ginteractive", FALSE))
+                .gdefine_autocompletion_vars(get("GTRACKS", envir = .misha), get("GINTERVS", envir = .misha), gvtrack.ls(), .ggetOption(".ginteractive", FALSE))
             }
         }
     )
@@ -211,11 +211,11 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())
     srcstr <- do.call(.gexpr2str, list(substitute(src)), envir = parent.frame())
 
-    if (!is.na(match(vtrackstr, get("GTRACKS")))) {
+    if (!is.na(match(vtrackstr, get("GTRACKS", envir = .misha)))) {
         stop(sprintf("Cannot create virtual track: regular track named %s already exists", vtrackstr), call. = F)
     }
 
-    if (!is.na(match(vtrackstr, get("GINTERVS")))) {
+    if (!is.na(match(vtrackstr, get("GINTERVS", envir = .misha)))) {
         stop(sprintf("Cannot create virtual track: intervals named %s already exists", vtrackstr), call. = F)
     }
 
@@ -224,7 +224,7 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
     }
 
     var <- list()
-    if (is.character(srcstr) && !is.na(match(srcstr, get("GTRACKS")))) {
+    if (is.character(srcstr) && !is.na(match(srcstr, get("GTRACKS", envir = .misha)))) {
         var$src <- srcstr
     } else {
         var$src <- src
@@ -407,17 +407,17 @@ gvtrack.iterator.2d <- function(vtrack = NULL, sshift1 = 0, eshift1 = 0, sshift2
 gvtrack.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     .gcheckroot()
 
-    if (!exists("GVTRACKS")) {
+    if (!exists("GVTRACKS", envir = .misha)) {
         return(NULL)
     }
 
-    gvtracks <- get("GVTRACKS")
+    gvtracks <- get("GVTRACKS", envir = .misha)
     gwds <- names(gvtracks)
     if (!is.list(gvtracks) || (length(gvtracks) && !is.character(gwds)) || length(gvtracks) != length(gwds)) {
         stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = F)
     }
 
-    gwd <- get("GWD")
+    gwd <- get("GWD", envir = .misha)
     idx <- match(gwd, gwds)
     if (is.na(idx)) {
         return(NULL)

@@ -69,18 +69,18 @@
 #' @export gcis_decay
 gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, intervals = NULL, include.lowest = FALSE, iterator = NULL, band = NULL) {
     if (is.null(substitute(expr)) || is.null(breaks) || is.null(src) || is.null(domain)) {
-        stop("Usage: gcis_decay(expr, breaks, src, domain, intervals = ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gcis_decay(expr, breaks, src, domain, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
     }
     .gcheckroot()
 
     if (is.null(intervals)) {
-        intervals <- get("ALLGENOME")
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    res <- .gcall("gcis_decay", exprstr, breaks, src, domain, intervals, include.lowest, .iterator, band, new.env(parent = parent.frame()))
+    res <- .gcall("gcis_decay", exprstr, breaks, src, domain, intervals, include.lowest, .iterator, band, .misha_env())
     attr(res, "breaks") <- breaks
     res
 }
@@ -136,14 +136,14 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL, band = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
     if (length(args) < 2 || (length(args) %% 2 != 0 && (length(args) - 1) %% 2 != 0)) {
-        stop("Usage: gdist([expr, breaks]+, intervals = ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gdist([expr, breaks]+, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
     }
     .gcheckroot()
 
     if (length(args) %% 2 != 0) {
         intervals <- eval.parent(args[[length(args)]])
     } else if (is.null(intervals)) {
-        intervals <- get("ALLGENOME")
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprs <- c()
@@ -157,9 +157,9 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
     if (.ggetOption("gmultitasking")) {
-        res <- .gcall("gtrackdist_multitask", intervals, exprs, breaks, include.lowest, .iterator, band, new.env(parent = parent.frame()))
+        res <- .gcall("gtrackdist_multitask", intervals, exprs, breaks, include.lowest, .iterator, band, .misha_env())
     } else {
-        res <- .gcall("gtrackdist", intervals, exprs, breaks, include.lowest, .iterator, band, new.env(parent = parent.frame()))
+        res <- .gcall("gtrackdist", intervals, exprs, breaks, include.lowest, .iterator, band, .misha_env())
     }
     attr(res, "breaks") <- breaks
     res
@@ -267,9 +267,9 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
         {
             if (!is.null(intervals)) {
                 if (.ggetOption("gmultitasking")) {
-                    res <- .gcall("gextract_multitask", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, new.env(parent = parent.frame()))
+                    res <- .gcall("gextract_multitask", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
                 } else {
-                    res <- .gcall("gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, new.env(parent = parent.frame()))
+                    res <- .gcall("gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
                 }
 
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
@@ -361,7 +361,7 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gpartition", intervals, exprstr, breaks, include.lowest, .iterator, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gpartition", intervals, exprstr, breaks, include.lowest, .iterator, band, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -420,9 +420,9 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
 #' gquantiles("dense_track", c(0.1, 0.6, 0.8), gintervals(c(1, 2)))
 #'
 #' @export gquantiles
-gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOME"), iterator = NULL, band = NULL) {
+gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOME", envir = .misha), iterator = NULL, band = NULL) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gquantiles(expr, percentiles = 0.5, intervals = ALLGENOME, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gquantiles(expr, percentiles = 0.5, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = F)
     }
     .gcheckroot()
 
@@ -430,9 +430,9 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
     if (.ggetOption("gmultitasking")) {
-        res <- .gcall("gquantiles_multitask", intervals, exprstr, percentiles, .iterator, band, new.env(parent = parent.frame()))
+        res <- .gcall("gquantiles_multitask", intervals, exprstr, percentiles, .iterator, band, .misha_env())
     } else {
-        res <- .gcall("gquantiles", intervals, exprstr, percentiles, .iterator, band, new.env(parent = parent.frame()))
+        res <- .gcall("gquantiles", intervals, exprstr, percentiles, .iterator, band, .misha_env())
     }
     res
 }
@@ -543,7 +543,7 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gbintransform", intervals, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gbintransform", intervals, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -597,18 +597,18 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
 #' @export gsample
 gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, band = NULL) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gsample(expr, n, intervals = ALLGENOME, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gsample(expr, n, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = F)
     }
     .gcheckroot()
 
     if (is.null(intervals)) {
-        intervals <- get("ALLGENOME")
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    .gcall("gsample", exprstr, n, intervals, .iterator, band, new.env(parent = parent.frame()))
+    .gcall("gsample", exprstr, n, intervals, .iterator, band, .misha_env())
 }
 
 
@@ -645,12 +645,12 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
 #' @export gscreen
 gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gscreen(expr, intervals = ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gscreen(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
     }
     .gcheckroot()
 
     if (is.null(intervals)) {
-        intervals <- get("ALLGENOME")
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
@@ -666,9 +666,9 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
     tryCatch(
         {
             if (.ggetOption("gmultitasking")) {
-                res <- .gcall("gscreen_multitask", exprstr, intervals, .iterator, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gscreen_multitask", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
             } else {
-                res <- .gcall("gscreen", exprstr, intervals, .iterator, band, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gscreen", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
             }
 
             if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
@@ -731,12 +731,12 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
 #' @export gsegment
 gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed = TRUE, intervals = NULL, iterator = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) || is.null(minsegment)) {
-        stop("Usage: gsegment(expr, minsegment, maxpval = 0.05, onetailed = TRUE, intervals = ALLGENOME, iterator = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gsegment(expr, minsegment, maxpval = 0.05, onetailed = TRUE, intervals = .misha$ALLGENOME, iterator = NULL, intervals.set.out = NULL)", call. = F)
     }
     .gcheckroot()
 
     if (is.null(intervals)) {
-        intervals <- get("ALLGENOME")
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
@@ -756,7 +756,7 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gsegment", exprstr, intervals, minsegment, stats::qnorm(maxpval), onetailed, .iterator, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gsegment", exprstr, intervals, minsegment, stats::qnorm(maxpval), onetailed, .iterator, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -805,21 +805,21 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
 #' @export gsummary
 gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gsummary(expr, intervals = ALLGENOME, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gsummary(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = F)
     }
     .gcheckroot()
 
     if (is.null(intervals)) {
-        intervals <- get("ALLGENOME")
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
     if (.ggetOption("gmultitasking")) {
-        res <- .gcall("gtracksummary_multitask", exprstr, intervals, .iterator, band, new.env(parent = parent.frame()))
+        res <- .gcall("gtracksummary_multitask", exprstr, intervals, .iterator, band, .misha_env())
     } else {
-        res <- .gcall("gtracksummary", exprstr, intervals, .iterator, band, new.env(parent = parent.frame()))
+        res <- .gcall("gtracksummary", exprstr, intervals, .iterator, band, .misha_env())
     }
     res
 }
@@ -873,12 +873,12 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 #' @export gwilcox
 gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.05, onetailed = TRUE, what2find = 1, intervals = NULL, iterator = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) || is.null(winsize1) || is.null(winsize2)) {
-        stop("Usage: gwilcox(expr, winsize1, winsize2, maxpval = 0.05, onetailed = TRUE, what2find = 1 (-1=lows, 0=lows/highs, 1=highs), intervals = ALLGENOME, iterator = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gwilcox(expr, winsize1, winsize2, maxpval = 0.05, onetailed = TRUE, what2find = 1 (-1=lows, 0=lows/highs, 1=highs), intervals = .misha$ALLGENOME, iterator = NULL, intervals.set.out = NULL)", call. = F)
     }
     .gcheckroot()
 
     if (is.null(intervals)) {
-        intervals <- get("ALLGENOME")
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
@@ -898,7 +898,7 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gwilcox", exprstr, intervals, winsize1, winsize2, qnorm(maxpval), onetailed, as.integer(what2find), .iterator, intervals.set.out, new.env(parent = parent.frame()))
+                res <- .gcall("gwilcox", exprstr, intervals, winsize1, winsize2, qnorm(maxpval), onetailed, as.integer(what2find), .iterator, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -966,7 +966,7 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
 #' )
 #'
 #' @export gbins.quantiles
-gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get("ALLGENOME"), include.lowest = FALSE, iterator = NULL, band = NULL) {
+gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get("ALLGENOME", envir = .misha), include.lowest = FALSE, iterator = NULL, band = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
 
     if (length(args) >= 0 && length(args) %% 2 != 0) {
@@ -974,7 +974,7 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
     }
 
     if (length(args) < 2 || is.null(substitute(expr))) {
-        stop("Usage: gbins.quantiles([bin_expr, breaks]+, expr, percentiles = 0.5, intervals = ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gbins.quantiles([bin_expr, breaks]+, expr, percentiles = 0.5, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
     }
     .gcheckroot()
 
@@ -989,7 +989,7 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    res <- .gcall("gbins_quantiles", exprs, breaks, include.lowest, percentiles, intervals, .iterator, band, new.env(parent = parent.frame()))
+    res <- .gcall("gbins_quantiles", exprs, breaks, include.lowest, percentiles, intervals, .iterator, band, .misha_env())
     attr(res, "breaks") <- breaks
     res
 }
@@ -1036,7 +1036,7 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
 #' )
 #'
 #' @export gbins.summary
-gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME"), include.lowest = FALSE, iterator = NULL, band = NULL) {
+gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir = .misha), include.lowest = FALSE, iterator = NULL, band = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
 
     if (length(args) >= 0 && length(args) %% 2 != 0) {
@@ -1044,7 +1044,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME"), includ
     }
 
     if (length(args) < 2 || is.null(substitute(expr))) {
-        stop("Usage: gbins.summary([expr, breaks]+, expr, intervals = ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gbins.summary([expr, breaks]+, expr, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
     }
     .gcheckroot()
 
@@ -1059,7 +1059,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME"), includ
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    res <- .gcall("gbins_summary", exprs, breaks, include.lowest, intervals, .iterator, band, new.env(parent = parent.frame()))
+    res <- .gcall("gbins_summary", exprs, breaks, include.lowest, intervals, .iterator, band, .misha_env())
     attr(res, "breaks") <- breaks
     res
 }
@@ -1117,7 +1117,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME"), includ
                 seq <- sprintf("%s/seq/chr%s.seq", groot, chrom)
 
                 cat(sprintf("chr%s\n", chrom))
-                .gcall("gseqimport", fasta, seq, new.env(parent = parent.frame()), silent = TRUE)
+                .gcall("gseqimport", fasta, seq, .misha_env(), silent = TRUE)
 
                 chroms <- c(chroms, chrom)
             }
@@ -1158,7 +1158,7 @@ gseq.extract <- function(intervals = NULL) {
     }
     .gcheckroot()
 
-    res <- .gcall("gseqread", intervals, new.env(parent = parent.frame()))
+    res <- .gcall("gseqread", intervals, .misha_env())
     res
 }
 
@@ -1203,7 +1203,7 @@ gseq.extract <- function(intervals = NULL) {
 #' @examples
 #'
 #' gdb.init_examples()
-#' gcompute_strands_autocorr(paste(GROOT, "reads", sep = "/"),
+#' gcompute_strands_autocorr(paste(.misha$GROOT, "reads", sep = "/"),
 #'     "chr1", 50,
 #'     maxread = 300
 #' )
@@ -1219,6 +1219,6 @@ gcompute_strands_autocorr <- function(file = NULL, chrom = NULL, binsize = NULL,
         chrom <- paste("chr", chrom, sep = "")
     }
 
-    res <- .gcall("gcompute_strands_autocorr", file, chrom, binsize, maxread, cols.order, min.coord, max.coord, new.env(parent = parent.frame()))
+    res <- .gcall("gcompute_strands_autocorr", file, chrom, binsize, maxread, cols.order, min.coord, max.coord, .misha_env())
     res
 }

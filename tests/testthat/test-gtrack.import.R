@@ -31,6 +31,6 @@ test_that("import with gmax data size option", {
     withr::with_options(list(gmax.data.size = 10000), {
         gtrack.2d.import("test.tmptrack", "aaa7", c("/net/mraid14/export/tgdata/db/tgdb/misha_snapshot/input_files/f4"))
     })
-    r <- gextract("test.tmptrack", ALLGENOME)
+    r <- gextract("test.tmptrack", .misha$ALLGENOME)
     expect_regression(r, "track.import_gmax_option")
 })

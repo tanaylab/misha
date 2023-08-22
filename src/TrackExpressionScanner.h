@@ -141,7 +141,7 @@ inline double TrackExprScanner::last_real(int idx) const
         if (RdbInitializer::is_kid()) 
             verror("Expression \"%s\" does not produce a numeric result.", m_track_exprs[idx].c_str());
         else {
-            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".GlobalEnv"), m_iu.get_env()));
+            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".misha"), m_iu.get_env()));
             verror("Expression \"%s\" does not produce a numeric result.\n"
                     "The result of the last expression evaluation was saved in GERROR_EXPR variable.", m_track_exprs[idx].c_str());
         }
@@ -158,7 +158,7 @@ inline int TrackExprScanner::last_logical(int idx) const
         if (RdbInitializer::is_kid()) 
             verror("Expression \"%s\" does not produce a logical result\n", m_track_exprs[idx].c_str());
         else {
-            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".GlobalEnv"), m_iu.get_env()));
+            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".misha"), m_iu.get_env()));
             verror("Expression \"%s\" does not produce a logical result\n"
                     "The result of the last expression evaluation was saved in GERROR_EXPR variable.", m_track_exprs[idx].c_str());
         }

@@ -6,7 +6,7 @@
 \usage{
 giterator.intervals(
   expr = NULL,
-  intervals = get("ALLGENOME"),
+  intervals = .misha$ALLGENOME,
   iterator = NULL,
   band = NULL,
   intervals.set.out = NULL
@@ -55,7 +55,7 @@ giterator.intervals("dense_track", gintervals(1, 0, 200))
 giterator.intervals("dense_track", gintervals(1, 0, 200), 30)
 
 ## iterator is an intervals set named 'annotations'
-giterator.intervals("dense_track", ALLGENOME, "annotations")
+giterator.intervals("dense_track", .misha$ALLGENOME, "annotations")
 
 ## iterator is set implicitly to intervals of 'array_track' track
 giterator.intervals("array_track", gintervals(1, 0, 200))
