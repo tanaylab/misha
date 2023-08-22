@@ -628,7 +628,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 						"	.ginteractive = getOption(\".ginteractive\")\n"
 						"	tryCatch({\n"
 						"			options(.ginteractive = F)\n"
-						"			.gtrack.prepare.pvals(\"%s\")\n"
+						"			misha:::.gtrack.prepare.pvals(\"%s\")\n"
 						"		},\n"
 						"		finally = { options(.ginteractive = .ginteractive) })"
 						" }",
