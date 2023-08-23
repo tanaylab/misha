@@ -70,8 +70,8 @@
     if (!is.null(var)) {
         names(gvtracks[[idx1]]) <- vtracknames
 
-        envir <- new.env(parent = parent.frame())
-        assign("GVTRACKS", gvtracks, envir)
+        envir <- .misha_env()
+        assign("GVTRACKS", gvtracks, envir$.misha)
         .gcall("gcheck_vtrack", vtrackstr, envir)
     }
 

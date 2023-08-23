@@ -4,3 +4,4 @@ README.html
 regression.R
 regression_tests.R
 inst/trackdb/test/.db.cache
+.vscode
