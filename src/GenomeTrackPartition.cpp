@@ -104,7 +104,7 @@ static void gpartition_add_interval2res(const GInterval2D &interval, GIntervals2
 
 extern "C" {
 
-SEXP gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_lowest, SEXP _iterator_policy, SEXP _band,
+SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_lowest, SEXP _iterator_policy, SEXP _band,
 				SEXP _intervals_set_out, SEXP _envir)
 {
 	try {

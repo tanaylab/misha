@@ -1187,7 +1187,7 @@
 // 	return R_NilValue;
 // }
 
-// SEXP _gcreate_arrays_track(SEXP _track, SEXP _minsize, SEXP _maxsize, SEXP _expr, SEXP _scope, SEXP _iterator_policy, SEXP _envir)
+// SEXP gcreate_arrays_track(SEXP _track, SEXP _minsize, SEXP _maxsize, SEXP _expr, SEXP _scope, SEXP _iterator_policy, SEXP _envir)
 // {
 // 	try {
 // 		RdbInitializer rdb_init;

@@ -36,42 +36,42 @@
     res
 }
 
-.gtrack.create_test_arrays <- function(track, minsize, maxsize, intervals = get("ALLGENOME", envir = .misha), iterator = NULL) {
-    if (is.null(substitute(track))) {
-        stop("Usage: .gtrack.create_test_arrays(track, expr, iterator = NULL, band = NULL)", call. = F)
-    }
-    .gcheckroot()
+# .gtrack.create_test_arrays <- function(track, minsize, maxsize, intervals = get("ALLGENOME", envir = .misha), iterator = NULL) {
+#     if (is.null(substitute(track))) {
+#         stop("Usage: .gtrack.create_test_arrays(track, expr, iterator = NULL, band = NULL)", call. = F)
+#     }
+#     .gcheckroot()
 
-    trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+#     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
+#     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+#     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
-    direxisted <- file.exists(trackdir)
+#     direxisted <- file.exists(trackdir)
 
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
-    }
+#     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
+#         stop(sprintf("Track %s already exists", trackstr), call. = F)
+#     }
 
-    .gconfirmtrackcreate(trackstr)
-    success <- FALSE
-    tryCatch(
-        {
-            colnames <- .gcall("_gcreate_arrays_track", trackstr, minsize, maxsize, "1", intervals, .iterator, .misha_env(), silent = TRUE)
-            .gdb.add_track(trackstr)
-            .gtrack.array.set_colnames(trackstr, colnames, FALSE)
-            .gtrack.attr.set(trackstr, "created.by", ".gtrack.create_test_arrays", T)
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            success <- TRUE
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
-            }
-        }
-    )
-    retv <- 0 # suppress return value
-}
+#     .gconfirmtrackcreate(trackstr)
+#     success <- FALSE
+#     tryCatch(
+#         {
+#             colnames <- .gcall("gcreate_arrays_track", trackstr, minsize, maxsize, "1", intervals, .iterator, .misha_env(), silent = TRUE)
+#             .gdb.add_track(trackstr)
+#             .gtrack.array.set_colnames(trackstr, colnames, FALSE)
+#             .gtrack.attr.set(trackstr, "created.by", ".gtrack.create_test_arrays", T)
+#             .gtrack.attr.set(trackstr, "created.date", date(), T)
+#             success <- TRUE
+#         },
+#         finally = {
+#             if (!success && !direxisted) {
+#                 unlink(trackdir, recursive = TRUE)
+#                 .gdb.rm_track(trackstr)
+#             }
+#         }
+#     )
+#     retv <- 0 # suppress return value
+# }
 
 
 .gtrack.array.get_colnames <- function(trackstr) {

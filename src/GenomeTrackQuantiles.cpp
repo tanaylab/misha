@@ -103,7 +103,7 @@ bool calc_medians(StreamPercentiler<double> &sp, vector<Percentile> &percentiles
 
 extern "C" {
 
-SEXP gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_policy, SEXP _band, SEXP _envir)
+SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_policy, SEXP _band, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
