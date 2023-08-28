@@ -32,7 +32,7 @@ test_that("gintervals.mapply fails with 1d function for 2d intervals", {
 
 test_that("gintervals.mapply works with INTERVID", {
     expect_regression(gintervals.mapply(function(x) {
-        as.numeric(GAPPLY.INTERVID)
+        as.numeric(.misha$GAPPLY.INTERVID)
     }, "test.fixedbin", .misha$ALLGENOME), "gintervals.mapply.fixedbin.ALLGENOME.INTERVID")
 })
 
