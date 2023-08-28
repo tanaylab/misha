@@ -80,7 +80,7 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    res <- .gcall("gcis_decay", exprstr, breaks, src, domain, intervals, include.lowest, .iterator, band, .misha_env())
+    res <- .gcall("C_gcis_decay", exprstr, breaks, src, domain, intervals, include.lowest, .iterator, band, .misha_env())
     attr(res, "breaks") <- breaks
     res
 }
@@ -269,7 +269,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
                 if (.ggetOption("gmultitasking")) {
                     res <- .gcall("gextract_multitask", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
                 } else {
-                    res <- .gcall("gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
+                    res <- .gcall("C_gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
                 }
 
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
@@ -361,7 +361,7 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gpartition", intervals, exprstr, breaks, include.lowest, .iterator, band, intervals.set.out, .misha_env())
+                res <- .gcall("C_gpartition", intervals, exprstr, breaks, include.lowest, .iterator, band, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -432,7 +432,7 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
     if (.ggetOption("gmultitasking")) {
         res <- .gcall("gquantiles_multitask", intervals, exprstr, percentiles, .iterator, band, .misha_env())
     } else {
-        res <- .gcall("gquantiles", intervals, exprstr, percentiles, .iterator, band, .misha_env())
+        res <- .gcall("C_gquantiles", intervals, exprstr, percentiles, .iterator, band, .misha_env())
     }
     res
 }
@@ -608,7 +608,7 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    .gcall("gsample", exprstr, n, intervals, .iterator, band, .misha_env())
+    .gcall("C_gsample", exprstr, n, intervals, .iterator, band, .misha_env())
 }
 
 
@@ -668,7 +668,7 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
             if (.ggetOption("gmultitasking")) {
                 res <- .gcall("gscreen_multitask", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
             } else {
-                res <- .gcall("gscreen", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
+                res <- .gcall("C_gscreen", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
             }
 
             if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
@@ -756,7 +756,7 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gsegment", exprstr, intervals, minsegment, stats::qnorm(maxpval), onetailed, .iterator, intervals.set.out, .misha_env())
+                res <- .gcall("C_gsegment", exprstr, intervals, minsegment, stats::qnorm(maxpval), onetailed, .iterator, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -898,7 +898,7 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("gwilcox", exprstr, intervals, winsize1, winsize2, qnorm(maxpval), onetailed, as.integer(what2find), .iterator, intervals.set.out, .misha_env())
+                res <- .gcall("C_gwilcox", exprstr, intervals, winsize1, winsize2, qnorm(maxpval), onetailed, as.integer(what2find), .iterator, intervals.set.out, .misha_env())
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
@@ -1219,6 +1219,6 @@ gcompute_strands_autocorr <- function(file = NULL, chrom = NULL, binsize = NULL,
         chrom <- paste("chr", chrom, sep = "")
     }
 
-    res <- .gcall("gcompute_strands_autocorr", file, chrom, binsize, maxread, cols.order, min.coord, max.coord, .misha_env())
+    res <- .gcall("C_gcompute_strands_autocorr", file, chrom, binsize, maxread, cols.order, min.coord, max.coord, .misha_env())
     res
 }

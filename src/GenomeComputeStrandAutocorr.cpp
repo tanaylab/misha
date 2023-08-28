@@ -21,7 +21,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _maxread, SEXP _cols_order, SEXP _min_coord, SEXP _max_coord, SEXP _envir)
+SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _maxread, SEXP _cols_order, SEXP _min_coord, SEXP _max_coord, SEXP _envir)
 {
 	enum { SEQ_COL, CHROM_COL, COORD_COL, STRAND_COL, NUM_COLS };
 	const char *COL_NAMES[NUM_COLS] = { "sequence", "chromosome", "coordinate", "strand" };

@@ -8,7 +8,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_intervals, SEXP _intervals,
+SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_intervals, SEXP _intervals,
 				SEXP _include_lowest, SEXP _iterator_policy, SEXP _band, SEXP _envir)
 {
 	try {

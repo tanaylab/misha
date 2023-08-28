@@ -30,6 +30,9 @@
     if (!exists("GROOT", envir = .misha)) {
         gdb.init_examples()
     }
+
+    utils::suppressForeignCheck("retv")
+    utils::globalVariables("retv")
 }
 
 .onAttach <- function(lib, pkg) {

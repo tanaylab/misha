@@ -82,23 +82,10 @@
     }
 
     success <- F
-    tryCatch(
-        {
-            if (.ggetOption(".gautocompletion", FALSE)) {
-                .gundefine_autocompletion_vars()
-            }
-            assign("GVTRACKS", gvtracks, envir = .misha)
-            if (.ggetOption(".gautocompletion", FALSE)) {
-                .gdefine_autocompletion_vars(get("GTRACKS", envir = .misha), get("GINTERVS", envir = .misha), gvtrack.ls(), .ggetOption(".ginteractive", FALSE))
-            }
-            success <- T
-        },
-        finally = {
-            if (!success && .ggetOption(".gautocompletion", FALSE)) {
-                .gdefine_autocompletion_vars(get("GTRACKS", envir = .misha), get("GINTERVS", envir = .misha), gvtrack.ls(), .ggetOption(".ginteractive", FALSE))
-            }
-        }
-    )
+    tryCatch({
+        assign("GVTRACKS", gvtracks, envir = .misha)
+        success <- T
+    })
 }
 
 

@@ -68,7 +68,7 @@ void gscreen_add_interval2res(const GInterval2D &interval, GIntervals2D &res_int
 
 extern "C" {
 
-SEXP gscreen(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _intervals_set_out, SEXP _envir)
+SEXP C_gscreen(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _intervals_set_out, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;

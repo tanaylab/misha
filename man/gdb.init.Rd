@@ -60,7 +60,7 @@ iterator intervals for which the track expression is evaluated\cr }
 \seealso{
 \code{\link{gdb.reload}}, \code{\link{gdb.create}},
 \code{\link{gdir.cd}}, \code{\link{gtrack.ls}}, \code{\link{gintervals.ls}},
-\code{\link{gvtrack.ls}}, \code{\link{gset_input_mode}}
+\code{\link{gvtrack.ls}}
 }
 \keyword{~data}
 \keyword{~database}

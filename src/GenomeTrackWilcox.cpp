@@ -215,7 +215,7 @@ void GenomeTrackSlidingWilcox::debug_slide(double *old_v, double *new_v)
 
 extern "C" {
 
-SEXP gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP _maxz, SEXP _one_tailed, SEXP _what2find, SEXP _iterator_policy,
+SEXP C_gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP _maxz, SEXP _one_tailed, SEXP _what2find, SEXP _iterator_policy,
 			 SEXP _intervals_set_out, SEXP _envir)
 {
 	try {

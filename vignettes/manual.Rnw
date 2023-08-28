@@ -550,21 +550,6 @@ We added a band then. \texttt{gintervals.2d.band\_intersect} shows the minimal r
 
 \emph{Note, however, that the space used in the calculation of the weighted average is the actual space of the intersection and not the space occupied by the minimal rectangles!}
 
-\section{Input Mode and Auto-Completion}
-
-By default track expressions, track names, virtual tracks and interval sets are passed to the functions as character strings. Being good for scripts, this mode is however less appropriate for interactive work in R where user might miss the ability to use auto-completion of the object names with a TAB key - in a way similar to how R variables and functions are auto-completed.
-
-\texttt{gset\_input\_mode} allows the user to pass track expressions, track names, virtual tracks and interval sets unquoted, i.e. to use them as if they were valid R variables and expressions. In this "unquoted" (or "interactive") mode all the track names, virtual tracks and intervals sets are indeed defined as R variables (auxiliary variables) which allows them to be auto-completed by TAB. The values of these variables are meaningless for the user and they should not be altered.
-
-\begin{verbatim}
-> gset_input_mode(interactive = FALSE)   # this is the default mode
-> gsummary("dense_track+10")
-> gset_input_mode(interactive = TRUE)
-> gsummary(dense_track+10)
-\end{verbatim}
-
-Please beware of the consequences of using interactive mode as it creates a bunch of new variables in R environment. Though collision with the existing variables is checked at the time of the call to \texttt{gset\_input\_mode}, yet nothing prevents the user to modify the value of the auxiliary variables later. This might cause unexpected behaviour in some of the package functions. Also the auxiliary variables are automatically undefined once the interactive mode is switched off. User who mistakenly uses auxiliary variables to store the data might therefore accidentially loose it. 
-
 \section{Random Algorithms}
 Various functions in the library such as \texttt{gsample} make use of pseudo-random number generator. Each time the function is invoked a unique series of random numbers is issued. Hence two identical calls might produce different results. To guarantee reproducible results call \texttt{set.seed} before invoking the function.
 

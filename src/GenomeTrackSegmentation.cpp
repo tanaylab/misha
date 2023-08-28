@@ -55,7 +55,7 @@ void gsegment_add_interval2res(const GInterval &interval, GIntervals &res_interv
 
 extern "C" {
 
-SEXP gsegment(SEXP _expr, SEXP _intervals, SEXP _minsegment, SEXP _maxz, SEXP _one_tailed, SEXP _iterator_policy, SEXP _intervals_set_out, SEXP _envir)
+SEXP C_gsegment(SEXP _expr, SEXP _intervals, SEXP _minsegment, SEXP _maxz, SEXP _one_tailed, SEXP _iterator_policy, SEXP _intervals_set_out, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;

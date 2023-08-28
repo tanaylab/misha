@@ -67,7 +67,7 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 
 extern "C" {
 
-SEXP gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_policy, SEXP _band, SEXP _file, SEXP _intervals_set_out, SEXP _envir)
+SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_policy, SEXP _band, SEXP _file, SEXP _intervals_set_out, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;

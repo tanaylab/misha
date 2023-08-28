@@ -22,6 +22,6 @@ that resides in 'GROOT/.db.cache' file.
 }
 \seealso{
 \code{\link{gdb.init}}, \code{\link{gdb.create}},
-\code{\link{gdir.cd}}, \code{\link{gset_input_mode}}
+\code{\link{gdir.cd}},
 }
 \keyword{~db}

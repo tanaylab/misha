@@ -35,8 +35,7 @@ gtrack.ls()
 }
 \seealso{
 \code{\link{gdb.init}}, \code{\link{gdir.cwd}},
-\code{\link{gdir.create}}, \code{\link{gdir.rm}},
-\code{\link{gset_input_mode}}
+\code{\link{gdir.create}}, \code{\link{gdir.rm}}
 }
 \keyword{~cd}
 \keyword{~data}

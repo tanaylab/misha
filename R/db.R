@@ -35,9 +35,6 @@
             setwd(dir)
             newwd <- getwd()
 
-            if (.ggetOption(".gautocompletion", FALSE)) {
-                .gundefine_autocompletion_vars()
-            }
             assign("GWD", newwd, envir = .misha)
             setwd(oldwd)
             gdb.reload(rescan)
@@ -59,10 +56,6 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     }
 
     groot <- normalizePath(groot)
-
-    if (exists("GROOT", envir = .misha) && exists("ALLGENOME", envir = .misha) && !is.null(get("GROOT", envir = .misha)) && !is.null(get("ALLGENOME", envir = .misha)) && .ggetOption(".gautocompletion", FALSE)) {
-        .gundefine_autocompletion_vars()
-    }
 
     assign("ALLGENOME", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)
@@ -142,8 +135,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 #' @param dir directory path
 #' @return None.
 #' @seealso \code{\link{gdb.init}}, \code{\link{gdir.cwd}},
-#' \code{\link{gdir.create}}, \code{\link{gdir.rm}},
-#' \code{\link{gset_input_mode}}
+#' \code{\link{gdir.create}}, \code{\link{gdir.rm}}
 #' @keywords ~db ~data ~database ~cd ~dir ~directory ~folder
 #' @examples
 #'
@@ -592,7 +584,7 @@ gdb.get_readonly_attrs <- function() {
 #' @return None.
 #' @seealso \code{\link{gdb.reload}}, \code{\link{gdb.create}},
 #' \code{\link{gdir.cd}}, \code{\link{gtrack.ls}}, \code{\link{gintervals.ls}},
-#' \code{\link{gvtrack.ls}}, \code{\link{gset_input_mode}}
+#' \code{\link{gvtrack.ls}}
 #' @keywords ~db ~data ~database
 #' @export gdb.init
 gdb.init <- function(groot = NULL, dir = NULL, rescan = FALSE) {
@@ -625,16 +617,12 @@ gdb.init_examples <- function() {
 #'
 #' @param rescan indicates whether the file structure should be rescanned
 #' @seealso \code{\link{gdb.init}}, \code{\link{gdb.create}},
-#' \code{\link{gdir.cd}}, \code{\link{gset_input_mode}}
+#' \code{\link{gdir.cd}},
 #' @keywords ~db
 #' @export gdb.reload
 gdb.reload <- function(rescan = TRUE) {
     if (!exists("GROOT", envir = .misha)) {
         stop("gdb.init() must be called beforehand.", call. = F)
-    }
-
-    if (.ggetOption(".gautocompletion", FALSE)) {
-        .gundefine_autocompletion_vars()
     }
 
     assign("GTRACKS", NULL, envir = .misha)

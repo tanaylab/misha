@@ -1,1 +1,1 @@
-PKG_LIBS += -lpthread -shared
+PKG_LIBS = -lpthread -shared
