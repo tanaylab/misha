@@ -26,9 +26,6 @@ typedef double real8;
 #define DBL_SAME               FLT_EPSILON
 #define always() true
 #define never() false
-#if !ENV_HAS_FOR_SCOPE
-# define for    if(never()) ; else for
-#endif // ENV_HAS_FOR_SCOPE
 #define ENV_NO_ARGS
 #if ENV_HAS_INST_TEMPLATE
 
