@@ -402,7 +402,7 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
 void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 {
 	int64_t delay_msec = LAUNCH_DELAY / 2;
-    bool slept_once = false;
+    // bool slept_once = false;
 
 	struct timespec timeout, last_progress_time, last_delay_change_time;
 	int last_progress = -1;
@@ -446,7 +446,7 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
         int64_t delta_mem_usage = s_shm->total_mem_usage - total_mem_usage;
         int64_t time2reach_limit = -1;
 
-        if (delta_mem_usage > 0 && s_shm->total_mem_usage <= s_max_mem_usage)
+        if (delta_mem_usage > 0 && (uint64_t)s_shm->total_mem_usage <= (uint64_t)s_max_mem_usage)
             time2reach_limit = delay_msec * ((s_max_mem_usage - s_shm->total_mem_usage) / delta_mem_usage);
 
         if (time2reach_limit >= 0 && time2reach_limit < delay_msec) {
@@ -480,9 +480,9 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
             clock_gettime(CLOCK_REALTIME, &last_progress_time);
         }
 
-        if (!s_shm->num_kids_running || s_shm->total_mem_usage < s_max_mem_usage) {
+        if (!s_shm->num_kids_running || (uint64_t)s_shm->total_mem_usage < (uint64_t)s_max_mem_usage) {
             // wake up suspended processes
-            for (int i = 0; i < s_shm->num_kids_suspended; ++i) 
+            for (uint64_t i = 0; i < s_shm->num_kids_suspended; ++i) 
                 sem_post(s_alloc_suspend_sem);
         }
     }
@@ -698,7 +698,7 @@ SEXP rdb::rprotect(SEXP &expr)
 
 void rdb::runprotect(int count)
 {
-	if (RdbInitializer::s_protect_counter < count)
+	if (RdbInitializer::s_protect_counter < (uint64_t)count)
 		errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
 	UNPROTECT(count);
 	RdbInitializer::s_protect_counter -= count;

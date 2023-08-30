@@ -59,7 +59,7 @@ SEXP grbind(SEXP _objs, SEXP _envir)
 				verror("Object for grbind is not a data frame");
 
 			if (i) {
-				if (numcols != length(obj)) 
+				if (numcols != (uint64_t)length(obj)) 
 					verror("Data frames for grbind differ in the number of columns");
 			} else
 				numcols = length(obj);
@@ -76,7 +76,7 @@ SEXP grbind(SEXP _objs, SEXP _envir)
 
 		uint64_t tgtrow = 0;
 
-		for (int i = 0; i < (uint64_t)length(_objs); ++i) {
+		for (int i = 0; i < length(_objs); ++i) {
 			SEXP obj = VECTOR_ELT(_objs, i);
 			uint64_t srcnumrows = length(VECTOR_ELT(obj, 0));
 

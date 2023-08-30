@@ -27,8 +27,7 @@ struct Winval {
 
 	Winval(double _v, int64_t _coord) : v(_v), coord(_coord) {}
 };
-
-};
+}
 
 using namespace GSegment_ns;
 

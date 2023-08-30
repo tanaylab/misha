@@ -76,7 +76,7 @@ public:
 protected:
 	mutable const_iterator m_iinterval;
 	int                    m_cur_chromid;
-	uint64_t                 m_iter_chrom_index;
+	uint64_t                 m_iter_chrom_index = -1;
 
 	// Holds the start location of each chromosome. Chromosomes that do not appear among the intervals
 	// point to the start location of the next closest existing chromosome.

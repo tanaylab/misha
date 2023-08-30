@@ -17,14 +17,14 @@ bool TrackExpressionSparseIterator::next()
 	if (isend())
 		return false;
 
-	while (m_chromid < m_iu.get_chromkey().get_num_chroms()) {
+	while ((uint64_t)m_chromid < (uint64_t)m_iu.get_chromkey().get_num_chroms()) {
 		if (!m_intervals || m_intervals->empty()) {
 			if (!m_scope->size(m_chromid)) {
 				++m_chromid;
 				continue;
 			}
 
-			const GInterval &scope_interval = m_scope->cur_interval();
+			// const GInterval &scope_interval = m_scope->cur_interval();
 			string track_filename = m_track_dir + "/" + GenomeTrack::get_1d_filename(m_iu.get_chromkey(), m_chromid);
 
 			if (m_track_type == GenomeTrack::ARRAYS) {

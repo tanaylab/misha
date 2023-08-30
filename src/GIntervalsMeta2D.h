@@ -74,13 +74,13 @@ inline int GIntervalsMeta2D::num_chrom_pairs() const
 
 inline bool GIntervalsMeta2D::get_next_chroms(int *chromid1, int *chromid2)
 {
-	if (*chromid2 < m_chromkey->get_num_chroms() - 1)
+	if ((uint64_t)*chromid2 < m_chromkey->get_num_chroms() - 1)
 		++*chromid2;
 	else {
 		++*chromid1;
 		*chromid2 = 0;
 	}
-	return *chromid1 < m_chromkey->get_num_chroms() && *chromid2 < m_chromkey->get_num_chroms();
+	return (uint64_t)*chromid1 < m_chromkey->get_num_chroms() && (uint64_t)*chromid2 < m_chromkey->get_num_chroms();
 }
 
 #endif

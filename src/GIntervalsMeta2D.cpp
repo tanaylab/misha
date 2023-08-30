@@ -7,9 +7,10 @@ const char *GIntervalsMeta2D::STAT_COL_NAMES[NUM_STAT_COLS] = {
 
 void GIntervalsMeta2D::init(const char *name, SEXP meta, const GenomeChromKey &chromkey)
 {
-	if (!is2d(meta) || !isVector(meta) || length(meta) < 1) 
+	if (!is2d(meta) || !isVector(meta) || length(meta) < 1) {
 		verror("%s: Invalid format of .meta file", name);
-
+	}
+	
 	m_chromkey = (GenomeChromKey *)&chromkey;
 	m_size = 0;
 	m_surface = 0;
@@ -71,7 +72,7 @@ void GIntervalsMeta2D::init_masked_copy(GIntervalsMeta2D *obj, const set<ChromPa
 	obj->m_surfaces.resize(m_surfaces.size(), 0);
 	obj->m_orig_chroms2size = m_orig_chroms2size;
 
-	for (int chromid = 0; chromid < obj->m_chroms2size.size(); ++chromid) {
+	for (int chromid = 0; (uint64_t)chromid < obj->m_chroms2size.size(); ++chromid) {
 		int chromid1 = idx2chrom1(chromid);
 		int chromid2 = idx2chrom2(chromid);
 
@@ -133,8 +134,8 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 	}
 
 	int res_index = 0;
-	for (int chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-		for (int chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
+	for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
+		for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
 			const ChromStat &chromstat = chromstats[chromid1 * iu.get_chromkey().get_num_chroms() + chromid2];
 
 			if (!chromstat.size) 

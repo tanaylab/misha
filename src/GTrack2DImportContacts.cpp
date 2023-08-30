@@ -147,7 +147,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 			if (start1 >= end1) 
 				verror("File %s, line %ld: start1 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
 
-			if (end1 > iu.get_chromkey().get_chrom_size(chromid1)) 
+			if ((uint64_t)end1 > iu.get_chromkey().get_chrom_size(chromid1)) 
 				verror("File %s, line %ld: end1 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
 
 			start2 = strtoll(fields[GInterval2D::START2].c_str(), &endptr, 10);
@@ -161,7 +161,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 			if (start2 >= end2) 
 				verror("File %s, line %ld: start2 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
 
-			if (end2 > iu.get_chromkey().get_chrom_size(chromid2)) 
+			if ((uint64_t)end2 > iu.get_chromkey().get_chrom_size(chromid2)) 
 				verror("File %s, line %ld: end2 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
 
 			val = strtod(fields[GInterval2D::NUM_COLS].c_str(), &endptr);
@@ -289,7 +289,6 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 
 	progress.init(contacts_files_size_sum, 10000000);
 
-	int64_t coord1, coord2;
 	float value;
 
 	for (int icontact_file = 0; icontact_file < length(_contacts); ++icontact_file) {
@@ -490,7 +489,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 				unlink(infile.file_name().c_str());
 			}
 
-			for (uint64_t i = 0; i < num_subtrees; ++i) {
+			for (uint64_t i = 0; i < (uint64_t)num_subtrees; ++i) {
 				BufferedFile &subtree_file = num_subtrees == 1 ? infile : *subtrees_files[i];
 				Contacts contacts;
 

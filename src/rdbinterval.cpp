@@ -726,8 +726,9 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 		verror("Invalid source data frame for a copy");
 
 	src_cols.resize(length(src));
-	if (tgt_cols.size() < length(tgt) + tgt_col_offset) 
+	if (tgt_cols.size() < (uint64_t)(length(tgt) + tgt_col_offset)){ 
 		tgt_cols.resize(length(tgt) + tgt_col_offset);
+	}
 
 	for (int col = 0; col < length(src); ++col) {
 		SEXP src_col = VECTOR_ELT(src, col);
@@ -766,7 +767,7 @@ void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row,
 
 void IntervUtils::copy_data_frame_rows(const vector<SEXP> &src_cols, int src_row, int num_rows, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)
 {
-	for (int col = 0; col < src_cols.size(); ++col) {
+	for (uint64_t col = 0; col < src_cols.size(); ++col) {
 		SEXP src_col = src_cols[col];
 		SEXP tgt_col = tgt_cols[col + tgt_col_offset];
 
@@ -1044,7 +1045,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 					}
 
 					// should we allocate a new process?
-					if (kid_range > get_min_scope4process() && range > get_min_scope4process() && kid_range + chrom_range >= range / num_avail_kids) {
+					if ((uint64_t)kid_range > get_min_scope4process() && (uint64_t)range > get_min_scope4process() && (uint64_t)(kid_range + chrom_range) >= (uint64_t)(range / num_avail_kids)) {
 						--num_avail_kids;
 						kid_range = 0;
 						m_kids_intervals1d.push_back(new GIntervals());
@@ -1072,7 +1073,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 
 				if (kid_range && num_avail_kids) {
 					// should we allocate a new process?
-					if (kid_range > get_min_scope4process() && range > get_min_scope4process() && kid_range + chrom_range >= range / num_avail_kids) {
+					if ((uint64_t)kid_range > get_min_scope4process() && (uint64_t)range > get_min_scope4process() && kid_range + chrom_range >= range / num_avail_kids) {
 						--num_avail_kids;
 						kid_range = 0;
 						m_kids_intervals1d.push_back(scope1d->create_masked_copy(chromids_mask));

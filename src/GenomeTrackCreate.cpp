@@ -114,8 +114,13 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 
 			if (gtrack.opened())
 				gtrack.write(qtree);
-		} else
-			verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+		} else {
+			if (itr_type >= 0 && itr_type < sizeof(TrackExpressionIteratorBase::TYPE_NAMES) / sizeof(TrackExpressionIteratorBase::TYPE_NAMES[0])) {
+    			verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+			} else {
+    			verror("Invalid iterator type encountered");
+			}
+		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
@@ -218,8 +223,13 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 
 				if (gtrack.opened())
 					gtrack.write(qtree);
-			} else
-				verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+			} else {
+				if (itr_type >= 0 && itr_type < sizeof(TrackExpressionIteratorBase::TYPE_NAMES) / sizeof(TrackExpressionIteratorBase::TYPE_NAMES[0])) {
+    				verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+				} else {
+    				verror("Invalid iterator type encountered");
+				}
+			}				
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

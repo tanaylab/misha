@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstring>
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -107,14 +108,15 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 					for (uint64_t coord = start_coord; coord < end_coord; ++coord) {
 						float v;
 
-						if (iinterval != iinterv_end && coord >= iinterval->start && coord < iinterval->end) {
+						if (iinterval != iinterv_end && coord >= (uint64_t)iinterval->start && coord < (uint64_t)iinterval->end) {
 							if (is_csv) {
 								csv.get_sliced_vals(iinterval, vals);
 								v = vals.front();
-							} else
-								v = *(float *)&iinterval->udata;
+							} else {
+								memcpy(&v, &iinterval->udata, sizeof(float));
+							}
 
-							if (coord == iinterval->end - 1) 
+							if (coord == (uint64_t)iinterval->end - 1) 
 								++iinterval;
 						} else
 							v = defvalue;
@@ -140,8 +142,9 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 					if (is_csv) {
 						csv.get_sliced_vals(iinterval, vals);
 						v = vals.front();
-					} else
-						v = *(float *)&iinterval->udata;
+					} else {
+						memcpy(&v, &iinterval->udata, sizeof(float));
+					}
 
 					gtrack.write_next_interval(*iinterval, v);
 					progress.report(0);

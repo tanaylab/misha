@@ -589,8 +589,8 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 			if (GenomeTrack::is_1d(track_type)) {
 				set<int> chromids;
 
-				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {
-					int chromid;
+				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {										
+					int chromid = -1;
 					GenomeTrackFixedBin gtrack_fbin;
 
 					try {
@@ -604,9 +604,10 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
                         gtrack_fbin.init_read((trackpath + "/" + *ifilename).c_str(), chromid);
                         int64_t expected_num_bins = (int64_t)ceil(all_genome_intervs[chromid].end / (double)gtrack_fbin.get_bin_size());
 
-                        if (gtrack_fbin.get_num_samples() != expected_num_bins)
+                        if (gtrack_fbin.get_num_samples() != expected_num_bins){
                             verror("Number of bins in track %s, chrom %s do not match the chromosome size (expecting: %ld, reading: %ld)",
                                     itrack_name->c_str(), m_iu.get_chromkey().id2chrom(chromid).c_str(), expected_num_bins, gtrack_fbin.get_num_samples());
+						}
 					}
 
 					if (ifilename == filenames.begin()) {

@@ -150,14 +150,12 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 					}
 
 					while (num_nonempty_strs == NUM_COLS) {
-						unordered_map<string, int>::iterator istr2chrom;
-						int chrom_idx;
+						unordered_map<string, int>::iterator istr2chrom;						
 						int64_t coord;
 						char *endptr;
 
 						if (strcmp(str[CHROM_COL].c_str(), chrom))
 							break;
-						chrom_idx = istr2chrom->second;
 
 						coord = strtoll(str[COORD_COL].c_str(), &endptr, 10);
 						if (*endptr || coord < 0 || coord >= chromsize)

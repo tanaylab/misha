@@ -762,8 +762,9 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 
 void TrackExpressionVars::set_vars(const GInterval &interval, unsigned idx)
 {
-    if (m_interval1d.chromid != interval.chromid)
+    if (m_interval1d.chromid != interval.chromid) {
         start_chrom(interval);
+	}
 
 	m_interval1d = interval;
 

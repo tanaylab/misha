@@ -100,7 +100,7 @@ GIntervals2D::const_iterator GIntervals2D::get_chrom_end() const
 	build_chrom_map();
 	if (m_iinterval->chromid1() < m_num_chroms && m_iinterval->chromid2() < m_num_chroms) {
 		int idx = chroms2idx(m_iinterval->chromid1(), m_iinterval->chromid2()) + 1;
-		return idx < m_chrom2itr.size() ? m_chrom2itr[idx] : end();
+		return (uint64_t)idx < m_chrom2itr.size() ? m_chrom2itr[idx] : end();
 	}
 	return end();
 }

@@ -35,7 +35,7 @@ void read_annots_file(const char *annots_fname, Id2Annots &id2annots, int num_an
 		if (fields.size() < 1 || fields[0].empty())
 			verror("Annotation file %s, line %d: invalid format\n", annots_file.file_name().c_str(), lineno);
 
-		if (fields.size() != num_annots)
+		if (fields.size() != (uint64_t)num_annots)
 			verror("Annotation file %s, line %d: number of annotations in file (%ld)\n"
 				   "does not match the number of annotations in annots.name argument (%d)",
 				   annots_file.file_name().c_str(), lineno, fields.size(), num_annots);
@@ -117,7 +117,7 @@ void read_genes_file(const char *genes_fname, GIntervals &tss, GIntervals &exons
 				verror("Genes file %s, line %d: invalid exonStarts value", genes_file.file_name().c_str(), lineno);
 			endptr++;
 		}
-		if (exon_starts.size() != exoncount) 
+		if (exon_starts.size() != (uint64_t)exoncount) 
 			verror("Genes file %s, line %d: number of exonStarts values does not match exonCount", genes_file.file_name().c_str(), lineno);
 
 		// EXONENDS
@@ -129,7 +129,7 @@ void read_genes_file(const char *genes_fname, GIntervals &tss, GIntervals &exons
 				verror("Genes file %s, line %d: invalid exonEnds value", genes_file.file_name().c_str(), lineno);
 			endptr++;
 		}
-		if (exon_ends.size() != exoncount) 
+		if (exon_ends.size() != (uint64_t)exoncount) 
 			verror("Genes file %s, line %d: number of exonEnds values does not match exonCount", genes_file.file_name().c_str(), lineno);
 
 		const Id2Annots::const_iterator itr = id2annots.find(fields[ID]);

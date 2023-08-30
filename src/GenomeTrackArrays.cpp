@@ -122,7 +122,7 @@ void GenomeTrackArrays::read_intervals_map()
 		m_intervals.resize(num_intervals);
 		m_vals_pos.resize(num_intervals);
 
-		for (int64_t i = 0; i < num_intervals; ++i) {
+		for (int64_t i = 0; i < (int64_t)num_intervals; ++i) {
 			GInterval &interval = m_intervals[i];
 
 			if (m_bfile.read(&interval.start, sizeof(int64_t)) != sizeof(int64_t) ||

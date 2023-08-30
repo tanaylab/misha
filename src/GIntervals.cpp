@@ -10,7 +10,7 @@ void GIntervals::sort(bool (*cmp_function)(const GInterval &, const GInterval &)
 			std::sort(begin(), end(), cmp_function);
 			break;
 		}
-	}
+	}	
 }
 
 // intervs are expected to be already sorted
@@ -258,7 +258,7 @@ void GIntervals::begin_chrom_iter(int chromid)
 	build_chrom_map();
 	m_cur_chromid = chromid;
 	m_iter_chrom_index = 0;
-	if (chromid < m_chrom2itr.size())
+	if ((uint64_t)chromid < m_chrom2itr.size())
 		m_iinterval = m_chrom2itr[chromid];
 	else
 		m_iinterval = end();
@@ -273,7 +273,7 @@ GIntervals::const_iterator GIntervals::get_chrom_begin() const
 GIntervals::const_iterator GIntervals::get_chrom_end() const
 {
 	build_chrom_map();
-	return m_iinterval->chromid + 1 < m_chrom2itr.size() ? m_chrom2itr[m_iinterval->chromid + 1] : end();
+	return (uint64_t)m_iinterval->chromid + 1 < m_chrom2itr.size() ? m_chrom2itr[m_iinterval->chromid + 1] : end();
 }
 
 void GIntervals::write(const GenomeChromKey &chromkey, ostream &tab)

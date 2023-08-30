@@ -18,7 +18,7 @@ bool TrackExpressionBigSet1DIterator::next()
 	if (isend())
 		return false;
 
-	while (m_chromid < m_iu.get_chromkey().get_num_chroms()) {
+	while ((uint64_t)m_chromid < m_iu.get_chromkey().get_num_chroms()) {
 		if (!m_intervals || m_intervals->empty()) {
 			if (!m_scope->size(m_chromid) || !m_bigset.size(m_chromid)) {
 				++m_chromid;
