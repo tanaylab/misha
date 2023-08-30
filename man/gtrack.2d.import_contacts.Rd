@@ -9,7 +9,7 @@ gtrack.2d.import_contacts(
   description = NULL,
   contacts = NULL,
   fends = NULL,
-  allow.duplicates = T
+  allow.duplicates = TRUE
 )
 }
 \arguments{

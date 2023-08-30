@@ -69,7 +69,7 @@
 #' @export gcis_decay
 gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, intervals = NULL, include.lowest = FALSE, iterator = NULL, band = NULL) {
     if (is.null(substitute(expr)) || is.null(breaks) || is.null(src) || is.null(domain)) {
-        stop("Usage: gcis_decay(expr, breaks, src, domain, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gcis_decay(expr, breaks, src, domain, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -136,7 +136,7 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL, band = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
     if (length(args) < 2 || (length(args) %% 2 != 0 && (length(args) - 1) %% 2 != 0)) {
-        stop("Usage: gdist([expr, breaks]+, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gdist([expr, breaks]+, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -239,7 +239,7 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
 gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(intervals) && length(args) < 2 || !is.null(intervals) && length(args) < 1) {
-        stop("Usage: gextract([expr]+, intervals, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gextract([expr]+, intervals, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -344,7 +344,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 #' @export gpartition
 gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.lowest = FALSE, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) || is.null(breaks) || is.null(intervals)) {
-        stop("Usage: gpartition(expr, breaks, intervals, include.lowest = FALSE, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gpartition(expr, breaks, intervals, include.lowest = FALSE, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -422,7 +422,7 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
 #' @export gquantiles
 gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOME", envir = .misha), iterator = NULL, band = NULL) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gquantiles(expr, percentiles = 0.5, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gquantiles(expr, percentiles = 0.5, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -515,7 +515,7 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
 glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest = FALSE, force.binning = TRUE, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(lookup_table) || length(args) < 2 || (!is.null(intervals) && length(args) %% 2 != 0) || (is.null(intervals) && length(args) %% 2 == 0)) {
-        stop("Usage: glookup(lookup_table, [expr, breaks]+, intervals, include.lowest = FALSE, force.binning = TRUE, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: glookup(lookup_table, [expr, breaks]+, intervals, include.lowest = FALSE, force.binning = TRUE, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -597,7 +597,7 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
 #' @export gsample
 gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, band = NULL) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gsample(expr, n, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gsample(expr, n, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -645,7 +645,7 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
 #' @export gscreen
 gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gscreen(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gscreen(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -731,7 +731,7 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
 #' @export gsegment
 gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed = TRUE, intervals = NULL, iterator = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) || is.null(minsegment)) {
-        stop("Usage: gsegment(expr, minsegment, maxpval = 0.05, onetailed = TRUE, intervals = .misha$ALLGENOME, iterator = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gsegment(expr, minsegment, maxpval = 0.05, onetailed = TRUE, intervals = .misha$ALLGENOME, iterator = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -805,7 +805,7 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
 #' @export gsummary
 gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gsummary(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gsummary(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -873,7 +873,7 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 #' @export gwilcox
 gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.05, onetailed = TRUE, what2find = 1, intervals = NULL, iterator = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) || is.null(winsize1) || is.null(winsize2)) {
-        stop("Usage: gwilcox(expr, winsize1, winsize2, maxpval = 0.05, onetailed = TRUE, what2find = 1 (-1=lows, 0=lows/highs, 1=highs), intervals = .misha$ALLGENOME, iterator = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gwilcox(expr, winsize1, winsize2, maxpval = 0.05, onetailed = TRUE, what2find = 1 (-1=lows, 0=lows/highs, 1=highs), intervals = .misha$ALLGENOME, iterator = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -974,7 +974,7 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
     }
 
     if (length(args) < 2 || is.null(substitute(expr))) {
-        stop("Usage: gbins.quantiles([bin_expr, breaks]+, expr, percentiles = 0.5, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gbins.quantiles([bin_expr, breaks]+, expr, percentiles = 0.5, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1044,7 +1044,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
     }
 
     if (length(args) < 2 || is.null(substitute(expr))) {
-        stop("Usage: gbins.summary([expr, breaks]+, expr, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gbins.summary([expr, breaks]+, expr, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1069,8 +1069,8 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
     chroms <- c()
     files <- c()
     tmp.dirname <- tempfile(pattern = "", tmpdir = paste(groot, "/downloads", sep = ""))
-    if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
-        stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
+    if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+        stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
     }
 
     tryCatch(
@@ -1088,28 +1088,28 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
                     .files <- paste(tmp.dirname, "/", .files, sep = "")
                 } else {
                     # local path
-                    .files <- system(paste("/bin/sh -c \"ls -d -A", fasta, "\""), intern = T)
+                    .files <- system(paste("/bin/sh -c \"ls -d -A", fasta, "\""), intern = TRUE)
                 }
 
                 files <- c(files, .files)
             }
 
             cat("Building Seq files...\n")
-            fastas <- files[grep("^chr.+$", basename(files), perl = T)]
+            fastas <- files[grep("^chr.+$", basename(files), perl = TRUE)]
             for (fasta in fastas) {
-                chrom <- gsub("^chr(\\w+)(\\..*)*$", "\\1", basename(fasta), perl = T)
+                chrom <- gsub("^chr(\\w+)(\\..*)*$", "\\1", basename(fasta), perl = TRUE)
                 if (!is.na(match(chrom, chroms))) {
                     next
                 }
 
                 fasta.original <- fasta
 
-                if (length(grep("^.+\\.gz$", fasta, perl = T))) {
-                    .chrom <- basename(gsub("^(.+)\\.gz$", "\\1", fasta, perl = T))
+                if (length(grep("^.+\\.gz$", fasta, perl = TRUE))) {
+                    .chrom <- basename(gsub("^(.+)\\.gz$", "\\1", fasta, perl = TRUE))
                     fasta.unzipped <- paste(tmp.dirname, "/", .chrom, sep = "")
                     cmd <- paste("/bin/sh -c \"gunzip -q -c", fasta, ">", fasta.unzipped, "\"")
                     if (system(cmd)) {
-                        stop(sprintf("Command failed: %s", cmd), call. = F)
+                        stop(sprintf("Command failed: %s", cmd), call. = FALSE)
                     }
                     fasta <- fasta.unzipped
                 }
@@ -1154,7 +1154,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
 #' @export gseq.extract
 gseq.extract <- function(intervals = NULL) {
     if (is.null(intervals)) {
-        stop("Usage: gseq.extract(intervals)", call. = F)
+        stop("Usage: gseq.extract(intervals)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1211,7 +1211,7 @@ gseq.extract <- function(intervals = NULL) {
 #' @export gcompute_strands_autocorr
 gcompute_strands_autocorr <- function(file = NULL, chrom = NULL, binsize = NULL, maxread = 400, cols.order = c(9, 11, 13, 14), min.coord = 0, max.coord = 3e+8) {
     if (is.null(file) || is.null(chrom) || is.null(binsize)) {
-        stop("Usage: gcompute_strands_autocorr(file, chrom, binsize, maxread = 400, cols.order = c(9, 11, 13, 14), min.coord = 0, max.coord = 3e+8)", call. = F)
+        stop("Usage: gcompute_strands_autocorr(file, chrom, binsize, maxread = 400, cols.order = c(9, 11, 13, 14), min.coord = 0, max.coord = 3e+8)", call. = FALSE)
     }
     .gcheckroot()
 

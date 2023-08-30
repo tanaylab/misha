@@ -21,7 +21,7 @@
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
 
     if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s does not exist", trackstr), call. = F)
+        stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
     }
 
     quantile.edge.data.size <- .ggetOption("gquantile.edge.data.size", 100000)
@@ -116,13 +116,13 @@
 #' @export gtrack.convert
 gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
     if (is.null(substitute(src.track))) {
-        stop("Usage: gtrack.convert(src.track, tgt.track = NULL)", call. = F)
+        stop("Usage: gtrack.convert(src.track, tgt.track = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
     src.trackstr <- do.call(.gexpr2str, list(substitute(src.track)), envir = parent.frame())
     if (is.na(match(src.trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s does not exist", src.trackstr), call. = F)
+        stop(sprintf("Track %s does not exist", src.trackstr), call. = FALSE)
     }
 
     tgt.trackstr <- ""
@@ -165,7 +165,7 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
                         sep = "\n"
                     )
                 }
-                warning(msg, call. = F)
+                warning(msg, call. = FALSE)
             }
             success <- TRUE
         },
@@ -216,12 +216,12 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
 #'     iterator = 70
 #' )
 #' gtrack.info("mixed_track")
-#' gtrack.rm("mixed_track", force = T)
+#' gtrack.rm("mixed_track", force = TRUE)
 #'
 #' @export gtrack.create
 gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterator = NULL, band = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(substitute(expr))) {
-        stop("Usage: gtrack.create(track, description, expr, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gtrack.create(track, description, expr, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -233,7 +233,7 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -303,7 +303,7 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
 #' @export gtrack.create_pwm_energy
 gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset = NULL, pssmid = NULL, prior = NULL, iterator = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(pssmset) || is.null(pssmid) || is.null(prior) || is.null(iterator)) {
-        stop("Usage: gtrack.create_pwm_energy(track, description, pssmset, pssmid, prior, iterator)", call. = F)
+        stop("Usage: gtrack.create_pwm_energy(track, description, pssmset, pssmid, prior, iterator)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -313,7 +313,7 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -380,7 +380,7 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
 #' @export gtrack.create_sparse
 gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = NULL, values = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(intervals) || is.null(values)) {
-        stop("Usage: gtrack.create_sparse(track, description, intervals, values)", call. = F)
+        stop("Usage: gtrack.create_sparse(track, description, intervals, values)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -392,7 +392,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -437,7 +437,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
 #' @export gtrack.exists
 gtrack.exists <- function(track = NULL) {
     if (is.null(substitute(track))) {
-        stop("Usage: gtrack.exists(track)", call. = F)
+        stop("Usage: gtrack.exists(track)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -483,7 +483,7 @@ get_bigWigToWig_bin <- function() {
 #' @export gtrack.import
 gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize = NULL, defval = NaN) {
     if (is.null(substitute(track)) || is.null(description) || is.null(file)) {
-        stop("Usage: gtrack.import(track, description, file, binsize, defval = NaN)", call. = F)
+        stop("Usage: gtrack.import(track, description, file, binsize, defval = NaN)", call. = FALSE)
     }
 
     .gcheckroot()
@@ -494,7 +494,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -508,38 +508,38 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
         {
             report.progress <- FALSE
 
-            if (length(grep("^.+\\.gz$", file, perl = T)) || length(grep("^.+\\.zip$", file, perl = T))) {
+            if (length(grep("^.+\\.gz$", file, perl = TRUE)) || length(grep("^.+\\.zip$", file, perl = TRUE))) {
                 cat("Unzipping...\n")
                 report.progress <- TRUE
                 tmp.dirname <- tempfile()
-                if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
-                    stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
+                if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+                    stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
                 }
 
-                file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = T))
+                file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
                 file.unzipped <- paste(tmp.dirname, "/", file.noext, sep = "")
                 if (system(paste("/bin/sh -c \"gunzip -q -c", file, ">", file.unzipped, "\""))) {
-                    stop(sprintf("Failed to unzip file %s", file), call. = F)
+                    stop(sprintf("Failed to unzip file %s", file), call. = FALSE)
                 }
                 file <- file.unzipped
             }
 
             # looks like all bigWig files start with "fc26" in their first two bytes
-            if (length(grep("^.+\\.bw$", file, perl = T)) || length(grep("^.+\\.bigWig$", file, perl = T)) ||
+            if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
                 system(sprintf("od -x -N 2 \"%s\"", file), intern = TRUE)[1] == "0000000 fc26") {
                 cat("Converting from BigWig to WIG...\n")
                 report.progress <- TRUE
                 if (tmp.dirname == "") {
                     tmp.dirname <- tempfile()
-                    if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
-                        stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
+                    if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+                        stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
                     }
                 }
 
-                file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = T))
+                file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
                 file.converted <- paste(tmp.dirname, "/", file.noext, ".wig", sep = "")
                 if (paste(system(get_bigWigToWig_bin(), file, file.converted))) {
-                    stop("Command failed", call. = F)
+                    stop("Command failed", call. = FALSE)
                 }
                 file <- file.converted
             }
@@ -624,7 +624,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' @export gtrack.import_mappedseq
 gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NULL, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE) {
     if (is.null(substitute(track)) || is.null(description) || is.null(file)) {
-        stop("Usage: gtrack.import_mappedseq(track, description, file, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE)", call. = F)
+        stop("Usage: gtrack.import_mappedseq(track, description, file, pileup = 0, binsize = -1, cols.order = c(9, 11, 13, 14), remove.dups = TRUE)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -634,7 +634,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -726,7 +726,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
     .gcheckroot()
 
     if (is.null(description) || is.null(path) || is.null(binsize)) {
-        stop("Usage: gtrack.import_set(description, path, binsize, track.prefix = NULL, defval = NaN)", call. = F)
+        stop("Usage: gtrack.import_set(description, path, binsize, track.prefix = NULL, defval = NaN)", call. = FALSE)
     }
 
     if (is.null(substitute(track.prefix))) {
@@ -741,8 +741,8 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
     tryCatch(
         {
             tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/downloads", sep = ""))
-            if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
-                stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
+            if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+                stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
             }
             protocol <- "ftp://"
             if (substr(path, 1, nchar(protocol)) == protocol) {
@@ -750,18 +750,18 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
                 files <- gwget(path, tmp.dirname)
 
                 if (!length(files)) {
-                    stop("No files downloaded. Exiting.", call. = F)
+                    stop("No files downloaded. Exiting.", call. = FALSE)
                 }
 
                 files <- paste(tmp.dirname, "/", files, sep = "")
             } else {
                 # local path
-                files <- system(paste("/bin/sh -c \"ls -d -A", path, "\""), intern = T)
+                files <- system(paste("/bin/sh -c \"ls -d -A", path, "\""), intern = TRUE)
             }
 
             files <- files[!file.info(files)$isdir]
             if (!length(files)) {
-                stop("No files to import. Exiting.", call. = F)
+                stop("No files to import. Exiting.", call. = FALSE)
             }
 
             files.imported <- c()
@@ -770,7 +770,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
                 tryCatch(
                     {
                         cat(sprintf("Importing file %s\n", file))
-                        file.noext <- basename(gsub("^([^.]+)(\\..*)*$", "\\1", file, perl = T))
+                        file.noext <- basename(gsub("^([^.]+)(\\..*)*$", "\\1", file, perl = TRUE))
                         trackstr <- paste(track.prefix, file.noext, sep = "")
 
                         .gcall_noninteractive(gtrack.import, trackstr, description, file, binsize, defval)
@@ -780,7 +780,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
                     error = function(e) {
                         msg <- as.character(e)
                         if (msg == "Error: Command interrupted!\n") {
-                            stop("Command interrupted!", call. = F)
+                            stop("Command interrupted!", call. = FALSE)
                         } else {
                             cat(sprintf("%s\n", msg))
                         }
@@ -830,7 +830,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' @export gtrack.info
 gtrack.info <- function(track = NULL) {
     if (is.null(substitute(track))) {
-        stop("Usage: gtrack.info(track)", call. = F)
+        stop("Usage: gtrack.info(track)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -863,7 +863,7 @@ gtrack.info <- function(track = NULL) {
 #' @export gtrack.liftover
 gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NULL, chain = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(src.track.dir) || is.null(chain)) {
-        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain)", call. = F)
+        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -873,7 +873,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     if (is.character(chain)) {
@@ -984,7 +984,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
 gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL, ..., include.lowest = FALSE, force.binning = TRUE, iterator = NULL, band = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(substitute(track)) || is.null(description) || is.null(lookup_table) || length(args) < 2 || length(args) %% 2 != 0) {
-        stop("Usage: gtrack.lookup(track, description, lookup_table, [expr, breaks]+, include.lowest = FALSE, force.binning = TRUE, iterator = NULL, band = NULL)", call. = F)
+        stop("Usage: gtrack.lookup(track, description, lookup_table, [expr, breaks]+, include.lowest = FALSE, force.binning = TRUE, iterator = NULL, band = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1003,7 +1003,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -1157,7 +1157,7 @@ gtrack.ls <- function(..., ignore.case = FALSE, perl = FALSE, fixed = FALSE, use
 #' @export gtrack.modify
 gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
     if (is.null(substitute(track)) || is.null(substitute(expr))) {
-        stop("Usage: gtrack.modify(track, expr, intervals = .misha$ALLGENOME)", call. = F)
+        stop("Usage: gtrack.modify(track, expr, intervals = .misha$ALLGENOME)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1205,13 +1205,13 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
 #' gdb.init_examples()
 #' gtrack.create("new_track", "Test track", "2 * dense_track")
 #' gtrack.exists("new_track")
-#' gtrack.rm("new_track", force = T)
+#' gtrack.rm("new_track", force = TRUE)
 #' gtrack.exists("new_track")
 #'
 #' @export gtrack.rm
 gtrack.rm <- function(track = NULL, force = FALSE) {
     if (is.null(substitute(track))) {
-        stop("Usage: gtrack.rm(track, force = FALSE)", call. = F)
+        stop("Usage: gtrack.rm(track, force = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1222,7 +1222,7 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
         if (force) {
             return(invisible())
         }
-        stop(sprintf("Track %s does not exist", trackname), call. = F)
+        stop(sprintf("Track %s does not exist", trackname), call. = FALSE)
     }
 
     answer <- "N"
@@ -1309,10 +1309,10 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
 #' gtrack.rm("smoothed_track", force = TRUE)
 #'
 #' @export gtrack.smooth
-gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize = NULL, weight_thr = 0, smooth_nans = F, alg = "LINEAR_RAMP", iterator = NULL) {
+gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize = NULL, weight_thr = 0, smooth_nans = FALSE, alg = "LINEAR_RAMP", iterator = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(substitute(expr)) || is.null(winsize)) {
         stop("Usage: gtrack.smooth(track, description, expr, winsize, weight_thr = 0, smooth_nans = FALSE, alg = \"LINEAR_RAMP\" (\"LINEAR_RAMP\" | \"MEAN\"), iterator = NULL)",
-            call. = F
+            call. = FALSE
         )
     }
     .gcheckroot()
@@ -1324,7 +1324,7 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)

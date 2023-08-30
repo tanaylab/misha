@@ -12,11 +12,11 @@
 
         idx <- match(NA, res$slice)
         if (!is.na(idx)) {
-            stop(sprintf("%s does not appear among the column names of track %s", slice[idx], trackstr), call. = F)
+            stop(sprintf("%s does not appear among the column names of track %s", slice[idx], trackstr), call. = FALSE)
         }
     } else if (is.numeric(slice) || is.integer(slice)) {
         if (TRUE %in% (as.integer(slice) != slice)) {
-            stop("Invalid type of slice parameter", call. = F)
+            stop("Invalid type of slice parameter", call. = FALSE)
         }
 
         slice <- unique(slice)
@@ -24,13 +24,13 @@
 
         outofrange <- slice < 1 | slice > length(colnames)
         if (TRUE %in% outofrange) {
-            stop(sprintf("Slice index %d is out of range", slice[match(TRUE, outofrange)], trackstr), call. = F)
+            stop(sprintf("Slice index %d is out of range", slice[match(TRUE, outofrange)], trackstr), call. = FALSE)
         }
 
         res$slice <- colnames[slice]
         res$colnames <- names(res$slice)
     } else {
-        stop("Invalid type of slice parameter", call. = F)
+        stop("Invalid type of slice parameter", call. = FALSE)
     }
 
     res
@@ -38,7 +38,7 @@
 
 # .gtrack.create_test_arrays <- function(track, minsize, maxsize, intervals = get("ALLGENOME", envir = .misha), iterator = NULL) {
 #     if (is.null(substitute(track))) {
-#         stop("Usage: .gtrack.create_test_arrays(track, expr, iterator = NULL, band = NULL)", call. = F)
+#         stop("Usage: .gtrack.create_test_arrays(track, expr, iterator = NULL, band = NULL)", call. = FALSE)
 #     }
 #     .gcheckroot()
 
@@ -49,7 +49,7 @@
 #     direxisted <- file.exists(trackdir)
 
 #     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-#         stop(sprintf("Track %s already exists", trackstr), call. = F)
+#         stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
 #     }
 
 #     .gconfirmtrackcreate(trackstr)
@@ -78,11 +78,11 @@
     .gcheckroot()
 
     if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s does not exist", trackstr), call. = F)
+        stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
     }
 
     if (.gcall_noninteractive(gtrack.info, trackstr)$type != "array") {
-        stop("gtrack.array.get_colnames can only be applied to array tracks", call. = F)
+        stop("gtrack.array.get_colnames can only be applied to array tracks", call. = FALSE)
     }
 
     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
@@ -102,24 +102,24 @@
     .gcheckroot()
 
     if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s does not exist", trackstr), call. = F)
+        stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
     }
 
     if (typeof(names) != "character") {
-        stop(sprintf("names parameter must be a character vector", trackstr), call. = F)
+        stop(sprintf("names parameter must be a character vector", trackstr), call. = FALSE)
     }
 
     if (.gcall_noninteractive(gtrack.info, trackstr)$type != "array") {
-        stop("gtrack.array.set_colnames can only be applied to array tracks", call. = F)
+        stop("gtrack.array.set_colnames can only be applied to array tracks", call. = FALSE)
     }
 
     if ("" %in% names) {
-        stop(sprintf("Column names cannot be empty", duplicated[1]), call. = F)
+        stop(sprintf("Column names cannot be empty", duplicated[1]), call. = FALSE)
     }
 
     duplicated <- names[duplicated(names)]
     if (length(duplicated)) {
-        stop(sprintf("Column %s appears more than once", duplicated[1]), call. = F)
+        stop(sprintf("Column %s appears more than once", duplicated[1]), call. = FALSE)
     }
 
     if (check_num_cols) {
@@ -128,7 +128,7 @@
             stop(sprintf(
                 "The number of columns in the track (%d) does not match the number of column names (%d)",
                 length(oldnames), length(names)
-            ), call. = F)
+            ), call. = FALSE)
         }
     }
 
@@ -193,7 +193,7 @@
 #' @export gtrack.array.extract
 gtrack.array.extract <- function(track = NULL, slice = NULL, intervals = NULL, file = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(track)) || is.null(intervals)) {
-        stop("Usage: gtrack.array.extract(track, slice, intervals, file = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gtrack.array.extract(track, slice, intervals, file = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -260,7 +260,7 @@ gtrack.array.extract <- function(track = NULL, slice = NULL, intervals = NULL, f
 #' @export gtrack.array.get_colnames
 gtrack.array.get_colnames <- function(track = NULL) {
     if (is.null(substitute(track))) {
-        stop("Usage: gtrack.array.get_colnames(track)", call. = F)
+        stop("Usage: gtrack.array.get_colnames(track)", call. = FALSE)
     }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
@@ -329,7 +329,7 @@ gtrack.array.get_colnames <- function(track = NULL) {
 gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(substitute(track)) || is.null(description) || !length(args)) {
-        stop("Usage: gtrack.array.import(track, description, [src]+)", call. = F)
+        stop("Usage: gtrack.array.import(track, description, [src]+)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -344,7 +344,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
             colnames[[length(colnames) + 1]] <- as.character(NULL)
         } else {
             if (.gcall_noninteractive(gtrack.info, src)$type != "array") {
-                stop(sprintf("Track %s: only array tracks can be used as a source", src), call. = F)
+                stop(sprintf("Track %s: only array tracks can be used as a source", src), call. = FALSE)
             }
             colnames[[length(colnames) + 1]] <- names(.gtrack.array.get_colnames(src))
         }
@@ -355,7 +355,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -408,7 +408,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
 #' @export gtrack.array.set_colnames
 gtrack.array.set_colnames <- function(track = NULL, names = NULL) {
     if (is.null(substitute(track)) || is.null(names)) {
-        stop("Usage: gtrack.array.set_colnames(track, names)", call. = F)
+        stop("Usage: gtrack.array.set_colnames(track, names)", call. = FALSE)
     }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())

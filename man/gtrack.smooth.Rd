@@ -10,7 +10,7 @@ gtrack.smooth(
   expr = NULL,
   winsize = NULL,
   weight_thr = 0,
-  smooth_nans = F,
+  smooth_nans = FALSE,
   alg = "LINEAR_RAMP",
   iterator = NULL
 )

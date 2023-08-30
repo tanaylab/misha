@@ -50,7 +50,7 @@ gtrack.create("mixed_track", "Test track",
     iterator = 70
 )
 gtrack.info("mixed_track")
-gtrack.rm("mixed_track", force = T)
+gtrack.rm("mixed_track", force = TRUE)
 
 }
 \seealso{

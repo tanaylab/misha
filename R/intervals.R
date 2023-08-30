@@ -13,22 +13,22 @@
 
     err.intervs <- intervals[intervals$start < 0, ]
     if (nrow(err.intervs) > 0) {
-        stop(sprintf("Invalid interval (%s, %g, %g): start coordinate is out of range", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = F)
+        stop(sprintf("Invalid interval (%s, %g, %g): start coordinate is out of range", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = FALSE)
     }
 
     err.intervs <- intervals[intervals$end > maxends, ]
     if (nrow(err.intervs) > 0) {
-        stop(sprintf("Invalid interval (%s, %g, %g): end coordinate exceeds chromosome boundaries", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = F)
+        stop(sprintf("Invalid interval (%s, %g, %g): end coordinate exceeds chromosome boundaries", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = FALSE)
     }
 
     err.intervs <- intervals[intervals$start >= intervals$end, ]
     if (nrow(err.intervs) > 0) {
-        stop(sprintf("Invalid interval (%s, %g, %g): start coordinate exceeds or equals to end coordinate", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = F)
+        stop(sprintf("Invalid interval (%s, %g, %g): start coordinate exceeds or equals to end coordinate", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = FALSE)
     }
 
     if (!is.null(strands)) {
         if (!is.numeric(intervals$strand)) {
-            stop("Invalid strand values", call. = F)
+            stop("Invalid strand values", call. = FALSE)
         }
 
         err.intervs <- intervals[intervals$strand != as.integer(intervals$strand) | intervals$strand < -1 | intervals$strand > 1, ]
@@ -71,7 +71,7 @@
             {
                 # if any of the source intervals sets is big then create the output intervals set big too
                 if (!is.null(intervals.set.out)) {
-                    dir.create(fullpath, recursive = T, mode = "0777")
+                    dir.create(fullpath, recursive = TRUE, mode = "0777")
                 }
 
                 if (.gintervals.is1d(intervals[[1]])) {
@@ -169,56 +169,56 @@
 
 .gintervals.check_new_set <- function(intervals.set) {
     if (!is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
-        stop(sprintf("Intervals set %s already exists", intervals.set), call. = F)
+        stop(sprintf("Intervals set %s already exists", intervals.set), call. = FALSE)
     }
 
-    if (!length(grep("^[A-Za-z][\\w.]*$", intervals.set, perl = T))) {
+    if (!length(grep("^[A-Za-z][\\w.]*$", intervals.set, perl = TRUE))) {
         stop("Invalid interval name %s. Only alphanumeric characters and _ are allowed in the name.")
     }
 
-    path <- gsub(".", "/", intervals.set, fixed = T)
+    path <- gsub(".", "/", intervals.set, fixed = TRUE)
     path <- paste(path, ".interv", sep = "")
     fullpath <- paste(get("GWD", envir = .misha), path, sep = "/")
     dir <- dirname(path)
     fulldir <- paste(get("GWD", envir = .misha), dir, sep = "/")
 
     if (!file.exists(fulldir)) {
-        stop(sprintf("Directory %s does not exist", dir), call. = F)
+        stop(sprintf("Directory %s does not exist", dir), call. = FALSE)
     }
 
     if (file.exists(fullpath)) {
-        stop(sprintf("File %s already exists", path), call. = F)
+        stop(sprintf("File %s already exists", path), call. = FALSE)
     }
 
     if (!is.na(match(intervals.set, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", intervals.set), call. = F)
+        stop(sprintf("Track %s already exists", intervals.set), call. = FALSE)
     }
 
     if (!is.na(match(intervals.set, gvtrack.ls()))) {
-        stop(sprintf("Virtual track %s already exists", intervals.set), call. = F)
+        stop(sprintf("Virtual track %s already exists", intervals.set), call. = FALSE)
     }
 
     if (.ggetOption(".gautocompletion", FALSE) && exists(intervals.set, envir = .misha)) {
-        stop(sprintf("Variable \"%s\" shadows the name of the new intervals set.\nPlease remove this variable from the environment or switch off autocompletion mode.", intervals.set), call. = F)
+        stop(sprintf("Variable \"%s\" shadows the name of the new intervals set.\nPlease remove this variable from the environment or switch off autocompletion mode.", intervals.set), call. = FALSE)
     }
 
     fullpath
 }
 
-.gintervals.load_ext <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, chrom2 = NULL, progress = F) {
+.gintervals.load_ext <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, chrom2 = NULL, progress = FALSE) {
     if (is.null(intervals.set)) {
-        stop("Usage: gintervals.load(intervals.set, chrom = NULL, chrom1 = NULL, chrom2 = NULL)", call. = F)
+        stop("Usage: gintervals.load(intervals.set, chrom = NULL, chrom1 = NULL, chrom2 = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
     if (is.character(intervals.set) && length(intervals.set) == 1 && is.na(match(intervals.set, get("GINTERVS", envir = .misha))) && is.na(match(intervals.set, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Intervals set %s does not exist", intervals.set), call. = F)
+        stop(sprintf("Intervals set %s does not exist", intervals.set), call. = FALSE)
     }
 
     .gintervals.load(intervals.set, chrom, chrom1, chrom2, progress)
 }
 
-.gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, chrom2 = NULL, progress = F) {
+.gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, chrom2 = NULL, progress = FALSE) {
     if (!is.null(chrom)) {
         chrom <- .gchroms(chrom)
         if (length(chrom) > 1) {
@@ -241,15 +241,15 @@
     }
 
     if (!is.null(chrom) && !is.null(chrom1)) {
-        stop("Cannot use chrom and chrom1 parameters in the same call", call. = F)
+        stop("Cannot use chrom and chrom1 parameters in the same call", call. = FALSE)
     }
 
     if (!is.null(chrom) && !is.null(chrom2)) {
-        stop("Cannot use chrom and chrom2 parameters in the same call", call. = F)
+        stop("Cannot use chrom and chrom2 parameters in the same call", call. = FALSE)
     }
 
     if (is.character(intervals.set) && length(intervals.set) != 1 || !is.character(intervals.set) && !.gintervals.is1d(intervals.set) && !.gintervals.is2d(intervals.set)) {
-        stop("Invalid format of intervals", call. = F)
+        stop("Invalid format of intervals", call. = FALSE)
     }
 
     res <- NULL
@@ -261,7 +261,7 @@
 
         if (.gintervals.big.is1d(intervals.set)) {
             if (!is.null(chrom1) || !is.null(chrom2)) {
-                stop(sprintf("%s is a 1D big intervals set.\nchrom1 or chrom2 parameters can be applied only to 2D intervals.", intervals.set), call. = F)
+                stop(sprintf("%s is a 1D big intervals set.\nchrom1 or chrom2 parameters can be applied only to 2D intervals.", intervals.set), call. = FALSE)
             }
 
             if (!is.null(chrom)) {
@@ -273,12 +273,12 @@
                     stop(sprintf(
                         "Cannot load a big intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.\nFor big intervals sets only one chromosome pair can be loaded at a time.",
                         intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size", 10000000)
-                    ), call. = F)
+                    ), call. = FALSE)
                 } else {
                     stop(sprintf(
                         "Cannot load chromosome %s of an intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.",
                         chrom, intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size", 10000000)
-                    ), call. = F)
+                    ), call. = FALSE)
                 }
             }
 
@@ -289,7 +289,7 @@
                     function(chrom) {
                         loaded_intervs <- .gintervals.load_file(intervals.set, chrom = chrom)
                         if (!identical(sapply(loaded_intervs, "class"), sapply(zeroline, "class"))) {
-                            stop(sprintf("Intervals set %s, chrom %s: invalid columns definition", intervals.set, chrom), call. = F)
+                            stop(sprintf("Intervals set %s, chrom %s: invalid columns definition", intervals.set, chrom), call. = FALSE)
                         }
                         res <<- c(res, list(loaded_intervs))
                         if (as.integer(difftime(Sys.time(), t, units = "secs")) > 3) {
@@ -306,14 +306,14 @@
             } else if (nrow(meta$stats) == 1) {
                 res <- .gintervals.load_file(intervals.set, chrom = meta$stat$chrom[1])
                 if (!identical(sapply(res, "class"), sapply(zeroline, "class"))) {
-                    stop(sprintf("Intervals set %s, chrom %s: invalid columns definition", intervals.set, meta$stat$chrom[1]), call. = F)
+                    stop(sprintf("Intervals set %s, chrom %s: invalid columns definition", intervals.set, meta$stat$chrom[1]), call. = FALSE)
                 }
             } else {
                 res <- meta$zeroline
             }
         } else {
             if (!is.null(chrom)) {
-                stop(sprintf("%s is a 2D big intervals set.\nchrom parameter can be applied only to 1D intervals.", intervals.set), call. = F)
+                stop(sprintf("%s is a 2D big intervals set.\nchrom parameter can be applied only to 1D intervals.", intervals.set), call. = FALSE)
             }
 
             if (!is.null(chrom1)) {
@@ -328,22 +328,22 @@
                     stop(sprintf(
                         "Cannot load chromosome pair (%s, %s) of an intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.",
                         chrom1, chrom2, intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size", 10000000)
-                    ), call. = F)
+                    ), call. = FALSE)
                 } else if (!is.null(chrom1)) {
                     stop(sprintf(
                         "Cannot load chromosome %s of an intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.",
                         chrom1, intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size", 10000000)
-                    ), call. = F)
+                    ), call. = FALSE)
                 } else if (!is.null(chrom2)) {
                     stop(sprintf(
                         "Cannot load chromosome %s of an intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.",
                         chrom2, intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size", 10000000)
-                    ), call. = F)
+                    ), call. = FALSE)
                 } else {
                     stop(sprintf(
                         "Cannot load a big intervals set %s: its size (%d) exceeds the limit (%d) controlled by gmax.data.size option.\nFor big intervals sets only one chromosome pair can be loaded at a time.",
                         intervals.set, sum(meta$stats$size), .ggetOption("gmax.data.size", 10000000)
-                    ), call. = F)
+                    ), call. = FALSE)
                 }
             }
 
@@ -353,7 +353,7 @@
                     function(chrom1, chrom2) {
                         loaded_intervs <- .gintervals.load_file(intervals.set, chrom1 = chrom1, chrom2 = chrom2)
                         if (!identical(sapply(loaded_intervs, "class"), sapply(zeroline, "class"))) {
-                            stop(sprintf("Interval set %s, chrom1 %s, chrom2 %s: invalid columns definition", intervals.set, chrom1, chrom2), call. = F)
+                            stop(sprintf("Interval set %s, chrom1 %s, chrom2 %s: invalid columns definition", intervals.set, chrom1, chrom2), call. = FALSE)
                         }
                         res <<- c(res, list(loaded_intervs))
                         if (as.integer(difftime(Sys.time(), t, units = "secs")) > 3) {
@@ -371,7 +371,7 @@
             } else if (nrow(meta$stats) == 1) {
                 res <- .gintervals.load_file(intervals.set, chrom1 = meta$stat$chrom1[1], chrom2 = meta$stat$chrom2[1])
                 if (!identical(sapply(res, "class"), sapply(zeroline, "class"))) {
-                    stop(sprintf("Interval set %s, chrom1 %s, chrom2 %s: invalid columns definition", intervals.set, meta$stat$chrom1[1], meta$stat$chrom2[1]), call. = F)
+                    stop(sprintf("Interval set %s, chrom1 %s, chrom2 %s: invalid columns definition", intervals.set, meta$stat$chrom1[1], meta$stat$chrom2[1]), call. = FALSE)
                 }
             } else {
                 res <- meta$zeroline
@@ -389,11 +389,11 @@
         }
         if (!is.null(res)) {
             if (!.gintervals.is1d(res) && !is.null(chrom)) {
-                stop("chrom parameter can be applied only to 1D intervals", call. = F)
+                stop("chrom parameter can be applied only to 1D intervals", call. = FALSE)
             }
 
             if (!.gintervals.is2d(res) && (!is.null(chrom1) || !is.null(chrom2))) {
-                stop("chrom1 or chrom2 parameters can be applied only to 2D intervals", call. = F)
+                stop("chrom1 or chrom2 parameters can be applied only to 2D intervals", call. = FALSE)
             }
 
             if (nrow(res) > 0) {
@@ -444,7 +444,7 @@
             if (.gintervals.is_bigset(intervals.set)) {
                 .gintervals.big.meta(intervals.set)$zeroline
             } else {
-                stop(sprintf("File %s does not exist", intervfname), call. = F)
+                stop(sprintf("File %s does not exist", intervfname), call. = FALSE)
             }
         }
     }
@@ -472,7 +472,7 @@
     nrow(intervs)
 }
 
-.gintervals.is_bigset <- function(intervals.set, err_if_non_exist = T) {
+.gintervals.is_bigset <- function(intervals.set, err_if_non_exist = TRUE) {
     if (is.character(intervals.set) & length(intervals.set) == 1) {
         if (intervals.set %in% get("GTRACKS", envir = .misha)) {
             intervfname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
@@ -484,7 +484,7 @@
                 return(TRUE)
             }
         } else if (err_if_non_exist) {
-            stop(sprintf("Intervals set %s does not exist", intervals.set), call. = F)
+            stop(sprintf("Intervals set %s does not exist", intervals.set), call. = FALSE)
         }
     }
     FALSE
@@ -531,7 +531,7 @@
     # We assume that writing the intervals might be a lengthy process.
     # During this time the process might get interrupted leaving the intervals set in incomplete state.
     # Even though it's not fully transaction-safe, we prefer to create a temporary file and then move it hoping it's fast enough.
-    path <- gsub(".", "/", intervals.set, fixed = T)
+    path <- gsub(".", "/", intervals.set, fixed = TRUE)
     path <- paste(get("GWD", envir = .misha), path, sep = "/")
     path <- paste(path, ".interv", sep = "")
 
@@ -563,7 +563,7 @@
         intervals <- .gintervals.load(intervals.set)
     }
 
-    path <- gsub(".", "/", intervals.set, fixed = T)
+    path <- gsub(".", "/", intervals.set, fixed = TRUE)
     path <- paste(get("GWD", envir = .misha), path, sep = "/")
     path <- paste(path, ".interv", sep = "")
 
@@ -695,7 +695,7 @@
 #' @export gintervals
 gintervals <- function(chroms = NULL, starts = 0, ends = -1, strands = NULL) {
     if (is.null(chroms)) {
-        stop("Usage: gintervals(chroms, starts = 0, ends = -1, strands = NULL)", call. = F)
+        stop("Usage: gintervals(chroms, starts = 0, ends = -1, strands = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -747,7 +747,7 @@ gintervals <- function(chroms = NULL, starts = 0, ends = -1, strands = NULL) {
 #' @export gintervals.2d
 gintervals.2d <- function(chroms1 = NULL, starts1 = 0, ends1 = -1, chroms2 = NULL, starts2 = 0, ends2 = -1) {
     if (is.null(chroms1)) {
-        stop("Usage: gintervals.2d(chroms1, starts1 = 0, ends1 = -1, chroms2 = NULL, starts2 = 0, ends2 = -1)", call. = F)
+        stop("Usage: gintervals.2d(chroms1, starts1 = 0, ends1 = -1, chroms2 = NULL, starts2 = 0, ends2 = -1)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -832,7 +832,7 @@ gintervals.all <- function() {
 #' @export gintervals.2d.band_intersect
 gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(intervals)) {
-        stop("Usage: gintervals.2d.band_intersect(intervals, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.2d.band_intersect(intervals, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
@@ -951,7 +951,7 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
 #' @export gintervals.canonic
 gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE) {
     if (is.null(intervals)) {
-        stop("Usage: gintervals.canonic(intervals, unify_touching_intervals = TRUE)", call. = F)
+        stop("Usage: gintervals.canonic(intervals, unify_touching_intervals = TRUE)", call. = FALSE)
     }
 
     res <- .gcall("gintervcanonic", intervals, unify_touching_intervals, .misha_env())
@@ -993,7 +993,7 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
 #' @export gintervals.diff
 gintervals.diff <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.out = NULL) {
     if (is.null(intervals1) || is.null(intervals2)) {
-        stop("Usage: gintervals.diff(intervals1, intervals2, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.diff(intervals1, intervals2, intervals.set.out = NULL)", call. = FALSE)
     }
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
@@ -1058,7 +1058,7 @@ gintervals.diff <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.
 #' @export gintervals.exists
 gintervals.exists <- function(intervals.set = NULL) {
     if (is.null(substitute(intervals.set))) {
-        stop("Usage: gintervals.exists(intervals.set)", call. = F)
+        stop("Usage: gintervals.exists(intervals.set)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1102,7 +1102,7 @@ gintervals.exists <- function(intervals.set = NULL) {
 #' @export gintervals.force_range
 gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(intervals))) {
-        stop("Usage: gintervals.force_range(intervals, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.force_range(intervals, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1188,12 +1188,12 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
 #' @export gintervals.import_genes
 gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annots.names = NULL) {
     if (is.null(genes.file)) {
-        stop("Usage: gintervals.import_genes(genes.file, annots.file = NULL, annots.names = NULL)", call. = F)
+        stop("Usage: gintervals.import_genes(genes.file, annots.file = NULL, annots.names = NULL)", call. = FALSE)
     }
 
     tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/downloads", sep = ""))
-    if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
-        stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
+    if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+        stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
     }
 
     files <- list(genes.file, annots.file)
@@ -1211,17 +1211,17 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
                     # ftp
                     f <- gwget(files[[i]], tmp.dirname)
                     if (length(f) != 1) {
-                        stop(sprintf("More than one file matches %s argument", file.types[i]), call. = F)
+                        stop(sprintf("More than one file matches %s argument", file.types[i]), call. = FALSE)
                     }
                     files[[i]] <- paste(tmp.dirname, "/", f, sep = "")
                 }
 
-                if (length(grep("^.+\\.gz$", files[[i]], perl = T))) {
-                    f.unzipped <- basename(gsub("^(.+)\\.gz$", "\\1", files[[i]], perl = T))
+                if (length(grep("^.+\\.gz$", files[[i]], perl = TRUE))) {
+                    f.unzipped <- basename(gsub("^(.+)\\.gz$", "\\1", files[[i]], perl = TRUE))
                     f.unzipped <- paste(tmp.dirname, "/", f.unzipped, sep = "")
                     cmd <- paste("/bin/sh -c \"gunzip -q -c", files[[i]], ">", f.unzipped, "\"")
                     if (system(cmd)) {
-                        stop(sprintf("Command failed: %s", cmd), call. = F)
+                        stop(sprintf("Command failed: %s", cmd), call. = FALSE)
                     }
                     files[[i]] <- f.unzipped
                 }
@@ -1272,7 +1272,7 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
 #' @export gintervals.intersect
 gintervals.intersect <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.out = NULL) {
     if (is.null(intervals1) || is.null(intervals2)) {
-        stop("Usage: gintervals.intersect(intervals1, intervals2, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.intersect(intervals1, intervals2, intervals.set.out = NULL)", call. = FALSE)
     }
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
@@ -1342,7 +1342,7 @@ gintervals.intersect <- function(intervals1 = NULL, intervals2 = NULL, intervals
 #' @export gintervals.chrom_sizes
 gintervals.chrom_sizes <- function(intervals = NULL) {
     if (is.null(intervals)) {
-        stop("Usage: gintervals.chrom_sizes(intervals)", call. = F)
+        stop("Usage: gintervals.chrom_sizes(intervals)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1390,7 +1390,7 @@ gintervals.chrom_sizes <- function(intervals = NULL) {
 #' @export gintervals.is.bigset
 gintervals.is.bigset <- function(intervals.set = NULL) {
     if (is.null(intervals.set)) {
-        stop("Usage: gintervals.is.bigset(intervals.set)", call. = F)
+        stop("Usage: gintervals.is.bigset(intervals.set)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1432,7 +1432,7 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' @export gintervals.liftover
 gintervals.liftover <- function(intervals = NULL, chain = NULL) {
     if (is.null(intervals) || is.null(chain)) {
-        stop("Usage: gintervals.liftover(intervals, chain)", call. = F)
+        stop("Usage: gintervals.liftover(intervals, chain)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1508,7 +1508,7 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' @export gintervals.load_chain
 gintervals.load_chain <- function(file = NULL) {
     if (is.null(file)) {
-        stop("Usage: gintervals.load_chain(file)", call. = F)
+        stop("Usage: gintervals.load_chain(file)", call. = FALSE)
     }
     .gcall("gchain2interv", file, .misha_env())
 }
@@ -1607,11 +1607,11 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #' )
 #'
 #' @export gintervals.mapply
-gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.intervals = F, iterator = NULL, band = NULL, intervals.set.out = NULL) {
+gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.intervals = FALSE, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     assign("GINTERVID", -1, envir = .misha)
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(intervals) && length(args) < 2 || !is.null(intervals) && length(args) < 1) {
-        stop("Usage: gintervals.mapply(FUN, [expr]+, intervals, enable.gapply.intervals = FALSE, iterator = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.mapply(FUN, [expr]+, intervals, enable.gapply.intervals = FALSE, iterator = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1744,7 +1744,7 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
         stop(paste("Usage: gintervals.neighbors(intervals1, intervals2, maxneighbors = 1, mindist = -1e+09, maxdist = 1e+09, ",
             "mindist1 = -1e+09, maxdist1 = 1e+09, mindist2 = -1e+09, maxdist2 = 1e+09, na.if.notfound = FALSE, intervals.set.out = NULL)",
             sep = ""
-        ), call. = F)
+        ), call. = FALSE)
     }
 
     if (is.null(colnames)) {
@@ -1835,7 +1835,7 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
 #' @export gintervals.quantiles
 gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NULL, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) || is.null(intervals)) {
-        stop("Usage: gintervals.quantiles(expr, percentiles = 0.5, intervals, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.quantiles(expr, percentiles = 0.5, intervals, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1918,7 +1918,7 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
 gintervals.rbind <- function(..., intervals.set.out = NULL) {
     intervals <- list(...)
     if (!length(intervals)) {
-        stop("Usage: gintervals.rbind([intervals]+, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.rbind([intervals]+, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -2011,7 +2011,7 @@ gintervals.rbind <- function(..., intervals.set.out = NULL) {
 #' @export gintervals.rm
 gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
     if (is.null(substitute(intervals.set))) {
-        stop("Usage: gintervals.rm(intervals.set, force = FALSE)", call. = F)
+        stop("Usage: gintervals.rm(intervals.set, force = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -2022,7 +2022,7 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
         if (force) {
             return(invisible())
         }
-        stop(sprintf("Intervals set %s does not exist", intervals.set), call. = F)
+        stop(sprintf("Intervals set %s does not exist", intervals.set), call. = FALSE)
     }
 
     answer <- "N"
@@ -2075,7 +2075,7 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
 #' @export gintervals.save
 gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
     if (is.null(substitute(intervals.set.out)) || is.null(intervals)) {
-        stop("Usage: gintervals.save(intervals.set.out, intervals)", call. = F)
+        stop("Usage: gintervals.save(intervals.set.out, intervals)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -2126,7 +2126,7 @@ gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
 #' @export gintervals.update
 gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL, chrom1 = NULL, chrom2 = NULL) {
     if (is.null(substitute(intervals.set)) || identical(intervals, "")) {
-        stop("Usage: gintervals.update(intervals.set, intervals, chrom = NULL, chrom1 = NULL, chrom2 = NULL)", call. = F)
+        stop("Usage: gintervals.update(intervals.set, intervals, chrom = NULL, chrom1 = NULL, chrom2 = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -2135,7 +2135,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
     }
 
     if (is.null(chrom) && is.null(chrom1) && is.null(chrom2)) {
-        stop("Chromosome must be specified in chrom (for 2D intervals: chrom1, chrom2) parameter", call. = F)
+        stop("Chromosome must be specified in chrom (for 2D intervals: chrom1, chrom2) parameter", call. = FALSE)
     }
 
     if (!is.null(chrom)) {
@@ -2160,22 +2160,22 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
     }
 
     if (!is.null(chrom) && !is.null(chrom1)) {
-        stop("Cannot use chrom and chrom1 parameters in the same call", call. = F)
+        stop("Cannot use chrom and chrom1 parameters in the same call", call. = FALSE)
     }
 
     if (!is.null(chrom) && !is.null(chrom2)) {
-        stop("Cannot use chrom and chrom2 parameters in the same call", call. = F)
+        stop("Cannot use chrom and chrom2 parameters in the same call", call. = FALSE)
     }
 
     if (!is.character(intervals.set) || length(intervals.set) != 1) {
-        stop("Invalid format of intervals.set parameter", call. = F)
+        stop("Invalid format of intervals.set parameter", call. = FALSE)
     }
 
     if (is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
-        stop(sprintf("Intervals set %s does not exist", intervals.set), call. = F)
+        stop(sprintf("Intervals set %s does not exist", intervals.set), call. = FALSE)
     }
 
-    path <- gsub(".", "/", intervals.set, fixed = T)
+    path <- gsub(".", "/", intervals.set, fixed = TRUE)
     path <- paste(path, ".interv", sep = "")
     fullpath <- paste(get("GWD", envir = .misha), path, sep = "/")
 
@@ -2195,12 +2195,12 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
         zeroline <- meta$zeroline
 
         if (!is.null(intervals) && !identical(sapply(intervals, "class"), sapply(zeroline, "class"))) {
-            stop(sprintf("Cannot update intervals set %s: columns differ", intervals.set), call. = F)
+            stop(sprintf("Cannot update intervals set %s: columns differ", intervals.set), call. = FALSE)
         }
 
         if (is1d) {
             if (is.null(chrom)) {
-                stop("chrom parameter is not specified", call. = F)
+                stop("chrom parameter is not specified", call. = FALSE)
             }
             idx <- which(stats$chrom == chrom)
             if (length(idx) > 0) {
@@ -2214,7 +2214,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             .gintervals.big.save(fullpath, intervals, chrom = chrom)
         } else {
             if (is.null(chrom1) || is.null(chrom2)) {
-                stop("chrom1 and chrom2 parameters must be specified", call. = F)
+                stop("chrom1 and chrom2 parameters must be specified", call. = FALSE)
             }
             idx <- which(stats$chrom1 == chrom1 & stats$chrom2 == chrom2)
             if (length(idx) > 0) {
@@ -2244,12 +2244,12 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
         is1d <- .gintervals.is1d(intervals.set)
 
         if (!is.null(intervals) && !identical(sapply(intervals, "class"), sapply(tgt.intervals, "class"))) {
-            stop(sprintf("Cannot update intervals set %s: columns differ", intervals.set), call. = F)
+            stop(sprintf("Cannot update intervals set %s: columns differ", intervals.set), call. = FALSE)
         }
 
         if (is1d) {
             if (is.null(chrom)) {
-                stop("chrom parameter is not specified", call. = F)
+                stop("chrom parameter is not specified", call. = FALSE)
             }
             idx <- which(tgt.intervals$chrom == chrom)
             if (length(idx) > 0) {
@@ -2261,7 +2261,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
             }
         } else {
             if (is.null(chrom1) || is.null(chrom2)) {
-                stop("chrom1 and chrom2 parameters must be specified", call. = F)
+                stop("chrom1 and chrom2 parameters must be specified", call. = FALSE)
             }
             idx <- which(tgt.intervals$chrom1 == chrom1 & tgt.intervals$chrom2 == chrom2)
             if (length(idx) > 0) {
@@ -2316,7 +2316,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
 #' @export gintervals.summary
 gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) || is.null(intervals)) {
-        stop("Usage: gintervals.summary(expr, intervals, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.summary(expr, intervals, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -2392,7 +2392,7 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
 #' @export gintervals.union
 gintervals.union <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.out = NULL) {
     if (is.null(intervals1) || is.null(intervals2)) {
-        stop("Usage: gintervals.union(intervals1, intervals2, intervals.set.out = NULL)", call. = F)
+        stop("Usage: gintervals.union(intervals1, intervals2, intervals.set.out = NULL)", call. = FALSE)
     }
 
     if (.gintervals.is_bigset(intervals1) || .gintervals.is_bigset(intervals2) || !is.null(intervals.set.out)) {
@@ -2522,17 +2522,17 @@ gintervals.union <- function(intervals1 = NULL, intervals2 = NULL, intervals.set
 #' @export giterator.cartesian_grid
 giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, intervals2 = NULL, expansion2 = NULL, min.band.idx = NULL, max.band.idx = NULL) {
     if (is.null(intervals1) || is.null(expansion1)) {
-        stop("Usage: giterator.cartesian_grid(intervals1, expansion1, intervals2 = NULL, expansion2 = NULL, min.band.idx = NULL, max.band.idx = NULL)", call. = F)
+        stop("Usage: giterator.cartesian_grid(intervals1, expansion1, intervals2 = NULL, expansion2 = NULL, min.band.idx = NULL, max.band.idx = NULL)", call. = FALSE)
     }
 
     use.band.idx.limit <- !is.null(min.band.idx) && !is.null(max.band.idx)
     if (use.band.idx.limit) {
         if (min.band.idx > max.band.idx) {
-            stop("min.band.idx exceeds max.band.idx", call. = F)
+            stop("min.band.idx exceeds max.band.idx", call. = FALSE)
         }
 
         if (!is.null(intervals2)) {
-            stop("band.idx limit can only be used when intervals2 is set to NULL", call. = F)
+            stop("band.idx limit can only be used when intervals2 is set to NULL", call. = FALSE)
         }
     } else {
         min.band.idx <- 0
@@ -2602,7 +2602,7 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
 #' @export giterator.intervals
 giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) && is.null(substitute(iterator))) {
-        stop("Usage: giterator.intervals(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = F)
+        stop("Usage: giterator.intervals(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
 
     if (is.null(substitute(expr))) {

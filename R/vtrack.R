@@ -1,18 +1,18 @@
 .gvtrack <- function(vtrack) {
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())
     if (!is.character(vtrackstr) || length(vtrackstr) != 1) {
-        stop(sprintf("Virtual track must be specified as a character string"), call. = F)
+        stop(sprintf("Virtual track must be specified as a character string"), call. = FALSE)
     }
 
     if (is.na(match(vtrackstr, gvtrack.ls()))) {
-        stop(sprintf("Virtual track %s does not exist", vtrackstr), call. = F)
+        stop(sprintf("Virtual track %s does not exist", vtrackstr), call. = FALSE)
     }
     vtrackstr
 }
 
 .gvtrack.get <- function(vtrackstr) {
     if (is.na(match(vtrackstr, gvtrack.ls()))) {
-        stop(sprintf("Virtual track %s does not exist", vtrackstr), call. = F)
+        stop(sprintf("Virtual track %s does not exist", vtrackstr), call. = FALSE)
     }
 
     gwd <- get("GWD", envir = .misha)
@@ -28,7 +28,7 @@
 
     gwds <- names(gvtracks)
     if (!is.list(gvtracks) || (length(gvtracks) && !is.character(gwds)) || length(gvtracks) != length(gwds)) {
-        stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = F)
+        stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = FALSE)
     }
 
     gwd <- get("GWD", envir = .misha)
@@ -44,21 +44,21 @@
 
     vtracknames <- names(vtracks)
     if (!is.list(vtracks) || (length(vtracks) && !is.character(vtracknames)) || length(vtracks) != length(vtracknames)) {
-        stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = F)
+        stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = FALSE)
     }
 
     idx2 <- match(vtrackstr, vtracknames)
     if (is.na(idx2)) {
         if (!is.na(match(vtrackstr, get("GTRACKS", envir = .misha)))) {
-            stop(sprintf("Track %s already exists", vtrackstr), call. = F)
+            stop(sprintf("Track %s already exists", vtrackstr), call. = FALSE)
         }
 
         if (!is.na(match(vtrackstr, get("GINTERVS", envir = .misha)))) {
-            stop(sprintf("Interval %s already exists", vtrackstr), call. = F)
+            stop(sprintf("Interval %s already exists", vtrackstr), call. = FALSE)
         }
 
         if (.ggetOption(".gautocompletion", FALSE) && exists(vtrackstr, envir = .misha)) {
-            stop(sprintf("Variable \"%s\" shadows the name of identically named virtual track.\nPlease remove this variable from the environment or switch off autocompletion mode.", vtrackstr), call. = F)
+            stop(sprintf("Variable \"%s\" shadows the name of identically named virtual track.\nPlease remove this variable from the environment or switch off autocompletion mode.", vtrackstr), call. = FALSE)
         }
 
         vtracknames <- c(vtracknames, vtrackstr)
@@ -191,7 +191,7 @@
 #' @export gvtrack.create
 gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL) {
     if (is.null(substitute(vtrack)) || is.null(substitute(src))) {
-        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL)", call. = F)
+        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -199,15 +199,15 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
     srcstr <- do.call(.gexpr2str, list(substitute(src)), envir = parent.frame())
 
     if (!is.na(match(vtrackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Cannot create virtual track: regular track named %s already exists", vtrackstr), call. = F)
+        stop(sprintf("Cannot create virtual track: regular track named %s already exists", vtrackstr), call. = FALSE)
     }
 
     if (!is.na(match(vtrackstr, get("GINTERVS", envir = .misha)))) {
-        stop(sprintf("Cannot create virtual track: intervals named %s already exists", vtrackstr), call. = F)
+        stop(sprintf("Cannot create virtual track: intervals named %s already exists", vtrackstr), call. = FALSE)
     }
 
     if (vtrackstr != make.names(vtrackstr)) {
-        stop(sprintf("\"%s\" is not a syntactically valid name for a variable", vtrackstr), call. = F)
+        stop(sprintf("\"%s\" is not a syntactically valid name for a variable", vtrackstr), call. = FALSE)
     }
 
     var <- list()
@@ -245,7 +245,7 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 #' @export gvtrack.info
 gvtrack.info <- function(vtrack = NULL) {
     if (is.null(substitute(vtrack))) {
-        stop("Usage: gvtrack.info(vtrack)", call. = F)
+        stop("Usage: gvtrack.info(vtrack)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -297,7 +297,7 @@ gvtrack.info <- function(vtrack = NULL) {
 #' @export gvtrack.iterator
 gvtrack.iterator <- function(vtrack = NULL, dim = NULL, sshift = 0, eshift = 0) {
     if (is.null(substitute(vtrack))) {
-        stop("Usage: gvtrack.iterator(vtrack, dim = NULL, sshift = 0, eshift = 0)", call. = F)
+        stop("Usage: gvtrack.iterator(vtrack, dim = NULL, sshift = 0, eshift = 0)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -349,7 +349,7 @@ gvtrack.iterator <- function(vtrack = NULL, dim = NULL, sshift = 0, eshift = 0) 
 #' @export gvtrack.iterator.2d
 gvtrack.iterator.2d <- function(vtrack = NULL, sshift1 = 0, eshift1 = 0, sshift2 = 0, eshift2 = 0) {
     if (is.null(substitute(vtrack))) {
-        stop("Usage: gvtrack.iterator.2d(vtrack, sshift1 = 0, eshift1 = 0, sshift2 = 0, eshift2 = 0)", call. = F)
+        stop("Usage: gvtrack.iterator.2d(vtrack, sshift1 = 0, eshift1 = 0, sshift2 = 0, eshift2 = 0)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -401,7 +401,7 @@ gvtrack.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = 
     gvtracks <- get("GVTRACKS", envir = .misha)
     gwds <- names(gvtracks)
     if (!is.list(gvtracks) || (length(gvtracks) && !is.character(gwds)) || length(gvtracks) != length(gwds)) {
-        stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = F)
+        stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = FALSE)
     }
 
     gwd <- get("GWD", envir = .misha)
@@ -413,7 +413,7 @@ gvtrack.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = 
     vtracks <- gvtracks[[idx]]
     vtracknames <- names(vtracks)
     if (!is.list(vtracks) || (length(vtracks) && !is.character(vtracknames)) || length(vtracks) != length(vtracknames)) {
-        stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = F)
+        stop("Invalid format of GVTRACKS variable.\nTo continue working with virtual tracks please remove this variable from the environment.", call. = FALSE)
     }
 
     if (!length(vtracks)) {
@@ -451,7 +451,7 @@ gvtrack.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = 
 #' @export gvtrack.rm
 gvtrack.rm <- function(vtrack = NULL) {
     if (is.null(substitute(vtrack))) {
-        stop("Usage: gvtrack.rm(vtrack)", call. = F)
+        stop("Usage: gvtrack.rm(vtrack)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -517,7 +517,7 @@ gvtrack.rm <- function(vtrack = NULL) {
 #' @export gvtrack.array.slice
 gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", params = NULL) {
     if (is.null(substitute(vtrack))) {
-        stop("Usage: gvtrack.array.slice(vtrack, slice = NULL, func = \"avg\", params = NULL)", call. = F)
+        stop("Usage: gvtrack.array.slice(vtrack, slice = NULL, func = \"avg\", params = NULL)", call. = FALSE)
     }
     .gcheckroot()
 

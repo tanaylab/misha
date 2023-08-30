@@ -75,7 +75,7 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
     } else {
         idx <- which(!(tracks %in% get("GTRACKS", envir = .misha)))[1]
         if (!is.na(idx)) {
-            stop(sprintf("Track %s does not exist", tracks[idx]), call. = F)
+            stop(sprintf("Track %s does not exist", tracks[idx]), call. = FALSE)
         }
     }
 
@@ -124,7 +124,7 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
 #' @export gtrack.attr.import
 gtrack.attr.import <- function(table = NULL, remove.others = FALSE) {
     if (is.null(table)) {
-        stop("Usage: gtrack.attr.import(table, remove.others = FALSE)", call. = F)
+        stop("Usage: gtrack.attr.import(table, remove.others = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -132,22 +132,22 @@ gtrack.attr.import <- function(table = NULL, remove.others = FALSE) {
     attrs <- colnames(table)
 
     if (!is.data.frame(table) || any(dim(table) < 1) || !length(tracks) || !length(attrs) || any(is.na(tracks)) || any(is.na(attrs)) || any(attrs == "")) {
-        stop("Invalid format of attributes table", call. = F)
+        stop("Invalid format of attributes table", call. = FALSE)
     }
 
     idx <- which(!(tracks %in% get("GTRACKS", envir = .misha)))[1]
     if (!is.na(idx)) {
-        stop(sprintf("Track %s does not exist", tracks[idx]), call. = F)
+        stop(sprintf("Track %s does not exist", tracks[idx]), call. = FALSE)
     }
 
     idx <- which(duplicated(tracks))[1]
     if (!is.na(idx)) {
-        stop(sprintf("Track %s appears more than once", tracks[idx]), call. = F)
+        stop(sprintf("Track %s appears more than once", tracks[idx]), call. = FALSE)
     }
 
     idx <- which(duplicated(attrs))[1]
     if (!is.na(idx)) {
-        stop(sprintf("Attribute %s appears more than once", attrs[idx]), call. = F)
+        stop(sprintf("Attribute %s appears more than once", attrs[idx]), call. = FALSE)
     }
 
     .gtrack.attr.import(table, remove.others, FALSE)
@@ -178,7 +178,7 @@ gtrack.attr.import <- function(table = NULL, remove.others = FALSE) {
 #' @export gtrack.attr.get
 gtrack.attr.get <- function(track = NULL, attr = NULL) {
     if (is.null(substitute(track)) || is.null(attr)) {
-        stop("Usage: gtrack.attr.get(track, attr)", call. = F)
+        stop("Usage: gtrack.attr.get(track, attr)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -217,7 +217,7 @@ gtrack.attr.get <- function(track = NULL, attr = NULL) {
 #' @export gtrack.attr.set
 gtrack.attr.set <- function(track = NULL, attr = NULL, value = NULL) {
     if (is.null(substitute(track)) || is.null(attr) || is.null(value)) {
-        stop("Usage: gtrack.attr.set(track, attr, value)", call. = F)
+        stop("Usage: gtrack.attr.set(track, attr, value)", call. = FALSE)
     }
     .gcheckroot()
 
