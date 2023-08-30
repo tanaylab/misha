@@ -236,7 +236,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 				const Rectangles &subarenas = are_all_points ? points_serializer.get_subarenas() : rects_serializer.get_subarenas();
 
 				for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
-					snprintf(filename, sizeof(filename), "%s/.%ld", dirname.c_str(), i);
+					snprintf(filename, sizeof(filename), "%s/.%ld", dirname.c_str(), (long)i);
 					subtrees_files[i] = new BufferedFile();
 					if (subtrees_files[i]->open(filename, "w+")) 
 						verror("Opening an intermediate file %s: %s\n", filename, strerror(errno));

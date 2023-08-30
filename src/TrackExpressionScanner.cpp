@@ -49,9 +49,7 @@ static uint64_t get_cur_clock()
 }
 
 TrackExprScanner::TrackExprScanner(rdb::IntervUtils &iu) :
-	m_iu(iu),
-	m_num_track_vars(0),
-	m_num_interv_vars(0),
+	m_iu(iu),	
 	m_isend(true),
 	m_expr_itr(NULL),
 	m_expr_vars(iu)

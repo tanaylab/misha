@@ -47,6 +47,7 @@ public:
 	virtual int num_chroms() const;
 
 	virtual int64_t range() const { return m_range; }    // complexity: O(1)
+	virtual int64_t range(int chromid) const = 0;   // complexity: O(n)
 
 protected:
 	vector<int64_t>            m_chrom2size;

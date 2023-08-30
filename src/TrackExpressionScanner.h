@@ -63,9 +63,7 @@ public:
 private:
 	rdb::IntervUtils &m_iu;
 
-	vector<string>   m_track_exprs;
-	unsigned         m_num_track_vars;
-	unsigned         m_num_interv_vars;
+	vector<string>   m_track_exprs;	
 
 	vector<SEXP>     m_eval_exprs;
 	vector<SEXP>     m_eval_bufs;
