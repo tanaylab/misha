@@ -35,7 +35,7 @@ This function calculates the quantiles for the given percentiles.
 
 If data size exceeds the limit (see: 'getOption(gmax.data.size)'), the data
 is randomly sampled to fit the limit. A warning message is generated. The
-seed of the pseudo-random generator can be controled through 'grnd.seed'
+seed of the pseudo-random generator can be controlled through 'grnd.seed'
 option.
 
 Note: this function is capable to run in multitasking mode. Sampling may

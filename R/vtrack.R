@@ -230,7 +230,7 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 #'
 #' Returns the definition of a virtual track.
 #'
-#' This function returns the internal represenation of a virtual track.
+#' This function returns the internal representation of a virtual track.
 #'
 #' @param vtrack virtual track name
 #' @return Internal representation of a virtual track.

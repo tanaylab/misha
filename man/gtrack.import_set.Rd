@@ -35,7 +35,7 @@ files on disk or FTP.
 }
 \details{
 This function is similar to 'gtrack.import' however unlike the latter it can
-create multiple tracks. Additionaly the files can be fetched from an FTP
+create multiple tracks. Additionally the files can be fetched from an FTP
 server.
 
 The files are expected to be in WIG / BigWig / BedGraph / tab-delimited

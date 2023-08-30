@@ -36,7 +36,7 @@
 // 5. Unlike StatQuadTree that must be entirely stored in the memory, StatQuadTreeCached may load some parts of the quad tree
 //    on demand in order to answer "get_stat" or "do_intersect" queries. Each part that StatQuadTreeCached loads is called a "chunk".
 //    Chunks are stored in the memory and can be loaded or unloaded in accordance to their recent usage.
-//    Chunk size and the maximal number of chunks StatQuadTreeCached stores at any given moment in the memory is controled by init() function.
+//    Chunk size and the maximal number of chunks StatQuadTreeCached stores at any given moment in the memory is controlled by init() function.
 // 6. Even on small trees StatQuadTreeCached may be more efficient than StatQuadTree since it stores objects in the memory in a more compact and
 //    efficient way in the memo. This efficiency has a price: as mentioned earlier new objects cannot be inserted to StatQuadTreeCached.
 // 7. StatQuadTreeCached replaces StatQuadTree::get_objs() function by an Iterator mechanism. The need to store in the memory all the objects

@@ -27,11 +27,11 @@ implicitly based on track expressions.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
 
-\item{file}{file name where the function result is optionally outputed in
+\item{file}{file name where the function result is optionally outputted in
 tab-delimited format}
 
 \item{intervals.set.out}{intervals set name where the function result is
-optionally outputed}
+optionally outputted}
 }
 \value{
 If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
@@ -55,7 +55,7 @@ An additional column 'intervalID' is added to the return value. Use this
 column to refer to the index of the original interval from the supplied
 'intervals'.
 
-If 'file' parameter is not 'NULL' the result is outputed to a tab-delimited
+If 'file' parameter is not 'NULL' the result is outputted to a tab-delimited
 text file (without 'intervalID' column) rather than returned to the user.
 This can be especially useful when the result is too big to fit into the
 physical memory.  The resulted file can be used as an input for

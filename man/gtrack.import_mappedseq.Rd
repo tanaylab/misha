@@ -25,7 +25,7 @@ gtrack.import_mappedseq(
 
 \item{binsize}{bin size of a dense track}
 
-\item{cols.order}{order of sequece, chromosome, coordinate and strand
+\item{cols.order}{order of sequence, chromosome, coordinate and strand
 columns in mapped sequences file or NULL if SAM file is used}
 
 \item{remove.dups}{if 'TRUE' the duplicated coordinates are counted only

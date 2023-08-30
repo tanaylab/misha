@@ -30,7 +30,7 @@ two tailed}
 iterator is determined implicitly based on track expression.}
 
 \item{intervals.set.out}{intervals set name where the function result is
-optionally outputed}
+optionally outputted}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a set of intervals where each

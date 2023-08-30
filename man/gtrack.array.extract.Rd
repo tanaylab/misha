@@ -23,7 +23,7 @@ gtrack.array.extract(
 result is returned to the user.}
 
 \item{intervals.set.out}{intervals set name where the function result is
-optionally outputed}
+optionally outputted}
 }
 \value{
 If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with

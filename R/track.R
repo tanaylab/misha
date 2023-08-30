@@ -271,7 +271,7 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
 #' Creates a new track from PSSM energy function.
 #'
 #' This function creates a new track with values of a PSSM energy function.
-#' PSSM parameters (nucleotide probability per position and ploarization) are
+#' PSSM parameters (nucleotide probability per position and pluralization) are
 #' determined by 'pssmset' key and data files ('pssmset.key' and
 #' 'pssmset.data'). These two files must be located in 'GROOT/pssms' directory.
 #' The type of the created track is determined by the type of the iterator.
@@ -613,7 +613,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' @param file name of mapped sequences file
 #' @param pileup interval expansion
 #' @param binsize bin size of a dense track
-#' @param cols.order order of sequece, chromosome, coordinate and strand
+#' @param cols.order order of sequence, chromosome, coordinate and strand
 #' columns in mapped sequences file or NULL if SAM file is used
 #' @param remove.dups if 'TRUE' the duplicated coordinates are counted only
 #' once.
@@ -671,7 +671,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
 #' files on disk or FTP.
 #'
 #' This function is similar to 'gtrack.import' however unlike the latter it can
-#' create multiple tracks. Additionaly the files can be fetched from an FTP
+#' create multiple tracks. Additionally the files can be fetched from an FTP
 #' server.
 #'
 #' The files are expected to be in WIG / BigWig / BedGraph / tab-delimited
@@ -1194,7 +1194,7 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
 #' 'force' to 'TRUE' to suppress the user prompt.
 #'
 #' @param track track name
-#' @param force if 'TRUE', supresses user confirmation of a named track removal
+#' @param force if 'TRUE', suppresses user confirmation of a named track removal
 #' @return None.
 #' @seealso \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}},
 #' \code{\link{gtrack.create}}, \code{\link{gtrack.2d.create}},

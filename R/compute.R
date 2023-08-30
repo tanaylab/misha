@@ -184,7 +184,7 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
 #' column to refer to the index of the original interval from the supplied
 #' 'intervals'.
 #'
-#' If 'file' parameter is not 'NULL' the result is outputed to a tab-delimited
+#' If 'file' parameter is not 'NULL' the result is outputted to a tab-delimited
 #' text file (without 'intervalID' column) rather than returned to the user.
 #' This can be especially useful when the result is too big to fit into the
 #' physical memory.  The resulted file can be used as an input for
@@ -205,10 +205,10 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
 #' @param iterator track expression iterator. If 'NULL' iterator is determined
 #' implicitly based on track expressions.
 #' @param band track expression band. If 'NULL' no band is used.
-#' @param file file name where the function result is optionally outputed in
+#' @param file file name where the function result is optionally outputted in
 #' tab-delimited format
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
 #' an additional column for each of the track expressions and 'columnID'
 #' column.
@@ -329,7 +329,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 #' implicitly based on track expression.
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a set of intervals with an
 #' additional column that indicates the corresponding bin index.
 #' @seealso \code{\link{gscreen}}, \code{\link{gextract}},
@@ -394,7 +394,7 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
 #'
 #' If data size exceeds the limit (see: 'getOption(gmax.data.size)'), the data
 #' is randomly sampled to fit the limit. A warning message is generated. The
-#' seed of the pseudo-random generator can be controled through 'grnd.seed'
+#' seed of the pseudo-random generator can be controlled through 'grnd.seed'
 #' option.
 #'
 #' Note: this function is capable to run in multitasking mode. Sampling may
@@ -489,7 +489,7 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
 #' implicitly based on track expressions.
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a set of intervals with additional
 #' 'value' and 'columnID' columns.
 #' @seealso \code{\link{gtrack.lookup}}, \code{\link{gextract}},
@@ -574,8 +574,8 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
 #'
 #' This function returns a sample of the specified size from the values of
 #' track expression. If 'n' is less than the total number of values, the data
-#' is randomally sampled. The seed of the pseudo-random generator can be
-#' controled through 'grnd.seed' option.
+#' is randomly sampled. The seed of the pseudo-random generator can be
+#' controlled through 'grnd.seed' option.
 #'
 #' If 'n' is higher than the total number of values, all values are returned
 #' (yet reshuffled).
@@ -630,7 +630,7 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
 #' implicitly based on track expression.
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a set of intervals that match track
 #' expression.
 #' @seealso \code{\link{gsegment}}, \code{\link{gextract}}
@@ -718,7 +718,7 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
 #' @param iterator track expression iterator of "fixed bin" type. If 'NULL'
 #' iterator is determined implicitly based on track expression.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a set of intervals where each
 #' interval represents a segment.
 #' @seealso \code{\link{gscreen}}, \code{\link{gwilcox}}
@@ -857,7 +857,7 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 #' @param iterator track expression iterator of "fixed bin" type. If 'NULL'
 #' iterator is determined implicitly based on track expression.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing the
 #' intervals with an additional 'pval' column where P-value is below 'maxpval'.
 #' @seealso \code{\link{gscreen}}, \code{\link{gsegment}}
@@ -930,7 +930,7 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
 #' This function is a binned version of 'gquantiles'. For each iterator
 #' interval the value of 'bin_expr' is calculated and assigned to the
 #' corresponding bin determined by 'breaks'. The quantiles of 'expr' are
-#' calculated then separatedly for each bin.
+#' calculated then separately for each bin.
 #'
 #' The bins can be multi-dimensional depending on the number of
 #' 'bin_expr'-'breaks' pairs.
@@ -1003,7 +1003,7 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
 #' This function is a binned version of 'gsummary'. For each iterator interval
 #' the value of 'bin_expr' is calculated and assigned to the corresponding bin
 #' determined by 'breaks'. The summary statistics of 'expr' are calculated then
-#' separatedly for each bin.
+#' separately for each bin.
 #'
 #' The bins can be multi-dimensional depending on the number of
 #' 'bin_expr'-'breaks' pairs.

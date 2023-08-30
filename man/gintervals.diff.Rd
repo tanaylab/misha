@@ -10,7 +10,7 @@ gintervals.diff(intervals1 = NULL, intervals2 = NULL, intervals.set.out = NULL)
 \item{intervals1, intervals2}{set of one-dimensional intervals}
 
 \item{intervals.set.out}{intervals set name where the function result is
-optionally outputed}
+optionally outputted}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a data frame representing the

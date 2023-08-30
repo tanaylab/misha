@@ -16,7 +16,7 @@ Internal representation of a virtual track.
 Returns the definition of a virtual track.
 }
 \details{
-This function returns the internal represenation of a virtual track.
+This function returns the internal representation of a virtual track.
 }
 \examples{
 

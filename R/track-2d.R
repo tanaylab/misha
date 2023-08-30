@@ -118,7 +118,7 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
 #' Creates a 2D track from tab-delimited file(s).
 #'
 #' This function creates a 2D track track from one or more tab-delimited files.
-#' Each file must start with a header desribing the columns. The first 6
+#' Each file must start with a header describing the columns. The first 6
 #' columns must have the following names: 'chrom1', 'start1', 'end1', 'chrom2',
 #' 'start2', 'end2'. The last column is designated for the value and it may
 #' have an arbitrary name. The header is followed by a list of intervals and a

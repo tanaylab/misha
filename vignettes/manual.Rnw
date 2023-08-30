@@ -120,7 +120,7 @@ Each \emph{PSSM Set} consists of two files: \emph{PSSM key} and \emph{PSSM data}
   \hline
   ID & Integer & Unique ID (referenced in PSSM Data file) \\
   Sequence & String & PSSM sequence \\
-  Biderectional & '0' or '1' & If Bidirectional is '1' energy is calculated on complementary strand as well \\
+  Bidirectional & '0' or '1' & If Bidirectional is '1' energy is calculated on complementary strand as well \\
   \hline
 \end{tabular}
 \subparagraph*{}
@@ -394,13 +394,13 @@ For a full list of supported functions please see \texttt{gvtrack.create} and \t
 
 \subsubsection{Administrating Virtual Tracks}
 
-As desribed in the previous chapter virtual tracks define a set of rules of how to access and proceed the values of the "source" object. The connection between the virtual track and the source object is done via "soft link", i.e. by name and not by reference. For example, a virtual track will continue to exist until explicitly removed by \texttt{gvtrack.rm} even if the physical track that it is pointing to is deleted or renamed. 
+As described in the previous chapter virtual tracks define a set of rules of how to access and proceed the values of the "source" object. The connection between the virtual track and the source object is done via "soft link", i.e. by name and not by reference. For example, a virtual track will continue to exist until explicitly removed by \texttt{gvtrack.rm} even if the physical track that it is pointing to is deleted or renamed. 
 
 Operations such as \texttt{gdb.init} and \texttt{gdir.cd} alter the list of available tracks and intervals sets. Since these objects are referenced by virtual tracks, these latter are always defined in the context of the current working directory in Genomic Database (not to be confused with shell's current working directory). Changing the current working directory using \texttt{gdb.init} or \texttt{gdir.cd} will also change the list of available virtual tracks.
 
-Another issue to bare in mind is that unlike regular tracks whose data is stored on disk virtual tracks are non-persistent objects in current R environment. Their definition is stored in \texttt{GVTRACKS} R variable. In particular a virtual track named "vtrack" that was created within a context of "/home/user/trackdb" Genomic Database working directory would reside in \texttt{GVTRACKS[["/home/user/trackdb"]][["vtrack"]]}. One can also use \texttt{gvtrack.info} function that provides a more convenient access to virtual track definitons.
+Another issue to bare in mind is that unlike regular tracks whose data is stored on disk virtual tracks are non-persistent objects in current R environment. Their definition is stored in \texttt{GVTRACKS} R variable. In particular a virtual track named "vtrack" that was created within a context of "/home/user/trackdb" Genomic Database working directory would reside in \texttt{GVTRACKS[["/home/user/trackdb"]][["vtrack"]]}. One can also use \texttt{gvtrack.info} function that provides a more convenient access to virtual track definitions.
 
-As the virtual tracks are stored in an R variable their behavior hence complies with the rules of other R variables: a virtual track defined by one user will not be seen by another one, virtual tracks might dissapear once R is relaunched, etc.
+As the virtual tracks are stored in an R variable their behavior hence complies with the rules of other R variables: a virtual track defined by one user will not be seen by another one, virtual tracks might disappear once R is relaunched, etc.
 
 To preserve the definition of virtual tracks between the sessions one would need to save \texttt{GVTRACKS} variable on disk. The serialization of \texttt{GVTRACKS} is under user's responsibility. The standard suit of functions for saving / loading R variables can be used for that purpose.
 
@@ -418,7 +418,7 @@ options(gbuf.size = 1)
 
 One might wonder why should we care about the fact that \texttt{mytrack} is not a scalar but rather a vector? Indeed in many cases it does not really matter. For example \texttt{mytrack * 3} expression produces exactly the same results regardless whether \texttt{mytrack} is defined internally as a vector or as a scalar. This is due to the fact that the expression \texttt{V * 3} (\texttt{V} stands for a vector) results in each value of \texttt{V} being multiplied by 3.
 
-Multiplication is a good example of "parallel" operation in R (works on each element in vector separatedly). On contrary some functions that accept a vector might return a scalar rather than a vector. Such is, for example, \texttt{min} function.
+Multiplication is a good example of "parallel" operation in R (works on each element in vector separately). On contrary some functions that accept a vector might return a scalar rather than a vector. Such is, for example, \texttt{min} function.
 
 Let's look at the following track expression: \texttt{track1 + min(track1, track2)}. This expression was probably meant to produce a sum of \texttt{track1} track and a minimum value between \texttt{track1} and \texttt{track2} tracks for each iterator interval. However the library defines the variables \texttt{track1} and \texttt{track2} to be vectors of \texttt{gbuf.size} size (by default: 1000). \texttt{min} is not a "parallel" operation. Given two vectors of any size it returns a single scalar that is the minimal value of \underline{all} values in both of the vectors. Therefore \texttt{track1 + min(track1, track2)} will be interpreted as \texttt{track1 + M}, where M is minimum of 2000 values (1000 values from \texttt{track1} track, and another 1000 - from \texttt{track2} track). We can hardly imagine that a user would have really meant this! Sadly enough the expression will be seamlessly evaluated and produce a valid, but meaningless result. The solution for our example is to use \texttt{pmin} rather than \texttt{min} function.
 
