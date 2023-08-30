@@ -151,9 +151,10 @@ void GIntervalsMeta1D::save_plain_intervals_meta(const char *path, const vector<
 
 void GIntervalsMeta1D::save_meta(const char *path, SEXP zeroline, const vector<ChromStat> &chromstats, const IntervUtils &iu)
 {
-	uint64_t num_intervals = 0;
-	for (vector<ChromStat>::const_iterator istat = chromstats.begin(); istat < chromstats.end(); ++istat)
-		num_intervals += istat->size;
+	// uint64_t num_intervals = 0;
+	// for (vector<ChromStat>::const_iterator istat = chromstats.begin(); istat < chromstats.end(); ++istat){
+	// 	num_intervals += istat->size;
+	// }
 
 	SEXP rstat;
 	SEXP colnames;

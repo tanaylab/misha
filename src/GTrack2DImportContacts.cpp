@@ -444,7 +444,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 				const Rectangles &subarenas = qtree_serializer1.get_subarenas();
 
 				for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
-					snprintf(filename, sizeof(filename), "%s/.%ld", dirname.c_str(), i);
+					snprintf(filename, sizeof(filename), "%s/.%ld", dirname.c_str(), (long)i);
 					subtrees_files[i] = new BufferedFile();
 					if (subtrees_files[i]->open(filename, "w+")) 
 						verror("Opening an intermediate file %s: %s\n", filename, strerror(errno));

@@ -336,16 +336,19 @@ int64_t StatQuadTreeCachedSerializer<T, Size>::serialize_top_tree(int i1, int j1
 
 	if (i2 - i1 <= 2) {  // lowest node in the top tree (== below are only serialized already subtrees)
 		for (int iquad = 0; iquad < StatQuadTreeCached<T, Size>::NUM_QUADS; iquad++) {
-			int idx;
+			int idx = 0;
 
-			if (iquad == StatQuadTreeCached<T, Size>::SW)
+			if (iquad == StatQuadTreeCached<T, Size>::SW) {
 				idx = idx2dto1d(i1, j1);
-			else if (iquad == StatQuadTreeCached<T, Size>::SE)
+			} else if (iquad == StatQuadTreeCached<T, Size>::SE) {
 				idx = idx2dto1d(i1 + 1, j1);
-			else if (iquad == StatQuadTreeCached<T, Size>::NW)
+			} else if (iquad == StatQuadTreeCached<T, Size>::NW) {
 				idx = idx2dto1d(i1, j1 + 1);
-			else if (iquad == StatQuadTreeCached<T, Size>::NE)
+			} else if (iquad == StatQuadTreeCached<T, Size>::NE){
 				idx = idx2dto1d(i1 + 1, j1 + 1);
+			} else {
+				TGLError< StatQuadTreeCachedSerializer<T, Size> >("Invalid quad index %d", iquad);
+			}
 
 			node.kid_ptr[iquad] = -m_subtree_fpos[idx]; // lowest node in the top tree points to the absolute position of chunk in a file (marked by negative number)
 			node.stat.weighted_sum += m_stat[idx].weighted_sum;
