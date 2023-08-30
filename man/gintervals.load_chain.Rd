@@ -20,7 +20,7 @@ This function reads a file in 'chain' format and returns assembly conversion
 table that can be used in 'gtrack.liftover' and 'gintervals.liftover'.
 
 Note: chain file might map a few different source intervals into a single
-target one. These ambigous mappings are not presented in the data frame
+target one. These ambiguous mappings are not presented in the data frame
 returned by 'gintervals.load_chain'.
 }
 \examples{

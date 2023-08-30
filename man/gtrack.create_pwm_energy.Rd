@@ -35,7 +35,7 @@ Creates a new track from PSSM energy function.
 }
 \details{
 This function creates a new track with values of a PSSM energy function.
-PSSM parameters (nucleotide probability per position and ploarization) are
+PSSM parameters (nucleotide probability per position and pluralization) are
 determined by 'pssmset' key and data files ('pssmset.key' and
 'pssmset.data'). These two files must be located in 'GROOT/pssms' directory.
 The type of the created track is determined by the type of the iterator.

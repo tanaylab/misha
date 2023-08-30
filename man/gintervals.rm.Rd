@@ -9,7 +9,7 @@ gintervals.rm(intervals.set = NULL, force = FALSE)
 \arguments{
 \item{intervals.set}{name of an intervals set}
 
-\item{force}{if 'TRUE', supresses user confirmation of a named intervals set
+\item{force}{if 'TRUE', suppresses user confirmation of a named intervals set
 removal}
 }
 \value{

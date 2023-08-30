@@ -176,7 +176,7 @@
 #' @param file file name where the function result is to be saved. If 'NULL'
 #' result is returned to the user.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
 #' additional columns for 'Array' track column values and 'columnID'.
 #' @seealso \code{\link{gextract}}, \code{\link{gtrack.array.get_colnames}},
@@ -275,7 +275,7 @@ gtrack.array.get_colnames <- function(track = NULL) {
 #'
 #' This function creates a new 'Array' track from one or more "sources". Each
 #' source can be either another 'Array' track or a tab-delimited file that
-#' contains one-dimentional intervals and column values that should be added to
+#' contains one-dimensional intervals and column values that should be added to
 #' the newly created track. One can learn about the exact format of the file by
 #' running 'gtrack.array.extract' or 'gextract' functions with a 'file'
 #' parameter and inspecting the output file.

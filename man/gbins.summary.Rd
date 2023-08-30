@@ -39,7 +39,7 @@ Calculates summary statistics of a track expression for bins.
 This function is a binned version of 'gsummary'. For each iterator interval
 the value of 'bin_expr' is calculated and assigned to the corresponding bin
 determined by 'breaks'. The summary statistics of 'expr' are calculated then
-separatedly for each bin.
+separately for each bin.
 
 The bins can be multi-dimensional depending on the number of
 'bin_expr'-'breaks' pairs.

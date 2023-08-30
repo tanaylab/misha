@@ -42,7 +42,7 @@ Calculates quantiles of a track expression for bins.
 This function is a binned version of 'gquantiles'. For each iterator
 interval the value of 'bin_expr' is calculated and assigned to the
 corresponding bin determined by 'breaks'. The quantiles of 'expr' are
-calculated then separatedly for each bin.
+calculated then separately for each bin.
 
 The bins can be multi-dimensional depending on the number of
 'bin_expr'-'breaks' pairs.

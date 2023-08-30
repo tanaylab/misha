@@ -804,9 +804,9 @@ gintervals.all <- function() {
 
 
 
-#' Intersects two-dimenstional intervals with a band
+#' Intersects two-dimensional intervals with a band
 #'
-#' Intersects two-dimenstional intervals with a band.
+#' Intersects two-dimensional intervals with a band.
 #'
 #' This function intersects each two-dimensional interval from 'intervals' with
 #' 'band'. If the intersection is not empty, the interval is shrunk to the
@@ -819,7 +819,7 @@ gintervals.all <- function() {
 #' @param intervals two-dimensional intervals
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing the
 #' intervals.
 #' @seealso \code{\link{gintervals.2d}}, \code{\link{gintervals.intersect}}
@@ -973,7 +973,7 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
 #'
 #' @param intervals1,intervals2 set of one-dimensional intervals
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing the
 #' intervals.
 #' @seealso \code{\link{gintervals}}, \code{\link{gintervals.intersect}},
@@ -1083,7 +1083,7 @@ gintervals.exists <- function(intervals.set = NULL) {
 #'
 #' @param intervals intervals
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing the
 #' intervals.
 #' @seealso \code{\link{gintervals}}, \code{\link{gintervals.2d}},
@@ -1251,7 +1251,7 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
 #'
 #' @param intervals1,intervals2 set of intervals
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing the
 #' intersection of intervals.
 #' @seealso \code{\link{gintervals.2d.band_intersect}},
@@ -1492,7 +1492,7 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' table that can be used in 'gtrack.liftover' and 'gintervals.liftover'.
 #'
 #' Note: chain file might map a few different source intervals into a single
-#' target one. These ambigous mappings are not presented in the data frame
+#' target one. These ambiguous mappings are not presented in the data frame
 #' returned by 'gintervals.load_chain'.
 #'
 #' @param file name of chain file
@@ -1586,7 +1586,7 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #' implicitly based on track expressions.
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing intervals
 #' with an additional column that contains the return values of 'FUN'.
 #' @seealso \code{\link{mapply}}
@@ -1703,7 +1703,7 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
 #' @param na.if.notfound if 'TRUE' return 'NA' interval if no matching
 #' neighbors were found, otherwise omit the interval in the answer
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame containing the pairs
 #' of intervals from 'intervals1', intervals from 'intervals2' and an
 #' additional column named 'dist' ('dist1' and 'dist2' for 2D intervals)
@@ -1819,7 +1819,7 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
 #' implicitly based on track expressions.
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a set of intervals with additional
 #' columns representing quantiles for each percentile.
 #' @seealso \code{\link{gquantiles}}, \code{\link{gbins.quantiles}}
@@ -1898,7 +1898,7 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
 #' @param ... intervals sets to combine
 #' @param intervals intervals set
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame combining intervals
 #' sets.
 #' @seealso \code{\link{gintervals}}, \code{\link{gintervals.2d}},
@@ -1992,7 +1992,7 @@ gintervals.rbind <- function(..., intervals.set.out = NULL) {
 #' deletion. Set 'force' to 'TRUE' to suppress the user prompt.
 #'
 #' @param intervals.set name of an intervals set
-#' @param force if 'TRUE', supresses user confirmation of a named intervals set
+#' @param force if 'TRUE', suppresses user confirmation of a named intervals set
 #' removal
 #' @return None.
 #' @seealso \code{\link{gintervals.save}}, \code{\link{gintervals.exists}},
@@ -2302,7 +2302,7 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
 #' implicitly based on track expression.
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a set of intervals with additional
 #' columns representing summary statistics for each percentile and interval.
 #' @seealso \code{\link{gsummary}}, \code{\link{gbins.summary}}
@@ -2372,7 +2372,7 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
 #'
 #' @param intervals1,intervals2 set of one-dimensional intervals
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing the union
 #' of intervals.
 #' @seealso \code{\link{gintervals.intersect}}, \code{\link{gintervals.diff}},
@@ -2571,7 +2571,7 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
 #' implicitly based on track expression.
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
-#' optionally outputed
+#' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing iterator
 #' intervals.
 #' @seealso \code{\link{giterator.cartesian_grid}}

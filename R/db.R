@@ -254,7 +254,7 @@ gdir.cwd <- function() {
 #'
 #' @param dir directory path
 #' @param recursive if 'TRUE', the directory is deleted recursively
-#' @param force if 'TRUE', supresses user confirmation of tracks/intervals
+#' @param force if 'TRUE', suppresses user confirmation of tracks/intervals
 #' removal
 #' @return None.
 #' @seealso \code{\link{gdb.init}}, \code{\link{gdir.create}},

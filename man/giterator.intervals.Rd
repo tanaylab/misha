@@ -23,7 +23,7 @@ implicitly based on track expression.}
 \item{band}{track expression band. If 'NULL' no band is used.}
 
 \item{intervals.set.out}{intervals set name where the function result is
-optionally outputed}
+optionally outputted}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a data frame representing iterator

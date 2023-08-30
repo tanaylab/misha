@@ -2,7 +2,7 @@
 % Please edit documentation in R/intervals.R
 \name{gintervals.2d.band_intersect}
 \alias{gintervals.2d.band_intersect}
-\title{Intersects two-dimenstional intervals with a band}
+\title{Intersects two-dimensional intervals with a band}
 \usage{
 gintervals.2d.band_intersect(
   intervals = NULL,
@@ -16,14 +16,14 @@ gintervals.2d.band_intersect(
 \item{band}{track expression band. If 'NULL' no band is used.}
 
 \item{intervals.set.out}{intervals set name where the function result is
-optionally outputed}
+optionally outputted}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a data frame representing the
 intervals.
 }
 \description{
-Intersects two-dimenstional intervals with a band.
+Intersects two-dimensional intervals with a band.
 }
 \details{
 This function intersects each two-dimensional interval from 'intervals' with

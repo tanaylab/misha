@@ -22,7 +22,7 @@ Creates an array track from array tracks or files.
 \details{
 This function creates a new 'Array' track from one or more "sources". Each
 source can be either another 'Array' track or a tab-delimited file that
-contains one-dimentional intervals and column values that should be added to
+contains one-dimensional intervals and column values that should be added to
 the newly created track. One can learn about the exact format of the file by
 running 'gtrack.array.extract' or 'gextract' functions with a 'file'
 parameter and inspecting the output file.

@@ -25,7 +25,7 @@ contain the track names.
 The list of required tracks is specified by 'tracks' argument. If 'tracks'
 is 'NULL' the attribute values of all existing tracks are returned.
 
-Likewise the list of required attributes is controled by 'attrs' argument.
+Likewise the list of required attributes is controlled by 'attrs' argument.
 If 'attrs' is 'NULL' all attribute values of the specified tracks are
 returned. The columns are also sorted then by "popularity" of an attribute,
 i.e. the number of tracks containing this attribute. This sorting is not

@@ -11,7 +11,7 @@ gdir.rm(dir = NULL, recursive = FALSE, force = FALSE)
 
 \item{recursive}{if 'TRUE', the directory is deleted recursively}
 
-\item{force}{if 'TRUE', supresses user confirmation of tracks/intervals
+\item{force}{if 'TRUE', suppresses user confirmation of tracks/intervals
 removal}
 }
 \value{

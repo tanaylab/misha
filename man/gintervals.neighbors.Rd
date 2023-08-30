@@ -31,7 +31,7 @@ gintervals.neighbors(
 neighbors were found, otherwise omit the interval in the answer}
 
 \item{intervals.set.out}{intervals set name where the function result is
-optionally outputed}
+optionally outputted}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a data frame containing the pairs

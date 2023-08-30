@@ -66,7 +66,7 @@
 
 # misha 3.7.0
 
-*  Ubuntu support (multitasking mode still not thorougly tested)
+*  Ubuntu support (multitasking mode still not thoroughly tested)
 *  Bug fix: no progress report in multitasking mode
 *  Bug fix in gdb.create: temporary directory is created under the current GROOT instead of the new one
 
@@ -437,8 +437,8 @@
 *  gextract: allow saving result in a tab-delimited file
 *  gintervals.force_range: eliminate intervals with non-existent chromosome
 *  gquantile / gintervals.quantile, quantile / global.percentile / global.percentile.min / global.percentile.max functions of a virtual track: use weighted average of nearest samples instead of picking up the closest sample
-*  Bug fix: sometimes using invalid value of quantile.edge.data.size option. Result: suboptimal precision at the edges for quantile calculation OR memory bloating for quantile calculations on large sets of data.
-*  Bug fix: sometimes using invalid value for gtrack.chunk.size option. Result: suboptimal performance for newly created 2D tracks + memory bloating while reading 2D tracks.
+*  Bug fix: sometimes using invalid value of quantile.edge.data.size option. Result: sub-optimal precision at the edges for quantile calculation OR memory bloating for quantile calculations on large sets of data.
+*  Bug fix: sometimes using invalid value for gtrack.chunk.size option. Result: sub-optimal performance for newly created 2D tracks + memory bloating while reading 2D tracks.
 *  Bug fix: sometimes using invalid value for gtrack.num.chunks option. Result: slow performance while reading 2D tracks OR memory bloating.
 *  Bug fix: gsetroot / gdb.reload / gdir.cd corrupts the database state if one of the names shadows a variable in R environment.
 
@@ -515,7 +515,7 @@
 *  New functions: gbins.quantiles and gbins.summary
 *  giterator.cartesian.grid: do not implicitly add zero expansion
 *  Add R parameter in gcluster.run
-*  Add support of bedGraph extention in gtrack.import.wigs
+*  Add support of bedGraph extension in gtrack.import.wigs
 *  Bug fix: overlapping 2D intervals are not reported correctly
 
 # misha 2.53
@@ -752,7 +752,7 @@
 
 # misha 1.19
 
-*  Require all track directories to have an extention .track
+*  Require all track directories to have an extension .track
 *  Forbid creation of tracks, intervals or directories inside track directories
 *  Forbid deletion of directories inside track directories
 *  Bug fix: gtrack.cache() sometimes creates tracks shorter by one sample than the chrom size
@@ -787,7 +787,7 @@
 
 # misha 1.13
 
-*  Rename intervals files by adding them ".interv" extention
+*  Rename intervals files by adding them ".interv" extension
 
 # misha 1.12
 
@@ -833,9 +833,9 @@
 *  Misha: eliminate use of the slow gsetroot() for track list refresh after track creation or removal The fix applies to grmtrack, gcreatetrack, gcachemultires, gsmooth.
 *  Rami: On failure to create a track - remove it. The fix applies for gcreatetrack, gcachemultires, gsmooth.
 *  Misha: allow a dot in the name of the track variable.
-*  should store the command that created a track in a track varible (For future reference), we should also save the date (in the future we may want to do something with dependencies). Each newly created track is assigned two track variables: created.by and created.date.
+*  should store the command that created a track in a track variable (For future reference), we should also save the date (in the future we may want to do something with dependencies). Each newly created track is assigned two track variables: created.by and created.date.
 *  Rami: Easier dump to text of info (current need to use sep="\t" rownames = F, etc) Added gwrite.table() function.
-*  Summary statistics on tracks (a simplification of the distribution feature). We want to compute the total, average, stdev, min and max of a track, number of bins, number of NAN bins. All that without going throuhg the distribution computation (maybe using R function that seat over the gdist function) New function added: gsummary.
+*  Summary statistics on tracks (a simplification of the distribution feature). We want to compute the total, average, stdev, min and max of a track, number of bins, number of NAN bins. All that without going through the distribution computation (maybe using R function that seat over the gdist function) New function added: gsummary.
 *  Change coordinate->bin function (should be int(coordinate/bin_size)
 *  Iterator protect/unprotect (eval_next_int, eval_next_bool etc)
 *  Misha: gsetroot() should undefine previous track variables
@@ -851,7 +851,7 @@
 *  Return intervals as a dataframe from C code rather than a list that should be later converted to a dataframe. Misha: affects gscreen, gwilcox, gintervals.union, gsetroot. Improves run time for large sets of intervals.
 *  Misha: intervals returned by gwilcox should cover the whole area covered by the small window rather than just the center of the window.
 *  Why is the usage of: PeakIntervals_TE_AR_AR <- gwilcox (TE.TE_AR_DHT__AR, 100000, 1000, maxpval = 0.001) - giving me intervals with peak values of 0? Misha: added _what2find_ option to gwilcox. This option controls whether peaks/lows or both should be searched by gwilcox.
-*  Implemenet operations on intervals. Union: generate a new interval set, which include an interval for each closure of the two given set. Intersection: returns an interval set with all the non empty intersections of intervals in the two sets. Difference: returns the intervals of set A such that intersection with interval from B are removed. Misha: added gintervals.union(), gintervals.intersect(), gintervals.diff() function
+*  Implement operations on intervals. Union: generate a new interval set, which include an interval for each closure of the two given set. Intersection: returns an interval set with all the non empty intersections of intervals in the two sets. Difference: returns the intervals of set A such that intersection with interval from B are removed. Misha: added gintervals.union(), gintervals.intersect(), gintervals.diff() function
 *  Call R eval in bulks to boost run times. Misha: added ".bufsize=1" parameter to all functions that accept track expressions. Increase "bufsize" to boost the performance.
 *  Misha: allow command interruption by "ctrl-C" in various function such as gwilcox. (Check R event loop?)
 *  Misha: if "ctrl-C" is pressed whilst gcreate/gsmooth/gcachemult track directory is not removed.
@@ -878,13 +878,13 @@
 *  Bug: if ~ symbol is used in gsetroot, track files cannot be accessed
 *  Allow custom column names for gapply and gextract
 *  Regression tests
-*  make it easier to import intervals/annotations: add ginterval.import that will take non cannonical intervals and will sort them and unify them to become disjoint. The function will return the cannonical ginterval object plus a factor mapping ids in the original data frame to the new cannoincal gintervals. We can then use tapply to import meta-data.
+*  make it easier to import intervals/annotations: add ginterval.import that will take non canonical intervals and will sort them and unify them to become disjoint. The function will return the canonical ginterval object plus a factor mapping ids in the original data frame to the new canonical gintervals. We can then use tapply to import meta-data.
 *  Merge annotations and intervals concepts. Misha: renamed functions: gls.annots => gls.intervs, gls.annotset => gls.intervsets, grm.annots => grm.intervs, grm.annotsets => grm.intervsets. Newly added functions: gintervals.load, gintervals.save.
 *  Effi: segmentation fault in gdist
 *  Buf fix: calling gprepare_pvals() twice on the same track fails
 *  need a simple way to merge data onto intervals, without reordering and invalidating the intervals (i.e. doing ginterval.import after merge is annoying. This may be solvable using standard r merge options, but we need to wrap it up nicely) Misha: Added gintervals.merge function
 *  More protective use of intervals: coerce fields as factors if needed and generally be aware of potential user changes to intervals.
-*  allow colelction of pairs of interval within a maximal distance Misha: Added gintervals.neighbors function
+*  allow collection of pairs of interval within a maximal distance Misha: Added gintervals.neighbors function
 *  Bug fix: gcachemultires does not work
 *  Decide about the naming policy for the functions
 *  Restrict gdist to accept minval=2
@@ -901,7 +901,7 @@
 *  Provide the interval ID in the function provided to intervals.gapply Misha: GINTERVID variable is maintained while gapply
 *  add progress report for non-track expression functions Misha: added progress report to gintervals.annotate
 *  Allow to smooth NaN values in gtrack.smooth (add smooth_nans parameter)
-*  it might be usefull to have a direct way get sets of intervals corresponding to division of the genome according to the values of some track. it would be best if gdist could return another extra value with intervals corresponding to each of the track combinations Misha: gpartition function was added
+*  it might be useful to have a direct way get sets of intervals corresponding to division of the genome according to the values of some track. it would be best if gdist could return another extra value with intervals corresponding to each of the track combinations Misha: gpartition function was added
 *  Misha: avoid memory blow up when large vectors are returned by gquantile, etc.
 *  gseq.extract() should return reverse-complementary sequence for strand -1
 *  Bug fix: gpartition does not treat NaNs correctly

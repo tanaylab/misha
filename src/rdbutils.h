@@ -144,7 +144,7 @@ void *allocate_res(uint64_t res_num_records);
 // returns memory for the parent where the child process wrote its result
 void *get_kid_res(int kid_index);
 
-// returns result size of the child process in the number of datums
+// returns result size of the child process in the number of data
 uint64_t get_kid_res_size(int kid_index);
 
 // keeps track of allocations in child processes; if the total memory consumption exceeds the limit,
@@ -179,7 +179,7 @@ void rexit();
 // RdbInitializer performs the following actions:
 //   1. Installs a new SIGINT handler. ONE MUST CALL check_interrupt() INSTEAD OF R_CheckUserInterrupt()!!!!!!!
 //   2. Installs out-of-memory handler.
-//   3. Supresses the default error report behaviour.
+//   3. suppresses the default error report behaviour.
 //   4. Makes sure all file descriptors are closed on exit / error / interrupt.
 //   5. Makes sure all objects are destructed on exit / error / interrupt.
 
@@ -215,7 +215,7 @@ private:
 		int64_t       mem_usage[MAX_KIDS];
 		unsigned char kid_progress[MAX_KIDS];          // progress report for each pid
 		uint64_t        kid_res_offset[MAX_KIDS];        // offset for kid's result
-		uint64_t        kid_res_num_records[MAX_KIDS];   // size of kid's result in number of datums
+		uint64_t        kid_res_num_records[MAX_KIDS];   // size of kid's result in number of data
 		char          res;
 	};
 

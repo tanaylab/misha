@@ -16,7 +16,7 @@ The following options are available for the package. Use 'options' function
 to alter the value of the options.
 
 \tabular{lll}{ NAME \tab DEFAULT \tab DESCRIPTION \cr gmax.data.size \tab
-10000000 \tab Maximal number of datums (intervals, ...) in large data sets
+10000000 \tab Maximal number of data (intervals, ...) in large data sets
 stored \cr \tab \tab in memory. Prevents excessive memory usage by various
 functions \cr \tab \tab such as 'gextract', 'gscreen', etc. \cr
 gbig.intervals.size \tab 1000000 \tab Minimal number of intervals in a big

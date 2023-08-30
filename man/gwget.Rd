@@ -26,7 +26,7 @@ are downloaded to a directory given by 'path' argument.  If 'path' is
 \examples{
 
 gdb.init_examples()
-gwget("ftp://hgdownload.cse.ucsc.edu/logs/2012/access_log.2012071*")
+# gwget("ftp://hgdownload.cse.ucsc.edu/goldenpath/hg19/chromosomes/md5sum.txt")
 
 }
 \seealso{
