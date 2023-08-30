@@ -161,7 +161,7 @@ inline void GIntervals::build_chrom_map() const
 {
 	if (m_chrom2itr.empty() && size()) {
 		for (const_iterator iinterv = begin(); iinterv < end(); ++iinterv) {
-			m_chrom2itr.resize(max((uint64_t)(iinterv->chromid + 1), m_chrom2itr.size()), end());
+			m_chrom2itr.resize(max((uint64_t)(iinterv->chromid + 1), (uint64_t)m_chrom2itr.size()), end());
 			if (m_chrom2itr[iinterv->chromid] == end())
 				m_chrom2itr[iinterv->chromid] = iinterv;
 		}
