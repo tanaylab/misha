@@ -156,7 +156,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 				if (start1 >= end1) 
 					verror("File %s, line %ld: start1 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
 
-				if (end1 > iu.get_chromkey().get_chrom_size(chromid1)) 
+				if ((uint64_t)end1 > iu.get_chromkey().get_chrom_size(chromid1)) 
 					verror("File %s, line %ld: end1 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
 
 				start2 = strtoll(fields[GInterval2D::START2].c_str(), &endptr, 10);
@@ -170,7 +170,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 				if (start2 >= end2) 
 					verror("File %s, line %ld: start2 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
 
-				if (end2 > iu.get_chromkey().get_chrom_size(chromid2)) 
+				if ((uint64_t)end2 > iu.get_chromkey().get_chrom_size(chromid2)) 
 					verror("File %s, line %ld: end2 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
 
 				val = strtod(fields[GInterval2D::NUM_COLS].c_str(), &endptr);
@@ -264,7 +264,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 			}
 
 			// Stage 4: Read the contacts of a subtree and insert them to StatQuadTreeCachedSerializer.
-			for (uint64_t i = 0; i < num_subtrees; ++i) {
+			for (uint64_t i = 0; i < (uint64_t)num_subtrees; ++i) {
 				BufferedFile &subtree_file = num_subtrees == 1 ? infile : *subtrees_files[i];
 
 				while (1) {

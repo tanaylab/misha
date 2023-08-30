@@ -77,8 +77,9 @@ inline int GenomeChromKey::chrom2id(const char *name) const
 
 inline const string &GenomeChromKey::id2chrom(int id) const
 {
-	if (id >= (int)m_id2chrom.size())
+	if (id >= (int)m_id2chrom.size()){
 		TGLError<GenomeChromKey>(ID_NOEXISTS, "Id %d cannot be mapped to any chromosome", id);
+	}
 	return m_id2chrom[id].name;
 }
 

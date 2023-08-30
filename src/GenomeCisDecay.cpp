@@ -112,7 +112,7 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 					uint64_t *kid_intra_domain_dist = kid_distribution;
 					uint64_t *kid_inter_domain_dist = kid_distribution + bin_finder.get_numbins();
 
-					for (int ibin = 0; ibin < bin_finder.get_numbins(); ++ibin) {
+					for (uint64_t ibin = 0; ibin < bin_finder.get_numbins(); ++ibin) {
 						intra_domain_dist[ibin] += kid_intra_domain_dist[ibin];
 						inter_domain_dist[ibin] += kid_inter_domain_dist[ibin];
 					}

@@ -79,8 +79,9 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 		TrackExprScanner scanner(iu);
 		TrackExpressionIteratorBase *expr_itr_base = scanner.create_expr_iterator(R_NilValue, &scope, NULL, _iterator_policy, R_NilValue);
 
-		if (!expr_itr_base->is_1d())
+		if (!expr_itr_base->is_1d()){
 			verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[expr_itr_base->get_type()]);
+		}
 
 		TrackExpression1DIterator *expr_itr = (TrackExpression1DIterator *)expr_itr_base;
 		GIntervals::const_iterator icur_scope = scope.begin();
@@ -218,8 +219,9 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 			TrackExprScanner scanner(iu);
 			TrackExpressionIteratorBase *expr_itr_base = scanner.create_expr_iterator(R_NilValue, kid_intervals1d, NULL, _iterator_policy, R_NilValue);
 
-			if (!expr_itr_base->is_1d())
+			if (!expr_itr_base->is_1d()) {
 				verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[expr_itr_base->get_type()]);
+			}
 
 			TrackExpression1DIterator *expr_itr = (TrackExpression1DIterator *)expr_itr_base;
 			GIntervals::const_iterator icur_scope = kid_intervals1d->begin();

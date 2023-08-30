@@ -129,7 +129,7 @@ void StatQuadTreeCachedSerializer<T, Size>::begin(BufferedFile &file, int64_t x1
 	// check that num_subtrees is a power of 4:
 	// the position of the most significant must be odd + the rest of the bits must be zero
 	int msbit_pos = ffs(num_subtrees);
-	if (num_subtrees != 1 << (msbit_pos - 1) || msbit_pos % 2 == 0)
+	if ((int)num_subtrees != 1 << (msbit_pos - 1) || msbit_pos % 2 == 0)
 		TGLError< StatQuadTreeCachedSerializer<T, Size> >("Number of sub quad trees must be a power of 4");
 
 	m_num_subtrees = num_subtrees;
@@ -277,7 +277,7 @@ void StatQuadTreeCachedSerializer<T, Size>::seal_qtree()
 		local2global_id[i] = i + m_cur_id_offset;
 
 	for (vector<uint64_t>::const_iterator iptr = m_border_obj_ptrs[m_cur_qtree_idx].begin(); iptr != m_border_obj_ptrs[m_cur_qtree_idx].end(); ++iptr) {
-		if (m_border_obj_ids[*iptr] == -1) { // object hasn't been added yet to any quad tree
+		if ((int)m_border_obj_ids[*iptr] == -1) { // object hasn't been added yet to any quad tree
 			m_border_obj_ids[*iptr] = m_cur_id_offset + num_unique_objs;
 			++num_unique_objs;
 		}

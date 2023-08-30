@@ -563,8 +563,15 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 
 				if (gtrack.opened())
 					gtrack.write(qtree);
-			} else
-				verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+			} else {
+				size_t numTypeNames = sizeof(TrackExpressionIteratorBase::TYPE_NAMES) / sizeof(TrackExpressionIteratorBase::TYPE_NAMES[0]);
+				if (itr_type >= 0 && itr_type < numTypeNames) {
+					verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+				} else {
+					verror("Invalid iterator type encountered");
+				}
+			}
+				
 		} catch (TGLException &e) {
 			verror("Error writing %s: %s", filename, e.msg());
 		}

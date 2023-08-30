@@ -142,7 +142,6 @@ SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 		SEXP answer = R_NilValue;
-		unsigned num_cols;
 
 		scanner.begin(_track_expr, intervals1d, intervals2d, _iterator_policy, _band);
 

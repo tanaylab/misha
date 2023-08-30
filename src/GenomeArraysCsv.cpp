@@ -71,7 +71,7 @@ const GIntervals &GenomeArraysCsv::get_intervals(int chromid)
 		if (start >= end) 
 			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: start coordinate exceeds or equals the end coordinate", m_bfile.file_name().c_str(), lineno);
 
-		if (end > m_chromkey->get_chrom_size(chromid)) 
+		if ((uint64_t)end > m_chromkey->get_chrom_size(chromid)) 
 			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: end coordinate exceeds chromosome's size", m_bfile.file_name().c_str(), lineno);
 
 		m_intervals.push_back(GInterval(chromid, start, end, 0, (void *)&*ipos));
@@ -118,7 +118,7 @@ int GenomeArraysCsv::read_fields(const Position &pos)
 		return 0;
 	}
 
-	if (m_fields.size() != total_numcols) 
+	if (m_fields.size() != (uint64_t)total_numcols) 
 		TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: expecting %ld columns, read %ld",
 								  m_bfile.file_name().c_str(), pos.lineno + delta_lines, total_numcols, m_fields.size());
 

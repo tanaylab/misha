@@ -123,7 +123,7 @@ SEXP gcheck_iterator(SEXP _iterator_policy, SEXP _envir)
 		iu.get_all_genome_intervs(scope2d);
 
 		TrackExprScanner scanner(iu);
-		TrackExpressionIteratorBase *expr_itr_base = scanner.create_expr_iterator(R_NilValue, &scope1d, &scope2d, _iterator_policy, R_NilValue);
+		scanner.create_expr_iterator(R_NilValue, &scope1d, &scope2d, _iterator_policy, R_NilValue);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {

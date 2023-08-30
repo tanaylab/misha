@@ -55,7 +55,7 @@ public:
 	typedef typename StatQuadTree<T, Size>::Stat Stat;
 
 	// chunk size 0 means there's no caching at all
-	StatQuadTreeCached() : m_chunk_size(0), m_max_num_chunks(0), m_num_chunks(0), m_bfile(NULL), m_uptr(NULL), m_local2global_id(NULL) {}
+	StatQuadTreeCached() : m_chunk_size(0), m_max_num_chunks(0), m_num_chunks(0), m_bfile(NULL), m_local2global_id(NULL), m_uptr(NULL) {}
 	StatQuadTreeCached(int64_t chunk_size, int64_t max_num_chunks) : m_uptr(NULL) { init(chunk_size, max_num_chunks); }
 
 	~StatQuadTreeCached() { clear(); }

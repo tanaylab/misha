@@ -213,7 +213,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
 		vector<double> medians(percentiles.size(), numeric_limits<float>::quiet_NaN());
-		bool estimation_occured = false;
+
 		int num_kids = iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band);
 
 		if (num_kids) {
@@ -446,14 +446,14 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 			if (scanner.get_iterator()->is_1d()) {
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
-				for (int chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
+				for (int chromid = 0; (uint64_t)chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
 					if (intervals1d->size(chromid))
 						chroms1d.insert(chromid);
 				}
 			} else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
-				for (int chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-					for (int chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
+				for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
+					for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
 						if (intervals2d->size(chromid1, chromid2))
 							chroms2d.insert(ChromPair(chromid1, chromid2));
 					}
@@ -666,14 +666,14 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 
 			if (is_1d_iterator) {
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
-				for (int chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
+				for (int chromid = 0; (uint64_t)chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
 					if (intervals1d->size(chromid))
 						chroms1d.insert(chromid);
 				}
 			} else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
-				for (int chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-					for (int chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
+				for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
+					for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
 						if (intervals2d->size(chromid1, chromid2))
 							chroms2d.insert(ChromPair(chromid1, chromid2));
 					}
@@ -838,10 +838,9 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 
 				if (dynamic_cast<const TrackExpressionCartesianGridIterator *>(scanner.get_iterator()) ||
 					dynamic_cast<const TrackExpressionIntervals2DIterator *>(scanner.get_iterator()) ||
-					dynamic_cast<const TrackExpressionTrackRectsIterator *>(scanner.get_iterator()))
+					dynamic_cast<const TrackExpressionTrackRectsIterator *>(scanner.get_iterator())) {
 					verror("The type of iterator is currently not supported by the function");
-
-				uint64_t orig_scope_idx = 0;
+				}
 
 				while (!scanner.isend()) {
 					float val = scanner.last_real(0);

@@ -278,7 +278,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+				
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;
@@ -352,7 +352,7 @@ void DnaPSSM::update_like_vec(const string &target,
 					rlogp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+				
 				switch(*j) {
 					case 'A': rlogp += p->get_log_prob('T');
 						  break;
@@ -426,7 +426,7 @@ void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &en
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+				
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;
@@ -505,7 +505,7 @@ void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> 
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+				
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;
@@ -544,7 +544,7 @@ void DnaPSSM::count(string::const_iterator seq, float weight, int dir)
 		for(vector<DnaProbVec>::reverse_iterator i = m_chars.rbegin();
 		    i != m_chars.rend();
 		    i++) {
-			char c;
+			char c = 'N';
 			switch(*seq) {
 				case 'A': c = 'T';
 					  break;
@@ -824,11 +824,11 @@ string DnaPSSM::get_consensus() const
 ostream &operator<<(ostream &out, const DnaPSSM &pssm)
 {
 	// cerr << "[" << pssm.get_min_range() << "," << pssm.get_max_range() << "] dir=" << pssm.is_bidirect() << endl;
-	for(int i = 0; i < pssm.size(); i++) {
+	for(uint64_t i = 0; i < pssm.size(); i++) {
 		out << pssm[i];
 	}
 	out << endl;
-	for(int i = 0; i < pssm.size(); i++) {
+	for(uint64_t i = 0; i < pssm.size(); i++) {
 		out << pssm[i].get_log_prob('A') << "\t" << pssm[i].get_log_prob('C') << "\t" << pssm[i].get_log_prob('G') << "\t" << pssm[i].get_log_prob('T') << endl;
 	}
 	return(out);
@@ -881,7 +881,7 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;
@@ -952,7 +952,7 @@ void DnaPSSM::like_thresh_match(const string &target, float thresh,
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;

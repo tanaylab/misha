@@ -463,7 +463,7 @@ inline void RdbInitializer::report_alloc(int64_t bytes)
 //vdebug_print("%*s%d (%d): ATTEMPT TO ALLOC %ld, total: %ld, running: %ld, suspended: %ld\n", s_kid_index + 1, "", (int)s_kid_index, (int)getpid(), bytes,
 //s_shm->total_mem_usage, s_shm->num_kids_running, s_shm->num_kids_suspended);
 		if (s_kid_index != s_shm->untouchable_kid_idx) {  // never suspend untouchable kid
-			while (s_shm->total_mem_usage + bytes > s_max_mem_usage && s_shm->num_kids_running > 1) {
+			while ((uint64_t)s_shm->total_mem_usage + bytes > s_max_mem_usage && s_shm->num_kids_running > 1) {
 				{
 					SemLocker sl(s_shm_sem);
 					s_shm->num_kids_running--;
