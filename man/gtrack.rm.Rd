@@ -27,7 +27,7 @@ This function deletes a track from the Genomic Database. By default
 gdb.init_examples()
 gtrack.create("new_track", "Test track", "2 * dense_track")
 gtrack.exists("new_track")
-gtrack.rm("new_track", force = T)
+gtrack.rm("new_track", force = TRUE)
 gtrack.exists("new_track")
 
 }

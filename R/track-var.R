@@ -6,13 +6,13 @@
 
 .gtrack.var.get <- function(trackname, varname) {
     if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s does not exist", trackname), call. = F)
+        stop(sprintf("Track %s does not exist", trackname), call. = FALSE)
     }
 
     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
     filename <- paste(trackdir, "vars", varname, sep = "/")
     if (!file.exists(filename)) {
-        stop(sprintf("Track variable %s does not exist", varname), call. = F)
+        stop(sprintf("Track variable %s does not exist", varname), call. = FALSE)
     }
     f <- file(filename, "rb")
     val <- unserialize(f)
@@ -22,7 +22,7 @@
 
 .gtrack.var.set <- function(trackname, varname, value) {
     if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s does not exist", trackname), call. = F)
+        stop(sprintf("Track %s does not exist", trackname), call. = FALSE)
     }
 
     # if vars directory does not exist, create it
@@ -64,7 +64,7 @@
 #' @export gtrack.var.get
 gtrack.var.get <- function(track = NULL, var = NULL) {
     if (is.null(substitute(track)) || is.null(var)) {
-        stop("Usage: gtrack.var.get(track, var)", call. = F)
+        stop("Usage: gtrack.var.get(track, var)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -102,14 +102,14 @@ gtrack.var.get <- function(track = NULL, var = NULL) {
 #' @export gtrack.var.ls
 gtrack.var.ls <- function(track = NULL, pattern = "", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     if (length(substitute(track)) != 1) {
-        stop("Usage: gtrack.var.ls(track, pattern = \"\", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE)", call. = F)
+        stop("Usage: gtrack.var.ls(track, pattern = \"\", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
 
     if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s does not exist", trackstr), call. = F)
+        stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
     }
 
     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
@@ -151,13 +151,13 @@ gtrack.var.ls <- function(track = NULL, pattern = "", ignore.case = FALSE, perl 
 #' @export gtrack.var.rm
 gtrack.var.rm <- function(track = NULL, var = NULL) {
     if (is.null(substitute(track)) || is.null(var)) {
-        stop("Usage: gtrack.var.rm(track, var)", call. = F)
+        stop("Usage: gtrack.var.rm(track, var)", call. = FALSE)
     }
     .gcheckroot()
 
     trackname <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s does not exist", trackname), call. = F)
+        stop(sprintf("Track %s does not exist", trackname), call. = FALSE)
     }
 
     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
@@ -191,7 +191,7 @@ gtrack.var.rm <- function(track = NULL, var = NULL) {
 #' @export gtrack.var.set
 gtrack.var.set <- function(track = NULL, var = NULL, value = NULL) {
     if (is.null(substitute(track)) || is.null(var) || is.null(value)) {
-        stop("Usage: gtrack.var.set(track, var, value)", call. = F)
+        stop("Usage: gtrack.var.set(track, var, value)", call. = FALSE)
     }
     .gcheckroot()
 

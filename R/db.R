@@ -17,7 +17,7 @@
 
 .gcheckroot <- function() {
     if (!exists("GROOT", envir = .misha) || !exists("ALLGENOME", envir = .misha) || is.null(get("GROOT", envir = .misha)) || is.null(get("ALLGENOME", envir = .misha))) {
-        stop("Database root directory is not set. Please call gdb.init().", call. = F)
+        stop("Database root directory is not set. Please call gdb.init().", call. = FALSE)
     }
 }
 
@@ -29,7 +29,7 @@
         {
             t <- .gfindtrackinpath(dir)
             if (!is.null(t)) {
-                stop(sprintf("Directory %s belongs to track %s", dir, t), call. = F)
+                stop(sprintf("Directory %s belongs to track %s", dir, t), call. = FALSE)
             }
 
             setwd(dir)
@@ -52,7 +52,7 @@
 #' @export
 gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     if (is.null(groot)) {
-        stop("Usage: gsetroot(groot, dir = NULL, rescan = FALSE)", call. = F)
+        stop("Usage: gsetroot(groot, dir = NULL, rescan = FALSE)", call. = FALSE)
     }
 
     groot <- normalizePath(groot)
@@ -60,7 +60,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("ALLGENOME", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)
 
-    chromsizes <- read.csv(paste(groot, "chrom_sizes.txt", sep = "/"), sep = "\t", header = F)
+    chromsizes <- read.csv(paste(groot, "chrom_sizes.txt", sep = "/"), sep = "\t", header = FALSE)
     colnames(chromsizes) <- c("chrom", "size")
     intervals <- data.frame(
         chrom = as.factor(paste("chr", as.character(chromsizes$chrom), sep = "")),
@@ -68,7 +68,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     )
 
     if (nrow(intervals) == 0) {
-        stop("chrom_sizes.txt file does not contain any chromosomes", call. = F)
+        stop("chrom_sizes.txt file does not contain any chromosomes", call. = FALSE)
     }
 
     for (chrom in intervals$chrom) {
@@ -148,7 +148,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 #' @export gdir.cd
 gdir.cd <- function(dir = NULL) {
     if (is.null(dir)) {
-        stop("Usage: gdir.cd(dir)", call. = F)
+        stop("Usage: gdir.cd(dir)", call. = FALSE)
     }
 
     success <- FALSE
@@ -187,7 +187,7 @@ gdir.cd <- function(dir = NULL) {
 #' @export gdir.create
 gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
     if (is.null(dir)) {
-        stop("Usage: gdir.create(dir, showWarnings = TRUE, mode = \"0777\")", call. = F)
+        stop("Usage: gdir.create(dir, showWarnings = TRUE, mode = \"0777\")", call. = FALSE)
     }
 
     oldwd <- getwd()
@@ -197,16 +197,16 @@ gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
             d <- dirname(dir)
 
             if (!file.exists(d)) {
-                stop(sprintf("Path %s does not exist.\nNote: recursive directory creation is forbidden.", d), call. = F)
+                stop(sprintf("Path %s does not exist.\nNote: recursive directory creation is forbidden.", d), call. = FALSE)
             }
 
             t <- .gfindtrackinpath(d)
             if (!is.null(t)) {
-                stop(sprintf("Cannot create a directory within a track %s", t), call. = F)
+                stop(sprintf("Cannot create a directory within a track %s", t), call. = FALSE)
             }
 
             if (length(grep("\\.track$", basename(dir))) > 0) {
-                stop("gdir.create cannot create track directories", call. = F)
+                stop("gdir.create cannot create track directories", call. = FALSE)
             }
 
             dir.create(dir, showWarnings = showWarnings, recursive = FALSE, mode = mode)
@@ -263,7 +263,7 @@ gdir.cwd <- function() {
 #' @export gdir.rm
 gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
     if (is.null(dir)) {
-        stop("Usage: gdir.rm(dir, recursive = FALSE, force = FALSE)", call. = F)
+        stop("Usage: gdir.rm(dir, recursive = FALSE, force = FALSE)", call. = FALSE)
     }
 
     oldwd <- getwd()
@@ -274,17 +274,17 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
                 if (force) {
                     return(invisible())
                 }
-                stop(sprintf("Directory %s does not exist", dir), call. = F)
+                stop(sprintf("Directory %s does not exist", dir), call. = FALSE)
             }
 
             r <- file.info(dir)
             if (r[names(r) == "isdir"] != 1) {
-                stop(sprintf("%s is not a directory", dir), call. = F)
+                stop(sprintf("%s is not a directory", dir), call. = FALSE)
             }
 
             t <- .gfindtrackinpath(dir)
             if (!is.null(t)) {
-                stop(sprintf("Directory %s belongs to track %s", dir, t), call. = F)
+                stop(sprintf("Directory %s belongs to track %s", dir, t), call. = FALSE)
             }
 
             answer <- "Y"
@@ -308,7 +308,7 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
                 }
 
                 if (file.exists(dir)) {
-                    stop("Failed to remove the directory", call. = F)
+                    stop("Failed to remove the directory", call. = FALSE)
                 }
             }
             gdb.reload()
@@ -352,12 +352,12 @@ gdb.set_readonly_attrs <- function(attrs) {
 
         idx <- which(duplicated(attrs))[1]
         if (!is.na(idx)) {
-            stop(sprintf("Attribute %s appears more than once", attrs[idx]), call. = F)
+            stop(sprintf("Attribute %s appears more than once", attrs[idx]), call. = FALSE)
         }
 
         idx <- which(attrs == "")[1]
         if (!is.na(idx)) {
-            stop("Attribute name cannot be an empty string", call. = F)
+            stop("Attribute name cannot be an empty string", call. = FALSE)
         }
 
         f <- file(filename, "wb")
@@ -425,11 +425,11 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' @export gdb.create
 gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.file = NULL, annots.names = NULL) {
     if (is.null(groot) || is.null(fasta)) {
-        stop("Usage: gdb.create(groot, fasta, genes.file = NULL, annots.file = NULL, annots.names = NULL)", call. = F)
+        stop("Usage: gdb.create(groot, fasta, genes.file = NULL, annots.file = NULL, annots.names = NULL)", call. = FALSE)
     }
 
     if (file.exists(groot)) {
-        stop(sprintf("Directory %s already exists", groot), call. = F)
+        stop(sprintf("Directory %s already exists", groot), call. = FALSE)
     }
 
     success <- FALSE
@@ -444,15 +444,15 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
     tryCatch(
         {
-            dir.create(groot, showWarnings = F, recursive = TRUE, mode = "0777")
-            dir.create(paste(groot, "pssms", sep = "/"), showWarnings = F, recursive = TRUE, mode = "0777")
-            dir.create(paste(groot, "seq", sep = "/"), showWarnings = F, recursive = TRUE, mode = "0777")
-            dir.create(paste(groot, "tracks", sep = "/"), showWarnings = F, recursive = TRUE, mode = "0777")
+            dir.create(groot, showWarnings = FALSE, recursive = TRUE, mode = "0777")
+            dir.create(paste(groot, "pssms", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
+            dir.create(paste(groot, "seq", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
+            dir.create(paste(groot, "tracks", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
 
             chroms <- .gseq.import(groot, fasta)
 
             if (!length(chroms)) {
-                stop("No FASTA files were imported", call. = F)
+                stop("No FASTA files were imported", call. = FALSE)
             }
 
             seq.files <- paste("chr", chroms, ".seq", sep = "")
@@ -532,7 +532,7 @@ gdb.get_readonly_attrs <- function() {
         attrs <- unserialize(f)
         close(f)
         if (!is.character(attrs)) {
-            stop(sprintf("Invalid format of read-only atrributes file %s", filename), call. = F)
+            stop(sprintf("Invalid format of read-only atrributes file %s", filename), call. = FALSE)
         }
 
         attrs <- unique(attrs)
@@ -589,7 +589,7 @@ gdb.get_readonly_attrs <- function() {
 #' @export gdb.init
 gdb.init <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     if (is.null(groot)) {
-        stop("Usage: gdb.init(groot, dir = NULL, rescan = FALSE)", call. = F)
+        stop("Usage: gdb.init(groot, dir = NULL, rescan = FALSE)", call. = FALSE)
     }
     gsetroot(groot, dir, rescan)
 }
@@ -622,7 +622,7 @@ gdb.init_examples <- function() {
 #' @export gdb.reload
 gdb.reload <- function(rescan = TRUE) {
     if (!exists("GROOT", envir = .misha)) {
-        stop("gdb.init() must be called beforehand.", call. = F)
+        stop("gdb.init() must be called beforehand.", call. = FALSE)
     }
 
     assign("GTRACKS", NULL, envir = .misha)
@@ -646,7 +646,7 @@ gdb.reload <- function(rescan = TRUE) {
                 res <- unserialize(f)
                 close(f)
             },
-            silent = T
+            silent = TRUE
         )
 
         if (inherits(retv, "try-error")) {
@@ -663,7 +663,7 @@ gdb.reload <- function(rescan = TRUE) {
                     serialize(res, f)
                     close(f)
                 },
-                silent = T
+                silent = TRUE
             )
         } else {
             unlink(db.filename, recursive = TRUE)
@@ -729,32 +729,32 @@ gdb.reload <- function(rescan = TRUE) {
 
 .gconfirmtrackcreate <- function(track) {
     if (!is.na(match(track, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", track), call. = F)
+        stop(sprintf("Track %s already exists", track), call. = FALSE)
     }
 
-    path <- gsub(".", "/", track, fixed = T)
+    path <- gsub(".", "/", track, fixed = TRUE)
     dir <- dirname(path)
     fulldir <- paste(get("GWD", envir = .misha), dir, sep = "/")
     fullpath <- sprintf("%s.track", paste(get("GWD", envir = .misha), path, sep = "/"))
 
     if (!file.exists(fulldir)) {
-        stop(sprintf("Directory %s does not exist", dir), call. = F)
+        stop(sprintf("Directory %s does not exist", dir), call. = FALSE)
     }
 
     if (file.exists(fullpath)) {
-        stop(sprintf("File %s already exists", path), call. = F)
+        stop(sprintf("File %s already exists", path), call. = FALSE)
     }
 
     if (!is.na(match(track, get("GINTERVS", envir = .misha)))) {
-        stop(sprintf("Interval %s already exists", track), call. = F)
+        stop(sprintf("Interval %s already exists", track), call. = FALSE)
     }
 
     if (!is.na(match(track, gvtrack.ls()))) {
-        stop(sprintf("Virtual track %s already exists", track), call. = F)
+        stop(sprintf("Virtual track %s already exists", track), call. = FALSE)
     }
 
     if (.ggetOption(".gautocompletion", FALSE) && exists(track)) {
-        stop(sprintf("Variable \"%s\" shadows the name of the new track.\nPlease remove this variable from the environment or switch off autocompletion mode.", track), call. = F)
+        stop(sprintf("Variable \"%s\" shadows the name of the new track.\nPlease remove this variable from the environment or switch off autocompletion mode.", track), call. = FALSE)
     }
 }
 
@@ -773,7 +773,7 @@ gdb.reload <- function(rescan = TRUE) {
 
         if (.ggetOption(".gautocompletion", FALSE)) {
             if (exists(track, envir = .misha)) {
-                stop(sprintf("Variable \"%s\" shadows the name of identically named track.\nPlease remove this variable from the environment or switch off autocompletion mode.", track), call. = F)
+                stop(sprintf("Variable \"%s\" shadows the name of identically named track.\nPlease remove this variable from the environment or switch off autocompletion mode.", track), call. = FALSE)
             }
 
             if (.ggetOption(".ginteractive", FALSE)) { # set track to NULL otherwise evaluation of track expression pmin(track, 2) will produce a string "2"
@@ -819,7 +819,7 @@ gdb.reload <- function(rescan = TRUE) {
 
         if (.ggetOption(".gautocompletion", FALSE)) {
             if (exists(intervals.set, envir = .misha)) {
-                stop(sprintf("Variable \"%s\" shadows the name of identically named intervals set.\nPlease remove this variable from the environment or switch off autocompletion mode.", intervals.set), call. = F)
+                stop(sprintf("Variable \"%s\" shadows the name of identically named intervals set.\nPlease remove this variable from the environment or switch off autocompletion mode.", intervals.set), call. = FALSE)
             }
 
             assign(intervals.set, intervals.set, envir = .misha)

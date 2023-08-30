@@ -7,8 +7,8 @@ test_that("gtrack.var works", {
 })
 
 test_that("gtrack.var.set works", {
-    gtrack.rm("test.tmptrack", force = T)
-    withr::defer(gtrack.rm("test.tmptrack", force = T))
+    gtrack.rm("test.tmptrack", force = TRUE)
+    withr::defer(gtrack.rm("test.tmptrack", force = TRUE))
     gtrack.create_sparse("test.tmptrack", "", gintervals(c(1, 2)), 1:2)
     gtrack.var.set("test.tmptrack", "testvar1", 1)
     gtrack.var.set("test.tmptrack", "testvar2", 1)
@@ -21,7 +21,7 @@ test_that("gtrack.var.set works", {
 test_that("gtrack.rm works", {
     expect_warning(gtrack.var.rm("test.fixedbin", "blablablabla"))
     expect_error(gtrack.var.rm("test.blablablabla", "pv.percentiles"))
-    gtrack.rm("test.tmptrack", force = T)
+    gtrack.rm("test.tmptrack", force = TRUE)
     withr::defer(gtrack.rm("test.tmptrack", force = TRUE))
     gtrack.create_sparse("test.tmptrack", "", gintervals(c(1, 2)), 1:2)
     gtrack.var.set("test.tmptrack", "testvar1", 1:10)

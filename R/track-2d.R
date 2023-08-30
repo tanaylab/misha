@@ -1,6 +1,6 @@
 .gtrack.create_test_computer2d <- function(track = NULL, prob.skip.chrom = 0.5, max.rect = 100000, max.rect.size = 10000) {
     if (is.null(substitute(track))) {
-        stop("Usage: gtrack.create_test_computer2d(trackname, prob.skip.chrom, max.rect, max.rect.size)", call. = F)
+        stop("Usage: gtrack.create_test_computer2d(trackname, prob.skip.chrom, max.rect, max.rect.size)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -10,7 +10,7 @@
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -75,7 +75,7 @@
 #' @export gtrack.2d.create
 gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL, values = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(intervals) || is.null(values)) {
-        stop("Usage: gtrack.2d.create(track, description, intervals, values)", call. = F)
+        stop("Usage: gtrack.2d.create(track, description, intervals, values)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -87,7 +87,7 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -156,7 +156,7 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
 #' @export gtrack.2d.import
 gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(file)) {
-        stop("Usage: gtrack.2d.import(track, description, file)", call. = F)
+        stop("Usage: gtrack.2d.import(track, description, file)", call. = FALSE)
     }
 
     .gcheckroot()
@@ -167,7 +167,7 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -269,9 +269,9 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
 #' \code{\link{gtrack.info}}, \code{\link{gdir.create}}
 #' @keywords ~contacts ~fragment ~track
 #' @export gtrack.2d.import_contacts
-gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts = NULL, fends = NULL, allow.duplicates = T) {
+gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts = NULL, fends = NULL, allow.duplicates = TRUE) {
     if (is.null(substitute(track)) || is.null(description) || is.null(contacts)) {
-        stop("Usage: gtrack.2d.import_contacts(track, description, contacts, fends = NULL, allow.duplicates = TRUE)", call. = F)
+        stop("Usage: gtrack.2d.import_contacts(track, description, contacts, fends = NULL, allow.duplicates = TRUE)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -281,7 +281,7 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
     direxisted <- file.exists(trackdir)
 
     if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = F)
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
     .gconfirmtrackcreate(trackstr)

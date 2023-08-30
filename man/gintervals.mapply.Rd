@@ -8,7 +8,7 @@ gintervals.mapply(
   FUN = NULL,
   ...,
   intervals = NULL,
-  enable.gapply.intervals = F,
+  enable.gapply.intervals = FALSE,
   iterator = NULL,
   band = NULL,
   intervals.set.out = NULL
