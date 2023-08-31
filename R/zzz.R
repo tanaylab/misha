@@ -9,7 +9,7 @@
 
     options(.ginteractive = FALSE)
     options(.gautocompletion = FALSE)
-    options(gmax.data.size = 10000000)
+    options(gmax.data.size = 1e9)
     options(gmax.mem.usage = 10000000) # in KB
     options(gbig.intervals.size = 1000000)
     options(gbuf.size = 1000)
