@@ -761,8 +761,6 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
                 if (!length(files)) {
                     stop("No files downloaded. Exiting.", call. = FALSE)
                 }
-
-                files <- paste(tmp.dirname, "/", files, sep = "")
             } else {
                 # local path
                 files <- system(paste("/bin/sh -c \"ls -d -A", path, "\""), intern = TRUE)

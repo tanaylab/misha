@@ -126,12 +126,10 @@
 #' @seealso \code{\link{gtrack.import_set}}
 #' @keywords ~ftp
 #' @examples
-#' \dontshow{
-#' options(gmax.processes = 2)
-#' }
-#'
 #' gdb.init_examples()
-#' gwget("ftp://hgdownload.cse.ucsc.edu/logs/2012/access_log.2012071*")
+#' \donttest{
+#' gwget("ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/md5sum.txt")
+#' }
 #'
 #' @export gwget
 gwget <- function(url = NULL, path = NULL) {
@@ -153,42 +151,7 @@ gwget <- function(url = NULL, path = NULL) {
         stop("Invalid format of URL", call. = FALSE)
     }
 
-    old.files <- dir(path)
-    oldwd <- getwd()
-    tryCatch(
-        {
-            setwd(path)
-
-            server <- gsub("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", "\\1", url, perl = TRUE)
-            rpath <- gsub("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", "\\3", url, perl = TRUE)
-
-            rdir <- dirname(rpath)
-            rfiles <- basename(rpath)
-
-            if (system(paste(
-                "/bin/sh -c \"",
-                "ftp -i -n -v",
-                server,
-                "<< EOF\n",
-                "user anonymous anonymous\n",
-                "cd", rdir, "\n",
-                paste("mget \"", rfiles, "\"", sep = ""), "\n",
-                "quit\n",
-                "EOF\""
-            ))) {
-                stop("Command failed", call. = FALSE)
-            }
-        },
-        interrupt = function(interrupt) {
-            setwd(oldwd)
-        },
-        finally = {
-            setwd(oldwd)
-        }
-    )
-
-    new.files <- dir(path)
-    setdiff(new.files, old.files)
+    gftp_download_glob(url, path, verbose = FALSE, handle = NULL)
 }
 
 

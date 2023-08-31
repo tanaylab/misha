@@ -45,7 +45,7 @@ In order to create a misha database for _hg38_ genome, run the following command
 ```{r, eval = FALSE}
 ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/hg38"
 gdb.create(
-    "hg19",
+    "hg38",
     paste(ftp, "chromosomes", paste0("chr", c(1:22, "X", "Y", "M"), ".fa.gz"), sep = "/"),
     paste(ftp, "database/knownGene.txt.gz", sep = "/"),
     paste(ftp, "database/kgXref.txt.gz", sep = "/"),
