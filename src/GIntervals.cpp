@@ -4,6 +4,11 @@
 
 void GIntervals::sort(bool (*cmp_function)(const GInterval &, const GInterval &))
 {
+	// if the intervals are empty do not sort 
+	if (empty()){
+		return;
+	}
+	
 	// do not sort automatically, check first that the intervals are not sorted yet
 	for (iterator iinterv = begin() + 1; iinterv < end(); ++iinterv) {
 		if (cmp_function(*iinterv, *(iinterv - 1))) {
