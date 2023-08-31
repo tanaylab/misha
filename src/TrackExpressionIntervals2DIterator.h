@@ -1,6 +1,7 @@
 #ifndef TRACKEXPRESSIONINTERVALS2DITERATOR_H_
 #define TRACKEXPRESSIONINTERVALS2DITERATOR_H_
 
+#include <cstdint>
 #include "GenomeChromKey.h"
 #include "GIntervals2D.h"
 #include "StatQuadTree.h"

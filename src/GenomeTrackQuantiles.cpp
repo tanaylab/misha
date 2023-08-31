@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <algorithm>
 #include <cmath>
 #include <vector>

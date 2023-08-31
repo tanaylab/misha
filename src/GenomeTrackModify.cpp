@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "BinFinder.h"
 #include "GenomeTrackFixedBin.h"
 

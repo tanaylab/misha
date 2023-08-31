@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <sys/time.h>
 
 #include "rdbutils.h"

@@ -1,5 +1,6 @@
 #ifndef _SYSTEM_H_INCLUDED_
 #define _SYSTEM_H_INCLUDED_
+#include <cstdint>
 
 // This function returns the actual number of unique bytes (cannot shared with other processes) used by pid.
 // This is done by counting Private Dirty memory mappings.

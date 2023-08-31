@@ -1,6 +1,7 @@
 #ifndef SEGMENT_FINDER_H_INCLUDED
 #define SEGMENT_FINDER_H_INCLUDED
 
+#include <cstdint>
 #include "Segment.h"
 
 #include <queue>

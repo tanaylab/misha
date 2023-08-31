@@ -1,6 +1,7 @@
 #ifndef GTRACKINTERVALSFETCHER1D_H_INCLUDED
 #define GTRACKINTERVALSFETCHER1D_H_INCLUDED
 
+#include <cstdint>
 #include "GenomeTrackArrays.h"
 #include "GenomeTrackSparse.h"
 #include "GIntervalsMeta1D.h"

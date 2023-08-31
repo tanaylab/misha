@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <cmath>
 #include <fstream>
 #include <time.h>

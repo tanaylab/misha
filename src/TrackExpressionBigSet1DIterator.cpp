@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "TrackExpressionBigSet1DIterator.h"
 
 bool TrackExpressionBigSet1DIterator::begin(const char *intervset, SEXP meta, GIntervalsFetcher1D &scope)

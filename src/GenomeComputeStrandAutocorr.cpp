@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>
 
 #include <unordered_map>

@@ -8,6 +8,7 @@
 #ifndef RDBINTERVAL_H_
 #define RDBINTERVAL_H_
 
+#include <cstdint>
 #include <inttypes.h>
 #include <sys/types.h>
 

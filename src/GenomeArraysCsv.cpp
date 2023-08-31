@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <errno.h>
 #include <limits>
 

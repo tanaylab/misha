@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "GIntervalsBigSet1D.h"
 #include "GenomeSeqFetch.h"
 #include "rdbinterval.h"

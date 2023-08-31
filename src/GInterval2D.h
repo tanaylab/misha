@@ -8,6 +8,7 @@
 #ifndef GINTERVAL2D_H_
 #define GINTERVAL2D_H_
 
+#include <cstdint>
 #include <inttypes.h>
 
 #include <vector>

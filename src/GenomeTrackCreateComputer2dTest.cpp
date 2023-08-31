@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "GenomeTrackComputed.h"
 #include "HiCComputers.h"
 

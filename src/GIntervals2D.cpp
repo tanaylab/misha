@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "GIntervals2D.h"
 #include "StatQuadTree.h"
 

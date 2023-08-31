@@ -8,6 +8,7 @@
 #ifndef GENOMETRACK1D_H_
 #define GENOMETRACK1D_H_
 
+#include <cstdint>
 #include "GenomeTrack.h"
 #include "GInterval.h"
 #include "StreamPercentiler.h"

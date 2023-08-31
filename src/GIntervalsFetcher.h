@@ -1,5 +1,6 @@
 #ifndef _GINTERVALSFETCHER_H_INCLUDED_
 #define _GINTERVALSFETCHER_H_INCLUDED_
+#include <cstdint>
 
 template <typename Interval>
 class GIntervalsFetcher {

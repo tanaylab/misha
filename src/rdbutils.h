@@ -9,6 +9,7 @@
 #ifndef RDBUTILS_H_
 #define RDBUTILS_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <pthread.h>

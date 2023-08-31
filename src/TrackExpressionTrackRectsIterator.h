@@ -1,6 +1,7 @@
 #ifndef TRACKEXPRESSIONTRACK2DRECTSITERATOR_H_
 #define TRACKEXPRESSIONTRACK2DRECTSITERATOR_H_
 
+#include <cstdint>
 #include "GenomeChromKey.h"
 #include "GIntervals2D.h"
 #include "GenomeTrackComputed.h"

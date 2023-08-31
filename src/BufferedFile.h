@@ -1,6 +1,7 @@
 #ifndef BUFFEREDFILE_H_
 #define BUFFEREDFILE_H_
 
+#include <cstdint>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>

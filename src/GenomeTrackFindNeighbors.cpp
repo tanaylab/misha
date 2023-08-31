@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"

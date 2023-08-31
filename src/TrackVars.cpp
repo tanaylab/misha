@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "GenomeTrack.h"
 #include "rdbinterval.h"
 #include "rdbprogress.h"

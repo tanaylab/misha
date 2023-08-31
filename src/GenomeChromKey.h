@@ -1,6 +1,7 @@
 #ifndef GENOMECHROMKEY_H_
 #define GENOMECHROMKEY_H_
 
+#include <cstdint>
 #include <stdint.h>
 #include <unordered_map>
 #include <vector>

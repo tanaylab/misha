@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "TrackExpressionSparseIterator.h"
 
 bool TrackExpressionSparseIterator::begin(const string &track_dir, GIntervalsFetcher1D &scope)

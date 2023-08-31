@@ -9,3 +9,4 @@ inst/doc
 docs
 .DS_Store
 mm10
+add_include.sh

@@ -8,6 +8,7 @@
 #ifndef GENOMETRACKCOMPUTED_H_
 #define GENOMETRACKCOMPUTED_H_
 
+#include <cstdint>
 #include <stdio.h>
 
 #include "GenomeTrack2D.h"

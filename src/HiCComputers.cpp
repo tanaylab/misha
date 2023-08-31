@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "TGLException.h"
 #include "GenomeTrack2D.h"
 #include "HiCComputers.h"

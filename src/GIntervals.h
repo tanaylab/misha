@@ -1,6 +1,7 @@
 #ifndef _GINTERVALS_H_INCLUDED_
 #define _GINTERVALS_H_INCLUDED_
 
+#include <cstdint>
 #include "GIntervalsFetcher1D.h"
 
 //------------------------------------- GIntervals ----------------------------------------------
