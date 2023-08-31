@@ -46,6 +46,9 @@ intervals.
 a form of 'ftp://[address]/[file]'. 'fasta' can also contain wildcards to
 indicate multiple files. Files that these arguments point to can be zipped
 or unzipped.
+
+See the 'Genomes' vignette for details on how to create a database from common
+genome sources.
 }
 \examples{
 \dontshow{
