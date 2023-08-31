@@ -20,7 +20,7 @@
     .ginteractive <- .ggetOption(".ginteractive")
     tryCatch(
         {
-            options(.ginteractive = F)
+            options(.ginteractive = FALSE)
             do.call(FUN, list(...))
         },
         finally = {
@@ -47,7 +47,7 @@
             NULL
         } else {
             str <- deparse(substitute(x), width.cutoff = 500)[1]
-            gsub("^\"(.*)\"$", "\\1", str, perl = T)
+            gsub("^\"(.*)\"$", "\\1", str, perl = TRUE)
         }
     } else {
         eval.parent(x)
@@ -79,7 +79,7 @@
 
     diffs <- sapply(zerolines, FUN = attr.all.equal, zerolines[[1]])
     if (!all(sapply(diffs, FUN = is.null))) {
-        stop("Cannot rbind objects: columns differ", call. = F)
+        stop("Cannot rbind objects: columns differ", call. = FALSE)
     }
 
     .gcall("grbind", objs, .misha_env())
@@ -96,7 +96,7 @@
                     sep = "\n"
                 ),
                 data_name, max.data.size
-            ), call. = F)
+            ), call. = FALSE)
         } else {
             stop(sprintf(
                 paste("%s size exceeded the maximal allowed (%d).",
@@ -105,7 +105,7 @@
                     sep = "\n"
                 ),
                 data_name, max.data.size, paste(arguments, collapse = " or ")
-            ), call. = F)
+            ), call. = FALSE)
         }
     }
 }
@@ -136,21 +136,21 @@
 #' @export gwget
 gwget <- function(url = NULL, path = NULL) {
     if (is.null(url)) {
-        stop("Usage: gwget(url, path = NULL)", call. = F)
+        stop("Usage: gwget(url, path = NULL)", call. = FALSE)
     }
 
     if (is.null(path)) {
         .gcheckroot()
         path <- paste(get("GROOT", envir = .misha), "/downloads", sep = "")
-        dir.create(path, showWarnings = F, recursive = T, mode = "0777")
+        dir.create(path, showWarnings = FALSE, recursive = TRUE, mode = "0777")
     }
 
-    if (!length(grep("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", url, perl = T))) {
+    if (!length(grep("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", url, perl = TRUE))) {
         url <- paste("ftp://", url, sep = "")
     }
 
-    if (!length(grep("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", url, perl = T))) {
-        stop("Invalid format of URL", call. = F)
+    if (!length(grep("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", url, perl = TRUE))) {
+        stop("Invalid format of URL", call. = FALSE)
     }
 
     old.files <- dir(path)
@@ -159,8 +159,8 @@ gwget <- function(url = NULL, path = NULL) {
         {
             setwd(path)
 
-            server <- gsub("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", "\\1", url, perl = T)
-            rpath <- gsub("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", "\\3", url, perl = T)
+            server <- gsub("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", "\\1", url, perl = TRUE)
+            rpath <- gsub("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", "\\3", url, perl = TRUE)
 
             rdir <- dirname(rpath)
             rfiles <- basename(rpath)
@@ -176,7 +176,7 @@ gwget <- function(url = NULL, path = NULL) {
                 "quit\n",
                 "EOF\""
             ))) {
-                stop("Command failed", call. = F)
+                stop("Command failed", call. = FALSE)
             }
         },
         interrupt = function(interrupt) {
@@ -253,11 +253,11 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
     commands <- as.list(substitute(list(...))[-1L])
 
     if (length(commands) < 1) {
-        stop("Usage: gculster.run(..., opt.flags = \"\" max.jobs = 400, debug = FALSE)", call. = F)
+        stop("Usage: gculster.run(..., opt.flags = \"\" max.jobs = 400, debug = FALSE)", call. = FALSE)
     }
 
-    if (!length(system("which qsub", ignore.stderr = T, intern = T))) {
-        stop("gcluster.run must run on a host that supports Sun Grid Engine (qsub)", call. = F)
+    if (!length(system("which qsub", ignore.stderr = TRUE, intern = TRUE))) {
+        stop("gcluster.run must run on a host that supports Sun Grid Engine (qsub)", call. = FALSE)
     }
 
     .gcheckroot()
@@ -269,8 +269,8 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
     tryCatch(
         {
             tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/tmp", sep = ""))
-            if (!dir.create(tmp.dirname, recursive = T, mode = "0777")) {
-                stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = F)
+            if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+                stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
             }
 
             # save the environment + options
@@ -413,7 +413,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
                                 answer[[i]] <- res
                             }
                             for (job in running.jobs) {
-                                system(sprintf("qdel %s", job), ignore.stderr = T, intern = T)
+                                system(sprintf("qdel %s", job), ignore.stderr = TRUE, intern = TRUE)
                             }
 
                             unlink(tmp.dirname, recursive = TRUE)
@@ -431,7 +431,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
 
 
 .gcluster.running.jobs <- function(jobids) {
-    str <- system("qstat | sed 's/^[ ]*//' | cut -f 1 -d\" \"", intern = T)
+    str <- system("qstat | sed 's/^[ ]*//' | cut -f 1 -d\" \"", intern = TRUE)
     if (length(str) > 2) {
         intersect(jobids, str)
     } else {

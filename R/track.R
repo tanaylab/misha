@@ -294,17 +294,14 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
 #' \code{\link{gtrack.info}}, \code{\link{gdir.create}}
 #' @keywords ~energy ~pssm ~pwm ~track
 #' @examples
-#' \dontshow{
-#' options(gmax.processes = 2)
-#' }
-#'
+#' \donttest{
 #' gdb.init_examples()
 #' gtrack.create_pwm_energy("pwm_energy_track", "Test track", "pssm",
 #'     3, 0.01,
 #'     iterator = 100
 #' )
 #' gextract("pwm_energy_track", gintervals(1, 0, 1000))
-#' gtrack.rm("pwm_energy_track", force = TRUE)
+#' }
 #'
 #' @export gtrack.create_pwm_energy
 gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset = NULL, pssmid = NULL, prior = NULL, iterator = NULL) {

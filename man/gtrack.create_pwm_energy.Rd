@@ -42,17 +42,14 @@ The type of the created track is determined by the type of the iterator.
 'description' is added as a track attribute.
 }
 \examples{
-\dontshow{
-options(gmax.processes = 2)
-}
-
+\donttest{
 gdb.init_examples()
 gtrack.create_pwm_energy("pwm_energy_track", "Test track", "pssm",
     3, 0.01,
     iterator = 100
 )
 gextract("pwm_energy_track", gintervals(1, 0, 1000))
-gtrack.rm("pwm_energy_track", force = TRUE)
+}
 
 }
 \seealso{
