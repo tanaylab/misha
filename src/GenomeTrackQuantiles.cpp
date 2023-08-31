@@ -890,10 +890,14 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 					generate_warning |= kid_generate_warning;
 
 					kid_medians.resize(res_size * num_percentiles);
-					unpack_data(ptr, kid_medians.front(), kid_medians.size());
+					if(!kid_medians.empty() && ptr != nullptr) {
+ 					   unpack_data(ptr, kid_medians.front(), kid_medians.size());
+					}					
 
 					kid_orig_scope_indices.resize(res_size);
-					unpack_data(ptr, kid_orig_scope_indices.front(), kid_orig_scope_indices.size());
+					if (!kid_orig_scope_indices.empty() && ptr != nullptr){
+						unpack_data(ptr, kid_orig_scope_indices.front(), kid_orig_scope_indices.size());
+					}
 
 					for (uint64_t i = 0; i < kid_orig_scope_indices.size(); ++i) {
 						uint64_t offset = i * num_percentiles;
