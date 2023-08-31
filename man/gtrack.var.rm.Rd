@@ -21,6 +21,9 @@ Deletes a track variable.
 This function deletes a track variable.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.var.set("sparse_track", "test_var1", 1:10)

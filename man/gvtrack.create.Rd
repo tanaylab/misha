@@ -92,6 +92,9 @@ Once a virtual track is created one can modify its iterator behavior by
 calling 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

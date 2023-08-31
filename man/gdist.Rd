@@ -49,6 +49,9 @@ an individual value can be accessed by [i1,i2,...,iN] notation, where 'i1'
 is the first track and 'iN' is the last track expression.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

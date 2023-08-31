@@ -21,6 +21,9 @@ This function returns number of intervals per chromosome (for 1D intervals)
 or chromosome pair (for 2D intervals).
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gintervals.chrom_sizes("annotations")

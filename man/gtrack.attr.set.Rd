@@ -28,6 +28,9 @@ If 'value' is an empty string the attribute is removed.
 Error is reported on an attempt to modify a value of a read-only attribute.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.attr.set("sparse_track", "test_attr", "value")

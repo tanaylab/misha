@@ -24,9 +24,12 @@ are downloaded to a directory given by 'path' argument.  If 'path' is
 'NULL', file are downloaded into 'GROOT/downloads'.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
-# gwget("ftp://hgdownload.cse.ucsc.edu/goldenpath/hg19/chromosomes/md5sum.txt")
+gwget("ftp://hgdownload.cse.ucsc.edu/logs/2012/access_log.2012071*")
 
 }
 \seealso{

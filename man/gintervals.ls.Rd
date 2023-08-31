@@ -27,6 +27,9 @@ This function returns a list of named intervals sets that match the pattern
 returned.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gintervals.ls()

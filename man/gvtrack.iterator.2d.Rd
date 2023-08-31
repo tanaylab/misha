@@ -39,6 +39,9 @@ Similarly 'end1', 'start2', 'end2' coordinates are altered by adding
 'eshift1', 'sshift2' and 'eshift2' accordingly.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gvtrack.create("vtrack1", "rects_track")

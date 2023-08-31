@@ -48,6 +48,9 @@ range of [start, end). Additional columns can be presented in 2D intervals
 object yet these columns must be added after the six obligatory ones.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

@@ -54,6 +54,9 @@
 #' \code{\link{gdir.create}}, \code{\link{gtrack.attr.get}}
 #' @keywords ~create ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs1 <- gintervals.2d(

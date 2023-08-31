@@ -21,6 +21,9 @@ Saves intervals to a named intervals set.
 This function saves 'intervals' as a named intervals set.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 intervs <- gintervals(c(1, 2))

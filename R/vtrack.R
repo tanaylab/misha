@@ -174,6 +174,9 @@
 #' \code{\link{gvtrack.ls}}, \code{\link{gvtrack.rm}}
 #' @keywords ~virtual
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -237,6 +240,9 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 #' @seealso \code{\link{gvtrack.create}}
 #' @keywords ~virtual
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gvtrack.create("vtrack1", "dense_track", "max")
@@ -281,6 +287,9 @@ gvtrack.info <- function(vtrack = NULL) {
 #' @seealso \code{\link{gvtrack.create}}, \code{\link{gvtrack.iterator.2d}}
 #' @keywords ~virtual
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -337,6 +346,9 @@ gvtrack.iterator <- function(vtrack = NULL, dim = NULL, sshift = 0, eshift = 0) 
 #' @seealso \code{\link{gvtrack.create}}, \code{\link{gvtrack.iterator}}
 #' @keywords ~virtual
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gvtrack.create("vtrack1", "rects_track")
@@ -383,6 +395,9 @@ gvtrack.iterator.2d <- function(vtrack = NULL, sshift1 = 0, eshift1 = 0, sshift2
 #' \code{\link{gvtrack.rm}}
 #' @keywords ~virtual ~ls
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gvtrack.create("vtrack1", "dense_track", "max")
@@ -440,6 +455,9 @@ gvtrack.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = 
 #' @seealso \code{\link{gvtrack.create}}, \code{\link{gvtrack.ls}}
 #' @keywords ~virtual
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gvtrack.create("vtrack1", "dense_track", "max")
@@ -508,6 +526,9 @@ gvtrack.rm <- function(vtrack = NULL) {
 #' \code{\link{gtrack.array.get_colnames}}, \code{\link{gtrack.array.extract}}
 #' @keywords ~virtual ~array
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gvtrack.create("vtrack1", "array_track")

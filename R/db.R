@@ -138,6 +138,9 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 #' \code{\link{gdir.create}}, \code{\link{gdir.rm}}
 #' @keywords ~db ~data ~database ~cd ~dir ~directory ~folder
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gdir.cd("subdir")
@@ -401,6 +404,9 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' \code{\link{gintervals.import_genes}}
 #' @keywords ~database ~create ~genes
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #' \dontrun{
 #' ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19"
 #' gdb.create(

@@ -33,6 +33,9 @@ intervals is altered as they are sorted by chromosome (or chromosomes pair -
 for 2D).
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

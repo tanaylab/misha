@@ -19,6 +19,9 @@ Tests for a track existence.
 This function returns 'TRUE' if a track exists in Genomic Database.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.exists("dense_track")

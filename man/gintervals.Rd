@@ -37,6 +37,9 @@ to the intervals. The possible values of a strand can be '1' (plus strand),
 '-1' (minus strand) or '0' (unknown).
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

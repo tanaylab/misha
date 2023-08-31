@@ -31,6 +31,9 @@ This function creates a new 'Sparse' track with values at given intervals.
 'description' is added as a track attribute.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 intervs <- gintervals.load("annotations")

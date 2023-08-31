@@ -30,6 +30,9 @@ pattern (see 'grep'). If called without any arguments all track variables of
 a track are returned.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.var.ls("sparse_track")

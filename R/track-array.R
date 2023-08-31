@@ -183,6 +183,9 @@
 #' \code{\link{gtrack.array.import}}
 #' @keywords ~extract ~array
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.array.extract(
@@ -254,6 +257,9 @@ gtrack.array.extract <- function(track = NULL, slice = NULL, intervals = NULL, f
 #' \code{\link{gtrack.info}}
 #' @keywords ~array ~columns
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gtrack.array.get_colnames("array_track")
 #'
@@ -298,6 +304,9 @@ gtrack.array.get_colnames <- function(track = NULL) {
 #' \code{\link{gtrack.info}}, \code{\link{gdir.create}}
 #' @keywords ~array ~import ~create ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' f1 <- tempfile()
 #' gextract("sparse_track", gintervals(1, 5000, 20000), file = f1)
@@ -397,6 +406,9 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
 #' \code{\link{gtrack.info}}
 #' @keywords ~array ~columns
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' old.names <- gtrack.array.get_colnames("array_track")
 #' new.names <- paste("modified", old.names, sep = "_")

@@ -37,6 +37,9 @@ Iterator interval's 'start' coordinate is modified by adding 'sshift'.
 Similarly 'end' coordinate is altered by adding 'eshift'.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

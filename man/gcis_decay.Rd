@@ -71,6 +71,9 @@ If 'include.lowest' is 'TRUE' the the lowest value will be included in the
 first interval, i.e. in [x1, x2]
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

@@ -51,6 +51,9 @@ Set 'debug' argument to 'TRUE to allow additional report prints.
 argument specifies how R executable should be invoked.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 \dontrun{
 gdb.init_examples()
 v <- 17

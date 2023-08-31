@@ -70,6 +70,9 @@ evaluated expressions. By default the column names match the track
 expressions.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

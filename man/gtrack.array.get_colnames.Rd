@@ -19,6 +19,9 @@ Returns column names of array track.
 This function returns the column names of an array track.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gtrack.array.get_colnames("array_track")
 

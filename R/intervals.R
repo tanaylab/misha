@@ -681,6 +681,9 @@
 #' @seealso \code{\link{gintervals.2d}}, \code{\link{gintervals.force_range}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -733,6 +736,9 @@ gintervals <- function(chroms = NULL, starts = 0, ends = -1, strands = NULL) {
 #' @seealso \code{\link{gintervals}}, \code{\link{gintervals.force_range}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -825,6 +831,9 @@ gintervals.all <- function() {
 #' @seealso \code{\link{gintervals.2d}}, \code{\link{gintervals.intersect}}
 #' @keywords ~band ~intersect
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gintervals.2d.band_intersect(gintervals.2d(1), c(10000, 20000))
@@ -898,6 +907,9 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
 #' @seealso \code{\link{gintervals}}, \code{\link{gintervals.2d}}
 #' @keywords ~intervals ~canonic
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -980,6 +992,9 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
 #' \code{\link{gintervals.union}}
 #' @keywords ~diff
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -1051,6 +1066,9 @@ gintervals.diff <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.
 #' \code{\link{gintervals}}, \code{\link{gintervals.2d}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gintervals.exists("annotations")
@@ -1090,6 +1108,9 @@ gintervals.exists <- function(intervals.set = NULL) {
 #' \code{\link{gintervals.canonic}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- data.frame(
@@ -1259,6 +1280,9 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
 #' \code{\link{gintervals}}, \code{\link{gintervals.2d}}
 #' @keywords ~intersect
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -1335,6 +1359,9 @@ gintervals.intersect <- function(intervals1 = NULL, intervals2 = NULL, intervals
 #' \code{\link{gintervals}}, \code{\link{gintervals.2d}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gintervals.chrom_sizes("annotations")
@@ -1383,6 +1410,9 @@ gintervals.chrom_sizes <- function(intervals = NULL) {
 #' \code{\link{gintervals.exists}}, \code{\link{gintervals.ls}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gintervals.is.bigset("annotations")
@@ -1420,6 +1450,9 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' \code{\link{gintervals}}
 #' @keywords ~intervals ~liftover ~chain
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
@@ -1473,6 +1506,9 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL) {
 #' \code{\link{gintervals}}, \code{\link{gintervals.2d}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gintervals.load("annotations")
@@ -1500,6 +1536,9 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' @seealso \code{\link{gintervals.liftover}}, \code{\link{gtrack.liftover}}
 #' @keywords ~intervals ~liftover ~chain
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
@@ -1531,6 +1570,9 @@ gintervals.load_chain <- function(file = NULL) {
 #' \code{\link{gintervals.2d}}
 #' @keywords ~intervals ~ls
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gintervals.ls()
@@ -1592,6 +1634,9 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #' @seealso \code{\link{mapply}}
 #' @keywords ~apply ~mapply
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gintervals.mapply(
@@ -1716,6 +1761,9 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
 #' @seealso \code{\link{gintervals}},
 #' @keywords ~intervals ~annotate ~nearest ~neighbor ~neighbors
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs1 <- giterator.intervals("dense_track",
@@ -1825,6 +1873,9 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
 #' @seealso \code{\link{gquantiles}}, \code{\link{gbins.quantiles}}
 #' @keywords ~quantiles ~percentiles
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- gintervals(c(1, 2), 0, 5000)
@@ -1905,6 +1956,9 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
 #' \code{\link{gintervals.canonic}}
 #' @keywords ~rbind
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -2000,6 +2054,9 @@ gintervals.rbind <- function(..., intervals.set.out = NULL) {
 #' \code{\link{gintervals.2d}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- gintervals(c(1, 2))
@@ -2065,6 +2122,9 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
 #' \code{\link{gintervals}}, \code{\link{gintervals.2d}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- gintervals(c(1, 2))
@@ -2109,6 +2169,9 @@ gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
 #' \code{\link{gintervals.exists}}, \code{\link{gintervals.ls}}
 #' @keywords ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- gscreen(
@@ -2308,6 +2371,9 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
 #' @seealso \code{\link{gsummary}}, \code{\link{gbins.summary}}
 #' @keywords ~summary ~statistics
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- gintervals(c(1, 2), 0, 5000)
@@ -2379,6 +2445,9 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
 #' \code{\link{gintervals}}, \code{\link{gintervals.2d}}
 #' @keywords ~union
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -2493,6 +2562,9 @@ gintervals.union <- function(intervals1 = NULL, intervals2 = NULL, intervals.set
 #' @seealso \code{\link{giterator.intervals}}
 #' @keywords ~iterator ~cartesian
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -2577,6 +2649,9 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
 #' @seealso \code{\link{giterator.cartesian_grid}}
 #' @keywords ~iterator ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'

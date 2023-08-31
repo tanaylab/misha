@@ -35,6 +35,9 @@ set. Use this parameter if the result size exceeds the limits of the
 physical memory.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gintervals.2d.band_intersect(gintervals.2d(1), c(10000, 20000))

@@ -45,6 +45,9 @@
 #' @seealso \code{\link{gdist}}, \code{\link{gtrack.2d.import_contacts}}
 #' @keywords ~contacts
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -118,6 +121,9 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 #' @seealso \code{\link{gextract}}
 #' @keywords ~distribution
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -217,6 +223,9 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
 #' \code{\link{glookup}}, \code{\link{gpartition}}, \code{\link{gdist}}
 #' @keywords ~extract
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -336,6 +345,9 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 #' \code{\link{glookup}}, \code{\link{gdist}}
 #' @keywords ~partition
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' breaks <- seq(0, 0.2, by = 0.05)
@@ -415,6 +427,9 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
 #' \code{\link{gdist}}
 #' @keywords ~quantiles ~percentiles
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gquantiles("dense_track", c(0.1, 0.6, 0.8), gintervals(c(1, 2)))
@@ -496,6 +511,9 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
 #' \code{\link{gpartition}}, \code{\link{gdist}}
 #' @keywords ~lookup ~extract
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -590,6 +608,9 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
 #' @seealso \code{\link{gextract}}
 #' @keywords ~sample
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gsample("sparse_track", 10)
@@ -636,6 +657,9 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
 #' @seealso \code{\link{gsegment}}, \code{\link{gextract}}
 #' @keywords ~screen ~interval ~intervals
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gscreen("dense_track > 0.2 & sparse_track < 0.4",
@@ -724,6 +748,9 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
 #' @seealso \code{\link{gscreen}}, \code{\link{gwilcox}}
 #' @keywords ~segment ~wilcoxon ~Mann-Whitney
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gsegment("dense_track", 5000, 0.0001)
@@ -798,6 +825,9 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
 #' @seealso \code{\link{gintervals.summary}}, \code{\link{gbins.summary}}
 #' @keywords ~summary ~statistics
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gsummary("rects_track")
@@ -863,6 +893,9 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 #' @seealso \code{\link{gscreen}}, \code{\link{gsegment}}
 #' @keywords ~wilcoxon ~Mann-Whitney
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gwilcox("dense_track", 100000, 1000,
@@ -957,6 +990,9 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
 #' \code{\link{gdist}}
 #' @keywords ~quantiles ~percentiles
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gbins.quantiles("dense_track", c(0, 0.2, 0.4, 2), "sparse_track",
@@ -1029,6 +1065,9 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
 #' \code{\link{gdist}}
 #' @keywords ~summary
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gbins.summary("dense_track", c(0, 0.2, 0.4, 2), "sparse_track",
@@ -1146,6 +1185,9 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
 #' @seealso \code{\link{gextract}}
 #' @keywords ~extract ~DNA ~sequence
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- gintervals(c(1, 2), 10000, 10020)
@@ -1201,6 +1243,9 @@ gseq.extract <- function(intervals = NULL) {
 #' @keywords ~gcompute_strands_autocorr ~auto-correlation ~autocorrelation
 #' ~correlation
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gcompute_strands_autocorr(paste(.misha$GROOT, "reads", sep = "/"),

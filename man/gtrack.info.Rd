@@ -20,6 +20,9 @@ Returns information about the track (type, dimensions, size in bytes, etc.).
 The fields in the returned value vary depending on the type of the track.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.info("dense_track")

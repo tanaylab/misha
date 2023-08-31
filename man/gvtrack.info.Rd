@@ -19,6 +19,9 @@ Returns the definition of a virtual track.
 This function returns the internal representation of a virtual track.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gvtrack.create("vtrack1", "dense_track", "max")

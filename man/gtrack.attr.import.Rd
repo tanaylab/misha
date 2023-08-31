@@ -34,6 +34,9 @@ in the table are removed, otherwise they are preserved unchanged.
 Error is reported on an attempt to modify a value of a read-only attribute.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 t <- gtrack.attr.export()

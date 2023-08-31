@@ -29,6 +29,9 @@ The converted intervals are returned. An additional column named
 resulted intervals it indicates the index of the original interval.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")

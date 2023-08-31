@@ -38,6 +38,9 @@ If 'intervals' is 'NULL' all intervals of given chromosome are removed from
 'intervals.set'.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 intervs <- gscreen(

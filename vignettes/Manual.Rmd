@@ -9,8 +9,8 @@ vignette: >
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
+    collapse = TRUE,
+    comment = "#>"
 )
 ```
 
@@ -488,9 +488,9 @@ Various functions in the library such as `gsample` make use of pseudo-random num
 ```{r}
 set.seed(1)
 r1 <- gsample("dense_track", 10)
-r2 <- gsample("dense_track", 10)  # r2 differs from r1
+r2 <- gsample("dense_track", 10) # r2 differs from r1
 set.seed(1)
-r3 <- gsample("dense_track", 10)  # r3 == r1
+r3 <- gsample("dense_track", 10) # r3 == r1
 ```
 
 

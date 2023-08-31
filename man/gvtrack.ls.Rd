@@ -27,6 +27,9 @@ environment that match the pattern (see 'grep'). If called without any
 arguments all virtual tracks are returned.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gvtrack.create("vtrack1", "dense_track", "max")
