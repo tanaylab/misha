@@ -1116,22 +1116,18 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
         {
             files <- c()
 
-            for (fasta in path) {
-                protocol <- "ftp://"
-                .files <- c()
-                if (substr(fasta, 1, nchar(protocol)) == protocol) {
-                    cat("Downloading FASTA files...\n")
-
-                    # ftp
-                    .files <- gwget(fasta, tmp.dirname)
-                    .files <- paste(tmp.dirname, "/", .files, sep = "")
-                } else {
-                    # local path
-                    .files <- system(paste("/bin/sh -c \"ls -d -A", fasta, "\""), intern = TRUE)
-                }
-
-                files <- c(files, .files)
+            ftp_files <- grep("^ftp://", path, perl = TRUE, value = TRUE)
+            other_files <- setdiff(path, ftp_files)
+            if (length(other_files) + length(ftp_files) != length(path)) {
+                stop("Some paths are not supported", call. = FALSE)
             }
+            if (length(ftp_files) > 0) {
+                files <- c(files, gwget(ftp_files, tmp.dirname))
+            }
+            if (any(!file.exists(other_files))) {
+                stop("Some files do not exist", call. = FALSE)
+            }
+            files <- c(files, other_files)
 
             cat("Building Seq files...\n")
             fastas <- files[grep("^chr.+$", basename(files), perl = TRUE)]

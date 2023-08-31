@@ -5,7 +5,7 @@
 * Use roxygen2 for documentation
 * Fixed compilation errors on MAC. 
 * Fixed many compilation warnings.
-* `gwget` now uses `RCurl` in order to work on systems that do not have `ftp` installed.
+* `gwget` now uses `curl` in order to work on systems that do not have `ftp` installed.
 * User manual was converted to `markdown` format.
 * Added a new `Genomes` vignette that demonstrates how to create a new genome database.
 * fix: wrong bins assignment in BinFinder.h (this code was never accessible from the R API)

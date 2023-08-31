@@ -1234,7 +1234,7 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
                     if (length(f) != 1) {
                         stop(sprintf("More than one file matches %s argument", file.types[i]), call. = FALSE)
                     }
-                    files[[i]] <- paste(tmp.dirname, "/", f, sep = "")
+                    files[[i]] <- f
                 }
 
                 if (length(grep("^.+\\.gz$", files[[i]], perl = TRUE))) {

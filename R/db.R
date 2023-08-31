@@ -407,17 +407,14 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' \code{\link{gintervals.import_genes}}
 #' @keywords ~database ~create ~genes
 #' @examples
-#' \dontshow{
-#' options(gmax.processes = 2)
-#' }
 #' \dontrun{
-#' ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19"
+#' ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
 #' gdb.create(
-#'     "mydb",
-#'     c(
-#'         paste(ftp, "chromosomes/chr2*", sep = "/"),
-#'         paste(ftp, "chromosomes/chr7.*", sep = "/")
-#'     ),
+#'     "mm10",
+#'     paste(ftp, "chromosomes", paste0(
+#'         "chr", c(1:19, "X", "Y", "M"),
+#'         ".fa.gz"
+#'     ), sep = "/"),
 #'     paste(ftp, "database/knownGene.txt.gz", sep = "/"),
 #'     paste(ftp, "database/kgXref.txt.gz", sep = "/"),
 #'     c(
@@ -426,7 +423,7 @@ gdb.set_readonly_attrs <- function(attrs) {
 #'         "tRnaName"
 #'     )
 #' )
-#' gdb.init("mydb")
+#' gdb.init("mm10")
 #' gintervals.ls()
 #' gintervals.all()
 #' }
