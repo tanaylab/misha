@@ -39,6 +39,9 @@ Multiple patterns are applied one after another. The resulted list of tracks
 should match all the patterns.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

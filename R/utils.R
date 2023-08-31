@@ -126,6 +126,9 @@
 #' @seealso \code{\link{gtrack.import_set}}
 #' @keywords ~ftp
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gwget("ftp://hgdownload.cse.ucsc.edu/logs/2012/access_log.2012071*")
@@ -161,6 +164,7 @@ gwget <- function(url = NULL, path = NULL) {
 
             rdir <- dirname(rpath)
             rfiles <- basename(rpath)
+
             if (system(paste(
                 "/bin/sh -c \"",
                 "ftp -i -n -v",
@@ -228,6 +232,9 @@ gwget <- function(url = NULL, path = NULL) {
 #' command. }
 #' @keywords ~cluster
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #' \dontrun{
 #' gdb.init_examples()
 #' v <- 17

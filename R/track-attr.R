@@ -46,6 +46,9 @@
 #' \code{\link{gtrack.attr.set}}
 #' @keywords ~attr ~attribute
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.attr.export()
@@ -110,6 +113,9 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
 #' \code{\link{gtrack.attr.get}}, \code{\link{gdb.get_readonly_attrs}}
 #' @keywords ~attr ~attribute
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' t <- gtrack.attr.export()
@@ -169,6 +175,9 @@ gtrack.attr.import <- function(table = NULL, remove.others = FALSE) {
 #' @seealso \code{\link{gtrack.attr.import}}, \code{\link{gtrack.attr.set}}
 #' @keywords ~attr ~attribute
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.attr.set("sparse_track", "test_attr", "value")
@@ -208,6 +217,9 @@ gtrack.attr.get <- function(track = NULL, attr = NULL) {
 #' \code{\link{gtrack.var.set}}, \code{\link{gdb.get_readonly_attrs}}
 #' @keywords ~attr ~attribute
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.attr.set("sparse_track", "test_attr", "value")

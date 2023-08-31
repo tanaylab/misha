@@ -22,6 +22,9 @@ This function returns the value of a track variable. If the variable does
 not exist an error is reported.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.var.set("sparse_track", "test_var", 1:10)

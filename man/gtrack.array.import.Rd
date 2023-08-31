@@ -37,6 +37,9 @@ two intervals from different sources are forbidden.
 'description' is added as a track attribute.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 f1 <- tempfile()
 gextract("sparse_track", gintervals(1, 5000, 20000), file = f1)

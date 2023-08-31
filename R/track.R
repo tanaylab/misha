@@ -204,6 +204,9 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
 #' \code{\link{gdir.create}}
 #' @keywords ~create ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -291,6 +294,9 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
 #' \code{\link{gtrack.info}}, \code{\link{gdir.create}}
 #' @keywords ~energy ~pssm ~pwm ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.create_pwm_energy("pwm_energy_track", "Test track", "pssm",
@@ -367,6 +373,9 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
 #' \code{\link{gdir.create}}
 #' @keywords ~create ~sparse ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- gintervals.load("annotations")
@@ -430,6 +439,9 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
 #' \code{\link{gtrack.create}}, \code{\link{gtrack.rm}}
 #' @keywords ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.exists("dense_track")
@@ -822,6 +834,9 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' @seealso \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}}
 #' @keywords ~track ~info ~property
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.info("dense_track")
@@ -960,6 +975,9 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
 #' \code{\link{gtrack.info}}, \code{\link{gdir.create}}
 #' @keywords ~lookup ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -1059,6 +1077,9 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
 #' \code{\link{gtrack.create}}, \code{\link{gtrack.rm}}
 #' @keywords ~intervals ~ls
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #'
@@ -1146,6 +1167,9 @@ gtrack.ls <- function(..., ignore.case = FALSE, perl = FALSE, fixed = FALSE, use
 #' @seealso \code{\link{gtrack.create}}, \code{\link{gtrack.rm}}
 #' @keywords ~modify ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' intervs <- gintervals(1, 300, 800)
@@ -1201,6 +1225,9 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
 #' \code{\link{gtrack.create_sparse}}, \code{\link{gtrack.smooth}}
 #' @keywords ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.create("new_track", "Test track", "2 * dense_track")
@@ -1302,6 +1329,9 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
 #' \code{\link{gdir.create}}
 #' @keywords ~smooth ~track
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.smooth("smoothed_track", "Test track", "dense_track", 500)

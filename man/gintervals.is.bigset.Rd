@@ -24,6 +24,9 @@ Memory limit is controlled by 'gmax.data.size' option (see:
 'getOption("gmax.data.size")').
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gintervals.is.bigset("annotations")

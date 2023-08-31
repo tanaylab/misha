@@ -19,6 +19,9 @@ Deletes a virtual track.
 This function deletes a virtual track from current R environment.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gvtrack.create("vtrack1", "dense_track", "max")

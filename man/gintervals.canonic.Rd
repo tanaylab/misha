@@ -35,6 +35,9 @@ intervals and the resulted intervals. Use 'attr(retv_of_gintervals.canonic,
 "mapping")' to retrieve the map.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

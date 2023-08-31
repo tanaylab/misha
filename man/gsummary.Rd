@@ -28,6 +28,9 @@ of bins, total number of bins whose value is NaN, min, max, sum, mean and
 standard deviation of the values.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gsummary("rects_track")

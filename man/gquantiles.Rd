@@ -46,6 +46,9 @@ want to achieve identical results on any machine. For more information
 regarding multitasking please refer "User Manual".
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gquantiles("dense_track", c(0.1, 0.6, 0.8), gintervals(c(1, 2)))

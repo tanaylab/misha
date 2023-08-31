@@ -72,6 +72,9 @@ calculated normally.
 Iterator policy must be of "fixed bin" type.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.smooth("smoothed_track", "Test track", "dense_track", 500)

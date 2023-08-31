@@ -38,6 +38,9 @@ the new track is determined by the type of the iterator. 'Fixed bin',
 added as a track attribute.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

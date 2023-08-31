@@ -21,6 +21,9 @@ Sets column names of array track.
 This sets the column names of an array track.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 old.names <- gtrack.array.get_colnames("array_track")
 new.names <- paste("modified", old.names, sep = "_")

@@ -55,6 +55,9 @@ columns' values.
 Quantile of columns' values.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gvtrack.create("vtrack1", "array_track")

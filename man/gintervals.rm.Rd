@@ -24,6 +24,9 @@ default 'gintervals.rm' requires the user to interactively confirm the
 deletion. Set 'force' to 'TRUE' to suppress the user prompt.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 intervs <- gintervals(c(1, 2))

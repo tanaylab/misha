@@ -55,6 +55,9 @@ If 'include.lowest' is 'TRUE' the the lowest value will be included in the
 first interval, i.e. in [x1, x2].
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gbins.quantiles("dense_track", c(0, 0.2, 0.4, 2), "sparse_track",

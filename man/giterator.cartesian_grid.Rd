@@ -63,6 +63,9 @@ and 'max.band.idx' are not 'NULL', i.e. band indices filtering is applied,
 then 'intervals2' parameter must be set to 'NULL'.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

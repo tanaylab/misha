@@ -72,6 +72,9 @@ value in the track would be 'NaN' too.
 'description' is added as a track attribute.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 

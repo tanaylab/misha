@@ -55,6 +55,9 @@
 #' \code{\link{gtrack.var.rm}}
 #' @keywords ~variable
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.var.set("sparse_track", "test_var", 1:10)
@@ -89,6 +92,9 @@ gtrack.var.get <- function(track = NULL, var = NULL) {
 #' \code{\link{gtrack.var.set}}, \code{\link{gtrack.var.rm}}
 #' @keywords ~variable ~ls
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.var.ls("sparse_track")
@@ -139,6 +145,9 @@ gtrack.var.ls <- function(track = NULL, pattern = "", ignore.case = FALSE, perl 
 #' \code{\link{gtrack.var.ls}}
 #' @keywords ~variable
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.var.set("sparse_track", "test_var1", 1:10)
@@ -182,6 +191,9 @@ gtrack.var.rm <- function(track = NULL, var = NULL) {
 #' \code{\link{gtrack.var.rm}}
 #' @keywords ~variable
 #' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
 #'
 #' gdb.init_examples()
 #' gtrack.var.set("sparse_track", "test_var", 1:10)

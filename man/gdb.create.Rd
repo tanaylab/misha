@@ -48,6 +48,9 @@ indicate multiple files. Files that these arguments point to can be zipped
 or unzipped.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 \dontrun{
 ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19"
 gdb.create(

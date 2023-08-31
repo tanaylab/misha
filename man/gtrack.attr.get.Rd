@@ -22,6 +22,9 @@ This function returns the value of a track attribute. If the attribute does
 not exist an empty sting is returned.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.attr.set("sparse_track", "test_attr", "value")

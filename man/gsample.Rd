@@ -34,6 +34,9 @@ If 'n' is higher than the total number of values, all values are returned
 (yet reshuffled).
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gsample("sparse_track", 10)

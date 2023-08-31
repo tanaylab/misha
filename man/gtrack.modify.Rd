@@ -26,6 +26,9 @@ modified. The iterator policy is set internally to the bin size of the
 track.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 intervs <- gintervals(1, 300, 800)

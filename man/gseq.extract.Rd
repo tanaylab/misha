@@ -21,6 +21,9 @@ This function returns an array of sequence strings for each interval from
 value is '-1', the reverse-complementary sequence is returned.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 intervs <- gintervals(c(1, 2), 10000, 10020)

@@ -57,6 +57,9 @@ set. Use this parameter if the result size exceeds the limits of the
 physical memory.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 breaks <- seq(0, 0.2, by = 0.05)

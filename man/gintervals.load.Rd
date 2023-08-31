@@ -40,6 +40,9 @@ parameters (2D case) must be specified. In other words: big intervals sets
 can be loaded only by chromosome or chromosome pair.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gintervals.load("annotations")

@@ -55,6 +55,9 @@ set. Similarly to 'file' parameter 'intervals.set.out' can be useful to
 overcome the limits of the physical memory.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.array.extract(

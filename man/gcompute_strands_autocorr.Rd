@@ -58,6 +58,9 @@ auto-correlation given by bins. The size of the bin is indicated by
 [-maxread, maxread].
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gcompute_strands_autocorr(paste(.misha$GROOT, "reads", sep = "/"),

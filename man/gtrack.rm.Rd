@@ -23,6 +23,9 @@ This function deletes a track from the Genomic Database. By default
 'force' to 'TRUE' to suppress the user prompt.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.create("new_track", "Test track", "2 * dense_track")

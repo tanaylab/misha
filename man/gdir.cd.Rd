@@ -25,6 +25,9 @@ working directory. Example: a track named 'subdir.dense' will be referred as
 tracks are removed.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gdir.cd("subdir")

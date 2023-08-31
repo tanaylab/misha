@@ -34,6 +34,9 @@ applied if 'attrs' is not 'NULL'.
 Empty character string in a table cell marks a non-existing attribute.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 gtrack.attr.export()

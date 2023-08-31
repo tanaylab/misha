@@ -24,6 +24,9 @@ target one. These ambiguous mappings are not presented in the data frame
 returned by 'gintervals.load_chain'.
 }
 \examples{
+\dontshow{
+options(gmax.processes = 2)
+}
 
 gdb.init_examples()
 chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
