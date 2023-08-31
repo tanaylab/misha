@@ -570,24 +570,8 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 	if (node.is_leaf) {
 		Leaf new_leaf;
 
-#ifdef __GNUC__
-	#ifdef __clang__
-    	#pragma clang diagnostic push
-    	#pragma clang diagnostic ignored "-Wunknown-warning-option"
-	#endif
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wpragmas"  
-	#pragma GCC diagnostic ignored "-Wclass-memaccess"
-	#ifdef __clang__
-		#pragma clang diagnostic pop
-	#endif
-#endif
-
 		// ensure that stucture's members are padded with zeroes (and not some junk) otherwise there will be no binary consistency between the files with identical quad trees
 		memset(&new_leaf, 0, sizeof(new_leaf));
-#ifdef __GNUC__
-	#pragma GCC diagnostic pop
-#endif
 
 		new_leaf.is_leaf = true;
 		new_leaf.stat = node.stat;
@@ -610,25 +594,8 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 	} else {
 		Node new_node;
 
-#ifdef __GNUC__
-	#ifdef __clang__
-    	#pragma clang diagnostic push
-    	#pragma clang diagnostic ignored "-Wunknown-warning-option"
-	#endif
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wpragmas"  
-	#pragma GCC diagnostic ignored "-Wclass-memaccess"
-	#ifdef __clang__
-		#pragma clang diagnostic pop
-	#endif
-#endif
-
 		// ensure that stucture's members are padded with zeroes (and not some junk) otherwise there will be no binary consistency between the files with identical quad trees
 		memset(&new_node, 0, sizeof(new_node));
-
-#ifdef __GNUC__
-	#pragma GCC diagnostic pop
-#endif
 
 		new_node.is_leaf = false;
 		new_node.stat = node.stat;
