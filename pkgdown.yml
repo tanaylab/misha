@@ -1,6 +1,8 @@
-pandoc: '2.2'
-pkgdown: 1.5.1
+pandoc: 2.19.2
+pkgdown: 2.0.7
 pkgdown_sha: ~
-articles: {}
-last_built: 2020-07-09T09:07Z
+articles:
+  Genomes: Genomes.html
+  Manual: Manual.html
+last_built: 2023-08-31T15:37Z
 
