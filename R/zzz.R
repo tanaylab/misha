@@ -31,8 +31,8 @@
         gdb.init_examples()
     }
 
-    utils::suppressForeignCheck("retv")
-    utils::globalVariables("retv")
+    utils::suppressForeignCheck(c("retv", "."))
+    utils::globalVariables(c("retv", "."))
 }
 
 .onAttach <- function(lib, pkg) {
