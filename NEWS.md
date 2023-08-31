@@ -1,4 +1,4 @@
-# misha 4.2.0
+# misha 4.2.1
 
 * First CRAN release
 * **Breaking change**: Moved global variables into a separate environment called `.misha`. Variables such as `ALLGENOME` can now be accessed as `.misha$ALLGENOME`. This change is not backwards compatible, please update your code accordingly.
