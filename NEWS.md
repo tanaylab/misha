@@ -1,7 +1,15 @@
 # misha 4.2.0
 
+* First CRAN release
+* **Breaking change**: Moved global variables into a separate environment called `.misha`. Variables such as `ALLGENOME` can now be accessed as `.misha$ALLGENOME`. This change is not backwards compatible, please update your code accordingly.
 * Use roxygen2 for documentation
+* Fixed compilation errors on MAC. 
+* Fixed many compilation warnings.
+* `gwget` now uses `RCurl` in order to work on systems that do not have `ftp` installed.
+* User manual was converted to `markdown` format.
+* Added a new `Genomes` vignette that demonstrates how to create a new genome database.
 * fix: wrong bins assignment in BinFinder.h (this code was never accessible from the R API)
+
 # misha 4.1.0
 
 *  Bug fix (bug first appears in 4.0.8): virtual tracks based on "global.percentile", "global.percentile.min" or "global.percentile.max" might occasionally return unexpected results and/or cause crashes due to faulty memory management.

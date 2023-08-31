@@ -1,25 +1,3 @@
-navbar:
-  structure:
-    left:
-    - home
-    - intro
-    - reference
-    - articles
-    - tutorials
-    - news
-    right: github
-  components:
-    home:
-      icon: fa-home fa-lg
-      href: index.html
-    tutorials:
-      icon: fa-road
-      text: User Manual
-      href: articles/manual.pdf
-    reference:
-      text: Reference
-      href: reference/index.html
-
 reference:
   - title: Track functions
     desc:  Functions to manipulate and create tracks
@@ -130,9 +108,5 @@ reference:
     contents:
       - misha-package
       - gcluster.run
-      - gset_input_mode
-      - gtraceback
       - gwget
       - gwilcox
-
-pdf: /net/mraid14/export/data/tools/lib/misha/doc/manual.pdf

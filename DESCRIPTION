@@ -4,7 +4,8 @@ Title: Toolkit for Analysis of Genomic Data
 Version: 4.2.0
 Authors@R: c(
     person("Misha", "Hoichman", , "misha@hoichman.com", role = "aut"),
-    person("Aviezer", "Lifshitz", , "aviezer.lifshitz@weizmann.ac.il", role = c("aut", "cre"))
+    person("Aviezer", "Lifshitz", , "aviezer.lifshitz@weizmann.ac.il", role = c("aut", "cre")),
+    person("Amos", "Tanay", , "amos.tanay@weizmann.ac.il", role = "aut")
   )
 Description: A toolkit for analysis of genomic data. The 'misha' package
     implements an efficient data structure for storing genomic data, and
@@ -20,7 +21,9 @@ Imports:
 Suggests: 
     dplyr,
     glue,
+    knitr,
     readr,
+    rmarkdown,
     spelling,
     stats,
     testthat (>= 3.0.0),
@@ -34,3 +37,4 @@ LazyLoad: yes
 NeedsCompilation: yes
 OS_type: unix
 RoxygenNote: 7.2.3
+VignetteBuilder: knitr
