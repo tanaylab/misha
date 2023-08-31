@@ -5,3 +5,5 @@ regression.R
 regression_tests.R
 inst/trackdb/test/.db.cache
 .vscode
+inst/doc
+docs

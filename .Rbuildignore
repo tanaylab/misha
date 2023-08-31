@@ -6,3 +6,5 @@
 ^inst/trackdb/test/\.db\.cache$
 ^LICENSE\.md$
 ^\.vscode$
+^cran-comments\.md$
+^docs$
