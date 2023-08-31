@@ -3,6 +3,7 @@
 * First CRAN release
 * **Breaking change**: Moved global variables into a separate environment called `.misha`. Variables such as `ALLGENOME` can now be accessed as `.misha$ALLGENOME`. This change is not backwards compatible, please update your code accordingly.
 * Use roxygen2 for documentation
+* changed default of `gmax.data.size` to 1e9 (instead of 1e7).
 * Fixed compilation errors on MAC. 
 * Fixed many compilation warnings.
 * `gwget` now uses `curl` in order to work on systems that do not have `ftp` installed.
