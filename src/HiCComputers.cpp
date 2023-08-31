@@ -8,7 +8,7 @@
 // Utility structure and functions
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct comp_interval_start : public binary_function<GInterval, GInterval, bool> {
+struct comp_interval_start {
     bool operator()(const GInterval x, const GInterval y) {
         if (x.chromid != y.chromid)
             return (x.chromid < y.chromid);
@@ -17,7 +17,7 @@ struct comp_interval_start : public binary_function<GInterval, GInterval, bool> 
     }
 };
 
-struct comp_interval_end : public binary_function<GInterval, GInterval, bool> {
+struct comp_interval_end {
     const bool operator()(const GInterval x, const GInterval y) {
         if (x.chromid != y.chromid)
             return (x.chromid < y.chromid);
