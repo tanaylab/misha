@@ -33,7 +33,6 @@ NaN
 NaNs
 NxM
 OSX
-PACKAGEDIR
 PKGDIR
 PSSM
 PSSMs
@@ -46,6 +45,7 @@ SGE
 StatQuadTreeCached
 TSS
 TrackScanner
+UCSC
 annot
 annotnames
 annots
@@ -65,7 +65,6 @@ canonic
 cd
 chr
 chrX
-chrXXX
 chrom
 chromo
 chroms
@@ -147,6 +146,7 @@ gwget
 gwilcox
 gwrite
 gz
+hg
 hostnames
 iN
 idx
@@ -158,11 +158,12 @@ intervs
 intervsets
 intevals
 intra
-invloved
 kgID
+le
 libR
 liftover
 loadall
+logN
 logics
 makepvals
 mappedseq
@@ -179,9 +180,6 @@ minsegment
 minval
 multitasked
 mydata
-mytrack
-myvar
-myvtrack
 na
 nans
 nbash
@@ -189,10 +187,8 @@ neighbouring
 notfound
 num
 numbins
-numerious
 onexit
 params
-pmin
 probs
 ps
 pssms
@@ -204,7 +200,6 @@ pwm
 pwms
 qsub
 readonly
-rects
 rescan
 rescanned
 rescanning
@@ -231,9 +226,7 @@ trackname
 tracknames
 trackset
 tracksets
-tranformed
 tss
-ulimit
 undefine
 unevaluated
 unprotect
