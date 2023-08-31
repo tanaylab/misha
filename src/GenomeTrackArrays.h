@@ -25,7 +25,7 @@ public:
 		bool operator<(const ArrayVal &obj) const { return idx < obj.idx; }
 	};
 
-	struct LessIdx : public binary_function<ArrayVal, unsigned, bool> {
+	struct LessIdx {
 		bool operator()(const ArrayVal &obj, unsigned idx) const { return obj.idx < idx; }
 	};
 

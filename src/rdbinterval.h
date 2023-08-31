@@ -52,11 +52,11 @@ struct ChainInterval : public GInterval {
 	enum Errors { BAD_INTERVAL };
 	enum { CHROM_SRC = GInterval::NUM_COLS, START_SRC, NUM_COLS };
 
-	struct SrcCompare : public binary_function<ChainInterval, ChainInterval, bool> {
+	struct SrcCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
-	};
+	};	
 
-	struct SetCompare : public binary_function<ChainInterval, ChainInterval, bool> {
+	struct SetCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
 	};
 
