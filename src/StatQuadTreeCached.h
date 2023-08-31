@@ -568,10 +568,7 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 	int64_t top_node_fpos;
 
 	if (node.is_leaf) {
-		Leaf new_leaf;
-
-		// ensure that stucture's members are padded with zeroes (and not some junk) otherwise there will be no binary consistency between the files with identical quad trees
-		memset(&new_leaf, 0, sizeof(new_leaf));
+		Leaf new_leaf{};
 
 		new_leaf.is_leaf = true;
 		new_leaf.stat = node.stat;
@@ -592,10 +589,7 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 			file.write(&obj, sizeof(obj));
 		}
 	} else {
-		Node new_node;
-
-		// ensure that stucture's members are padded with zeroes (and not some junk) otherwise there will be no binary consistency between the files with identical quad trees
-		memset(&new_node, 0, sizeof(new_node));
+		Node new_node{};
 
 		new_node.is_leaf = false;
 		new_node.stat = node.stat;
