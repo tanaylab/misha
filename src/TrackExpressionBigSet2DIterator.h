@@ -1,6 +1,7 @@
 #ifndef TRACKEXPRESSIONBIGSET2DITERATOR_H_
 #define TRACKEXPRESSIONBIGSET2DITERATOR_H_
 
+#include <cstdint>
 #include "GIntervalsBigSet2D.h"
 #include "rdbinterval.h"
 #include "TrackExpression2DIterator.h"

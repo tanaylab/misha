@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "rdbinterval.h"
 #include "rdbutils.h"
 #include "BinsManager.h"

@@ -8,6 +8,7 @@
 #ifndef GENOMETRACKFIXEDBIN_H_
 #define GENOMETRACKFIXEDBIN_H_
 
+#include <cstdint>
 #include <math.h>
 
 #include "GenomeTrack1D.h"

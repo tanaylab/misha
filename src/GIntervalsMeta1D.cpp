@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "GIntervalsMeta1D.h"
 #include "rdbutils.h"
 

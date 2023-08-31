@@ -1,6 +1,7 @@
 #ifndef _GINTERVALSFETCHER2D_H_INCLUDED_
 #define _GINTERVALSFETCHER2D_H_INCLUDED_
 
+#include <cstdint>
 #include <set>
 
 #include "GInterval2D.h"

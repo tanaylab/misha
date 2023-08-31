@@ -1,6 +1,7 @@
 #ifndef GTRACKINTERVALSFETCHER2D_H_INCLUDED
 #define GTRACKINTERVALSFETCHER2D_H_INCLUDED
 
+#include <cstdint>
 #include "GenomeTrackComputed.h"
 #include "GenomeTrackRects.h"
 #include "GIntervalsMeta2D.h"

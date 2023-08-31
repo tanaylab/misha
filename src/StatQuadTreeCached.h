@@ -8,6 +8,7 @@
 #ifndef STATQUADTREECACHED_H_
 #define STATQUADTREECACHED_H_
 
+#include <cstdint>
 #include <inttypes.h>
 
 #include <list>

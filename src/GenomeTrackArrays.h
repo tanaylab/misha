@@ -1,6 +1,7 @@
 #ifndef GENOMETRACKARRAYS_H_
 #define GENOMETRACKARRAYS_H_
 
+#include <cstdint>
 #include <cmath>
 #include <vector>
 

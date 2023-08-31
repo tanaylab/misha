@@ -20,6 +20,7 @@
 // The greater resolution at the edges is achieved by monitoring the N1 lowest and N2 highest values of the stream.
 // During the construction of the object the user should supply the size of the buffer for random sampling as well as N1 and N2.
 
+#include <cstdint>
 #include <math.h>
 #include "StreamSampler.h"
 

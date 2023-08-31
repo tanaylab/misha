@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "port.h"
 #include "DnaPSSM.h"
 #include "Random.h"

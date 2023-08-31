@@ -1,6 +1,7 @@
 #ifndef TRACKEXPRESSION2DITERATOR_H_
 #define TRACKEXPRESSION2DITERATOR_H_
 
+#include <cstdint>
 #include "StatQuadTree.h"
 #include "TrackExpressionIterator.h"
 

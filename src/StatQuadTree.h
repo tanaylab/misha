@@ -8,6 +8,7 @@
 #ifndef QUADTREE_H_
 #define QUADTREE_H_
 
+#include <cstdint>
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>

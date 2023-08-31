@@ -1,6 +1,7 @@
 #ifndef STATQUADTREECACHEDSERIALIZER_H_
 #define STATQUADTREECACHEDSERIALIZER_H_
 
+#include <cstdint>
 #include <math.h>
 #include <strings.h>
 

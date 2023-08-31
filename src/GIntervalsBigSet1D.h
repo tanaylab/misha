@@ -1,6 +1,7 @@
 #ifndef _GINTERVALSBIGSET1D_H_INCLUDED_
 #define _GINTERVALSBIGSET1D_H_INCLUDED_
 
+#include <cstdint>
 #include "GInterval.h"
 #include "GIntervalsBigSet.h"
 #include "GIntervalsMeta1D.h"

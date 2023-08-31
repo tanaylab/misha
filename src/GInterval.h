@@ -1,6 +1,7 @@
 #ifndef GINTERVAL_H_
 #define GINTERVAL_H_
 
+#include <cstdint>
 #include <inttypes.h>
 #include <math.h>
 #include <sys/types.h>

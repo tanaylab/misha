@@ -8,6 +8,7 @@
 #ifndef STREAMSAMPLER_H_
 #define STREAMSAMPLER_H_
 
+#include <cstdint>
 #include <vector>
 
 #include "TGLException.h"

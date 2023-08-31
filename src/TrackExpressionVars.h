@@ -8,6 +8,7 @@
 #ifndef TRACKEXPRESSIONVARS_H_
 #define TRACKEXPRESSIONVARS_H_
 
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <string.h>

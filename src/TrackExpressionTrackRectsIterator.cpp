@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <unistd.h>
 
 #include "TrackExpressionTrackRectsIterator.h"

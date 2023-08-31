@@ -1,6 +1,7 @@
 #ifndef RANDOM_SHUFFLE_H_INCLUDED
 #define RANDOM_SHUFFLE_H_INCLUDED
 
+#include <cstdint>
 #include <algorithm>
 #include <stdlib.h>
 

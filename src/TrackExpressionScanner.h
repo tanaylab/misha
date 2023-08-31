@@ -1,6 +1,7 @@
 #ifndef TRACKEXPRESSIONSCANNER_H_
 #define TRACKEXPRESSIONSCANNER_H_
 
+#include <cstdint>
 #include <ctype.h>
 
 #include <vector>

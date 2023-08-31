@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>

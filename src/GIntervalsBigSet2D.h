@@ -1,6 +1,7 @@
 #ifndef _GINTERVALSBIGSET2D_H_INCLUDED_
 #define _GINTERVALSBIGSET2D_H_INCLUDED_
 
+#include <cstdint>
 #include "GIntervals2D.h"
 #include "GIntervalsBigSet.h"
 #include "GIntervalsFetcher2D.h"
