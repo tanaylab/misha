@@ -119,7 +119,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		int active_col_idx = -1;
 		int c;
 		string str[NUM_COLS];
-		int line = 1;
+		// int line = 1;
 		int pos = 0;
 
 		Progress_reporter progress;
@@ -145,7 +145,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 				if (c == EOF) 
 					break;
-				++line;
+				// ++line;
 				continue;
 			}
 			++pos;
@@ -205,7 +205,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							str[i].clear();
 					}
 					col = 1;
-					line++;
+					// line++;
 				} else
 					col++;
 
