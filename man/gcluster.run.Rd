@@ -57,15 +57,17 @@ options(gmax.processes = 2)
 \donttest{
 gdb.init_examples()
 # Run only on systems with Sun Grid Engine (SGE)
-v <- 17
-gcluster.run(
-    gsummary("dense_track + v"),
-    {
-        intervs <- gscreen("dense_track > 0.1", gintervals(1, 2))
-        gsummary("sparse_track", intervs)
-    },
-    gsummary("rects_track")
-)
+if (length(system("which qsub", ignore.stderr = TRUE, intern = TRUE))) {
+    v <- 17
+    gcluster.run(
+        gsummary("dense_track + v"),
+        {
+            intervs <- gscreen("dense_track > 0.1", gintervals(1, 2))
+            gsummary("sparse_track", intervs)
+        },
+        gsummary("rects_track")
+    )
+}
 }
 
 }

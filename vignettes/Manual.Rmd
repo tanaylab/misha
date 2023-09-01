@@ -385,7 +385,7 @@ Previously we described how a track expression `"mytrack * 3"` (where `mytrack` 
 
 The size of the vector is controlled via `gbuf.size` option. By default it equals to 1000. Altering this value (for instance setting it to 1) might significantly affect the run-time of various functions in the library. If you still wish to force the functions to define scalars rather than vectors, set `gbuf.size` to 1:
 
-```{r}
+```{r, eval = FALSE}
 options(gbuf.size = 1)
 ```
 
@@ -486,10 +486,10 @@ We added a band then. `gintervals.2d.band_intersect` shows the minimal rectangle
 Various functions in the library such as `gsample` make use of pseudo-random number generator. Each time the function is invoked a unique series of random numbers is issued. Hence two identical calls might produce different results. To guarantee reproducible results call `set.seed` before invoking the function.
 
 ```{r}
-set.seed(1)
+set.seed(60427)
 r1 <- gsample("dense_track", 10)
 r2 <- gsample("dense_track", 10) # r2 differs from r1
-set.seed(1)
+set.seed(60427)
 r3 <- gsample("dense_track", 10) # r3 == r1
 ```
 
