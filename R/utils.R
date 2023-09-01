@@ -21,6 +21,7 @@
     tryCatch(
         {
             options(.ginteractive = FALSE)
+            on.exit(options(.ginteractive = .ginteractive))
             do.call(FUN, list(...))
         },
         finally = {

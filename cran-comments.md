@@ -10,6 +10,5 @@ See response to previous submission below.
 * Added missing \value tags to all exported functions in the package.
 * Replaced \dontrun with \donttest in examples.
 * Replaced `cat` calls with `message`.
-
-* A link to macbuilder test results: https://mac.R-project.org/macbuilder/results/1693508419-aba69eca0b78a073/
+* Added `on.exit` calls right before any call to `setwd` as instructed.
 
