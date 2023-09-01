@@ -648,38 +648,38 @@ gdb.reload <- function(rescan = TRUE) {
 
     db.filename <- paste(get("GROOT", envir = .misha), ".db.cache", sep = "/")
 
-    options(warn = -1) # disable warnings since dir() on non dir or non existing dir produces warnings
-    if (!rescan) {
-        retv <- try(
-            {
-                f <- file(db.filename, "rb")
-                res <- unserialize(f)
-                close(f)
-            },
-            silent = TRUE
-        )
-
-        if (inherits(retv, "try-error")) {
-            rescan <- TRUE
-        }
-    }
-
-    if (rescan) {
-        res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env(), silent = TRUE)
-        if (get("GWD", envir = .misha) == paste(get("GROOT", envir = .misha), "tracks", sep = "/")) {
-            try(
+    suppressWarnings({ # disable warnings since dir() on non dir or non existing dir produces warnings
+        if (!rescan) {
+            retv <- try(
                 {
-                    f <- file(db.filename, "wb")
-                    serialize(res, f)
+                    f <- file(db.filename, "rb")
+                    res <- unserialize(f)
                     close(f)
                 },
                 silent = TRUE
             )
-        } else {
-            unlink(db.filename, recursive = TRUE)
+
+            if (inherits(retv, "try-error")) {
+                rescan <- TRUE
+            }
         }
-    }
-    options(warn = 0) # restore the warning behavior
+
+        if (rescan) {
+            res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env(), silent = TRUE)
+            if (get("GWD", envir = .misha) == paste(get("GROOT", envir = .misha), "tracks", sep = "/")) {
+                try(
+                    {
+                        f <- file(db.filename, "wb")
+                        serialize(res, f)
+                        close(f)
+                    },
+                    silent = TRUE
+                )
+            } else {
+                unlink(db.filename, recursive = TRUE)
+            }
+        }
+    })
 
     tracks <- res[[1]]
     intervals <- res[[2]]
