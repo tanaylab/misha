@@ -9,6 +9,9 @@ gdb.reload(rescan = TRUE)
 \arguments{
 \item{rescan}{indicates whether the file structure should be rescanned}
 }
+\value{
+No return value, called for side effects.
+}
 \description{
 Reloads database from disk: list of tracks, intervals, etc.
 }
