@@ -14,3 +14,4 @@ See response to previous submission below.
 * Replaced `cat` calls with `message`.
 * Added `on.exit` calls right before any call to `setwd` or `options` as instructed.
 * Removed the `options(warn=-1)` calls. 
+* Changed the example of a function that wrote files to the current working directory to a temporary directory.

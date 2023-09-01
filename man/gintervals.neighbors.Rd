@@ -37,7 +37,8 @@ optionally outputted}
 If 'intervals.set.out' is 'NULL' a data frame containing the pairs
 of intervals from 'intervals1', intervals from 'intervals2' and an
 additional column named 'dist' ('dist1' and 'dist2' for 2D intervals)
-representing the distance between the corresponding intervals. If
+representing the distance between the corresponding intervals. The intervals
+from intervals2 would be changed to 'chrom1', 'start1', and 'end1'. If
 'na.if.notfound' is 'TRUE', the data frame contains all the intervals from
 'intervals1' including those for which no matching neighbor was found. For
 the latter intervals an 'NA' neighboring interval is stated. If
@@ -61,6 +62,9 @@ For 2D intervals two distances are calculated and returned for each axis.
 The distances must fall in the range of ['mindist1', 'maxdist1'] for axis 1
 and ['mindist2', 'maxdist2'] for axis 2. For selecting the closest
 'maxneighbors' intervals Manhattan distance is used (i.e. dist1+dist2).
+
+The names of the returned columns are made unique using
+\code{make.unique(colnames(df), sep = "")}, assuming 'df' is the result.
 
 If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 set. Use this parameter if the result size exceeds the limits of the

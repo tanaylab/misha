@@ -1,7 +1,8 @@
-# misha 4.2.1
+# misha 4.2.2
 
 * First CRAN release
 * **Breaking change**: Moved global variables into a separate environment called `.misha`. Variables such as `ALLGENOME` can now be accessed as `.misha$ALLGENOME`. This change is not backwards compatible, please update your code accordingly.
+* **Breaking change**: Repair names of the resulting data frame of `gintervals.neighbors` (same as `gintervals.neighbors1` from `misha.ext`). This means that instead of having two columns of 'chrom', 'start' and 'end', the resulting data frame would have 'chrom1', 'start1' and 'end1'. 
 * Use roxygen2 for documentation
 * Fixed compilation errors on MAC. 
 * Fixed many compilation warnings.
