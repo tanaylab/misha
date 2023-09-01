@@ -24,6 +24,7 @@
 
 .gdir.cd <- function(dir, rescan) {
     oldwd <- getwd()
+    on.exit(setwd(oldwd), add = TRUE)
     setwd(get("GWD", envir = .misha))
     tryCatch(
         {
@@ -194,6 +195,7 @@ gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
     }
 
     oldwd <- getwd()
+    on.exit(setwd(oldwd), add = TRUE)
     setwd(get("GWD", envir = .misha))
     tryCatch(
         {
@@ -270,6 +272,7 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
     }
 
     oldwd <- getwd()
+    on.exit(setwd(oldwd), add = TRUE)
     setwd(get("GWD", envir = .misha))
     tryCatch(
         {
