@@ -412,10 +412,13 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' @examples
 #' \donttest{
 #' ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
+#' mm10_dir <- tempdir()
+#' # only a single chromosome is loaded in this example
+#' # see "Genomes" vignette how to downloaded all of them/other genomes
 #' gdb.create(
-#'     "mm10",
+#'     mm10_dir,
 #'     paste(ftp, "chromosomes", paste0(
-#'         "chr", c(1:19, "X", "Y", "M"),
+#'         "chr", c("X"),
 #'         ".fa.gz"
 #'     ), sep = "/"),
 #'     paste(ftp, "database/knownGene.txt.gz", sep = "/"),
@@ -426,7 +429,7 @@ gdb.set_readonly_attrs <- function(attrs) {
 #'         "tRnaName"
 #'     )
 #' )
-#' gdb.init("mm10")
+#' gdb.init(mm10_dir)
 #' gintervals.ls()
 #' gintervals.all()
 #' }

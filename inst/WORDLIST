@@ -74,8 +74,10 @@ ctrl
 cwd
 defunc
 defval
+df
 dir
 dirs
+doi
 dups
 eshift
 eval
@@ -185,6 +187,7 @@ na
 nans
 nbash
 neighbouring
+ng
 notfound
 num
 numbins
