@@ -90,7 +90,7 @@
                             t <<- Sys.time()
                             percentage <- as.integer(100 * match(chrom, chroms$chrom) / nrow(chroms))
                             if (percentage < 100 && progress.percentage != percentage) {
-                                cat(sprintf("%d%%...", percentage))
+                                message(sprintf("%d%%...", percentage))
                                 progress.percentage <<- percentage
                             }
                         }
@@ -111,7 +111,7 @@
                             t <<- Sys.time()
                             percentage <- as.integer(100 * which(chroms$chrom1 == chrom1 & chroms$chrom2 == chrom2) / nrow(chroms))
                             if (percentage < 100 && progress.percentage != percentage) {
-                                cat(sprintf("%d%%...", percentage))
+                                message(sprintf("%d%%...", percentage))
                                 progress.percentage <<- percentage
                             }
                         }
@@ -126,7 +126,7 @@
                 }
 
                 if (progress.percentage >= 0) {
-                    cat("100%\n")
+                    message("100%")
                 }
 
                 success <- TRUE
@@ -296,7 +296,7 @@
                             t <<- Sys.time()
                             percentage <- as.integer(100 * match(chrom, meta$stats$chrom) / length(meta$stats$chrom))
                             if (progress && percentage < 100 && progress.percentage != percentage) {
-                                cat(sprintf("%d%%...", percentage))
+                                message(sprintf("%d%%...", percentage))
                                 progress.percentage <<- percentage
                             }
                         }
@@ -360,7 +360,7 @@
                             t <<- Sys.time()
                             percentage <- as.integer(100 * which(meta$stats$chrom1 == chrom1 & meta$stats$chrom2 == chrom2) / nrow(meta$stats))
                             if (progress && percentage < 100 && progress.percentage != percentage) {
-                                cat(sprintf("%d%%...", percentage))
+                                message(sprintf("%d%%...", percentage))
                                 progress.percentage <<- percentage
                             }
                         }
@@ -379,7 +379,7 @@
         }
 
         if (progress.percentage >= 0) {
-            cat("100%\n")
+            message("100%")
         }
     } else {
         if (is.character(intervals.set) && length(intervals.set) == 1) {
@@ -2087,7 +2087,7 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
         answer <- "Y"
     } else {
         str <- sprintf("Are you sure you want to delete intervals set %s (Y/N)? ", intervals.set)
-        cat(str)
+        message(str)
         answer <- toupper(readLines(n = 1))
     }
 
@@ -2098,7 +2098,7 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
         unlink(fname, recursive = TRUE)
 
         if (file.exists(fname)) {
-            cat(sprintf("Failed to delete intervals set %s\n", intervals.set))
+            message(sprintf("Failed to delete intervals set %s", intervals.set))
         } else {
             # refresh the list of GINTERVS, etc.
             .gdb.rm_intervals.set(intervals.set)

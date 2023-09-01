@@ -298,7 +298,7 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
                 intervals <- res[[2]]
 
                 if (!force && length(tracks) + length(intervals) > 0) {
-                    cat(sprintf("Directory %s contains tracks or intervals. Are you still sure you want to delete it (Y/N)? ", dir))
+                    message(sprintf("Directory %s contains tracks or intervals. Are you still sure you want to delete it (Y/N)? ", dir))
                     answer <- toupper(readLines(n = 1))
                 }
             }
@@ -407,7 +407,7 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' \code{\link{gintervals.import_genes}}
 #' @keywords ~database ~create ~genes
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
 #' gdb.create(
 #'     "mm10",
@@ -498,7 +498,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             serialize(c("created.by", "created.date"), f)
             close(f)
 
-            cat("Database was successfully created\n")
+            message("Database was successfully created")
             success <- TRUE
         },
         finally = {
@@ -712,7 +712,7 @@ gdb.reload <- function(rescan = TRUE) {
                 silent = TRUE
             )
         }
-        cat(sprintf("%s\n", track))
+        message(track)
     }
 }
 
@@ -724,7 +724,7 @@ gdb.reload <- function(rescan = TRUE) {
             {
                 retv <- try(.gcall_noninteractive(gtrack.info, track), silent = TRUE)
                 if (inherits(retv, "try-error") & length(grep("obsolete", retv)) > 0) {
-                    cat(sprintf("Converting track %s\n", track))
+                    message(sprintf("Converting track %s", track))
                     .gcall_noninteractive(gtrack.convert, track)
                 }
             },

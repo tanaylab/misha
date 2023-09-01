@@ -518,7 +518,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
             report.progress <- FALSE
 
             if (length(grep("^.+\\.gz$", file, perl = TRUE)) || length(grep("^.+\\.zip$", file, perl = TRUE))) {
-                cat("Unzipping...\n")
+                message("Unzipping...\n")
                 report.progress <- TRUE
                 tmp.dirname <- tempfile()
                 if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
@@ -536,7 +536,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
             # looks like all bigWig files start with "fc26" in their first two bytes
             if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
                 system(sprintf("od -x -N 2 \"%s\"", file), intern = TRUE)[1] == "0000000 fc26") {
-                cat("Converting from BigWig to WIG...\n")
+                message("Converting from BigWig to WIG...\n")
                 report.progress <- TRUE
                 if (tmp.dirname == "") {
                     tmp.dirname <- tempfile()
@@ -554,7 +554,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
             }
 
             if (report.progress) {
-                cat("Converting to track...\n")
+                message("Converting to track...\n")
             }
 
             .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env(), silent = TRUE)
@@ -776,7 +776,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
             for (file in files) {
                 tryCatch(
                     {
-                        cat(sprintf("Importing file %s\n", file))
+                        message(sprintf("Importing file %s", file))
                         file.noext <- basename(gsub("^([^.]+)(\\..*)*$", "\\1", file, perl = TRUE))
                         trackstr <- paste(track.prefix, file.noext, sep = "")
 
@@ -789,7 +789,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
                         if (msg == "Error: Command interrupted!\n") {
                             stop("Command interrupted!", call. = FALSE)
                         } else {
-                            cat(sprintf("%s\n", msg))
+                            message(sprintf("%s", msg))
                         }
                     }
                 )
@@ -1252,7 +1252,7 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
         answer <- "Y"
     } else {
         str <- sprintf("Are you sure you want to delete track %s (Y/N)? ", trackname)
-        cat(str)
+        message(str)
         answer <- toupper(readLines(n = 1))
     }
 
@@ -1263,7 +1263,7 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
         unlink(dirname, recursive = TRUE)
 
         if (file.exists(dirname)) {
-            cat(sprintf("Failed to delete track %s\n", trackname))
+            message(sprintf("Failed to delete track %s", trackname))
         } else {
             # refresh the list of GTRACKS, etc.
             .gdb.rm_track(trackname)

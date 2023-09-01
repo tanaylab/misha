@@ -1129,7 +1129,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
             }
             files <- c(files, other_files)
 
-            cat("Building Seq files...\n")
+            message("Building Seq files...")
             fastas <- files[grep("^chr.+$", basename(files), perl = TRUE)]
             for (fasta in fastas) {
                 chrom <- gsub("^chr(\\w+)(\\..*)*$", "\\1", basename(fasta), perl = TRUE)
@@ -1151,7 +1151,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
 
                 seq <- sprintf("%s/seq/chr%s.seq", groot, chrom)
 
-                cat(sprintf("chr%s\n", chrom))
+                message(sprintf("chr%s", chrom))
                 .gcall("gseqimport", fasta, seq, .misha_env(), silent = TRUE)
 
                 chroms <- c(chroms, chrom)
