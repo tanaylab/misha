@@ -120,9 +120,9 @@ gtrack.var.ls <- function(track = NULL, pattern = "", ignore.case = FALSE, perl 
 
     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
     dirname <- paste(trackdir, "vars", sep = "/")
-    options(warn = -1) # disable warnings since dir() on non dir or non existing dir produces warnings
-    invisible(files <- dir(dirname))
-    options(warn = 0) # restore the warning behavior
+    suppressWarnings({ # disable warnings since dir() on non dir or non existing dir produces warnings
+        invisible(files <- dir(dirname))
+    })
     if (length(files) > 0) {
         grep(pattern, files, value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
     } else {

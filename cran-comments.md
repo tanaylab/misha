@@ -10,5 +10,5 @@ See response to previous submission below.
 * Added missing \value tags to all exported functions in the package.
 * Replaced \dontrun with \donttest in examples.
 * Replaced `cat` calls with `message`.
-* Added `on.exit` calls right before any call to `setwd` as instructed.
-
+* Added `on.exit` calls right before any call to `setwd` or `options` as instructed.
+* Removed the `options(warn=-1)` calls. 

@@ -55,35 +55,36 @@
     selected.percentiles <- NULL
 
     multitasking <- .ggetOption("gmultitasking")
+    on.exit(options(gmultitasking = multitasking))
     tryCatch(
         {
-            options(warn = -1) # disable warnings since gquantiles is going to warn about random sampling
-            options(gmultitasking = FALSE)
-            quantiles <- do.call(gquantiles, list(substitute(track), percentiles = c(0, percentiles)), envir = parent.frame())
-            names(quantiles) <- NULL
-            minval <- quantiles[1]
-            maxval <- quantiles[length(quantiles)]
-            quantiles <- quantiles[2:length(quantiles)]
+            suppressWarnings({ # disable warnings since gquantiles is going to warn about random sampling
+                options(gmultitasking = FALSE)
+                quantiles <- do.call(gquantiles, list(substitute(track), percentiles = c(0, percentiles)), envir = parent.frame())
+                names(quantiles) <- NULL
+                minval <- quantiles[1]
+                maxval <- quantiles[length(quantiles)]
+                quantiles <- quantiles[2:length(quantiles)]
 
-            # for each group of quantiles with identical value choose the maximal one
-            selected.percentiles <- sapply(split(percentiles, quantiles), max)
-            names(selected.percentiles) <- NULL
+                # for each group of quantiles with identical value choose the maximal one
+                selected.percentiles <- sapply(split(percentiles, quantiles), max)
+                names(selected.percentiles) <- NULL
 
-            # if all percentiles are equal create an artificial table
-            if (length(selected.percentiles) == 1) {
-                selected.percentiles <- c(1, 1)
-                attr(selected.percentiles, "breaks") <- c(minval, maxval + 1)
-            } else {
-                indices <- match(selected.percentiles, percentiles)
-                selected.quantiles <- quantiles[indices]
-                attr(selected.percentiles, "breaks") <- selected.quantiles
-            }
+                # if all percentiles are equal create an artificial table
+                if (length(selected.percentiles) == 1) {
+                    selected.percentiles <- c(1, 1)
+                    attr(selected.percentiles, "breaks") <- c(minval, maxval + 1)
+                } else {
+                    indices <- match(selected.percentiles, percentiles)
+                    selected.quantiles <- quantiles[indices]
+                    attr(selected.percentiles, "breaks") <- selected.quantiles
+                }
 
-            attr(selected.percentiles, "minval") <- minval
-            attr(selected.percentiles, "maxval") <- maxval
+                attr(selected.percentiles, "minval") <- minval
+                attr(selected.percentiles, "maxval") <- maxval
+            })
         },
         finally = {
-            options(warn = 0)
             options(gmultitasking = multitasking)
         }
     )
