@@ -51,7 +51,7 @@ See the 'Genomes' vignette for details on how to create a database from common
 genome sources.
 }
 \examples{
-\dontrun{
+\donttest{
 ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
 gdb.create(
     "mm10",

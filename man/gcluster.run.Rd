@@ -54,8 +54,9 @@ argument specifies how R executable should be invoked.
 \dontshow{
 options(gmax.processes = 2)
 }
-\dontrun{
+\donttest{
 gdb.init_examples()
+# Run only on systems with Sun Grid Engine (SGE)
 v <- 17
 gcluster.run(
     gsummary("dense_track + v"),

@@ -198,8 +198,9 @@ gwget <- function(url = NULL, path = NULL) {
 #' \dontshow{
 #' options(gmax.processes = 2)
 #' }
-#' \dontrun{
+#' \donttest{
 #' gdb.init_examples()
+#' # Run only on systems with Sun Grid Engine (SGE)
 #' v <- 17
 #' gcluster.run(
 #'     gsummary("dense_track + v"),
@@ -238,7 +239,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
 
             # save the environment + options
             # parent.frame() is the environment of the caller
-            cat("Preparing for distribution...\n")
+            message("Preparing for distribution...\n")
             save(.misha$.GLIBDIR, file = paste(tmp.dirname, "libdir", sep = "/"))
             vars <- ls(all.names = TRUE, envir = parent.frame())
             envir <- parent.frame()
@@ -252,7 +253,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
             opts <- options()
             save(opts, file = paste(tmp.dirname, "opts", sep = "/"))
 
-            cat("Running the commands...\n")
+            message("Running the commands...")
             completed.jobs <- c()
             progress <- -1
             repeat {
@@ -275,7 +276,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
                             stop("Failed to run qsub", call. = FALSE)
                         }
                         if (debug) {
-                            cat(sprintf("\tSubmitted job %d (id: %s)\n", i, jobid))
+                            message(sprintf("\tSubmitted job %d (id: %s)", i, jobid))
                         }
                         submitted.jobs <- c(submitted.jobs, jobid)
                     }
@@ -291,7 +292,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
                     delta.jobs <- setdiff(completed.jobs, old.completed.jobs)
                     if (length(delta.jobs) > 0) {
                         for (jobid in delta.jobs) {
-                            cat(sprintf("\tJob %d (id: %s) completed\n", match(jobid, submitted.jobs), jobid))
+                            message(sprintf("\tJob %d (id: %s) completed", match(jobid, submitted.jobs), jobid))
                         }
                     }
 
@@ -302,7 +303,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
                     new.progress <- length(completed.jobs)
                     if (new.progress != progress) {
                         progress <- new.progress
-                        cat(sprintf("\t%d job(s) still in progress\n", length(commands) - progress))
+                        message(sprintf("\t%d job(s) still in progress", length(commands) - progress))
                     }
                 } else {
                     if (!length(running.jobs) && length(submitted.jobs) == length(commands)) {
@@ -312,18 +313,18 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
                     new.progress <- as.integer(100 * length(completed.jobs) / length(commands))
                     if (new.progress != progress) {
                         progress <- new.progress
-                        cat(sprintf("%d%%...", progress))
+                        message(sprintf("%d%%...", progress))
                     } else {
-                        cat(".")
+                        message(".")
                     }
                 }
             }
             if (!debug && progress != -1 && progress != 100) {
-                cat("100%\n")
+                message("100%\n")
             }
         },
         interrupt = function(interrupt) {
-            cat("\n")
+            message("\n")
             stop("Command interrupted!", call. = FALSE)
         },
         finally = {
