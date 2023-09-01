@@ -129,7 +129,8 @@
 #' @examples
 #' gdb.init_examples()
 #' \donttest{
-#' gwget("ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/md5sum.txt")
+#' outdir <- tempdir()
+#' gwget("ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/md5sum.txt", path = outdir)
 #' }
 #'
 #' @export gwget

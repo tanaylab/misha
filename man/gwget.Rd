@@ -26,7 +26,8 @@ are downloaded to a directory given by 'path' argument.  If 'path' is
 \examples{
 gdb.init_examples()
 \donttest{
-gwget("ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/md5sum.txt")
+outdir <- tempdir()
+gwget("ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/md5sum.txt", path = outdir)
 }
 
 }
