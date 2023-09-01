@@ -625,6 +625,7 @@ gdb.init_examples <- function() {
 #' @seealso \code{\link{gdb.init}}, \code{\link{gdb.create}},
 #' \code{\link{gdir.cd}},
 #' @keywords ~db
+#' @return No return value, called for side effects.
 #' @export gdb.reload
 gdb.reload <- function(rescan = TRUE) {
     if (!exists("GROOT", envir = .misha)) {
