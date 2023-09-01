@@ -53,7 +53,7 @@ genome sources.
 \examples{
 \donttest{
 ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
-mm10_dir <- tempdir()
+mm10_dir <- file.path(tempdir(), "mm10")
 # only a single chromosome is loaded in this example
 # see "Genomes" vignette how to downloaded all of them/other genomes
 gdb.create(
