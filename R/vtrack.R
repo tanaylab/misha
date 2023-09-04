@@ -75,16 +75,16 @@
         .gcall("gcheck_vtrack", vtrackstr, envir)
     }
 
-    success <- F
+    success <- FALSE
     old.gvtracks <- NULL
     if (exists("GVTRACKS", envir = .misha)) {
         old.gvtracks <- get("GVTRACKS", envir = .misha)
     }
 
-    success <- F
+    success <- FALSE
     tryCatch({
         assign("GVTRACKS", gvtracks, envir = .misha)
-        success <- T
+        success <- TRUE
     })
 }
 

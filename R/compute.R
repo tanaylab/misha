@@ -281,7 +281,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
                     res <- .gcall("C_gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
                 }
 
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }
@@ -374,7 +374,7 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
         {
             if (!is.null(intervals)) {
                 res <- .gcall("C_gpartition", intervals, exprstr, breaks, include.lowest, .iterator, band, intervals.set.out, .misha_env())
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }
@@ -562,7 +562,7 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
         {
             if (!is.null(intervals)) {
                 res <- .gcall("gbintransform", intervals, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, intervals.set.out, .misha_env())
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }
@@ -695,7 +695,7 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
                 res <- .gcall("C_gscreen", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
             }
 
-            if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+            if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                 .gintervals.big2small(intervals.set.out)
             }
 
@@ -784,7 +784,7 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
         {
             if (!is.null(intervals)) {
                 res <- .gcall("C_gsegment", exprstr, intervals, minsegment, stats::qnorm(maxpval), onetailed, .iterator, intervals.set.out, .misha_env())
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }
@@ -932,7 +932,7 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
         {
             if (!is.null(intervals)) {
                 res <- .gcall("C_gwilcox", exprstr, intervals, winsize1, winsize2, qnorm(maxpval), onetailed, as.integer(what2find), .iterator, intervals.set.out, .misha_env())
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }

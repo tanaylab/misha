@@ -59,8 +59,8 @@
 #             colnames <- .gcall("gcreate_arrays_track", trackstr, minsize, maxsize, "1", intervals, .iterator, .misha_env(), silent = TRUE)
 #             .gdb.add_track(trackstr)
 #             .gtrack.array.set_colnames(trackstr, colnames, FALSE)
-#             .gtrack.attr.set(trackstr, "created.by", ".gtrack.create_test_arrays", T)
-#             .gtrack.attr.set(trackstr, "created.date", date(), T)
+#             .gtrack.attr.set(trackstr, "created.by", ".gtrack.create_test_arrays", TRUE)
+#             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
 #             success <- TRUE
 #         },
 #         finally = {
@@ -216,7 +216,7 @@ gtrack.array.extract <- function(track = NULL, slice = NULL, intervals = NULL, f
             if (!is.null(intervals)) {
                 res <- .gcall("garrayextract", trackstr, slice$slice, slice$colnames, file, intervals, intervals.set.out, .misha_env())
 
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }
@@ -375,9 +375,9 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
             .gdb.add_track(trackstr)
             .gtrack.array.set_colnames(trackstr, colnames, FALSE)
             created.by <- sprintf("gtrack.array.import(\"%s\", description, src = c(\"%s\"))", trackstr, paste(srcs, collapse = "\", \""))
-            .gtrack.attr.set(trackstr, "created.by", created.by, T)
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.by", created.by, TRUE)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {

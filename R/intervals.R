@@ -857,7 +857,7 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
         {
             if (!is.null(intervals)) {
                 res <- .gcall("ginterv_intersectband", intervals, band, intervals.set.out, .misha_env())
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }
@@ -1921,7 +1921,7 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
                 res <- .gcall("gintervals_quantiles", intervals, exprstr, percentiles, .iterator, band, intervals.set.out, .misha_env())
             }
 
-            if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+            if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                 .gintervals.big2small(intervals.set.out)
             }
 
@@ -2414,7 +2414,7 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
         {
             if (!is.null(intervals)) {
                 res <- .gcall("gintervals_summary", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }
@@ -2714,7 +2714,7 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
             if (!is.null(intervals)) {
                 res <- .gcall("giterator_intervals", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
 
-                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, F) && !.gintervals.needs_bigset(intervals.set.out)) {
+                if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
             }
