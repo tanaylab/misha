@@ -90,7 +90,7 @@
                             t <<- Sys.time()
                             percentage <- as.integer(100 * match(chrom, chroms$chrom) / nrow(chroms))
                             if (percentage < 100 && progress.percentage != percentage) {
-                                message(sprintf("%d%%...", percentage))
+                                message(sprintf("%d%%...", percentage), appendLF = FALSE)
                                 progress.percentage <<- percentage
                             }
                         }
@@ -111,7 +111,7 @@
                             t <<- Sys.time()
                             percentage <- as.integer(100 * which(chroms$chrom1 == chrom1 & chroms$chrom2 == chrom2) / nrow(chroms))
                             if (percentage < 100 && progress.percentage != percentage) {
-                                message(sprintf("%d%%...", percentage))
+                                message(sprintf("%d%%...", percentage), appendLF = FALSE)
                                 progress.percentage <<- percentage
                             }
                         }
@@ -296,7 +296,7 @@
                             t <<- Sys.time()
                             percentage <- as.integer(100 * match(chrom, meta$stats$chrom) / length(meta$stats$chrom))
                             if (progress && percentage < 100 && progress.percentage != percentage) {
-                                message(sprintf("%d%%...", percentage))
+                                message(sprintf("%d%%...", percentage), appendLF = FALSE)
                                 progress.percentage <<- percentage
                             }
                         }
@@ -360,7 +360,7 @@
                             t <<- Sys.time()
                             percentage <- as.integer(100 * which(meta$stats$chrom1 == chrom1 & meta$stats$chrom2 == chrom2) / nrow(meta$stats))
                             if (progress && percentage < 100 && progress.percentage != percentage) {
-                                message(sprintf("%d%%...", percentage))
+                                message(sprintf("%d%%...", percentage), appendLF = FALSE)
                                 progress.percentage <<- percentage
                             }
                         }

@@ -186,6 +186,9 @@ gwget <- function(url = NULL, path = NULL) {
 #' @param max.jobs maximal number of simultaneously submitted jobs
 #' @param debug if 'TRUE', additional reports are printed
 #' @param R command that launches R
+#' @param control_dir directory where the control files are stored. Note that this
+#' directory should be accessible from all nodes. If 'NULL', a temporary directory
+#' would be created under the current misha database.
 #' @return Return value ('retv') is a list, such that 'retv[[i]]' represents
 #' the result of the run of command number 'i'. Each result consists of 4
 #' fields that can be accessed by 'retv[[i]]$FIELDNAME':
@@ -217,11 +220,11 @@ gwget <- function(url = NULL, path = NULL) {
 #' }
 #'
 #' @export gcluster.run
-gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R = "R") {
+gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R = "R", control_dir = NULL) {
     commands <- as.list(substitute(list(...))[-1L])
 
     if (length(commands) < 1) {
-        stop("Usage: gculster.run(..., opt.flags = \"\" max.jobs = 400, debug = FALSE)", call. = FALSE)
+        stop("Usage: gcluster.run(..., opt.flags = \"\" max.jobs = 400, debug = FALSE)", call. = FALSE)
     }
 
     if (!length(system("which qsub", ignore.stderr = TRUE, intern = TRUE))) {
@@ -231,12 +234,20 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
     .gcheckroot()
 
     tmp.dirname <- ""
+    if (is.null(control_dir)) {
+        control_dir <- paste(get("GROOT", envir = .misha), "/tmp", sep = "")
+    }
+
+    # if the path of control dir starts with '/tmp' warn that the tempdir needs to be shared
+    if (grepl("^/tmp", control_dir)) {
+        message("Warning: The control directory is in /tmp. Make sure that it is shared between all nodes.")
+    }
 
     submitted.jobs <- c()
 
     tryCatch(
         {
-            tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/tmp", sep = ""))
+            tmp.dirname <- tempfile(pattern = "", tmpdir = control_dir)
             if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
                 stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
             }
@@ -244,7 +255,8 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
             # save the environment + options
             # parent.frame() is the environment of the caller
             message("Preparing for distribution...\n")
-            save(.misha$.GLIBDIR, file = paste(tmp.dirname, "libdir", sep = "/"))
+
+            save(.misha, file = paste(tmp.dirname, "misha", sep = "/"))
             vars <- ls(all.names = TRUE, envir = parent.frame())
             envir <- parent.frame()
             while (!identical(envir, .GlobalEnv)) {
@@ -317,14 +329,14 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
                     new.progress <- as.integer(100 * length(completed.jobs) / length(commands))
                     if (new.progress != progress) {
                         progress <- new.progress
-                        message(sprintf("%d%%...", progress))
+                        message(sprintf("%d%%...", progress), appendLF = FALSE)
                     } else {
-                        message(".")
+                        message(".", appendLF = FALSE)
                     }
                 }
             }
             if (!debug && progress != -1 && progress != 100) {
-                message("100%\n")
+                message("100%")
             }
         },
         interrupt = function(interrupt) {
