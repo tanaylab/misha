@@ -4,7 +4,14 @@
 \alias{gcluster.run}
 \title{Runs R commands on a cluster}
 \usage{
-gcluster.run(..., opt.flags = "", max.jobs = 400, debug = FALSE, R = "R")
+gcluster.run(
+  ...,
+  opt.flags = "",
+  max.jobs = 400,
+  debug = FALSE,
+  R = "R",
+  control_dir = NULL
+)
 }
 \arguments{
 \item{...}{R commands}
@@ -16,6 +23,10 @@ gcluster.run(..., opt.flags = "", max.jobs = 400, debug = FALSE, R = "R")
 \item{debug}{if 'TRUE', additional reports are printed}
 
 \item{R}{command that launches R}
+
+\item{control_dir}{directory where the control files are stored. Note that this
+directory should be accessible from all nodes. If 'NULL', a temporary directory
+would be created under the current misha database.}
 }
 \value{
 Return value ('retv') is a list, such that 'retv[[i]]' represents
