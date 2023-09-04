@@ -232,7 +232,7 @@ gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
 #' creates the directories 'proj' and 'sample'. Use this function with caution -
 #' a long track name may create a deep directory structure.
 #'
-#' @param track
+#' @param track name of the track
 #'
 #' @inheritParams gdir.create
 #'
