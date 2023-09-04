@@ -38,7 +38,8 @@ If 'intervals.set.out' is 'NULL' a data frame containing the pairs
 of intervals from 'intervals1', intervals from 'intervals2' and an
 additional column named 'dist' ('dist1' and 'dist2' for 2D intervals)
 representing the distance between the corresponding intervals. The intervals
-from intervals2 would be changed to 'chrom1', 'start1', and 'end1'. If
+from intervals2 would be changed to 'chrom1', 'start1', and 'end1' and for
+2D intervals chrom11, start11, end11 and chrom22, start22, end22. If
 'na.if.notfound' is 'TRUE', the data frame contains all the intervals from
 'intervals1' including those for which no matching neighbor was found. For
 the latter intervals an 'NA' neighboring interval is stated. If
