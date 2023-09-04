@@ -15,7 +15,7 @@ Description: A toolkit for analysis of genomic data. The 'misha' package
     analysis. Some of the 2D genome algorithms were described in Yaffe and Tanay
     (2011) <doi:10.1038/ng.947>. 
 License: MIT + file LICENSE
-URL: https://tanaylab.github.io/misha/
+URL: https://tanaylab.github.io/misha/, https://github.com/tanaylab/misha
 BugReports: https://github.com/tanaylab/misha/issues
 Depends: 
     R (>= 3.0.0)
