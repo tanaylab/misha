@@ -11,6 +11,9 @@ gtrack.create_dirs(track, mode = "0777")
 
 \item{mode}{see 'dir.create'}
 }
+\value{
+None.
+}
 \description{
 This function creates the directories needed for track creation.
 For example, if the track name is 'proj.sample.my_track', this function
