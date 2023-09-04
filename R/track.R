@@ -252,10 +252,10 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
-                sprintf("gtrack.create(%s, description, %s, iterator=%s)", trackstr, exprstr, deparse(substitute(iterator), width.cutoff = 500)[1]), T
+                sprintf("gtrack.create(%s, description, %s, iterator=%s)", trackstr, exprstr, deparse(substitute(iterator), width.cutoff = 500)[1]), TRUE
             )
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {
@@ -335,10 +335,10 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
                 sprintf(
                     "gtrack.create_pwm_energy(%s, description, \"%s\", %g, %g, iterator=%s)",
                     trackstr, pssmset, as.numeric(pssmid), as.numeric(prior), deparse(substitute(iterator), width.cutoff = 500)[1]
-                ), T
+                ), TRUE
             )
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {
@@ -408,9 +408,9 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
         {
             .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
-            .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), T)
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), TRUE)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {
@@ -562,10 +562,10 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
-                sprintf("gtrack.import(%s, description, \"%s\", %d, %g)", trackstr, file.original, binsize, defval), T
+                sprintf("gtrack.import(%s, description, \"%s\", %d, %g)", trackstr, file.original, binsize, defval), TRUE
             )
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {
@@ -656,10 +656,10 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
-                sprintf("gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s)", trackstr, file, pileup, binsize, remove.dups), T
+                sprintf("gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s)", trackstr, file, pileup, binsize, remove.dups), TRUE
             )
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {
@@ -900,12 +900,12 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
             .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
             if (is.character(chain)) {
-                .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), T)
+                .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), TRUE)
             } else {
-                .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", chain)", trackstr, src.track.dir), T)
+                .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", chain)", trackstr, src.track.dir), TRUE)
             }
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {
@@ -1031,9 +1031,9 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
                 created.by <- sprintf("%s, %s, breaks%d", created.by, exprs[i], i)
             }
             created.by <- sprintf("%s, include.lowest = %s, force.binning = %s)", created.by, include.lowest, force.binning)
-            .gtrack.attr.set(trackstr, "created.by", created.by, T)
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.by", created.by, TRUE)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {
@@ -1198,7 +1198,7 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
         created.by.str <- paste(created.by.str, str, sep = "\n")
     }
 
-    .gtrack.attr.set(trackstr, "created.by", created.by.str, T)
+    .gtrack.attr.set(trackstr, "created.by", created.by.str, TRUE)
 
     retv <- 0 # suppress return value
 }
@@ -1361,10 +1361,10 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
-                sprintf("gtrack.smooth(%s, description, %s, %s, %s, %s, %s)", trackstr, exprstr, as.character(winsize), as.character(weight_thr), as.character(smooth_nans), alg), T
+                sprintf("gtrack.smooth(%s, description, %s, %s, %s, %s, %s)", trackstr, exprstr, as.character(winsize), as.character(weight_thr), as.character(smooth_nans), alg), TRUE
             )
-            .gtrack.attr.set(trackstr, "created.date", date(), T)
-            .gtrack.attr.set(trackstr, "description", description, T)
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
         finally = {

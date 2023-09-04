@@ -89,7 +89,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GROOT", groot, envir = .misha)
     assign("GWD", groot, envir = .misha)
 
-    success <- F
+    success <- FALSE
     tryCatch(
         {
             if (is.null(dir)) {
@@ -106,7 +106,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
                     .gdir.cd(paste(groot, dir, sep = "/"), rescan)
                 }
             }
-            success <- T
+            success <- TRUE
         },
         finally = {
             if (!success) {
@@ -744,7 +744,7 @@ gdb.reload <- function(rescan = TRUE) {
             try(
                 {
                     if (.gcall_noninteractive(.gtrack.var.exists, track, attr)) {
-                        .gcall_noninteractive(.gtrack.attr.set, track, attr, as.character(.gtrack.var.get(track, attr))[1], T)
+                        .gcall_noninteractive(.gtrack.attr.set, track, attr, as.character(.gtrack.var.get(track, attr))[1], TRUE)
                         .gcall_noninteractive(gtrack.var.rm, track, attr)
                     }
                 },
