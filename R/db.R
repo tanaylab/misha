@@ -235,6 +235,8 @@ gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
 #' @param track
 #'
 #' @inheritParams gdir.create
+#'
+#' @return None.
 #' @examples
 #'
 #' gdb.init_examples()
