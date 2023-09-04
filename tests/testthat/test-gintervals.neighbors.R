@@ -55,7 +55,7 @@ test_that("columns are maintained", {
     intervs2$usercol1 <- "aaa"
     intervs2$usercol2 <- 10 + (1:dim(intervs2)[1])
     res <- gintervals.neighbors(intervs1, intervs2, 1)
-    expect_true(all(colnames(res) %in% c("chrom", "start", "end", "usercol1", "usercol2", "dist")))
+    expect_true(all(colnames(res) %in% c("chrom", "start", "end", "chrom1", "start1", "end1", "usercol1", "usercol2", "dist")))
     expect_true(all(c("usercol1", "usercol2") %in% colnames(res)))
     expect_regression(res, "gintervals.neighbors.8")
 })
@@ -65,7 +65,11 @@ test_that("columns are maintained (2d)", {
     intervs2 <- gscreen("test.rects < 97 & test.rects > 94")
     intervs2$blabla <- 1:nrow(intervs2)
     res <- gintervals.neighbors(intervs1, intervs2, 1)
-    expect_true(all(colnames(res) %in% c("chrom1", "start1", "end1", "chrom2", "start2", "end2", "blabla", "dist1", "dist2")))
+    expect_true(all(colnames(res) %in% c(
+        "chrom1", "start1", "end1", "chrom2", "start2", "end2", "chrom11",
+        "start11", "end11", "chrom21", "start21", "end21", "blabla",
+        "dist1", "dist2"
+    )))
     expect_true("blabla" %in% colnames(res))
     expect_regression(res, "gintervals.neighbors.9")
 })
