@@ -17,6 +17,7 @@ reference:
       - gtrack.create
       - gtrack.create_pwm_energy
       - gtrack.create_sparse
+      - gtrack.create_dirs
       - gtrack.exists
       - gtrack.import
       - gtrack.import_mappedseq

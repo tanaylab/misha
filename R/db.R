@@ -225,6 +225,37 @@ gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
     )
 }
 
+#' Create directories needed for track creation
+#'
+#' @description This function creates the directories needed for track creation.
+#' For example, if the track name is 'proj.sample.my_track', this function
+#' creates the directories 'proj' and 'sample'. Use this function with caution -
+#' a long track name may create a deep directory structure.
+#'
+#' @param track
+#'
+#' @inheritParams gdir.create
+#' @examples
+#'
+#' gdb.init_examples()
+#'
+#' # This creates the directories 'proj' and 'sample'
+#' gtrack.create_dirs("proj.sample.my_track")
+#'
+#' @export
+gtrack.create_dirs <- function(track, mode = "0777") {
+    # split the track name into directories
+    dirs <- dirname(gsub("\\.", "/", track))
+    dirs <- strsplit(dirs, "/")[[1]]
+    dir <- dirs[1]
+    for (i in 1:length(dirs)) {
+        if (i > 1) {
+            dir <- paste(dir, dirs[i], sep = "/")
+        }
+        gdir.create(dir, mode = mode)
+    }
+}
+
 
 
 #' Returns the current working directory in Genomic Database
