@@ -7,6 +7,7 @@
 
 [![CRAN
 status](https://www.r-pkg.org/badges/version/misha)](https://CRAN.R-project.org/package=misha)
+[![R-CMD-check](https://github.com/tanaylab/misha/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/tanaylab/misha/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 The `misha` package is a toolkit for analysis of genomic data. it

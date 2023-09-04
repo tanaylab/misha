@@ -12,3 +12,4 @@
 ^mm10$
 ^add_include\.sh$
 ^CRAN-SUBMISSION$
+^\.github$

@@ -1,5 +1,9 @@
 # misha 4.2.3
 
+* Added `gtrack.create_dirs` function.
+* Fixed a bug in `gcluster.run`.
+* Updated documentation of `gintervals.neighbors`.
+
 # misha 4.2.2
 
 * First CRAN release
