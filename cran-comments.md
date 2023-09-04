@@ -2,16 +2,10 @@
 
 0 errors | 0 warnings | 1 note
 
-### Resubmission
+### Resubmission 2
 
-See response to previous submission below.
+This version contains a few bug fixes, a new function and some updated documentation. 
 
-* Added Eitan Yaffe (eitany) as an author.
-* Added Weizmann Institute of Science as a cph.
-* The `misha` package, while utilized in numerous studies over the years, does not have a dedicated publication for citation, but I have added citation for the 2D genome algorithms. 
-* Added missing \value tags to all exported functions in the package.
-* Replaced \dontrun with \donttest in examples.
-* Replaced `cat` calls with `message`.
-* Added `on.exit` calls right before any call to `setwd` or `options` as instructed.
-* Removed the `options(warn=-1)` calls. 
-* Changed the example of a function that wrote files to the current working directory to a temporary directory.
+To answer Victoria Wimmer's question regarding the 'UNIX only' note: 
+
+The need for the Unix OS stems from the package's implementation of a database that utilizes shared memory files, which involves numerous Unix-specific system calls. Furthermore, the package employs parallel algorithms that depend on the Unix forking method. It would require, therefore, a large and non-trivial effort to re-implement those in Windows and mark those which cannot be implemented, which is, unfortunately, not within our current bandwidth. 
