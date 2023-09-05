@@ -8,6 +8,7 @@
 #ifndef GENOMETRACKCOMPUTED_H_
 #define GENOMETRACKCOMPUTED_H_
 
+#include <cstdint>
 #include <stdio.h>
 
 #include "GenomeTrack2D.h"
@@ -44,7 +45,7 @@ struct Computed_val : public Rectangle {
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%ld - %ld) (%ld - %ld) %g", x1, x2, y1, y2, (double)v);
+		snprintf(str, sizeof(str), "(%ld - %ld) (%ld - %ld) %g", x1, x2, y1, y2, (double)v);
 		return str;
 	}
 };

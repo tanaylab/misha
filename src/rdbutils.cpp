@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -87,11 +88,11 @@ const string rdb::INTERV_FILE_EXT = ".interv";
 const int64_t        RdbInitializer::LAUNCH_DELAY = 50; // in msec
 const int64_t        RdbInitializer::MEM_SYNC_DELAY = 100;
 const int64_t        RdbInitializer::REPORT_INTERVAL_DELAY = 3000;
-size_t               RdbInitializer::s_shm_size;
-size_t               RdbInitializer::s_res_const_size;
-size_t               RdbInitializer::s_res_var_size;
-size_t               RdbInitializer::s_max_res_size;
-size_t               RdbInitializer::s_max_mem_usage;
+uint64_t               RdbInitializer::s_shm_size;
+uint64_t               RdbInitializer::s_res_const_size;
+uint64_t               RdbInitializer::s_res_var_size;
+uint64_t               RdbInitializer::s_max_res_size;
+uint64_t               RdbInitializer::s_max_mem_usage;
 bool                 RdbInitializer::s_is_kid = false;
 pid_t                RdbInitializer::s_parent_pid = 0;
 sem_t               *RdbInitializer::s_shm_sem = SEM_FAILED;
@@ -226,18 +227,18 @@ RdbInitializer::~RdbInitializer()
 string RdbInitializer::get_shm_sem_name()
 {
 	char buf[100];
-	sprintf(buf, "misha-shm-%d", (int)getpid());
+	snprintf(buf, sizeof(buf), "misha-shm-%d", (int)getpid());
 	return buf;
 }
 
 string RdbInitializer::get_alloc_suspend_sem_name()
 {
 	char buf[100];
-	sprintf(buf, "misha-alloc-suspend-%d", (int)getpid());
+	snprintf(buf, sizeof(buf), "misha-alloc-suspend-%d", (int)getpid());
 	return buf;
 }
 
-void RdbInitializer::prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids)
+void RdbInitializer::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids)
 {
 	if (num_planned_kids > MAX_KIDS) 
 		verror("Too many child processes");
@@ -325,20 +326,23 @@ pid_t RdbInitializer::launch_process()
 		s_is_kid = true;
 
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
-		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
-
+		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);		
+		
 		SEXP r_multitasking_stdout = GetOption(install("gmultitasking_stdout"), R_NilValue);
 
-		if (!isLogical(r_multitasking_stdout) || !(int)LOGICAL(r_multitasking_stdout)[0]) {
-            if (!freopen("/dev/null", "w", stdout))
-                verror("Failed to open /dev/null");
+		int devnull;
+
+		if ((devnull = open("/dev/null", O_RDWR)) == -1){
+            verror("Failed to open /dev/null");
         }
 
-        if (!freopen("/dev/null", "w", stderr))
-            verror("Failed to open /dev/null");
+        if (!isLogical(r_multitasking_stdout) || !(int)LOGICAL(r_multitasking_stdout)[0]) {
+            dup2(devnull, STDOUT_FILENO);
+        }
 
-        if (!freopen("/dev/null", "r", stdin))
-            verror("Failed to open /dev/null");
+        dup2(devnull, STDIN_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        close(devnull);
 
 		int64_t delta_mem_usage = get_unique_mem_usage(getpid()) - s_shm->mem_usage[s_kid_index];
 		s_shm->mem_usage[s_kid_index] += delta_mem_usage;
@@ -370,8 +374,9 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
                 swap(*ipid, s_running_pids.back());
                 s_running_pids.pop_back();
 
-                if (!ignore_errors && !WIFEXITED(status))
+                if (!ignore_errors && !WIFEXITED(status) && WIFSIGNALED(status) && WTERMSIG(status) != MISHA_EXIT_SIG){
                     verror("Child process %d ended unexpectedly", (int)ipid->pid);
+				}
 
                 // choose a new untouchable kid: the one with maximal memory consumption
                 if (kid_idx == s_shm->untouchable_kid_idx && s_running_pids.size()) {
@@ -398,7 +403,7 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
 void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 {
 	int64_t delay_msec = LAUNCH_DELAY / 2;
-    bool slept_once = false;
+    // bool slept_once = false;
 
 	struct timespec timeout, last_progress_time, last_delay_change_time;
 	int last_progress = -1;
@@ -421,7 +426,7 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
 
         if (s_res_var_size) {
             // update of data_size is atomic => don't use a semaphore
-            size_t res_num_records = 0;
+            uint64_t res_num_records = 0;
 
             for (int i = 0; i < get_num_kids(); ++i)
                 res_num_records += s_shm->kid_res_num_records[i];
@@ -442,7 +447,7 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
         int64_t delta_mem_usage = s_shm->total_mem_usage - total_mem_usage;
         int64_t time2reach_limit = -1;
 
-        if (delta_mem_usage > 0 && s_shm->total_mem_usage <= s_max_mem_usage)
+        if (delta_mem_usage > 0 && (uint64_t)s_shm->total_mem_usage <= (uint64_t)s_max_mem_usage)
             time2reach_limit = delay_msec * ((s_max_mem_usage - s_shm->total_mem_usage) / delta_mem_usage);
 
         if (time2reach_limit >= 0 && time2reach_limit < delay_msec) {
@@ -476,9 +481,9 @@ void RdbInitializer::wait_for_kids(rdb::IntervUtils &iu)
             clock_gettime(CLOCK_REALTIME, &last_progress_time);
         }
 
-        if (!s_shm->num_kids_running || s_shm->total_mem_usage < s_max_mem_usage) {
+        if (!s_shm->num_kids_running || (uint64_t)s_shm->total_mem_usage < (uint64_t)s_max_mem_usage) {
             // wake up suspended processes
-            for (int i = 0; i < s_shm->num_kids_suspended; ++i) 
+            for (uint64_t i = 0; i < s_shm->num_kids_suspended; ++i) 
                 sem_post(s_alloc_suspend_sem);
         }
     }
@@ -494,7 +499,7 @@ int64_t RdbInitializer::update_kids_mem_usage()
 	int64_t total_mem_usage = 0;
 
 	for (vector<LiveStat>::const_iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid) {
-		size_t mem_usage = get_unique_mem_usage(ipid->pid);
+		uint64_t mem_usage = get_unique_mem_usage(ipid->pid);
 
 		if (mem_usage) {
 			s_shm->mem_usage[ipid->index] = mem_usage;
@@ -519,12 +524,12 @@ void RdbInitializer::handle_error(const char *msg)
 				s_shm->error_msg[sizeof(s_shm->error_msg) - 1] = '\0';
 			}
 		}
-		exit(1);
+		rexit();
 	} else
 		errorcall(R_NilValue, msg);
 }
 
-void *RdbInitializer::allocate_res(size_t res_num_records)
+void *RdbInitializer::allocate_res(uint64_t res_num_records)
 {
 	if (!s_is_kid)
 		verror("allocate_res() cannot be called by parent process");
@@ -608,6 +613,17 @@ void RdbInitializer::get_open_fds(set<int> &fds)
             fds.insert(fdinfo[i].proc_fd);
     }
 #else
+
+#ifdef __sun
+    #ifdef __XOPEN_OR_POSIX
+        #define _dirfd(dir) (dir->d_fd)
+    #else
+        #define _dirfd(dir) (dir->dd_fd)
+    #endif
+#else
+    #define _dirfd(dir) dirfd(dir)
+#endif
+
 	DIR *dir = opendir("/proc/self/fd");
 	struct dirent *dirp;
 
@@ -616,7 +632,7 @@ void RdbInitializer::get_open_fds(set<int> &fds)
     	while ((dirp = readdir(dir))) {
     		char *endptr;
     		int fd = strtol(dirp->d_name, &endptr, 10);
-    		if (!*endptr && fd != dirfd(dir)) // name is a number (it can be also ".", "..", whatever...)
+    		if (!*endptr && fd != _dirfd(dir)) // name is a number (it can be also ".", "..", whatever...)
     			fds.insert(fd);
     	}
 
@@ -631,7 +647,7 @@ void RdbInitializer::vdebug_print(const char *fmt, ...)
 	char buf[1000];
 
 	va_start(ap, fmt);
-	vsprintf(buf, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
 	SemLocker sl(s_shm_sem);
@@ -651,7 +667,7 @@ void rdb::rerror(const char *fmt, ...)
 	char buf[1000];
 
 	va_start(ap, fmt);
-	vsprintf(buf, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
 	RdbInitializer::handle_error(buf);
@@ -663,7 +679,7 @@ void rdb::verror(const char *fmt, ...)
 	char buf[1000];
 
 	va_start(ap, fmt);
-	vsprintf(buf, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
 	if (RdbInitializer::s_ref_count)
@@ -683,7 +699,7 @@ SEXP rdb::rprotect(SEXP &expr)
 
 void rdb::runprotect(int count)
 {
-	if (RdbInitializer::s_protect_counter < count)
+	if (RdbInitializer::s_protect_counter < (uint64_t)count)
 		errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
 	UNPROTECT(count);
 	RdbInitializer::s_protect_counter -= count;
@@ -743,7 +759,7 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 const char *rdb::get_groot(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP groot = findVar(install("GROOT"), envir);
+	SEXP groot = findVar(install("GROOT"), findVar(install(".misha"), envir));
 
 	if (!isString(groot))
 		verror("GROOT variable does not exist");
@@ -754,7 +770,7 @@ const char *rdb::get_groot(SEXP envir)
 const char *rdb::get_gwd(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP gwd = findVar(install("GWD"), envir);
+	SEXP gwd = findVar(install("GWD"), findVar(install(".misha"), envir));
 
 	if (!isString(gwd))
 		verror("GWD variable does not exist");
@@ -765,7 +781,7 @@ const char *rdb::get_gwd(SEXP envir)
 const char *rdb::get_glib_dir(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP glibdir = findVar(install(".GLIBDIR"), envir);
+	SEXP glibdir = findVar(install(".GLIBDIR"), findVar(install(".misha"), envir));
 
 	if (!isString(glibdir))
 		verror(".GLIBDIR variable does not exist");

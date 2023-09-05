@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>
 
 #include <unordered_map>
@@ -21,7 +22,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _maxread, SEXP _cols_order, SEXP _min_coord, SEXP _max_coord, SEXP _envir)
+SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _maxread, SEXP _cols_order, SEXP _min_coord, SEXP _max_coord, SEXP _envir)
 {
 	enum { SEQ_COL, CHROM_COL, COORD_COL, STRAND_COL, NUM_COLS };
 	const char *COL_NAMES[NUM_COLS] = { "sequence", "chromosome", "coordinate", "strand" };
@@ -107,8 +108,8 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 		if (max_coord < 0 || max_coord > chromsize)
 			max_coord = chromsize;
 
-		vector<int> forward((size_t)ceil(chromsize / binsize), 0);
-		vector<int> reverse((size_t)ceil(chromsize / binsize), 0);
+		vector<int> forward((uint64_t)ceil(chromsize / binsize), 0);
+		vector<int> reverse((uint64_t)ceil(chromsize / binsize), 0);
 
 		BufferedFile infile;
 		infile.open(infilename, "r");
@@ -122,8 +123,8 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 		string str[NUM_COLS];
 		int min_off = (int)(-maxread / binsize);
 		int max_off = (int)(maxread / binsize);
-		size_t min_idx = (size_t)(max_off + min_coord / binsize);
-		size_t max_idx = (size_t)(max_coord / binsize - max_off - 1);
+		uint64_t min_idx = (uint64_t)(max_off + min_coord / binsize);
+		uint64_t max_idx = (uint64_t)(max_coord / binsize - max_off - 1);
 
 		if (min_idx >= forward.size() || (int64_t)max_idx < 0)
 			verror("Not enough data to calculate auto correlation.");
@@ -150,14 +151,12 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 					}
 
 					while (num_nonempty_strs == NUM_COLS) {
-						unordered_map<string, int>::iterator istr2chrom;
-						int chrom_idx;
+						unordered_map<string, int>::iterator istr2chrom;						
 						int64_t coord;
 						char *endptr;
 
 						if (strcmp(str[CHROM_COL].c_str(), chrom))
 							break;
-						chrom_idx = istr2chrom->second;
 
 						coord = strtoll(str[COORD_COL].c_str(), &endptr, 10);
 						if (*endptr || coord < 0 || coord >= chromsize)
@@ -167,11 +166,11 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 							break;
 
 						if (str[STRAND_COL] == "+" || str[STRAND_COL] == "F") {
-							size_t idx = (size_t)(coord / binsize);
+							uint64_t idx = (uint64_t)(coord / binsize);
 							forward[idx] = min(MAX_COV, forward[idx] + 1);
 						}
 						else if (str[STRAND_COL] == "-" || str[STRAND_COL] == "R") {
-							size_t idx = (size_t)((coord + str[SEQ_COL].size()) / binsize);
+							uint64_t idx = (uint64_t)((coord + str[SEQ_COL].size()) / binsize);
 							reverse[idx] = min(MAX_COV, reverse[idx] + 1);
 						}
 
@@ -213,7 +212,7 @@ SEXP gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP _m
 		int64_t tot_rr = 0;
 		vector<double> tot_fr(max_off - min_off);
 
-		for (size_t i = min_idx; i < max_idx; i++) {
+		for (uint64_t i = min_idx; i < max_idx; i++) {
 			int cur_fr = forward[i];
 			int cur_rv = reverse[i];
 			tot_f += cur_fr;

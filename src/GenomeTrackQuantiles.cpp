@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -42,7 +43,7 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 {
 	SEXP answer;
 	unsigned num_interv_cols;
-	size_t num_intervs;
+	uint64_t num_intervs;
 
 	if (out_intervals1d) {
 		num_interv_cols = GInterval::NUM_COLS;
@@ -57,7 +58,7 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 	for (unsigned ipercentile = 0; ipercentile < percentiles.size(); ++ipercentile) {
 		SEXP percentile_vals;
 		rprotect(percentile_vals = RSaneAllocVector(REALSXP, num_intervs));
-		for (size_t iinterv = 0; iinterv < num_intervs; ++iinterv)
+		for (uint64_t iinterv = 0; iinterv < num_intervs; ++iinterv)
 			REAL(percentile_vals)[iinterv] = quantiles[iinterv * percentiles.size() + ipercentile];
 		SET_VECTOR_ELT(answer, num_interv_cols + ipercentile, percentile_vals);
 	}
@@ -67,14 +68,14 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 	for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 		char buf[100];
 
-		sprintf(buf, "%g", ip->percentile);
+		snprintf(buf, sizeof(buf), "%g", ip->percentile);
 		SET_STRING_ELT(colnames, num_interv_cols + ip->index, mkChar(buf));
 	}
 
 	return answer;
 }
 
-bool calc_medians(StreamPercentiler<double> &sp, vector<Percentile> &percentiles, vector<double> &medians, size_t offset)
+bool calc_medians(StreamPercentiler<double> &sp, vector<Percentile> &percentiles, vector<double> &medians, uint64_t offset)
 {
 	bool estimated_results = false;
 
@@ -103,7 +104,7 @@ bool calc_medians(StreamPercentiler<double> &sp, vector<Percentile> &percentiles
 
 extern "C" {
 
-SEXP gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_policy, SEXP _band, SEXP _envir)
+SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_policy, SEXP _band, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -164,7 +165,7 @@ SEXP gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_p
 
 			REAL(answer)[ip->index] = medians[ip->index];
 
-			sprintf(buf, "%g", ip->percentile);
+			snprintf(buf, sizeof(buf), "%g", ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, mkChar(buf));
 		}
 
@@ -213,15 +214,15 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
 		vector<double> medians(percentiles.size(), numeric_limits<float>::quiet_NaN());
-		bool estimation_occured = false;
+
 		int num_kids = iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band);
 
 		if (num_kids) {
-			size_t kid_rnd_sampling_buf_size = (size_t)ceil(iu.get_max_data_size() / (double)num_kids);
-			size_t kid_lowest_vals_buf_size = iu.get_quantile_edge_data_size();
-			size_t kid_highest_vals_buf_size = iu.get_quantile_edge_data_size();
+			uint64_t kid_rnd_sampling_buf_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
+			uint64_t kid_lowest_vals_buf_size = iu.get_quantile_edge_data_size();
+			uint64_t kid_highest_vals_buf_size = iu.get_quantile_edge_data_size();
 
-			if (iu.distribute_task(4 * sizeof(size_t) +
+			if (iu.distribute_task(4 * sizeof(uint64_t) +
 								   (kid_rnd_sampling_buf_size + kid_lowest_vals_buf_size + kid_highest_vals_buf_size) * sizeof(double),
 								   0))
 			{ // child process
@@ -236,10 +237,10 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 				}
 
 				void *result = allocate_res(0);
-				size_t kid_stream_size = sp.stream_size();
-				size_t kid_samples_size = sp.samples().size();
-				size_t kid_lowest_vals_size = sp.lowest_vals().size();
-				size_t kid_highest_vals_size = sp.highest_vals().size();
+				uint64_t kid_stream_size = sp.stream_size();
+				uint64_t kid_samples_size = sp.samples().size();
+				uint64_t kid_lowest_vals_size = sp.lowest_vals().size();
+				uint64_t kid_highest_vals_size = sp.highest_vals().size();
 				pack_data(result, kid_stream_size, 1);
 				pack_data(result, kid_samples_size, 1);
 				pack_data(result, kid_lowest_vals_size, 1);
@@ -250,11 +251,11 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 				rreturn(R_NilValue);
 			} else { // parent process
-				size_t stream_size = 0;
-				vector<size_t> kids_stream_size(get_num_kids());
-				vector<size_t> kids_samples_size(get_num_kids());
-				vector<size_t> kids_lowest_vals_size(get_num_kids());
-				vector<size_t> kids_highest_vals_size(get_num_kids());
+				uint64_t stream_size = 0;
+				vector<uint64_t> kids_stream_size(get_num_kids());
+				vector<uint64_t> kids_samples_size(get_num_kids());
+				vector<uint64_t> kids_lowest_vals_size(get_num_kids());
+				vector<uint64_t> kids_highest_vals_size(get_num_kids());
 				vector<double *> kids_vals(get_num_kids());
 				vector<double> samples;
 				vector<double> highest_vals;
@@ -294,7 +295,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 						samples.insert(samples.end(), kid_samples, kid_samples + kids_samples_size[i]);
 					else {
 						double sampling_ratio = min_sampling_rate / kid_sampling_rate;
-						for (size_t j = 0; j < kids_samples_size[i]; ++j) {
+						for (uint64_t j = 0; j < kids_samples_size[i]; ++j) {
 							if (unif_rand() < sampling_ratio)
 								samples.push_back(kid_samples[j]);
 						}
@@ -362,7 +363,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 			REAL(answer)[ip->index] = medians[ip->index];
 
-			sprintf(buf, "%g", ip->percentile);
+			snprintf(buf, sizeof(buf), "%g", ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, mkChar(buf));
 		}
 
@@ -392,7 +393,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 			verror("intervals.set.out argument is not a string");
 
 		vector<Percentile> percentiles(length(_percentiles));
-		size_t num_percentiles = percentiles.size();
+		uint64_t num_percentiles = percentiles.size();
 		for (int64_t i = 0; i < length(_percentiles); ++i)
 			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
 		sort(percentiles.begin(), percentiles.end());
@@ -417,7 +418,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 		scanner.begin(_expr, intervals1d, intervals2d, _iterator_policy, _band);
 
-		size_t num_intervals = scanner.get_iterator()->is_1d() ? intervals1d->size() : intervals2d->size();
+		uint64_t num_intervals = scanner.get_iterator()->is_1d() ? intervals1d->size() : intervals2d->size();
 		if (!num_intervals) 
 			return R_NilValue;
 
@@ -446,14 +447,14 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 			if (scanner.get_iterator()->is_1d()) {
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
-				for (int chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
+				for (int chromid = 0; (uint64_t)chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
 					if (intervals1d->size(chromid))
 						chroms1d.insert(chromid);
 				}
 			} else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
-				for (int chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-					for (int chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
+				for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
+					for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
 						if (intervals2d->size(chromid1, chromid2))
 							chroms2d.insert(ChromPair(chromid1, chromid2));
 					}
@@ -464,7 +465,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 				float val = scanner.last_real(0);
 
 				if (cur_interval_idx != scanner.last_scope_idx()) {
-					size_t size;
+					uint64_t size;
 					char error_prefix[1000];
 
 					cur_interval_idx = scanner.last_scope_idx();
@@ -552,7 +553,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 				GIntervalsBigSet2D::end_save(intervset_out.c_str(), zeroline, iu, chromstats2d);
 			}
 		} else {
-			size_t orig_scope_idx = 0;
+			uint64_t orig_scope_idx = 0;
 
 			iu.verify_max_data_size(num_intervals, "Result");
 			medians.resize(num_intervals * num_percentiles, numeric_limits<double>::quiet_NaN());
@@ -617,7 +618,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 			verror("intervals.set.out argument is not a string");
 
 		vector<Percentile> percentiles(length(_percentiles));
-		size_t num_percentiles = percentiles.size();
+		uint64_t num_percentiles = percentiles.size();
 		for (int64_t i = 0; i < length(_percentiles); ++i)
 			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
 		sort(percentiles.begin(), percentiles.end());
@@ -639,7 +640,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
 		bool is_1d_iterator = iu.is_1d_iterator(_expr, intervals1d, intervals2d, _iterator_policy);
-		size_t num_intervals = is_1d_iterator ? intervals1d->size() : intervals2d->size();
+		uint64_t num_intervals = is_1d_iterator ? intervals1d->size() : intervals2d->size();
 		if (!num_intervals) 
 			return R_NilValue;
 
@@ -655,7 +656,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		if (!(num_kids = iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band)))
 			rreturn(R_NilValue);
 
-		size_t kid_rnd_sampling_buf_size = (size_t)ceil(iu.get_max_data_size() / (double)num_kids);
+		uint64_t kid_rnd_sampling_buf_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
 		StreamPercentiler<double> sp(kid_rnd_sampling_buf_size, iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
 
 		if (do_big_intervset_out) {
@@ -666,14 +667,14 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 
 			if (is_1d_iterator) {
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
-				for (int chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
+				for (int chromid = 0; (uint64_t)chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
 					if (intervals1d->size(chromid))
 						chroms1d.insert(chromid);
 				}
 			} else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
-				for (int chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-					for (int chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
+				for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
+					for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
 						if (intervals2d->size(chromid1, chromid2))
 							chroms2d.insert(ChromPair(chromid1, chromid2));
 					}
@@ -701,7 +702,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 					float val = scanner.last_real(0);
 
 					if (cur_interval_idx != scanner.last_scope_idx()) {
-						size_t size;
+						uint64_t size;
 						char error_prefix[1000];
 
 						cur_interval_idx = scanner.last_scope_idx();
@@ -787,7 +788,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 						unpack_data(ptr, kid_chromstats2d.front(), kid_chromstats2d.size());
 						for (vector<GIntervalsBigSet2D::ChromStat>::const_iterator istat = kid_chromstats2d.begin(); istat < kid_chromstats2d.end(); ++istat) {
 							if (istat->size) {
-								size_t idx = istat - kid_chromstats2d.begin();
+								uint64_t idx = istat - kid_chromstats2d.begin();
 								chromstats2d[idx] = *istat;
 								chroms2d.erase(ChromPair(GIntervalsBigSet2D::idx2chrom1(idx, num_chroms), GIntervalsBigSet2D::idx2chrom2(idx, num_chroms)));
 							}
@@ -829,19 +830,18 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 				}
 			}
 		} else {  // !do_big_intervset_out
-			vector<size_t> orig_scope_indices;
+			vector<uint64_t> orig_scope_indices;
 
 			iu.verify_max_data_size(num_intervals, "Result");
-			if (iu.distribute_task(sizeof(bool), (intervals1d->size() ? sizeof(GInterval) : sizeof(GInterval2D)) + sizeof(double) * percentiles.size() + sizeof(size_t))) { // child process
+			if (iu.distribute_task(sizeof(bool), (intervals1d->size() ? sizeof(GInterval) : sizeof(GInterval2D)) + sizeof(double) * percentiles.size() + sizeof(uint64_t))) { // child process
 				TrackExprScanner scanner(iu);
 				scanner.begin(_expr, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band);
 
 				if (dynamic_cast<const TrackExpressionCartesianGridIterator *>(scanner.get_iterator()) ||
 					dynamic_cast<const TrackExpressionIntervals2DIterator *>(scanner.get_iterator()) ||
-					dynamic_cast<const TrackExpressionTrackRectsIterator *>(scanner.get_iterator()))
+					dynamic_cast<const TrackExpressionTrackRectsIterator *>(scanner.get_iterator())) {
 					verror("The type of iterator is currently not supported by the function");
-
-				size_t orig_scope_idx = 0;
+				}
 
 				while (!scanner.isend()) {
 					float val = scanner.last_real(0);
@@ -874,7 +874,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 				pack_data(ptr, orig_scope_indices.front(), orig_scope_indices.size());
 			} else { // parent process
 				vector<double> kid_medians;
-				vector<size_t> kid_orig_scope_indices;
+				vector<uint64_t> kid_orig_scope_indices;
 
 				medians.resize(num_intervals * num_percentiles, numeric_limits<double>::quiet_NaN());
 
@@ -882,7 +882,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 				for (int i = 0; i < get_num_kids(); ++i) {
 					void *ptr = get_kid_res(i);
 					bool kid_generate_warning;
-					size_t res_size = get_kid_res_size(i);
+					uint64_t res_size = get_kid_res_size(i);
 
 					kid_medians.resize(res_size * num_percentiles, numeric_limits<double>::quiet_NaN());
 					kid_orig_scope_indices.resize(res_size);
@@ -891,13 +891,17 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 					generate_warning |= kid_generate_warning;
 
 					kid_medians.resize(res_size * num_percentiles);
-					unpack_data(ptr, kid_medians.front(), kid_medians.size());
+					if(!kid_medians.empty() && ptr != nullptr) {
+ 					   unpack_data(ptr, kid_medians.front(), kid_medians.size());
+					}					
 
 					kid_orig_scope_indices.resize(res_size);
-					unpack_data(ptr, kid_orig_scope_indices.front(), kid_orig_scope_indices.size());
+					if (!kid_orig_scope_indices.empty() && ptr != nullptr){
+						unpack_data(ptr, kid_orig_scope_indices.front(), kid_orig_scope_indices.size());
+					}
 
-					for (size_t i = 0; i < kid_orig_scope_indices.size(); ++i) {
-						size_t offset = i * num_percentiles;
+					for (uint64_t i = 0; i < kid_orig_scope_indices.size(); ++i) {
+						uint64_t offset = i * num_percentiles;
 						copy(kid_medians.begin() + offset, kid_medians.begin() + offset + num_percentiles,
 							 medians.begin() + kid_orig_scope_indices[i] * num_percentiles);
 					}
@@ -1055,7 +1059,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
-			sprintf(buf, "%g", ip->percentile);
+			snprintf(buf, sizeof(buf), "%g", ip->percentile);
 			SET_STRING_ELT(dimname, ip->index, mkChar(buf));
 		}
 		SET_VECTOR_ELT(dimnames, bins_manager.get_num_bin_finders(), dimname);

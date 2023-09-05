@@ -1,0 +1,12 @@
+src/*.o
+src/*.so
+README.html
+regression.R
+regression_tests.R
+inst/trackdb/test/.db.cache
+.vscode
+inst/doc
+docs
+.DS_Store
+mm10
+add_include.sh

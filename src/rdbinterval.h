@@ -8,7 +8,10 @@
 #ifndef RDBINTERVAL_H_
 #define RDBINTERVAL_H_
 
+#include <cstdint>
+#include <inttypes.h>
 #include <sys/types.h>
+
 #include <vector>
 
 using namespace std;
@@ -50,11 +53,11 @@ struct ChainInterval : public GInterval {
 	enum Errors { BAD_INTERVAL };
 	enum { CHROM_SRC = GInterval::NUM_COLS, START_SRC, NUM_COLS };
 
-	struct SrcCompare : public binary_function<ChainInterval, ChainInterval, bool> {
+	struct SrcCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
-	};
+	};	
 
-	struct SetCompare : public binary_function<ChainInterval, ChainInterval, bool> {
+	struct SetCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
 	};
 
@@ -222,10 +225,10 @@ public:
 	void verify_max_data_size(uint64_t data_size, const char *data_name = "Result", bool check_all_kids = true);
 
 	// returns true if the intervals set should be saved in a big set
-	bool needs_bigset(size_t num_intervs) { return num_intervs > get_big_intervals_size(); }
+	bool needs_bigset(uint64_t num_intervs) { return num_intervs > get_big_intervals_size(); }
 
-	size_t get_orig_interv_idx(const GInterval &interval) const { return (size_t)interval.udata; }
-	size_t get_orig_interv_idx(const GInterval2D &interval) const { return (size_t)interval.udata(); }
+	uint64_t get_orig_interv_idx(const GInterval &interval) const { return (uint64_t)interval.udata; }
+	uint64_t get_orig_interv_idx(const GInterval2D &interval) const { return (uint64_t)interval.udata(); }
 
 	int chrom2id(const string &chrom) const { return m_chrom_key.chrom2id(chrom); }
 	const string &id2chrom(int id) const { return m_chrom_key.id2chrom(id); }
@@ -242,8 +245,8 @@ public:
 
 	// multi-tasking: divides intervals and forks child processes each with its own kid_intervals.
 	// Returns true if a child, false if a parent.
-	bool distribute_task(size_t res_const_size,    // data size in bytes for all the result
-						 size_t res_record_size);  // size in bytes per datum in the result
+	bool distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
+						 uint64_t res_record_size);  // size in bytes per datum in the result
 
 private:
 	GenomeChromKey                m_chrom_key;
@@ -287,10 +290,11 @@ inline bool rdb::ChainInterval::SetCompare::operator()(const ChainInterval &obj1
 
 inline string rdb::ChainInterval::tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const
 {
-	char buf[1000];
-	sprintf(buf, "(%s, %lld, %lld) <- (%s, %lld)", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src);
-	return string(buf);
+    char buf[1000];
+    snprintf(buf, sizeof(buf), "(%s, %" PRId64 ", %" PRId64 ") <- (%s, %" PRId64 ")", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src);
+    return string(buf);
 }
+
 
 inline void rdb::ChainInterval::verify(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom, bool check_chrom_boundary) const
 {

@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,14 +8,14 @@
 #include "port.h"
 #include "strutil.h"
 
-size_t get_unique_mem_usage(pid_t pid)
+uint64_t get_unique_mem_usage(pid_t pid)
 {
-	size_t mem_usage = 0;
+	uint64_t mem_usage = 0;
 	BufferedFile bf;
 	char filename[100];
 	vector<string> fields;
 
-	sprintf(filename, "/proc/%ld/smaps", (long)pid);
+	snprintf(filename, sizeof(filename), "/proc/%ld/smaps", (long)pid);
 
 	// count only private dirty bytes under heap section
 	if (!bf.open(filename, "r")) {

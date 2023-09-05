@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -21,7 +22,7 @@ double (*GenomeTrack::s_rnd_func)() = drand48;
 
 const pair<int, int> GenomeTrack::get_chromid_2d(const GenomeChromKey &chromkey, const string &filename)
 {
-	size_t pos = filename.find_first_of("-");
+	uint64_t pos = filename.find_first_of("-");
 
 	if (pos == string::npos)
 		TGLError<GenomeTrack>(NOT_2D, "File %s does not belong to 2D track", filename.c_str());
@@ -41,7 +42,7 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 	Type type;
 	bool is_1d = false;
 
-	for (size_t chromid = 0; chromid < chromkey.get_num_chroms(); chromid++) {
+	for (uint64_t chromid = 0; chromid < chromkey.get_num_chroms(); chromid++) {
 		try {
 			type = s_read_type((string(track_dir) + "/" + get_1d_filename(chromkey, chromid)).c_str());
 			is_1d = true;
@@ -55,8 +56,8 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 		return type;
 	}
 
-	for (size_t chromid1 = 0; chromid1 < chromkey.get_num_chroms(); chromid1++) {
-		for (size_t chromid2 = 0; chromid2 < chromkey.get_num_chroms(); chromid2++) {
+	for (uint64_t chromid1 = 0; chromid1 < chromkey.get_num_chroms(); chromid1++) {
+		for (uint64_t chromid2 = 0; chromid2 < chromkey.get_num_chroms(); chromid2++) {
 			bool is_2d = false;
 
 			try {

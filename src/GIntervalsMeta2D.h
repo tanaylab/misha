@@ -1,6 +1,7 @@
 #ifndef GINTERVALSMETA2D_H_INCLUDED
 #define GINTERVALSMETA2D_H_INCLUDED
 
+#include <cstdint>
 #include "GIntervalsFetcher2D.h"
 #include "GIntervalsMeta.h"
 
@@ -14,7 +15,7 @@ public:
 
 	struct ChromStat {
 		bool    contains_overlaps;
-		size_t  size;
+		uint64_t  size;
 		double  surface;
 
 		ChromStat() : contains_overlaps(false), size(0), surface(0.) {}
@@ -32,9 +33,9 @@ public:
 
 	//-------------------------------- GIntervalsFetcher2D interface -----------------------------------
 
-	virtual size_t size() const { return m_size; }
+	virtual uint64_t size() const { return m_size; }
 
-	virtual size_t size(int chromid1, int chromid2) const { return m_chroms2size[chroms2idx(chromid1, chromid2)]; }
+	virtual uint64_t size(int chromid1, int chromid2) const { return m_chroms2size[chroms2idx(chromid1, chromid2)]; }
 
 	virtual int num_chrom_pairs() const;
 
@@ -48,7 +49,7 @@ protected:
 	vector<int64_t>              m_orig_chroms2size;
 	vector<double>               m_surfaces;
 	vector<bool>                 m_contains_overlaps;
-	size_t                       m_size;
+	uint64_t                       m_size;
 	double                       m_surface;
 	GenomeChromKey              *m_chromkey;
 
@@ -74,13 +75,13 @@ inline int GIntervalsMeta2D::num_chrom_pairs() const
 
 inline bool GIntervalsMeta2D::get_next_chroms(int *chromid1, int *chromid2)
 {
-	if (*chromid2 < m_chromkey->get_num_chroms() - 1)
+	if ((uint64_t)*chromid2 < m_chromkey->get_num_chroms() - 1)
 		++*chromid2;
 	else {
 		++*chromid1;
 		*chromid2 = 0;
 	}
-	return *chromid1 < m_chromkey->get_num_chroms() && *chromid2 < m_chromkey->get_num_chroms();
+	return (uint64_t)*chromid1 < m_chromkey->get_num_chroms() && (uint64_t)*chromid2 < m_chromkey->get_num_chroms();
 }
 
 #endif

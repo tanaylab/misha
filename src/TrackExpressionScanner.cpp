@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <errno.h>
 #include <sys/time.h>
 
@@ -49,9 +50,7 @@ static uint64_t get_cur_clock()
 }
 
 TrackExprScanner::TrackExprScanner(rdb::IntervUtils &iu) :
-	m_iu(iu),
-	m_num_track_vars(0),
-	m_num_interv_vars(0),
+	m_iu(iu),	
 	m_isend(true),
 	m_expr_itr(NULL),
 	m_expr_vars(iu)
@@ -111,7 +110,7 @@ void TrackExprScanner::define_r_vars(unsigned eval_buf_limit)
 		for (unsigned i = 0; i < m_eval_buf_limit; i++)
 			m_2d.expr_itr_intervals_chroms1[i] = m_2d.expr_itr_intervals_chroms2[i] = 1;
 	}
-	defineVar(install("GITERATOR.INTERVALS"), m_rexpr_itr_intervals, findVar(install(".GlobalEnv"), m_iu.get_env()));
+	defineVar(install("GITERATOR.INTERVALS"), m_rexpr_itr_intervals, findVar(install(".misha"), m_iu.get_env()));
 
     for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         const TrackExpressionVars::Track_var *var = m_expr_vars.var(m_track_exprs[iexpr].c_str());
@@ -362,7 +361,7 @@ bool TrackExprScanner::eval_next()
 void TrackExprScanner::report_progress()
 {
 	m_num_evals += m_eval_buf_size;
-	if (m_num_evals > (size_t)m_report_step && m_do_report_progress) {
+	if (m_num_evals > (uint64_t)m_report_step && m_do_report_progress) {
         uint64_t curclock = get_cur_clock();
         double delta = curclock - m_last_report_clock;
 
@@ -559,7 +558,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 				SEXP all_track_names;
 				SEXPCleaner all_track_names_cleaner(all_track_names);
 
-				rprotect(all_track_names = findVar(install("GTRACKS"), m_iu.get_env()));
+				rprotect(all_track_names = findVar(install("GTRACKS"), findVar(install(".misha"), m_iu.get_env())));
 				if (isString(all_track_names)) {
 					int i;
 					for (i = 0; i < length(all_track_names); ++i) {
@@ -569,7 +568,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 					if (i >= length(all_track_names)) 
 						verror("Invalid iterator: %s is neither a name of a track nor a name of an intervals set", iter_val.c_str());
 				}
-			}
+                        }
 			track_names.push_back(iter_val);
 			track_types.push_back(GenomeTrack::get_type(track2path(m_iu.get_env(), iter_val).c_str(), m_iu.get_chromkey()));
 		}
@@ -589,8 +588,8 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 			if (GenomeTrack::is_1d(track_type)) {
 				set<int> chromids;
 
-				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {
-					int chromid;
+				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {										
+					int chromid = -1;
 					GenomeTrackFixedBin gtrack_fbin;
 
 					try {
@@ -604,9 +603,10 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
                         gtrack_fbin.init_read((trackpath + "/" + *ifilename).c_str(), chromid);
                         int64_t expected_num_bins = (int64_t)ceil(all_genome_intervs[chromid].end / (double)gtrack_fbin.get_bin_size());
 
-                        if (gtrack_fbin.get_num_samples() != expected_num_bins)
+                        if (gtrack_fbin.get_num_samples() != expected_num_bins){
                             verror("Number of bins in track %s, chrom %s do not match the chromosome size (expecting: %ld, reading: %ld)",
                                     itrack_name->c_str(), m_iu.get_chromkey().id2chrom(chromid).c_str(), expected_num_bins, gtrack_fbin.get_num_samples());
+						}
 					}
 
 					if (ifilename == filenames.begin()) {

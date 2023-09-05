@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <cmath>
 #include <fstream>
 #include <time.h>
@@ -42,7 +43,8 @@ IntervUtils::IntervUtils(SEXP envir)
 	m_kids_intervals1d.clear();
 	m_kids_intervals2d.clear();
 
-	m_allgenome = findVar(install("ALLGENOME"), m_envir);
+	
+	m_allgenome = findVar(install("ALLGENOME"), findVar(install(".misha"), m_envir));
 
 	if (isNull(m_allgenome))
 		verror("ALLGENOME variable does not exist");
@@ -80,7 +82,7 @@ bool IntervUtils::track_exists(const char *track_name)
 {
 	SEXP all_track_names;
 
-	rprotect(all_track_names = findVar(install("GTRACKS"), get_env()));
+	rprotect(all_track_names = findVar(install("GTRACKS"), findVar(install(".misha"), get_env())));
 	if (isString(all_track_names)) {
 		for (int i = 0; i < length(all_track_names); ++i) {
 			if (!strcmp(track_name, CHAR(STRING_ELT(all_track_names, i))))
@@ -314,7 +316,7 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		SEXP gintervs;
 		bool interv_found = false;
 
-		rprotect(gintervs = findVar(install("GINTERVS"), m_envir));
+		rprotect(gintervs = findVar(install("GINTERVS"), findVar(install(".misha"),m_envir)));
 		if (isString(gintervs)) {
 			for (int iinterv = 0; iinterv < length(gintervs); ++iinterv) {
 				const char *interv = CHAR(STRING_ELT(gintervs, iinterv));
@@ -340,7 +342,7 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		if (!stat(path.c_str(), &stat_res) && S_ISDIR(stat_res.st_mode))
 			verror("%s is a big intervals set. Big intervals sets are not supported by the function.", full_interv_name);
 		rprotect(rintervals = RSaneUnserialize(path.c_str()));
-	}
+        }
 
 	if (TYPEOF(rintervals) == PROMSXP) {
 		if (PRENV(rintervals) == R_NilValue)
@@ -476,7 +478,7 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher1D *intervals, unsigned num_c
 
 	for (intervals->begin_iter(); !intervals->isend(); intervals->next()) {
 		const GInterval &interval = intervals->cur_interval();
-		size_t index = use_original_index ? get_orig_interv_idx(interval) : intervals->iter_index();
+		uint64_t index = use_original_index ? get_orig_interv_idx(interval) : intervals->iter_index();
 
 		INTEGER(chroms_idx)[index] = interval.chromid + 1;
 		REAL(starts)[index] = interval.start;
@@ -533,7 +535,7 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher2D *intervals, unsigned num_c
 
 	for (intervals->begin_iter(); !intervals->isend(); intervals->next()) {
 		const GInterval2D &interval = intervals->cur_interval();
-		size_t index = use_original_index ? get_orig_interv_idx(interval) : intervals->iter_index();
+		uint64_t index = use_original_index ? get_orig_interv_idx(interval) : intervals->iter_index();
 
 		INTEGER(chroms_idx1)[index] = interval.chromid1() + 1;
 		REAL(starts1)[index] = interval.start1();
@@ -725,8 +727,9 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 		verror("Invalid source data frame for a copy");
 
 	src_cols.resize(length(src));
-	if (tgt_cols.size() < length(tgt) + tgt_col_offset) 
+	if (tgt_cols.size() < (uint64_t)(length(tgt) + tgt_col_offset)){ 
 		tgt_cols.resize(length(tgt) + tgt_col_offset);
+	}
 
 	for (int col = 0; col < length(src); ++col) {
 		SEXP src_col = VECTOR_ELT(src, col);
@@ -748,7 +751,7 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 
 void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)
 {
-	for (size_t col = 0; col < src_cols.size(); ++col) {
+	for (uint64_t col = 0; col < src_cols.size(); ++col) {
 		SEXP src_col = src_cols[col];
 		SEXP tgt_col = tgt_cols[col + tgt_col_offset];
 
@@ -765,7 +768,7 @@ void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row,
 
 void IntervUtils::copy_data_frame_rows(const vector<SEXP> &src_cols, int src_row, int num_rows, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)
 {
-	for (int col = 0; col < src_cols.size(); ++col) {
+	for (uint64_t col = 0; col < src_cols.size(); ++col) {
 		SEXP src_col = src_cols[col];
 		SEXP tgt_col = tgt_cols[col + tgt_col_offset];
 
@@ -1043,7 +1046,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 					}
 
 					// should we allocate a new process?
-					if (kid_range > get_min_scope4process() && range > get_min_scope4process() && kid_range + chrom_range >= range / num_avail_kids) {
+					if ((uint64_t)kid_range > get_min_scope4process() && (uint64_t)range > get_min_scope4process() && (uint64_t)(kid_range + chrom_range) >= (uint64_t)(range / num_avail_kids)) {
 						--num_avail_kids;
 						kid_range = 0;
 						m_kids_intervals1d.push_back(new GIntervals());
@@ -1071,7 +1074,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 
 				if (kid_range && num_avail_kids) {
 					// should we allocate a new process?
-					if (kid_range > get_min_scope4process() && range > get_min_scope4process() && kid_range + chrom_range >= range / num_avail_kids) {
+					if ((uint64_t)kid_range > get_min_scope4process() && (uint64_t)range > get_min_scope4process() && kid_range + chrom_range >= range / num_avail_kids) {
 						--num_avail_kids;
 						kid_range = 0;
 						m_kids_intervals1d.push_back(scope1d->create_masked_copy(chromids_mask));
@@ -1204,10 +1207,10 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 	return m_num_planned_kids;
 }
 
-bool IntervUtils::distribute_task(size_t res_const_size,    // data size in bytes for all the result
-								  size_t res_record_size)   // size in bytes per datum in the result
+bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
+								  uint64_t res_record_size)   // size in bytes per datum in the result
 {
-	size_t max_res_size = get_max_data_size() * res_record_size + m_num_planned_kids * res_const_size;
+	uint64_t max_res_size = get_max_data_size() * res_record_size + m_num_planned_kids * res_const_size;
 
 	rdb::prepare4multitasking(res_const_size, res_record_size, max_res_size, get_max_mem_usage(), m_num_planned_kids);
 

@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include "rdbinterval.h"
 #include "rdbutils.h"
 #include "BinsManager.h"
@@ -131,7 +132,7 @@ SEXP gtrackdist_multitask(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP
 			for (int i = 0; i < get_num_kids(); ++i) {
 				uint64_t *kid_distribution = (uint64_t *)get_kid_res(i);
 
-				for (int ibin = 0; ibin < totalbins; ++ibin) 
+				for (uint64_t ibin = 0; ibin < totalbins; ++ibin) 
 					distribution[ibin] += kid_distribution[ibin];
 			}
 

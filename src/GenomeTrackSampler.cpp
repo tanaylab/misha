@@ -14,7 +14,7 @@ typedef iterator_traits<double *> traits;
 
 extern "C" {
 
-SEXP gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _envir)
+SEXP C_gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;

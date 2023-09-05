@@ -1,6 +1,7 @@
 #ifndef GTRACKINTERVALSFETCHER1D_H_INCLUDED
 #define GTRACKINTERVALSFETCHER1D_H_INCLUDED
 
+#include <cstdint>
 #include "GenomeTrackArrays.h"
 #include "GenomeTrackSparse.h"
 #include "GIntervalsMeta1D.h"
@@ -41,9 +42,9 @@ public:
 	virtual GIntervals::const_iterator get_chrom_begin() const { return m_intervals.begin(); }
 	virtual GIntervals::const_iterator get_chrom_end() const { return m_intervals.end(); }
 
-	virtual size_t iter_index() const { return m_iter_index; }
+	virtual uint64_t iter_index() const { return m_iter_index; }
 
-	virtual size_t iter_chrom_index() const { return m_iter_chrom_index; }
+	virtual uint64_t iter_chrom_index() const { return m_iter_chrom_index; }
 
 	virtual const GInterval &cur_interval() const { return *m_iinterval; }
 
@@ -58,8 +59,8 @@ protected:
 	GIntervals::const_iterator m_iinterval;
 	int                        m_cur_chromid;
 	int                        m_iter_chrom;
-	size_t                     m_iter_index;
-	size_t                     m_iter_chrom_index;
+	uint64_t                     m_iter_index;
+	uint64_t                     m_iter_chrom_index;
 	Compare_t                  m_compare;
 	bool                       m_do_sort;
 	bool                       m_unify_touching_intervals;
@@ -95,7 +96,7 @@ void GTrackIntervalsFetcher1D<Track>::load_chrom(int chromid)
 			m_intervals = track.get_intervals();
 
 			// set udata
-			size_t offset = 0;
+			uint64_t offset = 0;
 			for (int i = 0; i < chromid; ++i)
 				offset += m_orig_chrom2size[i];
 			for (GIntervals::iterator iinterval = m_intervals.begin(); iinterval < m_intervals.end(); ++iinterval) 

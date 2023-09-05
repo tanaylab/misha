@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -131,7 +132,7 @@ void GenomeTrackSparse::read_interval(const GInterval &interval)
 
 void GenomeTrackSparse::write_next_interval(const GInterval &interval, float val)
 {
-	size_t size = 0;
+	uint64_t size = 0;
 	size += m_bfile.write(&interval.start, sizeof(interval.start));
 	size += m_bfile.write(&interval.end, sizeof(interval.end));
 	size += m_bfile.write(&val, sizeof(val));

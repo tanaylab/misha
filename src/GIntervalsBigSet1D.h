@@ -1,6 +1,7 @@
 #ifndef _GINTERVALSBIGSET1D_H_INCLUDED_
 #define _GINTERVALSBIGSET1D_H_INCLUDED_
 
+#include <cstdint>
 #include "GInterval.h"
 #include "GIntervalsBigSet.h"
 #include "GIntervalsMeta1D.h"
@@ -50,15 +51,15 @@ public:
 	virtual bool next();
 	virtual bool next_in_chrom();
 
-	virtual bool isend() const { return m_iter_index == -1 || m_iter_index >= m_size; }
+	virtual bool isend() const { return (int)m_iter_index == -1 || m_iter_index >= m_size; }
 	virtual bool isend_chrom() const { return m_iinterval >= m_intervals.end() || m_cur_chromid != m_iter_chrom; }
 
 	virtual GIntervals::const_iterator get_chrom_begin() const { return m_intervals.begin(); }
 	virtual GIntervals::const_iterator get_chrom_end() const { return m_intervals.end(); }
 
-	virtual size_t iter_index() const { return m_iter_index; }
+	virtual uint64_t iter_index() const { return m_iter_index; }
 
-	virtual size_t iter_chrom_index() const { return m_iter_chrom_index; }
+	virtual uint64_t iter_chrom_index() const { return m_iter_chrom_index; }
 
 	virtual const GInterval &cur_interval() const { return *m_iinterval; }
 
@@ -73,8 +74,8 @@ private:
 	GIntervals::const_iterator m_iinterval;
 	int                        m_cur_chromid;
 	int                        m_iter_chrom;
-	size_t                     m_iter_index;
-	size_t                     m_iter_chrom_index;
+	uint64_t                     m_iter_index;
+	uint64_t                     m_iter_chrom_index;
 	Compare_t                  m_compare;
 	bool                       m_do_sort;
 	bool                       m_do_unify_overlaps;

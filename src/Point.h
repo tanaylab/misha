@@ -8,6 +8,7 @@
 #ifndef POINT_H_
 #define POINT_H_
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -77,9 +78,10 @@ struct Point {
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%lld, %lld)", x, y);
+		snprintf(str, sizeof(str), "(%" PRId64 ", %" PRId64 ")", x, y);
 		return str;
 	}
+
 };
 
 #pragma pack(pop)

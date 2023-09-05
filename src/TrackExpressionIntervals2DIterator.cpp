@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "rdbutils.h"
 #include "TrackExpressionIntervals2DIterator.h"
 

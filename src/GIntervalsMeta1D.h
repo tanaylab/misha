@@ -1,6 +1,7 @@
 #ifndef GINTERVALSMETA1D_H_INCLUDED
 #define GINTERVALSMETA1D_H_INCLUDED
 
+#include <cstdint>
 #include "GIntervalsFetcher1D.h"
 #include "GIntervalsMeta.h"
 
@@ -15,9 +16,9 @@ public:
 
 	struct ChromStat {
 		bool    contains_overlaps;
-		size_t  size;
-		size_t  unified_overlap_size;
-		size_t  unified_touching_size;
+		uint64_t  size;
+		uint64_t  unified_overlap_size;
+		uint64_t  unified_touching_size;
 		int64_t range;
 		int64_t unified_overlap_range;
 
@@ -40,13 +41,14 @@ public:
 
 	//-------------------------------- GIntervalsFetcher1D interface -----------------------------------
 
-	virtual size_t size() const { return m_size; }
+	virtual uint64_t size() const { return m_size; }
 
-	virtual size_t size(int chromid) const { return (*m_user_chrom2size)[chromid]; }
+	virtual uint64_t size(int chromid) const { return (*m_user_chrom2size)[chromid]; }
 
 	virtual int num_chroms() const;
 
 	virtual int64_t range() const { return m_range; }    // complexity: O(1)
+	virtual int64_t range(int chromid) const = 0;   // complexity: O(n)
 
 protected:
 	vector<int64_t>            m_chrom2size;
@@ -56,7 +58,7 @@ protected:
 	vector<int64_t>            m_chrom2unified_touching_size;
 	vector<int64_t>            m_chrom2range;
 	vector<int64_t>            m_chrom2unified_overlap_range;
-	size_t                     m_size;
+	uint64_t                     m_size;
 	int64_t                    m_range;
 	bool                       m_contains_overlaps;
 	GenomeChromKey            *m_chromkey;

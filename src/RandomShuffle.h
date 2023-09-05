@@ -1,6 +1,7 @@
 #ifndef RANDOM_SHUFFLE_H_INCLUDED
 #define RANDOM_SHUFFLE_H_INCLUDED
 
+#include <cstdint>
 #include <algorithm>
 #include <stdlib.h>
 
@@ -17,7 +18,7 @@ void tgs_random_shuffle(RandomIt first, RandomIt last, double (*rnd_func)())
     n = last - first;
     for (i = n - 1; i > 0; --i) {
         using std::swap;
-        swap(first[i], first[(size_t)(rnd_func() * (i + 1))]);
+        swap(first[i], first[(uint64_t)(rnd_func() * (i + 1))]);
     }
 }
 

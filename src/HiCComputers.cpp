@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "TGLException.h"
 #include "GenomeTrack2D.h"
 #include "HiCComputers.h"
@@ -8,7 +9,7 @@
 // Utility structure and functions
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct comp_interval_start : public binary_function<GInterval, GInterval, bool> {
+struct comp_interval_start {
     bool operator()(const GInterval x, const GInterval y) {
         if (x.chromid != y.chromid)
             return (x.chromid < y.chromid);
@@ -17,7 +18,7 @@ struct comp_interval_start : public binary_function<GInterval, GInterval, bool> 
     }
 };
 
-struct comp_interval_end : public binary_function<GInterval, GInterval, bool> {
+struct comp_interval_end {
     const bool operator()(const GInterval x, const GInterval y) {
         if (x.chromid != y.chromid)
             return (x.chromid < y.chromid);
@@ -39,7 +40,7 @@ static void binary_search(const GIntervals& ints, int chromid, int64_t coord, bo
 
 static void write_string(BufferedFile& bfile, string str)
 {
-	size_t size = str.size();
+	uint64_t size = str.size();
     bfile.write(&size, sizeof(size));
     if (bfile.write(&*str.begin(), sizeof(char)*size) != size)
 		TGLError("Writing string failed, file: %s", bfile.file_name().c_str());
@@ -47,7 +48,7 @@ static void write_string(BufferedFile& bfile, string str)
 
 static void read_string(BufferedFile& bfile, string& str)
 {
-	size_t size;
+	uint64_t size;
     bfile.read(&size, sizeof(size));
 
     str.resize(size);
@@ -147,13 +148,13 @@ void PotentialComputer2D::unserialize(BufferedFile& bfile)
     read_string(bfile, m_track_fn2);
 }
 
-void PotentialComputer2D::dump()
+void PotentialComputer2D::dump(ostream &out)
 {
-    cout << "m_type: " << m_type << endl;
-    cout << "m_chromid1: " << m_chromid1 << endl;
-    cout << "m_chromid2: " << m_chromid2 << endl;
-    cout << "m_track_fn1: " << m_track_fn1 << endl;
-    cout << "m_track_fn2: " << m_track_fn2 << endl;
+    out << "m_type: " << m_type << endl;
+    out << "m_chromid1: " << m_chromid1 << endl;
+    out << "m_chromid2: " << m_chromid2 << endl;
+    out << "m_track_fn1: " << m_track_fn1 << endl;
+    out << "m_track_fn2: " << m_track_fn2 << endl;
 }
 
 void PotentialComputer2D::set_fend_track(const char* track_fn1, const char* track_fn2)
@@ -313,22 +314,22 @@ void TechnicalComputer2D::unserialize(BufferedFile& bfile)
     }
 }
 
-void TechnicalComputer2D::dump()
+void TechnicalComputer2D::dump(ostream &out)
 {
-    cout << "m_type: " << m_type << endl;
-    cout << "m_chromid1: " << m_chromid1 << endl;
-    cout << "m_chromid2: " << m_chromid2 << endl;
+    out << "m_type: " << m_type << endl;
+    out << "m_chromid1: " << m_chromid1 << endl;
+    out << "m_chromid2: " << m_chromid2 << endl;
 
-    cout << "m_dim: " << m_dim << endl;
+    out << "m_dim: " << m_dim << endl;
     for (unsigned int i = 0; i < m_track_fn1.size(); i++) {
-        cout << "m_track_fn1: " << m_track_fn1[i] << endl;
-        cout << "m_track_fn2: " << m_track_fn2[i] << endl;
-        cout << "m_matrix: num_cols=" << m_matrix[i].col_size() << " num_rows=" << m_matrix[i].row_size() << endl;
+        out << "m_track_fn1: " << m_track_fn1[i] << endl;
+        out << "m_track_fn2: " << m_track_fn2[i] << endl;
+        out << "m_matrix: num_cols=" << m_matrix[i].col_size() << " num_rows=" << m_matrix[i].row_size() << endl;
 //         for (unsigned int row = 0; row < m_matrix[i].row_size(); row++) {
 //             for (unsigned int col = 0; col < m_matrix[i].col_size(); col++) {
-//                 cout << m_matrix[i][col][row] << " ";
+//                 out << m_matrix[i][col][row] << " ";
 //             }
-//             cout << endl;
+//             out << endl;
 //         }
     }
 }

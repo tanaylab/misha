@@ -8,6 +8,9 @@
 #ifndef GINTERVAL2D_H_
 #define GINTERVAL2D_H_
 
+#include <cstdint>
+#include <inttypes.h>
+
 #include <vector>
 
 #include "GenomeChromKey.h"
@@ -64,15 +67,16 @@ public:
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%d, %lld, %lld) (%d, %lld, %lld)", chromid1(), start1(), end1(), chromid2(), start2(), end2());
+		snprintf(str, sizeof(str), "(%d, %" PRId64 ", %" PRId64 ") (%d, %" PRId64 ", %" PRId64 ")", chromid1(), start1(), end1(), chromid2(), start2(), end2());
 		return str;
 	}
 
 	char *debug_str(const GenomeChromKey &chromkey) const {
 		static char str[200];
-		sprintf(str, "(%s, %lld, %lld) (%s, %lld, %lld)", chromkey.id2chrom(chromid1()).c_str(), start1(), end1(), chromkey.id2chrom(chromid2()).c_str(), start2(), end2());
+		snprintf(str, sizeof(str), "(%s, %" PRId64 ", %" PRId64 ") (%s, %" PRId64 ", %" PRId64 ")", chromkey.id2chrom(chromid1()).c_str(), start1(), end1(), chromkey.id2chrom(chromid2()).c_str(), start2(), end2());
 		return str;
 	}
+
 
 private:
 	int     m_chromid1;

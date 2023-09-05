@@ -8,6 +8,7 @@
 #ifndef GENOMETRACKRECTS_H_
 #define GENOMETRACKRECTS_H_
 
+#include <cstdint>
 #include <stdio.h>
 
 #include "GenomeTrack2D.h"

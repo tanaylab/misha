@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
@@ -171,7 +172,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			iu.define_data_frame_cols(_intervs2, src_cols2, answer, tgt_cols, length(_intervs1));
 			rprotect(rdists = RSaneAllocVector(REALSXP, result.size()));
 
-			for (size_t i = 0; i < result.size(); ++i) {
+			for (uint64_t i = 0; i < result.size(); ++i) {
 				const IntervNeighbor &r = result[i];
 				iu.copy_data_frame_row(src_cols1, r.id1, tgt_cols, i, 0);
 
@@ -223,8 +224,8 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 			int chromid1 = -1;
 			int chromid2 = -1;
-			StatQuadTree<Rectangle_val<size_t>, uint64_t> qtree;
-			StatQuadTree<Rectangle_val<size_t>, uint64_t>::NNIterator inn(&qtree);
+			StatQuadTree<Rectangle_val<uint64_t>, uint64_t> qtree;
+			StatQuadTree<Rectangle_val<uint64_t>, uint64_t>::NNIterator inn(&qtree);
 
 			if (LOGICAL(_report_progress)[0])
 				progress.init(intervals2d[0].size(), 100);
@@ -237,7 +238,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 					for (intervals2d[1].begin_chrom_iter(chromid1, chromid2); !intervals2d[1].isend_chrom(); intervals2d[1].next_in_chrom()) {
 						const GInterval2D &interv = intervals2d[1].cur_interval();
-						StatQuadTree<Rectangle_val<size_t>, uint64_t>::ValueType rect(interv, iu.get_orig_interv_idx(interv));
+						StatQuadTree<Rectangle_val<uint64_t>, uint64_t>::ValueType rect(interv, iu.get_orig_interv_idx(interv));
 						qtree.insert(rect);
 					}
 				}
@@ -296,7 +297,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			rprotect(rdists1 = RSaneAllocVector(REALSXP, result.size()));
 			rprotect(rdists2 = RSaneAllocVector(REALSXP, result.size()));
 
-			for (size_t i = 0; i < result.size(); ++i) {
+			for (uint64_t i = 0; i < result.size(); ++i) {
 				const IntervNeighbor2D &r = result[i];
 				iu.copy_data_frame_row(src_cols1, r.id1, tgt_cols, i, 0);
 

@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <fts.h>
 
 #include "rdbutils.h"
@@ -65,7 +66,7 @@ SEXP gfind_tracks_n_intervals(SEXP _dir, SEXP _envir)
 		rprotect(rtracks = RSaneAllocVector(STRSXP, tracks.size()));
 		for (vector<string>::iterator itrack = tracks.begin(); itrack < tracks.end(); ++itrack) {
 			itrack->resize(itrack->size() - rdb::TRACK_FILE_EXT.size());
-			for (size_t pos = itrack->find_first_of('/'); pos != string::npos; pos = itrack->find_first_of('/', pos + 1))
+			for (uint64_t pos = itrack->find_first_of('/'); pos != string::npos; pos = itrack->find_first_of('/', pos + 1))
 				itrack->at(pos) = '.';
 			SET_STRING_ELT(rtracks, itrack - tracks.begin(), mkChar(itrack->c_str() + strlen(dir) + 1));
 		}
@@ -73,7 +74,7 @@ SEXP gfind_tracks_n_intervals(SEXP _dir, SEXP _envir)
 		rprotect(rintervs = RSaneAllocVector(STRSXP, intervs.size()));
 		for (vector<string>::iterator iinterv = intervs.begin(); iinterv < intervs.end(); ++iinterv) {
 			iinterv->resize(iinterv->size() - rdb::INTERV_FILE_EXT.size());
-			for (size_t pos = iinterv->find_first_of('/'); pos != string::npos; pos = iinterv->find_first_of('/', pos + 1))
+			for (uint64_t pos = iinterv->find_first_of('/'); pos != string::npos; pos = iinterv->find_first_of('/', pos + 1))
 				iinterv->at(pos) = '.';
 			SET_STRING_ELT(rintervs, iinterv - intervs.begin(), mkChar(iinterv->c_str() + strlen(dir) + 1));
 		}

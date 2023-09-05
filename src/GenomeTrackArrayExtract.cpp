@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <vector>
 
 #include <fstream>
@@ -17,11 +18,12 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 										  vector<unsigned> *interv_ids, int numcols, SEXP _colnames, IntervUtils &iu)
 {
 	SEXP answer = iu.convert_intervs(out_intervals, interv_ids ? GInterval::NUM_COLS + numcols + 1 : GInterval::NUM_COLS + numcols, false);
-	size_t numvals = res_vals.size() / numcols;
+	uint64_t numvals = res_vals.size() / numcols;
 	vector<SEXP> rvals(numcols);
 
-	for (int icol = 0; icol < numcols; ++icol)
+	for (int icol = 0; icol < numcols; ++icol) {
 		rprotect(rvals[icol] = RSaneAllocVector(REALSXP, numvals));
+	}
 
 	int rownum = 0;
 	for (vector<float>::const_iterator ival = res_vals.begin(); ival != res_vals.end(); ++rownum) {
@@ -32,8 +34,9 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 	}
 
 	SEXP colnames = getAttrib(answer, R_NamesSymbol);
-	for (int icol = 0; icol < numcols; ++icol)
+	for (int icol = 0; icol < numcols; ++icol){
 		SET_STRING_ELT(colnames, GInterval::NUM_COLS + icol, STRING_ELT(_colnames, icol));
+	}
 
 	if (interv_ids) {
 		SEXP ids;
@@ -44,9 +47,10 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 		SET_STRING_ELT(colnames, GInterval::NUM_COLS + numcols, mkChar("intervalID"));
 	}
 
-    for (int icol = 0; icol < numcols; ++icol)
+    for (int icol = 0; icol < numcols; ++icol) {
         SET_VECTOR_ELT(answer, GInterval::NUM_COLS + icol, rvals[icol]);
-
+	}
+	
 	return answer;
 }
 
@@ -143,7 +147,7 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 			}
 
 			track.get_sliced_vals(sparse_itr.get_icur_interval(), vals, numcols);
-			if (vals.size() != numcols) 
+			if (vals.size() != (uint64_t)numcols) 
 				verror("Number of sliced values (%ld) does not match the number of columns (%d)", vals.size(), numcols);
 
 			progress.report(max((int64_t)(sparse_itr.get_cur_scope_idx() - scope_idx), (int64_t)0));

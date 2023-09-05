@@ -39,7 +39,7 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 	for (int bin = 0; bin < numbins; bin++) {
 		char buf[10000];
 
-		sprintf(buf, "%c%g, %g]", bin || !include_lowest ? '(' : '[', bin_finder.get_breaks()[bin], bin_finder.get_breaks()[bin + 1]);
+		snprintf(buf, sizeof(buf), "%c%g, %g]", bin || !include_lowest ? '(' : '[', bin_finder.get_breaks()[bin], bin_finder.get_breaks()[bin + 1]);
 		SET_STRING_ELT(range, bin, mkChar(buf));
 	}
 	setAttrib(answer, install("range"), range);
@@ -104,7 +104,7 @@ static void gpartition_add_interval2res(const GInterval2D &interval, GIntervals2
 
 extern "C" {
 
-SEXP gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_lowest, SEXP _iterator_policy, SEXP _band,
+SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_lowest, SEXP _iterator_policy, SEXP _band,
 				SEXP _intervals_set_out, SEXP _envir)
 {
 	try {
@@ -142,7 +142,6 @@ SEXP gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include_l
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 		SEXP answer = R_NilValue;
-		unsigned num_cols;
 
 		scanner.begin(_track_expr, intervals1d, intervals2d, _iterator_policy, _band);
 

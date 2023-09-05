@@ -8,6 +8,7 @@
 #ifndef RECTANGLE_H_
 #define RECTANGLE_H_
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -93,7 +94,7 @@ struct Rectangle {
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%lld - %lld) (%lld - %lld)", x1, x2, y1, y2);
+		snprintf(str, sizeof(str), "(%" PRId64 " - %" PRId64 ") (%" PRId64 " - %" PRId64 ")", x1, x2, y1, y2);
 		return str;
 	}
 };

@@ -1,6 +1,7 @@
 #ifndef GENOMETRACKARRAYS_H_
 #define GENOMETRACKARRAYS_H_
 
+#include <cstdint>
 #include <cmath>
 #include <vector>
 
@@ -25,7 +26,7 @@ public:
 		bool operator<(const ArrayVal &obj) const { return idx < obj.idx; }
 	};
 
-	struct LessIdx : public binary_function<ArrayVal, unsigned, bool> {
+	struct LessIdx {
 		bool operator()(const ArrayVal &obj, unsigned idx) const { return obj.idx < idx; }
 	};
 
@@ -59,7 +60,7 @@ protected:
 
 	GenomeTrackArrays          *m_master_obj;
 	vector<GenomeTrackArrays *> m_dependent_objs;
-	size_t                      m_last_array_vals_idx;
+	uint64_t                      m_last_array_vals_idx;
 
 	GIntervals                  m_intervals;
 	vector<long>                m_vals_pos;
@@ -80,9 +81,9 @@ protected:
 
 	void read_intervals_map();
 	void finish_writing();
-	void read_array_vals(size_t idx);
-	float get_array_val(size_t islice);
-	float get_sliced_val(size_t idx);
+	void read_array_vals(uint64_t idx);
+	float get_array_val(uint64_t islice);
+	float get_sliced_val(uint64_t idx);
 	void calc_vals(const GInterval &interval);
 	bool check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2);
 };
@@ -165,7 +166,7 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 	}
 }
 
-inline float GenomeTrackArrays::get_array_val(size_t islice)
+inline float GenomeTrackArrays::get_array_val(uint64_t islice)
 {
 	unsigned &hint = m_array_hints[islice];
 	unsigned slice = m_slice[islice];
