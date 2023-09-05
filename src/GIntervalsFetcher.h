@@ -1,5 +1,6 @@
 #ifndef _GINTERVALSFETCHER_H_INCLUDED_
 #define _GINTERVALSFETCHER_H_INCLUDED_
+#include <cstdint>
 
 template <typename Interval>
 class GIntervalsFetcher {
@@ -21,7 +22,7 @@ public:
 	virtual void seal() = 0;
 
 	// returns number of intervals in the intervals set
-	virtual size_t size() const = 0;
+	virtual uint64_t size() const = 0;
 
 	// Iterators: there are two modes of iterators
 	// 1. If iterator is started with begin_iter():
@@ -49,10 +50,10 @@ public:
 	virtual bool isend_chrom() const = 0;
 
 	// returns current iterator index
-	virtual size_t iter_index() const = 0;
+	virtual uint64_t iter_index() const = 0;
 
 	// returns current iterator index within the current chromosome (or pair of chromosomes)
-	virtual size_t iter_chrom_index() const = 0;
+	virtual uint64_t iter_chrom_index() const = 0;
 
 	// returns current interval
 	virtual const Interval &cur_interval() const = 0;

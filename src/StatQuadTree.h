@@ -8,10 +8,13 @@
 #ifndef QUADTREE_H_
 #define QUADTREE_H_
 
+#include <cstdint>
+#include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
+
 #include <algorithm>
 #include <limits>
-#include <math.h>
 #include <queue>
 #include <vector>
 
@@ -40,9 +43,10 @@ struct Rectangle_val : public Rectangle {
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%lld - %lld) (%lld - %lld) %g", x1, x2, y1, y2, (double)v);
+		snprintf(str, sizeof(str), "(%" PRId64 " - %" PRId64 ") (%" PRId64 " - %" PRId64 ") %g", x1, x2, y1, y2, (double)v);
 		return str;
 	}
+
 };
 
 //----------------------------------------- Point_val ---------------------------------------
@@ -60,7 +64,7 @@ struct Point_val : public Point {
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%ld - %ld) %g", x, y, (double)v);
+		snprintf(str, sizeof(str), "(%ld - %ld) %g", x, y, (double)v);
 		return str;
 	}
 };
@@ -341,7 +345,7 @@ bool StatQuadTree<T, Size>::NNIterator::next()
 		m_neighbors.pop();
 		if (node->is_leaf) {
 			for (uint64_t iobj_ptr = node->leaf.obj_ptr_start_idx; iobj_ptr < node->leaf.obj_ptr_end_idx; ++iobj_ptr) {
-				size_t idx = m_parent->m_obj_ptrs[iobj_ptr];
+				uint64_t idx = m_parent->m_obj_ptrs[iobj_ptr];
 				if (!m_used_objs[idx]) {
 					T &obj = m_parent->m_objs[idx];
 					if (!obj.do_intersect(m_excluded_area)) {
@@ -459,7 +463,7 @@ void StatQuadTree<T, Size>::insert(Node *&node, const Rectangle &intersection, u
 		Rectangle intersection = obj.intersect(quad->arena);
 		if (intersection.is_non_empty_area()) {
 			// after insert() the node pointer might change (m_nodes might get resized)
-			size_t node_idx = node - &*m_nodes.begin();
+			uint64_t node_idx = node - &*m_nodes.begin();
 			insert(quad, intersection, depth + 1, obj, obj_idx);
 			node = &m_nodes[node_idx];
 		}
@@ -510,7 +514,7 @@ void StatQuadTree<T, Size>::insert2leaf(Node *&node, uint64_t obj_idx)
 template <class T, class Size>
 void StatQuadTree<T, Size>::create_quad(Node *&node, int quad, const Rectangle &arena)
 {
-	size_t node_idx = node - &*m_nodes.begin();
+	uint64_t node_idx = node - &*m_nodes.begin();
 	node->node.kid_idx[quad] = m_nodes.size();
 	m_nodes.push_back(Node(arena));
 	node = &m_nodes[node_idx];

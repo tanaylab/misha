@@ -61,7 +61,7 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 			for (; !scanner.isend(); scanner.next()) {
 				if (cur_chromid != scanner.last_interval1d().chromid) {
 					cur_chromid = scanner.last_interval1d().chromid;
-					sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
 					gtrack.init_write(filename, ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size(), cur_chromid);
 				}
 				gtrack.write_next_bin(scanner.last_real(0));
@@ -74,7 +74,7 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 			for (; !scanner.isend(); scanner.next()) {
 				if (cur_chromid != scanner.last_interval1d().chromid) {
 					cur_chromid = scanner.last_interval1d().chromid;
-					sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
 					gtrack.init_write(filename, cur_chromid);
 					created_chromids.insert(cur_chromid);
 				}
@@ -84,7 +84,7 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 			// some of the chromosome could be previously skipped; we still must create them even if they are empty
 			for (GIntervals::const_iterator iinterv = all_genome_intervs1d.begin(); iinterv != all_genome_intervs1d.end(); ++iinterv) {
 				if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
-					sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
 					gtrack.init_write(filename, iinterv->chromid);
 				}
 			}
@@ -103,7 +103,7 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 
 					cur_chromid1 = interv.chromid1();
 					cur_chromid2 = interv.chromid2();
-					sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
 
 					qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(cur_chromid1), iu.get_chromkey().get_chrom_size(cur_chromid2));
 					gtrack.init_write(filename, cur_chromid1, cur_chromid2);
@@ -114,8 +114,13 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 
 			if (gtrack.opened())
 				gtrack.write(qtree);
-		} else
-			verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+		} else {
+			if (itr_type >= 0 && itr_type < sizeof(TrackExpressionIteratorBase::TYPE_NAMES) / sizeof(TrackExpressionIteratorBase::TYPE_NAMES[0])) {
+    			verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+			} else {
+    			verror("Invalid iterator type encountered");
+			}
+		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
@@ -164,7 +169,7 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 				for (; !scanner.isend(); scanner.next()) {
                     if (cur_chromid != scanner.last_interval1d().chromid) {
                         cur_chromid = scanner.last_interval1d().chromid;
-                        sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
+                        snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
                         gtrack.init_write(filename, ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size(), cur_chromid);
                     }
                     gtrack.write_next_bin(scanner.last_real(0));
@@ -177,7 +182,7 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 				for (; !scanner.isend(); scanner.next()) {
 					if (cur_chromid != scanner.last_interval1d().chromid) {
 						cur_chromid = scanner.last_interval1d().chromid;
-						sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
 						gtrack.init_write(filename, cur_chromid);
 						created_chromids.insert(cur_chromid);
 					}
@@ -188,7 +193,7 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 				GIntervals *kid_intervals1d = (GIntervals *)iu.get_kid_intervals1d();
 				for (GIntervals::const_iterator iinterv = kid_intervals1d->begin(); iinterv != kid_intervals1d->end(); ++iinterv) {
 					if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
-						sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
 						gtrack.init_write(filename, iinterv->chromid);
 					}
 				}
@@ -207,7 +212,7 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 
 						cur_chromid1 = interv.chromid1();
 						cur_chromid2 = interv.chromid2();
-						sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
 
 						qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(cur_chromid1), iu.get_chromkey().get_chrom_size(cur_chromid2));
 						gtrack.init_write(filename, cur_chromid1, cur_chromid2);
@@ -218,8 +223,13 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 
 				if (gtrack.opened())
 					gtrack.write(qtree);
-			} else
-				verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+			} else {
+				if (itr_type >= 0 && itr_type < sizeof(TrackExpressionIteratorBase::TYPE_NAMES) / sizeof(TrackExpressionIteratorBase::TYPE_NAMES[0])) {
+    				verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+				} else {
+    				verror("Invalid iterator type encountered");
+				}
+			}				
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

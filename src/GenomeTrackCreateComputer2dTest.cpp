@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "GenomeTrackComputed.h"
 #include "HiCComputers.h"
 
@@ -44,15 +45,15 @@ SEXP gcreate_test_computer2d_track(SEXP _track, SEXP _prob_skip_chrom, SEXP _max
 		Progress_reporter progress;
 		progress.init(iu.get_chromkey().get_num_chroms() * iu.get_chromkey().get_num_chroms(), 1);
 
-		for (size_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
-			for (size_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
+		for (uint64_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
+			for (uint64_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
 				if (unif_rand() < prob_skip_chrom) {
 					progress.report(1);
 					continue;
 				}
 
 				GenomeTrackComputed gtrack(get_groot(_envir), iu.get_track_chunk_size(), iu.get_track_num_chunks());
-				sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 				gtrack.init_write(filename, chromid1, chromid2);
 				gtrack.set_computer(new TestComputer2D(get_groot(_envir), chromid1, chromid2));
 

@@ -1,6 +1,7 @@
 #ifndef _GINTERVALS_H_INCLUDED_
 #define _GINTERVALS_H_INCLUDED_
 
+#include <cstdint>
 #include "GIntervalsFetcher1D.h"
 
 //------------------------------------- GIntervals ----------------------------------------------
@@ -38,9 +39,9 @@ public:
 
 	virtual void seal();
 
-	virtual size_t size() const { return std::vector<GInterval>::size(); }
+	virtual uint64_t size() const { return std::vector<GInterval>::size(); }
 
-	virtual size_t size(int chromid) const;
+	virtual uint64_t size(int chromid) const;
 
 	virtual int num_chroms() const;
 
@@ -61,9 +62,9 @@ public:
 	virtual const_iterator get_chrom_begin() const;
 	virtual const_iterator get_chrom_end() const;
 
-	virtual size_t iter_index() const { return m_iinterval - begin(); }
+	virtual uint64_t iter_index() const { return m_iinterval - begin(); }
 
-	virtual size_t iter_chrom_index() const { return m_iter_chrom_index; }
+	virtual uint64_t iter_chrom_index() const { return m_iter_chrom_index; }
 
 	virtual const GInterval &cur_interval() const { return *m_iinterval; }
 
@@ -76,7 +77,7 @@ public:
 protected:
 	mutable const_iterator m_iinterval;
 	int                    m_cur_chromid;
-	size_t                 m_iter_chrom_index;
+	uint64_t                 m_iter_chrom_index = -1;
 
 	// Holds the start location of each chromosome. Chromosomes that do not appear among the intervals
 	// point to the start location of the next closest existing chromosome.
@@ -111,12 +112,12 @@ inline void GIntervals::seal()
 	m_iinterval = begin();
 }
 
-inline size_t GIntervals::size(int chromid) const
+inline uint64_t GIntervals::size(int chromid) const
 {
 	build_chrom_map();
-	if ((size_t)chromid >= m_chrom2itr.size()) 
+	if ((uint64_t)chromid >= m_chrom2itr.size()) 
 		return 0;
-	if ((size_t)chromid == m_chrom2itr.size() - 1) 
+	if ((uint64_t)chromid == m_chrom2itr.size() - 1) 
 		return end() - m_chrom2itr[chromid];
 	return m_chrom2itr[chromid + 1] - m_chrom2itr[chromid];
 }
@@ -125,7 +126,7 @@ inline int GIntervals::num_chroms() const
 {
 	int num_chroms = 0;
 	build_chrom_map();
-	for (size_t chromid = 0; chromid < m_chrom2itr.size(); ++chromid) {
+	for (uint64_t chromid = 0; chromid < m_chrom2itr.size(); ++chromid) {
 		if (size(chromid)) 
 			++num_chroms;
 	}
@@ -161,7 +162,7 @@ inline void GIntervals::build_chrom_map() const
 {
 	if (m_chrom2itr.empty() && size()) {
 		for (const_iterator iinterv = begin(); iinterv < end(); ++iinterv) {
-			m_chrom2itr.resize(max((size_t)(iinterv->chromid + 1), m_chrom2itr.size()), end());
+			m_chrom2itr.resize(max((uint64_t)(iinterv->chromid + 1), (uint64_t)m_chrom2itr.size()), end());
 			if (m_chrom2itr[iinterv->chromid] == end())
 				m_chrom2itr[iinterv->chromid] = iinterv;
 		}

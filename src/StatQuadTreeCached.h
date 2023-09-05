@@ -8,8 +8,11 @@
 #ifndef STATQUADTREECACHED_H_
 #define STATQUADTREECACHED_H_
 
-#include <unordered_map>
+#include <cstdint>
+#include <inttypes.h>
+
 #include <list>
+#include <unordered_map>
 #include <vector>
 
 #include "DiagonalBand.h"
@@ -34,7 +37,7 @@
 // 5. Unlike StatQuadTree that must be entirely stored in the memory, StatQuadTreeCached may load some parts of the quad tree
 //    on demand in order to answer "get_stat" or "do_intersect" queries. Each part that StatQuadTreeCached loads is called a "chunk".
 //    Chunks are stored in the memory and can be loaded or unloaded in accordance to their recent usage.
-//    Chunk size and the maximal number of chunks StatQuadTreeCached stores at any given moment in the memory is controled by init() function.
+//    Chunk size and the maximal number of chunks StatQuadTreeCached stores at any given moment in the memory is controlled by init() function.
 // 6. Even on small trees StatQuadTreeCached may be more efficient than StatQuadTree since it stores objects in the memory in a more compact and
 //    efficient way in the memo. This efficiency has a price: as mentioned earlier new objects cannot be inserted to StatQuadTreeCached.
 // 7. StatQuadTreeCached replaces StatQuadTree::get_objs() function by an Iterator mechanism. The need to store in the memory all the objects
@@ -53,7 +56,7 @@ public:
 	typedef typename StatQuadTree<T, Size>::Stat Stat;
 
 	// chunk size 0 means there's no caching at all
-	StatQuadTreeCached() : m_chunk_size(0), m_max_num_chunks(0), m_num_chunks(0), m_bfile(NULL), m_uptr(NULL), m_local2global_id(NULL) {}
+	StatQuadTreeCached() : m_chunk_size(0), m_max_num_chunks(0), m_num_chunks(0), m_bfile(NULL), m_local2global_id(NULL), m_uptr(NULL) {}
 	StatQuadTreeCached(int64_t chunk_size, int64_t max_num_chunks) : m_uptr(NULL) { init(chunk_size, max_num_chunks); }
 
 	~StatQuadTreeCached() { clear(); }
@@ -566,10 +569,8 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 	int64_t top_node_fpos;
 
 	if (node.is_leaf) {
-		Leaf new_leaf;
+		Leaf new_leaf{};
 
-		// ensure that stucture's members are padded with zeroes (and not some junk) otherwise there will be no binary consistency between the files with identical quad trees
-		memset(&new_leaf, 0, sizeof(new_leaf));
 		new_leaf.is_leaf = true;
 		new_leaf.stat = node.stat;
 		new_leaf.arena = node.arena;
@@ -589,10 +590,8 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 			file.write(&obj, sizeof(obj));
 		}
 	} else {
-		Node new_node;
+		Node new_node{};
 
-		// ensure that stucture's members are padded with zeroes (and not some junk) otherwise there will be no binary consistency between the files with identical quad trees
-		memset(&new_node, 0, sizeof(new_node));
 		new_node.is_leaf = false;
 		new_node.stat = node.stat;
 		new_node.arena = node.arena;
@@ -911,7 +910,7 @@ void StatQuadTreeCached<T, Size>::debug_print_tree(const Chunk &chunk, NodeBase 
 	Rectangle arena;
 	fprintf(stderr, "\n%*sArena: %s\n", depth * 2, "", node_base->arena.debug_str());
 	fprintf(stderr, "%*sIs leaf?: %d\n", (depth + 1) * 2, "", node_base->is_leaf);
-	fprintf(stderr, "%*sArea occupied: %lld\n", (depth + 1) * 2, "", node_base->stat.occupied_area);
+	fprintf(stderr, "%*sArea occupied: %" PRId64 "\n", (depth + 1) * 2, "", node_base->stat.occupied_area);
 	fprintf(stderr, "%*sAvg: %g\tMin: %g\tMax: %g\n", (depth + 1) * 2, "", node_base->stat.occupied_area / (double)node_base->stat.weighted_sum, node_base->stat.min_val, node_base->stat.max_val);
 
 	if (node_base->is_leaf) {

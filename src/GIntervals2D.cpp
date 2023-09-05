@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "GIntervals2D.h"
 #include "StatQuadTree.h"
 
@@ -5,6 +6,11 @@
 
 void GIntervals2D::sort(bool (*cmp_function)(const GInterval2D &, const GInterval2D &))
 {
+	// if the intervals are empty do not sort 
+	if (empty()){
+		return;
+	}
+
 	// do not sort automatically, check first that the intervals are not sorted yet
 	for (iterator iinterv = begin() + 1; iinterv < end(); ++iinterv) {
 		if (cmp_function(*iinterv, *(iinterv - 1))) {
@@ -100,7 +106,7 @@ GIntervals2D::const_iterator GIntervals2D::get_chrom_end() const
 	build_chrom_map();
 	if (m_iinterval->chromid1() < m_num_chroms && m_iinterval->chromid2() < m_num_chroms) {
 		int idx = chroms2idx(m_iinterval->chromid1(), m_iinterval->chromid2()) + 1;
-		return idx < m_chrom2itr.size() ? m_chrom2itr[idx] : end();
+		return (uint64_t)idx < m_chrom2itr.size() ? m_chrom2itr[idx] : end();
 	}
 	return end();
 }

@@ -5,6 +5,7 @@
  *      Author: hoichman
  */
 
+#include <cstdint>
 #include <cmath>
 
 #include "rdbinterval.h"
@@ -73,7 +74,7 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 {
 	SEXP answer, rsummary[NUM_COLS], colnames;
 	unsigned num_interv_cols;
-	size_t num_intervs;
+	uint64_t num_intervs;
 
 	if (intervals1d) {
 		num_interv_cols = GInterval::NUM_COLS;
@@ -261,7 +262,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 
 		scanner.begin(_expr, intervals1d, intervals2d, _iterator_policy, _band);
 
-		size_t num_intervals = scanner.get_iterator()->is_1d() ? intervals1d->size() : intervals2d->size();
+		uint64_t num_intervals = scanner.get_iterator()->is_1d() ? intervals1d->size() : intervals2d->size();
 		vector<IntervalSummary> summaries;
 
 		if (!num_intervals) 
@@ -284,14 +285,14 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 
 			if (scanner.get_iterator()->is_1d()) {
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
-				for (int chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
+				for (int chromid = 0; (uint64_t)chromid < iu.get_chromkey().get_num_chroms(); ++chromid) {
 					if (intervals1d->size(chromid))
 						chroms1d.insert(chromid);
 				}
 			} else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
-				for (int chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-					for (int chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
+				for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
+					for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
 						if (intervals2d->size(chromid1, chromid2))
 							chroms2d.insert(ChromPair(chromid1, chromid2));
 					}
@@ -302,7 +303,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 				float val = scanner.last_real(0);
 
 				if (cur_interval_idx != scanner.last_scope_idx()) {
-					size_t size;
+					uint64_t size;
 					char error_prefix[1000];
 
 					cur_interval_idx = scanner.last_scope_idx();

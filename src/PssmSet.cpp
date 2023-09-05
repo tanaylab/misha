@@ -1,5 +1,4 @@
 #include "port.h"
-BASE_CC_FILE
 
 #include <sstream>
 
@@ -96,7 +95,7 @@ void PssmSet::read(istream &pssm_key, istream &pssm_data, float prior, bool logo
 void PssmSet::read_old(istream &pssm_key, istream &pssm_data, int max_range, int with_set_id, float prior, bool logodds)
 {
 	int base_id = m_pssms.size();
-	cerr << "read with set id " << with_set_id << endl;
+	// cerr << "read with set id " << with_set_id << endl;
 	int id;
 	string name;
 	int fr, to, bid;
@@ -120,7 +119,7 @@ void PssmSet::read_old(istream &pssm_key, istream &pssm_data, int max_range, int
 			m_pssms.resize(id + 1);
 			m_pssm_bid.resize(id + 1);
 		}
-		cerr << "read id " << id << " set " << set_id << " sc " << score << " direct " << bid << endl;
+		// cerr << "read id " << id << " set " << set_id << " sc " << score << " direct " << bid << endl;
 
 		m_pssms[id].set_range(max_range + fr, max_range + to);
 		m_pssms[id].set_bidirect(bid);
@@ -132,8 +131,8 @@ void PssmSet::read_old(istream &pssm_key, istream &pssm_data, int max_range, int
 		id += base_id;
 	}
 
-	cerr << "done reading " << m_pssm_name.size() << " pssms " << endl;
-	cerr << "logodds is " << logodds << endl;
+	// cerr << "done reading " << m_pssm_name.size() << " pssms " << endl;
+	// cerr << "logodds is " << logodds << endl;
 
 	m_pssms.resize(m_pssm_name.size());
 

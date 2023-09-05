@@ -9,6 +9,7 @@
 #ifndef RDBUTILS_H_
 #define RDBUTILS_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <pthread.h>
@@ -23,8 +24,11 @@
 
 #include <R.h>
 #include <Rinternals.h>
+#include <Rinterface.h>
 
 #include "TGLException.h"
+
+#define MISHA_EXIT_SIG SIGTERM
 
 using namespace std;
 
@@ -123,7 +127,7 @@ SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 
-void prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids);
+void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
 
 pid_t launch_process();
 
@@ -133,16 +137,16 @@ int get_num_kids();
 
 void update_progress(unsigned char progress);
 
-void update_res_data_size(size_t size);
+void update_res_data_size(uint64_t size);
 
 // returns memory where the child process can write its result
-void *allocate_res(size_t res_num_records);
+void *allocate_res(uint64_t res_num_records);
 
 // returns memory for the parent where the child process wrote its result
 void *get_kid_res(int kid_index);
 
-// returns result size of the child process in the number of datums
-size_t get_kid_res_size(int kid_index);
+// returns result size of the child process in the number of data
+uint64_t get_kid_res_size(int kid_index);
 
 // keeps track of allocations in child processes; if the total memory consumption exceeds the limit,
 // the child processes is suspended unless all the rest of the processes have been already suspended
@@ -152,14 +156,14 @@ void report_alloc(int64_t bytes);
 // the memory is freed
 void monitor_memusage();
 
-template<typename T> void pack_data(void *&ptr, const T &data, size_t n) {
-	size_t size = sizeof(data) * n;
+template<typename T> void pack_data(void *&ptr, const T &data, uint64_t n) {
+	uint64_t size = sizeof(data) * n;
 	memcpy(ptr, &data, size);
 	ptr = (char *)ptr + size;
 }
 
-template<typename T> void unpack_data(void *&ptr, T &data, size_t n) {
-	size_t size = sizeof(data) * n;
+template<typename T> void unpack_data(void *&ptr, T &data, uint64_t n) {
+	uint64_t size = sizeof(data) * n;
 	memcpy(&data, ptr, size);
 	ptr = (char *)ptr + size;
 }
@@ -167,15 +171,16 @@ template<typename T> void unpack_data(void *&ptr, T &data, size_t n) {
 }
 
 #define MAX_KIDS 1000
-#define rreturn(retv) { if (RdbInitializer::is_kid()) exit(0); return(retv); }
+#define rreturn(retv) { if (RdbInitializer::is_kid()) rexit(); return(retv); }
 
+void rexit();
 
 // Define RdbInitializer instance in your main function that is called by R.
 // RdbInitializer should be defined inside "try-catch" statement that catches TGLException.
 // RdbInitializer performs the following actions:
 //   1. Installs a new SIGINT handler. ONE MUST CALL check_interrupt() INSTEAD OF R_CheckUserInterrupt()!!!!!!!
 //   2. Installs out-of-memory handler.
-//   3. Supresses the default error report behaviour.
+//   3. suppresses the default error report behaviour.
 //   4. Makes sure all file descriptors are closed on exit / error / interrupt.
 //   5. Makes sure all objects are destructed on exit / error / interrupt.
 
@@ -202,16 +207,16 @@ private:
 
 	struct Shm {
 		char          error_msg[10000];
-		size_t        res_offset;
+		uint64_t        res_offset;
 		int64_t       total_mem_usage;                 // cumulative memory usage of the kids
-		size_t        num_kids_running;
-		size_t        num_kids_suspended;
+		uint64_t        num_kids_running;
+		uint64_t        num_kids_suspended;
 		int           untouchable_kid_idx;
 		bool          is_alive[MAX_KIDS];
 		int64_t       mem_usage[MAX_KIDS];
 		unsigned char kid_progress[MAX_KIDS];          // progress report for each pid
-		size_t        kid_res_offset[MAX_KIDS];        // offset for kid's result
-		size_t        kid_res_num_records[MAX_KIDS];   // size of kid's result in number of datums
+		uint64_t        kid_res_offset[MAX_KIDS];        // offset for kid's result
+		uint64_t        kid_res_num_records[MAX_KIDS];   // size of kid's result in number of data
 		char          res;
 	};
 
@@ -234,11 +239,11 @@ private:
 	static const int64_t        MEM_SYNC_DELAY;
 	static const int64_t        REPORT_INTERVAL_DELAY;
 
-	static size_t               s_shm_size;
-	static size_t               s_res_const_size;
-	static size_t               s_res_var_size;
-	static size_t               s_max_res_size;
-	static size_t               s_max_mem_usage;
+	static uint64_t               s_shm_size;
+	static uint64_t               s_res_const_size;
+	static uint64_t               s_res_var_size;
+	static uint64_t               s_max_res_size;
+	static uint64_t               s_max_mem_usage;
 	static bool                 s_is_kid;
 	static pid_t                s_parent_pid;
 	static sem_t               *s_shm_sem;
@@ -264,7 +269,7 @@ private:
 	static string  get_alloc_suspend_sem_name();
 	static void    sigint_handler(int);
 	static void    sigchld_handler(int);
-	static void    prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids);
+	static void    prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
 	static pid_t   launch_process();
     static void    check_kids_state(bool ignore_errors);
 	static void    wait_for_kids(rdb::IntervUtils &iu);
@@ -272,10 +277,10 @@ private:
 	static int     get_num_kids() { return s_kid_index; }
 	static void    handle_error(const char *msg);
 	static void    update_progress(unsigned char progress);
-	static void    update_res_data_size(size_t size);
-	static void   *allocate_res(size_t res_num_records);
+	static void    update_res_data_size(uint64_t size);
+	static void   *allocate_res(uint64_t res_num_records);
 	static void   *get_kid_res(int kid_index);
-	static size_t  get_kid_res_size(int kid_index);
+	static uint64_t  get_kid_res_size(int kid_index);
 
 	// report_alloc function keeps track of how much memory the child process has consumed so far.
 	// Use positive value for new allocations and negative when the memory is freed.
@@ -347,15 +352,15 @@ private:
 	friend void rdb::runprotect_all();
 	friend void rdb::rerror(const char *fmt, ...);
 	friend void rdb::verror(const char *fmt, ...);
-	friend void rdb::prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids);
+	friend void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
 	friend pid_t rdb::launch_process();
 	friend void rdb::wait_for_kids(rdb::IntervUtils &iu);
 	friend int rdb::get_num_kids();
 	friend void rdb::update_progress(unsigned char progress);
-	friend void rdb::update_res_data_size(size_t size);
-	friend void *rdb::allocate_res(size_t res_num_records);
+	friend void rdb::update_res_data_size(uint64_t size);
+	friend void *rdb::allocate_res(uint64_t res_num_records);
 	friend void *rdb::get_kid_res(int kid_index);
-	friend size_t rdb::get_kid_res_size(int kid_index);
+	friend uint64_t rdb::get_kid_res_size(int kid_index);
 	friend void rdb::report_alloc(int64_t bytes);
 
 	friend class ChildShm;
@@ -363,6 +368,20 @@ private:
 
 
 // ------------------------------- IMPLEMENTATION --------------------------------
+
+inline void rexit() {
+	if (RdbInitializer::is_kid()){
+		// Normally we should have called exit() here. However "R CMD check"
+		// doesn't like calls to exit/abort/etc because they end R session
+		// itself. It prints a warning message and packages with warning
+		// messages cannot be submitted to CRAN. Yet the child process MUST end
+		// the R sessions, that's the whole point. Solution? Send a signal to
+		// itself. Fortunately "R CMD check" allows signals.
+		kill(getpid(), MISHA_EXIT_SIG);
+	} else {
+		rdb::verror("rexit is called from parent process");
+	}
+}
 
 inline void rdb::set_abs_timeout(int64_t delay_msec, struct timespec &req)
 {
@@ -390,7 +409,7 @@ inline string rdb::track2attrs_path(SEXP envir, const string &trackname) {
 	return rdb::track2path(envir, trackname) + "/.attributes";
 }
 
-inline void rdb::prepare4multitasking(size_t res_const_size, size_t res_var_size, size_t max_res_size, size_t max_mem_usage, unsigned num_planned_kids)
+inline void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids)
 {
 	RdbInitializer::prepare4multitasking(res_const_size, res_var_size, max_res_size, max_mem_usage, num_planned_kids);
 }
@@ -403,13 +422,13 @@ inline int rdb::get_num_kids() { return RdbInitializer::get_num_kids(); }
 
 inline void rdb::update_progress(unsigned char progress) { RdbInitializer::update_progress(progress); }
 
-inline void rdb::update_res_data_size(size_t size) { RdbInitializer::update_res_data_size(size); }
+inline void rdb::update_res_data_size(uint64_t size) { RdbInitializer::update_res_data_size(size); }
 
-inline void *rdb::allocate_res(size_t res_num_records) { return RdbInitializer::allocate_res(res_num_records); }
+inline void *rdb::allocate_res(uint64_t res_num_records) { return RdbInitializer::allocate_res(res_num_records); }
 
 inline void *rdb::get_kid_res(int kid_index) { return RdbInitializer::get_kid_res(kid_index); }
 
-inline size_t rdb::get_kid_res_size(int kid_index) { return RdbInitializer::get_kid_res_size(kid_index); }
+inline uint64_t rdb::get_kid_res_size(int kid_index) { return RdbInitializer::get_kid_res_size(kid_index); }
 
 inline void rdb::report_alloc(int64_t bytes) { RdbInitializer::report_alloc(bytes); }
 
@@ -422,7 +441,7 @@ inline void RdbInitializer::update_progress(unsigned char progress)
 		s_shm->kid_progress[s_kid_index] = progress;
 }
 
-inline void RdbInitializer::update_res_data_size(size_t size)
+inline void RdbInitializer::update_res_data_size(uint64_t size)
 {
 	if (s_is_kid)
 		// update of progress is atomic => don't use a semaphore
@@ -434,7 +453,7 @@ inline void *RdbInitializer::get_kid_res(int kid_index)
 	return &s_shm->res + s_shm->kid_res_offset[kid_index];
 }
 
-inline size_t RdbInitializer::get_kid_res_size(int kid_index)
+inline uint64_t RdbInitializer::get_kid_res_size(int kid_index)
 {
 	return s_shm->kid_res_num_records[kid_index];
 }
@@ -445,7 +464,7 @@ inline void RdbInitializer::report_alloc(int64_t bytes)
 //vdebug_print("%*s%d (%d): ATTEMPT TO ALLOC %ld, total: %ld, running: %ld, suspended: %ld\n", s_kid_index + 1, "", (int)s_kid_index, (int)getpid(), bytes,
 //s_shm->total_mem_usage, s_shm->num_kids_running, s_shm->num_kids_suspended);
 		if (s_kid_index != s_shm->untouchable_kid_idx) {  // never suspend untouchable kid
-			while (s_shm->total_mem_usage + bytes > s_max_mem_usage && s_shm->num_kids_running > 1) {
+			while ((uint64_t)s_shm->total_mem_usage + bytes > s_max_mem_usage && s_shm->num_kids_running > 1) {
 				{
 					SemLocker sl(s_shm_sem);
 					s_shm->num_kids_running--;

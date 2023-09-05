@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <cmath>
 #include <unistd.h>
 
@@ -50,12 +51,12 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 	SEXP vtracks = R_NilValue;
 
 	// retrieve track names
-	rprotect(rtracknames[TRACK] = findVar(install("GTRACKS"), m_iu.get_env()));
+	rprotect(rtracknames[TRACK] = findVar(install("GTRACKS"), findVar(install(".misha"), m_iu.get_env())));
 	SEXPCleaner rtracknames_track_cleaner(rtracknames[TRACK]);
 
 	// retrieve virtual track names (it's more complex since virtual track names are burried in a list of lists)
 	rtracknames[VTRACK] = R_NilValue;
-	rprotect(gvtracks = findVar(install("GVTRACKS"), m_iu.get_env()));
+	rprotect(gvtracks = findVar(install("GVTRACKS"), findVar(install(".misha"), m_iu.get_env())));
 	SEXPCleaner gvtracks_cleaner(gvtracks);
 
 	if (!isNull(gvtracks) && !isSymbol(gvtracks)) { 
@@ -88,7 +89,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 			for (int itrack = 0; itrack < length(rtracknames[var_type]); ++itrack) {
 				string track = CHAR(STRING_ELT(rtracknames[var_type], itrack));
-				size_t pos = 0;
+				uint64_t pos = 0;
 
 				while ((pos = iexpr->find(track, pos)) != string::npos) {
 					if (is_var(*iexpr, pos, pos + track.size())) {
@@ -277,7 +278,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 	if (isString(rsrc) && length(rsrc) == 1) {
 		string track(CHAR(STRING_ELT(rsrc, 0)));
 
-		SEXP gtracks = findVar(install("GTRACKS"), m_iu.get_env());
+		SEXP gtracks = findVar(install("GTRACKS"), findVar(install(".misha"), m_iu.get_env()));
 		if (isString(gtracks)) {
 			for (int itrack = 0; itrack < length(gtracks); itrack++) {
 				if (!strcmp(CHAR(STRING_ELT(gtracks, itrack)), track.c_str())) {
@@ -286,7 +287,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				}
 			}
 		}
-	}
+        }
 
 	GIntervals intervs1d;
 	GIntervals2D intervs2d;
@@ -623,12 +624,12 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 				SEXP rretv;
 
 				REprintf("Preparing track %s for percentiles queries\n", ivar->track_n_imdf->name.c_str());
-				sprintf(command,
+				snprintf(command, sizeof(command),
 						"{ "
 						"	.ginteractive = getOption(\".ginteractive\")\n"
 						"	tryCatch({\n"
-						"			options(.ginteractive = F)\n"
-						"			.gtrack.prepare.pvals(\"%s\")\n"
+						"			options(.ginteractive = FALSE)\n"
+						"			misha:::.gtrack.prepare.pvals(\"%s\")\n"
 						"		},\n"
 						"		finally = { options(.ginteractive = .ginteractive) })"
 						" }",
@@ -762,8 +763,9 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 
 void TrackExpressionVars::set_vars(const GInterval &interval, unsigned idx)
 {
-    if (m_interval1d.chromid != interval.chromid)
+    if (m_interval1d.chromid != interval.chromid) {
         start_chrom(interval);
+	}
 
 	m_interval1d = interval;
 

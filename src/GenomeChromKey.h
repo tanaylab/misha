@@ -1,6 +1,7 @@
 #ifndef GENOMECHROMKEY_H_
 #define GENOMECHROMKEY_H_
 
+#include <cstdint>
 #include <stdint.h>
 #include <unordered_map>
 #include <vector>
@@ -23,7 +24,7 @@ public:
 	int           chrom2id(const char *chrom) const;
 	const string &id2chrom(int id) const;
 	uint64_t      get_chrom_size(int id) const;
-	size_t        get_num_chroms() const { return m_id2chrom.size(); }
+	uint64_t        get_num_chroms() const { return m_id2chrom.size(); }
 
 	void read_chroms_sizes_file(const char *fname);
 
@@ -77,8 +78,9 @@ inline int GenomeChromKey::chrom2id(const char *name) const
 
 inline const string &GenomeChromKey::id2chrom(int id) const
 {
-	if (id >= (int)m_id2chrom.size())
+	if (id >= (int)m_id2chrom.size()){
 		TGLError<GenomeChromKey>(ID_NOEXISTS, "Id %d cannot be mapped to any chromosome", id);
+	}
 	return m_id2chrom[id].name;
 }
 

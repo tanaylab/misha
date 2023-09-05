@@ -8,6 +8,7 @@
 #ifndef TRACKEXPRESSIONVARS_H_
 #define TRACKEXPRESSIONVARS_H_
 
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <string.h>
@@ -162,7 +163,7 @@ private:
 	void start_chrom(const GInterval2D &interval);
 	void set_vars(unsigned idx);
 
-	bool is_var(const string &str, size_t start, size_t end) const { return (!start || !rdb::is_R_var_char(str[start - 1])) && (end == str.size() || !rdb::is_R_var_char(str[end])); }
+	bool is_var(const string &str, uint64_t start, uint64_t end) const { return (!start || !rdb::is_R_var_char(str[start - 1])) && (end == str.size() || !rdb::is_R_var_char(str[end])); }
 };
 
 

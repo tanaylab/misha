@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <cmath>
 
 #include "BinFinder.h"
@@ -171,7 +172,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
 		GInterval last_scope_interval1d;
 		GInterval2D last_scope_interval2d;
-		size_t size;
+		uint64_t size;
 		char error_prefix[1000];
 
 		TrackExprScanner scanner(iu);
@@ -302,7 +303,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 					iu.verify_max_data_size(out_values.size(), "Result");
 				}
 
-				size_t num_intervals = scanner.get_iterator()->is_1d() ? out_intervals1d.size() : out_intervals2d.size();
+				uint64_t num_intervals = scanner.get_iterator()->is_1d() ? out_intervals1d.size() : out_intervals2d.size();
 
 				void *result = allocate_res(num_intervals);
 
@@ -323,7 +324,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 			// collect results from kids
 			for (int i = 0; i < get_num_kids(); ++i) {
 				void *ptr = get_kid_res(i);
-				size_t num_intervals = get_kid_res_size(i);
+				uint64_t num_intervals = get_kid_res_size(i);
 
 				if (!num_intervals)
 					continue;
@@ -511,7 +512,7 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 					if (cur_chromid != scanner.last_interval1d().chromid) {
 						cur_chromid = scanner.last_interval1d().chromid;
 						created_chromids.insert(cur_chromid);
-						sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(cur_chromid).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(cur_chromid).c_str());
 
 						if (itr_type == TrackExpressionIteratorBase::FIXED_BIN)
 							fixed_bin_track.init_write(filename, ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size(), cur_chromid);
@@ -531,7 +532,7 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 					// some of the chromosome could be previously skipped; we still must create them even if they are empty
 					for (GIntervals::const_iterator iinterv = all_genome_intervs1d.begin(); iinterv != all_genome_intervs1d.end(); ++iinterv) {
 						if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
-							sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(iinterv->chromid).c_str());
+							snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(iinterv->chromid).c_str());
 							sparse_track.init_write(filename, iinterv->chromid);
 						}
 					}
@@ -551,7 +552,7 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 
 						cur_chromid1 = interv.chromid1();
 						cur_chromid2 = interv.chromid2();
-						sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), cur_chromid1, cur_chromid2).c_str());
 
 						qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(cur_chromid1), iu.get_chromkey().get_chrom_size(cur_chromid2));
 						gtrack.init_write(filename, cur_chromid1, cur_chromid2);
@@ -563,8 +564,15 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 
 				if (gtrack.opened())
 					gtrack.write(qtree);
-			} else
-				verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+			} else {
+				size_t numTypeNames = sizeof(TrackExpressionIteratorBase::TYPE_NAMES) / sizeof(TrackExpressionIteratorBase::TYPE_NAMES[0]);
+				if (itr_type >= 0 && itr_type < numTypeNames) {
+					verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[itr_type]);
+				} else {
+					verror("Invalid iterator type encountered");
+				}
+			}
+				
 		} catch (TGLException &e) {
 			verror("Error writing %s: %s", filename, e.msg());
 		}

@@ -1,5 +1,5 @@
+#include <cstdint>
 #include "port.h"
-BASE_CC_FILE
 #include "DnaPSSM.h"
 #include "Random.h"
 
@@ -43,7 +43,7 @@ void DnaProbVec::normalize_log()
        	log_sum_log(sum, m_logp[2]);
        	log_sum_log(sum, m_logp[3]);
 
-	cerr << "normalize, sum = " << sum << " 0 " << m_logp[0] << " 1 " << m_logp[1] << endl;
+	// cerr << "normalize, sum = " << sum << " 0 " << m_logp[0] << " 1 " << m_logp[1] << endl;
 
 	m_logp[0] -= sum;
 	m_logp[1] -= sum;
@@ -165,7 +165,7 @@ void DnaPSSM::calc_like_rc(const string &target, float &logp) const
 	logp = 0;
 	for(vector<DnaProbVec>::const_reverse_iterator p = m_chars.rbegin();
 	    p != m_chars.rend();
-	    p++) {
+	    p++) {		
 		char c;
 		switch(*i) {
 			case 'A': c = 'T';
@@ -279,7 +279,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+				
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;
@@ -353,7 +353,7 @@ void DnaPSSM::update_like_vec(const string &target,
 					rlogp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+				
 				switch(*j) {
 					case 'A': rlogp += p->get_log_prob('T');
 						  break;
@@ -427,7 +427,7 @@ void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &en
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+				
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;
@@ -506,7 +506,7 @@ void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> 
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+				
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;
@@ -545,7 +545,7 @@ void DnaPSSM::count(string::const_iterator seq, float weight, int dir)
 		for(vector<DnaProbVec>::reverse_iterator i = m_chars.rbegin();
 		    i != m_chars.rend();
 		    i++) {
-			char c;
+			char c = 'N';
 			switch(*seq) {
 				case 'A': c = 'T';
 					  break;
@@ -705,7 +705,6 @@ void DnaPSSM::reset_prior(const vector<float> &prior)
 //currently assuming same length profiles
 float DnaPSSM::dot_product(DnaPSSM &arg)
 {
-	ASSERT(arg.size() == size(), "dot product support equal sized profiles, extend the code if you ment something else");
 	vector<DnaProbVec>::iterator j = arg.m_chars.begin();
 	float prod = 1;
 	for(vector<DnaProbVec>::iterator i = m_chars.begin();
@@ -717,8 +716,7 @@ float DnaPSSM::dot_product(DnaPSSM &arg)
 	return(prod);
 }
 float DnaPSSM::log_dot_product(DnaPSSM &arg)
-{
-	ASSERT(arg.size() == size(), "dot product support equal sized profiles, extend the code if you ment something else");
+{	
 	vector<DnaProbVec>::iterator j = arg.m_chars.begin();
 	float prod = 1;
 	for(vector<DnaProbVec>::iterator i = m_chars.begin();
@@ -826,12 +824,12 @@ string DnaPSSM::get_consensus() const
 
 ostream &operator<<(ostream &out, const DnaPSSM &pssm)
 {
-	cerr << "[" << pssm.get_min_range() << "," << pssm.get_max_range() << "] dir=" << pssm.is_bidirect() << endl;
-	for(int i = 0; i < pssm.size(); i++) {
+	// cerr << "[" << pssm.get_min_range() << "," << pssm.get_max_range() << "] dir=" << pssm.is_bidirect() << endl;
+	for(uint64_t i = 0; i < pssm.size(); i++) {
 		out << pssm[i];
 	}
 	out << endl;
-	for(int i = 0; i < pssm.size(); i++) {
+	for(uint64_t i = 0; i < pssm.size(); i++) {
 		out << pssm[i].get_log_prob('A') << "\t" << pssm[i].get_log_prob('C') << "\t" << pssm[i].get_log_prob('G') << "\t" << pssm[i].get_log_prob('T') << endl;
 	}
 	return(out);
@@ -884,7 +882,7 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;
@@ -955,7 +953,7 @@ void DnaPSSM::like_thresh_match(const string &target, float thresh,
 					logp = -_REAL(MAX);
 					break;
 				}
-				char c = 0;
+
 				switch(*j) {
 					case 'A': logp += p->get_log_prob('T');
 						  break;

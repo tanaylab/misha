@@ -1,6 +1,7 @@
 #ifndef _GINTERVALSFETCHER1D_H_INCLUDED_
 #define _GINTERVALSFETCHER1D_H_INCLUDED_
 
+#include <cstdint>
 #include <set>
 
 #include "GInterval.h"
@@ -22,10 +23,10 @@ public:
 	virtual GIntervalsFetcher1D *create_masked_copy(const set<int> &chromids_mask) const = 0;
 
 	// returns number of intervals in the intervals set
-	virtual size_t size() const = 0;
+	virtual uint64_t size() const = 0;
 
 	// returns number of intervals for the given chromosome (intervals must be sorted)
-	virtual size_t size(int chromid) const = 0;
+	virtual uint64_t size(int chromid) const = 0;
 
 	virtual void begin_chrom_iter(int chromid) = 0;
 

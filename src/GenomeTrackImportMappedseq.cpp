@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>
 
 #include <unordered_map>
@@ -119,7 +120,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		int active_col_idx = -1;
 		int c;
 		string str[NUM_COLS];
-		int line = 1;
+		// int line = 1;
 		int pos = 0;
 
 		Progress_reporter progress;
@@ -145,7 +146,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 				if (c == EOF) 
 					break;
-				++line;
+				// ++line;
 				continue;
 			}
 			++pos;
@@ -205,7 +206,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 							str[i].clear();
 					}
 					col = 1;
-					line++;
+					// line++;
 				} else
 					col++;
 
@@ -228,14 +229,14 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 		for (unsigned ichrom = 0; ichrom < num_chroms; ichrom++) {
 			char filename[FILENAME_MAX];
-			sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(all_genome_intervs[ichrom].chromid).c_str());
+			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(all_genome_intervs[ichrom].chromid).c_str());
 
 			// dense track
 			if (pileup) {
 				GenomeTrackFixedBin gtrack;
 				gtrack.init_write(filename, (unsigned)binsize, all_genome_intervs[ichrom].chromid);
 
-				vector<float> trackvals((size_t)ceil(all_genome_intervs[ichrom].end / binsize), 0);
+				vector<float> trackvals((uint64_t)ceil(all_genome_intervs[ichrom].end / binsize), 0);
 
 				for (int strand = 0; strand < 2; strand++) {
 					vector<int64_t> &cur_coords = coords[strand * num_chroms + ichrom];

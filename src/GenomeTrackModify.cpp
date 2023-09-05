@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "BinFinder.h"
 #include "GenomeTrackFixedBin.h"
 
@@ -48,7 +49,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 			const GInterval &cur_interval = scanner.last_interval1d();
 
 			if (last_interval.chromid != cur_interval.chromid) {
-				sprintf(filename, "%s/%s", trackpath.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_interval.chromid).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_interval.chromid).c_str());
 				gtrack.init_read(filename, cur_interval.chromid);
 				if (gtrack.get_bin_size() != ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size())
 					verror("Cannot modify track %s: iterator policy must be set to the bin size of the track (%d).\n", track, gtrack.get_bin_size());
@@ -57,7 +58,7 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 			}
 
 			if (last_interval.chromid != cur_interval.chromid || last_interval.end != cur_interval.start)
-				gtrack.goto_bin((size_t)(cur_interval.start / gtrack.get_bin_size()));
+				gtrack.goto_bin((uint64_t)(cur_interval.start / gtrack.get_bin_size()));
 
 			double val = scanner.last_real(0);
 			gtrack.write_next_bin(val);

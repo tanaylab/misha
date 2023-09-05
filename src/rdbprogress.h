@@ -8,6 +8,7 @@
 #ifndef RDBPROGRESS_H_
 #define RDBPROGRESS_H_
 
+#include <cstdint>
 #include <stdint.h>
 
 namespace rdb {

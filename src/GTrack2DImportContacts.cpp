@@ -147,7 +147,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 			if (start1 >= end1) 
 				verror("File %s, line %ld: start1 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
 
-			if (end1 > iu.get_chromkey().get_chrom_size(chromid1)) 
+			if ((uint64_t)end1 > iu.get_chromkey().get_chrom_size(chromid1)) 
 				verror("File %s, line %ld: end1 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
 
 			start2 = strtoll(fields[GInterval2D::START2].c_str(), &endptr, 10);
@@ -161,7 +161,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 			if (start2 >= end2) 
 				verror("File %s, line %ld: start2 coordinate exceeds or equals the end1 coordinate", infile.file_name().c_str(), lineno);
 
-			if (end2 > iu.get_chromkey().get_chrom_size(chromid2)) 
+			if ((uint64_t)end2 > iu.get_chromkey().get_chrom_size(chromid2)) 
 				verror("File %s, line %ld: end2 coordinate exceeds chromosome's size", infile.file_name().c_str(), lineno);
 
 			val = strtod(fields[GInterval2D::NUM_COLS].c_str(), &endptr);
@@ -184,7 +184,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 			if (icontact_chrom_file == contact_chrom_files.end()) {
 				char filename[FILENAME_MAX];
 
-				sprintf(filename, "%s/.%s", dirname, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
+				snprintf(filename, sizeof(filename), "%s/.%s", dirname, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 				icontact_chrom_file = contact_chrom_files.insert(make_pair(chrom_pair, new BufferedFile())).first;
 				if (icontact_chrom_file->second->open(filename, "wb"))
 					verror("Writing an intermediate file %s: %s\n", filename, strerror(errno));
@@ -289,7 +289,6 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 
 	progress.init(contacts_files_size_sum, 10000000);
 
-	int64_t coord1, coord2;
 	float value;
 
 	for (int icontact_file = 0; icontact_file < length(_contacts); ++icontact_file) {
@@ -343,7 +342,7 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 			if (icontact_chrom_file == contact_chrom_files.end()) {
 				char filename[FILENAME_MAX];
 
-				sprintf(filename, "%s/.%s", dirname, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromids[fend1], chromids[fend2]).c_str());
+				snprintf(filename, sizeof(filename), "%s/.%s", dirname, GenomeTrack::get_2d_filename(iu.get_chromkey(), chromids[fend1], chromids[fend2]).c_str());
 				icontact_chrom_file = contact_chrom_files.insert(make_pair(chrom_pair, new BufferedFile())).first;
 				if (icontact_chrom_file->second->open(filename, "wb"))
 					verror("Writing an intermediate file %s: %s\n", filename, strerror(errno));
@@ -407,8 +406,8 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 		progress.init(contact_chrom_files.size(), 1);
 
 		for (Contact_chrom_files::iterator icontact_chrom_file = contact_chrom_files.begin(); icontact_chrom_file != contact_chrom_files.end(); ++icontact_chrom_file) {
-			size_t chromid1 = icontact_chrom_file->first.first;
-			size_t chromid2 = icontact_chrom_file->first.second;
+			uint64_t chromid1 = icontact_chrom_file->first.first;
+			uint64_t chromid2 = icontact_chrom_file->first.second;
 			BufferedFile &infile = *icontact_chrom_file->second;
 
 			// STAGE 2: Check what is the number of contacts in a chromosome pair and based on that number decide how many subtrees would be needed in StatQuadTreeCachedSerializer.
@@ -430,12 +429,12 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			PointsQuadTreeCachedSerializer qtree_serializer1, qtree_serializer2;
 			BufferedFiles subtrees_files(num_subtrees);
 
-			sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
+			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2).c_str());
 			gtrack1.init_write(filename, chromid1, chromid2);
 			gtrack1.init_serializer(qtree_serializer1, 0, 0, iu.get_chromkey().get_chrom_size(chromid1), iu.get_chromkey().get_chrom_size(chromid2), num_subtrees, false);
 
 			if (chromid1 != chromid2) {
-				sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid2, chromid1).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid2, chromid1).c_str());
 				gtrack2.init_write(filename, chromid2, chromid1);
 				gtrack2.init_serializer(qtree_serializer2, 0, 0, iu.get_chromkey().get_chrom_size(chromid2), iu.get_chromkey().get_chrom_size(chromid1), num_subtrees, false);
 			}
@@ -444,8 +443,8 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 			if (num_subtrees > 1) {
 				const Rectangles &subarenas = qtree_serializer1.get_subarenas();
 
-				for (size_t i = 0; i < subtrees_files.size(); ++i) {
-					sprintf(filename, "%s/.%ld", dirname.c_str(), i);
+				for (uint64_t i = 0; i < subtrees_files.size(); ++i) {
+					snprintf(filename, sizeof(filename), "%s/.%ld", dirname.c_str(), (long)i);
 					subtrees_files[i] = new BufferedFile();
 					if (subtrees_files[i]->open(filename, "w+")) 
 						verror("Opening an intermediate file %s: %s\n", filename, strerror(errno));
@@ -483,14 +482,14 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 					check_interrupt();
 				}
 
-				for (size_t i = 0; i < subtrees_files.size(); ++i)
+				for (uint64_t i = 0; i < subtrees_files.size(); ++i)
 					subtrees_files[i]->seek(0, SEEK_SET);
 
 				infile.close();
 				unlink(infile.file_name().c_str());
 			}
 
-			for (size_t i = 0; i < num_subtrees; ++i) {
+			for (uint64_t i = 0; i < (uint64_t)num_subtrees; ++i) {
 				BufferedFile &subtree_file = num_subtrees == 1 ? infile : *subtrees_files[i];
 				Contacts contacts;
 

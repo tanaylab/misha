@@ -1,0 +1,15 @@
+^push_misha_manual$
+^README\.Rmd$
+^_pkgdown\.yml$
+^\.travis\.yml$
+^regression\.R$
+^inst/trackdb/test/\.db\.cache$
+^LICENSE\.md$
+^\.vscode$
+^cran-comments\.md$
+^docs$
+^\.DS_Store$
+^mm10$
+^add_include\.sh$
+^CRAN-SUBMISSION$
+^\.github$

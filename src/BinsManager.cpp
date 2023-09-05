@@ -52,7 +52,8 @@ void BinsManager::set_dims(SEXP dim, SEXP dimnames) const
 		for (int j = 0; j < numbins; j++) {
 			char buf[10000];
 
-			sprintf(buf, "%c%g,%g]", j || !m_include_lowest ? '(' : '[', bin_finder.get_breaks()[j], bin_finder.get_breaks()[j + 1]);
+			snprintf(buf, sizeof(buf), "%c%g,%g]", j || !m_include_lowest ? '(' : '[', bin_finder.get_breaks()[j], bin_finder.get_breaks()[j + 1]);
+
 			SET_STRING_ELT(dimname, j, mkChar(buf));
 		}
 		SET_VECTOR_ELT(dimnames, i, dimname);

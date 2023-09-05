@@ -1,6 +1,7 @@
 #ifndef TRACKEXPRESSIONSCANNER_H_
 #define TRACKEXPRESSIONSCANNER_H_
 
+#include <cstdint>
 #include <ctype.h>
 
 #include <vector>
@@ -63,9 +64,7 @@ public:
 private:
 	rdb::IntervUtils &m_iu;
 
-	vector<string>   m_track_exprs;
-	unsigned         m_num_track_vars;
-	unsigned         m_num_interv_vars;
+	vector<string>   m_track_exprs;	
 
 	vector<SEXP>     m_eval_exprs;
 	vector<SEXP>     m_eval_bufs;
@@ -77,7 +76,7 @@ private:
 
 	vector<string>  m_chroms;
 	int             m_last_progress_reported;
-	size_t          m_num_evals;
+	uint64_t          m_num_evals;
 	int             m_report_step;
 	uint64_t        m_last_report_clock;
 	SEXP            m_rexpr_itr_intervals;
@@ -141,7 +140,7 @@ inline double TrackExprScanner::last_real(int idx) const
         if (RdbInitializer::is_kid()) 
             verror("Expression \"%s\" does not produce a numeric result.", m_track_exprs[idx].c_str());
         else {
-            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".GlobalEnv"), m_iu.get_env()));
+            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".misha"), m_iu.get_env()));
             verror("Expression \"%s\" does not produce a numeric result.\n"
                     "The result of the last expression evaluation was saved in GERROR_EXPR variable.", m_track_exprs[idx].c_str());
         }
@@ -158,7 +157,7 @@ inline int TrackExprScanner::last_logical(int idx) const
         if (RdbInitializer::is_kid()) 
             verror("Expression \"%s\" does not produce a logical result\n", m_track_exprs[idx].c_str());
         else {
-            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".GlobalEnv"), m_iu.get_env()));
+            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".misha"), m_iu.get_env()));
             verror("Expression \"%s\" does not produce a logical result\n"
                     "The result of the last expression evaluation was saved in GERROR_EXPR variable.", m_track_exprs[idx].c_str());
         }

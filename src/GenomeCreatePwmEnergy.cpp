@@ -1,5 +1,4 @@
 #include "port.h"
-BASE_CC_FILE
 
 #include <memory>
 
@@ -53,9 +52,9 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 		char seqdir[PATH_MAX];
 		const char *groot_str = get_groot(_envir);
 
-		sprintf(pssmkey_filename, "%s/pssms/%s.key", groot_str, pssmset);
-		sprintf(pssmdata_filename, "%s/pssms/%s.data", groot_str, pssmset);
-		sprintf(seqdir, "%s/seq", get_groot(_envir));
+		snprintf(pssmkey_filename, sizeof(pssmkey_filename), "%s/pssms/%s.key", groot_str, pssmset);
+		snprintf(pssmdata_filename, sizeof(pssmdata_filename), "%s/pssms/%s.data", groot_str, pssmset);
+		snprintf(seqdir, sizeof(seqdir), "%s/seq", get_groot(_envir));
 		pssm_set.read(pssmkey_filename, pssmdata_filename, prior);
 
 		DnaPSSM &pssm = pssm_set.get_pssm(pssmid);
@@ -80,8 +79,9 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 		TrackExprScanner scanner(iu);
 		TrackExpressionIteratorBase *expr_itr_base = scanner.create_expr_iterator(R_NilValue, &scope, NULL, _iterator_policy, R_NilValue);
 
-		if (!expr_itr_base->is_1d())
+		if (!expr_itr_base->is_1d()){
 			verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[expr_itr_base->get_type()]);
+		}
 
 		TrackExpression1DIterator *expr_itr = (TrackExpression1DIterator *)expr_itr_base;
 		GIntervals::const_iterator icur_scope = scope.begin();
@@ -95,7 +95,7 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 					++icur_scope;
 				while (icur_scope->chromid != last_interval.chromid) {
 					if (expr_itr->get_type() == TrackExpressionIteratorBase::INTERVALS1D) {
-						sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(icur_scope->chromid).c_str());
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(icur_scope->chromid).c_str());
 						sparse_track.init_write(filename, icur_scope->chromid);
 					}
 					progress.report(icur_scope->end - icur_scope->start);
@@ -104,7 +104,7 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 						verror("Failed to find chromid %d\n", last_interval.chromid);
 				}
 
-				sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(last_interval.chromid).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(last_interval.chromid).c_str());
 
 				if (expr_itr->get_type() == TrackExpressionIteratorBase::FIXED_BIN)
 					fixed_bin_track.init_write(filename, ((TrackExpressionFixedBinIterator *)expr_itr)->get_bin_size(), last_interval.chromid);
@@ -138,7 +138,7 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 		if (expr_itr->get_type() == TrackExpressionIteratorBase::INTERVALS1D) {
 			// some of the chromosome could be skipped by the iterator; we still must create them even if they are empty
 			for (++icur_scope; icur_scope != scope.end(); ++icur_scope) {
-				sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(icur_scope->chromid).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(icur_scope->chromid).c_str());
 				sparse_track.init_write(filename, icur_scope->chromid);
 				progress.report(icur_scope->end - icur_scope->start);
 			}
@@ -186,9 +186,9 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 		char seqdir[PATH_MAX];
 		const char *groot_str = get_groot(_envir);
 
-		sprintf(pssmkey_filename, "%s/pssms/%s.key", groot_str, pssmset);
-		sprintf(pssmdata_filename, "%s/pssms/%s.data", groot_str, pssmset);
-		sprintf(seqdir, "%s/seq", get_groot(_envir));
+		snprintf(pssmkey_filename, sizeof(pssmkey_filename), "%s/pssms/%s.key", groot_str, pssmset);
+		snprintf(pssmdata_filename, sizeof(pssmdata_filename), "%s/pssms/%s.data", groot_str, pssmset);
+		snprintf(seqdir, sizeof(seqdir), "%s/seq", get_groot(_envir));
 		pssm_set.read(pssmkey_filename, pssmdata_filename, prior);
 
 		DnaPSSM &pssm = pssm_set.get_pssm(pssmid);
@@ -219,8 +219,9 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 			TrackExprScanner scanner(iu);
 			TrackExpressionIteratorBase *expr_itr_base = scanner.create_expr_iterator(R_NilValue, kid_intervals1d, NULL, _iterator_policy, R_NilValue);
 
-			if (!expr_itr_base->is_1d())
+			if (!expr_itr_base->is_1d()) {
 				verror("Iterator type %s is not supported by the function", TrackExpressionIteratorBase::TYPE_NAMES[expr_itr_base->get_type()]);
+			}
 
 			TrackExpression1DIterator *expr_itr = (TrackExpression1DIterator *)expr_itr_base;
 			GIntervals::const_iterator icur_scope = kid_intervals1d->begin();
@@ -234,7 +235,7 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 						++icur_scope;
 					while (icur_scope->chromid != last_interval.chromid) {
 						if (expr_itr->get_type() == TrackExpressionIteratorBase::INTERVALS1D) {
-							sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(icur_scope->chromid).c_str());
+							snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(icur_scope->chromid).c_str());
 							sparse_track.init_write(filename, icur_scope->chromid);
 						}
 						progress.report(icur_scope->end - icur_scope->start);
@@ -243,7 +244,7 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 							verror("Failed to find chromid %d\n", last_interval.chromid);
 					}
 
-					sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(last_interval.chromid).c_str());
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(last_interval.chromid).c_str());
 
 					if (expr_itr->get_type() == TrackExpressionIteratorBase::FIXED_BIN)
 						fixed_bin_track.init_write(filename, ((TrackExpressionFixedBinIterator *)expr_itr)->get_bin_size(), last_interval.chromid);
@@ -277,7 +278,7 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 			if (expr_itr->get_type() == TrackExpressionIteratorBase::INTERVALS1D) {
 				// some of the chromosome could be skipped by the iterator; we still must create them even if they are empty
 				for (++icur_scope; icur_scope != kid_intervals1d->end(); ++icur_scope) {
-					sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(icur_scope->chromid).c_str());
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(icur_scope->chromid).c_str());
 					sparse_track.init_write(filename, icur_scope->chromid);
 					progress.report(icur_scope->end - icur_scope->start);
 				}

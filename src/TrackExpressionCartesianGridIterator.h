@@ -1,6 +1,7 @@
 #ifndef TRACKEXPRESSIONCARTESIANGRIDITERATOR_H_
 #define TRACKEXPRESSIONCARTESIANGRIDITERATOR_H_
 
+#include <cstdint>
 #include "GenomeChromKey.h"
 #include "GenomeTrackRects.h"
 #include "StatQuadTree.h"

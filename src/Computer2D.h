@@ -30,7 +30,7 @@ public:
     int get_chromid2() { return m_chromid2; }
 
     // used for debug, outputs object to screen
-	virtual void dump() {}
+	virtual void dump(ostream &out) {}
 
     // compute value for rectangle
     virtual double compute(const Rectangle &rectangle) = 0;

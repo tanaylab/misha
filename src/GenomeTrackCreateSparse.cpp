@@ -51,7 +51,7 @@ SEXP gtrack_create_sparse(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir)
 		for (GIntervals::const_iterator iinterv = intervs.begin(); iinterv != intervs.end(); ++iinterv) {
 			if (cur_chromid != iinterv->chromid) {
 				cur_chromid = iinterv->chromid;
-				sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
 				gtrack.init_write(filename, cur_chromid);
 				created_chromids.insert(cur_chromid);
 			}
@@ -68,7 +68,7 @@ SEXP gtrack_create_sparse(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir)
 		// some of the chromosome could be previously skipped; we still must create them even if they are empty
 		for (GIntervals::const_iterator iinterv = all_genome_intervs.begin(); iinterv != all_genome_intervs.end(); ++iinterv) {
 			if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
-				sprintf(filename, "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
 				gtrack.init_write(filename, iinterv->chromid);
 			}
 		}

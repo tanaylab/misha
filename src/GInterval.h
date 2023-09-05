@@ -1,8 +1,11 @@
 #ifndef GINTERVAL_H_
 #define GINTERVAL_H_
 
+#include <cstdint>
+#include <inttypes.h>
 #include <math.h>
 #include <sys/types.h>
+
 #include <iostream>
 #include <limits>
 #include <vector>
@@ -65,15 +68,16 @@ struct GInterval : public Segment {
 
 	char *debug_str(const GenomeChromKey &chromkey) const {
 		static char str[200];
-		sprintf(str, "(%s, %lld, %lld)", chromkey.id2chrom(chromid).c_str(), start, end);
+		snprintf(str, sizeof(str), "(%s, %" PRId64 ", %" PRId64 ")", chromkey.id2chrom(chromid).c_str(), start, end);
 		return str;
 	}
 
 	char *debug_str() const {
 		static char str[200];
-		sprintf(str, "(%d, %lld, %lld)", chromid, start, end);
+		snprintf(str, sizeof(str), "(%d, %" PRId64 ", %" PRId64 ")", chromid, start, end);
 		return str;
 	}
+
 };
 
 

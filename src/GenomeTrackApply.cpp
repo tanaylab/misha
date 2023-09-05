@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <vector>
 
 #include "rdbinterval.h"
@@ -56,7 +57,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 
 		SEXP rinterv_id;
 		rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
-		defineVar(install("GAPPLY.INTERVID"), rinterv_id, findVar(install(".GlobalEnv"), _envir));
+		defineVar(install("GAPPLY.INTERVID"), rinterv_id, findVar(install(".misha"), _envir));
 
 		GIntervals last_intervals1d;
 		GIntervals2D last_intervals2d;
@@ -98,7 +99,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 			if (interval_idx != scanner.last_scope_idx() || scanner.isend()) {
 				SEXP rarg = eval_expr;
 				for (unsigned iexpr = 0; iexpr < num_track_exprs; ++iexpr) {
-					size_t num_vals = vals.front().size();
+					uint64_t num_vals = vals.front().size();
 
 					runprotect(rvars[iexpr]);
 					rprotect(rvars[iexpr] = RSaneAllocVector(REALSXP, num_vals));
@@ -116,7 +117,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 
 				if (enable_gapply_intervals) {
 					rlast_intervals = scanner.get_iterator()->is_1d() ? iu.convert_intervs(&last_intervals1d) : iu.convert_intervs(&last_intervals2d);
-					defineVar(install("GAPPLY.INTERVALS"), rlast_intervals, findVar(install(".GlobalEnv"), _envir));
+					defineVar(install("GAPPLY.INTERVALS"), rlast_intervals, findVar(install(".misha"), _envir));
 				}
 
 				SEXP res = eval_in_R(eval_expr, _envir);
@@ -221,7 +222,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 
 			SEXP rinterv_id;
 			rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
-			defineVar(install("GAPPLY.INTERVID"), rinterv_id, findVar(install(".GlobalEnv"), _envir));
+			defineVar(install("GAPPLY.INTERVID"), rinterv_id, findVar(install(".misha"), _envir));
 
 			GIntervals last_intervals1d;
 			GIntervals2D last_intervals2d;
@@ -263,7 +264,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 				if (interval_idx != scanner.last_scope_idx() || scanner.isend()) {
 					SEXP rarg = eval_expr;
 					for (unsigned iexpr = 0; iexpr < num_track_exprs; ++iexpr) {
-						size_t num_vals = vals.front().size();
+						uint64_t num_vals = vals.front().size();
 
 						runprotect(rvars[iexpr]);
 						rprotect(rvars[iexpr] = RSaneAllocVector(REALSXP, num_vals));
@@ -281,7 +282,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 
 					if (enable_gapply_intervals) {
 						rlast_intervals = scanner.get_iterator()->is_1d() ? iu.convert_intervs(&last_intervals1d) : iu.convert_intervs(&last_intervals2d);
-						defineVar(install("GAPPLY.INTERVALS"), rlast_intervals, findVar(install(".GlobalEnv"), _envir));
+						defineVar(install("GAPPLY.INTERVALS"), rlast_intervals, findVar(install(".misha"), _envir));
 					}
 
 					SEXP res = eval_in_R(eval_expr, _envir);
@@ -309,7 +310,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 
 			for (int i = 0; i < get_num_kids(); ++i) {
 				void *ptr = get_kid_res(i);
-				size_t res_size = get_kid_res_size(i);
+				uint64_t res_size = get_kid_res_size(i);
 
 				if (!res_size)
 					continue;

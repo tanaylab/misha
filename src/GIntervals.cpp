@@ -1,16 +1,22 @@
+#include <cstdint>
 #include <algorithm>
 
 #include "GIntervals.h"
 
 void GIntervals::sort(bool (*cmp_function)(const GInterval &, const GInterval &))
 {
+	// if the intervals are empty do not sort 
+	if (empty()){
+		return;
+	}
+	
 	// do not sort automatically, check first that the intervals are not sorted yet
 	for (iterator iinterv = begin() + 1; iinterv < end(); ++iinterv) {
 		if (cmp_function(*iinterv, *(iinterv - 1))) {
 			std::sort(begin(), end(), cmp_function);
 			break;
 		}
-	}
+	}	
 }
 
 // intervs are expected to be already sorted
@@ -54,9 +60,9 @@ void GIntervals::unify_overlaps(bool unify_touching_intervals)
 	if (empty())
 		return;
 
-	size_t cur_idx = 0;
+	uint64_t cur_idx = 0;
 
-	for (size_t i = 1; i < size(); i++) {
+	for (uint64_t i = 1; i < size(); i++) {
 		if (operator[](cur_idx).chromid != operator[](i).chromid || operator[](cur_idx).end < operator[](i).start || (!unify_touching_intervals && operator[](cur_idx).end == operator[](i).start))
 			operator[](++cur_idx) = operator[](i);
 		// unite overlapping intervals
@@ -258,7 +264,7 @@ void GIntervals::begin_chrom_iter(int chromid)
 	build_chrom_map();
 	m_cur_chromid = chromid;
 	m_iter_chrom_index = 0;
-	if (chromid < m_chrom2itr.size())
+	if ((uint64_t)chromid < m_chrom2itr.size())
 		m_iinterval = m_chrom2itr[chromid];
 	else
 		m_iinterval = end();
@@ -273,7 +279,7 @@ GIntervals::const_iterator GIntervals::get_chrom_begin() const
 GIntervals::const_iterator GIntervals::get_chrom_end() const
 {
 	build_chrom_map();
-	return m_iinterval->chromid + 1 < m_chrom2itr.size() ? m_chrom2itr[m_iinterval->chromid + 1] : end();
+	return (uint64_t)m_iinterval->chromid + 1 < m_chrom2itr.size() ? m_chrom2itr[m_iinterval->chromid + 1] : end();
 }
 
 void GIntervals::write(const GenomeChromKey &chromkey, ostream &tab)

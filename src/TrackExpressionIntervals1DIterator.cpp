@@ -50,7 +50,7 @@ bool TrackExpressionIntervals1DIterator::next()
 		if (m_scope->cur_interval().chromid > (iend_interval - 1)->chromid) 
 			break;
 
-		// if scope preceeds the start interval => give up the search
+		// if scope precedes the start interval => give up the search
 		if (!istart_interval->do_overlap(m_scope->cur_interval()) && GIntervals::compare_by_start_coord(m_scope->cur_interval(), *istart_interval))
 			continue;
 

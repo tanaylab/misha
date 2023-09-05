@@ -381,7 +381,7 @@ SEXP gsmooth(SEXP _track, SEXP _expr, SEXP _winsize, SEXP _weight_thr, SEXP _smo
 					delete smoother;
 					smoother = NULL;
 
-					sprintf(filename, "%s/%s", dirname.c_str(), iu.id2chrom(scanner.last_interval1d().chromid).c_str());
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), iu.id2chrom(scanner.last_interval1d().chromid).c_str());
 					gtrack.init_write(filename, bin_size, scanner.last_interval1d().chromid);
 
 					if (smooth_type == LINEAR_RAMP)

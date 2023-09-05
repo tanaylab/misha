@@ -6,10 +6,9 @@ R=$3
 
 $R  --silent --vanilla --slave <<EOF
 
-retv <- try({
-    load(paste("${dirname}", "libdir", sep="/"))
-	library("misha", lib.loc=dirname(.GLIBDIR))
-	remove(.GLIBDIR)
+retv <- try({        
+	library("misha")	
+    load(paste("${dirname}", "misha", sep="/"))
     load(paste("${dirname}", "opts", sep="/"))
     options(opts)
 	options(echo = FALSE)
