@@ -418,3 +418,22 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
         c()
     }
 }
+
+rescue_ALLGENOME <- function(intervals, intervals_name) {
+    if (length(intervals_name) == 0){
+        return(intervals)
+    }
+    if (intervals_name[1] == "ALLGENOME") {
+        warning("ALLGENOME was deprecated at version 4.2.0. Use .misha$ALLGENOME instead.", call. = FALSE)
+        intervals <- .misha$ALLGENOME
+    }
+    if (intervals_name[1] == "ALLGENOME[[1]]") {
+        warning("ALLGENOME[[1]] was deprecated at version 4.2.0. Use .misha$ALLGENOME[[1]] instead.", call. = FALSE)
+        intervals <- .misha$ALLGENOME[[1]]
+    }
+    if (intervals_name[1] == "ALLGENOME[[2]]") {
+        warning("ALLGENOME[[2]] was deprecated at version 4.2.0. Use .misha$ALLGENOME[[2]] instead.", call. = FALSE)
+        intervals <- .misha$ALLGENOME[[2]]
+    }
+    return(intervals)
+}

@@ -844,6 +844,8 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
         stop("Usage: gintervals.2d.band_intersect(intervals, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
 
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     if (!is.null(intervals.set.out)) {
@@ -965,6 +967,8 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
     if (is.null(intervals)) {
         stop("Usage: gintervals.canonic(intervals, unify_touching_intervals = TRUE)", call. = FALSE)
     }
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     res <- .gcall("gintervcanonic", intervals, unify_touching_intervals, .misha_env())
     res
@@ -1126,6 +1130,8 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
         stop("Usage: gintervals.force_range(intervals, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
@@ -1373,6 +1379,8 @@ gintervals.chrom_sizes <- function(intervals = NULL) {
     }
     .gcheckroot()
 
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
     if (.gintervals.is_bigset(intervals)) {
         if (.gintervals.big.is1d(intervals)) {
             stats <- .gintervals.big.meta(intervals)$stats
@@ -1468,6 +1476,8 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL) {
         stop("Usage: gintervals.liftover(intervals, chain)", call. = FALSE)
     }
     .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.character(chain)) {
         chain.intervs <- gintervals.load_chain(chain)
@@ -1659,6 +1669,8 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
         stop("Usage: gintervals.mapply(FUN, [expr]+, intervals, enable.gapply.intervals = FALSE, iterator = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.null(intervals)) {
         intervals <- eval.parent(args[[length(args)]])
@@ -1902,6 +1914,8 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
         stop("Usage: gintervals.quantiles(expr, percentiles = 0.5, intervals, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
@@ -2152,6 +2166,8 @@ gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
     }
     .gcheckroot()
 
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
     .gintervals.apply(gintervals.chrom_sizes(intervals), intervals, intervals.set.out, function(intervs, ...) {
         intervs[[1]]
@@ -2205,6 +2221,8 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
         stop("Usage: gintervals.update(intervals.set, intervals, chrom = NULL, chrom1 = NULL, chrom2 = NULL)", call. = FALSE)
     }
     .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (identical(intervals.set, intervals)) {
         return(retv <- NULL)
@@ -2398,6 +2416,8 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
         stop("Usage: gintervals.summary(expr, intervals, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
     .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
@@ -2692,6 +2712,8 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
     if (is.null(substitute(expr)) && is.null(substitute(iterator))) {
         stop("Usage: giterator.intervals(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
     }
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.null(substitute(expr))) {
         exprstr <- "0"

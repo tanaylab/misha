@@ -1,5 +1,6 @@
 # misha (development version)
 
+* `ALLGENOME` is now only soft deprecated in order to support old misha scripts. 
 # misha 4.2.3
 
 * Added `gtrack.create_dirs` function.

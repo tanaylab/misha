@@ -391,6 +391,8 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     }
     .gcheckroot()
 
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
     valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
@@ -1180,6 +1182,8 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
         stop("Usage: gtrack.modify(track, expr, intervals = .misha$ALLGENOME)", call. = FALSE)
     }
     .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)
