@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.3.9000</span>
       </span>
     </div>
 
@@ -116,7 +116,9 @@ optionally outputted</p></dd>
 <p>If 'intervals.set.out' is 'NULL' a data frame containing the pairs
 of intervals from 'intervals1', intervals from 'intervals2' and an
 additional column named 'dist' ('dist1' and 'dist2' for 2D intervals)
-representing the distance between the corresponding intervals. If
+representing the distance between the corresponding intervals. The intervals
+from intervals2 would be changed to 'chrom1', 'start1', and 'end1' and for
+2D intervals chrom11, start11, end11 and chrom22, start22, end22. If
 'na.if.notfound' is 'TRUE', the data frame contains all the intervals from
 'intervals1' including those for which no matching neighbor was found. For
 the latter intervals an 'NA' neighboring interval is stated. If
@@ -136,6 +138,8 @@ distance is always positive.</p>
 The distances must fall in the range of ['mindist1', 'maxdist1'] for axis 1
 and ['mindist2', 'maxdist2'] for axis 2. For selecting the closest
 'maxneighbors' intervals Manhattan distance is used (i.e. dist1+dist2).</p>
+<p>The names of the returned columns are made unique using
+<code>make.unique(colnames(df), sep = "")</code>, assuming 'df' is the result.</p>
 <p>If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 set. Use this parameter if the result size exceeds the limits of the
 physical memory.</p>
@@ -164,43 +168,43 @@ physical memory.</p>
 <span class="r-in"><span>    mindist <span class="op">=</span> <span class="op">-</span><span class="fl">300</span>,</span></span>
 <span class="r-in"><span>    maxdist <span class="op">=</span> <span class="fl">500</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start  end chrom start  end dist</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  233  chr1     0   50    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1     0  233  chr1   100  150    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1     0  233  chr1   250  300   17</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   233  466  chr1   250  300    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1   233  466  chr1   100  150   83</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1   233  466  chr1     0   50  183</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1   466  699  chr1   250  300  166</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1   466  699  chr1   100  150  316</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1   466  699  chr1     0   50  416</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1   699  932  chr1   250  300  399</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1   699  932  chr1  1400 1450  468</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1   932 1165  chr1  1400 1450  235</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  1165 1398  chr1  1400 1450    2</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  1398 1631  chr1  1400 1450    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 15  chr1  1631 1864  chr1  1400 1450  181</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 16  chr1  1864 2097  chr1  1400 1450  414</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start  end chrom1 start1 end1 dist</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  233   chr1      0   50    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1     0  233   chr1    100  150    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1     0  233   chr1    250  300   17</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   233  466   chr1    250  300    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1   233  466   chr1    100  150   83</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1   233  466   chr1      0   50  183</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1   466  699   chr1    250  300  166</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1   466  699   chr1    100  150  316</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1   466  699   chr1      0   50  416</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1   699  932   chr1    250  300  399</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1   699  932   chr1   1400 1450  468</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1   932 1165   chr1   1400 1450  235</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  1165 1398   chr1   1400 1450    2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  1398 1631   chr1   1400 1450    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 15  chr1  1631 1864   chr1   1400 1450  181</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 16  chr1  1864 2097   chr1   1400 1450  414</span>
 <span class="r-in"><span><span class="va">intervs2</span><span class="op">$</span><span class="va">strand</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">1</span>, <span class="op">-</span><span class="fl">1</span>, <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">gintervals.neighbors</span><span class="op">(</span><span class="va">intervs1</span>, <span class="va">intervs2</span>, <span class="fl">10</span>,</span></span>
 <span class="r-in"><span>    mindist <span class="op">=</span> <span class="op">-</span><span class="fl">300</span>,</span></span>
 <span class="r-in"><span>    maxdist <span class="op">=</span> <span class="fl">500</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start  end chrom start  end strand dist</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  233  chr1     0   50      1    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1     0  233  chr1   100  150      1    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1     0  233  chr1   250  300     -1   17</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   233  466  chr1   250  300     -1    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1   233  466  chr1   100  150      1   83</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1   233  466  chr1     0   50      1  183</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1   466  699  chr1   250  300     -1 -166</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1   466  699  chr1   100  150      1  316</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1   466  699  chr1     0   50      1  416</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1   932 1165  chr1  1400 1450      1 -235</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1  1165 1398  chr1  1400 1450      1   -2</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1  1398 1631  chr1  1400 1450      1    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  1631 1864  chr1  1400 1450      1  181</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  1864 2097  chr1  1400 1450      1  414</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start  end chrom1 start1 end1 strand dist</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  233   chr1      0   50      1    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1     0  233   chr1    100  150      1    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1     0  233   chr1    250  300     -1   17</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   233  466   chr1    250  300     -1    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1   233  466   chr1    100  150      1   83</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1   233  466   chr1      0   50      1  183</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1   466  699   chr1    250  300     -1 -166</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1   466  699   chr1    100  150      1  316</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1   466  699   chr1      0   50      1  416</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1   932 1165   chr1   1400 1450      1 -235</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1  1165 1398   chr1   1400 1450      1   -2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1  1398 1631   chr1   1400 1450      1    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  1631 1864   chr1   1400 1450      1  181</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  1864 2097   chr1   1400 1450      1  414</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
@@ -212,7 +216,7 @@ physical memory.</p>
 
 
       <footer><div class="copyright">
-  <p></p><p>Developed by Misha Hoichman, Aviezer Lifshitz, Amos Tanay.</p>
+  <p></p><p>Developed by Misha Hoichman, Aviezer Lifshitz, Eitan Yaffe, Amos Tanay.</p>
 </div>
 
 <div class="pkgdown">

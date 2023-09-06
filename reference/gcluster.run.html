@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.3.9000</span>
       </span>
     </div>
 
@@ -66,7 +66,14 @@
     </div>
 
     <div id="ref-usage">
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gcluster.run</span><span class="op">(</span><span class="va">...</span>, opt.flags <span class="op">=</span> <span class="st">""</span>, max.jobs <span class="op">=</span> <span class="fl">400</span>, debug <span class="op">=</span> <span class="cn">FALSE</span>, R <span class="op">=</span> <span class="st">"R"</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gcluster.run</span><span class="op">(</span></span>
+<span>  <span class="va">...</span>,</span>
+<span>  opt.flags <span class="op">=</span> <span class="st">""</span>,</span>
+<span>  max.jobs <span class="op">=</span> <span class="fl">400</span>,</span>
+<span>  debug <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  R <span class="op">=</span> <span class="st">"R"</span>,</span>
+<span>  control_dir <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div id="arguments">
@@ -89,6 +96,12 @@
 
 <dt>R</dt>
 <dd><p>command that launches R</p></dd>
+
+
+<dt>control_dir</dt>
+<dd><p>directory where the control files are stored. Note that this
+directory should be accessible from all nodes. If 'NULL', a temporary directory
+would be created under the current misha database.</p></dd>
 
 </dl></div>
     <div id="value">
@@ -127,15 +140,18 @@ argument specifies how R executable should be invoked.</p>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 <span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gdb.init.html">gdb.init_examples</a></span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">v</span> <span class="op">&lt;-</span> <span class="fl">17</span></span></span>
-<span class="r-in"><span><span class="fu">gcluster.run</span><span class="op">(</span></span></span>
-<span class="r-in"><span>    <span class="fu"><a href="gsummary.html">gsummary</a></span><span class="op">(</span><span class="st">"dense_track + v"</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>    <span class="op">{</span></span></span>
-<span class="r-in"><span>        <span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="gscreen.html">gscreen</a></span><span class="op">(</span><span class="st">"dense_track &gt; 0.1"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span>        <span class="fu"><a href="gsummary.html">gsummary</a></span><span class="op">(</span><span class="st">"sparse_track"</span>, <span class="va">intervs</span><span class="op">)</span></span></span>
-<span class="r-in"><span>    <span class="op">}</span>,</span></span>
-<span class="r-in"><span>    <span class="fu"><a href="gsummary.html">gsummary</a></span><span class="op">(</span><span class="st">"rects_track"</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># Run only on systems with Sun Grid Engine (SGE)</span></span></span>
+<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.html" class="external-link">system</a></span><span class="op">(</span><span class="st">"which qsub"</span>, ignore.stderr <span class="op">=</span> <span class="cn">TRUE</span>, intern <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span></span>
+<span class="r-in"><span>    <span class="va">v</span> <span class="op">&lt;-</span> <span class="fl">17</span></span></span>
+<span class="r-in"><span>    <span class="fu">gcluster.run</span><span class="op">(</span></span></span>
+<span class="r-in"><span>        <span class="fu"><a href="gsummary.html">gsummary</a></span><span class="op">(</span><span class="st">"dense_track + v"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>        <span class="op">{</span></span></span>
+<span class="r-in"><span>            <span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="gscreen.html">gscreen</a></span><span class="op">(</span><span class="st">"dense_track &gt; 0.1"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span>            <span class="fu"><a href="gsummary.html">gsummary</a></span><span class="op">(</span><span class="st">"sparse_track"</span>, <span class="va">intervs</span><span class="op">)</span></span></span>
+<span class="r-in"><span>        <span class="op">}</span>,</span></span>
+<span class="r-in"><span>        <span class="fu"><a href="gsummary.html">gsummary</a></span><span class="op">(</span><span class="st">"rects_track"</span><span class="op">)</span></span></span>
+<span class="r-in"><span>    <span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">}</span></span></span>
 <span class="r-in"><span><span class="op">}</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
@@ -148,7 +164,7 @@ argument specifies how R executable should be invoked.</p>
 
 
       <footer><div class="copyright">
-  <p></p><p>Developed by Misha Hoichman, Aviezer Lifshitz, Amos Tanay.</p>
+  <p></p><p>Developed by Misha Hoichman, Aviezer Lifshitz, Eitan Yaffe, Amos Tanay.</p>
 </div>
 
 <div class="pkgdown">

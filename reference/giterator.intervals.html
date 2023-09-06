@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.3.9000</span>
       </span>
     </div>
 
@@ -154,9 +154,13 @@ physical memory.</p>
 <span class="r-in"><span><span class="fu">giterator.intervals</span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span>, <span class="st">"annotations"</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start   end</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1    20  2000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr2    20  2000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr2  3000  8000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr2  9000 11000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1  2500  2600</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr2    20  2000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr2  3000  8000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr2  9000 11000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6  chr2 12000 12001</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7  chr2 13000 14000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8  chr2 15000 15500</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co">## iterator is set implicitly to intervals of 'array_track' track</span></span></span>
 <span class="r-in"><span><span class="fu">giterator.intervals</span><span class="op">(</span><span class="st">"array_track"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span></span>
@@ -170,27 +174,27 @@ physical memory.</p>
 <span class="r-in"><span>    <span class="fu"><a href="gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span>chroms1 <span class="op">=</span> <span class="fl">1</span>, chroms2 <span class="op">=</span> <span class="st">"chrX"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>    <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100000</span>, <span class="fl">50000</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom1 start1  end1 chrom2 start2   end2</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1    chr1  0e+00 1e+05   chrX      0  50000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2    chr1  1e+05 2e+05   chrX      0  50000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3    chr1  2e+05 3e+05   chrX      0  50000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4    chr1  3e+05 4e+05   chrX      0  50000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5    chr1  4e+05 5e+05   chrX      0  50000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6    chr1  0e+00 1e+05   chrX  50000 100000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7    chr1  1e+05 2e+05   chrX  50000 100000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8    chr1  2e+05 3e+05   chrX  50000 100000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9    chr1  3e+05 4e+05   chrX  50000 100000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 10   chr1  4e+05 5e+05   chrX  50000 100000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 11   chr1  0e+00 1e+05   chrX 100000 150000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 12   chr1  1e+05 2e+05   chrX 100000 150000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 13   chr1  2e+05 3e+05   chrX 100000 150000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 14   chr1  3e+05 4e+05   chrX 100000 150000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 15   chr1  4e+05 5e+05   chrX 100000 150000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 16   chr1  0e+00 1e+05   chrX 150000 200000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 17   chr1  1e+05 2e+05   chrX 150000 200000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 18   chr1  2e+05 3e+05   chrX 150000 200000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 19   chr1  3e+05 4e+05   chrX 150000 200000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 20   chr1  4e+05 5e+05   chrX 150000 200000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom1 start1   end1 chrom2 start2   end2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1    chr1      0 100000   chrX      0  50000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2    chr1 100000 200000   chrX      0  50000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3    chr1 200000 300000   chrX      0  50000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4    chr1 300000 400000   chrX      0  50000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5    chr1 400000 500000   chrX      0  50000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6    chr1      0 100000   chrX  50000 100000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7    chr1 100000 200000   chrX  50000 100000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8    chr1 200000 300000   chrX  50000 100000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9    chr1 300000 400000   chrX  50000 100000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10   chr1 400000 500000   chrX  50000 100000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 11   chr1      0 100000   chrX 100000 150000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 12   chr1 100000 200000   chrX 100000 150000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13   chr1 200000 300000   chrX 100000 150000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 14   chr1 300000 400000   chrX 100000 150000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 15   chr1 400000 500000   chrX 100000 150000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 16   chr1      0 100000   chrX 150000 200000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 17   chr1 100000 200000   chrX 150000 200000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 18   chr1 200000 300000   chrX 150000 200000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 19   chr1 300000 400000   chrX 150000 200000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 20   chr1 400000 500000   chrX 150000 200000</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
@@ -202,7 +206,7 @@ physical memory.</p>
 
 
       <footer><div class="copyright">
-  <p></p><p>Developed by Misha Hoichman, Aviezer Lifshitz, Amos Tanay.</p>
+  <p></p><p>Developed by Misha Hoichman, Aviezer Lifshitz, Eitan Yaffe, Amos Tanay.</p>
 </div>
 
 <div class="pkgdown">

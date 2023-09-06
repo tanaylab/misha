@@ -33,7 +33,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.3.9000</span>
       </span>
     </div>
 
@@ -78,7 +78,7 @@
 
       
 
-      </header><div class="row">
+      </header><script src="Manual_files/accessible-code-block-0.0.1/empty-anchor.js"></script><div class="row">
   <div class="col-md-9 contents">
     <div class="page-header toc-ignore">
       <h1 data-toc-skip>Manual</h1>
@@ -97,45 +97,24 @@
 <div class="section level2">
 <h2 id="package-misha---user-manual">Package ‘misha’ - User Manual<a class="anchor" aria-label="anchor" href="#package-misha---user-manual"></a>
 </h2>
-<p><strong>misha</strong> package is intended to help users to
-efficiently analyze genomic data achieved from various experiments. The
-data must be stored in <em>Genomic Database</em> in certain format that
-is described later in this document. In addition the document describes
-fundamental concepts of the package such as <em>track expression</em>,
-<em>iterators</em>, etc.</p>
+<p><strong>misha</strong> package is intended to help users to efficiently analyze genomic data achieved from various experiments. The data must be stored in <em>Genomic Database</em> in certain format that is described later in this document. In addition the document describes fundamental concepts of the package such as <em>track expression</em>, <em>iterators</em>, etc.</p>
 <div class="section level3">
 <h3 id="genomic-database">Genomic Database<a class="anchor" aria-label="anchor" href="#genomic-database"></a>
 </h3>
-<p>Genomic Database starts with a <em>root</em> (also frequently
-referred as <em>GROOT</em>), i.e. top directory containing certain
-subdirectories and files. A new database can be created using
-<code>gdb.create</code> function. This is the easiest way to do it. One
-can also build a database manually by generating all the necessary
-components that will be described later in this document.</p>
-<p>Before the data in a Genomic Database can be accessed one must
-establish connection with it by calling <code>gdb.init</code> function.
-On launch the package connects to a Genomic Database located in
-<code>PACKAGEDIR/trackdb/test</code> which serves all the examples in
-the reference manual.</p>
-<p>A valid Genomic Database should contain the following files and
-subdirectories:</p>
+<p>Genomic Database starts with a <em>root</em> (also frequently referred as <em>GROOT</em>), i.e. top directory containing certain subdirectories and files. A new database can be created using <code>gdb.create</code> function. This is the easiest way to do it. One can also build a database manually by generating all the necessary components that will be described later in this document.</p>
+<p>Before the data in a Genomic Database can be accessed one must establish connection with it by calling <code>gdb.init</code> function. On launch the package connects to a Genomic Database located in <code>PACKAGEDIR/trackdb/test</code> which serves all the examples in the reference manual.</p>
+<p>A valid Genomic Database should contain the following files and subdirectories:</p>
 <ul>
 <li>
-<code>chrom_sizes.txt</code>: is a file containing the list of
-chromosomes and their sizes.</li>
+<code>chrom_sizes.txt</code>: is a file containing the list of chromosomes and their sizes.</li>
 <li>
-<code>tracks</code>: is a directory that servers as a repository for
-all <em>tracks</em> and <em>interval sets</em>. May contain other
-subdirectories.</li>
+<code>tracks</code>: is a directory that servers as a repository for all <em>tracks</em> and <em>interval sets</em>. May contain other subdirectories.</li>
 <li>
-<code>pssms</code>: is a directory containing PSSM sets (PSSM data
-and PSSM key files).</li>
+<code>pssms</code>: is a directory containing PSSM sets (PSSM data and PSSM key files).</li>
 <li>
-<code>seq</code>: is a directory containing full genomic
-sequences.</li>
+<code>seq</code>: is a directory containing full genomic sequences.</li>
 </ul>
-<p><code>pssms</code> and <code>seq</code> directories are optional and
-are required only by a subset of functions in the package.</p>
+<p><code>pssms</code> and <code>seq</code> directories are optional and are required only by a subset of functions in the package.</p>
 <p>An example of a Genomic Database file structure:</p>
 <pre><code>hg38/              &lt;- Genomic Database root directory
    chrom_sizes.txt
@@ -182,12 +161,7 @@ are required only by a subset of functions in the package.</p>
 <h4 id="chrom_sizes-txt">
 <code>chrom_sizes.txt</code><a class="anchor" aria-label="anchor" href="#chrom_sizes-txt"></a>
 </h4>
-<p><code>chrom_sizes.txt</code> file must be located under the root
-directory of Genomic Database. This file lists the chromosomes and their
-sizes. The chromosome name appears in the first column, the size is
-indicated in the second column. The chromosome name should appear
-without “chr” prefix. The two columns are separated by tab character.
-Example:</p>
+<p><code>chrom_sizes.txt</code> file must be located under the root directory of Genomic Database. This file lists the chromosomes and their sizes. The chromosome name appears in the first column, the size is indicated in the second column. The chromosome name should appear without “chr” prefix. The two columns are separated by tab character. Example:</p>
 <pre class="tsv"><code>1    247249719
 2    242951149
 3    199501827
@@ -197,30 +171,18 @@ Y    57772954</code></pre>
 <div class="section level4">
 <h4 id="seq-file">Seq File<a class="anchor" aria-label="anchor" href="#seq-file"></a>
 </h4>
-<p><em>Seq</em> (aka sequence) files are located in <code>seq</code>
-directory. Each of the Seq files contains a genomic sequence for a given
-chromosome as a contiguous string of ASCII characters. The length of the
-string should match the length of the chromosome. The file must be
-called <code>chrXXX.seq</code> where <code>XXX</code> indicates the name
-of the chromosome as it appears in <code>chrom_sizes.txt</code>
-file.</p>
-<p>Here is an example of an unusually short (25 base pairs) Seq
-file:</p>
+<p><em>Seq</em> (aka sequence) files are located in <code>seq</code> directory. Each of the Seq files contains a genomic sequence for a given chromosome as a contiguous string of ASCII characters. The length of the string should match the length of the chromosome. The file must be called <code>chrXXX.seq</code> where <code>XXX</code> indicates the name of the chromosome as it appears in <code>chrom_sizes.txt</code> file.</p>
+<p>Here is an example of an unusually short (25 base pairs) Seq file:</p>
 <pre class="csv"><code><span><span class="va">ggtgaAGccctggagattcttatta</span></span></code></pre>
 </div>
 <div class="section level4">
 <h4 id="pssm-set">PSSM Set<a class="anchor" aria-label="anchor" href="#pssm-set"></a>
 </h4>
-<p>Each <em>PSSM Set</em> consists of two files: <em>PSSM key</em> and
-<em>PSSM data</em>. The files should be named <code>XXX.key</code> and
-<code>XXX.data</code> accordingly, where <code>XXX</code> is the name of
-PSSM set. Both files must be placed into <code>pssms</code>
-directory.</p>
+<p>Each <em>PSSM Set</em> consists of two files: <em>PSSM key</em> and <em>PSSM data</em>. The files should be named <code>XXX.key</code> and <code>XXX.data</code> accordingly, where <code>XXX</code> is the name of PSSM set. Both files must be placed into <code>pssms</code> directory.</p>
 <div class="section level5">
 <h5 id="pssm-key">PSSM Key<a class="anchor" aria-label="anchor" href="#pssm-key"></a>
 </h5>
-<p><em>PSSM Key</em> file contains description of PSSMs in the following
-format (columns are separated by tab character):</p>
+<p><em>PSSM Key</em> file contains description of PSSMs in the following format (columns are separated by tab character):</p>
 <table class="table">
 <colgroup>
 <col width="29%">
@@ -246,8 +208,7 @@ format (columns are separated by tab character):</p>
 <tr class="odd">
 <td>Bidirectional</td>
 <td>‘0’ or ‘1’</td>
-<td>If Bidirectional is ‘1’ energy is calculated on complementary strand
-as well</td>
+<td>If Bidirectional is ‘1’ energy is calculated on complementary strand as well</td>
 </tr>
 </tbody>
 </table>
@@ -264,9 +225,7 @@ as well</td>
 <div class="section level5">
 <h5 id="pssm-data">PSSM Data<a class="anchor" aria-label="anchor" href="#pssm-data"></a>
 </h5>
-<p><em>PSSM Data</em> file contains probability matrices for each PSSM
-key in the following format (columns are separated by tab
-character):</p>
+<p><em>PSSM Data</em> file contains probability matrices for each PSSM key in the following format (columns are separated by tab character):</p>
 <table class="table">
 <colgroup>
 <col width="29%">
@@ -287,8 +246,7 @@ character):</p>
 <tr class="even">
 <td>Position</td>
 <td>Integer</td>
-<td>Zero based position in the range of [0, length(PSSM
-sequence)-1]</td>
+<td>Zero based position in the range of [0, length(PSSM sequence)-1]</td>
 </tr>
 <tr class="odd">
 <td>Probability of ‘A’</td>
@@ -321,131 +279,56 @@ sequence)-1]</td>
 <div class="section level4">
 <h4 id="d-intervals">1D Intervals<a class="anchor" aria-label="anchor" href="#d-intervals"></a>
 </h4>
-<p>A <strong>1D interval</strong> (or one-dimensional interval)
-represents a genomic section. It is defined by
-<code>(chrom, start, end)</code> where <code>start</code> and
-<code>end</code> are genomic coordinates (<code>start &lt; end</code>).
-The coordinates are zero-based, meaning the chromosome starts at
-coordinate 0. The end coordinate marks the last coordinate in the
-section plus 1. To represent a point in the genome at coordinate
-<code>X</code>, one should create an interval with start coordinate set
-to <code>X</code> and end coordinate set to <code>X + 1</code>.</p>
+<p>A <strong>1D interval</strong> (or one-dimensional interval) represents a genomic section. It is defined by <code>(chrom, start, end)</code> where <code>start</code> and <code>end</code> are genomic coordinates (<code>start &lt; end</code>). The coordinates are zero-based, meaning the chromosome starts at coordinate 0. The end coordinate marks the last coordinate in the section plus 1. To represent a point in the genome at coordinate <code>X</code>, one should create an interval with start coordinate set to <code>X</code> and end coordinate set to <code>X + 1</code>.</p>
 </div>
 <div class="section level4">
 <h4 id="d-intervals-1">2D Intervals<a class="anchor" aria-label="anchor" href="#d-intervals-1"></a>
 </h4>
-<p>A <strong>2D interval</strong> (or two-dimensional interval)
-represents a rectangle in a genomic space. It is defined by
-<code>(chrom_1, start_1, end_1, chrom_2, start_2, end_2)</code>, where
-<code>start_1, start_2, end_1,</code> and <code>end_2</code> are start
-and end coordinates that mark the limits of a rectangle.</p>
+<p>A <strong>2D interval</strong> (or two-dimensional interval) represents a rectangle in a genomic space. It is defined by <code>(chrom_1, start_1, end_1, chrom_2, start_2, end_2)</code>, where <code>start_1, start_2, end_1,</code> and <code>end_2</code> are start and end coordinates that mark the limits of a rectangle.</p>
 </div>
 <div class="section level4">
 <h4 id="interval-sets">Interval Sets<a class="anchor" aria-label="anchor" href="#interval-sets"></a>
 </h4>
-<p>Multiple intervals can be combined into a table, known as an
-<strong>interval set</strong> or often simply referred to as
-<strong>intervals</strong>. This table is represented by a data frame.
-In the case of 1D intervals, the data frame must have the first three
-columns named <code>chrom</code>, <code>start</code>, and
-<code>end</code>. Similarly, 2D intervals must have the first six
-columns named <code>chrom1</code>, <code>start1</code>,
-<code>end1</code>, <code>chrom2</code>, <code>start2</code>, and
-<code>end2</code>.</p>
-<p>Additional columns might be added to the intervals, and some of them
-might be utilized by various functions. For instance, the
-<code>gintervals.neighbors</code> function uses the <code>strand</code>
-column if it is presented in 1D intervals (should come after the regular
-three columns). Use <code>gintervals</code> and
-<code>gintervals.2d</code> functions to create 1D and 2D intervals,
-respectively.</p>
-<p>Both 1D and 2D intervals are prevalent in various functions. Some of
-these functions manipulate the intervals (unify, intersect, etc.).
-Others use the intervals to limit the function’s scope. There are also
-functions that perform their calculation for each interval in the
-interval set.</p>
+<p>Multiple intervals can be combined into a table, known as an <strong>interval set</strong> or often simply referred to as <strong>intervals</strong>. This table is represented by a data frame. In the case of 1D intervals, the data frame must have the first three columns named <code>chrom</code>, <code>start</code>, and <code>end</code>. Similarly, 2D intervals must have the first six columns named <code>chrom1</code>, <code>start1</code>, <code>end1</code>, <code>chrom2</code>, <code>start2</code>, and <code>end2</code>.</p>
+<p>Additional columns might be added to the intervals, and some of them might be utilized by various functions. For instance, the <code>gintervals.neighbors</code> function uses the <code>strand</code> column if it is presented in 1D intervals (should come after the regular three columns). Use <code>gintervals</code> and <code>gintervals.2d</code> functions to create 1D and 2D intervals, respectively.</p>
+<p>Both 1D and 2D intervals are prevalent in various functions. Some of these functions manipulate the intervals (unify, intersect, etc.). Others use the intervals to limit the function’s scope. There are also functions that perform their calculation for each interval in the interval set.</p>
 </div>
 <div class="section level4">
 <h4 id="dual-intervals">Dual Intervals<a class="anchor" aria-label="anchor" href="#dual-intervals"></a>
 </h4>
-<p><strong>Dual intervals</strong> is a list containing two elements.
-The first element is a 1D interval set, while the second element is a 2D
-interval set.</p>
-<p>The <code>.misha$ALLGENOME</code> variable is frequently used as a
-default value for the intervals argument. <code>.misha$ALLGENOME</code>
-is an interval set of a dual type. <code>.misha$ALLGENOME[[1]]</code>
-represents a set of intervals that cover the entire genome (1D), while
-<code>.misha$ALLGENOME[[2]]</code> contains all the possible pairs
-between the chromosomes (2D). One can also use
-<code>gintervals.all</code> and <code>gintervals.2d.all</code> functions
-to return all 1D or 2D intervals.</p>
+<p><strong>Dual intervals</strong> is a list containing two elements. The first element is a 1D interval set, while the second element is a 2D interval set.</p>
+<p>The <code>.misha$ALLGENOME</code> variable is frequently used as a default value for the intervals argument. <code>.misha$ALLGENOME</code> is an interval set of a dual type. <code>.misha$ALLGENOME[[1]]</code> represents a set of intervals that cover the entire genome (1D), while <code>.misha$ALLGENOME[[2]]</code> contains all the possible pairs between the chromosomes (2D). One can also use <code>gintervals.all</code> and <code>gintervals.2d.all</code> functions to return all 1D or 2D intervals.</p>
 </div>
 <div class="section level4">
 <h4 id="serializing-intervals-big-and-small-interval-sets">Serializing Intervals, Big and Small Interval Sets<a class="anchor" aria-label="anchor" href="#serializing-intervals-big-and-small-interval-sets"></a>
 </h4>
-<p>Interval sets can be saved in the Genomic Database. Use the
-<code>gintervals.save</code> and <code>gintervals.load</code> functions
-to save or load an interval set from the database, and
-<code>gintervals.update</code> to update/add/delete a certain chromosome
-from the set.</p>
-<p>Internally, interval sets can be stored in two different formats:
-<strong>small interval set</strong> or <strong>big interval
-set</strong>. The specific format is chosen depending on the size of the
-interval set. Big format is selected for interval sets that contain more
-than <code>gbig.intervals.size</code> intervals
-(<code>gbig.intervals.size</code> is set via <code>options</code>),
-while smaller sets are stored in the small format. Use
-<code>gintervals.is.bigset</code> to determine the format of the stored
-interval set.</p>
-<p>Saved interval sets in the small format can be seamlessly used in all
-functions and track expressions without the need to explicitly load
-them.</p>
+<p>Interval sets can be saved in the Genomic Database. Use the <code>gintervals.save</code> and <code>gintervals.load</code> functions to save or load an interval set from the database, and <code>gintervals.update</code> to update/add/delete a certain chromosome from the set.</p>
+<p>Internally, interval sets can be stored in two different formats: <strong>small interval set</strong> or <strong>big interval set</strong>. The specific format is chosen depending on the size of the interval set. Big format is selected for interval sets that contain more than <code>gbig.intervals.size</code> intervals (<code>gbig.intervals.size</code> is set via <code>options</code>), while smaller sets are stored in the small format. Use <code>gintervals.is.bigset</code> to determine the format of the stored interval set.</p>
+<p>Saved interval sets in the small format can be seamlessly used in all functions and track expressions without the need to explicitly load them.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># 'annotations' is an intervals set saved in Genomic Database</span></span>
 <span><span class="fu"><a href="../reference/gintervals.intersect.html">gintervals.intersect</a></span><span class="op">(</span><span class="st">"annotations"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   chrom start   end</span></span>
 <span><span class="co">#&gt; 1  chr2    20  2000</span></span>
 <span><span class="co">#&gt; 2  chr2  3000  8000</span></span>
-<span><span class="co">#&gt; 3  chr2  9000 11000</span></span></code></pre></div>
-<p>Likewise, big interval sets can be used in many but not all
-functions. A notable exception is <code>gintervals.load</code> that
-allows loading only a single chromosome (or a chromosome pair for 2D
-cases) of a big intervals set.</p>
+<span><span class="co">#&gt; 3  chr2  9000 11000</span></span>
+<span><span class="co">#&gt; 4  chr2 12000 12001</span></span>
+<span><span class="co">#&gt; 5  chr2 13000 14000</span></span>
+<span><span class="co">#&gt; 6  chr2 15000 15500</span></span></code></pre></div>
+<p>Likewise, big interval sets can be used in many but not all functions. A notable exception is <code>gintervals.load</code> that allows loading only a single chromosome (or a chromosome pair for 2D cases) of a big intervals set.</p>
 </div>
 </div>
 <div class="section level3">
 <h3 id="tracks">Tracks<a class="anchor" aria-label="anchor" href="#tracks"></a>
 </h3>
-<p>A <strong>Track</strong> is a data structure that allows binding
-numeric data (floating point values) to a genomic space (a set of
-genomic intervals). The data in the tracks can typically be accessed
-through <strong>track expressions</strong> that are widely used by
-various functions of the package.</p>
-<p>Two fundamental types of tracks exist: <strong>1D</strong> and
-<strong>2D</strong>.</p>
+<p>A <strong>Track</strong> is a data structure that allows binding numeric data (floating point values) to a genomic space (a set of genomic intervals). The data in the tracks can typically be accessed through <strong>track expressions</strong> that are widely used by various functions of the package.</p>
+<p>Two fundamental types of tracks exist: <strong>1D</strong> and <strong>2D</strong>.</p>
 <div class="section level4">
 <h4 id="d-track">1D Track<a class="anchor" aria-label="anchor" href="#d-track"></a>
 </h4>
-<p>A <strong>1D track</strong> (or one-dimensional track) maps numeric
-values <span class="math inline">\(V_0, ..., V_n\)</span> to
-non-overlapping 1D intervals. The package supports two formats of 1D
-tracks: <strong>Dense</strong> (sometimes also referred to as
-<strong>Fixed Bin</strong>) and <strong>Sparse</strong>.</p>
-<p>For a Dense track, the size of the genomic interval is always fixed
-and called <strong>bin size</strong>. Numeric values are stored for all
-genomic intervals that cover the genome, although some values can be
-<code>NaN</code>. A Dense track file appears as a continuous chunk of
-values <span class="math inline">\(V_0, ..., V_n\)</span>, where <span class="math inline">\(V_i\)</span> maps to an interval <span class="math inline">\([binsize * i, binsize * (i+1))\)</span>. Dense
-track files do not store interval coordinates, allowing them to
-represent large amounts of numeric data compactly. The size of a Dense
-track is inversely proportional to the bin size. Random access to a
-value at a given coordinate has constant complexity, i.e., <span class="math inline">\(O(1)\)</span>.</p>
-<p>Sparse tracks offer more flexibility compared to Dense tracks. Each
-numeric value can map to a genomic interval of any size. The size of a
-Sparse track is proportional to the number of numeric values (excluding
-<code>NaN</code>s). On the downside, the complexity of random access to
-a value at a given coordinate is <span class="math inline">\(O(logN)\)</span>, where <span class="math inline">\(N\)</span> is the number of values in the
-track.</p>
+<p>A <strong>1D track</strong> (or one-dimensional track) maps numeric values <span class="math inline">\(V_0, ..., V_n\)</span> to non-overlapping 1D intervals. The package supports two formats of 1D tracks: <strong>Dense</strong> (sometimes also referred to as <strong>Fixed Bin</strong>) and <strong>Sparse</strong>.</p>
+<p>For a Dense track, the size of the genomic interval is always fixed and called <strong>bin size</strong>. Numeric values are stored for all genomic intervals that cover the genome, although some values can be <code>NaN</code>. A Dense track file appears as a continuous chunk of values <span class="math inline">\(V_0, ..., V_n\)</span>, where <span class="math inline">\(V_i\)</span> maps to an interval <span class="math inline">\([binsize * i, binsize * (i+1))\)</span>. Dense track files do not store interval coordinates, allowing them to represent large amounts of numeric data compactly. The size of a Dense track is inversely proportional to the bin size. Random access to a value at a given coordinate has constant complexity, i.e., <span class="math inline">\(O(1)\)</span>.</p>
+<p>Sparse tracks offer more flexibility compared to Dense tracks. Each numeric value can map to a genomic interval of any size. The size of a Sparse track is proportional to the number of numeric values (excluding <code>NaN</code>s). On the downside, the complexity of random access to a value at a given coordinate is <span class="math inline">\(O(logN)\)</span>, where <span class="math inline">\(N\)</span> is the number of values in the track.</p>
 <p>To summarize the differences between Dense and Sparse tracks:</p>
 <table class="table">
 <colgroup>
@@ -481,102 +364,49 @@ track.</p>
 </tr>
 </tbody>
 </table>
-<p>1D tracks can be created by various functions, such as
-<code>gtrack.create</code>, <code>gtrack.create_sparse</code>,
-<code>gtrack.import_set</code>, and more.</p>
+<p>1D tracks can be created by various functions, such as <code>gtrack.create</code>, <code>gtrack.create_sparse</code>, <code>gtrack.import_set</code>, and more.</p>
 </div>
 <div class="section level4">
 <h4 id="array-track">Array Track<a class="anchor" aria-label="anchor" href="#array-track"></a>
 </h4>
-<p>An <strong>Array track</strong> is similar to a Sparse track in that
-it maps data to one-dimensional intervals of any size. However, unlike
-Sparse tracks, an Array track can map multiple values to each interval.
-Array tracks thus store large amounts of data in one track - a task that
-would otherwise require numerous tracks.</p>
-<p>The values in an Array track are organized into
-<strong>columns</strong>, each with a name and an index. You can view it
-as an NxM table, where N is the number of intervals, and M is the number
-of columns. The size of an Array track is proportional to the total
-number of numeric values stored (excluding <code>NaN</code>s).</p>
-<p>As useful as they are, Array tracks should not replace Dense or
-Sparse tracks. A single Sparse track will always be more compact and
-efficient than an Array track holding only one column.</p>
-<p>You can create Array tracks with the <code>gtrack.array.import</code>
-function.</p>
+<p>An <strong>Array track</strong> is similar to a Sparse track in that it maps data to one-dimensional intervals of any size. However, unlike Sparse tracks, an Array track can map multiple values to each interval. Array tracks thus store large amounts of data in one track - a task that would otherwise require numerous tracks.</p>
+<p>The values in an Array track are organized into <strong>columns</strong>, each with a name and an index. You can view it as an NxM table, where N is the number of intervals, and M is the number of columns. The size of an Array track is proportional to the total number of numeric values stored (excluding <code>NaN</code>s).</p>
+<p>As useful as they are, Array tracks should not replace Dense or Sparse tracks. A single Sparse track will always be more compact and efficient than an Array track holding only one column.</p>
+<p>You can create Array tracks with the <code>gtrack.array.import</code> function.</p>
 </div>
 <div class="section level4">
 <h4 id="d-track-1">2D Track<a class="anchor" aria-label="anchor" href="#d-track-1"></a>
 </h4>
-<p>A <strong>2D track</strong> (or two-dimensional track) maps numeric
-values <span class="math inline">\(V_0, ..., V_n\)</span> to
-non-overlapping 2D intervals. These are often used to represent
-interactions between different parts of the genome.</p>
-<p>2D tracks are stored internally in <strong>chunks</strong> with each
-chunk containing multiple track values. When accessing a track value,
-its entire chunk is loaded into memory. The byte size of a chunk,
-determined by the <code>gtrack.chunk.size</code> option, is a tradeoff
-between single value access (smaller chunk) and multiple value access
-(larger chunk).</p>
-<p>When accessing multiple track values, multiple chunks might be loaded
-into memory. Given the potential size of 2D tracks, the total number of
-chunks in memory can be limited using the <code>gtrack.num.chunks</code>
-parameter.</p>
-<p>Typically, 2D tracks use the <strong>Rectangles</strong> format.
-However, a more space-efficient <strong>Points</strong> format exists,
-similar in behavior to Rectangles. There’s also a
-<strong>Computed</strong> format, which is beyond the scope of this
-documentation.</p>
-<p>Rectangles tracks: <code>gtrack.create</code>,
-<code>gtrack.2d.create</code>.</p>
+<p>A <strong>2D track</strong> (or two-dimensional track) maps numeric values <span class="math inline">\(V_0, ..., V_n\)</span> to non-overlapping 2D intervals. These are often used to represent interactions between different parts of the genome.</p>
+<p>2D tracks are stored internally in <strong>chunks</strong> with each chunk containing multiple track values. When accessing a track value, its entire chunk is loaded into memory. The byte size of a chunk, determined by the <code>gtrack.chunk.size</code> option, is a tradeoff between single value access (smaller chunk) and multiple value access (larger chunk).</p>
+<p>When accessing multiple track values, multiple chunks might be loaded into memory. Given the potential size of 2D tracks, the total number of chunks in memory can be limited using the <code>gtrack.num.chunks</code> parameter.</p>
+<p>Typically, 2D tracks use the <strong>Rectangles</strong> format. However, a more space-efficient <strong>Points</strong> format exists, similar in behavior to Rectangles. There’s also a <strong>Computed</strong> format, which is beyond the scope of this documentation.</p>
+<p>Rectangles tracks: <code>gtrack.create</code>, <code>gtrack.2d.create</code>.</p>
 <p>Points tracks: <code>gtrack.2d.import_contacts</code>.</p>
 </div>
 <div class="section level4">
 <h4 id="track-as-an-intervals-set">Track as an Intervals Set<a class="anchor" aria-label="anchor" href="#track-as-an-intervals-set"></a>
 </h4>
-<p>Tracks represent sets of intervals, augmented with values, and can
-therefore replace interval sets in functions like <code>gextract</code>,
-<code>gintervals.neighbors</code>, and
-<code>gintervals.chrom_sizes</code>. The only exception is
-<strong>Dense</strong> tracks which can’t be used in place of interval
-sets.</p>
+<p>Tracks represent sets of intervals, augmented with values, and can therefore replace interval sets in functions like <code>gextract</code>, <code>gintervals.neighbors</code>, and <code>gintervals.chrom_sizes</code>. The only exception is <strong>Dense</strong> tracks which can’t be used in place of interval sets.</p>
 </div>
 <div class="section level4">
 <h4 id="track-attributes">Track Attributes<a class="anchor" aria-label="anchor" href="#track-attributes"></a>
 </h4>
-<p>Beyond numeric data, tracks can store metadata, such as descriptions
-or sources. This metadata is stored as name-value pairs or attributes
-with the value being a string. Tracks created using
-<code>gtrack.create</code>, <code>gtrack.smooth</code>, etc.,
-automatically have <code>created.by</code>, <code>created.date</code>,
-and <code>description</code> attributes.</p>
-<p>While there’s no strict rule, attributes typically store short
-strings. For other data formats, consider using <strong>track
-variables</strong>.</p>
-<p>Attribute management: - Retrieval/Modification:
-<code>gtrack.attr.get</code>, <code>gtrack.attr.set</code>. - Bulk
-Actions: <code>gtrack.attr.export</code>,
-<code>gtrack.attr.import</code>. - Search by Pattern:
-<code>gtrack.ls</code>.</p>
-<p>Some attributes are read-only, like <code>created.by</code> and
-<code>created.date</code>. Use <code>gdb.get_readonly_attrs</code> and
-<code>gdb.set_readonly_attrs</code> to manage these.</p>
+<p>Beyond numeric data, tracks can store metadata, such as descriptions or sources. This metadata is stored as name-value pairs or attributes with the value being a string. Tracks created using <code>gtrack.create</code>, <code>gtrack.smooth</code>, etc., automatically have <code>created.by</code>, <code>created.date</code>, and <code>description</code> attributes.</p>
+<p>While there’s no strict rule, attributes typically store short strings. For other data formats, consider using <strong>track variables</strong>.</p>
+<p>Attribute management: - Retrieval/Modification: <code>gtrack.attr.get</code>, <code>gtrack.attr.set</code>. - Bulk Actions: <code>gtrack.attr.export</code>, <code>gtrack.attr.import</code>. - Search by Pattern: <code>gtrack.ls</code>.</p>
+<p>Some attributes are read-only, like <code>created.by</code> and <code>created.date</code>. Use <code>gdb.get_readonly_attrs</code> and <code>gdb.set_readonly_attrs</code> to manage these.</p>
 </div>
 <div class="section level4">
 <h4 id="track-variables">Track Variables<a class="anchor" aria-label="anchor" href="#track-variables"></a>
 </h4>
-<p>Track variables store statistics, computation results, historical
-data, etc., related to a track. Unlike attributes, they can store data
-in any format.</p>
-<p>Variable management: - Retrieval/Modification/Removal:
-<code>gtrack.var.get</code>, <code>gtrack.var.set</code>,
-<code>gtrack.var.rm</code>. - List variables:
-<code>gtrack.var.ls</code>.</p>
+<p>Track variables store statistics, computation results, historical data, etc., related to a track. Unlike attributes, they can store data in any format.</p>
+<p>Variable management: - Retrieval/Modification/Removal: <code>gtrack.var.get</code>, <code>gtrack.var.set</code>, <code>gtrack.var.rm</code>. - List variables: <code>gtrack.var.ls</code>.</p>
 </div>
 <div class="section level4">
 <h4 id="track-attributes-vs--track-variables">Track Attributes vs. Track Variables<a class="anchor" aria-label="anchor" href="#track-attributes-vs--track-variables"></a>
 </h4>
-<p>Both track attributes and variables store track metadata, but they
-have distinct uses:</p>
+<p>Both track attributes and variables store track metadata, but they have distinct uses:</p>
 <table class="table">
 <colgroup>
 <col width="34%">
@@ -645,35 +475,10 @@ have distinct uses:</p>
 <div class="section level4">
 <h4 id="introduction">Introduction<a class="anchor" aria-label="anchor" href="#introduction"></a>
 </h4>
-<p><em>Track expression</em> is a key concept of the package. Track
-expressions are widely used in various functions (<code>gscreen</code>,
-<code>gextract</code>, <code>gdist</code>, …).</p>
-<p>Track expression is a character string that closely resembles a valid
-R expression. Just like any other R expression it may include
-conditions, functions and variables defined beforehand.
-<code>"1 &gt; 2"</code>, <code>"mean(1:10)"</code> and
-<code>"myvar &lt; 17"</code> are all valid track expressions. Unlike
-regular R expressions track expression might also contain track names or
-<em>virtual track</em> names.</p>
-<p>How does a track expression get evaluated? A track expression is
-accompanied by an <em>iterator</em> that determines a set of intervals
-over which the expression iterator goes. For each each iterator interval
-the track expression is evaluated. The value of a track expression
-<code>"mean(1:10)"</code> is constant regardless the iterator interval.
-However suppose the track expression contains a track name
-<code>mytrack</code>, like: <code>"mytrack * 3"</code>, and the whole
-story becomes very different. The library first recognizes that
-<code>mytrack</code> is not a regular R variable but rather a track
-name. A new R variable named <code>mytrack</code> is added then to R
-environment. For each iterator interval this variable is assigned the
-corresponding value of the track. This value obviously depends on the
-iterator interval. Once <code>mytrack</code> is assigned the
-corresponding value, the track expression is evaluated in R.</p>
-<p>So how exactly the value of <code>mytrack</code> variable is
-determined given the iterator interval? We will demonstrate the answer
-by the following example. Suppose the track <code>mytrack</code> is in
-sparse format. It consists of a single chromosome with the following
-values:</p>
+<p><em>Track expression</em> is a key concept of the package. Track expressions are widely used in various functions (<code>gscreen</code>, <code>gextract</code>, <code>gdist</code>, …).</p>
+<p>Track expression is a character string that closely resembles a valid R expression. Just like any other R expression it may include conditions, functions and variables defined beforehand. <code>"1 &gt; 2"</code>, <code>"mean(1:10)"</code> and <code>"myvar &lt; 17"</code> are all valid track expressions. Unlike regular R expressions track expression might also contain track names or <em>virtual track</em> names.</p>
+<p>How does a track expression get evaluated? A track expression is accompanied by an <em>iterator</em> that determines a set of intervals over which the expression iterator goes. For each each iterator interval the track expression is evaluated. The value of a track expression <code>"mean(1:10)"</code> is constant regardless the iterator interval. However suppose the track expression contains a track name <code>mytrack</code>, like: <code>"mytrack * 3"</code>, and the whole story becomes very different. The library first recognizes that <code>mytrack</code> is not a regular R variable but rather a track name. A new R variable named <code>mytrack</code> is added then to R environment. For each iterator interval this variable is assigned the corresponding value of the track. This value obviously depends on the iterator interval. Once <code>mytrack</code> is assigned the corresponding value, the track expression is evaluated in R.</p>
+<p>So how exactly the value of <code>mytrack</code> variable is determined given the iterator interval? We will demonstrate the answer by the following example. Suppose the track <code>mytrack</code> is in sparse format. It consists of a single chromosome with the following values:</p>
 <table class="table">
 <thead><tr class="header">
 <th>chrom</th>
@@ -708,19 +513,7 @@ values:</p>
 </tr>
 </tbody>
 </table>
-<p>What would be the value of the variable <code>mytrack</code> given an
-iterator interval? The resulted value is an average of all values of
-track <code>mytrack</code> covered by the iterator interval. For
-example, if the iterator interval is <code>[230, 620)</code> then the
-resulted value is an average of values 25, 17 and 44. Similarly if the
-iterator interval is <code>[0, 300)</code> then the resulted value is an
-average of 10 and 25. Lastly if the iterator intervals is
-<code>[300, 400)</code> then the resulted value is <span class="math inline">\(NaN\)</span>. Same evaluation logics is applied
-for Dense and Array tracks. (In the latter case the values from all
-columns are averaged.) On contrary Rectangles track value is calculated
-as a <em>weighted</em> average of the values covered by the iterator
-interval. The weight equals to the intersection area of the iterator
-interval and the 2D interval that contains the value.</p>
+<p>What would be the value of the variable <code>mytrack</code> given an iterator interval? The resulted value is an average of all values of track <code>mytrack</code> covered by the iterator interval. For example, if the iterator interval is <code>[230, 620)</code> then the resulted value is an average of values 25, 17 and 44. Similarly if the iterator interval is <code>[0, 300)</code> then the resulted value is an average of 10 and 25. Lastly if the iterator intervals is <code>[300, 400)</code> then the resulted value is <span class="math inline">\(NaN\)</span>. Same evaluation logics is applied for Dense and Array tracks. (In the latter case the values from all columns are averaged.) On contrary Rectangles track value is calculated as a <em>weighted</em> average of the values covered by the iterator interval. The weight equals to the intersection area of the iterator interval and the 2D interval that contains the value.</p>
 <p>See the table below:</p>
 <table class="table">
 <colgroup>
@@ -734,25 +527,19 @@ interval and the 2D interval that contains the value.</p>
 <tbody>
 <tr class="odd">
 <td>Dense</td>
-<td>Average of non <span class="math inline">\(NaN\)</span> values
-covered by iterator interval.</td>
+<td>Average of non <span class="math inline">\(NaN\)</span> values covered by iterator interval.</td>
 </tr>
 <tr class="even">
 <td>Sparse</td>
-<td>Average of non <span class="math inline">\(NaN\)</span> values
-covered by iterator interval.</td>
+<td>Average of non <span class="math inline">\(NaN\)</span> values covered by iterator interval.</td>
 </tr>
 <tr class="odd">
 <td>Array</td>
-<td>Average of non <span class="math inline">\(NaN\)</span> values from
-all columns covered by iterator interval.</td>
+<td>Average of non <span class="math inline">\(NaN\)</span> values from all columns covered by iterator interval.</td>
 </tr>
 <tr class="even">
 <td>Rectangles</td>
-<td>Weighted average of non <span class="math inline">\(NaN\)</span>
-values covered by iterator interval. Each weight equals to the
-intersection area between iterator interval and track interval that
-contains the value.</td>
+<td>Weighted average of non <span class="math inline">\(NaN\)</span> values covered by iterator interval. Each weight equals to the intersection area between iterator interval and track interval that contains the value.</td>
 </tr>
 </tbody>
 </table>
@@ -760,211 +547,85 @@ contains the value.</td>
 <div class="section level4">
 <h4 id="virtual-tracks">Virtual Tracks<a class="anchor" aria-label="anchor" href="#virtual-tracks"></a>
 </h4>
-<p>So far we showed that the value of a <code>mytrack</code> variable is
-set to be the average (or weighted average) of the track values that are
-covered by the iterator interval. But what if we do not want to average
-the values but rather pick up the maximal or minimal values? What if we
-want to use the percentile of a track value rather than the value
-itself? And maybe we even want to alter the iterator interval itself on
-the fly? This is where virtual tracks become useful.</p>
-<p>Virtual track is a set of rules that describe how the “source” (a
-real track or intervals) should be proceeded, and how the iterator
-interval should be modified. Virtual tracks are created with
-<code>gvtrack.create</code> function:</p>
+<p>So far we showed that the value of a <code>mytrack</code> variable is set to be the average (or weighted average) of the track values that are covered by the iterator interval. But what if we do not want to average the values but rather pick up the maximal or minimal values? What if we want to use the percentile of a track value rather than the value itself? And maybe we even want to alter the iterator interval itself on the fly? This is where virtual tracks become useful.</p>
+<p>Virtual track is a set of rules that describe how the “source” (a real track or intervals) should be proceeded, and how the iterator interval should be modified. Virtual tracks are created with <code>gvtrack.create</code> function:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"dense_track"</span><span class="op">)</span></span></code></pre></div>
-<p>This call creates a new virtual track named <code>myvtrack</code>.
-This virtual track can be used in the track expression instead of a real
-track <code>dense_track</code>. In our example <code>myvtrack</code> is
-just an alias of <code>dense_track</code>. Yet we can go on and create a
-more complicated virtual track if we specify a “function”, i.e. instruct
-the virtual track of what should be its value in track expression.</p>
+<p>This call creates a new virtual track named <code>myvtrack</code>. This virtual track can be used in the track expression instead of a real track <code>dense_track</code>. In our example <code>myvtrack</code> is just an alias of <code>dense_track</code>. Yet we can go on and create a more complicated virtual track if we specify a “function”, i.e. instruct the virtual track of what should be its value in track expression.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"dense_track"</span>, <span class="st">"global.percentile"</span><span class="op">)</span></span></code></pre></div>
-<p>In this example when <code>myvtrack</code> is evaluated in the track
-expression it will return the percentile of <span class="math inline">\(V_{avg}\)</span> among the values of
-<code>dense_track</code> where <span class="math inline">\(V_{avg}\)</span> is an average (or weighted
-average) of the track values that are covered by the iterator
-interval.</p>
-<p>Virtual tracks are especially useful for Array tracks. By default if
-an Array track is used in a track expressions, its interval value would
-be the average of all non-NaN column values covered by an iterator
-interval. <code>gvtrack.array.slice</code> allows to select specific
-columns and to specify the function applied to the values of each track
-interval.</p>
+<p>In this example when <code>myvtrack</code> is evaluated in the track expression it will return the percentile of <span class="math inline">\(V_{avg}\)</span> among the values of <code>dense_track</code> where <span class="math inline">\(V_{avg}\)</span> is an average (or weighted average) of the track values that are covered by the iterator interval.</p>
+<p>Virtual tracks are especially useful for Array tracks. By default if an Array track is used in a track expressions, its interval value would be the average of all non-NaN column values covered by an iterator interval. <code>gvtrack.array.slice</code> allows to select specific columns and to specify the function applied to the values of each track interval.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"array_track"</span>, <span class="st">"sum"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gvtrack.array.slice.html">gvtrack.array.slice</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"col2"</span>, <span class="st">"col5"</span><span class="op">)</span>, <span class="st">"max"</span><span class="op">)</span></span></code></pre></div>
-<p>In this example we create a virtual track based on
-<code>array_track</code>. Assume that an iterator interval <span class="math inline">\(I\)</span> covers <span class="math inline">\(n\)</span> different intervals in
-<code>array_track</code>: <span class="math inline">\(I_0, ...,
-I_n\)</span>. The value of <code>myvtrack</code> in a track expression
-would be then: <span class="math display">\[ \sum_{i=1}^{n}max(V_{i,2},
-V_{i,5}) \]</span> where <span class="math inline">\(V_{i,j}\)</span> is
-a value of the track in column <span class="math inline">\(j\)</span>
-for interval <span class="math inline">\(I_i\)</span>.</p>
-<p>Virtual tracks allow also to alter the iterator interval “on the
-fly”:</p>
+<p>In this example we create a virtual track based on <code>array_track</code>. Assume that an iterator interval <span class="math inline">\(I\)</span> covers <span class="math inline">\(n\)</span> different intervals in <code>array_track</code>: <span class="math inline">\(I_0, ..., I_n\)</span>. The value of <code>myvtrack</code> in a track expression would be then: <span class="math display">\[ \sum_{i=1}^{n}max(V_{i,2}, V_{i,5}) \]</span> where <span class="math inline">\(V_{i,j}\)</span> is a value of the track in column <span class="math inline">\(j\)</span> for interval <span class="math inline">\(I_i\)</span>.</p>
+<p>Virtual tracks allow also to alter the iterator interval “on the fly”:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.iterator.html">gvtrack.iterator</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, sshift <span class="op">=</span> <span class="op">-</span><span class="fl">100</span>, eshift <span class="op">=</span> <span class="fl">200</span><span class="op">)</span></span></code></pre></div>
-<p>In this example we expand each iterator interval by adding -100 to
-its <code>start</code> coordinate and 200 to its <code>end</code>
-coordinate.</p>
-<p>Similarly, iterator modifiers can be defined for 2D intervals.
-Moreover, an iterator modifier can create a 1D interval from a 2D
-iterator interval by projecting one of its axes.</p>
+<p>In this example we expand each iterator interval by adding -100 to its <code>start</code> coordinate and 200 to its <code>end</code> coordinate.</p>
+<p>Similarly, iterator modifiers can be defined for 2D intervals. Moreover, an iterator modifier can create a 1D interval from a 2D iterator interval by projecting one of its axes.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"dense_track"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gvtrack.iterator.html">gvtrack.iterator</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, dim <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></code></pre></div>
-<p>It is important to remember that iterator modifiers transform the
-iterator interval only for the given virtual tracks. Assume an iterator
-interval <span class="math inline">\(I\)</span> and two virtual tracks
-<span class="math inline">\(V_0\)</span> and <span class="math inline">\(V_1\)</span>. If <span class="math inline">\(I\)</span> is a 2D interval then <em>band</em>
-rules are applied first to it. <span class="math inline">\(I\)</span> is
-transformed then to <span class="math inline">\(I_0\)</span> and <span class="math inline">\(I_1\)</span> according to the modification rules
-defined by the virtual tracks. Finally, <span class="math inline">\(I_0\)</span> and <span class="math inline">\(I_1\)</span> are passed to <span class="math inline">\(V_0\)</span> and <span class="math inline">\(V_1\)</span> accordingly as the iterator
-intervals.</p>
-<p>So far we have used a track <code>dense_track</code> as a “source” of
-a virtual track. We can also use intervals as a source. In this case,
-the value of the virtual track will be some function that takes into
-account the “source” intervals and the current iterator interval.</p>
+<p>It is important to remember that iterator modifiers transform the iterator interval only for the given virtual tracks. Assume an iterator interval <span class="math inline">\(I\)</span> and two virtual tracks <span class="math inline">\(V_0\)</span> and <span class="math inline">\(V_1\)</span>. If <span class="math inline">\(I\)</span> is a 2D interval then <em>band</em> rules are applied first to it. <span class="math inline">\(I\)</span> is transformed then to <span class="math inline">\(I_0\)</span> and <span class="math inline">\(I_1\)</span> according to the modification rules defined by the virtual tracks. Finally, <span class="math inline">\(I_0\)</span> and <span class="math inline">\(I_1\)</span> are passed to <span class="math inline">\(V_0\)</span> and <span class="math inline">\(V_1\)</span> accordingly as the iterator intervals.</p>
+<p>So far we have used a track <code>dense_track</code> as a “source” of a virtual track. We can also use intervals as a source. In this case, the value of the virtual track will be some function that takes into account the “source” intervals and the current iterator interval.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"annotations"</span>, <span class="st">"distance"</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gscreen.html">gscreen</a></span><span class="op">(</span><span class="st">"dense_track &gt; 0.45"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span>, iterator <span class="op">=</span> <span class="va">intervs</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    chrom  start    end myvtrack intervalID</span></span>
-<span><span class="co">#&gt; 1   chr1  39350  39400    37375          1</span></span>
-<span><span class="co">#&gt; 2   chr1  73700  73750    71725          1</span></span>
-<span><span class="co">#&gt; 3   chr1  73800  73900    71850          1</span></span>
-<span><span class="co">#&gt; 4   chr1  91200  91250    89225          1</span></span>
-<span><span class="co">#&gt; 5   chr1 114700 114750   112725          1</span></span>
-<span><span class="co">#&gt; 6   chr1 137300 137350   135325          1</span></span>
-<span><span class="co">#&gt; 7   chr1 164750 164800   162775          1</span></span>
-<span><span class="co">#&gt; 8   chr1 165300 165350   163325          1</span></span>
-<span><span class="co">#&gt; 9   chr1 166050 166100   164075          1</span></span>
-<span><span class="co">#&gt; 10  chr1 221550 221600   219575          1</span></span>
-<span><span class="co">#&gt; 11  chr1 247100 247150   245125          1</span></span>
-<span><span class="co">#&gt; 12  chr1 255000 255050   253025          1</span></span>
-<span><span class="co">#&gt; 13  chr1 319100 319150   317125          1</span></span>
-<span><span class="co">#&gt; 14  chr1 399700 399750   397725          1</span></span>
-<span><span class="co">#&gt; 15  chr1 404000 404050   402025          1</span></span>
-<span><span class="co">#&gt; 16  chr1 438550 438600   436575          1</span></span>
-<span><span class="co">#&gt; 17  chr2  43800  43850    32825          2</span></span>
-<span><span class="co">#&gt; 18  chr2 117600 117650   106625          2</span></span>
-<span><span class="co">#&gt; 19  chr2 234500 234550   223525          2</span></span>
-<span><span class="co">#&gt; 20  chr2 235850 235900   224875          2</span></span>
-<span><span class="co">#&gt; 21  chr2 236200 236250   225225          2</span></span>
-<span><span class="co">#&gt; 22  chr2 277450 277500   266475          2</span></span>
+<span><span class="co">#&gt; 1   chr1  39350  39400    36775          1</span></span>
+<span><span class="co">#&gt; 2   chr1  73700  73750    71125          1</span></span>
+<span><span class="co">#&gt; 3   chr1  73800  73900    71250          1</span></span>
+<span><span class="co">#&gt; 4   chr1  91200  91250    88625          1</span></span>
+<span><span class="co">#&gt; 5   chr1 114700 114750   112125          1</span></span>
+<span><span class="co">#&gt; 6   chr1 137300 137350   134725          1</span></span>
+<span><span class="co">#&gt; 7   chr1 164750 164800   162175          1</span></span>
+<span><span class="co">#&gt; 8   chr1 165300 165350   162725          1</span></span>
+<span><span class="co">#&gt; 9   chr1 166050 166100   163475          1</span></span>
+<span><span class="co">#&gt; 10  chr1 221550 221600   218975          1</span></span>
+<span><span class="co">#&gt; 11  chr1 247100 247150   244525          1</span></span>
+<span><span class="co">#&gt; 12  chr1 255000 255050   252425          1</span></span>
+<span><span class="co">#&gt; 13  chr1 319100 319150   316525          1</span></span>
+<span><span class="co">#&gt; 14  chr1 399700 399750   397125          1</span></span>
+<span><span class="co">#&gt; 15  chr1 404000 404050   401425          1</span></span>
+<span><span class="co">#&gt; 16  chr1 438550 438600   435975          1</span></span>
+<span><span class="co">#&gt; 17  chr2  43800  43850    28325          2</span></span>
+<span><span class="co">#&gt; 18  chr2 117600 117650   102125          2</span></span>
+<span><span class="co">#&gt; 19  chr2 234500 234550   219025          2</span></span>
+<span><span class="co">#&gt; 20  chr2 235850 235900   220375          2</span></span>
+<span><span class="co">#&gt; 21  chr2 236200 236250   220725          2</span></span>
+<span><span class="co">#&gt; 22  chr2 277450 277500   261975          2</span></span>
 <span><span class="co">#&gt; 23  chrX   5750   5800      NaN          3</span></span>
 <span><span class="co">#&gt; 24  chrX  94000  94050      NaN          3</span></span>
 <span><span class="co">#&gt; 25  chrX 119150 119200      NaN          3</span></span>
 <span><span class="co">#&gt; 26  chrX 121400 121450      NaN          3</span></span>
 <span><span class="co">#&gt; 27  chrX 121500 121550      NaN          3</span></span></code></pre></div>
-<p>In this example <code>myvtrack</code> returns the minimal distance
-between intervals from an interval set <code>annotations</code> and the
-center of the current iterator interval from <code>intervs</code>.</p>
-<p>For a full list of supported functions please see
-<code>gvtrack.create</code> and <code>gvtrack.array.slice</code>
-functions.</p>
+<p>In this example <code>myvtrack</code> returns the minimal distance between intervals from an interval set <code>annotations</code> and the center of the current iterator interval from <code>intervs</code>.</p>
+<p>For a full list of supported functions please see <code>gvtrack.create</code> and <code>gvtrack.array.slice</code> functions.</p>
 </div>
 <div class="section level4">
 <h4 id="administrating-virtual-tracks">Administrating Virtual Tracks<a class="anchor" aria-label="anchor" href="#administrating-virtual-tracks"></a>
 </h4>
-<p>As described in the previous chapter virtual tracks define a set of
-rules of how to access and proceed the values of the “source” object.
-The connection between the virtual track and the source object is done
-via “soft link”, i.e. by name and not by reference. For example, a
-virtual track will continue to exist until explicitly removed by
-<code>gvtrack.rm</code> even if the physical track that it is pointing
-to is deleted or renamed.</p>
-<p>Operations such as <code>gdb.init</code> and <code>gdir.cd</code>
-alter the list of available tracks and intervals sets. Since these
-objects are referenced by virtual tracks, these latter are always
-defined in the context of the current working directory in Genomic
-Database (not to be confused with shell’s current working directory).
-Changing the current working directory using <code>gdb.init</code> or
-<code>gdir.cd</code> will also change the list of available virtual
-tracks.</p>
-<p>Another issue to bare in mind is that unlike regular tracks whose
-data is stored on disk virtual tracks are non-persistent objects in
-current R environment. Their definition is stored in
-<code>GVTRACKS</code> R variable. In particular a virtual track named
-“vtrack” that was created within a context of “/home/user/trackdb”
-Genomic Database working directory would reside in
-<code>GVTRACKS[["/home/user/trackdb"]][["vtrack"]]</code>. One can also
-use <code>gvtrack.info</code> function that provides a more convenient
-access to virtual track definitions.</p>
-<p>As the virtual tracks are stored in an R variable their behavior
-hence complies with the rules of other R variables: a virtual track
-defined by one user will not be seen by another one, virtual tracks
-might disappear once R is relaunched, etc.</p>
-<p>To preserve the definition of virtual tracks between the sessions one
-would need to save <code>GVTRACKS</code> variable on disk. The
-serialization of <code>GVTRACKS</code> is under user’s responsibility.
-The standard suit of functions for saving / loading R variables can be
-used for that purpose.</p>
-<p>Note that if <code>GVTRACKS</code> is loaded from a file or changed
-manually by a user the <em>auto-completion</em> list (in case it is
-turned on) might need to be refreshed by calling
-<code>gdb.reload</code>.</p>
+<p>As described in the previous chapter virtual tracks define a set of rules of how to access and proceed the values of the “source” object. The connection between the virtual track and the source object is done via “soft link”, i.e. by name and not by reference. For example, a virtual track will continue to exist until explicitly removed by <code>gvtrack.rm</code> even if the physical track that it is pointing to is deleted or renamed.</p>
+<p>Operations such as <code>gdb.init</code> and <code>gdir.cd</code> alter the list of available tracks and intervals sets. Since these objects are referenced by virtual tracks, these latter are always defined in the context of the current working directory in Genomic Database (not to be confused with shell’s current working directory). Changing the current working directory using <code>gdb.init</code> or <code>gdir.cd</code> will also change the list of available virtual tracks.</p>
+<p>Another issue to bare in mind is that unlike regular tracks whose data is stored on disk virtual tracks are non-persistent objects in current R environment. Their definition is stored in <code>GVTRACKS</code> R variable. In particular a virtual track named “vtrack” that was created within a context of “/home/user/trackdb” Genomic Database working directory would reside in <code>GVTRACKS[["/home/user/trackdb"]][["vtrack"]]</code>. One can also use <code>gvtrack.info</code> function that provides a more convenient access to virtual track definitions.</p>
+<p>As the virtual tracks are stored in an R variable their behavior hence complies with the rules of other R variables: a virtual track defined by one user will not be seen by another one, virtual tracks might disappear once R is relaunched, etc.</p>
+<p>To preserve the definition of virtual tracks between the sessions one would need to save <code>GVTRACKS</code> variable on disk. The serialization of <code>GVTRACKS</code> is under user’s responsibility. The standard suit of functions for saving / loading R variables can be used for that purpose.</p>
+<p>Note that if <code>GVTRACKS</code> is loaded from a file or changed manually by a user the <em>auto-completion</em> list (in case it is turned on) might need to be refreshed by calling <code>gdb.reload</code>.</p>
 </div>
 <div class="section level4">
 <h4 id="track-expression-evaluation-under-optimization">Track Expression Evaluation under Optimization<a class="anchor" aria-label="anchor" href="#track-expression-evaluation-under-optimization"></a>
 </h4>
-<p>Previously we described how a track expression
-<code>"mytrack * 3"</code> (where <code>mytrack</code> is a track name)
-leads to an implicit definition of <code>mytrack</code> variable in R
-environment. To make our explanation easier we presented this variable
-as a scalar whose value is altered each time the iterator interval
-changes. It’s time to admit that that was oversimplification. In reality
-the library defines <code>mytrack</code> variable as a vector (i.e. an
-array) and not as a single scalar. The vector is filled then with the
-corresponding values of the track. Finally the track expression is
-evaluated in R and the result is expected to be also a vector of the
-same size as <code>mytrack</code> vector. Working with vectors rather
-than single scalars reduces the number of evaluations within R and hence
-improves run-times.</p>
-<p>The size of the vector is controlled via <code>gbuf.size</code>
-option. By default it equals to 1000. Altering this value (for instance
-setting it to 1) might significantly affect the run-time of various
-functions in the library. If you still wish to force the functions to
-define scalars rather than vectors, set <code>gbuf.size</code> to 1:</p>
+<p>Previously we described how a track expression <code>"mytrack * 3"</code> (where <code>mytrack</code> is a track name) leads to an implicit definition of <code>mytrack</code> variable in R environment. To make our explanation easier we presented this variable as a scalar whose value is altered each time the iterator interval changes. It’s time to admit that that was oversimplification. In reality the library defines <code>mytrack</code> variable as a vector (i.e. an array) and not as a single scalar. The vector is filled then with the corresponding values of the track. Finally the track expression is evaluated in R and the result is expected to be also a vector of the same size as <code>mytrack</code> vector. Working with vectors rather than single scalars reduces the number of evaluations within R and hence improves run-times.</p>
+<p>The size of the vector is controlled via <code>gbuf.size</code> option. By default it equals to 1000. Altering this value (for instance setting it to 1) might significantly affect the run-time of various functions in the library. If you still wish to force the functions to define scalars rather than vectors, set <code>gbuf.size</code> to 1:</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gbuf.size <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
-<p>One might wonder why should we care about the fact that
-<code>mytrack</code> is not a scalar but rather a vector? Indeed in many
-cases it does not really matter. For example <code>mytrack * 3</code>
-expression produces exactly the same results regardless whether
-<code>mytrack</code> is defined internally as a vector or as a scalar.
-This is due to the fact that the expression <code>V * 3</code>
-(<code>V</code> stands for a vector) results in each value of
-<code>V</code> being multiplied by 3.</p>
-<p>Multiplication is a good example of “parallel” operation in R (works
-on each element in vector separately). On contrary some functions that
-accept a vector might return a scalar rather than a vector. Such is, for
-example, <code>min</code> function.</p>
-<p>Let’s look at the following track expression:
-<code>track1 + min(track1, track2)</code>. This expression was probably
-meant to produce a sum of <code>track1</code> track and a minimum value
-between <code>track1</code> and <code>track2</code> tracks for each
-iterator interval. However the library defines the variables
-<code>track1</code> and <code>track2</code> to be vectors of
-<code>gbuf.size</code> size (by default: 1000). <code>min</code> is not
-a “parallel” operation. Given two vectors of any size it returns a
-single scalar that is the minimal value of <em>all</em> values in both
-of the vectors. Therefore <code>track1 + min(track1, track2)</code> will
-be interpreted as <code>track1 + M</code>, where M is minimum of 2000
-values (1000 values from <code>track1</code> track, and another 1000 -
-from <code>track2</code> track). We can hardly imagine that a user would
-have really meant this! Sadly enough the expression will be seamlessly
-evaluated and produce a valid, but meaningless result. The solution for
-our example is to use <code>pmin</code> rather than <code>min</code>
-function.</p>
-<p>The library always verifies that the evaluation of the track
-expression produces a vector of the same size as the size of a track
-variable. In many cases this procedure is able to reveal faulty track
-expressions. Yet in more tricky examples like the one that we used
-before the library will not warn the user.</p>
+<p>One might wonder why should we care about the fact that <code>mytrack</code> is not a scalar but rather a vector? Indeed in many cases it does not really matter. For example <code>mytrack * 3</code> expression produces exactly the same results regardless whether <code>mytrack</code> is defined internally as a vector or as a scalar. This is due to the fact that the expression <code>V * 3</code> (<code>V</code> stands for a vector) results in each value of <code>V</code> being multiplied by 3.</p>
+<p>Multiplication is a good example of “parallel” operation in R (works on each element in vector separately). On contrary some functions that accept a vector might return a scalar rather than a vector. Such is, for example, <code>min</code> function.</p>
+<p>Let’s look at the following track expression: <code>track1 + min(track1, track2)</code>. This expression was probably meant to produce a sum of <code>track1</code> track and a minimum value between <code>track1</code> and <code>track2</code> tracks for each iterator interval. However the library defines the variables <code>track1</code> and <code>track2</code> to be vectors of <code>gbuf.size</code> size (by default: 1000). <code>min</code> is not a “parallel” operation. Given two vectors of any size it returns a single scalar that is the minimal value of <em>all</em> values in both of the vectors. Therefore <code>track1 + min(track1, track2)</code> will be interpreted as <code>track1 + M</code>, where M is minimum of 2000 values (1000 values from <code>track1</code> track, and another 1000 - from <code>track2</code> track). We can hardly imagine that a user would have really meant this! Sadly enough the expression will be seamlessly evaluated and produce a valid, but meaningless result. The solution for our example is to use <code>pmin</code> rather than <code>min</code> function.</p>
+<p>The library always verifies that the evaluation of the track expression produces a vector of the same size as the size of a track variable. In many cases this procedure is able to reveal faulty track expressions. Yet in more tricky examples like the one that we used before the library will not warn the user.</p>
 <blockquote>
 <p>Make sure your track expressions work correctly on vectors!</p>
 </blockquote>
@@ -972,27 +633,14 @@ before the library will not warn the user.</p>
 <div class="section level4">
 <h4 id="revealing-current-iterator-interval">Revealing Current Iterator Interval<a class="anchor" aria-label="anchor" href="#revealing-current-iterator-interval"></a>
 </h4>
-<p>During the evaluation of a track expression one can access a
-specially defined variable named <code>GITERATOR.INTERVALS</code>. This
-variable contains a set of iterator intervals for which the track
-expression is evaluated. <code>GITERATOR.INTERVALS</code> contains the
-same number of intervals as the size of <code>mytrack</code> vector from
-our previous example. The value of a track <code>mytrack</code> for an
-interval <code>i</code> is stored at <code>mytrack[i]</code>.</p>
-<p>Note that some intervals in <code>GITERATOR.INTERVALS</code> might
-have a start coordinate equal to -1. Skip those intervals and the values
-of <code>mytrack</code> at the corresponding index.</p>
+<p>During the evaluation of a track expression one can access a specially defined variable named <code>GITERATOR.INTERVALS</code>. This variable contains a set of iterator intervals for which the track expression is evaluated. <code>GITERATOR.INTERVALS</code> contains the same number of intervals as the size of <code>mytrack</code> vector from our previous example. The value of a track <code>mytrack</code> for an interval <code>i</code> is stored at <code>mytrack[i]</code>.</p>
+<p>Note that some intervals in <code>GITERATOR.INTERVALS</code> might have a start coordinate equal to -1. Skip those intervals and the values of <code>mytrack</code> at the corresponding index.</p>
 </div>
 <div class="section level4">
 <h4 id="iterators">Iterators<a class="anchor" aria-label="anchor" href="#iterators"></a>
 </h4>
-<p>So far we have discussed in details how the track expression is
-evaluated given the <em>iterator interval</em>. Yet how the iterator
-intervals can be controlled?</p>
-<p>Most of the functions that accept track expressions have an
-additional parameter named <code>iterator</code>. The value of this
-parameter determines the iterator intervals which is also sometimes
-called an <em>iterator policy</em>:</p>
+<p>So far we have discussed in details how the track expression is evaluated given the <em>iterator interval</em>. Yet how the iterator intervals can be controlled?</p>
+<p>Most of the functions that accept track expressions have an additional parameter named <code>iterator</code>. The value of this parameter determines the iterator intervals which is also sometimes called an <em>iterator policy</em>:</p>
 <table class="table">
 <colgroup>
 <col width="13%">
@@ -1011,9 +659,7 @@ called an <em>iterator policy</em>:</p>
 <td>Integer</td>
 <td>Fixed Bin</td>
 <td><code>50</code></td>
-<td>Iterator intervals will advance by a fixed step (bin) starting from
-zero coordinate up to chromosome’s length:
-<code>[0,50), [50,100), [100,150), ...</code>
+<td>Iterator intervals will advance by a fixed step (bin) starting from zero coordinate up to chromosome’s length: <code>[0,50), [50,100), [100,150), ...</code>
 </td>
 </tr>
 <tr class="even">
@@ -1026,8 +672,7 @@ zero coordinate up to chromosome’s length:
 <td>1D intervals</td>
 <td>1D Intervals</td>
 <td><code>"annotations"</code></td>
-<td>Iterate over the supplied intervals. <em>Note: the intervals are
-sorted and overlapping intervals are unified.</em>
+<td>Iterate over the supplied intervals. <em>Note: the intervals are sorted and overlapping intervals are unified.</em>
 </td>
 </tr>
 <tr class="even">
@@ -1046,17 +691,13 @@ sorted and overlapping intervals are unified.</em>
 <td>c(integer, integer)</td>
 <td>2D Intervals</td>
 <td><code>c(1000, 2000)</code></td>
-<td>2D iterator intervals will cover the whole 2D chromosomal space by
-rectangles of fixed size: Width X Height. Please keep in mind that small
-rectangles used without a limiting scope might result in immense number
-of iterator intervals.</td>
+<td>2D iterator intervals will cover the whole 2D chromosomal space by rectangles of fixed size: Width X Height. Please keep in mind that small rectangles used without a limiting scope might result in immense number of iterator intervals.</td>
 </tr>
 <tr class="odd">
 <td>2D intervals</td>
 <td>2D Intervals</td>
 <td><code>gintervals.2d(c(1, 2))</code></td>
-<td>Iterate over the supplied intervals. <em>Note: the intervals are
-sorted and overlapping is forbidden.</em>
+<td>Iterate over the supplied intervals. <em>Note: the intervals are sorted and overlapping is forbidden.</em>
 </td>
 </tr>
 <tr class="even">
@@ -1069,17 +710,13 @@ sorted and overlapping is forbidden.</em>
 <td>Cartesian grid iterator</td>
 <td>2D Intervals</td>
 <td><code>giterator.cartesian_grid( intervals1, intervals2, c(10, 20, 30))</code></td>
-<td>Iterate over 2D cartesian grid (see
-<code>giterator.cartesian_grid</code> function)</td>
+<td>Iterate over 2D cartesian grid (see <code>giterator.cartesian_grid</code> function)</td>
 </tr>
 <tr class="even">
 <td>NULL</td>
 <td>Fixed Bin OR 1D Intervals OR 2D Intervals</td>
 <td>NULL</td>
-<td>Implicitly determine the iterator policy based on the tracks that
-appear in the track expression. If no track names presented or two
-different tracks determine different iterator policy, an error is
-reported.</td>
+<td>Implicitly determine the iterator policy based on the tracks that appear in the track expression. If no track names presented or two different tracks determine different iterator policy, an error is reported.</td>
 </tr>
 </tbody>
 </table>
@@ -1087,10 +724,7 @@ reported.</td>
 <div class="section level4">
 <h4 id="scope">Scope<a class="anchor" aria-label="anchor" href="#scope"></a>
 </h4>
-<p>Many functions that accept a track expressions and iterator policy
-accept an additional set of intervals that limit the scope of a
-function. This scope also limits the iterator intervals. For
-instance:</p>
+<p>Many functions that accept a track expressions and iterator policy accept an additional set of intervals that limit the scope of a function. This scope also limits the iterator intervals. For instance:</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">340</span>, <span class="fl">520</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   chrom start end dense_track intervalID</span></span>
@@ -1099,49 +733,23 @@ instance:</p>
 <span><span class="co">#&gt; 3  chr2   400 450        0.16          1</span></span>
 <span><span class="co">#&gt; 4  chr2   450 500        0.00          1</span></span>
 <span><span class="co">#&gt; 5  chr2   500 520        0.16          1</span></span></code></pre></div>
-<p>As one can notice the first and the last intervals in the result are
-truncated by the scope <code>[340, 520)</code>.</p>
-<p>In some cases the combination of iterator policy and scope might
-result in nontrivial set of iterator intervals. Use
-<code>giterator.intervals</code> function to retrieve the iterator
-intervals given a track expression, scope and an iterator.</p>
+<p>As one can notice the first and the last intervals in the result are truncated by the scope <code>[340, 520)</code>.</p>
+<p>In some cases the combination of iterator policy and scope might result in nontrivial set of iterator intervals. Use <code>giterator.intervals</code> function to retrieve the iterator intervals given a track expression, scope and an iterator.</p>
 </div>
 <div class="section level4">
 <h4 id="band">Band<a class="anchor" aria-label="anchor" href="#band"></a>
 </h4>
-<p>As explained before track expression iterator can be determined
-implicitly or through an <code>iterator</code> parameter. In either case
-the result is a set of 1D or 2D intervals depending on how the iterator
-was defined. If iterator intervals are 2D an additional filter can be
-applied to them: a <em>band</em>.</p>
-<p>A band is a pair of integers: <span class="math inline">\(D_1,
-D_2\)</span>. We say that a 2D iterator interval <span class="math inline">\((chrom_1, x_1, x_2, chrom_2, y_1, y_2)\)</span>
-intersects a band if and only if the next two conditions are true:</p>
+<p>As explained before track expression iterator can be determined implicitly or through an <code>iterator</code> parameter. In either case the result is a set of 1D or 2D intervals depending on how the iterator was defined. If iterator intervals are 2D an additional filter can be applied to them: a <em>band</em>.</p>
+<p>A band is a pair of integers: <span class="math inline">\(D_1, D_2\)</span>. We say that a 2D iterator interval <span class="math inline">\((chrom_1, x_1, x_2, chrom_2, y_1, y_2)\)</span> intersects a band if and only if the next two conditions are true:</p>
 <ol style="list-style-type: decimal">
 <li><span class="math inline">\(chrom_1 = chrom_2\)</span></li>
 <li>
-<span class="math inline">\(\exists x,y: x_1 \le x &lt; x_2 \wedge
-y_1 \le y &lt; y_2 \wedge D_1 \le x-y &lt; D_2\)</span>.</li>
+<span class="math inline">\(\exists x,y: x_1 \le x &lt; x_2 \wedge y_1 \le y &lt; y_2 \wedge D_1 \le x-y &lt; D_2\)</span>.</li>
 </ol>
-<p>In a less formal way we can see a band as a space <span class="math inline">\(S\)</span> between two 45-degrees diagonals where
-<span class="math inline">\(D1, D2\)</span> determine where these
-diagonals cross <span class="math inline">\(X\)</span> axis. An iterator
-interval represents a rectangle in a 2D space and can be therefore
-intersected with S. The result of the intersection can be a rectangle, a
-trapeze, a triangle, a hexagon or it can be empty if the interval does
-not intersect with the band. If the intersection is non empty, the
-resulted figure, whatever it is, can be bound by some larger rectangle.
-The rectangle that has the minimal space and yet containing the
-intersected shape is called <em>the minimal rectangle</em>.</p>
-<p>After the formal definitions it’s time to say how band is actually
-applied.</p>
-<p>If the intersection between the 2D iterator interval and the band is
-non-empty and <span class="math inline">\(chrom_1=chrom_2\)</span>, the
-minimal rectangle replaces the original iterator interval. Otherwise the
-iterator interval is skipped as it lies outside of the band or the two
-chromosomes are not equal.</p>
-<p>The <code>gintervals.2d.band_intersect</code> function can help one
-better understand the concept:</p>
+<p>In a less formal way we can see a band as a space <span class="math inline">\(S\)</span> between two 45-degrees diagonals where <span class="math inline">\(D1, D2\)</span> determine where these diagonals cross <span class="math inline">\(X\)</span> axis. An iterator interval represents a rectangle in a 2D space and can be therefore intersected with S. The result of the intersection can be a rectangle, a trapeze, a triangle, a hexagon or it can be empty if the interval does not intersect with the band. If the intersection is non empty, the resulted figure, whatever it is, can be bound by some larger rectangle. The rectangle that has the minimal space and yet containing the intersected shape is called <em>the minimal rectangle</em>.</p>
+<p>After the formal definitions it’s time to say how band is actually applied.</p>
+<p>If the intersection between the 2D iterator interval and the band is non-empty and <span class="math inline">\(chrom_1=chrom_2\)</span>, the minimal rectangle replaces the original iterator interval. Otherwise the iterator interval is skipped as it lies outside of the band or the two chromosomes are not equal.</p>
+<p>The <code>gintervals.2d.band_intersect</code> function can help one better understand the concept:</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">200</span>, <span class="fl">800</span>, <span class="fl">1</span>, <span class="fl">100</span>, <span class="fl">1000</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="va">intervs</span>, <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">900</span>, <span class="fl">950</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
@@ -1153,19 +761,8 @@ better understand the concept:</p>
 <span><span class="co">#&gt; 2   chr1    900  950   chr1      0  200</span></span>
 <span><span class="co">#&gt; 3   chr1      0  100   chr1      0  400</span></span>
 <span><span class="co">#&gt; 4   chr1    900  950   chr2      0  200</span></span></code></pre></div>
-<p><code>gintervals.2d.band_intersect</code> intersects the intervals
-with the band and returns the intervals shrunk to the minimal rectangle.
-As you can see we have four different intervals. The first one
-<code>(chr1, 200, 800, chr1, 100, 1000)</code> intersects the band and
-after shrinking to the minimal rectangle it becomes
-<code>(chr1, 600, 800, chr1, 100, 300)</code>. The second interval lies
-entirely within the band and hence is returned without any change. The
-third interval lies entirely outside of the band, and hence is
-eliminated from the result. The last interval is coming from two
-different chromosomes and therefore is also filtered out.</p>
-<p>As said band filters out and alters 2D iterator intervals. Yet it
-also affects the result of 2D tracks. Let’s look at the following
-example:</p>
+<p><code>gintervals.2d.band_intersect</code> intersects the intervals with the band and returns the intervals shrunk to the minimal rectangle. As you can see we have four different intervals. The first one <code>(chr1, 200, 800, chr1, 100, 1000)</code> intersects the band and after shrinking to the minimal rectangle it becomes <code>(chr1, 600, 800, chr1, 100, 300)</code>. The second interval lies entirely within the band and hence is returned without any change. The third interval lies entirely outside of the band, and hence is eliminated from the result. The last interval is coming from two different chromosomes and therefore is also filtered out.</p>
+<p>As said band filters out and alters 2D iterator intervals. Yet it also affects the result of 2D tracks. Let’s look at the following example:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100</span>, <span class="fl">400</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">300</span>, <span class="fl">490</span><span class="op">)</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">120</span>, <span class="fl">180</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">200</span>, <span class="fl">500</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.2d.create.html">gtrack.2d.create</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="st">"test 2D track"</span>, <span class="va">intervs</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">20</span><span class="op">)</span><span class="op">)</span></span>
@@ -1184,37 +781,22 @@ example:</p>
 <span><span class="co">#&gt;   chrom1 start1 end1 chrom2 start2 end2   test2d intervalID</span></span>
 <span><span class="co">#&gt; 1   chr1    150 1000   chr1      0  850 19.57182          1</span></span>
 <span><span class="fu"><a href="../reference/gtrack.rm.html">gtrack.rm</a></span><span class="op">(</span><span class="st">"test2d"</span>, force <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
-<p>We created a 2D track <code>test2d</code> and inserted two values
-into it: <span class="math inline">\(10\)</span> and <span class="math inline">\(20\)</span>. If an iterator interval covers all
-the track’s rectangles, the resulted value of the track would be a
-weighted average of its values where the weight is equal to the
-intersected area. In our example it is <span class="math inline">\(16.42857\)</span>.</p>
-<p>We added a band then. <code>gintervals.2d.band_intersect</code> shows
-the minimal rectangles: the intersection result of the original
-rectangles with the band. The output of the new <code>gextract</code>
-has been changed accordingly: the new weights in the weighted average
-are equal to the new and smaller intersected area. The value has changed
-therefore to: <span class="math inline">\(19.57182\)</span>.</p>
+<p>We created a 2D track <code>test2d</code> and inserted two values into it: <span class="math inline">\(10\)</span> and <span class="math inline">\(20\)</span>. If an iterator interval covers all the track’s rectangles, the resulted value of the track would be a weighted average of its values where the weight is equal to the intersected area. In our example it is <span class="math inline">\(16.42857\)</span>.</p>
+<p>We added a band then. <code>gintervals.2d.band_intersect</code> shows the minimal rectangles: the intersection result of the original rectangles with the band. The output of the new <code>gextract</code> has been changed accordingly: the new weights in the weighted average are equal to the new and smaller intersected area. The value has changed therefore to: <span class="math inline">\(19.57182\)</span>.</p>
 <blockquote>
-<p>Note, however, that the space used in the calculation of the weighted
-average is the actual space of the intersection and not the space
-occupied by the minimal rectangles!</p>
+<p>Note, however, that the space used in the calculation of the weighted average is the actual space of the intersection and not the space occupied by the minimal rectangles!</p>
 </blockquote>
 </div>
 </div>
 <div class="section level3">
 <h3 id="random-algorithms">Random Algorithms<a class="anchor" aria-label="anchor" href="#random-algorithms"></a>
 </h3>
-<p>Various functions in the library such as <code>gsample</code> make
-use of pseudo-random number generator. Each time the function is invoked
-a unique series of random numbers is issued. Hence two identical calls
-might produce different results. To guarantee reproducible results call
-<code>set.seed</code> before invoking the function.</p>
+<p>Various functions in the library such as <code>gsample</code> make use of pseudo-random number generator. Each time the function is invoked a unique series of random numbers is issued. Hence two identical calls might produce different results. To guarantee reproducible results call <code>set.seed</code> before invoking the function.</p>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">60427</span><span class="op">)</span></span>
 <span><span class="va">r1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gsample.html">gsample</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fl">10</span><span class="op">)</span></span>
 <span><span class="va">r2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gsample.html">gsample</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fl">10</span><span class="op">)</span> <span class="co"># r2 differs from r1</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">60427</span><span class="op">)</span></span>
 <span><span class="va">r3</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gsample.html">gsample</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fl">10</span><span class="op">)</span> <span class="co"># r3 == r1</span></span></code></pre></div>
 </div>
 <div class="section level3">
@@ -1223,72 +805,21 @@ might produce different results. To guarantee reproducible results call
 <div class="section level4">
 <h4 id="controlling-the-number-of-processes">Controlling the Number of Processes<a class="anchor" aria-label="anchor" href="#controlling-the-number-of-processes"></a>
 </h4>
-<p>To boost the run time performance various functions in the library
-support multitasking mode, i.e. parallel computation of the result by
-several concurrent processes. The exact number of processes internally
-launched depends on the specific call however the upper bound can be
-controlled by a few parameters such as <code>gmax.processes</code>
-(absolute upper bound), <code>gmax.processes2core</code> (maximal number
-of processes per CPU core) and <code>gmin.scope4process</code> (minimal
-scope range / surface assigned to a process). Multitasking can also be
-completely switched off by setting <code>gmultitasking</code> parameter
-to <code>FALSE</code>.</p>
+<p>To boost the run time performance various functions in the library support multitasking mode, i.e. parallel computation of the result by several concurrent processes. The exact number of processes internally launched depends on the specific call however the upper bound can be controlled by a few parameters such as <code>gmax.processes</code> (absolute upper bound), <code>gmax.processes2core</code> (maximal number of processes per CPU core) and <code>gmin.scope4process</code> (minimal scope range / surface assigned to a process). Multitasking can also be completely switched off by setting <code>gmultitasking</code> parameter to <code>FALSE</code>.</p>
 </div>
 <div class="section level4">
 <h4 id="limiting-the-memory-consumption">Limiting the Memory Consumption<a class="anchor" aria-label="anchor" href="#limiting-the-memory-consumption"></a>
 </h4>
-<p>For certain functions multitasking might result in higher memory
-consumption. Users who have per process virtual memory limit (see:
-<code>ulimit -v</code>) might be the first to suffer from memory
-allocation errors.</p>
-<p>Various factors can affect the memory usage such as the number of
-running processes used for parallel computation, the value of
-<code>gmax.data.size</code> option or the combination of both. Some of
-the functions such as <code>gscreen</code> or <code>gextract</code>
-consume in multitasking mode amount of memory proportional to
-<code>gmax.data.size</code>. Please be aware of it while altering the
-value of this option.</p>
-<p>To limit memory consumption in multitasking mode one might lower down
-the values of <code>gmax.data.size</code> and
-<code>gmax.mem.usage</code> options or even switch off multitasking mode
-completely. <code>gmax.mem.usage</code> indicates the upper limit in KB
-of memory consumed cumulatively by the child processes. Once this limit
-is breached an internal mechanism tries to pause some of the running
-child processes, thereby preventing them from allocating more memory.
-The paused processes are resumed once the memory consumption drops or
-other sibling processes end.</p>
-<p>One should not expect the internal limiting mechanism to be the
-panacea for memory hungry tasks. First, the memory consumption of some
-of the functions is proportional to <code>gmax.data.size</code> option
-regardless of the number of running processes. Second, even when the
-memory limit is exceeded at least one process is still left to run and
-to potentially increase the memory consumption further. Third, the
-mechanism is mainly periodic, i.e. excessive memory consumption is
-detected only once in a while. The decision to pause running processes
-is thus periodic as well. The memory that has already been consumed in
-the time gap between the checks will not be release up until the whole
-task is complete.</p>
-<p>It is worth to say a word about memory consumption. Deducting real
-memory usage of the process based on “top”, “ps” or other utilities of
-similar kind might be highly misleading. Since all the processes are
-spawned from R, their memory usage as reported by these utilities will
-be at least as high as that of their parent process. If, for example, R
-process uses 5 Gb of memory and 10 processes are spawned from it, the
-virtual memory of all these 11 processes will top 55 Gb. Yet the
-majority of the consumed memory will be shared and unless the child
-processes start modifying this memory or allocating new one, the
-physical free memory of the machine will remain almost unaltered. The
-internal memory consumption limiting mechanism tries to estimate the
-drop of system free memory and hence deducts its data from counting
-“Private Dirty” bytes (on Linux) or from internal estimation (on other
-platforms) - a very different datum from what “top” is reporting.</p>
+<p>For certain functions multitasking might result in higher memory consumption. Users who have per process virtual memory limit (see: <code>ulimit -v</code>) might be the first to suffer from memory allocation errors.</p>
+<p>Various factors can affect the memory usage such as the number of running processes used for parallel computation, the value of <code>gmax.data.size</code> option or the combination of both. Some of the functions such as <code>gscreen</code> or <code>gextract</code> consume in multitasking mode amount of memory proportional to <code>gmax.data.size</code>. Please be aware of it while altering the value of this option.</p>
+<p>To limit memory consumption in multitasking mode one might lower down the values of <code>gmax.data.size</code> and <code>gmax.mem.usage</code> options or even switch off multitasking mode completely. <code>gmax.mem.usage</code> indicates the upper limit in KB of memory consumed cumulatively by the child processes. Once this limit is breached an internal mechanism tries to pause some of the running child processes, thereby preventing them from allocating more memory. The paused processes are resumed once the memory consumption drops or other sibling processes end.</p>
+<p>One should not expect the internal limiting mechanism to be the panacea for memory hungry tasks. First, the memory consumption of some of the functions is proportional to <code>gmax.data.size</code> option regardless of the number of running processes. Second, even when the memory limit is exceeded at least one process is still left to run and to potentially increase the memory consumption further. Third, the mechanism is mainly periodic, i.e. excessive memory consumption is detected only once in a while. The decision to pause running processes is thus periodic as well. The memory that has already been consumed in the time gap between the checks will not be release up until the whole task is complete.</p>
+<p>It is worth to say a word about memory consumption. Deducting real memory usage of the process based on “top”, “ps” or other utilities of similar kind might be highly misleading. Since all the processes are spawned from R, their memory usage as reported by these utilities will be at least as high as that of their parent process. If, for example, R process uses 5 Gb of memory and 10 processes are spawned from it, the virtual memory of all these 11 processes will top 55 Gb. Yet the majority of the consumed memory will be shared and unless the child processes start modifying this memory or allocating new one, the physical free memory of the machine will remain almost unaltered. The internal memory consumption limiting mechanism tries to estimate the drop of system free memory and hence deducts its data from counting “Private Dirty” bytes (on Linux) or from internal estimation (on other platforms) - a very different datum from what “top” is reporting.</p>
 </div>
 <div class="section level4">
 <h4 id="other-considerations">Other Considerations<a class="anchor" aria-label="anchor" href="#other-considerations"></a>
 </h4>
-<p>In multitasking mode the return value of <code>gquantiles</code> may
-vary depending on the number of CPU cores. For more details please refer
-the documentation of this function.</p>
+<p>In multitasking mode the return value of <code>gquantiles</code> may vary depending on the number of CPU cores. For more details please refer the documentation of this function.</p>
 </div>
 </div>
 </div>
@@ -1306,7 +837,7 @@ the documentation of this function.</p>
 
       <footer><div class="copyright">
   <p></p>
-<p>Developed by Misha Hoichman, Aviezer Lifshitz, Amos Tanay.</p>
+<p>Developed by Misha Hoichman, Aviezer Lifshitz, Eitan Yaffe, Amos Tanay.</p>
 </div>
 
 <div class="pkgdown">

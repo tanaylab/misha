@@ -15,7 +15,8 @@
 <meta property="og:description" content="A toolkit for analysis of genomic data. The misha package
     implements an efficient data structure for storing genomic data, and
     provides a set of functions for data extraction, manipulation and
-    analysis.">
+    analysis. Some of the 2D genome algorithms were described in Yaffe and Tanay
+    (2011) &lt;doi:10.1038/ng.947&gt;. ">
 <!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js" integrity="sha256-nvJJv9wWKEm88qvoQl9ekL2J+k/RWIsaSScxxlsrv8k=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/config/TeX-AMS-MML_HTMLorMML.js" integrity="sha256-84DKXVJXs0/F8OTMzX4UR909+jtl4G7SPypPavF+GfA=" crossorigin="anonymous"></script><!--[if lt IE 9]>
 <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
 <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
@@ -36,7 +37,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.3.9000</span>
       </span>
     </div>
 
@@ -87,7 +88,6 @@
 <div class="page-header"><h1 id="misha">misha<a class="anchor" aria-label="anchor" href="#misha"></a>
 </h1></div>
 <!-- badges: start -->
-
 <p>The <code>misha</code> package is a toolkit for analysis of genomic data. it implements an efficient data structure for storing genomic data, and provides a set of functions for data extraction, manipulation and analysis.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
@@ -105,6 +105,20 @@
 <p>See the <a href="https://tanaylab.github.io/misha/articles/Genomes.html" class="external-link">Genomes</a> vignette for instructions on how to create a misha database for common genomes.</p>
 <p>See the <a href="https://tanaylab.github.io/misha/articles/Manual.html" class="external-link">user manual</a> for more usage details.</p>
 </div>
+<div class="section level2">
+<h2 id="running-scripts-from-old-versions-of-misha--420">Running scripts from old versions of misha (&lt; 4.2.0)<a class="anchor" aria-label="anchor" href="#running-scripts-from-old-versions-of-misha--420"></a>
+</h2>
+<p>Starting in <code>misha</code> 4.2.0, the package no longer stores global variables such as <code>ALLGENOME</code> or <code>GROOT</code>. Instead, these variables are stored in a special environment called <code>.misha</code>. This means that scripts written for older versions of <code>misha</code> will no longer work. To run such scripts, either add a prefix of <code>.misha$</code> to all those variables (<code>.misha$ALLGENOME</code> instead of <code>ALLGENOME</code>), or run the following command before running the script:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ALLGENOME</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span></span>
+<span><span class="va">GROOT</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GROOT</span></span>
+<span><span class="va">ALLGENOME</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span></span>
+<span><span class="va">GINTERVID</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GINTERVID</span></span>
+<span><span class="va">GITERATOR.INTERVALS</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GITERATOR.INTERVALS</span></span>
+<span><span class="va">GROOT</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GROOT</span></span>
+<span><span class="va">GWD</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GWD</span></span>
+<span><span class="va">GTRACKS</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GTRACKS</span></span></code></pre></div>
+</div>
 </div>
   </div>
 
@@ -112,6 +126,7 @@
     <div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">
+<li><a href="https://cloud.r-project.org/package=misha" class="external-link">View on CRAN</a></li>
 <li><a href="https://github.com/tanaylab/misha/" class="external-link">Browse source code</a></li>
 <li><a href="https://github.com/tanaylab/misha/issues" class="external-link">Report a bug</a></li>
 </ul>
@@ -138,7 +153,9 @@
 <ul class="list-unstyled">
 <li>Misha Hoichman <br><small class="roles"> Author </small>  </li>
 <li>Aviezer Lifshitz <br><small class="roles"> Author, maintainer </small>  </li>
+<li>Eitan Yaffe <br><small class="roles"> Author </small>  </li>
 <li>Amos Tanay <br><small class="roles"> Author </small>  </li>
+<li><a href="authors.html">More about authors...</a></li>
 </ul>
 </div>
 
@@ -146,6 +163,7 @@
 <h2 data-toc-skip>Dev status</h2>
 <ul class="list-unstyled">
 <li><a href="https://CRAN.R-project.org/package=misha" class="external-link"><img src="https://www.r-pkg.org/badges/version/misha" alt="CRAN status"></a></li>
+<li><a href="https://github.com/tanaylab/misha/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/tanaylab/misha/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a></li>
 </ul>
 </div>
 
@@ -155,7 +173,7 @@
 
       <footer><div class="copyright">
   <p></p>
-<p>Developed by Misha Hoichman, Aviezer Lifshitz, Amos Tanay.</p>
+<p>Developed by Misha Hoichman, Aviezer Lifshitz, Eitan Yaffe, Amos Tanay.</p>
 </div>
 
 <div class="pkgdown">
