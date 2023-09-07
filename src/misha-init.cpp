@@ -11,7 +11,7 @@ extern "C" {
     extern SEXP gbintransform(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gchain2interv(SEXP, SEXP);
     extern SEXP gcheck_iterator(SEXP, SEXP);
-    extern SEXP gcheck_vtrack(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gcheck_vtrack(SEXP, SEXP);
     extern SEXP C_gcis_decay(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gcompute_strands_autocorr(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     // extern SEXP gcreate_arrays_track(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -19,7 +19,7 @@ extern "C" {
     extern SEXP gcreate_pwm_energy(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gcreate_test_computer2d_track(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gextract(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP gextract_multitask(SEXP);
+    extern SEXP gextract_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gfind_neighbors(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gfind_tracks_n_intervals(SEXP, SEXP);
     extern SEXP gget_tracks_attrs(SEXP, SEXP, SEXP);
@@ -81,7 +81,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gbintransform", (DL_FUNC)&gbintransform, 10},
     {"gchain2interv", (DL_FUNC)&gchain2interv, 2},
     {"gcheck_iterator", (DL_FUNC)&gcheck_iterator, 2},
-    {"gcheck_vtrack", (DL_FUNC)&gcheck_vtrack, 9},
+    {"gcheck_vtrack", (DL_FUNC)&gcheck_vtrack, 2},
     {"C_gcis_decay", (DL_FUNC)&C_gcis_decay, 9},
     {"C_gcompute_strands_autocorr", (DL_FUNC)&C_gcompute_strands_autocorr, 8},
     // {"gcreate_arrays_track", (DL_FUNC)&gcreate_arrays_track, 7},
@@ -89,7 +89,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gcreate_pwm_energy", (DL_FUNC)&gcreate_pwm_energy, 6},
     {"gcreate_test_computer2d_track", (DL_FUNC)&gcreate_test_computer2d_track, 5},
     {"C_gextract", (DL_FUNC)&C_gextract, 8},
-    {"gextract_multitask", (DL_FUNC)&gextract_multitask, 1},
+    {"gextract_multitask", (DL_FUNC)&gextract_multitask, 8},
     {"gfind_neighbors", (DL_FUNC)&gfind_neighbors, 12},
     {"gfind_tracks_n_intervals", (DL_FUNC)&gfind_tracks_n_intervals, 2},
     {"gget_tracks_attrs", (DL_FUNC)&gget_tracks_attrs, 3},
