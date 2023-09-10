@@ -1,6 +1,8 @@
-# misha (development version)
+# misha 4.2.4
 
 * `ALLGENOME` is now only soft deprecated in order to support old misha scripts. 
+* Fixed compilation issues with gcc-UBSAN and LTO.
+
 # misha 4.2.3
 
 * Added `gtrack.create_dirs` function.

@@ -4,6 +4,7 @@ BedGraph
 BigWig
 BinFinder
 Buf
+CMD
 CTRL
 ChIP
 Ctrl
@@ -28,6 +29,7 @@ GWD
 Gb
 GenomeTrack
 INTERVID
+LTO
 NA's
 NaN
 NaNs
@@ -45,6 +47,7 @@ SGE
 StatQuadTreeCached
 TSS
 TrackScanner
+UBSAN
 UCSC
 annot
 annotnames
@@ -91,6 +94,7 @@ gbins
 gbuf
 gcachemult
 gcachemultires
+gcc
 gcis
 gcluster
 gcompute
@@ -194,6 +198,7 @@ numbins
 onexit
 params
 probs
+proj
 ps
 pssms
 pssmset
