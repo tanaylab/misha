@@ -41,7 +41,7 @@ See the [user
 manual](https://tanaylab.github.io/misha/articles/Manual.html) for more
 usage details.
 
-## Running scripts from old versions of misha (\< 4.2.0)
+#### Running scripts from old versions of misha (\< 4.2.0)
 
 Starting in `misha` 4.2.0, the package no longer stores global variables
 such as `ALLGENOME` or `GROOT`. Instead, these variables are stored in a
