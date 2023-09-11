@@ -189,8 +189,13 @@ double TechnicalComputer2D::compute(const Rectangle &rectangle, const DiagonalBa
 	if ( (rectangle.x1 >= rectangle.x2) || (rectangle.y1 >= rectangle.y2) )
         return 0;
 
-    if (m_dim == 0)
+    if (m_dim == 0){
         TGLError("Assertion: dim must be >0");
+    }
+
+    if (m_dim > 10000000){
+        TGLError("Assertion: dim must be <10000000");
+    }
 
     if ( ((int)m_track_fn1.size() != (int)m_dim) || ((int)m_track_fn2.size() != m_dim) || ((int)m_matrix.size() != m_dim))
         TGLError("Assertion: number of correction tracks (d1=%d, d2=%d) and number of correction matrices (%d) must be equal to %d",
@@ -200,8 +205,9 @@ double TechnicalComputer2D::compute(const Rectangle &rectangle, const DiagonalBa
     {
         delete[] m_track1;
         delete[] m_track2;
-        m_track1 = new GenomeTrackSparse[m_dim];
-        m_track2 = new GenomeTrackSparse[m_dim];
+        uint64_t safe_m_dim = static_cast<uint64_t>(m_dim);
+        m_track1 = new GenomeTrackSparse[safe_m_dim];
+        m_track2 = new GenomeTrackSparse[safe_m_dim];
 
         for (int i = 0; i < m_dim; i++) {
             // track1
