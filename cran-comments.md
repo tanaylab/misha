@@ -2,4 +2,4 @@
 
 0 errors | 0 warnings | 0 notes
 
-* Fixed additional issues (gcc-UBSAN and LTO).
+* Fixed additional LTO warning.
