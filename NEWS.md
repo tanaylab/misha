@@ -1,4 +1,4 @@
-# misha 4.2.5
+# misha 4.2.6
 
 * `ALLGENOME` is now only soft deprecated in order to support old misha scripts. 
 * Fixed compilation issues with gcc-UBSAN and LTO.
