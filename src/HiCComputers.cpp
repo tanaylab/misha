@@ -205,7 +205,7 @@ double TechnicalComputer2D::compute(const Rectangle &rectangle, const DiagonalBa
     {
         delete[] m_track1;
         delete[] m_track2;
-        uint64_t safe_m_dim = static_cast<uint64_t>(m_dim);
+        unsigned safe_m_dim = static_cast<unsigned>(m_dim);
         m_track1 = new GenomeTrackSparse[safe_m_dim];
         m_track2 = new GenomeTrackSparse[safe_m_dim];
 
