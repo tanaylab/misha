@@ -99,7 +99,7 @@ public:
 protected:
     bool m_loaded;
 
-    int m_dim;
+    int m_dim = 0;
 
     // prior trans contact
     double m_prior;

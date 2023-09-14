@@ -68,7 +68,7 @@ options(gmax.processes = 2)
 \donttest{
 gdb.init_examples()
 # Run only on systems with Sun Grid Engine (SGE)
-if (length(system("which qsub", ignore.stderr = TRUE, intern = TRUE))) {
+if (FALSE) {
     v <- 17
     gcluster.run(
         gsummary("dense_track + v"),

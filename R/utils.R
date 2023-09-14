@@ -206,7 +206,7 @@ gwget <- function(url = NULL, path = NULL) {
 #' \donttest{
 #' gdb.init_examples()
 #' # Run only on systems with Sun Grid Engine (SGE)
-#' if (length(system("which qsub", ignore.stderr = TRUE, intern = TRUE))) {
+#' if (FALSE) {
 #'     v <- 17
 #'     gcluster.run(
 #'         gsummary("dense_track + v"),
@@ -420,7 +420,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
 }
 
 rescue_ALLGENOME <- function(intervals, intervals_name) {
-    if (length(intervals_name) == 0){
+    if (length(intervals_name) == 0) {
         return(intervals)
     }
     if (intervals_name[1] == "ALLGENOME") {
