@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.3.9000</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.6</span>
       </span>
     </div>
 
@@ -61,11 +61,16 @@
     </div>
 
     <div class="section level2">
-<h2 class="page-header" data-toc-text="development version" id="misha-development-version">misha (development version)<a class="anchor" aria-label="anchor" href="#misha-development-version"></a></h2>
-<ul><li><p><code>ALLGENOME</code> is now only soft deprecated in order to support old misha scripts. # misha 4.2.3</p></li>
-<li><p>Added <code>gtrack.create_dirs</code> function.</p></li>
-<li><p>Fixed a bug in <code>gcluster.run</code>.</p></li>
-<li><p>Updated documentation of <code>gintervals.neighbors</code>.</p></li>
+<h2 class="page-header" data-toc-text="4.2.6" id="misha-426">misha 4.2.6<small>2023-09-14</small><a class="anchor" aria-label="anchor" href="#misha-426"></a></h2>
+<ul><li>
+<code>ALLGENOME</code> is now only soft deprecated in order to support old misha scripts.</li>
+<li>Fixed compilation issues with gcc-UBSAN and LTO.</li>
+</ul></div>
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="4.2.3" id="misha-423">misha 4.2.3<small>2023-09-05</small><a class="anchor" aria-label="anchor" href="#misha-423"></a></h2>
+<ul><li>Added <code>gtrack.create_dirs</code> function.</li>
+<li>Fixed a bug in <code>gcluster.run</code>.</li>
+<li>Updated documentation of <code>gintervals.neighbors</code>.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.2.2" id="misha-422">misha 4.2.2<a class="anchor" aria-label="anchor" href="#misha-422"></a></h2>
@@ -85,16 +90,13 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.1.0" id="misha-410">misha 4.1.0<a class="anchor" aria-label="anchor" href="#misha-410"></a></h2>
-<ul><li>Bug fix (bug first appears in 4.0.8): virtual tracks based on “global.percentile”, “global.percentile.min” or “global.percentile.max” might occasionally return unexpected results and/or cause crashes due to faulty memory management.</li>
-</ul></div>
+<ul><li>Bug fix (bug first appears in 4.0.8): virtual tracks based on “global.percentile”, “global.percentile.min” or “global.percentile.max” might occasionally return unexpected results and/or cause crashes due to faulty memory management.</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.11" id="misha-4011">misha 4.0.11<a class="anchor" aria-label="anchor" href="#misha-4011"></a></h2>
-<ul><li>Fixed compilation errors on OSX.</li>
-</ul></div>
+<ul><li>Fixed compilation errors on OSX.</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.10" id="misha-4010">misha 4.0.10<a class="anchor" aria-label="anchor" href="#misha-4010"></a></h2>
-<ul><li>“unprotect_ptr: pointer not found” error in virtual tracks based on intervals.</li>
-</ul></div>
+<ul><li>“unprotect_ptr: pointer not found” error in virtual tracks based on intervals.</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.9" id="misha-409">misha 4.0.9<a class="anchor" aria-label="anchor" href="#misha-409"></a></h2>
 <ul><li>Fixed a minor resource leak.</li>
@@ -102,32 +104,25 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.8" id="misha-408">misha 4.0.8<a class="anchor" aria-label="anchor" href="#misha-408"></a></h2>
-<ul><li>Fixed a resource leak that might result in “protection stack overflow” error.</li>
-</ul></div>
+<ul><li>Fixed a resource leak that might result in “protection stack overflow” error.</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.6" id="misha-406">misha 4.0.6<a class="anchor" aria-label="anchor" href="#misha-406"></a></h2>
-<ul><li>Crash fix in gdb.create / gintervals.import.genes.</li>
-</ul></div>
+<ul><li>Crash fix in gdb.create / gintervals.import.genes.</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.5" id="misha-405">misha 4.0.5<a class="anchor" aria-label="anchor" href="#misha-405"></a></h2>
-<ul><li>Increase the maximal number of tracks allowed in a track expression to 10.000.</li>
-</ul></div>
+<ul><li>Increase the maximal number of tracks allowed in a track expression to 10.000.</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.4" id="misha-404">misha 4.0.4<a class="anchor" aria-label="anchor" href="#misha-404"></a></h2>
-<ul><li>Bug fix: “child process ended unexpectedly” errors, crashes and hang ups whilst multitasking when running out of memory</li>
-</ul></div>
+<ul><li>Bug fix: “child process ended unexpectedly” errors, crashes and hang ups whilst multitasking when running out of memory</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.3" id="misha-403">misha 4.0.3<a class="anchor" aria-label="anchor" href="#misha-403"></a></h2>
-<ul><li>Fixed installation issues on some platforms</li>
-</ul></div>
+<ul><li>Fixed installation issues on some platforms</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.2" id="misha-402">misha 4.0.2<a class="anchor" aria-label="anchor" href="#misha-402"></a></h2>
-<ul><li>Switched from custom random seed control (options(grnd.seed=…)) to R standard (set.seed)</li>
-</ul></div>
+<ul><li>Switched from custom random seed control (options(grnd.seed=…)) to R standard (set.seed)</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.1" id="misha-401">misha 4.0.1<a class="anchor" aria-label="anchor" href="#misha-401"></a></h2>
-<ul><li>Bug fix in gsample: results differ on Linux vs. OSX even when the same random seed is used on both platforms</li>
-</ul></div>
+<ul><li>Bug fix in gsample: results differ on Linux vs. OSX even when the same random seed is used on both platforms</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.0.0" id="misha-400">misha 4.0.0<a class="anchor" aria-label="anchor" href="#misha-400"></a></h2>
 <ul><li>OSX support</li>
@@ -153,12 +148,10 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.6.0" id="misha-360">misha 3.6.0<a class="anchor" aria-label="anchor" href="#misha-360"></a></h2>
-<ul><li>Bug fix: occasional defunc processes AND/OR hanging in multitasking mode</li>
-</ul></div>
+<ul><li>Bug fix: occasional defunc processes AND/OR hanging in multitasking mode</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.5.6" id="misha-356">misha 3.5.6<a class="anchor" aria-label="anchor" href="#misha-356"></a></h2>
-<ul><li>Run-time optimizations</li>
-</ul></div>
+<ul><li>Run-time optimizations</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.5.5" id="misha-355">misha 3.5.5<a class="anchor" aria-label="anchor" href="#misha-355"></a></h2>
 <ul><li>Avoid call to gdb.reload() (slow on large DB) in various functions: that create or remove tracks or intervals sets</li>
@@ -167,12 +160,10 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.5.4" id="misha-354">misha 3.5.4<a class="anchor" aria-label="anchor" href="#misha-354"></a></h2>
-<ul><li>Improved control over total maximal memory consumption in multitasking mode via gmax.mem.usage option.</li>
-</ul></div>
+<ul><li>Improved control over total maximal memory consumption in multitasking mode via gmax.mem.usage option.</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.5.3" id="misha-353">misha 3.5.3<a class="anchor" aria-label="anchor" href="#misha-353"></a></h2>
-<ul><li>Run time optimizations when using several virtual tracks based on the same array track, differing only by slice</li>
-</ul></div>
+<ul><li>Run time optimizations when using several virtual tracks based on the same array track, differing only by slice</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.5.2" id="misha-352">misha 3.5.2<a class="anchor" aria-label="anchor" href="#misha-352"></a></h2>
 <ul><li>Allow usage of sparse / arrays tracks in place of intervals</li>
@@ -203,8 +194,7 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.4.3" id="misha-343">misha 3.4.3<a class="anchor" aria-label="anchor" href="#misha-343"></a></h2>
-<ul><li>Support intervals represented by tibbles</li>
-</ul></div>
+<ul><li>Support intervals represented by tibbles</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.4.2" id="misha-342">misha 3.4.2<a class="anchor" aria-label="anchor" href="#misha-342"></a></h2>
 <ul><li>New function: gsample; returns N random samples from the specified track expression</li>
@@ -224,8 +214,7 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.3.18" id="misha-3318">misha 3.3.18<a class="anchor" aria-label="anchor" href="#misha-3318"></a></h2>
-<ul><li>Bug fix in gintervals.force_range: error when intervals are out of range</li>
-</ul></div>
+<ul><li>Bug fix in gintervals.force_range: error when intervals are out of range</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.3.17" id="misha-3317">misha 3.3.17<a class="anchor" aria-label="anchor" href="#misha-3317"></a></h2>
 <ul><li>Run-time optimizations in track expression evaluation</li>
@@ -245,12 +234,10 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.3.14" id="misha-3314">misha 3.3.14<a class="anchor" aria-label="anchor" href="#misha-3314"></a></h2>
-<ul><li>gintervals.neighbors: run-time optimizations (the answer is entirely generated in C++)</li>
-</ul></div>
+<ul><li>gintervals.neighbors: run-time optimizations (the answer is entirely generated in C++)</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.3.13" id="misha-3313">misha 3.3.13<a class="anchor" aria-label="anchor" href="#misha-3313"></a></h2>
-<ul><li>gintervals.neighbors: sort the output by original ids of intervals1, then |distance| (Manhattan distance for 2D), then ids of intervals2</li>
-</ul></div>
+<ul><li>gintervals.neighbors: sort the output by original ids of intervals1, then |distance| (Manhattan distance for 2D), then ids of intervals2</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.3.12" id="misha-3312">misha 3.3.12<a class="anchor" aria-label="anchor" href="#misha-3312"></a></h2>
 <ul><li>New version of gintervals.neighbors replaces both the old gintervals.neighbors and gintervals.annotate. By default gintervals.neighbors returns the closest neighbor</li>
@@ -290,12 +277,10 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.3.7" id="misha-337">misha 3.3.7<a class="anchor" aria-label="anchor" href="#misha-337"></a></h2>
-<ul><li>Bug fix for all functions using 2D iterators: in some cases full chromosome pairs can be skipped. Bug first appeared in 3.3.0</li>
-</ul></div>
+<ul><li>Bug fix for all functions using 2D iterators: in some cases full chromosome pairs can be skipped. Bug first appeared in 3.3.0</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.3.6" id="misha-336">misha 3.3.6<a class="anchor" aria-label="anchor" href="#misha-336"></a></h2>
-<ul><li>Bug fix in gdb.create: “Error in .gintervals.check_new_set(intervals.set.out)…”</li>
-</ul></div>
+<ul><li>Bug fix in gdb.create: “Error in .gintervals.check_new_set(intervals.set.out)…”</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.3.5" id="misha-335">misha 3.3.5<a class="anchor" aria-label="anchor" href="#misha-335"></a></h2>
 <ul><li>Added ‘opt.flags’ parameter to gcluster.run. Use this parameter to add restrictions to the machines that run submitted jobs: minimal RAM requirement, explicit hostnames list, etc. See man for qsub, “-l” flag.</li>
@@ -356,12 +341,10 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.2.7" id="misha-327">misha 3.2.7<a class="anchor" aria-label="anchor" href="#misha-327"></a></h2>
-<ul><li>Bug fix: no proper clean up if error is generated while P-values table is loaded</li>
-</ul></div>
+<ul><li>Bug fix: no proper clean up if error is generated while P-values table is loaded</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.2.6" id="misha-326">misha 3.2.6<a class="anchor" aria-label="anchor" href="#misha-326"></a></h2>
-<ul><li>New function: gcis_decay</li>
-</ul></div>
+<ul><li>New function: gcis_decay</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.2.5" id="misha-325">misha 3.2.5<a class="anchor" aria-label="anchor" href="#misha-325"></a></h2>
 <ul><li>New format for tracks created by gtrack.2d.import. This format uses on average 30% less space. Old format can still be used</li>
@@ -393,8 +376,7 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.2.1" id="misha-321">misha 3.2.1<a class="anchor" aria-label="anchor" href="#misha-321"></a></h2>
-<ul><li>Bug fix in gcluster.run: on some systems a warning is generated “bash: module: line 1: syntax error: unexpected end of file: error importing function definition for `module’”</li>
-</ul></div>
+<ul><li>Bug fix in gcluster.run: on some systems a warning is generated “bash: module: line 1: syntax error: unexpected end of file: error importing function definition for `module’”</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.2.0" id="misha-320">misha 3.2.0<a class="anchor" aria-label="anchor" href="#misha-320"></a></h2>
 <ul><li>Track variables are referenced by two parameters: track, varname instead of “track.varname”</li>
@@ -420,8 +402,7 @@ gvar.rm =&gt; gtrack.var.rm</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.11" id="misha-3111">misha 3.1.11<a class="anchor" aria-label="anchor" href="#misha-3111"></a></h2>
-<ul><li>Changed the policy for multitasking job distribution</li>
-</ul></div>
+<ul><li>Changed the policy for multitasking job distribution</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.10" id="misha-3110">misha 3.1.10<a class="anchor" aria-label="anchor" href="#misha-3110"></a></h2>
 <ul><li>Multitasking for glookup, gtrack.smooth, gintervals.quantiles</li>
@@ -435,16 +416,13 @@ gvar.rm =&gt; gtrack.var.rm</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.8" id="misha-318">misha 3.1.8<a class="anchor" aria-label="anchor" href="#misha-318"></a></h2>
-<ul><li>Multitasking for gtrack.create</li>
-</ul></div>
+<ul><li>Multitasking for gtrack.create</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.7" id="misha-317">misha 3.1.7<a class="anchor" aria-label="anchor" href="#misha-317"></a></h2>
-<ul><li>Multitasking for gtrack.create_pwm_energy</li>
-</ul></div>
+<ul><li>Multitasking for gtrack.create_pwm_energy</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.6" id="misha-316">misha 3.1.6<a class="anchor" aria-label="anchor" href="#misha-316"></a></h2>
-<ul><li>Multitasking for gquantiles</li>
-</ul></div>
+<ul><li>Multitasking for gquantiles</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.5" id="misha-315">misha 3.1.5<a class="anchor" aria-label="anchor" href="#misha-315"></a></h2>
 <ul><li>Bug fix: some genomic intervals might be missing in gintervals.load_chain</li>
@@ -460,8 +438,7 @@ gvar.rm =&gt; gtrack.var.rm</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.3" id="misha-313">misha 3.1.3<a class="anchor" aria-label="anchor" href="#misha-313"></a></h2>
-<ul><li>Bug fix: deadlock in all multitasked functions (gsummary, gextract, gdist)</li>
-</ul></div>
+<ul><li>Bug fix: deadlock in all multitasked functions (gsummary, gextract, gdist)</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.2" id="misha-312">misha 3.1.2<a class="anchor" aria-label="anchor" href="#misha-312"></a></h2>
 <ul><li>Multitasking for gscreen, gsummary</li>
@@ -479,16 +456,13 @@ gvar.rm =&gt; gtrack.var.rm</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.1.0" id="misha-310">misha 3.1.0<a class="anchor" aria-label="anchor" href="#misha-310"></a></h2>
-<ul><li>Multitasking for gdist</li>
-</ul></div>
+<ul><li>Multitasking for gdist</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.0.4" id="misha-304">misha 3.0.4<a class="anchor" aria-label="anchor" href="#misha-304"></a></h2>
-<ul><li>Bug fix: in gintervals.2d “Error in is.null(strands) : ‘strands’ is missing”</li>
-</ul></div>
+<ul><li>Bug fix: in gintervals.2d “Error in is.null(strands) : ‘strands’ is missing”</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.0.3" id="misha-303">misha 3.0.3<a class="anchor" aria-label="anchor" href="#misha-303"></a></h2>
-<ul><li>Add strand parameter to gintervals</li>
-</ul></div>
+<ul><li>Add strand parameter to gintervals</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.0.2" id="misha-302">misha 3.0.2<a class="anchor" aria-label="anchor" href="#misha-302"></a></h2>
 <ul><li>New function: gtrack.import</li>
@@ -499,8 +473,7 @@ gvar.rm =&gt; gtrack.var.rm</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.0.1" id="misha-301">misha 3.0.1<a class="anchor" aria-label="anchor" href="#misha-301"></a></h2>
-<ul><li>Bug fix: gintervals.import_genes / gdb.create switches between utr3 and utr5</li>
-</ul></div>
+<ul><li>Bug fix: gintervals.import_genes / gdb.create switches between utr3 and utr5</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="3.00" id="misha-300">misha 3.00<a class="anchor" aria-label="anchor" href="#misha-300"></a></h2>
 <ul><li>New track type: array</li>
@@ -565,8 +538,7 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.60" id="misha-260">misha 2.60<a class="anchor" aria-label="anchor" href="#misha-260"></a></h2>
-<ul><li>Bug fix: gdir.cd crashes</li>
-</ul></div>
+<ul><li>Bug fix: gdir.cd crashes</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.59" id="misha-259">misha 2.59<a class="anchor" aria-label="anchor" href="#misha-259"></a></h2>
 <ul><li>Support 2D tracks (Rectangles type) in gtrack.liftover</li>
@@ -580,12 +552,10 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.57" id="misha-257">misha 2.57<a class="anchor" aria-label="anchor" href="#misha-257"></a></h2>
-<ul><li>Added gtrack.liftover and gintervals.load_chain functions</li>
-</ul></div>
+<ul><li>Added gtrack.liftover and gintervals.load_chain functions</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.56" id="misha-256">misha 2.56<a class="anchor" aria-label="anchor" href="#misha-256"></a></h2>
-<ul><li>Cleaned up stdout field in the result of gcluster.run</li>
-</ul></div>
+<ul><li>Cleaned up stdout field in the result of gcluster.run</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.55" id="misha-255">misha 2.55<a class="anchor" aria-label="anchor" href="#misha-255"></a></h2>
 <ul><li>Bug fix: scope might be incorrectly applied while using cartesian iterator</li>
@@ -601,8 +571,7 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.53" id="misha-253">misha 2.53<a class="anchor" aria-label="anchor" href="#misha-253"></a></h2>
-<ul><li>New function: gcluster.run</li>
-</ul></div>
+<ul><li>New function: gcluster.run</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.52" id="misha-252">misha 2.52<a class="anchor" aria-label="anchor" href="#misha-252"></a></h2>
 <ul><li>Faster gsetroot using cached list of tracks and intervals.</li>
@@ -621,12 +590,10 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.43" id="misha-243">misha 2.43<a class="anchor" aria-label="anchor" href="#misha-243"></a></h2>
-<ul><li>Run-time optimizations for 2D queries</li>
-</ul></div>
+<ul><li>Run-time optimizations for 2D queries</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.42" id="misha-242">misha 2.42<a class="anchor" aria-label="anchor" href="#misha-242"></a></h2>
-<ul><li>Bug fix: crash if “preparing track for percentiles queries” is interrupted with CTRL-C</li>
-</ul></div>
+<ul><li>Bug fix: crash if “preparing track for percentiles queries” is interrupted with CTRL-C</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.41" id="misha-241">misha 2.41<a class="anchor" aria-label="anchor" href="#misha-241"></a></h2>
 <ul><li>New function: gdbreload</li>
@@ -652,27 +619,23 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.37" id="misha-237">misha 2.37<a class="anchor" aria-label="anchor" href="#misha-237"></a></h2>
-<ul><li>Bug fix: 2D cartesian grid iterator skips some of the iterator intervals</li>
-</ul></div>
+<ul><li>Bug fix: 2D cartesian grid iterator skips some of the iterator intervals</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.36" id="misha-236">misha 2.36<a class="anchor" aria-label="anchor" href="#misha-236"></a></h2>
-<ul><li>Bug fix: gtrack.convert does not correctly convert old (version 1) computed tracks</li>
-</ul></div>
+<ul><li>Bug fix: gtrack.convert does not correctly convert old (version 1) computed tracks</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.35" id="misha-235">misha 2.35<a class="anchor" aria-label="anchor" href="#misha-235"></a></h2>
-<ul><li>Fix memory leaks when command exists on error or is interrupted by CTRL-C</li>
-</ul></div>
+<ul><li>Fix memory leaks when command exists on error or is interrupted by CTRL-C</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.34" id="misha-234">misha 2.34<a class="anchor" aria-label="anchor" href="#misha-234"></a></h2>
 <ul><li>Added “sum” virtual track function</li>
 <li>Added “quantile” virtual track function</li>
-<li>Renamed “percentile<em>” virtual track functions to ”global.percentile</em>”</li>
+<li>Renamed “percentile<em>" virtual track functions to "global.percentile</em>”</li>
 <li>Bug fix: when iterator interval does not intersect any intervals of sparse track “stddev” virtual track function returns last value instead of NaN</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.33" id="misha-233">misha 2.33<a class="anchor" aria-label="anchor" href="#misha-233"></a></h2>
-<ul><li>Added “stddev” virtual track function</li>
-</ul></div>
+<ul><li>Added “stddev” virtual track function</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.32" id="misha-232">misha 2.32<a class="anchor" aria-label="anchor" href="#misha-232"></a></h2>
 <ul><li>Bug fix: memory corruption when the track expression contains more than one virtual track of “distance” or “distance.center” type.</li>
@@ -699,8 +662,7 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.25" id="misha-225">misha 2.25<a class="anchor" aria-label="anchor" href="#misha-225"></a></h2>
-<ul><li>Added gintervals.force_range and gintervals.2d.force_range</li>
-</ul></div>
+<ul><li>Added gintervals.force_range and gintervals.2d.force_range</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.24" id="misha-224">misha 2.24<a class="anchor" aria-label="anchor" href="#misha-224"></a></h2>
 <ul><li>Change the default of min/max.band in cartesian iterator to NULL</li>
@@ -709,16 +671,13 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.23" id="misha-223">misha 2.23<a class="anchor" aria-label="anchor" href="#misha-223"></a></h2>
-<ul><li>Changed virtual track function “dist” to distance</li>
-</ul></div>
+<ul><li>Changed virtual track function “dist” to distance</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.22" id="misha-222">misha 2.22<a class="anchor" aria-label="anchor" href="#misha-222"></a></h2>
-<ul><li>Added gtraceback</li>
-</ul></div>
+<ul><li>Added gtraceback</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.21" id="misha-221">misha 2.21<a class="anchor" aria-label="anchor" href="#misha-221"></a></h2>
-<ul><li>Added 2D computed tracks</li>
-</ul></div>
+<ul><li>Added 2D computed tracks</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.20" id="misha-220">misha 2.20<a class="anchor" aria-label="anchor" href="#misha-220"></a></h2>
 <ul><li>Changed the format of 2D tracks</li>
@@ -759,8 +718,7 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.14" id="misha-214">misha 2.14<a class="anchor" aria-label="anchor" href="#misha-214"></a></h2>
-<ul><li>Bug fix: gintervals.* might fail on overlapping intervals</li>
-</ul></div>
+<ul><li>Bug fix: gintervals.* might fail on overlapping intervals</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.13" id="misha-213">misha 2.13<a class="anchor" aria-label="anchor" href="#misha-213"></a></h2>
 <ul><li>Run-time optimizations for gintervals and gintervals.2d</li>
@@ -768,20 +726,16 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.12" id="misha-212">misha 2.12<a class="anchor" aria-label="anchor" href="#misha-212"></a></h2>
-<ul><li>Added cartesian grid iterator</li>
-</ul></div>
+<ul><li>Added cartesian grid iterator</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.11" id="misha-211">misha 2.11<a class="anchor" aria-label="anchor" href="#misha-211"></a></h2>
-<ul><li>Remove canonic / original property for 2D tracks</li>
-</ul></div>
+<ul><li>Remove canonic / original property for 2D tracks</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.10" id="misha-210">misha 2.10<a class="anchor" aria-label="anchor" href="#misha-210"></a></h2>
-<ul><li>Added virtual tracks</li>
-</ul></div>
+<ul><li>Added virtual tracks</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.02" id="misha-202">misha 2.02<a class="anchor" aria-label="anchor" href="#misha-202"></a></h2>
-<ul><li>Hide the chrom1/chrom2 swap in 2D intervals from the user</li>
-</ul></div>
+<ul><li>Hide the chrom1/chrom2 swap in 2D intervals from the user</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="2.01" id="misha-201">misha 2.01<a class="anchor" aria-label="anchor" href="#misha-201"></a></h2>
 <ul><li>Added support for 2D intervals in gtrack.create</li>
@@ -804,8 +758,7 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="1.24" id="misha-124">misha 1.24<a class="anchor" aria-label="anchor" href="#misha-124"></a></h2>
-<ul><li>Allow maximal precision of gquantiles / gintervals.quantiles near extreme probs (0 and 1)</li>
-</ul></div>
+<ul><li>Allow maximal precision of gquantiles / gintervals.quantiles near extreme probs (0 and 1)</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="1.23" id="misha-123">misha 1.23<a class="anchor" aria-label="anchor" href="#misha-123"></a></h2>
 <ul><li>Allow gquantiles / gintervals.quantiles work on the whole genome (use random sampling)</li>
@@ -869,12 +822,10 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="1.13" id="misha-113">misha 1.13<a class="anchor" aria-label="anchor" href="#misha-113"></a></h2>
-<ul><li>Rename intervals files by adding them “.interv” extension</li>
-</ul></div>
+<ul><li>Rename intervals files by adding them “.interv” extension</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="1.12" id="misha-112">misha 1.12<a class="anchor" aria-label="anchor" href="#misha-112"></a></h2>
-<ul><li>Remove global/user attribute for tracksets/intervsets</li>
-</ul></div>
+<ul><li>Remove global/user attribute for tracksets/intervsets</li></ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="1.11" id="misha-111">misha 1.11<a class="anchor" aria-label="anchor" href="#misha-111"></a></h2>
 <ul><li>Add “iterator” parameter to the relevant functions</li>
@@ -916,7 +867,7 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 <li>Rami: On failure to create a track - remove it. The fix applies for gcreatetrack, gcachemultires, gsmooth.</li>
 <li>Misha: allow a dot in the name of the track variable.</li>
 <li>should store the command that created a track in a track variable (For future reference), we should also save the date (in the future we may want to do something with dependencies). Each newly created track is assigned two track variables: created.by and created.date.</li>
-<li>Rami: Easier dump to text of info (current need to use sep=“ rownames = F, etc) Added gwrite.table() function.</li>
+<li>Rami: Easier dump to text of info (current need to use sep=" rownames = F, etc) Added gwrite.table() function.</li>
 <li>Summary statistics on tracks (a simplification of the distribution feature). We want to compute the total, average, stdev, min and max of a track, number of bins, number of NAN bins. All that without going through the distribution computation (maybe using R function that seat over the gdist function) New function added: gsummary.</li>
 <li>Change coordinate-&gt;bin function (should be int(coordinate/bin_size)</li>
 <li>Iterator protect/unprotect (eval_next_int, eval_next_bool etc)</li>
