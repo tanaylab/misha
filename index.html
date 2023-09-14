@@ -37,7 +37,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.3.9000</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.6</span>
       </span>
     </div>
 
@@ -88,7 +88,6 @@
 <div class="page-header"><h1 id="misha">misha<a class="anchor" aria-label="anchor" href="#misha"></a>
 </h1></div>
 <!-- badges: start -->
-
 <p>The <code>misha</code> package is a toolkit for analysis of genomic data. it implements an efficient data structure for storing genomic data, and provides a set of functions for data extraction, manipulation and analysis.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
@@ -98,17 +97,16 @@
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"misha"</span><span class="op">)</span></span></code></pre></div>
 <p>And the development version from GitHub with:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"tanaylab/misha"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu"><a href="https://remotes.r-lib.org/reference/install_github.html" class="external-link">install_github</a></span><span class="op">(</span><span class="st">"tanaylab/misha"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a>
 </h2>
 <p>See the <a href="https://tanaylab.github.io/misha/articles/Genomes.html" class="external-link">Genomes</a> vignette for instructions on how to create a misha database for common genomes.</p>
 <p>See the <a href="https://tanaylab.github.io/misha/articles/Manual.html" class="external-link">user manual</a> for more usage details.</p>
-</div>
-<div class="section level2">
-<h2 id="running-scripts-from-old-versions-of-misha--420">Running scripts from old versions of misha (&lt; 4.2.0)<a class="anchor" aria-label="anchor" href="#running-scripts-from-old-versions-of-misha--420"></a>
-</h2>
+<div class="section level4">
+<h4 id="running-scripts-from-old-versions-of-misha--420">Running scripts from old versions of misha (&lt; 4.2.0)<a class="anchor" aria-label="anchor" href="#running-scripts-from-old-versions-of-misha--420"></a>
+</h4>
 <p>Starting in <code>misha</code> 4.2.0, the package no longer stores global variables such as <code>ALLGENOME</code> or <code>GROOT</code>. Instead, these variables are stored in a special environment called <code>.misha</code>. This means that scripts written for older versions of <code>misha</code> will no longer work. To run such scripts, either add a prefix of <code>.misha$</code> to all those variables (<code>.misha$ALLGENOME</code> instead of <code>ALLGENOME</code>), or run the following command before running the script:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ALLGENOME</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span></span>
@@ -119,6 +117,7 @@
 <span><span class="va">GROOT</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GROOT</span></span>
 <span><span class="va">GWD</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GWD</span></span>
 <span><span class="va">GTRACKS</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GTRACKS</span></span></code></pre></div>
+</div>
 </div>
 </div>
   </div>

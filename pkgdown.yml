@@ -1,8 +1,8 @@
-pandoc: 2.19.2
+pandoc: 2.7.3
 pkgdown: 2.0.7
 pkgdown_sha: ~
 articles:
   Genomes: Genomes.html
   Manual: Manual.html
-last_built: 2023-09-06T13:05Z
+last_built: 2023-09-14T15:45Z
 
