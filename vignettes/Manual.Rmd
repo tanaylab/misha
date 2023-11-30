@@ -180,7 +180,7 @@ Internally, interval sets can be stored in two different formats: **small interv
 
 Saved interval sets in the small format can be seamlessly used in all functions and track expressions without the need to explicitly load them.
 
-```{r}
+```{r, eval=FALSE}
 # 'annotations' is an intervals set saved in Genomic Database
 gintervals.intersect("annotations", gintervals(2))
 ```
@@ -313,13 +313,13 @@ So far we showed that the value of a `mytrack` variable is set to be the average
 
 Virtual track is a set of rules that describe how the "source" (a real track or intervals) should be proceeded, and how the iterator interval should be modified. Virtual tracks are created with `gvtrack.create` function:
 
-```{r}
+```{r, eval=FALSE}
 gvtrack.create("myvtrack", "dense_track")
 ```
 
 This call creates a new virtual track named `myvtrack`. This virtual track can be used in the track expression instead of a real track `dense_track`. In our example `myvtrack` is just an alias of `dense_track`. Yet we can go on and create a more complicated virtual track if we specify a "function", i.e. instruct the virtual track of what should be its value in track expression.
 
-```{r}
+```{r, eval=FALSE}
 gvtrack.create("myvtrack", "dense_track", "global.percentile")
 ```
 
@@ -327,7 +327,7 @@ In this example when `myvtrack` is evaluated in the track expression it will ret
 
 Virtual tracks are especially useful for Array tracks. By default if an Array track is used in a track expressions, its interval value would be the average of all non-NaN column values covered by an iterator interval. `gvtrack.array.slice` allows to select specific columns and to specify the function applied to the values of each track interval.
 
-```{r}
+```{r, eval=FALSE}
 gvtrack.create("myvtrack", "array_track", "sum")
 gvtrack.array.slice("myvtrack", c("col2", "col5"), "max")
 ```
@@ -338,7 +338,7 @@ where \( V_{i,j} \) is a value of the track in column \( j \) for interval \( I_
 
 Virtual tracks allow also to alter the iterator interval "on the fly":
 
-```{r}
+```{r, eval=FALSE}
 gvtrack.iterator("myvtrack", sshift = -100, eshift = 200)
 ```
 
@@ -346,7 +346,7 @@ In this example we expand each iterator interval by adding -100 to its `start` c
 
 Similarly, iterator modifiers can be defined for 2D intervals. Moreover, an iterator modifier can create a 1D interval from a 2D iterator interval by projecting one of its axes.
 
-```{r}
+```{r, eval=FALSE}
 gvtrack.create("myvtrack", "dense_track")
 gvtrack.iterator("myvtrack", dim = 2)
 ```
@@ -355,7 +355,7 @@ It is important to remember that iterator modifiers transform the iterator inter
 
 So far we have used a track `dense_track` as a "source" of a virtual track. We can also use intervals as a source. In this case, the value of the virtual track will be some function that takes into account the "source" intervals and the current iterator interval.
 
-```{r}
+```{r, eval=FALSE}
 gvtrack.create("myvtrack", "annotations", "distance")
 intervs <- gscreen("dense_track > 0.45")
 gextract("myvtrack", .misha$ALLGENOME, iterator = intervs)
@@ -428,7 +428,7 @@ Most of the functions that accept track expressions have an additional parameter
 
 Many functions that accept a track expressions and iterator policy accept an additional set of intervals that limit the scope of a function. This scope also limits the iterator intervals. For instance:
 
-```{r}
+```{r, eval=FALSE}
 gextract("dense_track", gintervals(2, 340, 520))
 ```
 
@@ -453,7 +453,7 @@ If the intersection between the 2D iterator interval and the band is non-empty a
 
 The `gintervals.2d.band_intersect` function can help one better understand the concept:
 
-```{r}
+```{r, eval=FALSE}
 intervs <- gintervals.2d(1, 200, 800, 1, 100, 1000)
 intervs <- rbind(intervs, gintervals.2d(1, 900, 950, 1, 0, 200))
 intervs <- rbind(intervs, gintervals.2d(1, 0, 100, 1, 0, 400))
@@ -465,7 +465,7 @@ intervs
 
 As said band filters out and alters 2D iterator intervals. Yet it also affects the result of 2D tracks. Let's look at the following example:
 
-```{r}
+```{r, eval=FALSE}
 intervs <- gintervals.2d(1, c(100, 400), c(300, 490), 1, c(120, 180), c(200, 500))
 gtrack.2d.create("test2d", "test 2D track", intervs, c(10, 20))
 gextract("test2d", .misha$ALLGENOME)
@@ -485,7 +485,7 @@ We added a band then. `gintervals.2d.band_intersect` shows the minimal rectangle
 
 Various functions in the library such as `gsample` make use of pseudo-random number generator. Each time the function is invoked a unique series of random numbers is issued. Hence two identical calls might produce different results. To guarantee reproducible results call `set.seed` before invoking the function.
 
-```{r}
+```{r, eval=FALSE}
 set.seed(60427)
 r1 <- gsample("dense_track", 10)
 r2 <- gsample("dense_track", 10) # r2 differs from r1
