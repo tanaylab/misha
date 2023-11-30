@@ -525,8 +525,10 @@ void RdbInitializer::handle_error(const char *msg)
 			}
 		}
 		rexit();
-	} else
-		errorcall(R_NilValue, msg);
+	} else {
+		errorcall(R_NilValue, "%s", msg);
+	}
+
 }
 
 void *RdbInitializer::allocate_res(uint64_t res_num_records)
