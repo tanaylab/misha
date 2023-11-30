@@ -1,4 +1,4 @@
-# misha (development version)
+# misha 4.2.7
 
 # misha 4.2.6
 
