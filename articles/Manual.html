@@ -33,7 +33,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.6.9000</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.8</span>
       </span>
     </div>
 
@@ -402,14 +402,7 @@ functions and track expressions without the need to explicitly load
 them.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># 'annotations' is an intervals set saved in Genomic Database</span></span>
-<span><span class="fu"><a href="../reference/gintervals.intersect.html">gintervals.intersect</a></span><span class="op">(</span><span class="st">"annotations"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   chrom start   end</span></span>
-<span><span class="co">#&gt; 1  chr2    20  2000</span></span>
-<span><span class="co">#&gt; 2  chr2  3000  8000</span></span>
-<span><span class="co">#&gt; 3  chr2  9000 11000</span></span>
-<span><span class="co">#&gt; 4  chr2 12000 12001</span></span>
-<span><span class="co">#&gt; 5  chr2 13000 14000</span></span>
-<span><span class="co">#&gt; 6  chr2 15000 15500</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/gintervals.intersect.html">gintervals.intersect</a></span><span class="op">(</span><span class="st">"annotations"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>Likewise, big interval sets can be used in many but not all
 functions. A notable exception is <code>gintervals.load</code> that
 allows loading only a single chromosome (or a chromosome pair for 2D
@@ -834,35 +827,7 @@ account the “source” intervals and the current iterator interval.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"annotations"</span>, <span class="st">"distance"</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gscreen.html">gscreen</a></span><span class="op">(</span><span class="st">"dense_track &gt; 0.45"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span>, iterator <span class="op">=</span> <span class="va">intervs</span><span class="op">)</span></span>
-<span><span class="co">#&gt;    chrom  start    end myvtrack intervalID</span></span>
-<span><span class="co">#&gt; 1   chr1  39350  39400    36775          1</span></span>
-<span><span class="co">#&gt; 2   chr1  73700  73750    71125          1</span></span>
-<span><span class="co">#&gt; 3   chr1  73800  73900    71250          1</span></span>
-<span><span class="co">#&gt; 4   chr1  91200  91250    88625          1</span></span>
-<span><span class="co">#&gt; 5   chr1 114700 114750   112125          1</span></span>
-<span><span class="co">#&gt; 6   chr1 137300 137350   134725          1</span></span>
-<span><span class="co">#&gt; 7   chr1 164750 164800   162175          1</span></span>
-<span><span class="co">#&gt; 8   chr1 165300 165350   162725          1</span></span>
-<span><span class="co">#&gt; 9   chr1 166050 166100   163475          1</span></span>
-<span><span class="co">#&gt; 10  chr1 221550 221600   218975          1</span></span>
-<span><span class="co">#&gt; 11  chr1 247100 247150   244525          1</span></span>
-<span><span class="co">#&gt; 12  chr1 255000 255050   252425          1</span></span>
-<span><span class="co">#&gt; 13  chr1 319100 319150   316525          1</span></span>
-<span><span class="co">#&gt; 14  chr1 399700 399750   397125          1</span></span>
-<span><span class="co">#&gt; 15  chr1 404000 404050   401425          1</span></span>
-<span><span class="co">#&gt; 16  chr1 438550 438600   435975          1</span></span>
-<span><span class="co">#&gt; 17  chr2  43800  43850    28325          2</span></span>
-<span><span class="co">#&gt; 18  chr2 117600 117650   102125          2</span></span>
-<span><span class="co">#&gt; 19  chr2 234500 234550   219025          2</span></span>
-<span><span class="co">#&gt; 20  chr2 235850 235900   220375          2</span></span>
-<span><span class="co">#&gt; 21  chr2 236200 236250   220725          2</span></span>
-<span><span class="co">#&gt; 22  chr2 277450 277500   261975          2</span></span>
-<span><span class="co">#&gt; 23  chrX   5750   5800      NaN          3</span></span>
-<span><span class="co">#&gt; 24  chrX  94000  94050      NaN          3</span></span>
-<span><span class="co">#&gt; 25  chrX 119150 119200      NaN          3</span></span>
-<span><span class="co">#&gt; 26  chrX 121400 121450      NaN          3</span></span>
-<span><span class="co">#&gt; 27  chrX 121500 121550      NaN          3</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span>, iterator <span class="op">=</span> <span class="va">intervs</span><span class="op">)</span></span></code></pre></div>
 <p>In this example <code>myvtrack</code> returns the minimal distance
 between intervals from an interval set <code>annotations</code> and the
 center of the current iterator interval from <code>intervs</code>.</p>
@@ -1095,13 +1060,7 @@ accept an additional set of intervals that limit the scope of a
 function. This scope also limits the iterator intervals. For
 instance:</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">340</span>, <span class="fl">520</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   chrom start end dense_track intervalID</span></span>
-<span><span class="co">#&gt; 1  chr2   340 350        0.14          1</span></span>
-<span><span class="co">#&gt; 2  chr2   350 400        0.08          1</span></span>
-<span><span class="co">#&gt; 3  chr2   400 450        0.16          1</span></span>
-<span><span class="co">#&gt; 4  chr2   450 500        0.00          1</span></span>
-<span><span class="co">#&gt; 5  chr2   500 520        0.16          1</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">340</span>, <span class="fl">520</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>As one can notice the first and the last intervals in the result are
 truncated by the scope <code>[340, 520)</code>.</p>
 <p>In some cases the combination of iterator policy and scope might
@@ -1150,12 +1109,7 @@ better understand the concept:</p>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="va">intervs</span>, <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">900</span>, <span class="fl">950</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="va">intervs</span>, <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">100</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">400</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="va">intervs</span>, <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">900</span>, <span class="fl">950</span>, <span class="fl">2</span>, <span class="fl">0</span>, <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">intervs</span></span>
-<span><span class="co">#&gt;   chrom1 start1 end1 chrom2 start2 end2</span></span>
-<span><span class="co">#&gt; 1   chr1    200  800   chr1    100 1000</span></span>
-<span><span class="co">#&gt; 2   chr1    900  950   chr1      0  200</span></span>
-<span><span class="co">#&gt; 3   chr1      0  100   chr1      0  400</span></span>
-<span><span class="co">#&gt; 4   chr1    900  950   chr2      0  200</span></span></code></pre></div>
+<span><span class="va">intervs</span></span></code></pre></div>
 <p><code>gintervals.2d.band_intersect</code> intersects the intervals
 with the band and returns the intervals shrunk to the minimal rectangle.
 As you can see we have four different intervals. The first one
@@ -1173,19 +1127,9 @@ example:</p>
 <code class="sourceCode R"><span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100</span>, <span class="fl">400</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">300</span>, <span class="fl">490</span><span class="op">)</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">120</span>, <span class="fl">180</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">200</span>, <span class="fl">500</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.2d.create.html">gtrack.2d.create</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="st">"test 2D track"</span>, <span class="va">intervs</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">20</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   chrom1 start1 end1 chrom2 start2 end2 test2d intervalID</span></span>
-<span><span class="co">#&gt; 1   chr1    100  300   chr1    120  200     10          1</span></span>
-<span><span class="co">#&gt; 2   chr1    400  490   chr1    180  500     20          1</span></span>
 <span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span>, iterator <span class="op">=</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">1000</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">1000</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   chrom1 start1 end1 chrom2 start2 end2   test2d intervalID</span></span>
-<span><span class="co">#&gt; 1   chr1      0 1000   chr1      0 1000 16.42857          1</span></span>
 <span><span class="fu"><a href="../reference/gintervals.2d.band_intersect.html">gintervals.2d.band_intersect</a></span><span class="op">(</span><span class="va">intervs</span>, band <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">150</span>, <span class="fl">1000</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   chrom1 start1 end1 chrom2 start2 end2</span></span>
-<span><span class="co">#&gt; 1   chr1    270  300   chr1    120  150</span></span>
-<span><span class="co">#&gt; 2   chr1    400  490   chr1    180  340</span></span>
 <span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span>, iterator <span class="op">=</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">1000</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">1000</span><span class="op">)</span>, band <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">150</span>, <span class="fl">1000</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   chrom1 start1 end1 chrom2 start2 end2   test2d intervalID</span></span>
-<span><span class="co">#&gt; 1   chr1    150 1000   chr1      0  850 19.57182          1</span></span>
 <span><span class="fu"><a href="../reference/gtrack.rm.html">gtrack.rm</a></span><span class="op">(</span><span class="st">"test2d"</span>, force <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <p>We created a 2D track <code>test2d</code> and inserted two values
 into it: <span class="math inline">\(10\)</span> and <span class="math inline">\(20\)</span>. If an iterator interval covers all
