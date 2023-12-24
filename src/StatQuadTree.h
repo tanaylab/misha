@@ -41,12 +41,6 @@ struct Rectangle_val : public Rectangle {
 	double val(const Rectangle &, void *) const { return v; }
 	double val(const Rectangle &, const DiagonalBand &, void *) const { return v; }
 
-	char *debug_str() const {
-		static char str[200];
-		snprintf(str, sizeof(str), "(%" PRId64 " - %" PRId64 ") (%" PRId64 " - %" PRId64 ") %g", x1, x2, y1, y2, (double)v);
-		return str;
-	}
-
 };
 
 //----------------------------------------- Point_val ---------------------------------------

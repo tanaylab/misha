@@ -66,18 +66,6 @@ struct GInterval : public Segment {
 
 	static char char2strand(char c);
 
-	char *debug_str(const GenomeChromKey &chromkey) const {
-		static char str[200];
-		snprintf(str, sizeof(str), "(%s, %" PRId64 ", %" PRId64 ")", chromkey.id2chrom(chromid).c_str(), start, end);
-		return str;
-	}
-
-	char *debug_str() const {
-		static char str[200];
-		snprintf(str, sizeof(str), "(%d, %" PRId64 ", %" PRId64 ")", chromid, start, end);
-		return str;
-	}
-
 };
 
 

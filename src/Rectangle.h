@@ -92,11 +92,6 @@ struct Rectangle {
 	int64_t area() const { return width() * height(); }
 	bool    is_non_empty_area() const { return x2 > x1 && y2 > y1; }
 
-	char *debug_str() const {
-		static char str[200];
-		snprintf(str, sizeof(str), "(%" PRId64 " - %" PRId64 ") (%" PRId64 " - %" PRId64 ")", x1, x2, y1, y2);
-		return str;
-	}
 };
 
 #pragma pack(pop)

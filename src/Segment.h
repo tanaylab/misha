@@ -42,12 +42,6 @@ struct Segment {
 	// returns true if the segment fully overlaps the given segment
 	bool do_contain(const Segment &s) const { return start <= s.start && end >= s.end; }
 
-	char *debug_str() const {
-		static char str[200];
-		snprintf(str, sizeof(str), "(%" PRId64 " - %" PRId64 ")", start, end);
-		return str;
-	}
-
 };
 
 #pragma pack(pop)

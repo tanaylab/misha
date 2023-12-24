@@ -76,11 +76,6 @@ struct Point {
 
 	int64_t manhattan_dist(const Rectangle &rect, bool touch_is_at_dist_one = false) const { return xdist(rect, touch_is_at_dist_one) + ydist(rect, touch_is_at_dist_one); }
 
-	char *debug_str() const {
-		static char str[200];
-		snprintf(str, sizeof(str), "(%" PRId64 ", %" PRId64 ")", x, y);
-		return str;
-	}
 
 };
 
