@@ -148,10 +148,11 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 
 		vector<double> medians(percentiles.size(), numeric_limits<float>::quiet_NaN());
 
-		if (calc_medians(sp, percentiles, medians, 0))
-			warning("Data size (%ld) exceeds the limit (%ld).\n"
+		if (calc_medians(sp, percentiles, medians, 0)){
+			warning("Data size (%llu) exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
-					"(The limit can be controlled by gmax.data.size limit)", sp.stream_size(), iu.get_max_data_size());
+					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)sp.stream_size(), (unsigned long long)iu.get_max_data_size());
+		}
 
 		// assemble the answer
 		SEXP answer;
@@ -589,11 +590,12 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 			}
 		}
 
-		if (generate_warning)
-			warning("Data size in one or more intervals exceeds the limit (%ld).\n"
+		if (generate_warning){
+			warning("Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
-					"(The limit can be controlled by gmax.data.size limit)", iu.get_max_data_size());
-
+					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
+		}
+		
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -920,11 +922,12 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 			}
 		}
 
-		if (generate_warning)
-			warning("Data size in one or more intervals exceeds the limit (%ld).\n"
+		if (generate_warning){
+			warning("Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
-					"(The limit can be controlled by gmax.data.size limit)", iu.get_max_data_size());
-
+					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
+		}
+		
 		rreturn(answer);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -1034,10 +1037,11 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 			}
 		}
 
-		if (generate_warning)
-			warning("Data size in one or more intervals exceeds the limit (%ld).\n"
+		if (generate_warning){
+			warning("Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
-					"(The limit can be controlled by gmax.data.size limit)", iu.get_max_data_size());
+					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
+		}
 
 		// pack the answer
 		SEXP answer, dim, dimnames;
