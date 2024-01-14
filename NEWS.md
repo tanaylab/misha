@@ -1,4 +1,6 @@
-# misha (development version)
+# misha 4.2.9
+
+* Fixed compilation issues in M1 Mac.
 
 # misha 4.2.8
 

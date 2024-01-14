@@ -2,6 +2,5 @@
 
 0 errors | 0 warnings | 0 notes
 
-* Fixed gcc-UBSAN memory misalignment issues.
-* Fixed "mat string is not a string literal" warnings.
+* Fixed compilation issues in M1 Mac.
 
