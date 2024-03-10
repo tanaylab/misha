@@ -243,8 +243,8 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
 #' )
 #'
 #' ## get values of two track expressions 'dense_track' and
-#' ## 'array_track * 2' running over '100' iterator
-#' gextract("dense_track", "array_track * 2", gintervals(1, 0, 500),
+#' ## '"sparse_track * 2' running over '100' iterator
+#' gextract("dense_track", "sparse_track * 2", gintervals(1, 0, 800),
 #'     iterator = 100, colnames = c("expr1", "expr2")
 #' )
 #'

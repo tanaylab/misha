@@ -1,3 +1,7 @@
+# misha 4.2.10
+
+* Fixed clang-UBSAN error.
+
 # misha 4.2.9
 
 * Fixed compilation issues in M1 Mac.
