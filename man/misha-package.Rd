@@ -35,4 +35,29 @@ a 2D track. If '0' chunk size is unlimited. \cr gtrack.num.chunks \tab 0
 More information about the options can be found in 'User manual' of the
 package.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://tanaylab.github.io/misha/}
+  \item \url{https://github.com/tanaylab/misha}
+  \item Report bugs at \url{https://github.com/tanaylab/misha/issues}
+}
+
+}
+\author{
+\strong{Maintainer}: Aviezer Lifshitz \email{aviezer.lifshitz@weizmann.ac.il}
+
+Authors:
+\itemize{
+  \item Misha Hoichman \email{misha@hoichman.com}
+  \item Eitan Yaffe \email{eitan.yaffe@weizmann.ac.il}
+  \item Amos Tanay \email{amos.tanay@weizmann.ac.il}
+}
+
+Other contributors:
+\itemize{
+  \item Weizmann Institute of Science [copyright holder]
+}
+
+}
 \keyword{package}

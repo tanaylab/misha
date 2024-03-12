@@ -85,12 +85,6 @@ gextract(
     gintervals.2d("chr1", 0, 4000, "chr2", 2000, 5000)
 )
 
-## get values of two track expressions 'dense_track' and
-## '"sparse_track * 2' running over '100' iterator
-gextract("dense_track", "sparse_track * 2", gintervals(1, 0, 800),
-    iterator = 100, colnames = c("expr1", "expr2")
-)
-
 }
 \seealso{
 \code{\link{gtrack.array.extract}}, \code{\link{gsample}},
