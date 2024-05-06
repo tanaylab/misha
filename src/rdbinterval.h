@@ -51,7 +51,7 @@ struct IntervalPval : public GInterval {
 
 struct ChainInterval : public GInterval {
 	enum Errors { BAD_INTERVAL };
-	enum { CHROM_SRC = GInterval::NUM_COLS, START_SRC, NUM_COLS };
+	enum { CHROM_SRC = GInterval::NUM_COLS, START_SRC, STRAND_SRC, NUM_COLS };
 
 	struct SrcCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
@@ -69,11 +69,15 @@ struct ChainInterval : public GInterval {
 
 	int64_t start_src;
 	int     chromid_src;
+	int64_t    strand_src;
 
-	ChainInterval() : GInterval(), start_src(-1), chromid_src(-1) {}
+	ChainInterval() : GInterval(), start_src(-1), chromid_src(-1), strand_src(-1) {}
 
 	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _chromid_src, int64_t _start_src) :
-		GInterval(_chromid, _start, _end, 0), start_src(_start_src), chromid_src(_chromid_src) {}
+		GInterval(_chromid, _start, _end, 0), start_src(_start_src), chromid_src(_chromid_src), strand_src(-1) {}
+
+	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _chromid_src, int64_t _start_src, int64_t _strand_src) :
+		GInterval(_chromid, _start, _end, 0), start_src(_start_src), chromid_src(_chromid_src), strand_src(_strand_src) {}
 
 	string tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const;
 
