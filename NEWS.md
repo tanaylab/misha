@@ -1,3 +1,7 @@
+# misha 4.2.10 
+
+* Fixed a bug in `gtrack.import` from bigwig.
+
 # misha 4.2.9
 
 * Fixed compilation issues in M1 Mac.

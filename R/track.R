@@ -550,7 +550,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 
                 file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
                 file.converted <- paste(tmp.dirname, "/", file.noext, ".wig", sep = "")
-                if (paste(system(get_bigWigToWig_bin(), file, file.converted))) {
+                if (system(paste(get_bigWigToWig_bin(), file, file.converted))) {
                     stop("Command failed", call. = FALSE)
                 }
                 file <- file.converted
