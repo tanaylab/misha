@@ -24,7 +24,7 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
 		const char *full_track_str = CHAR(STRING_ELT(_track, 0));
@@ -52,21 +52,21 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 			snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), all_genome_intervs.front().chromid).c_str());
 
 			gtrack.init_read(filename, all_genome_intervs.front().chromid);
-            rprotect(rbinsize = ScalarInteger(gtrack.get_bin_size()));
+            rprotect(rbinsize = Rf_ScalarInteger(gtrack.get_bin_size()));
 			SET_VECTOR_ELT(answer, BINSIZE, rbinsize);
-			SET_STRING_ELT(names, BINSIZE, mkChar("bin.size"));
+			SET_STRING_ELT(names, BINSIZE, Rf_mkChar("bin.size"));
 		} else {
 			rprotect(answer = RSaneAllocVector(VECSXP, NUM_COLS));
 			rprotect(names = RSaneAllocVector(STRSXP, NUM_COLS));
 		}
 
-        rprotect(rtype = mkString(GenomeTrack::TYPE_NAMES[type]));
+        rprotect(rtype = Rf_mkString(GenomeTrack::TYPE_NAMES[type]));
 		SET_VECTOR_ELT(answer, TYPE, rtype);
-		SET_STRING_ELT(names, TYPE, mkChar("type"));
+		SET_STRING_ELT(names, TYPE, Rf_mkChar("type"));
 
-        rprotect(rdim = ScalarInteger(GenomeTrack::is_1d(type) ? 1 : 2));
+        rprotect(rdim = Rf_ScalarInteger(GenomeTrack::is_1d(type) ? 1 : 2));
 		SET_VECTOR_ELT(answer, DIM, rdim);
-		SET_STRING_ELT(names, DIM, mkChar("dimensions"));
+		SET_STRING_ELT(names, DIM, Rf_mkChar("dimensions"));
 
 		int64_t totsize = 0;
 		vector<string> filenames;
@@ -80,11 +80,11 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 			totsize += buf.st_size;
 		}
 
-        rprotect(rsize = ScalarReal(totsize));
+        rprotect(rsize = Rf_ScalarReal(totsize));
 		SET_VECTOR_ELT(answer, SIZE, rsize);
-		SET_STRING_ELT(names, SIZE, mkChar("size.in.bytes"));
+		SET_STRING_ELT(names, SIZE, Rf_mkChar("size.in.bytes"));
 
-		setAttrib(answer, R_NamesSymbol, names);
+		Rf_setAttrib(answer, R_NamesSymbol, names);
 
 		return answer;
 	} catch (TGLException &e) {

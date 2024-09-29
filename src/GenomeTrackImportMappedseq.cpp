@@ -30,38 +30,38 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(_infile) || length(_infile) != 1)
+		if (!Rf_isString(_infile) || Rf_length(_infile) != 1)
 			verror("File argument is not a string");
 
-		if (length(_pileup) != 1 || ((!isReal(_pileup) || REAL(_pileup)[0] != (int)REAL(_pileup)[0]) && !isInteger(_pileup)))
+		if (Rf_length(_pileup) != 1 || ((!Rf_isReal(_pileup) || REAL(_pileup)[0] != (int)REAL(_pileup)[0]) && !Rf_isInteger(_pileup)))
 			verror("Pileup argument is not an integer");
 
-		if (length(_binsize) != 1 || ((!isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !isInteger(_binsize)))
+		if (Rf_length(_binsize) != 1 || ((!Rf_isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !Rf_isInteger(_binsize)))
 			verror("Binsize argument is not an integer");
 
-		if (!isNull(_cols_order) && (length(_cols_order) != NUM_COLS || (!isReal(_cols_order) && !isInteger(_cols_order))))
+		if (!Rf_isNull(_cols_order) && (Rf_length(_cols_order) != NUM_COLS || (!Rf_isReal(_cols_order) && !Rf_isInteger(_cols_order))))
 			verror("cols.order argument must be a vector with %d numeric values", NUM_COLS);
 
-		if (!isNull(_cols_order) && isReal(_cols_order)) {
+		if (!Rf_isNull(_cols_order) && Rf_isReal(_cols_order)) {
 			for (int i = 0; i < NUM_COLS; i++) {
 				if (REAL(_cols_order)[i] != (int)REAL(_cols_order)[i])
 					verror("cols.order is not an integer");
 			}
 		}
 
-		if (length(_remove_dups) > 1 || !isLogical(_remove_dups))
+		if (Rf_length(_remove_dups) > 1 || !Rf_isLogical(_remove_dups))
 			verror("remove.dups argument must be a logical value");
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
 		const char *infilename = CHAR(STRING_ELT(_infile, 0));
-		int pileup = isReal(_pileup) ? (int)REAL(_pileup)[0] : INTEGER(_pileup)[0];
-		double binsize = isReal(_binsize) ? (int)REAL(_binsize)[0] : INTEGER(_binsize)[0];
+		int pileup = Rf_isReal(_pileup) ? (int)REAL(_pileup)[0] : INTEGER(_pileup)[0];
+		double binsize = Rf_isReal(_binsize) ? (int)REAL(_binsize)[0] : INTEGER(_binsize)[0];
 		int cols_order[NUM_COLS];
 		bool remove_dups = LOGICAL(_remove_dups)[0];
-		bool is_sam_format = isNull(_cols_order);
+		bool is_sam_format = Rf_isNull(_cols_order);
 
 		if (is_sam_format) { // SAM format
 			cols_order[SEQ_COL] = 10;
@@ -70,7 +70,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 			cols_order[STRAND_COL] = 2;
 		} else {
 			for (int i = 0; i < NUM_COLS; i++)
-				cols_order[i] = isReal(_cols_order) ? (int)REAL(_cols_order)[i] : INTEGER(_cols_order)[i];
+				cols_order[i] = Rf_isReal(_cols_order) ? (int)REAL(_cols_order)[i] : INTEGER(_cols_order)[i];
 		}
 
 		if (pileup < 0)
@@ -334,7 +334,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 		for (unsigned i = 0; i < num_chroms; i++) {
 			INTEGER(chroms_idx)[i] = all_genome_intervs[i].chromid + 1;
-			SET_STRING_ELT(chroms, i, mkChar(iu.id2chrom(i).c_str()));
+			SET_STRING_ELT(chroms, i, Rf_mkChar(iu.id2chrom(i).c_str()));
 			REAL(mapped)[i] = num_mapped[i];
 			REAL(dups)[i] = num_dups[i];
 			INTEGER(row_names)[i] = i + 1;
@@ -343,31 +343,31 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 			total_dups += num_dups[i];
 		}
 
-		SET_STRING_ELT(col_names, 0, mkChar("chrom"));
-		SET_STRING_ELT(col_names, 1, mkChar("mapped"));
-		SET_STRING_ELT(col_names, 2, mkChar("dups"));
+		SET_STRING_ELT(col_names, 0, Rf_mkChar("chrom"));
+		SET_STRING_ELT(col_names, 1, Rf_mkChar("mapped"));
+		SET_STRING_ELT(col_names, 2, Rf_mkChar("dups"));
 
-        setAttrib(chroms_idx, R_LevelsSymbol, chroms);
-        setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+        Rf_setAttrib(chroms_idx, R_LevelsSymbol, chroms);
+        Rf_setAttrib(chroms_idx, R_ClassSymbol, Rf_mkString("factor"));
 
         SET_VECTOR_ELT(chrom_stat, 0, chroms_idx);
         SET_VECTOR_ELT(chrom_stat, 1, mapped);
         SET_VECTOR_ELT(chrom_stat, 2, dups);
 
-        setAttrib(chrom_stat, R_NamesSymbol, col_names);
-        setAttrib(chrom_stat, R_ClassSymbol, mkString("data.frame"));
-        setAttrib(chrom_stat, R_RowNamesSymbol, row_names);
+        Rf_setAttrib(chrom_stat, R_NamesSymbol, col_names);
+        Rf_setAttrib(chrom_stat, R_ClassSymbol, Rf_mkString("data.frame"));
+        Rf_setAttrib(chrom_stat, R_RowNamesSymbol, row_names);
 
 		rprotect(total_stat = RSaneAllocVector(REALSXP, 4));
 		REAL(total_stat)[0] = total_mapped + total_unmapped + total_dups;
 		REAL(total_stat)[1] = total_mapped;
 		REAL(total_stat)[2] = total_unmapped;
 		REAL(total_stat)[3] = total_dups;
-		setAttrib(total_stat, R_NamesSymbol, RSaneAllocVector(STRSXP, 3));
-		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 0, mkChar("total"));
-		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 1, mkChar("total.mapped"));
-		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 2, mkChar("total.unmapped"));
-		SET_STRING_ELT(getAttrib(total_stat, R_NamesSymbol), 3, mkChar("total.dups"));
+		Rf_setAttrib(total_stat, R_NamesSymbol, RSaneAllocVector(STRSXP, 3));
+		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 0, Rf_mkChar("total"));
+		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 1, Rf_mkChar("total.mapped"));
+		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 2, Rf_mkChar("total.unmapped"));
+		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 3, Rf_mkChar("total.dups"));
 
 		rprotect(answer = RSaneAllocVector(VECSXP, 2));
 

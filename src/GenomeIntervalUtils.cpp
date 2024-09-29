@@ -45,43 +45,43 @@ SEXP grbind(SEXP _objs, SEXP _envir)
 
 		IntervUtils iu(_envir);
 
-		if (!isVector(_objs))
+		if (!Rf_isVector(_objs))
 			verror("Argument for grbind is not a list");
 
 		SEXP answer;
 		uint64_t numrows = 0;
 		uint64_t numcols = 0;
 
-		for (uint64_t i = 0; i < (uint64_t)length(_objs); ++i) {
+		for (uint64_t i = 0; i < (uint64_t)Rf_length(_objs); ++i) {
 			SEXP obj = VECTOR_ELT(_objs, i);
-			SEXP src_class = getAttrib(obj, R_ClassSymbol);
+			SEXP src_class = Rf_getAttrib(obj, R_ClassSymbol);
 
-			if (isNull(src_class) || !isString(src_class) || length(src_class) != 1 || strcmp(CHAR(STRING_ELT(src_class, 0)), "data.frame"))
+			if (Rf_isNull(src_class) || !Rf_isString(src_class) || Rf_length(src_class) != 1 || strcmp(CHAR(STRING_ELT(src_class, 0)), "data.frame"))
 				verror("Object for grbind is not a data frame");
 
 			if (i) {
-				if (numcols != (uint64_t)length(obj)) 
+				if (numcols != (uint64_t)Rf_length(obj)) 
 					verror("Data frames for grbind differ in the number of columns");
 			} else
-				numcols = length(obj);
+				numcols = Rf_length(obj);
 
 			if (numcols) 
-				numrows += length(VECTOR_ELT(obj, 0));
+				numrows += Rf_length(VECTOR_ELT(obj, 0));
 		}
 
 		// In complience with R additional attributes are copied from the first object in rbind
-		answer = iu.create_data_frame(numrows, numcols, length(_objs) ? VECTOR_ELT(_objs, 0) : R_NilValue);
+		answer = iu.create_data_frame(numrows, numcols, Rf_length(_objs) ? VECTOR_ELT(_objs, 0) : R_NilValue);
 		vector<SEXP> src_cols;
 		vector<SEXP> tgt_cols;
 		iu.define_data_frame_cols(VECTOR_ELT(_objs, 0), src_cols, answer, tgt_cols, 0);
 
 		uint64_t tgtrow = 0;
 
-		for (int i = 0; i < length(_objs); ++i) {
+		for (int i = 0; i < Rf_length(_objs); ++i) {
 			SEXP obj = VECTOR_ELT(_objs, i);
-			uint64_t srcnumrows = length(VECTOR_ELT(obj, 0));
+			uint64_t srcnumrows = Rf_length(VECTOR_ELT(obj, 0));
 
-			for (int j = 0; j < length(obj); ++j) 
+			for (int j = 0; j < Rf_length(obj); ++j) 
 				src_cols[j] = VECTOR_ELT(obj, j);
 
 			iu.copy_data_frame_rows(src_cols, 0, srcnumrows, tgt_cols, tgtrow, 0);
@@ -108,16 +108,16 @@ SEXP gintervsort(SEXP _intervs, SEXP _envir)
 		iu.convert_rintervs(_intervs, &intervs, &intervs2d);
 
 		if (!intervs.empty()) {
-			SEXP rcolnames = getAttrib(_intervs, R_NamesSymbol);
+			SEXP rcolnames = Rf_getAttrib(_intervs, R_NamesSymbol);
 			int strand_col;
 
-			for (strand_col = 0; strand_col < length(rcolnames); ++strand_col) {
+			for (strand_col = 0; strand_col < Rf_length(rcolnames); ++strand_col) {
 				if (!strcmp(CHAR(STRING_ELT(rcolnames, strand_col)), "strand"))
 					break;
 			}
 			intervs.sort();
 
-			if (strand_col == length(_intervs))
+			if (strand_col == Rf_length(_intervs))
 				return iu.convert_intervs(&intervs);
 
 			SEXP answer = iu.convert_intervs(&intervs, GInterval::NUM_COLS + 1);
@@ -128,7 +128,7 @@ SEXP gintervsort(SEXP _intervs, SEXP _envir)
 				INTEGER(strands)[interv - intervs.begin()] = interv->strand;
 
 			SET_VECTOR_ELT(answer, GInterval::NUM_COLS, strands);
-			SET_STRING_ELT(getAttrib(answer, R_NamesSymbol), GInterval::NUM_COLS, mkChar("strand"));
+			SET_STRING_ELT(Rf_getAttrib(answer, R_NamesSymbol), GInterval::NUM_COLS, Rf_mkChar("strand"));
 			return answer;
 		}
 
@@ -276,7 +276,7 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
 	try {
         RdbInitializer rdb_init;
 
-        if (!isLogical(_unify_touching_intervals) || xlength(_unify_touching_intervals) != 1)
+        if (!Rf_isLogical(_unify_touching_intervals) || Rf_xlength(_unify_touching_intervals) != 1)
             verror("unify_touching_intervals argument is not logical");
 
         bool unify_touching_intervals = LOGICAL(_unify_touching_intervals)[0] == 1;
@@ -297,7 +297,7 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
                 REAL(old2new_mapping)[interv - intervs2d.begin()] = ((int64_t)interv->udata()) + 1;
 
 			SEXP answer = iu.convert_intervs(&intervs2d);
-			setAttrib(answer, install("mapping"), old2new_mapping);
+			Rf_setAttrib(answer, Rf_install("mapping"), old2new_mapping);
 			return answer;
 		}
 
@@ -342,7 +342,7 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
         }
 
         SEXP answer = iu.convert_intervs(&intervs);
-        setAttrib(answer, install("mapping"), old2new_mapping);
+        Rf_setAttrib(answer, Rf_install("mapping"), old2new_mapping);
         return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -358,10 +358,10 @@ SEXP ginterv_intersectband(SEXP _intervs, SEXP _band, SEXP _intervals_set_out, S
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 
 		IntervUtils iu(_envir);
 		GIntervalsFetcher2D *intervs = NULL;
@@ -458,48 +458,48 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 			for (int i = 0; i < GIntervalsBigSet1D::NUM_STAT_COLS; i++) {
 				if (i != GIntervalsBigSet1D::CHROM_COL) {
 					idx2ridx[i] = colidx;
-					SET_STRING_ELT(colnames, colidx++, mkChar(GIntervalsBigSet1D::STAT_COL_NAMES[i]));
+					SET_STRING_ELT(colnames, colidx++, Rf_mkChar(GIntervalsBigSet1D::STAT_COL_NAMES[i]));
 				}
 			}
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.size));
+                rprotect(rexp = Rf_ScalarReal(chromstat.size));
     			SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::SIZE_COL], rexp);
             }
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.unified_overlap_size));
+                rprotect(rexp = Rf_ScalarReal(chromstat.unified_overlap_size));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_OVERLAP_SIZE_COL], rexp);
             }
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.unified_touching_size));
+                rprotect(rexp = Rf_ScalarReal(chromstat.unified_touching_size));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_TOUCHING_SIZE_COL], rexp);
             }
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.range));
+                rprotect(rexp = Rf_ScalarReal(chromstat.range));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::RANGE_COL], rexp);
             }
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.unified_overlap_range));
+                rprotect(rexp = Rf_ScalarReal(chromstat.unified_overlap_range));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::UNIFIED_OVERLAP_RANGE_COL], rexp);
             }
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.contains_overlaps));
+                rprotect(rexp = Rf_ScalarReal(chromstat.contains_overlaps));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::CONTAINS_OVERLAPS_COL], RSaneAllocVector(LGLSXP, 1));
             }
 
-            setAttrib(answer, R_NamesSymbol, colnames);
-            setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
+            Rf_setAttrib(answer, R_NamesSymbol, colnames);
+            Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
 		} else {
 			GIntervalsBigSet2D::ChromStat chromstat = GIntervalsBigSet2D::get_chrom_stat(&intervs2d, iu).second;
 
@@ -512,35 +512,35 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 			for (int i = 0; i < GIntervalsBigSet2D::NUM_STAT_COLS; i++) {
 				if (i != GIntervalsBigSet2D::CHROM1_COL && i != GIntervalsBigSet2D::CHROM2_COL) {
 					idx2ridx[i] = colidx;
-					SET_STRING_ELT(colnames, colidx++, mkChar(GIntervalsBigSet2D::STAT_COL_NAMES[i]));
+					SET_STRING_ELT(colnames, colidx++, Rf_mkChar(GIntervalsBigSet2D::STAT_COL_NAMES[i]));
 				}
 			}
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.size));
+                rprotect(rexp = Rf_ScalarReal(chromstat.size));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::SIZE_COL], rexp);
             }
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.surface));
+                rprotect(rexp = Rf_ScalarReal(chromstat.surface));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::SURFACE_COL], rexp);
             }
 
             {
                 SEXP rexp;
-                rprotect(rexp = ScalarReal(chromstat.contains_overlaps));
+                rprotect(rexp = Rf_ScalarReal(chromstat.contains_overlaps));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::CONTAINS_OVERLAPS_COL], rexp);
             }
 
-            setAttrib(answer, R_NamesSymbol, colnames);
-            setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
+            Rf_setAttrib(answer, R_NamesSymbol, colnames);
+            Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
 		}
 
         rprotect(rownames = RSaneAllocVector(INTSXP, 1));
         INTEGER(rownames)[0] = 1;
-		setAttrib(answer, R_RowNamesSymbol, rownames);
+		Rf_setAttrib(answer, R_RowNamesSymbol, rownames);
 
 		return answer;
 	} catch (TGLException &e) {
@@ -597,7 +597,7 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 			uint64_t idx = 0;
 
 			for (uint64_t chromid = 0; chromid < num_chroms; ++chromid) {
-				SET_STRING_ELT(chroms, chromid, mkChar(iu.get_chromkey().id2chrom(chromid).c_str()));
+				SET_STRING_ELT(chroms, chromid, Rf_mkChar(iu.get_chromkey().id2chrom(chromid).c_str()));
 
 				if (chrom_sizes[chromid]) {
 					INTEGER(chroms_idx)[idx] = chromid + 1;
@@ -606,12 +606,12 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 				}
 			}
 
-			SET_STRING_ELT(col_names, CHROM, mkChar("chrom"));
-			SET_STRING_ELT(col_names, SIZE, mkChar("size"));
+			SET_STRING_ELT(col_names, CHROM, Rf_mkChar("chrom"));
+			SET_STRING_ELT(col_names, SIZE, Rf_mkChar("size"));
 
-            setAttrib(answer, R_NamesSymbol, col_names);
-            setAttrib(chroms_idx, R_LevelsSymbol, chroms);
-            setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+            Rf_setAttrib(answer, R_NamesSymbol, col_names);
+            Rf_setAttrib(chroms_idx, R_LevelsSymbol, chroms);
+            Rf_setAttrib(chroms_idx, R_ClassSymbol, Rf_mkString("factor"));
 
             SET_VECTOR_ELT(answer, CHROM, chroms_idx);
             SET_VECTOR_ELT(answer, SIZE, sizes);
@@ -642,8 +642,8 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 			uint64_t idx = 0;
 
 			for (uint64_t chromid1 = 0; chromid1 < num_chroms; ++chromid1) {
-				SET_STRING_ELT(chroms1, chromid1, mkChar(iu.get_chromkey().id2chrom(chromid1).c_str()));
-				SET_STRING_ELT(chroms2, chromid1, mkChar(iu.get_chromkey().id2chrom(chromid1).c_str()));
+				SET_STRING_ELT(chroms1, chromid1, Rf_mkChar(iu.get_chromkey().id2chrom(chromid1).c_str()));
+				SET_STRING_ELT(chroms2, chromid1, Rf_mkChar(iu.get_chromkey().id2chrom(chromid1).c_str()));
 
 				for (uint64_t chromid2 = 0; chromid2 < num_chroms; ++chromid2) {
 					uint64_t chrom_size = chrom_sizes[chromid1 * num_chroms + chromid2];
@@ -656,15 +656,15 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 				}
 			}
 
-			SET_STRING_ELT(col_names, CHROM1, mkChar("chrom1"));
-			SET_STRING_ELT(col_names, CHROM2, mkChar("chrom2"));
-			SET_STRING_ELT(col_names, SIZE, mkChar("size"));
+			SET_STRING_ELT(col_names, CHROM1, Rf_mkChar("chrom1"));
+			SET_STRING_ELT(col_names, CHROM2, Rf_mkChar("chrom2"));
+			SET_STRING_ELT(col_names, SIZE, Rf_mkChar("size"));
 
-            setAttrib(answer, R_NamesSymbol, col_names);
-            setAttrib(chroms_idx1, R_LevelsSymbol, chroms1);
-            setAttrib(chroms_idx1, R_ClassSymbol, mkString("factor"));
-            setAttrib(chroms_idx2, R_LevelsSymbol, chroms2);
-            setAttrib(chroms_idx2, R_ClassSymbol, mkString("factor"));
+            Rf_setAttrib(answer, R_NamesSymbol, col_names);
+            Rf_setAttrib(chroms_idx1, R_LevelsSymbol, chroms1);
+            Rf_setAttrib(chroms_idx1, R_ClassSymbol, Rf_mkString("factor"));
+            Rf_setAttrib(chroms_idx2, R_LevelsSymbol, chroms2);
+            Rf_setAttrib(chroms_idx2, R_ClassSymbol, Rf_mkString("factor"));
 
             SET_VECTOR_ELT(answer, CHROM1, chroms_idx1);
             SET_VECTOR_ELT(answer, CHROM2, chroms_idx2);
@@ -677,8 +677,8 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 		for (int i = 0; i < num_non_zero_chroms; ++i) 
 			INTEGER(row_names)[i] = i + 1;
 
-        setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-        setAttrib(answer, R_RowNamesSymbol, row_names);
+        Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
+        Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
 
 		return answer;
 	} catch (TGLException &e) {
@@ -694,7 +694,7 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
 		const char *track_str = CHAR(STRING_ELT(_track, 0));
@@ -706,14 +706,14 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			verror("Track of type %s cannot be used in place of an intervals set", GenomeTrack::TYPE_NAMES[track_type]);
 
 		if (track_type == GenomeTrack::SPARSE  || track_type == GenomeTrack::ARRAYS) {
-			if ((!isString(_chrom) && !isFactor(_chrom)) || length(_chrom) != 1)
+			if ((!Rf_isString(_chrom) && !Rf_isFactor(_chrom)) || Rf_length(_chrom) != 1)
 				verror("Chromosome argument is not a string");
 
 			unique_ptr<GenomeTrack1D> track;
 			GIntervals *intervals = NULL;
 
-			SEXP chrom_levels = getAttrib(_chrom, R_LevelsSymbol);
-			const char *chrom = isString(_chrom) ? CHAR(STRING_ELT(_chrom, 0)) : CHAR(STRING_ELT(chrom_levels, INTEGER(_chrom)[0] - 1));
+			SEXP chrom_levels = Rf_getAttrib(_chrom, R_LevelsSymbol);
+			const char *chrom = Rf_isString(_chrom) ? CHAR(STRING_ELT(_chrom, 0)) : CHAR(STRING_ELT(chrom_levels, INTEGER(_chrom)[0] - 1));
 			int chromid = iu.chrom2id(chrom);
 
 			string filename(trackpath + "/" + GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid));
@@ -730,17 +730,17 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 
 			return iu.convert_intervs(intervals);
 		} else if (track_type == GenomeTrack::RECTS || track_type == GenomeTrack::POINTS || track_type == GenomeTrack::COMPUTED) {
-			if ((!isString(_chrom1) && !isFactor(_chrom1)) || length(_chrom1) != 1 || (!isString(_chrom2) && !isFactor(_chrom2)) || length(_chrom2) != 1)
+			if ((!Rf_isString(_chrom1) && !Rf_isFactor(_chrom1)) || Rf_length(_chrom1) != 1 || (!Rf_isString(_chrom2) && !Rf_isFactor(_chrom2)) || Rf_length(_chrom2) != 1)
 				verror("Chromosome argument is not a string");
 
 			unique_ptr<GenomeTrack2D> track;
 			GIntervals2D intervals;
 			uint64_t size = 0;
 
-			SEXP chrom_levels1 = getAttrib(_chrom1, R_LevelsSymbol);
-			SEXP chrom_levels2 = getAttrib(_chrom2, R_LevelsSymbol);
-			const char *chrom1 = isString(_chrom1) ? CHAR(STRING_ELT(_chrom1, 0)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(_chrom1)[0] - 1));
-			const char *chrom2 = isString(_chrom2) ? CHAR(STRING_ELT(_chrom2, 0)) : CHAR(STRING_ELT(chrom_levels2, INTEGER(_chrom2)[0] - 1));
+			SEXP chrom_levels1 = Rf_getAttrib(_chrom1, R_LevelsSymbol);
+			SEXP chrom_levels2 = Rf_getAttrib(_chrom2, R_LevelsSymbol);
+			const char *chrom1 = Rf_isString(_chrom1) ? CHAR(STRING_ELT(_chrom1, 0)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(_chrom1)[0] - 1));
+			const char *chrom2 = Rf_isString(_chrom2) ? CHAR(STRING_ELT(_chrom2, 0)) : CHAR(STRING_ELT(chrom_levels2, INTEGER(_chrom2)[0] - 1));
 			int chromid1 = iu.chrom2id(chrom1);
 			int chromid2 = iu.chrom2id(chrom2);
 

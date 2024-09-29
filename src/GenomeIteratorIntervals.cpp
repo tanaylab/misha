@@ -15,13 +15,13 @@ SEXP giterator_intervals(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEX
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Tracks expression argument must be a string");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 
 		IntervUtils iu(_envir);
 		GIntervalsFetcher1D *intervals1d = NULL;

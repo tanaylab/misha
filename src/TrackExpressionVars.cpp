@@ -4,6 +4,9 @@
 
 #include "rdbutils.h"
 
+#ifndef R_NO_REMAP
+#  define R_NO_REMAP
+#endif
 #include <R.h>
 #include <Rinternals.h>
 
@@ -51,29 +54,29 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 	SEXP vtracks = R_NilValue;
 
 	// retrieve track names
-	rprotect(rtracknames[TRACK] = findVar(install("GTRACKS"), findVar(install(".misha"), m_iu.get_env())));
+	rprotect(rtracknames[TRACK] = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env())));
 	SEXPCleaner rtracknames_track_cleaner(rtracknames[TRACK]);
 
 	// retrieve virtual track names (it's more complex since virtual track names are burried in a list of lists)
 	rtracknames[VTRACK] = R_NilValue;
-	rprotect(gvtracks = findVar(install("GVTRACKS"), findVar(install(".misha"), m_iu.get_env())));
+	rprotect(gvtracks = Rf_findVar(Rf_install("GVTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env())));
 	SEXPCleaner gvtracks_cleaner(gvtracks);
 
-	if (!isNull(gvtracks) && !isSymbol(gvtracks)) { 
-		SEXP gwds = getAttrib(gvtracks, R_NamesSymbol);
+	if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) { 
+		SEXP gwds = Rf_getAttrib(gvtracks, R_NamesSymbol);
 
-		if (!isVector(gvtracks) || (length(gvtracks) && !isString(gwds)) || length(gwds) != length(gvtracks))
+		if (!Rf_isVector(gvtracks) || (Rf_length(gvtracks) && !Rf_isString(gwds)) || Rf_length(gwds) != Rf_length(gvtracks))
 			verror("Invalid format of GVTRACKS variable.\n"
 				"To continue working with virtual tracks please remove this variable from the environment.");
 
 		const char *gwd = get_gwd(m_iu.get_env());
 
-		for (int i = 0; i < length(gwds); ++i) {
+		for (int i = 0; i < Rf_length(gwds); ++i) {
 			if (!strcmp(gwd, CHAR(STRING_ELT(gwds, i)))) {
 				vtracks = VECTOR_ELT(gvtracks, i);
-				SEXP vtracknames = getAttrib(vtracks, R_NamesSymbol);
+				SEXP vtracknames = Rf_getAttrib(vtracks, R_NamesSymbol);
 
-				if (!isVector(vtracks) || (length(vtracks) && !isString(vtracknames)) || length(vtracknames) != length(vtracks))
+				if (!Rf_isVector(vtracks) || (Rf_length(vtracks) && !Rf_isString(vtracknames)) || Rf_length(vtracknames) != Rf_length(vtracks))
 					verror("Invalid format of GVTRACKS variable.\n"
 						"To continue working with virtual tracks please remove this variable from the environment.");
 
@@ -84,10 +87,10 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 	for (vector<string>::const_iterator iexpr = track_exprs.begin(); iexpr != track_exprs.end(); ++iexpr) {
 		for (int var_type = 0; var_type < NUM_VAR_TYPES; ++var_type) {
-			if (!isString(rtracknames[var_type]))
+			if (!Rf_isString(rtracknames[var_type]))
 				continue;
 
-			for (int itrack = 0; itrack < length(rtracknames[var_type]); ++itrack) {
+			for (int itrack = 0; itrack < Rf_length(rtracknames[var_type]); ++itrack) {
 				string track = CHAR(STRING_ELT(rtracknames[var_type], itrack));
 				uint64_t pos = 0;
 
@@ -116,14 +119,14 @@ void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterato
 {
 	SEXP rimdf = get_rvector_col(rvtrack, "itr", vtrack.c_str(), false);
 
-	if (isNull(rimdf))
+	if (Rf_isNull(rimdf))
 		return;
 
 	string vname = vtrack + "$itr";
 
 	SEXP rtype = get_rvector_col(rimdf, "type", vname.c_str(), true);
 
-	if (!isString(rtype) || length(rtype) != 1)
+	if (!Rf_isString(rtype) || Rf_length(rtype) != 1)
 		verror("Invalid format of virtual track %s", vtrack.c_str());
 
 	string type(CHAR(STRING_ELT(rtype, 0)));
@@ -135,13 +138,13 @@ void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterato
 
 		SEXP rdim = get_rvector_col(rimdf, "dim", vname.c_str(), false);
 
-		if (isNull(rdim))
+		if (Rf_isNull(rdim))
 			imdf1d->dim = Iterator_modifier1D::DIM_NONE;
 		else {
-			if (!(isReal(rdim) || isInteger(rdim)) || length(rdim) != 1)
+			if (!(Rf_isReal(rdim) || Rf_isInteger(rdim)) || Rf_length(rdim) != 1)
 				verror("Virtual track %s: invalid dimension projection of iterator modifier", vtrack.c_str());
 
-			double dim = isReal(rdim) ? REAL(rdim)[0] : INTEGER(rdim)[0];
+			double dim = Rf_isReal(rdim) ? REAL(rdim)[0] : INTEGER(rdim)[0];
 
 			if (!dim)
 				imdf1d->dim = Iterator_modifier1D::DIM_NONE;
@@ -159,10 +162,10 @@ void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterato
 		for (int i = 0; i < NUM_SHIFTS; i++) {
 			SEXP rshift = get_rvector_col(rimdf, shift_col_names[i], vname.c_str(), false);
 
-			if (!(isReal(rshift) || isInteger(rshift)) || length(rshift) != 1)
+			if (!(Rf_isReal(rshift) || Rf_isInteger(rshift)) || Rf_length(rshift) != 1)
 				verror("Virtual track %s: %s must be an integer", vtrack.c_str(), shift_col_names[i]);
 
-			int64_t shift = isReal(rshift) ? (int64_t)REAL(rshift)[0] : INTEGER(rshift)[0];
+			int64_t shift = Rf_isReal(rshift) ? (int64_t)REAL(rshift)[0] : INTEGER(rshift)[0];
 
 			if (i == SSHIFT)
 				imdf1d->sshift = shift;
@@ -179,10 +182,10 @@ void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterato
 		for (int i = 0; i < NUM_SHIFTS; i++) {
 			SEXP rshift = get_rvector_col(rimdf, shift_col_names[i], vname.c_str(), false);
 
-			if (!(isReal(rshift) || isInteger(rshift)) || length(rshift) != 1)
+			if (!(Rf_isReal(rshift) || Rf_isInteger(rshift)) || Rf_length(rshift) != 1)
 				verror("Virtual track %s: %s must be an integer", vtrack.c_str(), shift_col_names[i]);
 
-			int64_t shift = isReal(rshift) ? (int64_t)REAL(rshift)[0] : INTEGER(rshift)[0];
+			int64_t shift = Rf_isReal(rshift) ? (int64_t)REAL(rshift)[0] : INTEGER(rshift)[0];
 
 			if (i == SSHIFT1)
 				imdf2d->sshift1 = shift;
@@ -275,12 +278,12 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 
 	SEXP rsrc = get_rvector_col(rvtrack, "src", vtrack.c_str(), true);
 
-	if (isString(rsrc) && length(rsrc) == 1) {
+	if (Rf_isString(rsrc) && Rf_length(rsrc) == 1) {
 		string track(CHAR(STRING_ELT(rsrc, 0)));
 
-		SEXP gtracks = findVar(install("GTRACKS"), findVar(install(".misha"), m_iu.get_env()));
-		if (isString(gtracks)) {
-			for (int itrack = 0; itrack < length(gtracks); itrack++) {
+		SEXP gtracks = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env()));
+		if (Rf_isString(gtracks)) {
+			for (int itrack = 0; itrack < Rf_length(gtracks); itrack++) {
 				if (!strcmp(CHAR(STRING_ELT(gtracks, itrack)), track.c_str())) {
 					add_vtrack_var_src_track(rvtrack, vtrack, track);
 					return;
@@ -336,19 +339,19 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 	GenomeTrackArrays::SliceFunctions slice_func = GenomeTrackArrays::S_AVG;
 	double slice_percentile = 0;
 
-	if (!isNull(rslice)) {
+	if (!Rf_isNull(rslice)) {
 		if (track_type != GenomeTrack::ARRAYS)
 			verror("Slices are not supported by %s tracks", GenomeTrack::TYPE_NAMES[track_type]);
 
 		SEXP rslice_func = get_rvector_col(rslice, "func", vtrack.c_str(), false);
 
-    	if (!isNull(rslice_func)) {
+    	if (!Rf_isNull(rslice_func)) {
     		string slice_func_str;
 
     		if (track_type != GenomeTrack::ARRAYS)
     			verror("Slices are not supported by %s tracks", GenomeTrack::TYPE_NAMES[track_type]);
 
-    		if (!isString(rslice_func))
+    		if (!Rf_isString(rslice_func))
     			verror("slice function argument must be a string");
 
     		SEXP rslice_params = get_rvector_col(rslice, "params", vtrack.c_str(), false);
@@ -361,14 +364,14 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
     			if (!strcmp(slice_func_str.c_str(), GenomeTrackArrays::SLICE_FUNCTION_NAMES[ifunc])) {
     				slice_func = (GenomeTrackArrays::SliceFunctions)ifunc;
 					if (slice_func == GenomeTrackArrays::S_QUANTILE) {
-						if (isNull(rslice_params))
+						if (Rf_isNull(rslice_params))
 							verror("Virtual track %s: slice function %s requires an additional parameter (percentile) to be specified", vtrack.c_str(), slice_func_str.c_str());
-						if (!isReal(rslice_params) || length(rslice_params) != 1)
+						if (!Rf_isReal(rslice_params) || Rf_length(rslice_params) != 1)
 							verror("Virtual track %s: invalid parameters used for function %s", vtrack.c_str(), slice_func_str.c_str());
 						slice_percentile = REAL(rslice_params)[0];
 						if (slice_percentile < 0 || slice_percentile > 1)
 							verror("Virtual track %s: parameter (percentile) used for function %s is out of range", vtrack.c_str(), slice_func_str.c_str());
-					} else if (!isNull(rslice_params))
+					} else if (!Rf_isNull(rslice_params))
     					verror("Virtual track %s: slice function %s does not accept any parameters", vtrack.c_str(), slice_func_str.c_str());
     				break;
     			}
@@ -379,12 +382,12 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
     	}
 
 		SEXP rslice_idx = get_rvector_col(rslice, "slice", vtrack.c_str(), false);
-		if (!isNull(rslice_idx)) {
-			if (!isReal(rslice_idx) && !isInteger(rslice_idx)) 
+		if (!Rf_isNull(rslice_idx)) {
+			if (!Rf_isReal(rslice_idx) && !Rf_isInteger(rslice_idx)) 
 				verror("Virtual track %s: invalid slice parameters", vtrack.c_str());
 
-			for (int i = 0; i < length(rslice_idx); ++i) {
-				double idx = isReal(rslice_idx) ? REAL(rslice_idx)[i] : INTEGER(rslice_idx)[i];
+			for (int i = 0; i < Rf_length(rslice_idx); ++i) {
+				double idx = Rf_isReal(rslice_idx) ? REAL(rslice_idx)[i] : INTEGER(rslice_idx)[i];
 				if (idx < 1 || idx != (double)(int)idx)
 					verror("Virtual track %s: slice indices must be positive integers", vtrack.c_str());
 				slice.push_back((unsigned)(idx - 1));
@@ -407,10 +410,10 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 	SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 	string func;
 
-	if (isNull(rfunc))
+	if (Rf_isNull(rfunc))
 		func = Track_var::FUNC_NAMES[Track_var::REG];
 	else {
-		if (!isString(rfunc))
+		if (!Rf_isString(rfunc))
 			verror("Function argument must be a string");
 
 		func = CHAR(STRING_ELT(rfunc, 0));
@@ -426,16 +429,16 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				verror("Virtual track %s: function %s is not supported by %s tracks", vtrack.c_str(), func.c_str(), GenomeTrack::TYPE_NAMES[track_type]);
 
 			if (ifunc == Track_var::QUANTILE) {
-				if (isNull(rparams))
+				if (Rf_isNull(rparams))
 					verror("Virtual track %s: function %s requires an additional parameter (percentile) to be specified", vtrack.c_str(), func.c_str());
-				if (!isReal(rparams) || length(rparams) != 1)
+				if (!Rf_isReal(rparams) || Rf_length(rparams) != 1)
 					verror("Virtual track %s: invalid parameters used for function %s", vtrack.c_str(), func.c_str());
 				var.percentile = REAL(rparams)[0];
 				if (var.percentile < 0 || var.percentile > 1)
 					verror("Virtual track %s: parameter (percentile) used for function %s is out of range", vtrack.c_str(), func.c_str());
 			} else {
 				var.percentile = numeric_limits<double>::quiet_NaN();
-				if (!isNull(rparams))
+				if (!Rf_isNull(rparams))
 					verror("Virtual track %s: function %s does not accept any parameters", vtrack.c_str(), func.c_str());
 			}
 
@@ -468,7 +471,7 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 	SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 	string func;
 
-	if (isNull(rfunc))
+	if (Rf_isNull(rfunc))
 		func = Interv_var::FUNC_NAMES[Interv_var::DIST];
 	else {
 		func = CHAR(STRING_ELT(rfunc, 0));
@@ -480,10 +483,10 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 
 		double dist_margin = 0;
 
-		if (!isNull(rparams)) {
-			if (isReal(rparams) && length(rparams) == 1)
+		if (!Rf_isNull(rparams)) {
+			if (Rf_isReal(rparams) && Rf_length(rparams) == 1)
 				dist_margin = REAL(rparams)[0];
-			else if (isInteger(rparams) && length(rparams) == 1)
+			else if (Rf_isInteger(rparams) && Rf_length(rparams) == 1)
 				dist_margin = INTEGER(rparams)[0];
 			else
 				verror("Virtual track %s: invalid parameters used for function %s", vtrack.c_str(), func.c_str());
@@ -508,7 +511,7 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::DIST_CENTER])) {
 		var.val_func = Interv_var::DIST_CENTER;
 
-		if (!isNull(rparams))
+		if (!Rf_isNull(rparams))
 			verror("Virtual track %s: function %s does not accept any parameters", vtrack.c_str(), func.c_str());
 
 		var.dist_margin = 0.;
@@ -639,13 +642,13 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 
 			rprotect(val = RSaneUnserialize(pv_fname.c_str()));
 			SEXPCleaner val_cleaner(val);
-			SEXP breaks = getAttrib(val, install("breaks"));
+			SEXP breaks = Rf_getAttrib(val, Rf_install("breaks"));
 
-			if (breaks == R_NilValue || !isReal(breaks) || length(breaks) != length(val))
+			if (breaks == R_NilValue || !Rf_isReal(breaks) || Rf_length(breaks) != Rf_length(val))
 				verror("File %s is in invalid format.", pv_fname.c_str());
 
-			pv.bins.assign(REAL(val), REAL(val) + length(val));
-			pv.binfinder.init(REAL(breaks), length(breaks));
+			pv.bins.assign(REAL(val), REAL(val) + Rf_length(val));
+			pv.binfinder.init(REAL(breaks), Rf_length(breaks));
 		}
 	}
 }
@@ -654,12 +657,12 @@ void TrackExpressionVars::define_r_vars(unsigned size)
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ivar++) {
 		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
-		defineVar(install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
+		Rf_defineVar(Rf_install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
 		ivar->var = REAL(ivar->rvar);
 	}
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ivar++) {
 		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
-		defineVar(install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
+		Rf_defineVar(Rf_install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
 		ivar->var = REAL(ivar->rvar);
 	}
 }
