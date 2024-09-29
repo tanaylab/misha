@@ -81,7 +81,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 	REprintf("Reading input file(s)...\n");
 
 	int64_t infiles_size_sum = 0;
-	for (int ifile = 0; ifile < length(_files); ++ifile) {
+	for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
 		const char *fname = CHAR(STRING_ELT(_files, ifile));
 		struct stat st;
 
@@ -92,7 +92,7 @@ static void process_contacts_as_intervals(IntervUtils &iu, SEXP _files, Contact_
 
 	// STEP 1: Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
 	progress.init(infiles_size_sum, 10000000);
-	for (int ifile = 0; ifile < length(_files); ++ifile) {
+	for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
 		vector<string> fields;
 		long lineno = 0;
 		BufferedFile infile;
@@ -211,7 +211,7 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 
 	vector<string> fields;
 	int64_t contacts_files_size_sum = 0;
-	for (int icontact_file = 0; icontact_file < length(_contacts); ++icontact_file) {
+	for (int icontact_file = 0; icontact_file < Rf_length(_contacts); ++icontact_file) {
 		const char *contacts_fname = CHAR(STRING_ELT(_contacts, icontact_file));
 		struct stat st;
 
@@ -291,7 +291,7 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 
 	float value;
 
-	for (int icontact_file = 0; icontact_file < length(_contacts); ++icontact_file) {
+	for (int icontact_file = 0; icontact_file < Rf_length(_contacts); ++icontact_file) {
 		int64_t fend1, fend2;
 		GIntervals2D intervs;
 		const char *contacts_fname = CHAR(STRING_ELT(_contacts, icontact_file));
@@ -363,16 +363,16 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isNull(_fends) && (!isString(_fends) || length(_fends) != 1))
+		if (!Rf_isNull(_fends) && (!Rf_isString(_fends) || Rf_length(_fends) != 1))
 			verror("Fends argument is not a string");
 
-		if (!isString(_contacts) || length(_contacts) < 1)
+		if (!Rf_isString(_contacts) || Rf_length(_contacts) < 1)
 			verror("Contacts argument is not a string");
 
-		if (!isLogical(_allow_duplicates) || length(_allow_duplicates) != 1)
+		if (!Rf_isLogical(_allow_duplicates) || Rf_length(_allow_duplicates) != 1)
 			verror("Allow duplicates argument is not a boolean");
 
 		IntervUtils iu(_envir);
@@ -392,7 +392,7 @@ SEXP gtrack_import_contacts(SEXP _track, SEXP _contacts, SEXP _fends, SEXP _allo
 		// 4. Read the contacts of a subtree, sum up the duplicates and insert them to StatQuadTreeCachedSerializer.
 
 		// STAGE 1: Read the contacts and split them into binary files each holding the contacts of specific pair of chromosomes.
-		if (isNull(_fends))
+		if (Rf_isNull(_fends))
 			process_contacts_as_intervals(iu, _contacts, contact_chrom_files, dirname.c_str());
 		else
 			process_contacts_as_fends(iu, _contacts, _fends, contact_chrom_files, dirname.c_str());

@@ -19,7 +19,7 @@ SEXP gcheck_vtrack(SEXP _vtrack, SEXP _envir)
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_vtrack) || length(_vtrack) != 1)
+		if (!Rf_isString(_vtrack) || Rf_length(_vtrack) != 1)
 			verror("Virtual track argument is not a string");
 
 		const char *vtrack = CHAR(STRING_ELT(_vtrack, 0));

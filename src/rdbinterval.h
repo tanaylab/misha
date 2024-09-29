@@ -26,6 +26,9 @@ using namespace std;
 #include "GIntervals2D.h"
 #include "TrackExpressionIterator.h"
 
+#ifndef R_NO_REMAP
+#  define R_NO_REMAP
+#endif
 #include <R.h>
 #include <Rinternals.h>
 

@@ -33,6 +33,9 @@
 // #include "TrackExpressionFixedBinIterator.h"
 // #include "TrackExpressionIntervals1DIterator.h"
 
+// #ifndef R_NO_REMAP
+// #  define R_NO_REMAP
+// #endif
 // #include <R.h>
 // #include <Rinternals.h>
 // #include <R_ext/Parse.h>
@@ -106,8 +109,8 @@
 // 		RdbInitializer rdb_init;
 // 		IntervUtils iu(_envir);
 
-// 		int n = isReal(_n) ? REAL(_n)[0] : INTEGER(_n)[0];
-// 		int variant = isReal(_variant) ? REAL(_variant)[0] : INTEGER(_variant)[0];
+// 		int n = Rf_isReal(_n) ? REAL(_n)[0] : INTEGER(_n)[0];
+// 		int variant = Rf_isReal(_variant) ? REAL(_variant)[0] : INTEGER(_variant)[0];
 // 		SEXP answer;
 
 // 		rprotect(answer = RSaneAllocVector(REALSXP, n));
@@ -129,7 +132,7 @@
 // 		case 2:
 // 			{
 // 				for (int i = 0; i < n; ++i) 
-// 					if (isReal(answer))
+// 					if (Rf_isReal(answer))
 // 						;
 // 			}
 // 			break;
@@ -144,7 +147,7 @@
 // 			{
 // 				double *ar = REAL(answer);
 // 				for (int i = 0; i < n; ++i) 
-// 					if (isReal(answer))
+// 					if (Rf_isReal(answer))
 // 						ar[i] = i;
 // 			}
 // 			break;
@@ -164,13 +167,13 @@
 // //		RdbInitializer rdb_init;
 // //		IntervUtils iu(_envir);
 // //
-// //		SEXP res = iu.create_data_frame(2, length(df1) + length(df2));
+// //		SEXP res = iu.create_data_frame(2, Rf_length(df1) + Rf_length(df2));
 // //		iu.define_data_frame_cols(df1, res, 0);
-// //		iu.define_data_frame_cols(df2, res, length(df1));
+// //		iu.define_data_frame_cols(df2, res, Rf_length(df1));
 // //		iu.copy_data_frame_row(df1, 1, res, 0, 0);
 // //		iu.copy_data_frame_row(df1, 3, res, 1, 0);
-// //		iu.copy_data_frame_row(df2, 0, res, 0, length(df1));
-// //		iu.copy_data_frame_row(df2, 2, res, 1, length(df1));
+// //		iu.copy_data_frame_row(df2, 0, res, 0, Rf_length(df1));
+// //		iu.copy_data_frame_row(df2, 2, res, 1, Rf_length(df1));
 // //		return res;
 // //	} catch (TGLException &e) {
 // //		rerror("%s", e.msg());
@@ -474,7 +477,7 @@
 // 	try {
 // 		RdbInitializer rdb_init;
 
-// 		if (!isString(_track) || length(_track) != 1)
+// 		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 // 			verror("Track argument is not a string");
 
 // 		IntervUtils iu(_envir);
@@ -492,8 +495,8 @@
 // 		RectsQuadTree qtree;
 // 		int chromid1 = -1;
 // 		int chromid2 = -1;
-// 		int max_num_rects = isReal(_max_chrom_rects) ? REAL(_max_chrom_rects)[0] : INTEGER(_max_chrom_rects)[0]; // 20000
-// 		int max_rect_size = isReal(_max_rect_size) ? REAL(_max_rect_size)[0] : INTEGER(_max_rect_size)[0]; // 100
+// 		int max_num_rects = Rf_isReal(_max_chrom_rects) ? REAL(_max_chrom_rects)[0] : INTEGER(_max_chrom_rects)[0]; // 20000
+// 		int max_rect_size = Rf_isReal(_max_rect_size) ? REAL(_max_rect_size)[0] : INTEGER(_max_rect_size)[0]; // 100
 
 // 		for (GIntervals2D::const_iterator igenome = all_genome_intervs.begin(); igenome != all_genome_intervs.end(); ++igenome) {
 // 			if (gtrack.opened())
@@ -1153,7 +1156,7 @@
 // 		RdbInitializer rdb_init;
 
 // //		StreamPercentiler<double> sp(REAL(_rnd_sampling_buf_size)[0], REAL(_lowest_vals_buf_size)[0], REAL(_highest_vals_buf_size)[0]);
-// //		for (int i = 0; i < length(_vals); i++)
+// //		for (int i = 0; i < Rf_length(_vals); i++)
 // //			sp.add(REAL(_vals)[i]);
 // //
 // //		bool estimation;
@@ -1193,16 +1196,16 @@
 // 	try {
 // 		RdbInitializer rdb_init;
 
-// 		if (!isString(_track) || length(_track) != 1)
+// 		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 // 			verror("Track argument is not a string");
 
-// 		if (!isReal(_minsize) || length(_minsize) != 1) 
+// 		if (!Rf_isReal(_minsize) || Rf_length(_minsize) != 1) 
 // 			verror("Min size argment is not a number");
 
-// 		if (!isReal(_maxsize) || length(_maxsize) != 1) 
+// 		if (!Rf_isReal(_maxsize) || Rf_length(_maxsize) != 1) 
 // 			verror("Max size argment is not a number");
 
-// 		if (!isString(_expr) || length(_expr) != 1)
+// 		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 // 			verror("Tracks expression argument must be a string");
 
 // 		const char *track_str = CHAR(STRING_ELT(_track, 0));
@@ -1269,7 +1272,7 @@
 // 		for (int i = 0; i < maxsize; i++) {
 // 			char buf[100];
 // 			snprintf(buf, sizeof(buf), "col%d", i);
-// 			SET_STRING_ELT(colnames, i, mkChar(buf));
+// 			SET_STRING_ELT(colnames, i, Rf_mkChar(buf));
 // 		}
 
 // 		return colnames;
@@ -1296,7 +1299,7 @@
 // 		SEXP rval = RSaneUnserialize(CHAR(STRING_ELT(_fname, 0)));
 
 // 		REprintf("After2...\n");
-// 		if (isReal(rval))
+// 		if (Rf_isReal(rval))
 // 			REprintf("Val = %g\n", REAL(rval)[0]);
 
 // 		return R_NilValue;

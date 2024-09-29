@@ -136,11 +136,11 @@ private:
 
 inline double TrackExprScanner::last_real(int idx) const
 {
-    if (m_eval_exprs[idx] != R_NilValue && !isReal(m_eval_bufs[idx])) {
+    if (m_eval_exprs[idx] != R_NilValue && !Rf_isReal(m_eval_bufs[idx])) {
         if (RdbInitializer::is_kid()) 
             verror("Expression \"%s\" does not produce a numeric result.", m_track_exprs[idx].c_str());
         else {
-            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".misha"), m_iu.get_env()));
+            Rf_defineVar(Rf_install("GERROR_EXPR"), m_eval_exprs[idx], Rf_findVar(Rf_install(".misha"), m_iu.get_env()));
             verror("Expression \"%s\" does not produce a numeric result.\n"
                     "The result of the last expression evaluation was saved in GERROR_EXPR variable.", m_track_exprs[idx].c_str());
         }
@@ -153,11 +153,11 @@ inline int TrackExprScanner::last_logical(int idx) const
     if (m_eval_exprs[idx] == R_NilValue)
         verror("Expression \"%s\" does not produce a logical result", m_track_exprs[idx].c_str());
 
-    if (!isLogical(m_eval_bufs[idx])) {
+    if (!Rf_isLogical(m_eval_bufs[idx])) {
         if (RdbInitializer::is_kid()) 
             verror("Expression \"%s\" does not produce a logical result\n", m_track_exprs[idx].c_str());
         else {
-            defineVar(install("GERROR_EXPR"), m_eval_exprs[idx], findVar(install(".misha"), m_iu.get_env()));
+            Rf_defineVar(Rf_install("GERROR_EXPR"), m_eval_exprs[idx], Rf_findVar(Rf_install(".misha"), m_iu.get_env()));
             verror("Expression \"%s\" does not produce a logical result\n"
                     "The result of the last expression evaluation was saved in GERROR_EXPR variable.", m_track_exprs[idx].c_str());
         }

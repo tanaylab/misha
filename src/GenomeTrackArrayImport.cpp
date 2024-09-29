@@ -24,8 +24,8 @@ public:
 	Source(const GenomeChromKey &chromkey, const char *src, const char *dir, SEXP colnames) : m_chromkey(chromkey) {
 		m_src = src;
 		m_dir = dir;
-		m_colnames.reserve(length(colnames));
-		for (int i = 0; i < length(colnames); ++i) 
+		m_colnames.reserve(Rf_length(colnames));
+		for (int i = 0; i < Rf_length(colnames); ++i) 
 			m_colnames.push_back(CHAR(STRING_ELT(colnames, i)));
 		m_dependencies.resize(get_colnames().size());
 		m_array_idxs.resize(get_colnames().size());
@@ -146,29 +146,29 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(_src)) 
+		if (!Rf_isString(_src)) 
 			verror("Invalid source argument");
 
-		if (!isVector(_colnames)) 
+		if (!Rf_isVector(_colnames)) 
 			verror("Invalid column names argument");
 
-		if (length(_src) != length(_colnames)) 
+		if (Rf_length(_src) != Rf_length(_colnames)) 
 			verror("Sources size does not match the columns names set size");
 
 		IntervUtils iu(_envir);
 		unsigned array_idx = 0;
 
-		for (int i = 0; i < length(_src); ++i) {
+		for (int i = 0; i < Rf_length(_src); ++i) {
 			SEXP rcolnames = VECTOR_ELT(_colnames, i);
 			const char *src = CHAR(STRING_ELT(_src, i));
 
-			if (!isString(rcolnames)) 
+			if (!Rf_isString(rcolnames)) 
 				verror("Invalid column names argument");
 
-			if (length(rcolnames))
+			if (Rf_length(rcolnames))
 				sources.push_back(new Source(iu.get_chromkey(), src, track2path(_envir, src).c_str(), rcolnames));
 			else
 				sources.push_back(new Source(iu.get_chromkey(), src));
@@ -285,7 +285,7 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 
 			for (unsigned i = 0; i < colnames.size(); ++i) {
 				if (!(*isrc)->is_dependent(i)) 
-					SET_STRING_ELT(answer, colidx++, mkChar(colnames[i].c_str()));
+					SET_STRING_ELT(answer, colidx++, Rf_mkChar(colnames[i].c_str()));
 			}
 		}
 

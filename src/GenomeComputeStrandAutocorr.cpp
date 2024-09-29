@@ -31,28 +31,28 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_infile) || length(_infile) != 1)
+		if (!Rf_isString(_infile) || Rf_length(_infile) != 1)
 			verror("file argument is not a string");
 
-		if (!isString(_chrom) || length(_chrom) != 1)
+		if (!Rf_isString(_chrom) || Rf_length(_chrom) != 1)
 			verror("chrom argument is not a string");
 
-		if (length(_binsize) != 1 || ((!isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !isInteger(_binsize)))
+		if (Rf_length(_binsize) != 1 || ((!Rf_isReal(_binsize) || REAL(_binsize)[0] != (int)REAL(_binsize)[0]) && !Rf_isInteger(_binsize)))
 			verror("binsize argument is not an integer");
 
-		if (length(_maxread) != 1 || ((!isReal(_maxread) || REAL(_maxread)[0] != (int)REAL(_maxread)[0]) && !isInteger(_maxread)))
+		if (Rf_length(_maxread) != 1 || ((!Rf_isReal(_maxread) || REAL(_maxread)[0] != (int)REAL(_maxread)[0]) && !Rf_isInteger(_maxread)))
 			verror("maxread argument is not an integer");
 
-		if (length(_cols_order) != NUM_COLS || (!isReal(_cols_order) && !isInteger(_cols_order)))
+		if (Rf_length(_cols_order) != NUM_COLS || (!Rf_isReal(_cols_order) && !Rf_isInteger(_cols_order)))
 			verror("cols.order argument must be a vector with %d numeric values", NUM_COLS);
 
-		if (length(_min_coord) != 1 || ((!isReal(_min_coord) || REAL(_min_coord)[0] != (int)REAL(_min_coord)[0]) && !isInteger(_min_coord)))
+		if (Rf_length(_min_coord) != 1 || ((!Rf_isReal(_min_coord) || REAL(_min_coord)[0] != (int)REAL(_min_coord)[0]) && !Rf_isInteger(_min_coord)))
 			verror("min_coord argument is not an integer");
 
-		if (length(_max_coord) != 1 || ((!isReal(_max_coord) || REAL(_max_coord)[0] != (int)REAL(_max_coord)[0]) && !isInteger(_max_coord)))
+		if (Rf_length(_max_coord) != 1 || ((!Rf_isReal(_max_coord) || REAL(_max_coord)[0] != (int)REAL(_max_coord)[0]) && !Rf_isInteger(_max_coord)))
 			verror("max_coord argument is not an integer");
 
-		if (isReal(_cols_order)) {
+		if (Rf_isReal(_cols_order)) {
 			for (int i = 0; i < NUM_COLS; i++) {
 				if (REAL(_cols_order)[i] != (int)REAL(_cols_order)[i])
 					verror("cols.order is not an integer");
@@ -61,14 +61,14 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 
 		const char *infilename = CHAR(STRING_ELT(_infile, 0));
 		const char *chrom = CHAR(STRING_ELT(_chrom, 0));
-		double binsize = isReal(_binsize) ? (int)REAL(_binsize)[0] : INTEGER(_binsize)[0];
-		double maxread = isReal(_maxread) ? (int)REAL(_maxread)[0] : INTEGER(_maxread)[0];
+		double binsize = Rf_isReal(_binsize) ? (int)REAL(_binsize)[0] : INTEGER(_binsize)[0];
+		double maxread = Rf_isReal(_maxread) ? (int)REAL(_maxread)[0] : INTEGER(_maxread)[0];
 		int cols_order[NUM_COLS];
 		int64_t min_coord;
 		int64_t max_coord;
 
 		for (int i = 0; i < NUM_COLS; i++)
-			cols_order[i] = isReal(_cols_order) ? (int)REAL(_cols_order)[i] : INTEGER(_cols_order)[i];
+			cols_order[i] = Rf_isReal(_cols_order) ? (int)REAL(_cols_order)[i] : INTEGER(_cols_order)[i];
 
 		if (binsize <= 0)
 			verror("Invalid binsize value %g", binsize);
@@ -87,8 +87,8 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 			}
 		}
 
-		min_coord = (int64_t)(isReal(_min_coord) ? REAL(_min_coord)[0] : INTEGER(_min_coord)[0]);
-		max_coord = (int64_t)(isReal(_max_coord) ? REAL(_max_coord)[0] : INTEGER(_max_coord)[0]);
+		min_coord = (int64_t)(Rf_isReal(_min_coord) ? REAL(_min_coord)[0] : INTEGER(_min_coord)[0]);
+		max_coord = (int64_t)(Rf_isReal(_max_coord) ? REAL(_max_coord)[0] : INTEGER(_max_coord)[0]);
 
 		IntervUtils iu(_envir);
 		int chromid = iu.chrom2id(chrom);
@@ -248,11 +248,11 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 		REAL(total_stat)[3] = std_r;
 
         rprotect(total_stat_names = RSaneAllocVector(STRSXP, 4));
-        SET_STRING_ELT(total_stat_names, 0, mkChar("Forward mean"));
-        SET_STRING_ELT(total_stat_names, 1, mkChar("Forward stdev"));
-        SET_STRING_ELT(total_stat_names, 2, mkChar("Reverse mean"));
-        SET_STRING_ELT(total_stat_names, 3, mkChar("Reverse stdev"));
-        setAttrib(total_stat, R_NamesSymbol, total_stat_names);
+        SET_STRING_ELT(total_stat_names, 0, Rf_mkChar("Forward mean"));
+        SET_STRING_ELT(total_stat_names, 1, Rf_mkChar("Forward stdev"));
+        SET_STRING_ELT(total_stat_names, 2, Rf_mkChar("Reverse mean"));
+        SET_STRING_ELT(total_stat_names, 3, Rf_mkChar("Reverse stdev"));
+        Rf_setAttrib(total_stat, R_NamesSymbol, total_stat_names);
 
 		rprotect(bin_stat = RSaneAllocVector(VECSXP, 2));
         rprotect(bin_idx = RSaneAllocVector(REALSXP, max_off - min_off));
@@ -270,12 +270,12 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
         SET_VECTOR_ELT(bin_stat, 0, bin_idx);
         SET_VECTOR_ELT(bin_stat, 1, corr);
 
-        SET_STRING_ELT(rnames, 0, mkChar("bin"));
-        SET_STRING_ELT(rnames, 1, mkChar("corr"));
+        SET_STRING_ELT(rnames, 0, Rf_mkChar("bin"));
+        SET_STRING_ELT(rnames, 1, Rf_mkChar("corr"));
 
-        setAttrib(bin_stat, R_RowNamesSymbol, row_names);
-		setAttrib(bin_stat, R_NamesSymbol, rnames);
-        setAttrib(bin_stat, R_ClassSymbol, mkString("data.frame"));
+        Rf_setAttrib(bin_stat, R_RowNamesSymbol, row_names);
+		Rf_setAttrib(bin_stat, R_NamesSymbol, rnames);
+        Rf_setAttrib(bin_stat, R_ClassSymbol, Rf_mkString("data.frame"));
 
 		SET_VECTOR_ELT(answer, 0, total_stat);
 		SET_VECTOR_ELT(answer, 1, bin_stat);

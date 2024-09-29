@@ -33,7 +33,7 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 		}
 	}
 
-	SEXP colnames = getAttrib(answer, R_NamesSymbol);
+	SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
 	for (int icol = 0; icol < numcols; ++icol){
 		SET_STRING_ELT(colnames, GInterval::NUM_COLS + icol, STRING_ELT(_colnames, icol));
 	}
@@ -44,7 +44,7 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 		for (vector<unsigned>::const_iterator iid = interv_ids->begin(); iid != interv_ids->end(); ++iid)
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, GInterval::NUM_COLS + numcols, ids);
-		SET_STRING_ELT(colnames, GInterval::NUM_COLS + numcols, mkChar("intervalID"));
+		SET_STRING_ELT(colnames, GInterval::NUM_COLS + numcols, Rf_mkChar("intervalID"));
 	}
 
     for (int icol = 0; icol < numcols; ++icol) {
@@ -61,23 +61,23 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument must be a string");
 
-		if (!isString(_colnames))
+		if (!Rf_isString(_colnames))
 			verror("Column names argument must be a vector of strings");
 
-		if (!isNull(_file) && (!isString(_file) || length(_file) != 1))
+		if (!Rf_isNull(_file) && (!Rf_isString(_file) || Rf_length(_file) != 1))
 			verror("File argument must be a string or NULL");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		if (!isNull(_file) && !isNull(_intervals_set_out))
+		if (!Rf_isNull(_file) && !Rf_isNull(_intervals_set_out))
 			verror("Cannot use both file and intervals.set.out arguments");
 
-		const char *filename = isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		const char *filename = Rf_isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 		IntervUtils iu(_envir);
 		const char *track_str = CHAR(STRING_ELT(_track, 0));
 		string track_path = track2path(iu.get_env(), track_str);
@@ -87,14 +87,14 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 		if (track_type != GenomeTrack::ARRAYS) 
 			verror("Track %s is not of %s type", track_str, GenomeTrack::TYPE_NAMES[GenomeTrack::ARRAYS]);
 
-		if (isInteger(_slice)) {
-			if (length(_slice) != length(_colnames))
+		if (Rf_isInteger(_slice)) {
+			if (Rf_length(_slice) != Rf_length(_colnames))
 				verror("Column names do not match slice indices");
-			for (int islice = 0; islice < length(_slice); ++islice) 
+			for (int islice = 0; islice < Rf_length(_slice); ++islice) 
 				slice.push_back((unsigned)INTEGER(_slice)[islice] - 1);
 		}
 
-		int numcols = length(_colnames);
+		int numcols = Rf_length(_colnames);
 		vector<float> res_vals;
 		GIntervalsFetcher1D *intervals = NULL;
 		GIntervals out_intervals;

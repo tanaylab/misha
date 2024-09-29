@@ -13,10 +13,10 @@ SEXP gseqimport(SEXP _fasta, SEXP _seq, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_fasta) || length(_fasta) != 1)
+		if (!Rf_isString(_fasta) || Rf_length(_fasta) != 1)
 			verror("Fasta argument is not a string");
 
-		if (!isString(_seq) || length(_seq) != 1)
+		if (!Rf_isString(_seq) || Rf_length(_seq) != 1)
 			verror("Seq argument is not a string");
 
 		const char *fasta_fname = CHAR(STRING_ELT(_fasta, 0));

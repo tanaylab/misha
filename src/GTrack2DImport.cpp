@@ -63,10 +63,10 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(_files) || length(_files) < 1)
+		if (!Rf_isString(_files) || Rf_length(_files) < 1)
 			verror("Files argument is not a vector of strings");
 
 		IntervUtils iu(_envir);
@@ -90,7 +90,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 		REprintf("Reading input file(s)...\n");
 
 		int64_t infiles_size_sum = 0;
-		for (int ifile = 0; ifile < length(_files); ++ifile) {
+		for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
 			const char *fname = CHAR(STRING_ELT(_files, ifile));
 			struct stat st;
 
@@ -101,7 +101,7 @@ SEXP gtrack_2d_import(SEXP _track, SEXP _files, SEXP _envir)
 
 		// STEP 1: Read the input files and split them into binary files each holding the intervals of specific chromosomes pair.
 		progress.init(infiles_size_sum, 10000000);
-		for (int ifile = 0; ifile < length(_files); ++ifile) {
+		for (int ifile = 0; ifile < Rf_length(_files); ++ifile) {
 			vector<string> fields;
 			long lineno = 0;
 			BufferedFile infile;

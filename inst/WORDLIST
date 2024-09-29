@@ -31,8 +31,6 @@ GenomeTrack
 INTERVID
 LTO
 NA's
-NaN
-NaNs
 NxM
 OSX
 PKGDIR
@@ -192,6 +190,7 @@ nans
 nbash
 neighbouring
 ng
+noRemap
 notfound
 num
 numbins

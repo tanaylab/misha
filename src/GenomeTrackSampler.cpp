@@ -20,16 +20,16 @@ SEXP C_gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_po
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Expression argument is not a string");
 
-		if ((!isReal(_num_samples) && !isInteger(_num_samples)) || length(_num_samples) != 1)
+		if ((!Rf_isReal(_num_samples) && !Rf_isInteger(_num_samples)) || Rf_length(_num_samples) != 1)
 			verror("Number of samples argument must be a number");
 
-		if (isReal(_num_samples) && (double)REAL(_num_samples)[0] != (double)(int)REAL(_num_samples)[0]) 
+		if (Rf_isReal(_num_samples) && (double)REAL(_num_samples)[0] != (double)(int)REAL(_num_samples)[0]) 
 			verror("Number of samples is not an integer");
 
-		int num_samples = isReal(_num_samples) ? (int)REAL(_num_samples)[0] : INTEGER(_num_samples)[0];
+		int num_samples = Rf_isReal(_num_samples) ? (int)REAL(_num_samples)[0] : INTEGER(_num_samples)[0];
 
 		if (num_samples < 1) 
 			verror("Number of samples must be greater than zero");
