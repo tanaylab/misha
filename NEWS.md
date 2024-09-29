@@ -1,3 +1,7 @@
+# misha 4.2.13
+
+* removed non-API calls to R: `R_curErrorBuf`, `SET_TYPEOF`
+
 # misha 4.2.12
 
 * Fixed *noRemap* additional issue by adding `Rf_` prefix in the c++ code.

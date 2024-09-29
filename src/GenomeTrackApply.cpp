@@ -50,8 +50,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 
 		SEXP eval_expr;
 
-		rprotect(eval_expr = Rf_allocList(num_track_exprs + 1));
-		SET_TYPEOF(eval_expr, LANGSXP);
+		rprotect(eval_expr = Rf_allocLang(num_track_exprs + 1));
 		SETCAR(eval_expr, _fn);
 
 		TrackExprScanner scanner(iu);
@@ -214,8 +213,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			vector<SEXP> rvars(num_track_exprs, R_NilValue);
 			SEXP eval_expr;
 
-			rprotect(eval_expr = Rf_allocList(num_track_exprs + 1));
-			SET_TYPEOF(eval_expr, LANGSXP);
+			rprotect(eval_expr = Rf_allocLang(num_track_exprs + 1));
 			SETCAR(eval_expr, _fn);
 
 			TrackExprScanner scanner(iu);
