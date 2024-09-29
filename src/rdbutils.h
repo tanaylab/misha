@@ -28,9 +28,23 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <Rinterface.h>
+#include <Rversion.h>
+
 #define MISHA_PRENV(x) TAG(x)
 #define MISHA_PRVALUE(x) CAR(x)
 #define MISHA_PREXPR(x) R_BytecodeExpr(CDR(x))
+
+#define LCONS1(a, b) Rf_lcons((a), (b))
+
+#if R_VERSION < R_Version(4, 4, 1)
+static inline SEXP Rf_allocLang(int n)
+{
+	if (n > 0)
+		return LCONS1(R_NilValue, Rf_allocList(n - 1));
+	else
+		return R_NilValue;
+}
+#endif
 
 #include "TGLException.h"
 
