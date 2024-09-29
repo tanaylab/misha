@@ -32,7 +32,7 @@ public:
 	// same as size(chromid) but faster
 	int64_t get_num_intervals(int chromid) const { return (*m_user_chrom2size)[chromid]; }
 
-	static bool is1d(SEXP meta) { return length(VECTOR_ELT(meta, 0)) == NUM_STAT_COLS; }
+	static bool is1d(SEXP meta) { return Rf_length(VECTOR_ELT(meta, 0)) == NUM_STAT_COLS; }
 
 	static pair<int, ChromStat> get_chrom_stat(GIntervalsFetcher1D *intervals);
 	static void init_chromstats(vector<ChromStat> &chromstats, const IntervUtils &iu);

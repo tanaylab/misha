@@ -86,7 +86,7 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 		num_intervs = intervals2d->size();
 	}
 
-	colnames = getAttrib(answer, R_NamesSymbol);
+	colnames = Rf_getAttrib(answer, R_NamesSymbol);
 
 	for (unsigned icol = 0; icol < NUM_COLS; ++icol)
 		rprotect(rsummary[icol] = RSaneAllocVector(REALSXP, num_intervs));
@@ -103,7 +103,7 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 
     for (unsigned icol = 0; icol < NUM_COLS; ++icol) {
         SET_VECTOR_ELT(answer, num_interv_cols + icol, rsummary[icol]);
-        SET_STRING_ELT(colnames, num_interv_cols + icol, mkChar(IntervalSummaryColNames[icol]));
+        SET_STRING_ELT(colnames, num_interv_cols + icol, Rf_mkChar(IntervalSummaryColNames[icol]));
     }
 
 	return answer;
@@ -117,7 +117,7 @@ SEXP gtracksummary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _ban
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track expression argument is not a string");
 
 		IntervUtils iu(_envir);
@@ -152,9 +152,9 @@ SEXP gtracksummary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _ban
 		REAL(answer)[STDEV] = summary.num_non_nan_bins > 1 ? summary.get_stdev() : numeric_limits<double>::quiet_NaN();
 
 		for (int i = 0; i < NUM_COLS; i++)
-			SET_STRING_ELT(colnames, i, mkChar(IntervalSummaryColNames[i]));
+			SET_STRING_ELT(colnames, i, Rf_mkChar(IntervalSummaryColNames[i]));
 
-		setAttrib(answer, R_NamesSymbol, colnames);
+		Rf_setAttrib(answer, R_NamesSymbol, colnames);
 
 		return answer;
 	} catch (TGLException &e) {
@@ -171,7 +171,7 @@ SEXP gtracksummary_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy,
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track expression argument is not a string");
 
 		IntervUtils iu(_envir);
@@ -223,9 +223,9 @@ SEXP gtracksummary_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy,
 			REAL(answer)[STDEV] = summary.num_non_nan_bins > 1 ? summary.get_stdev() : numeric_limits<double>::quiet_NaN();
 
 			for (int i = 0; i < NUM_COLS; i++)
-				SET_STRING_ELT(colnames, i, mkChar(IntervalSummaryColNames[i]));
+				SET_STRING_ELT(colnames, i, Rf_mkChar(IntervalSummaryColNames[i]));
 
-			setAttrib(answer, R_NamesSymbol, colnames);
+			Rf_setAttrib(answer, R_NamesSymbol, colnames);
 
 			rreturn(answer);
 		}
@@ -243,10 +243,10 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
 		IntervUtils iu(_envir);
@@ -268,9 +268,9 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 		if (!num_intervals) 
 			return R_NilValue;
 
-		bool do_small_intervset_out = !isNull(_intervals_set_out) && !iu.needs_bigset(num_intervals);
-		bool do_big_intervset_out = !isNull(_intervals_set_out) && !do_small_intervset_out;
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		bool do_small_intervset_out = !Rf_isNull(_intervals_set_out) && !iu.needs_bigset(num_intervals);
+		bool do_big_intervset_out = !Rf_isNull(_intervals_set_out) && !do_small_intervset_out;
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 		SEXP answer = R_NilValue;
 
 		if (do_big_intervset_out) {
@@ -424,10 +424,10 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track_exprs) || length(_track_exprs) < 1)
+		if (!Rf_isString(_track_exprs) || Rf_length(_track_exprs) < 1)
 			verror("Track argument is not a string vector");
 
-		unsigned numexpr = length(_track_exprs);
+		unsigned numexpr = Rf_length(_track_exprs);
 		BinsManager bins_manager(_breaks, _include_lowest);
 
 		if (bins_manager.get_num_bin_finders() != numexpr - 1)
@@ -481,13 +481,13 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 		SEXP dimname;
 		rprotect(dimname = RSaneAllocVector(STRSXP, NUM_COLS));
 		for (unsigned i = 0; i < NUM_COLS; i++)
-			SET_STRING_ELT(dimname, i, mkChar(IntervalSummaryColNames[i]));
+			SET_STRING_ELT(dimname, i, Rf_mkChar(IntervalSummaryColNames[i]));
 
 		SET_VECTOR_ELT(dimnames, bins_manager.get_num_bin_finders(), dimname);
 		INTEGER(dim)[bins_manager.get_num_bin_finders()] = NUM_COLS;
 
-		setAttrib(answer, R_DimSymbol, dim);
-		setAttrib(answer, R_DimNamesSymbol, dimnames);
+		Rf_setAttrib(answer, R_DimSymbol, dim);
+		Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

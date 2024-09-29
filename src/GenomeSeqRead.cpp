@@ -36,7 +36,7 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 			seqlen += buf.size();
 			iu.verify_max_data_size(seqlen, "Result sequence");
 			buf.push_back(0);
-			SET_STRING_ELT(answer, iu.get_orig_interv_idx(intervals->cur_interval()), mkChar(&*buf.begin()));
+			SET_STRING_ELT(answer, iu.get_orig_interv_idx(intervals->cur_interval()), Rf_mkChar(&*buf.begin()));
 			check_interrupt();
 		}
 		return answer;

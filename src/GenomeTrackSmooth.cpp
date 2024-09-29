@@ -307,22 +307,22 @@ SEXP gsmooth(SEXP _track, SEXP _expr, SEXP _winsize, SEXP _weight_thr, SEXP _smo
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track expression argument is not a string");
 
-		if (!isReal(_winsize) || length(_winsize) != 1)
+		if (!Rf_isReal(_winsize) || Rf_length(_winsize) != 1)
 			verror("Winsize is not numeric");
 
-		if (!isReal(_weight_thr) || length(_weight_thr) != 1)
+		if (!Rf_isReal(_weight_thr) || Rf_length(_weight_thr) != 1)
 			verror("Weight threshold is not numeric");
 
-		if (!isLogical(_smooth_nans) || length(_smooth_nans) != 1)
+		if (!Rf_isLogical(_smooth_nans) || Rf_length(_smooth_nans) != 1)
 			verror("Smooth nans argument is not logical");
 
-		if (!isString(_type) || length(_type) != 1)
+		if (!Rf_isString(_type) || Rf_length(_type) != 1)
 			verror("Algorithm is not a string");
 
 		const char *track = CHAR(STRING_ELT(_track, 0));

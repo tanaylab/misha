@@ -5,13 +5,13 @@ using namespace rdb;
 
 BinsManager::BinsManager(SEXP _breaks, SEXP _include_lowest)
 {
-	if (!isVector(_breaks))
+	if (!Rf_isVector(_breaks))
 		TGLError<BinsManager>("Breaks argument must be a vector");
 
-	if (!isLogical(_include_lowest) || length(_include_lowest) != 1)
+	if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
 		TGLError<BinsManager>("include.lowest argument is not logical");
 
-	unsigned num_breaks_sets = length(_breaks);
+	unsigned num_breaks_sets = Rf_length(_breaks);
 
 	m_include_lowest = LOGICAL(_include_lowest)[0];
 	m_bin_finders.reserve(num_breaks_sets);
@@ -21,19 +21,19 @@ BinsManager::BinsManager(SEXP _breaks, SEXP _include_lowest)
 	for (unsigned i = 0; i < num_breaks_sets; ++i) {
 		SEXP breaks = VECTOR_ELT(_breaks, i);
 
-		if (!isReal(breaks) && !isInteger(breaks))
+		if (!Rf_isReal(breaks) && !Rf_isInteger(breaks))
 			TGLError<BinsManager>("breaks[%d] is not numeric", i + 1);
 
 		m_bin_finders.push_back(BinFinder());
 
-		if (isInteger(breaks)) {
-			vector<double> double_breaks(length(breaks));
+		if (Rf_isInteger(breaks)) {
+			vector<double> double_breaks(Rf_length(breaks));
 
-			for (int i = 0; i < length(breaks); i++)
+			for (int i = 0; i < Rf_length(breaks); i++)
 				double_breaks[i] = INTEGER(breaks)[i];
 			m_bin_finders.back().init(double_breaks, m_include_lowest);
 		} else
-			m_bin_finders.back().init(REAL(breaks), length(breaks), m_include_lowest);
+			m_bin_finders.back().init(REAL(breaks), Rf_length(breaks), m_include_lowest);
 
 		m_totalbins *= m_bin_finders.back().get_numbins();
 		m_track_mult[i] = !i ? 1 : m_track_mult[i - 1] * m_bin_finders[i - 1].get_numbins();
@@ -54,7 +54,7 @@ void BinsManager::set_dims(SEXP dim, SEXP dimnames) const
 
 			snprintf(buf, sizeof(buf), "%c%g,%g]", j || !m_include_lowest ? '(' : '[', bin_finder.get_breaks()[j], bin_finder.get_breaks()[j + 1]);
 
-			SET_STRING_ELT(dimname, j, mkChar(buf));
+			SET_STRING_ELT(dimname, j, Rf_mkChar(buf));
 		}
 		SET_VECTOR_ELT(dimnames, i, dimname);
 	}

@@ -233,19 +233,13 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
 #'
 #' gdb.init_examples()
 #'
-#' ## get values of 'dense_track' for [0, 500), chrom 1
-#' gextract("dense_track", gintervals(1, 0, 500))
+#' ## get values of 'dense_track' for [0, 400), chrom 1
+#' gextract("dense_track", gintervals(1, 0, 400))
 #'
 #' ## get values of 'rects_track' (a 2D track) for a 2D interval
 #' gextract(
 #'     "rects_track",
 #'     gintervals.2d("chr1", 0, 4000, "chr2", 2000, 5000)
-#' )
-#'
-#' ## get values of two track expressions 'dense_track' and
-#' ## 'array_track * 2' running over '100' iterator
-#' gextract("dense_track", "array_track * 2", gintervals(1, 0, 500),
-#'     iterator = 100, colnames = c("expr1", "expr2")
 #' )
 #'
 #' @export gextract

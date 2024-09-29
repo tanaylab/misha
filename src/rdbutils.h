@@ -22,9 +22,15 @@
 #include "rdbinterval.h"
 #include "Thread.h"
 
+#ifndef R_NO_REMAP
+#  define R_NO_REMAP
+#endif
 #include <R.h>
 #include <Rinternals.h>
 #include <Rinterface.h>
+#define MISHA_PRENV(x) TAG(x)
+#define MISHA_PRVALUE(x) CAR(x)
+#define MISHA_PREXPR(x) R_BytecodeExpr(CDR(x))
 
 #include "TGLException.h"
 
@@ -122,7 +128,7 @@ void RSaneSerialize(SEXP rexp, const char *fname);
 SEXP RSaneUnserialize(FILE *fp);
 SEXP RSaneUnserialize(const char *fname);
 
-// Same as above: replaces allocVector which can fail on memory allocation and then R makes a longmp, skipping all the destructors
+// Same as above: replaces Rf_allocVector which can fail on memory allocation and then R makes a longmp, skipping all the destructors
 SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
@@ -373,7 +379,7 @@ inline void rexit() {
 	if (RdbInitializer::is_kid()){
 		// Normally we should have called exit() here. However "R CMD check"
 		// doesn't like calls to exit/abort/etc because they end R session
-		// itself. It prints a warning message and packages with warning
+		// itself. It prints a Rf_warning message and packages with Rf_warning
 		// messages cannot be submitted to CRAN. Yet the child process MUST end
 		// the R sessions, that's the whole point. Solution? Send a signal to
 		// itself. Fortunately "R CMD check" allows signals.

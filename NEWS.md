@@ -1,3 +1,8 @@
+# misha 4.2.12
+
+* Fixed *noRemap* additional issue by adding `Rf_` prefix in the c++ code.
+* Removed non-API calls to R in the C++ code.
+
 # misha 4.2.10 
 
 * Fixed a bug in `gtrack.import` from bigwig.

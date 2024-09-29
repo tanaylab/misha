@@ -191,21 +191,21 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_genes_fname) || length(_genes_fname) != 1)
+		if (!Rf_isString(_genes_fname) || Rf_length(_genes_fname) != 1)
 			verror("genes.file argument is not a string");
 
-		if (!isNull(_annots_fname) && (!isString(_annots_fname) || length(_annots_fname) != 1))
+		if (!Rf_isNull(_annots_fname) && (!Rf_isString(_annots_fname) || Rf_length(_annots_fname) != 1))
 			verror("annots.file argument is not a string");
 
-		if (isNull(_annots_names) && !isNull(_annots_fname))
+		if (Rf_isNull(_annots_names) && !Rf_isNull(_annots_fname))
 			verror("annots.names argument cannot be NULL if annots.file is specified");
 
-		if (!isNull(_annots_names) && !isString(_annots_names))
+		if (!Rf_isNull(_annots_names) && !Rf_isString(_annots_names))
 			verror("annots.names argument must be a vector strings");
 
 		const char *genes_fname = CHAR(STRING_ELT(_genes_fname, 0));
-		const char *annots_fname = isNull(_annots_fname) ? NULL : CHAR(STRING_ELT(_annots_fname, 0));
-		int num_annots = isNull(_annots_names) ? 0 : length(_annots_names);
+		const char *annots_fname = Rf_isNull(_annots_fname) ? NULL : CHAR(STRING_ELT(_annots_fname, 0));
+		int num_annots = Rf_isNull(_annots_names) ? 0 : Rf_length(_annots_names);
 
 		IntervUtils iu(_envir);
 		Id2Annots id2annots;
@@ -215,7 +215,7 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 		GIntervals utr5;
 
 		if (annots_fname)
-			read_annots_file(annots_fname, id2annots, length(_annots_names));
+			read_annots_file(annots_fname, id2annots, Rf_length(_annots_names));
 
 		read_genes_file(genes_fname, tss, exons, utr3, utr5, id2annots, iu.get_chromkey());
 
@@ -303,7 +303,7 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
                             }
                         }
 
-                        SET_STRING_ELT(rannots[iannot], intervs_size, mkChar(annot.c_str()));
+                        SET_STRING_ELT(rannots[iannot], intervs_size, Rf_mkChar(annot.c_str()));
 					}
 
 					intervs_size++;
@@ -335,17 +335,17 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
 			}
 
             for (unsigned id = 0; id < (unsigned)num_chroms; ++id)
-                SET_STRING_ELT(chroms, id, mkChar(iu.id2chrom(id).c_str()));
+                SET_STRING_ELT(chroms, id, Rf_mkChar(iu.id2chrom(id).c_str()));
 
             for (int i = 0; i < GInterval::NUM_COLS; i++)
-                SET_STRING_ELT(col_names, i, mkChar(GInterval::COL_NAMES[i]));
+                SET_STRING_ELT(col_names, i, Rf_mkChar(GInterval::COL_NAMES[i]));
 
-            SET_STRING_ELT(col_names, GInterval::NUM_COLS, mkChar("strand"));
+            SET_STRING_ELT(col_names, GInterval::NUM_COLS, Rf_mkChar("strand"));
 
             for (int i = 0; i < num_annots; ++i)
                 SET_STRING_ELT(col_names, i + GInterval::NUM_COLS + 1, STRING_ELT(_annots_names, i));
 
-            SET_STRING_ELT(answer_col_names, iintervs_set, mkChar(intervs_sets_names[iintervs_set]));
+            SET_STRING_ELT(answer_col_names, iintervs_set, Rf_mkChar(intervs_sets_names[iintervs_set]));
 
             SET_VECTOR_ELT(rintervs, GInterval::CHROM, chroms_idx);
             SET_VECTOR_ELT(rintervs, GInterval::START, starts);
@@ -354,16 +354,16 @@ SEXP gintervals_import_genes(SEXP _genes_fname, SEXP _annots_fname, SEXP _annots
             for (int iannot = 0; iannot < num_annots; ++iannot)
                 SET_VECTOR_ELT(rintervs, GInterval::NUM_COLS + 1 + iannot, rannots[iannot]);
 
-            setAttrib(chroms_idx, R_LevelsSymbol, chroms);
-            setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+            Rf_setAttrib(chroms_idx, R_LevelsSymbol, chroms);
+            Rf_setAttrib(chroms_idx, R_ClassSymbol, Rf_mkString("factor"));
 
-            setAttrib(rintervs, R_NamesSymbol, col_names);
-            setAttrib(rintervs, R_ClassSymbol, mkString("data.frame"));
-            setAttrib(rintervs, R_RowNamesSymbol, row_names);
+            Rf_setAttrib(rintervs, R_NamesSymbol, col_names);
+            Rf_setAttrib(rintervs, R_ClassSymbol, Rf_mkString("data.frame"));
+            Rf_setAttrib(rintervs, R_RowNamesSymbol, row_names);
 
             SET_VECTOR_ELT(answer, iintervs_set, rintervs);
         }
-        setAttrib(answer, R_NamesSymbol, answer_col_names);
+        Rf_setAttrib(answer, R_NamesSymbol, answer_col_names);
 
 		return answer;
 	} catch (TGLException &e) {

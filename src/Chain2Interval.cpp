@@ -20,7 +20,7 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_chainfile) || length(_chainfile) != 1)
+		if (!Rf_isString(_chainfile) || Rf_length(_chainfile) != 1)
 			verror("Chain file argument is not a string");
 
 		IntervUtils iu(_envir);

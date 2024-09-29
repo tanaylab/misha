@@ -21,23 +21,23 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(_wig) || length(_wig) != 1)
+		if (!Rf_isString(_wig) || Rf_length(_wig) != 1)
 			verror("Wig argument is not a string");
 
-		if ((!isReal(_binsize) && !isInteger(_binsize)) || length(_binsize) != 1)
+		if ((!Rf_isReal(_binsize) && !Rf_isInteger(_binsize)) || Rf_length(_binsize) != 1)
 			verror("Binsize argument is not a number");
 
-		if ((!isReal(_defvalue) && !isInteger(_defvalue)) || length(_defvalue) != 1)
+		if ((!Rf_isReal(_defvalue) && !Rf_isInteger(_defvalue)) || Rf_length(_defvalue) != 1)
 			verror("Defvalue argument is not a number");
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
 		const char *fname = CHAR(STRING_ELT(_wig, 0));
-		double dbinsize = isReal(_binsize) ? REAL(_binsize)[0] : INTEGER(_binsize)[0];
+		double dbinsize = Rf_isReal(_binsize) ? REAL(_binsize)[0] : INTEGER(_binsize)[0];
 		unsigned binsize = (unsigned)dbinsize;
-		double defvalue = isReal(_defvalue) ? REAL(_defvalue)[0] : INTEGER(_defvalue)[0];
+		double defvalue = Rf_isReal(_defvalue) ? REAL(_defvalue)[0] : INTEGER(_defvalue)[0];
 
 		if (dbinsize < 0 || binsize != dbinsize)
 			verror("Invalid value of binsize argument: %g\n", dbinsize);

@@ -20,7 +20,7 @@ SEXP gtrack_create_sparse(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
 		IntervUtils iu(_envir);
@@ -29,11 +29,11 @@ SEXP gtrack_create_sparse(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir)
 		intervs.sort();
 		intervs.verify_no_overlaps(iu.get_chromkey());
 
-		if (!isReal(_values) && !isInteger(_values))
+		if (!Rf_isReal(_values) && !Rf_isInteger(_values))
 			verror("Values argument is not numeric");
 
-		if (length(_values) != (int)intervs.size())
-			verror("Number of intervals (%ld) does not match the number of values (%d)", intervs.size(), (int)length(_values));
+		if (Rf_length(_values) != (int)intervs.size())
+			verror("Number of intervals (%ld) does not match the number of values (%d)", intervs.size(), (int)Rf_length(_values));
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
 
@@ -56,7 +56,7 @@ SEXP gtrack_create_sparse(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir)
 				created_chromids.insert(cur_chromid);
 			}
 
-			if (isReal(_values))
+			if (Rf_isReal(_values))
 				gtrack.write_next_interval(*iinterv, REAL(_values)[iu.get_orig_interv_idx(*iinterv)]);
 			else
 				gtrack.write_next_interval(*iinterv, INTEGER(_values)[iu.get_orig_interv_idx(*iinterv)]);

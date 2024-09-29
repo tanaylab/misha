@@ -44,10 +44,10 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
         SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
 	}
 
-	SEXP col_names = getAttrib(answer, R_NamesSymbol);
+	SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
 	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-		if (isNull(_colnames))
-			SET_STRING_ELT(col_names, num_interv_cols + iexpr, mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
+		if (Rf_isNull(_colnames))
+			SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
 		else
 			SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
 	}
@@ -59,7 +59,7 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
 
-		SET_STRING_ELT(col_names, num_interv_cols + num_exprs, mkChar("intervalID"));
+		SET_STRING_ELT(col_names, num_interv_cols + num_exprs, Rf_mkChar("intervalID"));
 	}
 
 	return answer;
@@ -73,28 +73,28 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_exprs) || length(_exprs) < 1)
+		if (!Rf_isString(_exprs) || Rf_length(_exprs) < 1)
 			verror("Track expressions argument must be a vector of strings");
 
-		if (!isNull(_colnames)) {
-			if (!isString(_colnames))
+		if (!Rf_isNull(_colnames)) {
+			if (!Rf_isString(_colnames))
 				verror("Column names argument must be a vector of strings");
-			if (length(_colnames) != length(_exprs))
+			if (Rf_length(_colnames) != Rf_length(_exprs))
 				verror("Number of column names must match the number of track expressions");
 		}
 
-		if (!isNull(_file) && (!isString(_file) || length(_file) != 1))
+		if (!Rf_isNull(_file) && (!Rf_isString(_file) || Rf_length(_file) != 1))
 			verror("File argument must be a string or NULL");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		if (!isNull(_file) && !isNull(_intervals_set_out))
+		if (!Rf_isNull(_file) && !Rf_isNull(_intervals_set_out))
 			verror("Cannot use both file and intervals.set.out arguments");
 
-		const char *filename = isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
-		unsigned num_exprs = (unsigned)length(_exprs);
+		const char *filename = Rf_isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		unsigned num_exprs = (unsigned)Rf_length(_exprs);
 		IntervUtils iu(_envir);
 
 		GIntervalsFetcher1D *intervals1d = NULL;
@@ -129,7 +129,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 				if (iexpr) 
 					outfile << "\t";
-				if (isNull(_colnames))
+				if (Rf_isNull(_colnames))
 					outfile << get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr)));
 				else
 					outfile << CHAR(STRING_ELT(_colnames, iexpr));
@@ -278,27 +278,27 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_exprs) || length(_exprs) < 1)
+		if (!Rf_isString(_exprs) || Rf_length(_exprs) < 1)
 			verror("Tracks expressions argument must be a vector of strings");
 
-		if (!isNull(_colnames)) {
-			if (!isString(_colnames))
+		if (!Rf_isNull(_colnames)) {
+			if (!Rf_isString(_colnames))
 				verror("Column names argument must be a vector of strings");
-			if (length(_colnames) != length(_exprs))
+			if (Rf_length(_colnames) != Rf_length(_exprs))
 				verror("Number of column names must match the number of track expressions");
 		}
 
-		if (!isNull(_file) && (!isString(_file) || length(_file) != 1))
+		if (!Rf_isNull(_file) && (!Rf_isString(_file) || Rf_length(_file) != 1))
 			verror("File argument must be a string or NULL");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		if (!isNull(_file) && !isNull(_intervals_set_out))
+		if (!Rf_isNull(_file) && !Rf_isNull(_intervals_set_out))
 			verror("Cannot use both file and intervals.set.out arguments");
 
-		const char *filename = isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
-		unsigned num_exprs = (unsigned)length(_exprs);
+		const char *filename = Rf_isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
+		unsigned num_exprs = (unsigned)Rf_length(_exprs);
 		uint64_t num_intervals;
 		GIntervals out_intervals1d;
 		GIntervals2D out_intervals2d;
@@ -315,7 +315,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 
 		if (filename) {
 			TrackExprScanner scanner(iu);
@@ -339,7 +339,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 				if (iexpr) 
 					outfile << "\t";
-				if (isNull(_colnames))
+				if (Rf_isNull(_colnames))
 					outfile << get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr)));
 				else
 					outfile << CHAR(STRING_ELT(_colnames, iexpr));
@@ -580,14 +580,14 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				INTEGER(ids)[iid - interv_ids.begin()] = *iid;
 			SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
 
-			SEXP col_names = getAttrib(answer, R_NamesSymbol);
+			SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-				if (isNull(_colnames))
-					SET_STRING_ELT(col_names, num_interv_cols + iexpr, mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
+				if (Rf_isNull(_colnames))
+					SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
 				else
 					SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
 			}
-			SET_STRING_ELT(col_names, num_interv_cols + num_exprs, mkChar("intervalID"));
+			SET_STRING_ELT(col_names, num_interv_cols + num_exprs, Rf_mkChar("intervalID"));
 
 			rreturn(answer);
 		}

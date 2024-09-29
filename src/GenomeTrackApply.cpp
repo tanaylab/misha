@@ -9,6 +9,9 @@
 #include "TrackExpressionIntervals2DIterator.h"
 #include "TrackExpressionTrackRectsIterator.h"
 
+#ifndef R_NO_REMAP
+#  define R_NO_REMAP
+#endif
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Parse.h>
@@ -25,17 +28,17 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		RdbInitializer rdb_init;
 
 
-		if (!isFunction(_fn))
+		if (!Rf_isFunction(_fn))
 			verror("FUN argument must be a function");
 
-		if (!isString(_track_exprs) || length(_track_exprs) < 1)
+		if (!Rf_isString(_track_exprs) || Rf_length(_track_exprs) < 1)
 			verror("Tracks expressions argument must be a vector of strings");
 
-		if (!isLogical(_enable_gapply_intervals) || length(_enable_gapply_intervals) != 1)
+		if (!Rf_isLogical(_enable_gapply_intervals) || Rf_length(_enable_gapply_intervals) != 1)
 			verror("Allow GAPPLY.INTERVALS argument must be logical");
 
 		bool enable_gapply_intervals = LOGICAL(_enable_gapply_intervals)[0];
-		unsigned num_track_exprs = (unsigned)length(_track_exprs);
+		unsigned num_track_exprs = (unsigned)Rf_length(_track_exprs);
 		vector<SEXP> rvars(num_track_exprs, R_NilValue);
 		IntervUtils iu(_envir);
 		GIntervals intervals1d;
@@ -47,7 +50,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 
 		SEXP eval_expr;
 
-		rprotect(eval_expr = allocList(num_track_exprs + 1));
+		rprotect(eval_expr = Rf_allocList(num_track_exprs + 1));
 		SET_TYPEOF(eval_expr, LANGSXP);
 		SETCAR(eval_expr, _fn);
 
@@ -57,7 +60,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 
 		SEXP rinterv_id;
 		rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
-		defineVar(install("GAPPLY.INTERVID"), rinterv_id, findVar(install(".misha"), _envir));
+		Rf_defineVar(Rf_install("GAPPLY.INTERVID"), rinterv_id, Rf_findVar(Rf_install(".misha"), _envir));
 
 		GIntervals last_intervals1d;
 		GIntervals2D last_intervals2d;
@@ -117,11 +120,11 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 
 				if (enable_gapply_intervals) {
 					rlast_intervals = scanner.get_iterator()->is_1d() ? iu.convert_intervs(&last_intervals1d) : iu.convert_intervs(&last_intervals2d);
-					defineVar(install("GAPPLY.INTERVALS"), rlast_intervals, findVar(install(".misha"), _envir));
+					Rf_defineVar(Rf_install("GAPPLY.INTERVALS"), rlast_intervals, Rf_findVar(Rf_install(".misha"), _envir));
 				}
 
 				SEXP res = eval_in_R(eval_expr, _envir);
-				if (!isReal(res) || length(res) != 1)
+				if (!Rf_isReal(res) || Rf_length(res) != 1)
 					verror("Evaluation of function does not produce a single numeric value");
 				result[interval_idx] = REAL(res)[0];
 
@@ -138,9 +141,9 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		if (type_mask == (IntervUtils::INTERVS1D | IntervUtils::INTERVS2D))
 			_intervals = scanner.get_iterator()->is_1d() ? VECTOR_ELT(_intervals, 0) : VECTOR_ELT(_intervals, 1);
 
-		int num_old_cols = length(_intervals);
+		int num_old_cols = Rf_length(_intervals);
 		SEXP answer;
-		SEXP old_colnames = getAttrib(_intervals, R_NamesSymbol);
+		SEXP old_colnames = Rf_getAttrib(_intervals, R_NamesSymbol);
 		SEXP col_names;
 		SEXP row_names;
 		SEXP rvals;
@@ -161,11 +164,11 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		}
 
 		SET_VECTOR_ELT(answer, num_old_cols, rvals);
-		SET_STRING_ELT(col_names, num_old_cols, mkChar("value"));
+		SET_STRING_ELT(col_names, num_old_cols, Rf_mkChar("value"));
 
-		setAttrib(answer, R_NamesSymbol, col_names);
-		setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-		setAttrib(answer, R_RowNamesSymbol, row_names);
+		Rf_setAttrib(answer, R_NamesSymbol, col_names);
+		Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
+		Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
 
 		return answer;
 	} catch (TGLException &e) {
@@ -182,17 +185,17 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isFunction(_fn))
+		if (!Rf_isFunction(_fn))
 			verror("FUN argument must be a function");
 
-		if (!isString(_track_exprs) || length(_track_exprs) < 1)
+		if (!Rf_isString(_track_exprs) || Rf_length(_track_exprs) < 1)
 			verror("Tracks expressions argument must be a vector of strings");
 
-		if (!isLogical(_enable_gapply_intervals) || length(_enable_gapply_intervals) != 1)
+		if (!Rf_isLogical(_enable_gapply_intervals) || Rf_length(_enable_gapply_intervals) != 1)
 			verror("Allow GAPPLY.INTERVALS argument must be logical");
 
 		bool enable_gapply_intervals = LOGICAL(_enable_gapply_intervals)[0];
-		unsigned num_track_exprs = (unsigned)length(_track_exprs);
+		unsigned num_track_exprs = (unsigned)Rf_length(_track_exprs);
 		IntervUtils iu(_envir);
 
 		GIntervals intervals1d;
@@ -211,7 +214,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			vector<SEXP> rvars(num_track_exprs, R_NilValue);
 			SEXP eval_expr;
 
-			rprotect(eval_expr = allocList(num_track_exprs + 1));
+			rprotect(eval_expr = Rf_allocList(num_track_exprs + 1));
 			SET_TYPEOF(eval_expr, LANGSXP);
 			SETCAR(eval_expr, _fn);
 
@@ -222,7 +225,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 
 			SEXP rinterv_id;
 			rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
-			defineVar(install("GAPPLY.INTERVID"), rinterv_id, findVar(install(".misha"), _envir));
+			Rf_defineVar(Rf_install("GAPPLY.INTERVID"), rinterv_id, Rf_findVar(Rf_install(".misha"), _envir));
 
 			GIntervals last_intervals1d;
 			GIntervals2D last_intervals2d;
@@ -282,11 +285,11 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 
 					if (enable_gapply_intervals) {
 						rlast_intervals = scanner.get_iterator()->is_1d() ? iu.convert_intervs(&last_intervals1d) : iu.convert_intervs(&last_intervals2d);
-						defineVar(install("GAPPLY.INTERVALS"), rlast_intervals, findVar(install(".misha"), _envir));
+						Rf_defineVar(Rf_install("GAPPLY.INTERVALS"), rlast_intervals, Rf_findVar(Rf_install(".misha"), _envir));
 					}
 
 					SEXP res = eval_in_R(eval_expr, _envir);
-					if (!isReal(res) || length(res) != 1)
+					if (!Rf_isReal(res) || Rf_length(res) != 1)
 						verror("Evaluation of function does not produce a single numeric value");
 					result[interval_idx] = REAL(res)[0];
 
@@ -327,9 +330,9 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			if (type_mask == (IntervUtils::INTERVS1D | IntervUtils::INTERVS2D))
 				_intervals = intervals2d.empty() ? VECTOR_ELT(_intervals, 0) : VECTOR_ELT(_intervals, 1);
 
-			int num_old_cols = length(_intervals);
+			int num_old_cols = Rf_length(_intervals);
 			SEXP answer;
-			SEXP old_colnames = getAttrib(_intervals, R_NamesSymbol);
+			SEXP old_colnames = Rf_getAttrib(_intervals, R_NamesSymbol);
 			SEXP col_names;
 			SEXP row_names;
 			SEXP rvals;
@@ -350,11 +353,11 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			}
 
 			SET_VECTOR_ELT(answer, num_old_cols, rvals);
-			SET_STRING_ELT(col_names, num_old_cols, mkChar("value"));
+			SET_STRING_ELT(col_names, num_old_cols, Rf_mkChar("value"));
 
-			setAttrib(answer, R_NamesSymbol, col_names);
-			setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-			setAttrib(answer, R_RowNamesSymbol, row_names);
+			Rf_setAttrib(answer, R_NamesSymbol, col_names);
+			Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
+			Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
 			rreturn(answer);
 		}
 	} catch (TGLException &e) {
