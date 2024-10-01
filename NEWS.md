@@ -1,5 +1,6 @@
 # misha 4.2.13
 
+* Added `gdb.create_genome` function.
 * removed non-API calls to R: `R_curErrorBuf`, `SET_TYPEOF`
 
 # misha 4.2.12

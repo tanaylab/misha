@@ -447,7 +447,8 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
 #' mm10_dir <- file.path(tempdir(), "mm10")
 #' # only a single chromosome is loaded in this example
-#' # see "Genomes" vignette how to download all of them/other genomes
+#' # see "Genomes" vignette how to download all of them and how
+#' # to download other genomes
 #' gdb.create(
 #'     mm10_dir,
 #'     paste(ftp, "chromosomes", paste0(
@@ -550,6 +551,62 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
     )
     retv <- 0 # suppress return value
 }
+
+#' Create and Load a Genome Database
+#'
+#' This function downloads, extracts, and loads a misha genome database for the specified genome.
+#'
+#' @param genome A character string specifying the genome to download. Supported genomes are "mm9", "mm10", "mm39", "hg19", and "hg38".
+#' @param path A character string specifying the directory where the genome will be extracted. Defaults to genome name (e.g. "mm10") in the current working directory.
+#' @param tmpdir A character string specifying the directory for storing temporary files. This is used for storing the downloaded genome file.
+#'
+#' @details
+#' The function checks if the specified genome is available. If tmpdir, it constructs the download URL, downloads the genome file,
+#' extracts it to the specified directory, and loads the genome database using \code{gsetroot}. The function also calls \code{gdb.reload} to reload the genome database.
+#'
+#' @return None.
+#'
+#' @examples
+#' \donttest{
+#' mm10_dir <- tempdir()
+#' gdb.create_genome("mm10", path = mm10_dir)
+#' list.files(file.path(mm10_dir, "mm10"))
+#' gsetroot(file.path(mm10_dir, "mm10"))
+#' gintervals.ls()
+#' }
+#'
+#' @export
+gdb.create_genome <- function(genome, path = getwd(), tmpdir = tempdir()) {
+    supported_genomes <- c("mm9", "mm10", "mm39", "hg19", "hg38")
+
+    if (!genome %in% supported_genomes) {
+        stop(paste("The genome", genome, "is not available yet. Available genomes are:", paste(supported_genomes, collapse = ", ")))
+    }
+
+    base_url <- "https://misha-genome.s3.eu-west-1.amazonaws.com/"
+    url <- paste0(base_url, genome, ".tar.gz")
+
+    temp_file <- tempfile(fileext = ".tar.gz", tmpdir = tmpdir)
+
+    withr::local_options(list(timeout = 60 * 60 * 2))
+    message("Downloading ", genome, " genome...")
+    utils::download.file(url, temp_file, mode = "wb")
+
+    dir.create(path, showWarnings = FALSE, recursive = TRUE)
+
+    message("Extracting ", genome, " genome...")
+    utils::untar(temp_file, exdir = path)
+
+    unlink(temp_file)
+
+    message("Loading misha root...")
+    gsetroot(file.path(path, genome))
+    gdb.init()
+    gdb.reload()
+
+    message(genome, " genome has been successfully downloaded and extracted to ", file.path(path, genome))
+}
+
 
 
 
