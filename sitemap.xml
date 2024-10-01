@@ -15,6 +15,7 @@
 <url><loc>/reference/gcluster.run.html</loc></url>
 <url><loc>/reference/gcompute_strands_autocorr.html</loc></url>
 <url><loc>/reference/gdb.create.html</loc></url>
+<url><loc>/reference/gdb.create_genome.html</loc></url>
 <url><loc>/reference/gdb.get_readonly_attrs.html</loc></url>
 <url><loc>/reference/gdb.init.html</loc></url>
 <url><loc>/reference/gdb.reload.html</loc></url>

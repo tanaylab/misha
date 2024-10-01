@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.10</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.13</span>
       </span>
     </div>
 
@@ -95,13 +95,25 @@
 <div class="section level2">
 <h2 id="create-a-misha-database-from-ucsc">Create a <code>misha</code> database from UCSC<a class="anchor" aria-label="anchor" href="#create-a-misha-database-from-ucsc"></a>
 </h2>
+<p>The easiest way to create a <code>misha</code> database is to use the
+<code>gdb.create_genome</code> function:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.create_genome.html">gdb.create_genome</a></span><span class="op">(</span><span class="st">"hg19"</span><span class="op">)</span> <span class="co"># creates a database for the hg19 genome</span></span>
+<span><span class="fu"><a href="../reference/gdb.create_genome.html">gdb.create_genome</a></span><span class="op">(</span><span class="st">"hg38"</span><span class="op">)</span> <span class="co"># creates a database for the hg38 genome</span></span>
+<span><span class="fu"><a href="../reference/gdb.create_genome.html">gdb.create_genome</a></span><span class="op">(</span><span class="st">"mm10"</span><span class="op">)</span> <span class="co"># creates a database for the mm10 genome</span></span>
+<span><span class="fu"><a href="../reference/gdb.create_genome.html">gdb.create_genome</a></span><span class="op">(</span><span class="st">"mm9"</span><span class="op">)</span> <span class="co"># creates a database for the mm9 genome</span></span>
+<span><span class="fu"><a href="../reference/gdb.create_genome.html">gdb.create_genome</a></span><span class="op">(</span><span class="st">"mm39"</span><span class="op">)</span> <span class="co"># creates a database for the mm39 genome</span></span></code></pre></div>
+<p>However, if you need to create a database for a genome that is not
+supported by <code>gdb.create_genome</code>, or if you want to make sure
+that the database is created from the latest version of the genome in
+ucsc, you can create it manually using the commands below.</p>
 <div class="section level3">
 <h3 id="hg19">hg19<a class="anchor" aria-label="anchor" href="#hg19"></a>
 </h3>
 <p>In order to create a misha database for <em>hg19</em> genome, run the
 following commands (assuming <em>“hg19”</em> is your new data base
 path):</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ftp</span> <span class="op">&lt;-</span> <span class="st">"ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19"</span></span>
 <span><span class="fu"><a href="../reference/gdb.create.html">gdb.create</a></span><span class="op">(</span></span>
 <span>    <span class="st">"hg19"</span>,</span>
@@ -122,7 +134,7 @@ path):</p>
 <p>In order to create a misha database for <em>hg38</em> genome, run the
 following commands (assuming <em>“hg38”</em> is your new data base
 path):</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ftp</span> <span class="op">&lt;-</span> <span class="st">"ftp://hgdownload.soe.ucsc.edu/goldenPath/hg38"</span></span>
 <span><span class="fu"><a href="../reference/gdb.create.html">gdb.create</a></span><span class="op">(</span></span>
 <span>    <span class="st">"hg38"</span>,</span>
@@ -135,7 +147,7 @@ path):</p>
 <span>        <span class="st">"tRnaName"</span></span>
 <span>    <span class="op">)</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/gdb.init.html">gdb.init</a></span><span class="op">(</span><span class="st">"hg19"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/gdb.init.html">gdb.init</a></span><span class="op">(</span><span class="st">"hg38"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="mm9">mm9<a class="anchor" aria-label="anchor" href="#mm9"></a>
@@ -143,7 +155,7 @@ path):</p>
 <p>In order to create a misha database for <em>mm9</em> genome, run the
 following commands (assuming <em>“mm9”</em> is your new data base
 path):</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ftp</span> <span class="op">&lt;-</span> <span class="st">"ftp://hgdownload.soe.ucsc.edu/goldenPath/mm9"</span></span>
 <span><span class="fu"><a href="../reference/gdb.create.html">gdb.create</a></span><span class="op">(</span></span>
 <span>    <span class="st">"mm9"</span>,</span>
@@ -163,7 +175,7 @@ path):</p>
 <p>In order to create a misha database for <em>mm10</em> genome, run the
 following commands (assuming <em>“mm10”</em> is your new data base
 path):</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ftp</span> <span class="op">&lt;-</span> <span class="st">"ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"</span></span>
 <span><span class="fu"><a href="../reference/gdb.create.html">gdb.create</a></span><span class="op">(</span></span>
 <span>    <span class="st">"mm10"</span>,</span>
@@ -184,7 +196,7 @@ path):</p>
 <p>In order to create a misha database for <em>mm39</em> genome, run the
 following commands (assuming <em>“mm39”</em> is your new data base
 path):</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ftp</span> <span class="op">&lt;-</span> <span class="st">"ftp://hgdownload.soe.ucsc.edu/goldenPath/mm39"</span></span>
 <span><span class="fu"><a href="../reference/gdb.create.html">gdb.create</a></span><span class="op">(</span></span>
 <span>    <span class="st">"mm39"</span>,</span>
@@ -217,7 +229,7 @@ path):</p>
 
 <div class="pkgdown">
   <p></p>
-<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
 </div>
 
       </footer>

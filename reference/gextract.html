@@ -18,7 +18,7 @@ intervals."><!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.10</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.2.13</span>
       </span>
     </div>
 
@@ -157,19 +157,17 @@ expressions.</p>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gdb.init.html">gdb.init_examples</a></span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co">## get values of 'dense_track' for [0, 500), chrom 1</span></span></span>
-<span class="r-in"><span><span class="fu">gextract</span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">500</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start end dense_track intervalID</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  50   0.1777778          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1    50 100   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1   100 150   0.1800000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   150 200   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1   200 250   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1   250 300   0.2000000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1   300 350   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1   350 400   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1   400 450   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1   450 500   0.0600000          1</span>
+<span class="r-in"><span><span class="co">## get values of 'dense_track' for [0, 400), chrom 1</span></span></span>
+<span class="r-in"><span><span class="fu">gextract</span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">400</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start end dense_track intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1     0  50   0.1777778          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1    50 100   0.1600000          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1   100 150   0.1800000          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1   150 200   0.1600000          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr1   200 250   0.1600000          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6  chr1   250 300   0.2000000          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7  chr1   300 350   0.1600000          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8  chr1   350 400   0.1600000          1</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co">## get values of 'rects_track' (a 2D track) for a 2D interval</span></span></span>
 <span class="r-in"><span><span class="fu">gextract</span><span class="op">(</span></span></span>
@@ -177,18 +175,6 @@ expressions.</p>
 <span class="r-in"><span>    <span class="fu"><a href="gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="st">"chr1"</span>, <span class="fl">0</span>, <span class="fl">4000</span>, <span class="st">"chr2"</span>, <span class="fl">2000</span>, <span class="fl">5000</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> NULL</span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co">## get values of two track expressions 'dense_track' and</span></span></span>
-<span class="r-in"><span><span class="co">## 'array_track * 2' running over '100' iterator</span></span></span>
-<span class="r-in"><span><span class="fu">gextract</span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="st">"array_track * 2"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">500</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">100</span>, colnames <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"expr1"</span>, <span class="st">"expr2"</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start end     expr1    expr2 intervalID</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1     0 100 0.1688889   8.0000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1   100 200 0.1700000 212.3333          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1   200 300 0.1800000 407.2000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1   300 400 0.1600000      NaN          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr1   400 500 0.1100000      NaN          1</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
@@ -204,7 +190,7 @@ expressions.</p>
 </div>
 
 <div class="pkgdown">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
 </div>
 
       </footer></div>
