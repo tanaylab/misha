@@ -229,12 +229,14 @@ tgt
 thr
 tibbles
 tmp
+tmpdir
 trackdb
 trackname
 tracknames
 trackset
 tracksets
 tss
+ucsc
 undefine
 unevaluated
 unprotect
