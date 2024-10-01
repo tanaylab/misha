@@ -600,9 +600,7 @@ gdb.create_genome <- function(genome, path = getwd(), tmpdir = tempdir()) {
     unlink(temp_file)
 
     message("Loading misha root...")
-    gsetroot(file.path(path, genome))
-    gdb.init()
-    gdb.reload()
+    gdb.init(file.path(path, genome), rescan = TRUE)
 
     message(genome, " genome has been successfully downloaded and extracted to ", file.path(path, genome))
 }
