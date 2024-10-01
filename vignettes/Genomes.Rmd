@@ -20,6 +20,18 @@ library(misha)
 
 # Create a `misha` database from UCSC
 
+The easiest way to create a `misha` database is to use the `gdb.create_genome` function:
+
+```{r, eval = FALSE}
+gdb.create_genome("hg19") # creates a database for the hg19 genome
+gdb.create_genome("hg38") # creates a database for the hg38 genome
+gdb.create_genome("mm10") # creates a database for the mm10 genome
+gdb.create_genome("mm9") # creates a database for the mm9 genome
+gdb.create_genome("mm39") # creates a database for the mm39 genome
+```
+
+However, if you need to create a database for a genome that is not supported by `gdb.create_genome`, or if you want to make sure that the database is created from the latest version of the genome in ucsc, you can create it manually using the commands below. 
+
 ## hg19
 In order to create a misha database for _hg19_ genome, run the following commands (assuming *"hg19"* is your new data base path):
 
@@ -55,7 +67,7 @@ gdb.create(
         "tRnaName"
     )
 )
-gdb.init("hg19")
+gdb.init("hg38")
 ```
 
 ## mm9
