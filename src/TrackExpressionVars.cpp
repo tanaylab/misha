@@ -298,7 +298,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 	try {
 		m_iu.convert_rintervs(rsrc, &intervs1d, &intervs2d);
 	} catch (TGLException &e) {
-		verror("Source of virtual track %s was not recognized neither as a track nor as intervals", vtrack.c_str());
+		verror("Source of virtual track %s was not recognized neither as a track nor as intervals. (\"%s\")", vtrack.c_str(), e.msg());
 	}
 	add_vtrack_var_src_interv(rvtrack, vtrack, intervs1d, intervs2d);
 }
