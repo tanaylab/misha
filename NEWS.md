@@ -1,3 +1,7 @@
+# misha 4.2.14
+
+* Better error message in `gvtrack.create`.
+
 # misha 4.2.13
 
 * Added `gdb.create_genome` function.
