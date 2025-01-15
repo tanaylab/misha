@@ -33,10 +33,10 @@ jobs:
           echo "Using version: ${{ env.VERSION }}"
 
       - name: Set up Conda environment
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@master
         with:
           auto-activate-base: true
-          activate-environment: build-env
+          activate-environment: separate
           miniforge-variant: Mambaforge
           use-mamba: true
           python-version: "3.11"
