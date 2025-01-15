@@ -94,7 +94,7 @@ jobs:
             requires:
               - r-testthat >=3.0.0
             commands:
-              - $R -e "library('misha')"
+              - R -e "library('misha')"
 
           about:
             home: https://tanaylab.github.io/misha/
