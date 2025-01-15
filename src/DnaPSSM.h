@@ -7,6 +7,8 @@
 #include <list>
 #include <string>
 
+#include "config.h"
+#include "util.h"
 #include "RaList.h"
 
 class DnaProbVec {
