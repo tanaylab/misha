@@ -37,10 +37,9 @@ jobs:
         with:
           auto-activate-base: true
           activate-environment: build-env
-          miniforge-version: latest
           miniforge-variant: Mambaforge
           use-mamba: true
-          python-version: "3.11"  # Specify Python 3.11
+          python-version: "3.11"
 
       - name: Install conda-build tools
         run: |
