@@ -33,16 +33,18 @@ jobs:
           echo "Using version: ${{ env.VERSION }}"
 
       - name: Set up Conda environment
-        uses: conda-incubator/setup-miniconda@master
+        uses: conda-incubator/setup-miniconda@v3
         with:
           auto-activate-base: true
-          activate-environment: separate
-          miniforge-variant: Mambaforge
-          use-mamba: true
+          activate-environment: build-env
+          miniconda-version: "latest"
+          channels: conda-forge,defaults
+          channel-priority: strict
           python-version: "3.11"
 
-      - name: Install conda-build tools
+      - name: Install mamba and build tools
         run: |
+          conda install -n build-env mamba -c conda-forge
           mamba install conda-build anaconda-client
 
       - name: Create conda recipe
