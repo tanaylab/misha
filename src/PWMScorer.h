@@ -7,6 +7,7 @@
 #include <R.h>
 #include <Rinternals.h>
 #include "DnaPSSM.h"
+#include "rdbutils.h"
 #include "GenomeSeqFetch.h"
 #include "GInterval.h"
 #include "GenomeChromKey.h"
@@ -38,12 +39,12 @@ public:
             if (m_mode == TOTAL_LIKELIHOOD) {
                 float energy;
                 m_pssm.integrate_like(target, energy);
-                return exp(energy);
+                return energy;
             } else {
                 float best_logp;
                 int best_dir;
                 m_pssm.max_like_match(target, best_logp, best_dir);
-                return exp(best_logp);
+                return best_logp;
             }
         } catch (TGLException &e) {
             return std::numeric_limits<double>::quiet_NaN();
@@ -53,30 +54,45 @@ public:
     // Static helper to create PWM from R matrix
     static DnaPSSM create_pssm_from_matrix(SEXP matrix) {
         DnaPSSM pssm;
-        int col_num = Rf_ncols(matrix);
-        pssm.resize(col_num);
+        int row_num = Rf_nrows(matrix);  // Number of positions in the PWM
+        pssm.resize(row_num);
 
-        // Get row indices for A,C,G,T
-        SEXP rownames = Rf_getAttrib(matrix, R_RowNamesSymbol);
+        // Get colnames properly using R_DimNames
+        SEXP dimnames = Rf_getAttrib(matrix, R_DimNamesSymbol);
+        if (Rf_isNull(dimnames) || VECTOR_ELT(dimnames, 1) == R_NilValue) {
+            rdb::verror("PWM matrix must have column names 'A', 'C', 'G', and 'T'");
+        }
+
+        SEXP colnames = VECTOR_ELT(dimnames, 1);
+        if (!Rf_isString(colnames) || Rf_length(colnames) != 4) {
+            rdb::verror("PWM matrix must have exactly 4 columns labeled 'A', 'C', 'G', and 'T'");
+        }
+
+        // Get column indices for A,C,G,T
         int a_idx = -1, c_idx = -1, g_idx = -1, t_idx = -1;
-        for (int i = 0; i < Rf_length(rownames); i++) {
-            const char *name = CHAR(STRING_ELT(rownames, i));
+        for (int i = 0; i < 4; i++) {
+            const char *name = CHAR(STRING_ELT(colnames, i));
             if (strcmp(name, "A") == 0) a_idx = i;
             else if (strcmp(name, "C") == 0) c_idx = i;
             else if (strcmp(name, "G") == 0) g_idx = i;
             else if (strcmp(name, "T") == 0) t_idx = i;
         }
 
+        // Verify we found all required indices
+        if (a_idx == -1 || c_idx == -1 || g_idx == -1 || t_idx == -1) {
+            rdb::verror("PWM matrix must have columns labeled 'A', 'C', 'G', and 'T'");
+        }
+
         double *matrix_ptr = REAL(matrix);
 
         // Initialize PSSM probabilities for each position
-        for (int i = 0; i < col_num; i++) {
-            std::vector<float> probs(4);
-            probs[0] = matrix_ptr[a_idx + i * 4]; // A
-            probs[1] = matrix_ptr[c_idx + i * 4]; // C
-            probs[2] = matrix_ptr[g_idx + i * 4]; // G
-            probs[3] = matrix_ptr[t_idx + i * 4]; // T
-            pssm[i] = DnaProbVec(probs[0], probs[1], probs[2], probs[3]);
+        for (int i = 0; i < row_num; i++) {
+            float pa = matrix_ptr[i + a_idx * row_num];  // Get A probability for position i
+            float pc = matrix_ptr[i + c_idx * row_num];  // Get C probability for position i
+            float pg = matrix_ptr[i + g_idx * row_num];  // Get G probability for position i
+            float pt = matrix_ptr[i + t_idx * row_num];  // Get T probability for position i
+            
+            pssm[i] = DnaProbVec(pa, pc, pg, pt);
         }
 
         return pssm;
