@@ -1,4 +1,3 @@
-// PWMScorer.h
 #ifndef PWM_SCORER_H_
 #define PWM_SCORER_H_
 
@@ -16,7 +15,7 @@ class PWMScorer {
 public:
     enum ScoringMode {
         TOTAL_LIKELIHOOD,  // For PWM function
-        MAX_LIKELIHOOD     // For PWM_MAX function
+        MAX_LIKELIHOOD     // For PWM_MAX function  
     };
 
     PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, ScoringMode mode = TOTAL_LIKELIHOOD) 
@@ -26,14 +25,18 @@ public:
 
     // Calculate PWM score for a given interval
     double score_interval(const GInterval& interval, const GenomeChromKey& chromkey) {
+        // Calculate expanded interval to include full motif coverage
+        int64_t motif_length = m_pssm.size();
+        GInterval expanded_interval = interval;
+        
+        // Expand interval to allow scoring positions where motif partially overlaps
+        expanded_interval.start = std::max((int64_t)0, expanded_interval.start - (motif_length - 1));
+        expanded_interval.end = std::min(expanded_interval.end + (motif_length - 1), 
+                                       (int64_t)chromkey.get_chrom_size(interval.chromid));
+
         std::vector<char> seq;
         try {
-            m_seqfetch.read_interval(interval, chromkey, seq);
-
-            if (seq.size() < m_pssm.size()) {
-                return std::numeric_limits<double>::quiet_NaN();
-            }
-
+            m_seqfetch.read_interval(expanded_interval, chromkey, seq);
             std::string target(seq.begin(), seq.end());
 
             if (m_mode == TOTAL_LIKELIHOOD) {
