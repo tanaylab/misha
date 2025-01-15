@@ -208,8 +208,7 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
         }
         if (!is.matrix(params) || ncol(params) != 4 || !all(c("A", "C", "G", "T") %in% colnames(params))) {
             stop("PSSM must be a nx4 matrix with colnames A, C, G, T")
-        }
-        params <- t(params)
+        }        
     }
 
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())
