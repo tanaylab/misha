@@ -48,10 +48,10 @@ static double get_bin_tranformed_value(unsigned numexpr, bool force_binning, SEX
 	if (nan)
 		value = numeric_limits<double>::quiet_NaN();
 	else {
-		if ((int)index >= length(lookup_table))
+		if ((int)index >= Rf_length(lookup_table))
 			verror("Internal error: index %d is out of range", index);
 
-		value = isReal(lookup_table) ? REAL(lookup_table)[index] : INTEGER(lookup_table)[index];
+		value = Rf_isReal(lookup_table) ? REAL(lookup_table)[index] : INTEGER(lookup_table)[index];
 	}
 
 	return value;
@@ -81,8 +81,8 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 
     SET_VECTOR_ELT(answer, num_interv_cols + VALUE, rvals);
 
-	SEXP col_names = getAttrib(answer, R_NamesSymbol);
-	SET_STRING_ELT(col_names, num_interv_cols + VALUE, mkChar("value"));
+	SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+	SET_STRING_ELT(col_names, num_interv_cols + VALUE, Rf_mkChar("value"));
 
 	if (interv_ids) {
 		SEXP ids;
@@ -91,7 +91,7 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, num_interv_cols + ID, ids);
 
-		SET_STRING_ELT(col_names, num_interv_cols + ID, mkChar("intervalID"));
+		SET_STRING_ELT(col_names, num_interv_cols + ID, Rf_mkChar("intervalID"));
 	}
 
 	return answer;
@@ -107,30 +107,30 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_track_exprs) || length(_track_exprs) < 1)
+		if (!Rf_isString(_track_exprs) || Rf_length(_track_exprs) < 1)
 			verror("Track argument is not a string vector");
 
-		unsigned numexpr = length(_track_exprs);
+		unsigned numexpr = Rf_length(_track_exprs);
 
-		if (!isVector(_breaks))
+		if (!Rf_isVector(_breaks))
 			verror("Breaks argument must be a vector");
 
-		if (length(_breaks) != (int)numexpr)
+		if (Rf_length(_breaks) != (int)numexpr)
 			verror("Number of breaks sets must be equal to the number of tracks used");
 
-		if (!isLogical(_include_lowest) || length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
 			verror("include.lowest argument is not logical");
 
-		if (!isLogical(_force_binning) || length(_force_binning) != 1)
+		if (!Rf_isLogical(_force_binning) || Rf_length(_force_binning) != 1)
 			verror("include.lowest argument is not logical");
 
-		if (!isNumeric(_lookup_table))
+		if (!Rf_isNumeric(_lookup_table))
 			verror("Lookup table argument must be numeric");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 		bool include_lowest = LOGICAL(_include_lowest)[0];
 		bool force_binning = LOGICAL(_force_binning)[0];
 		vector<BinFinder> bin_finders;
@@ -141,18 +141,18 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		for (unsigned i = 0; i < numexpr; ++i) {
 			SEXP breaks = VECTOR_ELT(_breaks, i);
 
-			if (!isReal(breaks))
+			if (!Rf_isReal(breaks))
 				verror("Breaks[%d] is not numeric", i);
 
 			bin_finders.push_back(BinFinder());
-			bin_finders.back().init(REAL(breaks), length(breaks), include_lowest);
+			bin_finders.back().init(REAL(breaks), Rf_length(breaks), include_lowest);
 
 			totalbins *= bin_finders.back().get_numbins();
 			track_mult[i] = !i ? 1 : track_mult[i - 1] * bin_finders[i - 1].get_numbins();
 		}
 
-		if ((int)totalbins != length(_lookup_table))
-			verror("Lookup table length (%d) must match the range of the bins (%d)", length(_lookup_table), totalbins);
+		if ((int)totalbins != Rf_length(_lookup_table))
+			verror("Lookup table Rf_length (%d) must match the range of the bins (%d)", Rf_length(_lookup_table), totalbins);
 
 		IntervUtils iu(_envir);
 		GIntervalsFetcher1D *intervals1d = NULL;
@@ -441,27 +441,27 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(_track_exprs) || length(_track_exprs) < 1)
+		if (!Rf_isString(_track_exprs) || Rf_length(_track_exprs) < 1)
 			verror("Track expression argument is not a string vector");
 
-		unsigned numexpr = length(_track_exprs);
+		unsigned numexpr = Rf_length(_track_exprs);
 
-		if (!isVector(_breaks))
+		if (!Rf_isVector(_breaks))
 			verror("Breaks argument must be a vector");
 
-		if (length(_breaks) != (int)numexpr)
+		if (Rf_length(_breaks) != (int)numexpr)
 			verror("Number of breaks sets must be equal to the number of tracks used");
 
-		if (!isLogical(_include_lowest) || length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
 			verror("include.lowest argument is not logical");
 
-		if (!isLogical(_force_binning) || length(_force_binning) != 1)
+		if (!Rf_isLogical(_force_binning) || Rf_length(_force_binning) != 1)
 			verror("include.lowest argument is not logical");
 
-		if (!isNumeric(_lookup_table))
+		if (!Rf_isNumeric(_lookup_table))
 			verror("Lookup table argument must be numeric");
 
 		bool include_lowest = LOGICAL(_include_lowest)[0];
@@ -474,18 +474,18 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 		for (unsigned i = 0; i < numexpr; ++i) {
 			SEXP breaks = VECTOR_ELT(_breaks, i);
 
-			if (!isReal(breaks))
+			if (!Rf_isReal(breaks))
 				verror("Breaks[%d] is not numeric", i);
 
 			bin_finders.push_back(BinFinder());
-			bin_finders.back().init(REAL(breaks), length(breaks), include_lowest);
+			bin_finders.back().init(REAL(breaks), Rf_length(breaks), include_lowest);
 
 			totalbins *= bin_finders.back().get_numbins();
 			track_mult[i] = !i ? 1 : track_mult[i - 1] * bin_finders[i - 1].get_numbins();
 		}
 
-		if ((int)totalbins != length(_lookup_table))
-			verror("Lookup table length (%d) must match the range of the bins (%d)", length(_lookup_table), totalbins);
+		if ((int)totalbins != Rf_length(_lookup_table))
+			verror("Lookup table Rf_length (%d) must match the range of the bins (%d)", Rf_length(_lookup_table), totalbins);
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
 		string dirname = create_track_dir(_envir, track);

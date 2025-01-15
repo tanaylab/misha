@@ -5,7 +5,7 @@
 #' @param obj an R object
 #' @param id unique test id.
 #' @param snapshot_dir directory with rds file containing snapshot of previous versions
-expect_regression <- function(obj, id, snapshot_dir = "/net/mraid14/export/tgdata/db/tgdb/misha_snapshot") {
+expect_regression <- function(obj, id, snapshot_dir = "/net/mraid20/export/tgdata/db/tgdb/misha_snapshot") {
     regression_file <- file.path(snapshot_dir, glue::glue("{id}.rds"))
 
     if (!file.exists(regression_file)) {

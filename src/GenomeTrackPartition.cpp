@@ -30,8 +30,8 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 		REAL(bins)[i] = res_bins[i];
 
 	SET_VECTOR_ELT(answer, Interval::NUM_COLS, bins);
-	SEXP colnames = getAttrib(answer, R_NamesSymbol);
-	SET_STRING_ELT(colnames, Interval::NUM_COLS, mkChar("bin"));
+	SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+	SET_STRING_ELT(colnames, Interval::NUM_COLS, Rf_mkChar("bin"));
 
 	SEXP range;
 	int numbins = bin_finder.get_numbins();
@@ -40,9 +40,9 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 		char buf[10000];
 
 		snprintf(buf, sizeof(buf), "%c%g, %g]", bin || !include_lowest ? '(' : '[', bin_finder.get_breaks()[bin], bin_finder.get_breaks()[bin + 1]);
-		SET_STRING_ELT(range, bin, mkChar(buf));
+		SET_STRING_ELT(range, bin, Rf_mkChar(buf));
 	}
-	setAttrib(answer, install("range"), range);
+	Rf_setAttrib(answer, Rf_install("range"), range);
 	return answer;
 }
 
@@ -111,22 +111,22 @@ SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_track_expr) || length(_track_expr) != 1)
+		if (!Rf_isString(_track_expr) || Rf_length(_track_expr) != 1)
 			verror("Expression argument is not a string");
 
-		if (!isReal(_breaks))
+		if (!Rf_isReal(_breaks))
 			verror("Breaks argument is not a number");
 
-		if (!isLogical(_include_lowest) || length(_include_lowest) != 1)
+		if (!Rf_isLogical(_include_lowest) || Rf_length(_include_lowest) != 1)
 			verror("include.lowest argument is not logical");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 
 		bool include_lowest = LOGICAL(_include_lowest)[0];
-		BinFinder bin_finder(REAL(_breaks), length(_breaks), include_lowest);
+		BinFinder bin_finder(REAL(_breaks), Rf_length(_breaks), include_lowest);
 
 		GIntervals res_intervals;
 		vector<int> res_bins;

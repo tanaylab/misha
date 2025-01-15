@@ -31,8 +31,6 @@ GenomeTrack
 INTERVID
 LTO
 NA's
-NaN
-NaNs
 NxM
 OSX
 PKGDIR
@@ -192,6 +190,7 @@ nans
 nbash
 neighbouring
 ng
+noRemap
 notfound
 num
 numbins
@@ -230,12 +229,14 @@ tgt
 thr
 tibbles
 tmp
+tmpdir
 trackdb
 trackname
 tracknames
 trackset
 tracksets
 tss
+ucsc
 undefine
 unevaluated
 unprotect

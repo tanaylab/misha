@@ -44,22 +44,22 @@ IntervUtils::IntervUtils(SEXP envir)
 	m_kids_intervals2d.clear();
 
 	
-	m_allgenome = findVar(install("ALLGENOME"), findVar(install(".misha"), m_envir));
+	m_allgenome = Rf_findVar(Rf_install("ALLGENOME"), Rf_findVar(Rf_install(".misha"), m_envir));
 
-	if (isNull(m_allgenome))
+	if (Rf_isNull(m_allgenome))
 		verror("ALLGENOME variable does not exist");
 
-	if (!isVector(m_allgenome) || length(m_allgenome) != 2)
+	if (!Rf_isVector(m_allgenome) || Rf_length(m_allgenome) != 2)
 		verror("ALLGENOME variable has invalid type");
 
 	SEXP chroms = VECTOR_ELT(get_rallgenome1d(), GInterval::CHROM);
 	SEXP chrom_sizes = VECTOR_ELT(get_rallgenome1d(), GInterval::END);
-	SEXP chrom_levels = getAttrib(chroms, R_LevelsSymbol);
-	unsigned num_intervals = (unsigned)length(chroms);
+	SEXP chrom_levels = Rf_getAttrib(chroms, R_LevelsSymbol);
+	unsigned num_intervals = (unsigned)Rf_length(chroms);
 
 	for (unsigned i = 0; i < num_intervals; i++) {
-		const char *chrom = isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
-		double chrom_size = isReal(chrom_sizes) ? REAL(chrom_sizes)[i] : INTEGER(chrom_sizes)[i];
+		const char *chrom = Rf_isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
+		double chrom_size = Rf_isReal(chrom_sizes) ? REAL(chrom_sizes)[i] : INTEGER(chrom_sizes)[i];
 		try {
 			m_chrom_key.add_chrom(chrom, (uint64_t)chrom_size);
 		} catch (TGLException &e) {
@@ -82,9 +82,9 @@ bool IntervUtils::track_exists(const char *track_name)
 {
 	SEXP all_track_names;
 
-	rprotect(all_track_names = findVar(install("GTRACKS"), findVar(install(".misha"), get_env())));
-	if (isString(all_track_names)) {
-		for (int i = 0; i < length(all_track_names); ++i) {
+	rprotect(all_track_names = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), get_env())));
+	if (Rf_isString(all_track_names)) {
+		for (int i = 0; i < Rf_length(all_track_names); ++i) {
 			if (!strcmp(track_name, CHAR(STRING_ELT(all_track_names, i))))
 				return true;
 		}
@@ -124,18 +124,18 @@ GIntervalsFetcher2D *IntervUtils::get_kid_intervals2d()
 
 unsigned IntervUtils::get_rintervs_type_mask(SEXP rintervals, const char *error_msg_prefix) const
 {
-	if (!isVector(rintervals))
+	if (!Rf_isVector(rintervals))
 		verror("%sInvalid format of intervals argument", error_msg_prefix);
 
-	if (length(rintervals) == 2) {
+	if (Rf_length(rintervals) == 2) {
 		if (get_rintervs_type_mask(VECTOR_ELT(rintervals, 0), error_msg_prefix) != INTERVS1D || get_rintervs_type_mask(VECTOR_ELT(rintervals, 1), error_msg_prefix) != INTERVS2D)
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
 		return INTERVS1D | INTERVS2D;
 	}
 
-	SEXP colnames = getAttrib(rintervals, R_NamesSymbol);
+	SEXP colnames = Rf_getAttrib(rintervals, R_NamesSymbol);
 
-	if (!isString(colnames) || length(colnames) < GInterval::NUM_COLS)
+	if (!Rf_isString(colnames) || Rf_length(colnames) < GInterval::NUM_COLS)
 		verror("%sInvalid format of intervals argument", error_msg_prefix);
 
 	IntervUtils::IntervsType type = INTERVS1D;
@@ -158,22 +158,22 @@ unsigned IntervUtils::get_rintervs_type_mask(SEXP rintervals, const char *error_
 		SEXP starts = VECTOR_ELT(rintervals, GInterval::START);
 		SEXP ends = VECTOR_ELT(rintervals, GInterval::END);
 		SEXP strands = R_NilValue;
-		SEXP colnames = getAttrib(rintervals, R_NamesSymbol);
+		SEXP colnames = Rf_getAttrib(rintervals, R_NamesSymbol);
 
-		for (int i = 0; i < length(rintervals); i++) {
+		for (int i = 0; i < Rf_length(rintervals); i++) {
 			if (!strcmp(CHAR(STRING_ELT(colnames, i)), "strand")) {
-				if (length(VECTOR_ELT(rintervals, i)) != length(VECTOR_ELT(rintervals, GInterval::CHROM)))
+				if (Rf_length(VECTOR_ELT(rintervals, i)) != Rf_length(VECTOR_ELT(rintervals, GInterval::CHROM)))
 					verror("%sNumber of rows in column %s differs than the number of rows in column strand", error_msg_prefix, GInterval::COL_NAMES[GInterval::CHROM]);
 				break;
 			}
 		}
 
 		for (unsigned i = 0; i < GInterval::NUM_COLS; i++) {
-			if (i != 0 && length(VECTOR_ELT(rintervals, i)) != length(VECTOR_ELT(rintervals, i - 1)))
+			if (i != 0 && Rf_length(VECTOR_ELT(rintervals, i)) != Rf_length(VECTOR_ELT(rintervals, i - 1)))
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval::COL_NAMES[i - 1], GInterval::COL_NAMES[i]);
 		}
 
-		if ((!isReal(starts) && !isInteger(starts)) || (!isReal(ends) && !isInteger(ends)) || (strands != R_NilValue && !isReal(strands) && !isInteger(strands)))
+		if ((!Rf_isReal(starts) && !Rf_isInteger(starts)) || (!Rf_isReal(ends) && !Rf_isInteger(ends)) || (strands != R_NilValue && !Rf_isReal(strands) && !Rf_isInteger(strands)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
 
 	} else if (type == INTERVS2D) {
@@ -183,11 +183,11 @@ unsigned IntervUtils::get_rintervs_type_mask(SEXP rintervals, const char *error_
 		SEXP ends2 = VECTOR_ELT(rintervals, GInterval2D::END2);
 
 		for (unsigned i = 0; i < GInterval2D::NUM_COLS; i++) {
-			if (i != 0 && length(VECTOR_ELT(rintervals, i)) != length(VECTOR_ELT(rintervals, i - 1)))
+			if (i != 0 && Rf_length(VECTOR_ELT(rintervals, i)) != Rf_length(VECTOR_ELT(rintervals, i - 1)))
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval2D::COL_NAMES[i - 1], GInterval2D::COL_NAMES[i]);
 		}
 
-		if ((!isReal(starts1) && !isInteger(starts1)) || (!isReal(ends1) && !isInteger(ends1)) || (!isReal(starts2) && !isInteger(starts2)) || (!isReal(ends2) && !isInteger(ends2)))
+		if ((!Rf_isReal(starts1) && !Rf_isInteger(starts1)) || (!Rf_isReal(ends1) && !Rf_isInteger(ends1)) || (!Rf_isReal(starts2) && !Rf_isInteger(starts2)) || (!Rf_isReal(ends2) && !Rf_isInteger(ends2)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
 	} else
 		verror("%sUnexpected intervals type", error_msg_prefix);
@@ -204,7 +204,7 @@ unsigned IntervUtils::convert_rintervs(SEXP rintervals, GIntervalsFetcher1D **in
 	if (intervals2d) 
 		*intervals2d = NULL;
 	try {
-		if (isString(rintervals) && length(rintervals) == 1) {
+		if (Rf_isString(rintervals) && Rf_length(rintervals) == 1) {
 			const char *full_interv_name = CHAR(STRING_ELT(rintervals, 0));
 
 			if (GIntervalsBigSet::isbig(full_interv_name, *this)) { // big intervals set?
@@ -308,17 +308,17 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 	if (pintervs_type_mask) 
 		*pintervs_type_mask = 0;
 
-	bool loaded_from_file = isString(rintervals);
+	bool loaded_from_file = Rf_isString(rintervals);
 
 	// rintervals is the name of the intervals file
-	if (isString(rintervals) && length(rintervals) == 1) {
+	if (Rf_isString(rintervals) && Rf_length(rintervals) == 1) {
 		const char *full_interv_name = CHAR(STRING_ELT(rintervals, 0));
 		SEXP gintervs;
 		bool interv_found = false;
 
-		rprotect(gintervs = findVar(install("GINTERVS"), findVar(install(".misha"),m_envir)));
-		if (isString(gintervs)) {
-			for (int iinterv = 0; iinterv < length(gintervs); ++iinterv) {
+		rprotect(gintervs = Rf_findVar(Rf_install("GINTERVS"), Rf_findVar(Rf_install(".misha"),m_envir)));
+		if (Rf_isString(gintervs)) {
+			for (int iinterv = 0; iinterv < Rf_length(gintervs); ++iinterv) {
 				const char *interv = CHAR(STRING_ELT(gintervs, iinterv));
 				if (!strcmp(full_interv_name, interv)) {
 					interv_found = true;
@@ -345,10 +345,10 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
         }
 
 	if (TYPEOF(rintervals) == PROMSXP) {
-		if (PRENV(rintervals) == R_NilValue)
-			rintervals = PRVALUE(rintervals);
+		if (MISHA_PRENV(rintervals) == R_NilValue)
+			rintervals = MISHA_PRVALUE(rintervals);
 		else
-			rintervals = eval_in_R(PRCODE(rintervals), PRENV(rintervals));
+			rintervals = eval_in_R(MISHA_PREXPR(rintervals), MISHA_PRENV(rintervals));
 	}
 
 	SEXP _rintervals = rintervals;
@@ -368,14 +368,14 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 
 	if ((intervs_type_mask & INTERVS1D) && intervals) {
 		SEXP chroms = VECTOR_ELT(rintervals, GInterval::CHROM);
-		SEXP chrom_levels = getAttrib(chroms, R_LevelsSymbol);
+		SEXP chrom_levels = Rf_getAttrib(chroms, R_LevelsSymbol);
 		SEXP starts = VECTOR_ELT(rintervals, GInterval::START);
 		SEXP ends = VECTOR_ELT(rintervals, GInterval::END);
 		SEXP strands = R_NilValue;
-		SEXP colnames = getAttrib(rintervals, R_NamesSymbol);
-		unsigned num_intervals = (unsigned)length(starts);
+		SEXP colnames = Rf_getAttrib(rintervals, R_NamesSymbol);
+		unsigned num_intervals = (unsigned)Rf_length(starts);
 
-		for (int i = 0; i < length(rintervals); i++) {
+		for (int i = 0; i < Rf_length(rintervals); i++) {
 			if (!strcmp(CHAR(STRING_ELT(colnames, i)), "strand")) {
 				strands = VECTOR_ELT(rintervals, i);
 				break;
@@ -383,25 +383,25 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		}
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if ((isFactor(chroms) && INTEGER(chroms)[i] < 0) ||
-				(isReal(starts) && std::isnan(REAL(starts)[i])) || (isReal(ends) && std::isnan(REAL(ends)[i])) ||
-				(strands != R_NilValue && isReal(strands) && std::isnan(REAL(strands)[i])))
+			if ((Rf_isFactor(chroms) && INTEGER(chroms)[i] < 0) ||
+				(Rf_isReal(starts) && std::isnan(REAL(starts)[i])) || (Rf_isReal(ends) && std::isnan(REAL(ends)[i])) ||
+				(strands != R_NilValue && Rf_isReal(strands) && std::isnan(REAL(strands)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
-			const char *chrom = isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
+			const char *chrom = Rf_isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
 			int chromid = chromkey ? chromkey->chrom2id(chrom) : chrom2id(chrom);
-			int64_t start = (int64_t)(isReal(starts) ? REAL(starts)[i] : INTEGER(starts)[i]);
-			int64_t end = (int64_t)(isReal(ends) ? REAL(ends)[i] : INTEGER(ends)[i]);
+			int64_t start = (int64_t)(Rf_isReal(starts) ? REAL(starts)[i] : INTEGER(starts)[i]);
+			int64_t end = (int64_t)(Rf_isReal(ends) ? REAL(ends)[i] : INTEGER(ends)[i]);
 			char strand = 0;
 
 			if (strands != R_NilValue)
-				strand = (char)(isReal(strands) ? REAL(strands)[i] : INTEGER(strands)[i]);
+				strand = (char)(Rf_isReal(strands) ? REAL(strands)[i] : INTEGER(strands)[i]);
 
 			GInterval interval(chromid, start, end, strand, (void *)(intptr_t)i);
 
 			if (loaded_from_file && interval.start == interval.end) {
 				interval.end++;
-				if (isReal(ends))
+				if (Rf_isReal(ends))
 					REAL(ends)[i]++;
 				else
 					INTEGER(ends)[i]++;
@@ -418,30 +418,30 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 
 	if ((intervs_type_mask & INTERVS2D) && intervals2d) {
 		SEXP chroms1 = VECTOR_ELT(rintervals, GInterval2D::CHROM1);
-		SEXP chrom_levels1 = getAttrib(chroms1, R_LevelsSymbol);
+		SEXP chrom_levels1 = Rf_getAttrib(chroms1, R_LevelsSymbol);
 		SEXP starts1 = VECTOR_ELT(rintervals, GInterval2D::START1);
 		SEXP ends1 = VECTOR_ELT(rintervals, GInterval2D::END1);
 		SEXP chroms2 = VECTOR_ELT(rintervals, GInterval2D::CHROM2);
-		SEXP chrom_levels2 = getAttrib(chroms2, R_LevelsSymbol);
+		SEXP chrom_levels2 = Rf_getAttrib(chroms2, R_LevelsSymbol);
 		SEXP starts2 = VECTOR_ELT(rintervals, GInterval2D::START2);
 		SEXP ends2 = VECTOR_ELT(rintervals, GInterval2D::END2);
-		unsigned num_intervals = (unsigned)length(starts1);
+		unsigned num_intervals = (unsigned)Rf_length(starts1);
 
 		for (unsigned i = 0; i < num_intervals; i++) {
-			if ((isFactor(chroms1) && INTEGER(chroms1)[i] < 0) ||
-				(isReal(starts1) && std::isnan(REAL(starts1)[i])) || (isReal(ends1) && std::isnan(REAL(ends1)[i])) ||
-				(isFactor(chroms2) && INTEGER(chroms2)[i] < 0) ||
-				(isReal(starts2) && std::isnan(REAL(starts2)[i])) || (isReal(ends2) && std::isnan(REAL(ends2)[i])))
+			if ((Rf_isFactor(chroms1) && INTEGER(chroms1)[i] < 0) ||
+				(Rf_isReal(starts1) && std::isnan(REAL(starts1)[i])) || (Rf_isReal(ends1) && std::isnan(REAL(ends1)[i])) ||
+				(Rf_isFactor(chroms2) && INTEGER(chroms2)[i] < 0) ||
+				(Rf_isReal(starts2) && std::isnan(REAL(starts2)[i])) || (Rf_isReal(ends2) && std::isnan(REAL(ends2)[i])))
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
-			const char *chrom1 = isString(chroms1) ? CHAR(STRING_ELT(chroms1, i)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(chroms1)[i] - 1));
-			const char *chrom2 = isString(chroms2) ? CHAR(STRING_ELT(chroms2, i)) : CHAR(STRING_ELT(chrom_levels2, INTEGER(chroms2)[i] - 1));
+			const char *chrom1 = Rf_isString(chroms1) ? CHAR(STRING_ELT(chroms1, i)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(chroms1)[i] - 1));
+			const char *chrom2 = Rf_isString(chroms2) ? CHAR(STRING_ELT(chroms2, i)) : CHAR(STRING_ELT(chrom_levels2, INTEGER(chroms2)[i] - 1));
 			int chromid1 = chromkey ? chromkey->chrom2id(chrom1) : chrom2id(chrom1);
 			int chromid2 = chromkey ? chromkey->chrom2id(chrom2) : chrom2id(chrom2);
-			int64_t start1 = (int64_t)(isReal(starts1) ? REAL(starts1)[i] : INTEGER(starts1)[i]);
-			int64_t start2 = (int64_t)(isReal(starts2) ? REAL(starts2)[i] : INTEGER(starts2)[i]);
-			int64_t end1 = (int64_t)(isReal(ends1) ? REAL(ends1)[i] : INTEGER(ends1)[i]);
-			int64_t end2 = (int64_t)(isReal(ends2) ? REAL(ends2)[i] : INTEGER(ends2)[i]);
+			int64_t start1 = (int64_t)(Rf_isReal(starts1) ? REAL(starts1)[i] : INTEGER(starts1)[i]);
+			int64_t start2 = (int64_t)(Rf_isReal(starts2) ? REAL(starts2)[i] : INTEGER(starts2)[i]);
+			int64_t end1 = (int64_t)(Rf_isReal(ends1) ? REAL(ends1)[i] : INTEGER(ends1)[i]);
+			int64_t end2 = (int64_t)(Rf_isReal(ends2) ? REAL(ends2)[i] : INTEGER(ends2)[i]);
 
 			GInterval2D interval(chromid1, start1, end1, chromid2, start2, end2, (void *)(intptr_t)i);
 
@@ -487,21 +487,21 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher1D *intervals, unsigned num_c
 	}
 
 	for (unsigned id = 0; id < (unsigned)num_chroms; ++id)
-		SET_STRING_ELT(chroms, id, mkChar(m_chrom_key.id2chrom(id).c_str()));
+		SET_STRING_ELT(chroms, id, Rf_mkChar(m_chrom_key.id2chrom(id).c_str()));
 
 	for (int i = 0; i < GInterval::NUM_COLS; i++)
-		SET_STRING_ELT(col_names, i, mkChar(GInterval::COL_NAMES[i]));
+		SET_STRING_ELT(col_names, i, Rf_mkChar(GInterval::COL_NAMES[i]));
 
-    setAttrib(chroms_idx, R_LevelsSymbol, chroms);
-    setAttrib(chroms_idx, R_ClassSymbol, mkString("factor"));
+    Rf_setAttrib(chroms_idx, R_LevelsSymbol, chroms);
+    Rf_setAttrib(chroms_idx, R_ClassSymbol, Rf_mkString("factor"));
 
     SET_VECTOR_ELT(answer, GInterval::CHROM, chroms_idx);
     SET_VECTOR_ELT(answer, GInterval::START, starts);
     SET_VECTOR_ELT(answer, GInterval::END, ends);
 
-    setAttrib(answer, R_NamesSymbol, col_names);
-    setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-    setAttrib(answer, R_RowNamesSymbol, row_names);
+    Rf_setAttrib(answer, R_NamesSymbol, col_names);
+    Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
+    Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
 
 	return answer;
 }
@@ -547,18 +547,18 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher2D *intervals, unsigned num_c
 	}
 
     for (unsigned id = 0; id < (unsigned)num_chroms; ++id) {
-        SET_STRING_ELT(chroms1, id, mkChar(m_chrom_key.id2chrom(id).c_str()));
-        SET_STRING_ELT(chroms2, id, mkChar(m_chrom_key.id2chrom(id).c_str()));
+        SET_STRING_ELT(chroms1, id, Rf_mkChar(m_chrom_key.id2chrom(id).c_str()));
+        SET_STRING_ELT(chroms2, id, Rf_mkChar(m_chrom_key.id2chrom(id).c_str()));
     }
 
     for (int i = 0; i < GInterval2D::NUM_COLS; i++)
-        SET_STRING_ELT(col_names, i, mkChar(GInterval2D::COL_NAMES[i]));
+        SET_STRING_ELT(col_names, i, Rf_mkChar(GInterval2D::COL_NAMES[i]));
 
 
-    setAttrib(chroms_idx1, R_LevelsSymbol, chroms1);
-    setAttrib(chroms_idx1, R_ClassSymbol, mkString("factor"));
-    setAttrib(chroms_idx2, R_LevelsSymbol, chroms2);
-    setAttrib(chroms_idx2, R_ClassSymbol, mkString("factor"));
+    Rf_setAttrib(chroms_idx1, R_LevelsSymbol, chroms1);
+    Rf_setAttrib(chroms_idx1, R_ClassSymbol, Rf_mkString("factor"));
+    Rf_setAttrib(chroms_idx2, R_LevelsSymbol, chroms2);
+    Rf_setAttrib(chroms_idx2, R_ClassSymbol, Rf_mkString("factor"));
 
     SET_VECTOR_ELT(answer, GInterval2D::CHROM1, chroms_idx1);
     SET_VECTOR_ELT(answer, GInterval2D::START1, starts1);
@@ -567,21 +567,21 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher2D *intervals, unsigned num_c
     SET_VECTOR_ELT(answer, GInterval2D::START2, starts2);
     SET_VECTOR_ELT(answer, GInterval2D::END2, ends2);
 
-    setAttrib(answer, R_NamesSymbol, col_names);
-    setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-    setAttrib(answer, R_RowNamesSymbol, row_names);
+    Rf_setAttrib(answer, R_NamesSymbol, col_names);
+    Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
+    Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
 
     return answer;
 }
 
 void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_intervs, vector<string> &src_id2chrom)
 {
-	if (!isVector(rchain) || length(rchain) != ChainInterval::NUM_COLS)
+	if (!Rf_isVector(rchain) || Rf_length(rchain) != ChainInterval::NUM_COLS)
 		TGLError("Invalid format of chain argument");
 
-	SEXP colnames = getAttrib(rchain, R_NamesSymbol);
+	SEXP colnames = Rf_getAttrib(rchain, R_NamesSymbol);
 
-	if (!isString(colnames) || length(colnames) != ChainInterval::NUM_COLS)
+	if (!Rf_isString(colnames) || Rf_length(colnames) != ChainInterval::NUM_COLS)
 		verror("Invalid format of chain argument");
 
 	for (unsigned i = 0; i < ChainInterval::NUM_COLS; i++) {
@@ -595,24 +595,24 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 
 	// convert the rest of the columns
 	SEXP src_chroms = VECTOR_ELT(rchain, ChainInterval::CHROM_SRC);
-	SEXP src_chrom_levels = getAttrib(src_chroms, R_LevelsSymbol);
+	SEXP src_chrom_levels = Rf_getAttrib(src_chroms, R_LevelsSymbol);
 	SEXP src_starts = VECTOR_ELT(rchain, ChainInterval::START_SRC);
 
 	for (unsigned i = 0; i < ChainInterval::NUM_COLS; i++) {
-		if (i != 0 && length(VECTOR_ELT(rchain, i)) != length(VECTOR_ELT(rchain, i - 1)))
+		if (i != 0 && Rf_length(VECTOR_ELT(rchain, i)) != Rf_length(VECTOR_ELT(rchain, i - 1)))
 			verror("Number of rows in column %s differs than the number of rows in column %s", ChainInterval::COL_NAMES[i - 1], ChainInterval::COL_NAMES[i]);
 	}
 
-	if (!isReal(src_starts) && !isInteger(src_starts))
+	if (!Rf_isReal(src_starts) && !Rf_isInteger(src_starts))
 		verror("Invalid format of intervals argument");
 
 	unordered_map<string, int> src_chrom2id;
 
 	for (unsigned i = 0; i < intervs.size(); i++) {
-		if ((isFactor(src_chroms) && INTEGER(src_chroms)[i] < 0) || (isReal(src_starts) && std::isnan(REAL(src_starts)[i])))
+		if ((Rf_isFactor(src_chroms) && INTEGER(src_chroms)[i] < 0) || (Rf_isReal(src_starts) && std::isnan(REAL(src_starts)[i])))
 			verror("Invalid format of interval at index %d", i + 1);
 
-		const char *src_chrom = isString(src_chroms) ? CHAR(STRING_ELT(src_chroms, i)) : CHAR(STRING_ELT(src_chrom_levels, INTEGER(src_chroms)[i] - 1));
+		const char *src_chrom = Rf_isString(src_chroms) ? CHAR(STRING_ELT(src_chroms, i)) : CHAR(STRING_ELT(src_chrom_levels, INTEGER(src_chroms)[i] - 1));
 		unordered_map<string, int>::const_iterator isrc_chrom2id = src_chrom2id.find(src_chrom);
 		int src_chromid;
 
@@ -623,7 +623,7 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 		} else
 			src_chromid = isrc_chrom2id->second;
 
-		int64_t src_start = (int64_t)(isReal(src_starts) ? REAL(src_starts)[i] : INTEGER(src_starts)[i]);
+		int64_t src_start = (int64_t)(Rf_isReal(src_starts) ? REAL(src_starts)[i] : INTEGER(src_starts)[i]);
 
 		ChainInterval interval(intervs[i].chromid, intervs[i].start, intervs[i].end, src_chromid, src_start);
 
@@ -641,7 +641,7 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 
 	SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
 	SEXP src_chroms, src_chroms_idx, src_starts;
-	SEXP col_names = getAttrib(answer, R_NamesSymbol);
+	SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
 	unsigned num_src_chroms = src_id2chrom.size();
 
     rprotect(src_chroms_idx = RSaneAllocVector(INTSXP, chain_intervs.size()));
@@ -654,13 +654,13 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 	}
 
 	for (unsigned id = 0; id < num_src_chroms; ++id)
-		SET_STRING_ELT(src_chroms, id, mkChar(src_id2chrom[id].c_str()));
+		SET_STRING_ELT(src_chroms, id, Rf_mkChar(src_id2chrom[id].c_str()));
 
 	for (int i = 0; i < ChainInterval::NUM_COLS; i++)
-		SET_STRING_ELT(col_names, i, mkChar(ChainInterval::COL_NAMES[i]));
+		SET_STRING_ELT(col_names, i, Rf_mkChar(ChainInterval::COL_NAMES[i]));
 
-    setAttrib(src_chroms_idx, R_LevelsSymbol, src_chroms);
-    setAttrib(src_chroms_idx, R_ClassSymbol, mkString("factor"));
+    Rf_setAttrib(src_chroms_idx, R_LevelsSymbol, src_chroms);
+    Rf_setAttrib(src_chroms_idx, R_ClassSymbol, Rf_mkString("factor"));
 
     SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, src_chroms_idx);
     SET_VECTOR_ELT(answer, ChainInterval::START_SRC, src_starts);
@@ -670,14 +670,14 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 
 DiagonalBand IntervUtils::convert_band(SEXP rband)
 {
-	if (isNull(rband))
+	if (Rf_isNull(rband))
 		return DiagonalBand();
 
-	if ((!isReal(rband) && !isInteger(rband)) || length(rband) != 2)
+	if ((!Rf_isReal(rband) && !Rf_isInteger(rband)) || Rf_length(rband) != 2)
 		verror("Invalid format of band argument");
 
-	int d1 = isReal(rband) ? (int)(REAL(rband)[0] > 0 ? REAL(rband)[0] + 0.5 : REAL(rband)[0] - 0.5) : INTEGER(rband)[0];
-	int d2 = isReal(rband) ? (int)(REAL(rband)[1] > 0 ? REAL(rband)[1] + 0.5 : REAL(rband)[1] - 0.5) : INTEGER(rband)[1];
+	int d1 = Rf_isReal(rband) ? (int)(REAL(rband)[0] > 0 ? REAL(rband)[0] + 0.5 : REAL(rband)[0] - 0.5) : INTEGER(rband)[0];
+	int d2 = Rf_isReal(rband) ? (int)(REAL(rband)[1] > 0 ? REAL(rband)[1] + 0.5 : REAL(rband)[1] - 0.5) : INTEGER(rband)[1];
 
 	if (d1 >= d2)
 		verror("Invalid band argument: distance1 exceeds distance2");
@@ -697,50 +697,50 @@ SEXP IntervUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
 		INTEGER(row_names)[i] = i + 1;
 
     if (attrs_src != R_NilValue) 
-        copyMostAttrib(attrs_src, answer);
+        Rf_copyMostAttrib(attrs_src, answer);
 
-    setAttrib(answer, R_NamesSymbol, col_names);
-    setAttrib(answer, R_ClassSymbol, mkString("data.frame"));
-    setAttrib(answer, R_RowNamesSymbol, row_names);
+    Rf_setAttrib(answer, R_NamesSymbol, col_names);
+    Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
+    Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
 
 	return answer;
 }
 
 void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP tgt, vector<SEXP> &tgt_cols, int tgt_col_offset)
 {
-	SEXP src_class = getAttrib(src, R_ClassSymbol);
+	SEXP src_class = Rf_getAttrib(src, R_ClassSymbol);
 
-	if (isNull(src_class) || !isString(src_class) ||
-		(!(length(src_class) == 1 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "data.frame")) &&
-		!(length(src_class) == 3 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "tbl_df")  &&
+	if (Rf_isNull(src_class) || !Rf_isString(src_class) ||
+		(!(Rf_length(src_class) == 1 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "data.frame")) &&
+		!(Rf_length(src_class) == 3 && !strcmp(CHAR(STRING_ELT(src_class, 0)), "tbl_df")  &&
           !strcmp(CHAR(STRING_ELT(src_class, 1)), "tbl") && !strcmp(CHAR(STRING_ELT(src_class, 2)), "data.frame"))))
 		verror("Copied object is not a data frame or tibble");
 
-	if (length(tgt) < length(src) + tgt_col_offset)
+	if (Rf_length(tgt) < Rf_length(src) + tgt_col_offset)
 		verror("Attempt to copy data frame columns beyond the valid size");
 
-	int numrows = length(getAttrib(tgt, R_RowNamesSymbol));
-	SEXP src_colnames = getAttrib(src, R_NamesSymbol);
-	SEXP tgt_colnames = getAttrib(tgt, R_NamesSymbol);
+	int numrows = Rf_length(Rf_getAttrib(tgt, R_RowNamesSymbol));
+	SEXP src_colnames = Rf_getAttrib(src, R_NamesSymbol);
+	SEXP tgt_colnames = Rf_getAttrib(tgt, R_NamesSymbol);
 
-	if (isNull(src_colnames) || !isString(src_colnames))
+	if (Rf_isNull(src_colnames) || !Rf_isString(src_colnames))
 		verror("Invalid source data frame for a copy");
 
-	src_cols.resize(length(src));
-	if (tgt_cols.size() < (uint64_t)(length(tgt) + tgt_col_offset)){ 
-		tgt_cols.resize(length(tgt) + tgt_col_offset);
+	src_cols.resize(Rf_length(src));
+	if (tgt_cols.size() < (uint64_t)(Rf_length(tgt) + tgt_col_offset)){ 
+		tgt_cols.resize(Rf_length(tgt) + tgt_col_offset);
 	}
 
-	for (int col = 0; col < length(src); ++col) {
+	for (int col = 0; col < Rf_length(src); ++col) {
 		SEXP src_col = VECTOR_ELT(src, col);
 		SEXP tgt_col;
 
         rprotect(tgt_col = RSaneAllocVector(TYPEOF(src_col), numrows));
 
-		if (!isInteger(src_col) && !isReal(src_col) && !isLogical(src_col) && !isString(src_col) && !isFactor(src_col))
-			verror("Unsupported type found in a data frame: %s", type2char(TYPEOF(src_col)));
+		if (!Rf_isInteger(src_col) && !Rf_isReal(src_col) && !Rf_isLogical(src_col) && !Rf_isString(src_col) && !Rf_isFactor(src_col))
+			verror("Unsupported type found in a data frame: %s", Rf_type2char(TYPEOF(src_col)));
 
-		copyMostAttrib(src_col, tgt_col);
+		Rf_copyMostAttrib(src_col, tgt_col);
 		SET_STRING_ELT(tgt_colnames, col + tgt_col_offset, STRING_ELT(src_colnames, col));
 		src_cols[col] = src_col;
 		tgt_cols[col + tgt_col_offset] = tgt_col;
@@ -755,14 +755,14 @@ void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row,
 		SEXP src_col = src_cols[col];
 		SEXP tgt_col = tgt_cols[col + tgt_col_offset];
 
-		if (isInteger(src_col) || isFactor(src_col))
+		if (Rf_isInteger(src_col) || Rf_isFactor(src_col))
 			INTEGER(tgt_col)[tgt_row] = INTEGER(src_col)[src_row];
-		else if (isReal(src_col))
+		else if (Rf_isReal(src_col))
 			REAL(tgt_col)[tgt_row] = REAL(src_col)[src_row];
-		else if (isLogical(src_col))
+		else if (Rf_isLogical(src_col))
 			LOGICAL(tgt_col)[tgt_row] = LOGICAL(src_col)[src_row];
-		else if (isString(src_col))
-			SET_STRING_ELT(tgt_col, tgt_row, mkChar(CHAR(STRING_ELT(src_col, src_row))));
+		else if (Rf_isString(src_col))
+			SET_STRING_ELT(tgt_col, tgt_row, Rf_mkChar(CHAR(STRING_ELT(src_col, src_row))));
 	}
 }
 
@@ -772,24 +772,24 @@ void IntervUtils::copy_data_frame_rows(const vector<SEXP> &src_cols, int src_row
 		SEXP src_col = src_cols[col];
 		SEXP tgt_col = tgt_cols[col + tgt_col_offset];
 
-		if (isInteger(src_col) || isFactor(src_col)) {
+		if (Rf_isInteger(src_col) || Rf_isFactor(src_col)) {
 			int *src_vals = INTEGER(src_col);
 			int *tgt_vals = INTEGER(tgt_col);
 			for (int i = 0; i < num_rows; ++i) 
 				tgt_vals[tgt_row + i] = src_vals[src_row + i];
-		} else if (isReal(src_col)) {
+		} else if (Rf_isReal(src_col)) {
 			double *src_vals = REAL(src_col);
 			double *tgt_vals = REAL(tgt_col);
 			for (int i = 0; i < num_rows; ++i) 
 				tgt_vals[tgt_row + i] = src_vals[src_row + i];
-		} else if (isLogical(src_col)) {
+		} else if (Rf_isLogical(src_col)) {
 			int *src_vals = LOGICAL(src_col);
 			int *tgt_vals = LOGICAL(tgt_col);
 			for (int i = 0; i < num_rows; ++i) 
 				tgt_vals[tgt_row + i] = src_vals[src_row + i];
-		} else if (isString(src_col)) {
+		} else if (Rf_isString(src_col)) {
 			for (int i = 0; i < num_rows; ++i) 
-				SET_STRING_ELT(tgt_col, tgt_row + i, mkChar(CHAR(STRING_ELT(src_col, src_row + i))));
+				SET_STRING_ELT(tgt_col, tgt_row + i, Rf_mkChar(CHAR(STRING_ELT(src_col, src_row + i))));
 		}
 	}
 }
@@ -798,13 +798,13 @@ void IntervUtils::set_data_frame_val_nan(const vector<SEXP> &tgt_cols, int tgt_r
 {
 	SEXP rtgt_col = tgt_cols[tgt_col];
 
-	if (isInteger(rtgt_col) || isFactor(rtgt_col))
+	if (Rf_isInteger(rtgt_col) || Rf_isFactor(rtgt_col))
 		INTEGER(rtgt_col)[tgt_row] = NA_INTEGER;
-	else if (isReal(rtgt_col))
+	else if (Rf_isReal(rtgt_col))
 		REAL(rtgt_col)[tgt_row] = NA_REAL;
-	else if (isLogical(rtgt_col))
+	else if (Rf_isLogical(rtgt_col))
 		LOGICAL(rtgt_col)[tgt_row] = NA_LOGICAL;
-	else if (isString(rtgt_col))
+	else if (Rf_isString(rtgt_col))
 		SET_STRING_ELT(rtgt_col, tgt_row, NA_STRING);
 }
 
@@ -822,9 +822,9 @@ void IntervUtils::restrict_bins(int64_t maxbins, GIntervals &intervals, unsigned
 bool IntervUtils::get_multitasking() const
 {
 	if (m_multitasking < 0) {
-		SEXP r_multitasking = GetOption(install("gmultitasking"), R_NilValue);
+		SEXP r_multitasking = Rf_GetOption(Rf_install("gmultitasking"), R_NilValue);
 
-		if (isLogical(r_multitasking))
+		if (Rf_isLogical(r_multitasking))
 			m_multitasking = (int)LOGICAL(r_multitasking)[0];
 		else
 			m_multitasking = false;
@@ -835,11 +835,11 @@ bool IntervUtils::get_multitasking() const
 uint64_t IntervUtils::get_max_processes() const
 {
 	if (!m_max_processes) {
-		SEXP r_max_processes = GetOption(install("gmax.processes"), R_NilValue);
+		SEXP r_max_processes = Rf_GetOption(Rf_install("gmax.processes"), R_NilValue);
 
-		if (isReal(r_max_processes))
+		if (Rf_isReal(r_max_processes))
 			m_max_processes = (uint64_t)REAL(r_max_processes)[0];
-		else if (isInteger(r_max_processes))
+		else if (Rf_isInteger(r_max_processes))
 			m_max_processes = INTEGER(r_max_processes)[0];
 		else
 			m_max_processes = 64;
@@ -852,11 +852,11 @@ uint64_t IntervUtils::get_max_processes() const
 uint64_t IntervUtils::get_max_processes2core() const
 {
 	if (!m_max_processes2core) {
-		SEXP r_max_processes2core = GetOption(install("gmax.processes2core"), R_NilValue);
+		SEXP r_max_processes2core = Rf_GetOption(Rf_install("gmax.processes2core"), R_NilValue);
 
-		if (isReal(r_max_processes2core))
+		if (Rf_isReal(r_max_processes2core))
 			m_max_processes2core = (uint64_t)REAL(r_max_processes2core)[0];
-		else if (isInteger(r_max_processes2core))
+		else if (Rf_isInteger(r_max_processes2core))
 			m_max_processes2core = INTEGER(r_max_processes2core)[0];
 		else
 			m_max_processes2core = 4;
@@ -869,11 +869,11 @@ uint64_t IntervUtils::get_max_processes2core() const
 uint64_t IntervUtils::get_min_scope4process() const
 {
 	if (!m_min_scope4process) {
-		SEXP r_min_scope4process = GetOption(install("gmin.scope4process"), R_NilValue);
+		SEXP r_min_scope4process = Rf_GetOption(Rf_install("gmin.scope4process"), R_NilValue);
 
-		if (isReal(r_min_scope4process))
+		if (Rf_isReal(r_min_scope4process))
 			m_min_scope4process = (uint64_t)REAL(r_min_scope4process)[0];
-		else if (isInteger(r_min_scope4process))
+		else if (Rf_isInteger(r_min_scope4process))
 			m_min_scope4process = INTEGER(r_min_scope4process)[0];
 		else
 			m_min_scope4process = 10000;
@@ -884,11 +884,11 @@ uint64_t IntervUtils::get_min_scope4process() const
 uint64_t IntervUtils::get_max_data_size() const
 {
 	if (!m_max_data_size) {
-		SEXP r_max_data_size = GetOption(install("gmax.data.size"), R_NilValue);
+		SEXP r_max_data_size = Rf_GetOption(Rf_install("gmax.data.size"), R_NilValue);
 
-		if (isReal(r_max_data_size))
+		if (Rf_isReal(r_max_data_size))
 			m_max_data_size = (uint64_t)REAL(r_max_data_size)[0];
-		else if (isInteger(r_max_data_size))
+		else if (Rf_isInteger(r_max_data_size))
 			m_max_data_size = INTEGER(r_max_data_size)[0];
 		else
 			m_max_data_size = numeric_limits<uint64_t>::max();
@@ -899,11 +899,11 @@ uint64_t IntervUtils::get_max_data_size() const
 uint64_t IntervUtils::get_max_mem_usage() const
 {
 	if (!m_max_mem_usage) {
-		SEXP r_max_mem_usage = GetOption(install("gmax.mem.usage"), R_NilValue);
+		SEXP r_max_mem_usage = Rf_GetOption(Rf_install("gmax.mem.usage"), R_NilValue);
 
-		if (isReal(r_max_mem_usage))
+		if (Rf_isReal(r_max_mem_usage))
 			m_max_mem_usage = (uint64_t)REAL(r_max_mem_usage)[0] * 1000;
-		else if (isInteger(r_max_mem_usage))
+		else if (Rf_isInteger(r_max_mem_usage))
 			m_max_mem_usage = INTEGER(r_max_mem_usage)[0] * 1000;
 		else
 			m_max_mem_usage = numeric_limits<uint64_t>::max();
@@ -914,11 +914,11 @@ uint64_t IntervUtils::get_max_mem_usage() const
 uint64_t IntervUtils::get_big_intervals_size() const
 {
 	if (!m_big_intervals_size) {
-		SEXP r_big_intervals_size = GetOption(install("gbig.intervals.size"), R_NilValue);
+		SEXP r_big_intervals_size = Rf_GetOption(Rf_install("gbig.intervals.size"), R_NilValue);
 
-		if (isReal(r_big_intervals_size))
+		if (Rf_isReal(r_big_intervals_size))
 			m_big_intervals_size = (uint64_t)REAL(r_big_intervals_size)[0];
-		else if (isInteger(r_big_intervals_size))
+		else if (Rf_isInteger(r_big_intervals_size))
 			m_big_intervals_size = INTEGER(r_big_intervals_size)[0];
 		else
 			m_big_intervals_size = numeric_limits<uint64_t>::max();
@@ -930,11 +930,11 @@ uint64_t IntervUtils::get_big_intervals_size() const
 uint64_t IntervUtils::get_quantile_edge_data_size() const
 {
 	if (!m_quantile_edge_data_size) {
-		SEXP r_quantile_edge_data_size = GetOption(install("gquantile.edge.data.size"), R_NilValue);
+		SEXP r_quantile_edge_data_size = Rf_GetOption(Rf_install("gquantile.edge.data.size"), R_NilValue);
 
-		if (isReal(r_quantile_edge_data_size))
+		if (Rf_isReal(r_quantile_edge_data_size))
 			m_quantile_edge_data_size = (uint64_t)REAL(r_quantile_edge_data_size)[0];
-		else if (isInteger(r_quantile_edge_data_size))
+		else if (Rf_isInteger(r_quantile_edge_data_size))
 			m_quantile_edge_data_size = INTEGER(r_quantile_edge_data_size)[0];
 		else
 			m_quantile_edge_data_size = 0;
@@ -945,11 +945,11 @@ uint64_t IntervUtils::get_quantile_edge_data_size() const
 uint64_t IntervUtils::get_track_chunk_size() const
 {
 	if (!m_track_chunk_size) {
-		SEXP r_track_chunk_size = GetOption(install("gtrack.chunk.size"), R_NilValue);
+		SEXP r_track_chunk_size = Rf_GetOption(Rf_install("gtrack.chunk.size"), R_NilValue);
 
-		if (isReal(r_track_chunk_size))
+		if (Rf_isReal(r_track_chunk_size))
 			m_track_chunk_size = (uint64_t)REAL(r_track_chunk_size)[0];
-		else if (isInteger(r_track_chunk_size))
+		else if (Rf_isInteger(r_track_chunk_size))
 			m_track_chunk_size = INTEGER(r_track_chunk_size)[0];
 		else
 			m_track_chunk_size = 100000;
@@ -960,11 +960,11 @@ uint64_t IntervUtils::get_track_chunk_size() const
 uint64_t IntervUtils::get_track_num_chunks() const
 {
 	if (!m_track_num_chunks) {
-		SEXP r_track_num_chunks = GetOption(install("gtrack.num.chunks"), R_NilValue);
+		SEXP r_track_num_chunks = Rf_GetOption(Rf_install("gtrack.num.chunks"), R_NilValue);
 
-		if (isReal(r_track_num_chunks))
+		if (Rf_isReal(r_track_num_chunks))
 			m_track_num_chunks = (uint64_t)REAL(r_track_num_chunks)[0];
-		else if (isInteger(r_track_num_chunks))
+		else if (Rf_isInteger(r_track_num_chunks))
 			m_track_num_chunks = INTEGER(r_track_num_chunks)[0];
 		else
 			m_track_num_chunks = 0;

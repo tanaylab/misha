@@ -17,10 +17,10 @@ SEXP gtrackconvert(SEXP _src_track, SEXP _tgt_track, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_src_track) || length(_src_track) != 1)
+		if (!Rf_isString(_src_track) || Rf_length(_src_track) != 1)
 			verror("Source track argument is not a string");
 
-		if (!isString(_tgt_track) || length(_tgt_track) != 1)
+		if (!Rf_isString(_tgt_track) || Rf_length(_tgt_track) != 1)
 			verror("Target track argument is not a string");
 
 		const char *src_track_str = CHAR(STRING_ELT(_src_track, 0));
@@ -188,7 +188,7 @@ SEXP gtrack_create_meta(SEXP _track, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
 		const char *track_str = CHAR(STRING_ELT(_track, 0));

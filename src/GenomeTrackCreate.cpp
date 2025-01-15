@@ -33,10 +33,10 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(track) || length(track) != 1)
+		if (!Rf_isString(track) || Rf_length(track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(expr) || length(expr) != 1)
+		if (!Rf_isString(expr) || Rf_length(expr) != 1)
 			verror("Track expression argument is not a string");
 
 		const char *track_str = CHAR(STRING_ELT(track, 0));
@@ -136,10 +136,10 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(track) || length(track) != 1)
+		if (!Rf_isString(track) || Rf_length(track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(expr) || length(expr) != 1)
+		if (!Rf_isString(expr) || Rf_length(expr) != 1)
 			verror("Track expression argument is not a string");
 
 		const char *track_str = CHAR(STRING_ELT(track, 0));

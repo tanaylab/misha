@@ -191,10 +191,10 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(_src_track_dir) || length(_src_track_dir) != 1)
+		if (!Rf_isString(_src_track_dir) || Rf_length(_src_track_dir) != 1)
 			verror("Track source directory argument is not a string");
 
 		const char *track = CHAR(STRING_ELT(_track, 0));

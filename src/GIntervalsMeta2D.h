@@ -25,7 +25,7 @@ public:
 
 	virtual ~GIntervalsMeta2D() {}
 
-	static bool is2d(SEXP meta) { return length(VECTOR_ELT(meta, 0)) == NUM_STAT_COLS; }
+	static bool is2d(SEXP meta) { return Rf_length(VECTOR_ELT(meta, 0)) == NUM_STAT_COLS; }
 
 	static void init_chromstats(vector<ChromStat> &chromstats, const IntervUtils &iu);
 	static void save_plain_intervals_meta(const char *path, const vector<ChromStat> &chromstats, const IntervUtils &iu);

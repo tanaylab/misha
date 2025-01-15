@@ -95,6 +95,7 @@ reference:
   - title: Database functions
     desc: Database functions
     contents:
+      - gdb.create_genome
       - gdb.create
       - gdb.get_readonly_attrs
       - gdb.init

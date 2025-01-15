@@ -63,13 +63,13 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 		SET_VECTOR_ELT(answer, num_interv_cols + ipercentile, percentile_vals);
 	}
 
-	SEXP colnames = getAttrib(answer, R_NamesSymbol);
+	SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
 
 	for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 		char buf[100];
 
 		snprintf(buf, sizeof(buf), "%g", ip->percentile);
-		SET_STRING_ELT(colnames, num_interv_cols + ip->index, mkChar(buf));
+		SET_STRING_ELT(colnames, num_interv_cols + ip->index, Rf_mkChar(buf));
 	}
 
 	return answer;
@@ -109,14 +109,14 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!isReal(_percentiles) || length(_percentiles) < 1)
+		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
-		vector<Percentile> percentiles(length(_percentiles));
-		for (int64_t i = 0; i < length(_percentiles); ++i)
+		vector<Percentile> percentiles(Rf_length(_percentiles));
+		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
 			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
 		sort(percentiles.begin(), percentiles.end());
 
@@ -149,7 +149,7 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 		vector<double> medians(percentiles.size(), numeric_limits<float>::quiet_NaN());
 
 		if (calc_medians(sp, percentiles, medians, 0)){
-			warning("Data size (%llu) exceeds the limit (%llu).\n"
+			Rf_warning("Data size (%llu) exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)sp.stream_size(), (unsigned long long)iu.get_max_data_size());
 		}
@@ -167,10 +167,10 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 			REAL(answer)[ip->index] = medians[ip->index];
 
 			snprintf(buf, sizeof(buf), "%g", ip->percentile);
-			SET_STRING_ELT(colnames, ip->index, mkChar(buf));
+			SET_STRING_ELT(colnames, ip->index, Rf_mkChar(buf));
 		}
 
-		setAttrib(answer, R_NamesSymbol, colnames);
+		Rf_setAttrib(answer, R_NamesSymbol, colnames);
 
 		return answer;
 	} catch (TGLException &e) {
@@ -186,14 +186,14 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!isReal(_percentiles) || length(_percentiles) < 1)
+		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
-		vector<Percentile> percentiles(length(_percentiles));
-		for (int64_t i = 0; i < length(_percentiles); ++i)
+		vector<Percentile> percentiles(Rf_length(_percentiles));
+		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
 			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
 		sort(percentiles.begin(), percentiles.end());
 
@@ -347,7 +347,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 				// calculate the percentiles
 				if (calc_medians(sp, percentiles, medians, 0))
-					warning("The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
+					Rf_warning("The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 							"(The limit can be controlled by gmax.data.size limit)");
 			}
 		}
@@ -365,10 +365,10 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 			REAL(answer)[ip->index] = medians[ip->index];
 
 			snprintf(buf, sizeof(buf), "%g", ip->percentile);
-			SET_STRING_ELT(colnames, ip->index, mkChar(buf));
+			SET_STRING_ELT(colnames, ip->index, Rf_mkChar(buf));
 		}
 
-		setAttrib(answer, R_NamesSymbol, colnames);
+		Rf_setAttrib(answer, R_NamesSymbol, colnames);
 
 		rreturn(answer);
 	} catch (TGLException &e) {
@@ -384,18 +384,18 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!isReal(_percentiles) || length(_percentiles) < 1)
+		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		vector<Percentile> percentiles(length(_percentiles));
+		vector<Percentile> percentiles(Rf_length(_percentiles));
 		uint64_t num_percentiles = percentiles.size();
-		for (int64_t i = 0; i < length(_percentiles); ++i)
+		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
 			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
 		sort(percentiles.begin(), percentiles.end());
 
@@ -423,9 +423,9 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		if (!num_intervals) 
 			return R_NilValue;
 
-		bool do_small_intervset_out = !isNull(_intervals_set_out) && !iu.needs_bigset(num_intervals);
-		bool do_big_intervset_out = !isNull(_intervals_set_out) && !do_small_intervset_out;
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		bool do_small_intervset_out = !Rf_isNull(_intervals_set_out) && !iu.needs_bigset(num_intervals);
+		bool do_big_intervset_out = !Rf_isNull(_intervals_set_out) && !do_small_intervset_out;
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 
 		if (dynamic_cast<const TrackExpressionCartesianGridIterator *>(scanner.get_iterator()) ||
 			dynamic_cast<const TrackExpressionIntervals2DIterator *>(scanner.get_iterator()) ||
@@ -591,7 +591,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		}
 
 		if (generate_warning){
-			warning("Data size in one or more intervals exceeds the limit (%llu).\n"
+			Rf_warning("Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
 		}
@@ -610,18 +610,18 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track argument is not a string");
 
-		if (!isReal(_percentiles) || length(_percentiles) < 1)
+		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		vector<Percentile> percentiles(length(_percentiles));
+		vector<Percentile> percentiles(Rf_length(_percentiles));
 		uint64_t num_percentiles = percentiles.size();
-		for (int64_t i = 0; i < length(_percentiles); ++i)
+		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
 			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
 		sort(percentiles.begin(), percentiles.end());
 
@@ -646,9 +646,9 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		if (!num_intervals) 
 			return R_NilValue;
 
-		bool do_small_intervset_out = !isNull(_intervals_set_out) && !iu.needs_bigset(num_intervals);
-		bool do_big_intervset_out = !isNull(_intervals_set_out) && !do_small_intervset_out;
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		bool do_small_intervset_out = !Rf_isNull(_intervals_set_out) && !iu.needs_bigset(num_intervals);
+		bool do_big_intervset_out = !Rf_isNull(_intervals_set_out) && !do_small_intervset_out;
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 		vector<double> medians;
 		bool generate_warning = false;
 		int cur_interval_idx = -1;
@@ -923,7 +923,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		}
 
 		if (generate_warning){
-			warning("Data size in one or more intervals exceeds the limit (%llu).\n"
+			Rf_warning("Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
 		}
@@ -942,20 +942,20 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track_exprs) || length(_track_exprs) < 1)
+		if (!Rf_isString(_track_exprs) || Rf_length(_track_exprs) < 1)
 			verror("Track argument is not a string vector");
 
-		unsigned numexpr = length(_track_exprs);
+		unsigned numexpr = Rf_length(_track_exprs);
 		BinsManager bins_manager(_breaks, _include_lowest);
 
 		if (bins_manager.get_num_bin_finders() != numexpr - 1)
 			verror("Number of breaks sets must be equal to the number of tracks used");
 
-		if (!isReal(_percentiles) || length(_percentiles) < 1)
+		if (!Rf_isReal(_percentiles) || Rf_length(_percentiles) < 1)
 			verror("Percentile argument is not a vector of numbers");
 
-		vector<Percentile> percentiles(length(_percentiles));
-		for (int64_t i = 0; i < length(_percentiles); ++i)
+		vector<Percentile> percentiles(Rf_length(_percentiles));
+		for (int64_t i = 0; i < Rf_length(_percentiles); ++i)
 			percentiles[i] = Percentile(REAL(_percentiles)[i], i);
 		sort(percentiles.begin(), percentiles.end());
 
@@ -1038,7 +1038,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		}
 
 		if (generate_warning){
-			warning("Data size in one or more intervals exceeds the limit (%llu).\n"
+			Rf_warning("Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
 		}
@@ -1064,13 +1064,13 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 			char buf[100];
 
 			snprintf(buf, sizeof(buf), "%g", ip->percentile);
-			SET_STRING_ELT(dimname, ip->index, mkChar(buf));
+			SET_STRING_ELT(dimname, ip->index, Rf_mkChar(buf));
 		}
 		SET_VECTOR_ELT(dimnames, bins_manager.get_num_bin_finders(), dimname);
 		INTEGER(dim)[bins_manager.get_num_bin_finders()] = percentiles.size();
 
-		setAttrib(answer, R_DimSymbol, dim);
-		setAttrib(answer, R_DimNamesSymbol, dimnames);
+		Rf_setAttrib(answer, R_DimSymbol, dim);
+		Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
