@@ -192,23 +192,63 @@
 #' gdist("vtrack3", seq(0, 1, l = 10), "vtrack4", seq(-500, 500, 200))
 #'
 #' @export gvtrack.create
-gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL) {
+gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...) {
     if (is.null(substitute(vtrack))) {
-        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL)", call. = FALSE)
+        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
     if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max"))) {
-        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL)", call. = FALSE)
+        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
 
     .gcheckroot()
 
     if (!is.null(func) && func %in% c("pwm", "pwm.max")) {
-        if (is.null(params)) {
-            stop("pwm function requires a PSSM matrix as params")
+        # Handle both formats: explicit params list or individual parameters via ...
+        dots <- list(...)
+
+        if (!is.null(params)) {
+            # Original format with params list
+            if (!is.list(params) || !("pssm" %in% names(params))) {
+                stop("pwm function requires a list with at least 'pssm' matrix parameter")
+            }
+            pssm <- params$pssm
+            bidirect <- if (!is.null(params$bidirect)) params$bidirect else TRUE
+            prior <- if (!is.null(params$prior)) params$prior else 0.01
+        } else {
+            # New format with individual parameters
+            if (!("pssm" %in% names(dots))) {
+                stop("pwm function requires a 'pssm' matrix parameter")
+            }
+            pssm <- dots$pssm
+            bidirect <- if (!is.null(dots$bidirect)) dots$bidirect else TRUE
+            prior <- if (!is.null(dots$prior)) dots$prior else 0.01
         }
-        if (!is.matrix(params) || ncol(params) != 4 || !all(c("A", "C", "G", "T") %in% colnames(params))) {
+
+        if (!is.matrix(pssm) || ncol(pssm) != 4 || !all(c("A", "C", "G", "T") %in% colnames(pssm))) {
             stop("PSSM must be a nx4 matrix with colnames A, C, G, T")
-        }        
+        }
+
+        if (!is.numeric(prior) || prior < 0 || prior > 1) {
+            stop("prior must be a number between 0 and 1")
+        }
+
+        if (!is.logical(bidirect)) {
+            stop("bidirect must be TRUE or FALSE")
+        }
+
+        # Normalize PSSM and add prior
+        pssm <- sweep(pssm, 1, rowSums(pssm), "/") # Normalize rows
+        if (prior > 0) {
+            pssm <- pssm + prior
+            pssm <- sweep(pssm, 1, rowSums(pssm), "/") # Renormalize after adding prior
+        }
+
+        # Set params with processed values
+        params <- list(
+            pssm = pssm,
+            bidirect = bidirect,
+            prior = prior
+        )
     }
 
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())
