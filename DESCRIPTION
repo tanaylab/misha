@@ -1,7 +1,7 @@
 Type: Package
 Package: misha
 Title: Toolkit for Analysis of Genomic Data
-Version: 4.2.11
+Version: 4.2.15
 Authors@R: c(
     person("Misha", "Hoichman", , "misha@hoichman.com", role = "aut"),
     person("Aviezer", "Lifshitz", , "aviezer.lifshitz@weizmann.ac.il", role = c("aut", "cre")),
@@ -21,7 +21,8 @@ Depends:
     R (>= 3.0.0)
 Imports: 
     magrittr,
-    curl
+    curl,
+    utils
 Suggests: 
     dplyr,
     glue,
@@ -31,8 +32,7 @@ Suggests:
     spelling,
     stats,
     testthat (>= 3.0.0),
-    tibble,
-    utils,
+    tibble,    
     withr
 Config/testthat/edition: 3
 Encoding: UTF-8

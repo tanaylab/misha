@@ -14,6 +14,9 @@
 
 #include "port.h"
 
+#ifndef R_NO_REMAP
+#  define R_NO_REMAP
+#endif
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Parse.h>
@@ -70,10 +73,10 @@ void TrackExprScanner::convert_rtrack_exprs(SEXP rtrack_exprs, vector<string> &t
 {
 	track_exprs.clear();
 
-	if (!isString(rtrack_exprs) || length(rtrack_exprs) < 1)
+	if (!Rf_isString(rtrack_exprs) || Rf_length(rtrack_exprs) < 1)
 		verror("Tracks expressions argument must be a vector of strings");
 
-	unsigned num_track_exprs = (unsigned)length(rtrack_exprs);
+	unsigned num_track_exprs = (unsigned)Rf_length(rtrack_exprs);
 	track_exprs.resize(num_track_exprs);
 
 	for (unsigned iexpr = 0; iexpr < num_track_exprs; ++iexpr)
@@ -110,7 +113,7 @@ void TrackExprScanner::define_r_vars(unsigned eval_buf_limit)
 		for (unsigned i = 0; i < m_eval_buf_limit; i++)
 			m_2d.expr_itr_intervals_chroms1[i] = m_2d.expr_itr_intervals_chroms2[i] = 1;
 	}
-	defineVar(install("GITERATOR.INTERVALS"), m_rexpr_itr_intervals, findVar(install(".misha"), m_iu.get_env()));
+	Rf_defineVar(Rf_install("GITERATOR.INTERVALS"), m_rexpr_itr_intervals, Rf_findVar(Rf_install(".misha"), m_iu.get_env()));
 
     for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         const TrackExpressionVars::Track_var *var = m_expr_vars.var(m_track_exprs[iexpr].c_str());
@@ -174,7 +177,7 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 			SEXPCleaner expr_cleaner(expr);
 
     		rprotect(expr = RSaneAllocVector(STRSXP, 1));
-    		SET_STRING_ELT(expr, 0, mkChar(m_track_exprs[iexpr].c_str()));
+    		SET_STRING_ELT(expr, 0, Rf_mkChar(m_track_exprs[iexpr].c_str()));
 
     		// parse R expression
     		ParseStatus status;
@@ -204,8 +207,8 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 	check(track_exprs, scope1d, scope2d, iterator_policy, band);
 
 	// check whether m_eval_buf_limit == 1000 will correctly work for the expression
-	SEXP gbufsize = GetOption(install("gbuf.size"), R_NilValue);
-	if (!isReal(gbufsize) || REAL(gbufsize)[0] < 1)
+	SEXP gbufsize = Rf_GetOption(Rf_install("gbuf.size"), R_NilValue);
+	if (!Rf_isReal(gbufsize) || REAL(gbufsize)[0] < 1)
 		define_r_vars(1000);
 	else
 		define_r_vars((unsigned)REAL(gbufsize)[0]);
@@ -214,7 +217,7 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
         if (m_eval_exprs[iexpr] != R_NilValue) {
             SEXP res = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
 
-            if (length(res) != (int)m_eval_buf_limit) {
+            if (Rf_length(res) != (int)m_eval_buf_limit) {
                 runprotect(res);
                 define_r_vars(1);
                 break;
@@ -334,16 +337,16 @@ bool TrackExprScanner::eval_next()
             if (m_eval_exprs[iexpr] != R_NilValue) {
                 runprotect(m_eval_bufs[iexpr]);
                 m_eval_bufs[iexpr] = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
-                if (length(m_eval_bufs[iexpr]) != (int)m_eval_buf_limit)
+                if (Rf_length(m_eval_bufs[iexpr]) != (int)m_eval_buf_limit)
                     verror("Evaluation of expression \"%s\" produces a vector of size %d while expecting size %d",
-                            m_track_exprs[iexpr].c_str(), length(m_eval_bufs[iexpr]), m_eval_buf_limit);
-                if (isReal(m_eval_bufs[iexpr]))
+                            m_track_exprs[iexpr].c_str(), Rf_length(m_eval_bufs[iexpr]), m_eval_buf_limit);
+                if (Rf_isReal(m_eval_bufs[iexpr]))
                     m_eval_doubles[iexpr] = REAL(m_eval_bufs[iexpr]);
-                else if (isLogical(m_eval_bufs[iexpr]))
+                else if (Rf_isLogical(m_eval_bufs[iexpr]))
                     m_eval_ints[iexpr] = LOGICAL(m_eval_bufs[iexpr]);
                 else
                     verror("Evaluation of expression \"%s\" produces a vector of unsupported type %s",
-                            m_track_exprs[iexpr].c_str(), type2char(TYPEOF(m_eval_bufs[iexpr])));
+                            m_track_exprs[iexpr].c_str(), Rf_type2char(TYPEOF(m_eval_bufs[iexpr])));
             }
         }
 
@@ -419,8 +422,8 @@ void TrackExprScanner::verify_2d_iter(GIntervalsFetcher1D *scope1d, GIntervalsFe
 TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP rtrack_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d,
 																	SEXP iterator_policy, SEXP band, bool call_begin)
 {
-	m_track_exprs.resize(length(rtrack_exprs));
-	for (int i = 0; i < length(rtrack_exprs); ++i) 
+	m_track_exprs.resize(Rf_length(rtrack_exprs));
+	for (int i = 0; i < Rf_length(rtrack_exprs); ++i) 
 		m_track_exprs[i] = CHAR(STRING_ELT(rtrack_exprs, i));
 
 	m_band = m_iu.convert_band(band);
@@ -438,64 +441,64 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 	monitor_memusage();
 
 	TrackExpressionIteratorBase *expr_itr = NULL;
-	SEXP class_name = getAttrib(giterator, R_ClassSymbol);
+	SEXP class_name = Rf_getAttrib(giterator, R_ClassSymbol);
 
-	if ((isReal(giterator) || isInteger(giterator)) && length(giterator) == 1) {            // giterator == binsize
+	if ((Rf_isReal(giterator) || Rf_isInteger(giterator)) && Rf_length(giterator) == 1) {            // giterator == binsize
 		verify_1d_iter(scope1d, scope2d);
 		expr_itr = new TrackExpressionFixedBinIterator;
 		if (call_begin) 
-			((TrackExpressionFixedBinIterator *)expr_itr)->begin(isReal(giterator) ? (int64_t)REAL(giterator)[0] : INTEGER(giterator)[0], *scope1d);
-	} else if ((isReal(giterator) || isInteger(giterator)) && length(giterator) == 2) {     // giterator == fixed rectangle
+			((TrackExpressionFixedBinIterator *)expr_itr)->begin(Rf_isReal(giterator) ? (int64_t)REAL(giterator)[0] : INTEGER(giterator)[0], *scope1d);
+	} else if ((Rf_isReal(giterator) || Rf_isInteger(giterator)) && Rf_length(giterator) == 2) {     // giterator == fixed rectangle
 		verify_2d_iter(scope1d, scope2d);
 		expr_itr = new TrackExpressionFixedRectIterator;
 		if (call_begin) {
-			if (isReal(giterator))
+			if (Rf_isReal(giterator))
 				((TrackExpressionFixedRectIterator *)expr_itr)->begin((int64_t)REAL(giterator)[0], (int64_t)REAL(giterator)[1], *scope2d, band);
 			else
 				((TrackExpressionFixedRectIterator *)expr_itr)->begin(INTEGER(giterator)[0], INTEGER(giterator)[1], *scope2d, band);
 		}
-	} else if (isVector(giterator) && !isNull(class_name) && !strcmp(CHAR(STRING_ELT(class_name, 0)), "cartesian.grid")) {
+	} else if (Rf_isVector(giterator) && !Rf_isNull(class_name) && !strcmp(CHAR(STRING_ELT(class_name, 0)), "cartesian.grid")) {
 		GIntervals intervals1;
 		GIntervals intervals2;
 
 		m_iu.convert_rintervs(VECTOR_ELT(giterator, 0), &intervals1, NULL, false);
-		if (!isNull(VECTOR_ELT(giterator, 1)))
+		if (!Rf_isNull(VECTOR_ELT(giterator, 1)))
 			m_iu.convert_rintervs(VECTOR_ELT(giterator, 1), &intervals2, NULL, false);
 
 		SEXP rexpansion1 = VECTOR_ELT(giterator, 2);
 		SEXP rexpansion2 = VECTOR_ELT(giterator, 3);
 
-		if ((!isReal(rexpansion1) && !isInteger(rexpansion1)) || (!isNull(rexpansion2) && !isReal(rexpansion2) && !isInteger(rexpansion2)))
+		if ((!Rf_isReal(rexpansion1) && !Rf_isInteger(rexpansion1)) || (!Rf_isNull(rexpansion2) && !Rf_isReal(rexpansion2) && !Rf_isInteger(rexpansion2)))
 			verror("Invalid format of cartesian grid iterator");
 
-		vector<int64_t> expansion1(length(rexpansion1));
-		for (int i = 0; i < length(rexpansion1); ++i)
-			expansion1[i] = isReal(rexpansion1) ? (int64_t)REAL(rexpansion1)[i] : INTEGER(rexpansion1)[i];
+		vector<int64_t> expansion1(Rf_length(rexpansion1));
+		for (int i = 0; i < Rf_length(rexpansion1); ++i)
+			expansion1[i] = Rf_isReal(rexpansion1) ? (int64_t)REAL(rexpansion1)[i] : INTEGER(rexpansion1)[i];
 
 		vector<int64_t> expansion2;
-		if (isNull(rexpansion2))
+		if (Rf_isNull(rexpansion2))
 			expansion2 = expansion1;
 		else {
-			expansion2.resize(length(rexpansion2));
-			for (int i = 0; i < length(rexpansion2); ++i)
-				expansion2[i] = isReal(rexpansion2) ? (int64_t)REAL(rexpansion2)[i] : INTEGER(rexpansion2)[i];
+			expansion2.resize(Rf_length(rexpansion2));
+			for (int i = 0; i < Rf_length(rexpansion2); ++i)
+				expansion2[i] = Rf_isReal(rexpansion2) ? (int64_t)REAL(rexpansion2)[i] : INTEGER(rexpansion2)[i];
 		}
 
 		SEXP rband_idx = VECTOR_ELT(giterator, 4);
 
-		if ((!isReal(rband_idx) && !isInteger(rband_idx)) || length(rband_idx) != 3)
+		if ((!Rf_isReal(rband_idx) && !Rf_isInteger(rband_idx)) || Rf_length(rband_idx) != 3)
 			verror("Invalid format of cartesian grid iterator");
 
-		int64_t min_band_idx = isReal(rband_idx) ? (int64_t)REAL(rband_idx)[0] : INTEGER(rband_idx)[0];
-		int64_t max_band_idx = isReal(rband_idx) ? (int64_t)REAL(rband_idx)[1] : INTEGER(rband_idx)[1];
-		bool use_band_idx_limit = isReal(rband_idx) ? (bool)REAL(rband_idx)[2] : (bool)INTEGER(rband_idx)[2];
+		int64_t min_band_idx = Rf_isReal(rband_idx) ? (int64_t)REAL(rband_idx)[0] : INTEGER(rband_idx)[0];
+		int64_t max_band_idx = Rf_isReal(rband_idx) ? (int64_t)REAL(rband_idx)[1] : INTEGER(rband_idx)[1];
+		bool use_band_idx_limit = Rf_isReal(rband_idx) ? (bool)REAL(rband_idx)[2] : (bool)INTEGER(rband_idx)[2];
 
 		expr_itr = new TrackExpressionCartesianGridIterator;
 		if (call_begin) 
-			((TrackExpressionCartesianGridIterator *)expr_itr)->begin(m_iu.get_chromkey(), &intervals1, isNull(VECTOR_ELT(giterator, 1)) ? NULL : &intervals2,
+			((TrackExpressionCartesianGridIterator *)expr_itr)->begin(m_iu.get_chromkey(), &intervals1, Rf_isNull(VECTOR_ELT(giterator, 1)) ? NULL : &intervals2,
 																	  expansion1, expansion2, min_band_idx, max_band_idx, use_band_idx_limit, *scope2d, band,
 																	  m_iu.get_max_data_size());
-	} else if (isString(giterator) && length(giterator) == 1 && GIntervalsBigSet::isbig(CHAR(STRING_ELT(giterator, 0)), m_iu)) {
+	} else if (Rf_isString(giterator) && Rf_length(giterator) == 1 && GIntervalsBigSet::isbig(CHAR(STRING_ELT(giterator, 0)), m_iu)) {
 		const char *intervset = CHAR(STRING_ELT(giterator, 0));
 		SEXP meta = GIntervalsMeta::load_meta(interv2path(m_iu.get_env(), intervset).c_str());
 
@@ -509,8 +512,8 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 				((TrackExpressionBigSet2DIterator *)expr_itr)->begin(intervset, meta, *scope2d, band, m_iu.get_max_data_size());
 		}
 		runprotect(meta);
-	} else if ((isVector(giterator) && !isString(giterator)) ||
-			   (isString(giterator) && length(giterator) == 1 && !m_iu.track_exists(CHAR(STRING_ELT(giterator, 0)))))
+	} else if ((Rf_isVector(giterator) && !Rf_isString(giterator)) ||
+			   (Rf_isString(giterator) && Rf_length(giterator) == 1 && !m_iu.track_exists(CHAR(STRING_ELT(giterator, 0)))))
 	{   // giterator == intervals
 		unsigned intervs_type_mask;
 		if (m_iu.convert_rintervs(giterator, &intervals1d, &intervals2d, true, NULL, "", &intervs_type_mask)) {
@@ -554,22 +557,22 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
     track_types.push_back(vars.get_track_type(ivar));
 }
 
-	if (isString(giterator) && !expr_itr) {
+	if (Rf_isString(giterator) && !expr_itr) {
 		string iter_val(CHAR(STRING_ELT(giterator, 0)));
 
 		if (find(track_names.begin(), track_names.end(), iter_val) == track_names.end()) {
-			if (isString(giterator)) {
+			if (Rf_isString(giterator)) {
 				SEXP all_track_names;
 				SEXPCleaner all_track_names_cleaner(all_track_names);
 
-				rprotect(all_track_names = findVar(install("GTRACKS"), findVar(install(".misha"), m_iu.get_env())));
-				if (isString(all_track_names)) {
+				rprotect(all_track_names = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env())));
+				if (Rf_isString(all_track_names)) {
 					int i;
-					for (i = 0; i < length(all_track_names); ++i) {
+					for (i = 0; i < Rf_length(all_track_names); ++i) {
 						if (iter_val == CHAR(STRING_ELT(all_track_names, i)))
 							break;
 					}
-					if (i >= length(all_track_names)) 
+					if (i >= Rf_length(all_track_names)) 
 						verror("Invalid iterator: %s is neither a name of a track nor a name of an intervals set", iter_val.c_str());
 				}
                         }
@@ -614,7 +617,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 					}
 
 					if (ifilename == filenames.begin()) {
-						if (isString(giterator)) {
+						if (Rf_isString(giterator)) {
 							if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
 								common_track_type = track_type;
 						} else {
@@ -627,7 +630,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 						if (track_type == GenomeTrack::FIXED_BIN) {
 							binsize = gtrack_fbin.get_bin_size();
 
-							if (isString(giterator)) {
+							if (Rf_isString(giterator)) {
 								if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
 									common_binsize = binsize;
 							} else {
@@ -656,7 +659,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 					}
 
 					if (ifilename == filenames.begin()) {
-						if (isString(giterator)) {
+						if (Rf_isString(giterator)) {
 							if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
 								common_track_type = track_type;
 						} else {
@@ -693,7 +696,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 			verror("Cannot implicitly determine iterator policy: track expressions contain tracks with different bin sizes.\n");
 		}
 
-		if (!isString(giterator) &&
+		if (!Rf_isString(giterator) &&
 			(common_track_type == GenomeTrack::SPARSE || common_track_type == GenomeTrack::ARRAYS ||
 			 common_track_type == GenomeTrack::POINTS || common_track_type == GenomeTrack::RECTS ||
 			 common_track_type == GenomeTrack::COMPUTED) &&
@@ -718,7 +721,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 			verify_1d_iter(scope1d, scope2d);
 			expr_itr = new TrackExpressionSparseIterator(m_iu, (GenomeTrack::Type)common_track_type);
 			if (call_begin) {
-				if (isString(giterator))
+				if (Rf_isString(giterator))
 					((TrackExpressionSparseIterator *)expr_itr)->begin(track2path(m_iu.get_env(), CHAR(STRING_ELT(giterator, 0))), *scope1d);
 				else
 					((TrackExpressionSparseIterator *)expr_itr)->begin(track2path(m_iu.get_env(), vars.get_track_name(0)), *scope1d);
@@ -727,7 +730,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 			verify_2d_iter(scope1d, scope2d);
 			expr_itr = new TrackExpressionTrackRectsIterator(m_iu);
 			if (call_begin) {
-				if (isString(giterator))
+				if (Rf_isString(giterator))
 					((TrackExpressionTrackRectsIterator *)expr_itr)->begin(track2path(m_iu.get_env(), CHAR(STRING_ELT(giterator, 0))), (GenomeTrack::Type)common_track_type, *scope2d, band, m_iu.get_max_data_size());
 				else
 					((TrackExpressionTrackRectsIterator *)expr_itr)->begin(track2path(m_iu.get_env(), vars.get_track_name(0)), (GenomeTrack::Type)common_track_type, *scope2d, band, m_iu.get_max_data_size());

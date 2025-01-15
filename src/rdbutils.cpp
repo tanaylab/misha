@@ -130,13 +130,13 @@ RdbInitializer::RdbInitializer()
 
 		struct sigaction new_act;
 
-		// install a new SIGINT handler
+		// Rf_install a new SIGINT handler
 		new_act.sa_handler = sigint_handler;
 		sigemptyset(&new_act.sa_mask);
 		new_act.sa_flags = SA_RESTART;
 		sigaction(SIGINT, &new_act, &s_old_sigint_act);
 
-		// install a new SIGCHLD handler
+		// Rf_install a new SIGCHLD handler
 		new_act.sa_handler = sigchld_handler;
 		sigemptyset(&new_act.sa_mask);
 		new_act.sa_flags = SA_RESTART | SA_NOCLDSTOP;
@@ -202,7 +202,7 @@ RdbInitializer::~RdbInitializer()
 
 		TGLException::set_error_handler(m_old_error_handler);
 
-		// install old signal handlers
+		// Rf_install old signal handlers
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
 		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
 
@@ -220,7 +220,7 @@ RdbInitializer::~RdbInitializer()
 	}
 
 	// deal with PROTECT / UNPROTECT
-	unprotect(s_protect_counter - m_old_protect_count);
+	runprotect(s_protect_counter - m_old_protect_count);
 	s_protect_counter = m_old_protect_count;
 }
 
@@ -328,7 +328,7 @@ pid_t RdbInitializer::launch_process()
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
 		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);		
 		
-		SEXP r_multitasking_stdout = GetOption(install("gmultitasking_stdout"), R_NilValue);
+		SEXP r_multitasking_stdout = Rf_GetOption(Rf_install("gmultitasking_stdout"), R_NilValue);
 
 		int devnull;
 
@@ -336,7 +336,7 @@ pid_t RdbInitializer::launch_process()
             verror("Failed to open /dev/null");
         }
 
-        if (!isLogical(r_multitasking_stdout) || !(int)LOGICAL(r_multitasking_stdout)[0]) {
+        if (!Rf_isLogical(r_multitasking_stdout) || !(int)LOGICAL(r_multitasking_stdout)[0]) {
             dup2(devnull, STDOUT_FILENO);
         }
 
@@ -526,7 +526,7 @@ void RdbInitializer::handle_error(const char *msg)
 		}
 		rexit();
 	} else {
-		errorcall(R_NilValue, "%s", msg);
+		Rf_errorcall(R_NilValue, "%s", msg);
 	}
 
 }
@@ -702,7 +702,7 @@ SEXP rdb::rprotect(SEXP &expr)
 void rdb::runprotect(int count)
 {
 	if (RdbInitializer::s_protect_counter < (uint64_t)count)
-		errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
+		Rf_errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
 	UNPROTECT(count);
 	RdbInitializer::s_protect_counter -= count;
 }
@@ -711,7 +711,7 @@ void rdb::runprotect(SEXP &expr)
 {
 	if (expr != R_NilValue) {
 		if (RdbInitializer::s_protect_counter < 1)
-			errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
+			Rf_errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
 		UNPROTECT_PTR(expr);
 		expr = R_NilValue;
 		RdbInitializer::s_protect_counter--;
@@ -761,9 +761,9 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 const char *rdb::get_groot(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP groot = findVar(install("GROOT"), findVar(install(".misha"), envir));
+	SEXP groot = Rf_findVar(Rf_install("GROOT"), Rf_findVar(Rf_install(".misha"), envir));
 
-	if (!isString(groot))
+	if (!Rf_isString(groot))
 		verror("GROOT variable does not exist");
 
 	return CHAR(STRING_ELT(groot, 0));
@@ -772,9 +772,9 @@ const char *rdb::get_groot(SEXP envir)
 const char *rdb::get_gwd(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP gwd = findVar(install("GWD"), findVar(install(".misha"), envir));
+	SEXP gwd = Rf_findVar(Rf_install("GWD"), Rf_findVar(Rf_install(".misha"), envir));
 
-	if (!isString(gwd))
+	if (!Rf_isString(gwd))
 		verror("GWD variable does not exist");
 
 	return CHAR(STRING_ELT(gwd, 0));
@@ -783,9 +783,9 @@ const char *rdb::get_gwd(SEXP envir)
 const char *rdb::get_glib_dir(SEXP envir)
 {
 	// no need to protect the returned value
-	SEXP glibdir = findVar(install(".GLIBDIR"), findVar(install(".misha"), envir));
+	SEXP glibdir = Rf_findVar(Rf_install(".GLIBDIR"), Rf_findVar(Rf_install(".misha"), envir));
 
-	if (!isString(glibdir))
+	if (!Rf_isString(glibdir))
 		verror(".GLIBDIR variable does not exist");
 
 	return CHAR(STRING_ELT(glibdir, 0));
@@ -841,10 +841,25 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 {
 	int check_error;
 	SEXP res;
+	SEXP err_call;
 
 	rprotect(res = R_tryEval(parsed_command, envir, &check_error));
 	if (check_error)
-		verror(R_curErrorBuf());
+	{
+		// Get the last error message
+		PROTECT(err_call = Rf_lang1(Rf_install("geterrmessage")));
+		SEXP err_msg = R_tryEval(err_call, R_GlobalEnv, &check_error);
+		UNPROTECT(1);
+
+		if (!check_error && TYPEOF(err_msg) == STRSXP && LENGTH(err_msg) > 0)
+		{
+			verror(CHAR(STRING_ELT(err_msg, 0)));
+		}
+		else
+		{
+			verror("R evaluation error: Unknown error");
+		}
+	}
 	return res;
 }
 
@@ -856,7 +871,7 @@ SEXP rdb::run_in_R(const char *command, SEXP envir)
 	ParseStatus status;
 
 	rprotect(expr = RSaneAllocVector(STRSXP, 1));
-	SET_STRING_ELT(expr, 0, mkChar(command));
+	SET_STRING_ELT(expr, 0, Rf_mkChar(command));
 	rprotect(parsed_expr = R_ParseVector(expr, -1, &status, R_NilValue));
 	if (status != PARSE_OK)
 		verror("Failed to parse expression \"%s\"", command);
@@ -954,7 +969,7 @@ struct RSaneAllocVectorData {
 static void RSaneAllocVectorCallback(void *_data)
 {
 	RSaneAllocVectorData *data = (RSaneAllocVectorData *)_data;
-    data->retv = allocVector(data->type, data->len);
+    data->retv = Rf_allocVector(data->type, data->len);
 }
 
 SEXP rdb::RSaneAllocVector(SEXPTYPE type, R_xlen_t len)
@@ -971,14 +986,14 @@ SEXP rdb::RSaneAllocVector(SEXPTYPE type, R_xlen_t len)
 
 SEXP rdb::get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing)
 {
-	SEXP colnames = getAttrib(v, R_NamesSymbol);
+	SEXP colnames = Rf_getAttrib(v, R_NamesSymbol);
 
-	if (!isVector(v) ||
-		(length(v) && (!isString(colnames) || length(colnames) != length(v))) ||
-		(!length(v) && !isNull(colnames)))
+	if (!Rf_isVector(v) ||
+		(Rf_length(v) && (!Rf_isString(colnames) || Rf_length(colnames) != Rf_length(v))) ||
+		(!Rf_length(v) && !Rf_isNull(colnames)))
 		verror("Invalid format of %s", varname);
 
-	int numcols = isNull(colnames) ? 0 : length(colnames);
+	int numcols = Rf_isNull(colnames) ? 0 : Rf_length(colnames);
 
 	for (int i = 0; i < numcols; i++) {
 		if (!strcmp(CHAR(STRING_ELT(colnames, i)), colname))

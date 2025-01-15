@@ -18,10 +18,10 @@ SEXP gtrack_modify(SEXP _track, SEXP _track_expr, SEXP _intervals, SEXP _iterato
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isString(_track_expr) || length(_track_expr) != 1)
+		if (!Rf_isString(_track_expr) || Rf_length(_track_expr) != 1)
 			verror("Track expression argument is not a string vector");
 
 		IntervUtils iu(_envir);

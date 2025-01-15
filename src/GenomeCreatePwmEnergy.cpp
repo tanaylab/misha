@@ -24,25 +24,25 @@ SEXP gcreate_pwm_energy(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP _prior, S
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 		const char *track = CHAR(STRING_ELT(_track, 0));
 
-		if (!isString(_pssmset) || length(_pssmset) != 1)
+		if (!Rf_isString(_pssmset) || Rf_length(_pssmset) != 1)
 			verror("Pssmset argument is not a string");
 		const char *pssmset = CHAR(STRING_ELT(_pssmset, 0));
 
 		int pssmid;
-		if (!(isReal(_pssmid) || isInteger(_pssmid)) || length(_pssmid) != 1)
+		if (!(Rf_isReal(_pssmid) || Rf_isInteger(_pssmid)) || Rf_length(_pssmid) != 1)
 			verror("Pssmid argument is not numeric");
-		if (isReal(_pssmid)) {
+		if (Rf_isReal(_pssmid)) {
 			if (REAL(_pssmid)[0] != (int)REAL(_pssmid)[0])
 				verror("Pssmid is not an integer");
 			pssmid = (int)REAL(_pssmid)[0];
 		} else
 			pssmid = INTEGER(_pssmid)[0];
 
-		if (!isReal(_prior) || length(_prior) != 1)
+		if (!Rf_isReal(_prior) || Rf_length(_prior) != 1)
 			verror("Prior argument is not numeric");
 		double prior = REAL(_prior)[0];
 
@@ -158,25 +158,25 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 		const char *track = CHAR(STRING_ELT(_track, 0));
 
-		if (!isString(_pssmset) || length(_pssmset) != 1)
+		if (!Rf_isString(_pssmset) || Rf_length(_pssmset) != 1)
 			verror("Pssmset argument is not a string");
 		const char *pssmset = CHAR(STRING_ELT(_pssmset, 0));
 
 		int pssmid;
-		if (!(isReal(_pssmid) || isInteger(_pssmid)) || length(_pssmid) != 1)
+		if (!(Rf_isReal(_pssmid) || Rf_isInteger(_pssmid)) || Rf_length(_pssmid) != 1)
 			verror("Pssmid argument is not numeric");
-		if (isReal(_pssmid)) {
+		if (Rf_isReal(_pssmid)) {
 			if (REAL(_pssmid)[0] != (int)REAL(_pssmid)[0])
 				verror("Pssmid is not an integer");
 			pssmid = (int)REAL(_pssmid)[0];
 		} else
 			pssmid = INTEGER(_pssmid)[0];
 
-		if (!isReal(_prior) || length(_prior) != 1)
+		if (!Rf_isReal(_prior) || Rf_length(_prior) != 1)
 			verror("Prior argument is not numeric");
 		double prior = REAL(_prior)[0];
 

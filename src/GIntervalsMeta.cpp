@@ -11,11 +11,11 @@ SEXP GIntervalsMeta::load_meta(const char *path)
 	filename += "/.meta";
 	SEXP meta = RSaneUnserialize(filename.c_str());
 	rprotect(meta);
-	if (!isVector(meta) || length(meta) != 2)
+	if (!Rf_isVector(meta) || Rf_length(meta) != 2)
 		verror("Invalid format of meta file %s", filename.c_str());
 
 	SEXP chromsizes = VECTOR_ELT(meta, 0);
-	if (!isVector(chromsizes) || (length(chromsizes) != GIntervalsMeta1D::NUM_STAT_COLS && length(chromsizes) != GIntervalsMeta2D::NUM_STAT_COLS))
+	if (!Rf_isVector(chromsizes) || (Rf_length(chromsizes) != GIntervalsMeta1D::NUM_STAT_COLS && Rf_length(chromsizes) != GIntervalsMeta2D::NUM_STAT_COLS))
 		verror("Invalid format of meta file %s", filename.c_str());
 
 	return meta;
@@ -33,9 +33,9 @@ void GIntervalsMeta::save_meta(const char *path, SEXP stats, SEXP zeroline)
 	SET_VECTOR_ELT(meta, ZEROLINE_FIELD, zeroline);
 
 	for (int i = 0; i < NUM_META_FIELDS; ++i) 
-		SET_STRING_ELT(colnames, i, mkChar(META_FIELD_NAMES[i]));
+		SET_STRING_ELT(colnames, i, Rf_mkChar(META_FIELD_NAMES[i]));
 
-    setAttrib(meta, R_NamesSymbol, colnames);
+    Rf_setAttrib(meta, R_NamesSymbol, colnames);
 
 	string filename(path);
 	filename += "/.meta";

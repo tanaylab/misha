@@ -14,7 +14,7 @@ SEXP gfind_tracks_n_intervals(SEXP _dir, SEXP _envir)
 		RdbInitializer rdb_init;
 
         // check the arguments
-		if (!isString(_dir) || length(_dir) != 1)
+		if (!Rf_isString(_dir) || Rf_length(_dir) != 1)
 			verror("Dir argument argument is not a string");
 
 		const char *dir = CHAR(STRING_ELT(_dir, 0));
@@ -68,7 +68,7 @@ SEXP gfind_tracks_n_intervals(SEXP _dir, SEXP _envir)
 			itrack->resize(itrack->size() - rdb::TRACK_FILE_EXT.size());
 			for (uint64_t pos = itrack->find_first_of('/'); pos != string::npos; pos = itrack->find_first_of('/', pos + 1))
 				itrack->at(pos) = '.';
-			SET_STRING_ELT(rtracks, itrack - tracks.begin(), mkChar(itrack->c_str() + strlen(dir) + 1));
+			SET_STRING_ELT(rtracks, itrack - tracks.begin(), Rf_mkChar(itrack->c_str() + strlen(dir) + 1));
 		}
 
 		rprotect(rintervs = RSaneAllocVector(STRSXP, intervs.size()));
@@ -76,7 +76,7 @@ SEXP gfind_tracks_n_intervals(SEXP _dir, SEXP _envir)
 			iinterv->resize(iinterv->size() - rdb::INTERV_FILE_EXT.size());
 			for (uint64_t pos = iinterv->find_first_of('/'); pos != string::npos; pos = iinterv->find_first_of('/', pos + 1))
 				iinterv->at(pos) = '.';
-			SET_STRING_ELT(rintervs, iinterv - intervs.begin(), mkChar(iinterv->c_str() + strlen(dir) + 1));
+			SET_STRING_ELT(rintervs, iinterv - intervs.begin(), Rf_mkChar(iinterv->c_str() + strlen(dir) + 1));
 		}
 
 		rprotect(answer = RSaneAllocVector(VECSXP, 2));

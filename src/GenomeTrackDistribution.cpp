@@ -22,10 +22,10 @@ SEXP gtrackdist(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _include_
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_track_exprs) || length(_track_exprs) < 1)
+		if (!Rf_isString(_track_exprs) || Rf_length(_track_exprs) < 1)
 			verror("Track argument is not a string vector");
 
-		unsigned numexpr = length(_track_exprs);
+		unsigned numexpr = Rf_length(_track_exprs);
 		BinsManager bins_manager(_breaks, _include_lowest);
 
 		if (bins_manager.get_num_bin_finders() != numexpr)
@@ -68,8 +68,8 @@ SEXP gtrackdist(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _include_
 		rprotect(dim = RSaneAllocVector(INTSXP, numexpr));
 		rprotect(dimnames = RSaneAllocVector(VECSXP, numexpr));
 		bins_manager.set_dims(dim, dimnames);
-		setAttrib(answer, R_DimSymbol, dim);
-		setAttrib(answer, R_DimNamesSymbol, dimnames);
+		Rf_setAttrib(answer, R_DimSymbol, dim);
+		Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -85,10 +85,10 @@ SEXP gtrackdist_multitask(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP
 		RdbInitializer rdb_init;
 
 		// check the arguments
-		if (!isString(_track_exprs) || length(_track_exprs) < 1)
+		if (!Rf_isString(_track_exprs) || Rf_length(_track_exprs) < 1)
 			verror("Track argument is not a string vector");
 
-		unsigned numexpr = length(_track_exprs);
+		unsigned numexpr = Rf_length(_track_exprs);
 		BinsManager bins_manager(_breaks, _include_lowest);
 
 		if (bins_manager.get_num_bin_finders() != numexpr)
@@ -147,8 +147,8 @@ SEXP gtrackdist_multitask(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP
 			rprotect(dim = RSaneAllocVector(INTSXP, numexpr));
 			rprotect(dimnames = RSaneAllocVector(VECSXP, numexpr));
 			bins_manager.set_dims(dim, dimnames);
-			setAttrib(answer, R_DimSymbol, dim);
-			setAttrib(answer, R_DimNamesSymbol, dimnames);
+			Rf_setAttrib(answer, R_DimSymbol, dim);
+			Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
 			return answer;
 		}
 	} catch (TGLException &e) {

@@ -6,6 +6,9 @@
 #include "rdbprogress.h"
 #include "rdbutils.h"
 
+#ifndef R_NO_REMAP
+#  define R_NO_REMAP
+#endif
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Parse.h>
@@ -19,16 +22,16 @@ SEXP gcreate_test_computer2d_track(SEXP _track, SEXP _prob_skip_chrom, SEXP _max
 	try {
 		RdbInitializer rdb_init;
 
-		if (!isString(_track) || length(_track) != 1)
+		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
 
-		if (!isNumeric(_prob_skip_chrom) || length(_prob_skip_chrom) != 1)
+		if (!Rf_isNumeric(_prob_skip_chrom) || Rf_length(_prob_skip_chrom) != 1)
 			verror("Skip chromosome probability argument is not numeric");
 
-		if (!isNumeric(_max_rects) || length(_max_rects) != 1)
+		if (!Rf_isNumeric(_max_rects) || Rf_length(_max_rects) != 1)
 			verror("Max rects argument is not numeric");
 
-		if (!isNumeric(_max_rect_size) || length(_max_rect_size) != 1)
+		if (!Rf_isNumeric(_max_rect_size) || Rf_length(_max_rect_size) != 1)
 			verror("Max rect size argument is not numeric");
 
 		const char *track = CHAR(STRING_ELT(_track, 0));

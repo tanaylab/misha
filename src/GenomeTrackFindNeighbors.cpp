@@ -71,24 +71,24 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 		if (type_mask1 != type_mask2) 
 			verror("Cannot intermix 1D and 2D intervals");
 
-		if (!isInteger(_maxneighbors) && !isReal(_maxneighbors)) 
+		if (!Rf_isInteger(_maxneighbors) && !Rf_isReal(_maxneighbors)) 
 			verror("maxneighbors argument is not numeric");
-		int maxneighbors = isInteger(_maxneighbors) ? INTEGER(_maxneighbors)[0] : (int)REAL(_maxneighbors)[0];
+		int maxneighbors = Rf_isInteger(_maxneighbors) ? INTEGER(_maxneighbors)[0] : (int)REAL(_maxneighbors)[0];
 		if (maxneighbors < 1) 
 			verror("maxneighbors must be greater or equal to 1");
 
-		if (!isLogical(_na_if_notfound))
+		if (!Rf_isLogical(_na_if_notfound))
 			verror("na.if.notfound argument is not logical");
 		bool na_if_notfound = LOGICAL(_na_if_notfound)[0];
 
 		Progress_reporter progress;
 
 		if (type_mask1 &= IntervUtils::INTERVS1D) {
-			if (!isReal(_distrange_start))
+			if (!Rf_isReal(_distrange_start))
 				verror("mindist argument is not numeric");
 			int64_t distance_start = (int64_t)REAL(_distrange_start)[0];
 
-			if (!isReal(_distrange_end))
+			if (!Rf_isReal(_distrange_end))
 				verror("maxdist argument is not numeric");
 			int64_t distance_end = (int64_t)REAL(_distrange_end)[0];
 
@@ -162,14 +162,14 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 			sort(result.begin(), result.end());
 
-			SEXP answer = iu.create_data_frame(result.size(), length(_intervs1) + length(_intervs2) + 1);
+			SEXP answer = iu.create_data_frame(result.size(), Rf_length(_intervs1) + Rf_length(_intervs2) + 1);
 			SEXP rdists;
 			vector<SEXP> src_cols1;
 			vector<SEXP> src_cols2;
 			vector<SEXP> tgt_cols;
 
 			iu.define_data_frame_cols(_intervs1, src_cols1, answer, tgt_cols, 0);
-			iu.define_data_frame_cols(_intervs2, src_cols2, answer, tgt_cols, length(_intervs1));
+			iu.define_data_frame_cols(_intervs2, src_cols2, answer, tgt_cols, Rf_length(_intervs1));
 			rprotect(rdists = RSaneAllocVector(REALSXP, result.size()));
 
 			for (uint64_t i = 0; i < result.size(); ++i) {
@@ -177,36 +177,36 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 				iu.copy_data_frame_row(src_cols1, r.id1, tgt_cols, i, 0);
 
 				if (r.id2 >= 0) {
-					iu.copy_data_frame_row(src_cols2, r.id2, tgt_cols, i, length(_intervs1));
+					iu.copy_data_frame_row(src_cols2, r.id2, tgt_cols, i, Rf_length(_intervs1));
 					REAL(rdists)[i] = (double)r.dist;
 				} else {
-					for (int j = 0; j < length(_intervs2); ++j)
-						iu.set_data_frame_val_nan(tgt_cols, i, length(_intervs1) + j);
+					for (int j = 0; j < Rf_length(_intervs2); ++j)
+						iu.set_data_frame_val_nan(tgt_cols, i, Rf_length(_intervs1) + j);
 					REAL(rdists)[i] = NA_REAL;
 				}
 			}
-			SET_VECTOR_ELT(answer, length(_intervs1) + length(_intervs2), rdists);
-			SEXP colnames = getAttrib(answer, R_NamesSymbol);
-			SET_STRING_ELT(colnames, length(_intervs1) + length(_intervs2), mkChar("dist"));
+			SET_VECTOR_ELT(answer, Rf_length(_intervs1) + Rf_length(_intervs2), rdists);
+			SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2), Rf_mkChar("dist"));
 
 			return answer;
 		} else {   // 2D
-			if (!isReal(_distrange_start1))
+			if (!Rf_isReal(_distrange_start1))
 				verror("mindist1 argument is not numeric");
 			int64_t distance_start1 = (int64_t)REAL(_distrange_start1)[0];
 
-			if (!isReal(_distrange_end1))
+			if (!Rf_isReal(_distrange_end1))
 				verror("maxdist1 argument is not numeric");
 			int64_t distance_end1 = (int64_t)REAL(_distrange_end1)[0];
 
 			if (distance_start1 > distance_end1)
 				verror("mindist1 exceeds maxdist1");
 
-			if (!isReal(_distrange_start2))
+			if (!Rf_isReal(_distrange_start2))
 				verror("mindist2 argument is not numeric");
 			int64_t distance_start2 = (int64_t)REAL(_distrange_start2)[0];
 
-			if (!isReal(_distrange_end2))
+			if (!Rf_isReal(_distrange_end2))
 				verror("maxdist2 argument is not numeric");
 			int64_t distance_end2 = (int64_t)REAL(_distrange_end2)[0];
 
@@ -286,14 +286,14 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 			sort(result.begin(), result.end());
 
-			SEXP answer = iu.create_data_frame(result.size(), length(_intervs1) + length(_intervs2) + 2);
+			SEXP answer = iu.create_data_frame(result.size(), Rf_length(_intervs1) + Rf_length(_intervs2) + 2);
 			SEXP rdists1, rdists2;
 			vector<SEXP> src_cols1;
 			vector<SEXP> src_cols2;
 			vector<SEXP> tgt_cols;
 
 			iu.define_data_frame_cols(_intervs1, src_cols1, answer, tgt_cols, 0);
-			iu.define_data_frame_cols(_intervs2, src_cols2, answer, tgt_cols, length(_intervs1));
+			iu.define_data_frame_cols(_intervs2, src_cols2, answer, tgt_cols, Rf_length(_intervs1));
 			rprotect(rdists1 = RSaneAllocVector(REALSXP, result.size()));
 			rprotect(rdists2 = RSaneAllocVector(REALSXP, result.size()));
 
@@ -302,22 +302,22 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 				iu.copy_data_frame_row(src_cols1, r.id1, tgt_cols, i, 0);
 
 				if (r.id2 >= 0) {
-					iu.copy_data_frame_row(src_cols2, r.id2, tgt_cols, i, length(_intervs1));
+					iu.copy_data_frame_row(src_cols2, r.id2, tgt_cols, i, Rf_length(_intervs1));
 					REAL(rdists1)[i] = (double)r.dist1;
 					REAL(rdists2)[i] = (double)r.dist2;
 				} else {
-					for (int j = 0; j < length(_intervs2); ++j)
-						iu.set_data_frame_val_nan(tgt_cols, i, length(_intervs1) + j);
+					for (int j = 0; j < Rf_length(_intervs2); ++j)
+						iu.set_data_frame_val_nan(tgt_cols, i, Rf_length(_intervs1) + j);
 					REAL(rdists1)[i] = NA_REAL;
 					REAL(rdists2)[i] = NA_REAL;
 				}
 			}
-			SET_VECTOR_ELT(answer, length(_intervs1) + length(_intervs2), rdists1);
-			SET_VECTOR_ELT(answer, length(_intervs1) + length(_intervs2) + 1, rdists2);
+			SET_VECTOR_ELT(answer, Rf_length(_intervs1) + Rf_length(_intervs2), rdists1);
+			SET_VECTOR_ELT(answer, Rf_length(_intervs1) + Rf_length(_intervs2) + 1, rdists2);
 
-			SEXP colnames = getAttrib(answer, R_NamesSymbol);
-			SET_STRING_ELT(colnames, length(_intervs1) + length(_intervs2), mkChar("dist1"));
-			SET_STRING_ELT(colnames, length(_intervs1) + length(_intervs2) + 1, mkChar("dist2"));
+			SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2), Rf_mkChar("dist1"));
+			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2) + 1, Rf_mkChar("dist2"));
 
 			return answer;
 		}

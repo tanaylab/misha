@@ -25,7 +25,7 @@ gdb.init_examples()
 
 ## Genomic Database
 
-Genomic Database starts with a *root* (also frequently referred as *GROOT*), i.e. top directory containing certain subdirectories and files. A new database can be created using `gdb.create` function. This is the easiest way to do it. One can also build a database manually by generating all the necessary components that will be described later in this document.
+Genomic Database starts with a *root* (also frequently referred as *GROOT*), i.e. top directory containing certain subdirectories and files. A new database can be created using `gdb.create_genome` and `gdb.create` functions. This is the easiest way to do it, see the "Genomes" vignette for more details. One can also build a database manually by generating all the necessary components that will be described later in this document.
 
 Before the data in a Genomic Database can be accessed one must establish connection with it by calling `gdb.init` function. On launch the package connects to a Genomic Database located in `PACKAGEDIR/trackdb/test` which serves all the examples in the reference manual.
 

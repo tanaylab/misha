@@ -33,8 +33,8 @@ static SEXP build_rintervals_wilcox(const vector<IntervalPval> &res_intervals, G
 		REAL(pvals)[i] = res_intervals[i].minpval;
 
 	SET_VECTOR_ELT(answer, IntervalPval::PVAL, pvals);
-	SEXP colnames = getAttrib(answer, R_NamesSymbol);
-	SET_STRING_ELT(colnames, IntervalPval::PVAL, mkChar(IntervalPval::COL_NAMES[IntervalPval::PVAL]));
+	SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+	SET_STRING_ELT(colnames, IntervalPval::PVAL, Rf_mkChar(IntervalPval::COL_NAMES[IntervalPval::PVAL]));
 	return answer;
 }
 
@@ -223,28 +223,28 @@ SEXP C_gwilcox(SEXP _expr, SEXP _intervals, SEXP _winsize1, SEXP _winsize2, SEXP
 
 		RdbInitializer rdb_init;
 
-		if (!isString(_expr) || length(_expr) != 1)
+		if (!Rf_isString(_expr) || Rf_length(_expr) != 1)
 			verror("Track expression argument is not a string");
 
-		if (!isReal(_winsize1) || length(_winsize1) != 1)
+		if (!Rf_isReal(_winsize1) || Rf_length(_winsize1) != 1)
 			verror("Winsize1 argument is not numeric");
 
-		if (!isReal(_winsize2) || length(_winsize2) != 1)
+		if (!Rf_isReal(_winsize2) || Rf_length(_winsize2) != 1)
 			verror("Winsize2 argument is not numeric");
 
-		if (!isReal(_maxz) || length(_maxz) != 1)
+		if (!Rf_isReal(_maxz) || Rf_length(_maxz) != 1)
 			verror("Max Z-score argument is not numeric");
 
-		if (!isLogical(_one_tailed) || length(_one_tailed) != 1)
+		if (!Rf_isLogical(_one_tailed) || Rf_length(_one_tailed) != 1)
 			verror("One-tailed argument is not boolean");
 
-		if (!isInteger(_what2find) || length(_what2find) != 1)
+		if (!Rf_isInteger(_what2find) || Rf_length(_what2find) != 1)
 			verror("What2find argument is not an integer");
 
-		if (!isNull(_intervals_set_out) && (!isString(_intervals_set_out) || length(_intervals_set_out) != 1))
+		if (!Rf_isNull(_intervals_set_out) && (!Rf_isString(_intervals_set_out) || Rf_length(_intervals_set_out) != 1))
 			verror("intervals.set.out argument is not a string");
 
-		string intervset_out = isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
+		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
 
 		IntervUtils iu(_envir);
 		GIntervalsFetcher1D *intervals = NULL;
