@@ -297,12 +297,29 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             var.track_n_imdf = nullptr;  // No track needed for PWM
             
             SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
-            if (!Rf_isMatrix(rparams))
-                verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
-            
-            // Create PSSM and initialize PWM scorer
-            DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rparams);
-            var.pwm_scorer = std::make_unique<PWMScorer>(
+			if (!Rf_isNewList(rparams))	{
+				verror("Virtual track %s: PWM functions require a list parameter with pssm matrix", vtrack.c_str());
+			}
+
+			// Get PSSM matrix from params
+			SEXP rpssm = VECTOR_ELT(rparams, findListElementIndex(rparams, "pssm"));
+			if (!Rf_isMatrix(rpssm)){
+				rdb::verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
+			}
+
+			// Get bidirect parameter
+			SEXP rbidirect = VECTOR_ELT(rparams, findListElementIndex(rparams, "bidirect"));
+			bool bidirect = true; // default value
+			if (rbidirect != R_NilValue){
+				if (!Rf_isLogical(rbidirect))
+					rdb::verror("Virtual track %s: bidirect parameter must be logical", vtrack.c_str());
+				bidirect = LOGICAL(rbidirect)[0];
+			}
+
+			// Create PSSM and initialize PWM scorer
+			DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rpssm);
+			pssm.set_bidirect(bidirect);
+			var.pwm_scorer = std::make_unique<PWMScorer>(
                 pssm,
                 m_groot,
                 func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD : PWMScorer::MAX_LIKELIHOOD

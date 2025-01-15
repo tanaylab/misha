@@ -172,6 +172,19 @@ private:
 	void set_vars(unsigned idx);
 
 	bool is_var(const string &str, uint64_t start, uint64_t end) const { return (!start || !rdb::is_R_var_char(str[start - 1])) && (end == str.size() || !rdb::is_R_var_char(str[end])); }
+
+    static int findListElementIndex(SEXP list, const char* name) {
+        SEXP names = Rf_getAttrib(list, R_NamesSymbol);
+        if (names == R_NilValue)
+            rdb::verror("List must have named elements");
+            
+        int len = Rf_length(list);
+        for (int i = 0; i < len; i++) {
+            if (strcmp(CHAR(STRING_ELT(names, i)), name) == 0)
+                return i;
+        }
+        return -1;  // Element not found
+    }
 };
 
 

@@ -4,7 +4,7 @@
 \alias{gvtrack.create}
 \title{Creates a new virtual track}
 \usage{
-gvtrack.create(vtrack = NULL, src = NULL, func = NULL, params = NULL)
+gvtrack.create(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...)
 }
 \arguments{
 \item{vtrack}{virtual track name}
