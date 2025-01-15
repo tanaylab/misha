@@ -123,10 +123,30 @@ jobs:
           chmod +x conda-recipe/build.sh
 
       - name: Build conda package
+        env:
+          CONDA_BUILD_SYSROOT: ${{ env.CONDA }}/x86_64-conda-linux-gnu/sysroot
         run: |
           conda build conda-recipe
 
-      - name: Upload conda package
+      - name: Find conda package
+        id: find_package
+        run: |
+          echo "Conda build output directory:"
+          ls -R /home/runner/miniconda3/envs/build-env/conda-bld/
+          
+          # Get the actual package path
+          PACKAGE_PATH=$(conda build conda-recipe --output)
+          echo "Package path: $PACKAGE_PATH"
+          echo "package_path=$PACKAGE_PATH" >> $GITHUB_OUTPUT
+
+      - name: Upload conda package as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: conda-package-${{ matrix.os }}
+          path: /home/runner/miniconda3/envs/build-env/conda-bld/**/*.tar.bz2
+          if-no-files-found: error
+
+      - name: Upload to Anaconda
         if: |
           startsWith(github.ref, 'refs/tags/') && 
           !failure() && 
@@ -134,14 +154,6 @@ jobs:
         env:
           ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
         run: |
-          # Get the platform-specific path
-          PLATFORM_PATH=$(conda build conda-recipe --output)
-          echo "Uploading package from: $PLATFORM_PATH"
-          anaconda -t $ANACONDA_TOKEN upload -u ${{ secrets.ANACONDA_USERNAME }} "$PLATFORM_PATH" --force
-
-      - name: Save conda package as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: conda-package-${{ matrix.os }}
-          path: ${{ env.CONDA }}/conda-bld/**/*.tar.bz2
-          if-no-files-found: error
+          PACKAGE_PATH="${{ steps.find_package.outputs.package_path }}"
+          echo "Uploading package from: $PACKAGE_PATH"
+          anaconda -t $ANACONDA_TOKEN upload -u ${{ secrets.ANACONDA_USERNAME }} "$PACKAGE_PATH" --force
