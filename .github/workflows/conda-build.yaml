@@ -36,7 +36,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-activate-base: true
-          activate-environment: ""
+          activate-environment: build-env
           miniforge-version: latest
           miniforge-variant: Mambaforge
           use-mamba: true
