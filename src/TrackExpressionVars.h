@@ -100,6 +100,7 @@ public:
         Binned_pv           pv_binned;
         Track_n_imdf       *track_n_imdf;
         std::unique_ptr<PWMScorer> pwm_scorer;
+        char strand;
     };
 
     typedef vector<Track_var> Track_vars;

@@ -19,8 +19,8 @@ public:
         MAX_LIKELIHOOD_POS // For PWM_MAX_POS function - returns position
     };
 
-    PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, const bool extend = true,ScoringMode mode = TOTAL_LIKELIHOOD) 
-        : m_pssm(pssm), m_extend(extend), m_mode(mode) {
+    PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, const bool extend = true, ScoringMode mode = TOTAL_LIKELIHOOD, const char &strand = 1) 
+        : m_pssm(pssm), m_extend(extend), m_strand(strand), m_mode(mode) {
         m_seqfetch.set_seqdir(genome_root + "/seq");
     }
 
@@ -29,16 +29,26 @@ public:
         // Calculate expanded interval to include full motif coverage
         int64_t motif_length = m_pssm.size();
         GInterval expanded_interval = interval;
-        
-        if (m_extend){
-            expanded_interval.end = std::min(expanded_interval.end + (motif_length - 1), 
-                                       (int64_t)chromkey.get_chrom_size(interval.chromid));
+        expanded_interval.strand = m_strand;
+
+        if (m_extend) {
+            if (m_strand == -1) {
+                expanded_interval.start = std::max(
+                    expanded_interval.start - (motif_length - 1), 
+                    (decltype(expanded_interval.start))0
+                );
+            } else {
+                expanded_interval.end = std::min(
+                    expanded_interval.end + (motif_length - 1), 
+                    (int64_t)chromkey.get_chrom_size(interval.chromid)
+            );
+            }
+            
         } else {
             if ((expanded_interval.end - expanded_interval.start) < motif_length) {
                 return std::numeric_limits<float>::quiet_NaN();
             }
         }
-        
 
         std::vector<char> seq;
         try {
@@ -59,8 +69,17 @@ public:
                 } else { // MAX_LIKELIHOOD_POS                    
                     float pos = best_pos - target.begin();
                     pos = pos + 1; // return a 1-based position
-                    // Return signed position - negative for reverse strand match
-                    pos = pos * best_dir;
+
+                    if (m_strand == -1){
+                        // The position is now according to the reverse complement sequence, change it to be according to the original sequence (the plus strand)
+                        pos = target.length() - pos - motif_length + 1;
+                    }
+
+                    if (m_pssm.is_bidirect()) {
+                        // Return signed position - negative for reverse strand match
+                        pos = pos * best_dir;
+                    }
+
                     return pos;
                 }
             }
@@ -119,6 +138,7 @@ public:
 private:
     DnaPSSM m_pssm;
     bool m_extend = true;
+    char m_strand = 1;
     GenomeSeqFetch m_seqfetch;
     ScoringMode m_mode;
 };
