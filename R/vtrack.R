@@ -96,64 +96,71 @@
 #'
 #' This function creates a new virtual track named 'vtrack' with the given
 #' source, function and parameters. 'src' can be either a track or intervals
-#' (1D or 2D). Use the following table for valid combinations:
+#' (1D or 2D). Use the following table for a reference of all valid source,
+#' function and parameters combinations:
 #'
-#' \emph{src = [Track], func = "avg", params = NULL} \cr
-#' Average track value in iterator interval.
+#' \emph{src = [Track], func = "avg", params = NULL} \cr Average track value in
+#' iterator interval.
 #'
-#' \emph{src = [Track], func = "max", params = NULL} \cr
-#' Maximal track value in iterator interval.
+#' \emph{src = [Track], func = "max", params = NULL} \cr Maximal track value in
+#' iterator interval.
 #'
-#' \emph{src = [Track], func = "min", params = NULL} \cr
-#' Minimal track value in iterator interval.
+#' \emph{src = [Track], func = "min", params = NULL} \cr Minimal track value in
+#' iterator interval.
 #'
-#' \emph{src = ['Dense' / 'Sparse' / 'Array' track], func = "nearest",
-#' params = NULL} \cr
-#' Mean track value in iterator interval. For 'Sparse' track with no values
-#' in interval, returns nearest track value.
+#' \emph{src = ['Dense' / 'Sparse' / 'Array' track], func = "nearest", params =
+#' NULL} \cr Mean track value in iterator interval. If there are no track
+#' values covered by an iterator interator (can occur only in 'Sparse' track),
+#' the nearest track value is returned.
 #'
-#' \emph{src = ['Dense' / 'Sparse' / 'Array' track], func = "stddev",
-#' params = NULL} \cr
-#' Unbiased standard deviation of track values in iterator interval.
+#' \emph{src = ['Dense' / 'Sparse' / 'Array' track], func = "stddev", params =
+#' NULL} \cr Unbiased standard deviation of track values in iterator interval.
 #'
-#' \emph{src = ['Dense' / 'Sparse' / 'Array' track], func = "sum",
-#' params = NULL} \cr
-#' Sum of track values in iterator interval.
+#' \emph{src = ['Dense' / 'Sparse' / 'Array' track], func = "sum", params =
+#' NULL} \cr Sum of track values in iterator interval.
 #'
-#' \emph{src = ['Dense' / 'Sparse' / 'Array' track], func = "quantile",
-#' params = [Percentile in [0, 1]]} \cr
-#' Quantile of track values in iterator interval.
+#' \emph{src = ['Dense' / 'Sparse' / 'Array' track], func = "quantile", params
+#' = [Percentile in the range of [0, 1]]} \cr Quantile of track values in
+#' iterator interval.
 #'
 #' \emph{src = ['Dense' track], func = "global.percentile", params = NULL} \cr
-#' Percentile of average track value relative to all track values.
+#' Percentile of an average track value in iterator interval relatively to all
+#' values of the track.
 #'
-#' \emph{src = ['Dense' track], func = "global.percentile.max",
-#' params = NULL} \cr
-#' Percentile of maximal track value relative to all track values.
+#' \emph{src = ['Dense' track], func = "global.percentile.max", params = NULL}
+#' \cr Percentile of a maximal track value in iterator interval relatively to
+#' all values of the track.
 #'
-#' \emph{src = ['Dense' track], func = "global.percentile.min",
-#' params = NULL} \cr
-#' Percentile of minimal track value relative to all track values.
+#' \emph{src = ['Dense' track], func = "global.percentile.min", params = NULL}
+#' \cr Percentile of a minimal track value in iterator interval relatively to
+#' all values of the track.
 #'
-#' \emph{src = [2D track], func = "area", params = NULL} \cr
-#' Area covered by iterator interval.
+#' \emph{src = [2D track], func = "area", params = NULL} \cr Area covered by
+#' iterator interval.
 #'
-#' \emph{src = [2D track], func = "weighted.sum", params = NULL} \cr
-#' Weighted sum of values, weights equal intersection area between iterator
-#' interval and value rectangle.
+#' \emph{src = [2D track], func = "weighted.sum", params = NULL} \cr Weighted
+#' sum of values where each weight equals to the intersection area between the
+#' iterator interval and the rectangle containing the value.
 #'
-#' \emph{src = [1D intervals], func = "distance",
-#' params = [Min distance from center (default: 0)]} \cr
-#' Returns 'DC * X/2', where 'DC' is normalized distance to center of
-#' containing interval, 'X' is parameter value. For no containing interval,
-#' returns 'D + XXX/2' where 'D' is distance to closest interval edge.
-#' Distance sign depends on position and strand (-1/1). Always positive for
-#' strand 0 or missing. NA if no intervals on chromosome.
+#' \emph{src = [1D intervals], func = "distance", params = [Minimal distance
+#' from center (default: 0)]} \cr Given the center 'C' of the current iterator
+#' interval returns 'DC * X/2', where 'DC' is the normalized distance to the
+#' center of the interval that contains 'C', and 'X' is the value of the
+#' parameter. If no interval contains 'C' the resulted value is 'D + XXX/2'
+#' where 'D' is the distance between 'C' and the edge of the closest interval.
+#' Distance can be positive or negative depending on the position of the
+#' coordinate relative to the interval and the strand (-1 or 1) of the
+#' interval. Distance is always positive if 'strand' is '0' or if 'strand'
+#' column is missing. Distance is 'NA' if no intervals exist for the current
+#' chromosome.
 #'
 #' \emph{src = [1D intervals], func = "distance.center", params = NULL} \cr
-#' Returns distance between iterator center 'C' and closest interval center.
-#' NaN if 'C' outside intervals. Sign depends on position and strand (-1/1).
-#' Always positive for strand 0 or missing.
+#' Given the center 'C' of the current iterator interval returns 'NaN' if 'C'
+#' is outside of the intervals, otherwise returns the distance between 'C' and
+#' the center of the closest interval. Distance can be positive or negative
+#' depending on the position of the coordinate relative to the interval and the
+#' strand (-1 or 1) of the interval. Distance is always positive if 'strand' is
+#' '0' or if 'strand' column is missing.
 #'
 #' \emph{func = "pwm", params = list(pssm = matrix, bidirect = TRUE,
 #' prior = 0.01, extend = TRUE)} \cr
