@@ -247,7 +247,7 @@ void DnaPSSM::calc_like_rc(string::const_iterator &j, float &logp) const
 }
 
 string::const_iterator DnaPSSM::max_like_match(const string &target,
-				float &best_logp, int &best_dir) const
+				float &best_logp, int &best_dir, const bool &combine_strands) const
 {
 	if(target.length() < m_chars.size()) {
 		best_logp = -_REAL(MAX);
@@ -276,59 +276,71 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 				logp += p->get_avg_log_prob();
 			} else {
 				logp += p->get_log_prob(*j);
-			}
-			if(logp < best_logp) {
-				break;
-			}
+			}			
 			j++;
 		}
-		if(logp > best_logp) {
-			best_logp = logp;
-			best_pos = i;
-			best_dir = 1;
-		}
+
+		float total_logp = logp;
+
 		if(m_bidirect) {
-			logp = 0;
+			float rlogp = 0;
 			j = i;
 			for(vector<DnaProbVec>::const_reverse_iterator p = m_chars.rbegin();
 			    p != m_chars.rend();
 			    p++) {
 				if(!(*j)) {
-					logp = -_REAL(MAX);
+					rlogp = -_REAL(MAX);
 					break;
 				}
 				
 				switch(*j) {
 					case 'a':
-					case 'A': logp += p->get_log_prob('T');
+					case 'A': rlogp += p->get_log_prob('T');
 						  break;
 					case 't':
-					case 'T': logp += p->get_log_prob('A');
+					case 'T': rlogp += p->get_log_prob('A');
 						  break;
 					case 'c':
-					case 'C': logp += p->get_log_prob('G');
+					case 'C': rlogp += p->get_log_prob('G');
 						  break;
 					case 'g':
-					case 'G': logp += p->get_log_prob('C');
+					case 'G': rlogp += p->get_log_prob('C');
 						  break;
-					case '*': logp += p->get_avg_log_prob();
+					case '*': rlogp += p->get_avg_log_prob();
 						  break;
 					case 'n':
-					case 'N': logp += p->get_avg_log_prob();
+					case 'N': rlogp += p->get_avg_log_prob();
 						  break;
 					default:  break;
 				}
 				j++;
 			}
-			if(logp > best_logp) {
-				best_logp = logp;
-				best_pos = i;
-				best_dir = -1;
+
+			if (combine_strands) {
+				// Combine probabilities by adding them in log space
+				log_sum_log(total_logp, rlogp);
+				best_dir = 0; // Indicate combined strands
+			} else {
+				// select best strand
+				if(rlogp > logp) {
+					total_logp = rlogp;
+					best_dir = -1;
+				} else {
+					best_dir = 1;
+				}
 			}
+		} else {
+			best_dir = 1;
+		}
+
+		if(total_logp > best_logp) {
+			best_logp = total_logp;
+			best_pos = i;
 		}
 	}
 	return(best_pos);
 }
+
 
 void DnaPSSM::update_like_vec(const string &target,
 			vector<float> &likes, vector<float> &deltas,

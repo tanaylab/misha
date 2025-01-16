@@ -221,7 +221,7 @@ public:
 	}
 
 	string::const_iterator max_like_match(const std::string &target,
-					float &best_p, int &best_dir) const;
+					float &best_p, int &best_dir, const bool &combine_strands = false) const;
 
     void integrate_like_seg(const char *min_i, const char *max_i, float &energy) const;
 	void integrate_like(const string &target, float &energy, vector<float> *spat_dist = 0) const;
