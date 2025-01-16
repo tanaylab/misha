@@ -52,7 +52,8 @@ public:
             } else {
                 float best_logp;
                 int best_dir;
-                string::const_iterator best_pos = m_pssm.max_like_match(target, best_logp, best_dir);
+                bool combine_strands = (m_mode == MAX_LIKELIHOOD);
+                string::const_iterator best_pos = m_pssm.max_like_match(target, best_logp, best_dir, combine_strands);
                 if (m_mode == MAX_LIKELIHOOD){
                     return best_logp;
                 } else { // MAX_LIKELIHOOD_POS
