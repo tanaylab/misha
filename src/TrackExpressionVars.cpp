@@ -325,6 +325,15 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				extend = LOGICAL(rextend)[0];
 			}
 
+			// Get strand parameter (numeric)
+			SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
+			char strand = 0;
+			if (rstrand != R_NilValue){
+				if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
+					rdb::verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
+				strand = (char)REAL(rstrand)[0];
+			}
+
 			// Create PSSM and initialize PWM scorer
 			DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rpssm);
 			pssm.set_bidirect(bidirect);
@@ -334,7 +343,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				extend,
 				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
 				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
-				PWMScorer::MAX_LIKELIHOOD_POS
+				PWMScorer::MAX_LIKELIHOOD_POS,
+				strand
 			);
             
             var.percentile = numeric_limits<double>::quiet_NaN();

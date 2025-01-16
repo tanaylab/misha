@@ -106,9 +106,12 @@ scoring.
 
 \emph{func = "pwm.max.pos", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE)} \cr
-Returns 1-based position of best PSSM match. Positive for forward strand,
-negative for reverse (bidirect=TRUE). Prior adds pseudocounts,
-extend=TRUE allows boundary scoring.
+Returns 1-based position of best PSSM match.
+If bidirect=TRUE, the position would be positive if the best hit was at the
+forward strand, and negative if it was at the reverse strand. When strand is
+-1 the position is still according to the forward strand, but the hit is at
+the end of the match.
+Prior adds pseudocounts, extend=TRUE allows boundary scoring.
 
 For all PWM functions:
 \itemize{
@@ -116,6 +119,10 @@ For all PWM functions:
   \item bidirect: If TRUE, scans both strands; if FALSE, forward only
   \item prior: Pseudocount for frequencies (default: 0.01)
   \item extend: If TRUE, computes boundary scores
+  \item strand: If 1, scans forward strand; if -1, scans reverse strand.
+for strand == 1, the energy (and position of the best match) would be at
+the beginning of the match, for strand == -1, the energy (and position of
+the best match) would be at the end of the match.
 }
 
 PWM parameters accepted as list or individual parameters (see examples).
