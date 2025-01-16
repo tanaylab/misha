@@ -15,24 +15,30 @@ class PWMScorer {
 public:
     enum ScoringMode {
         TOTAL_LIKELIHOOD,  // For PWM function
-        MAX_LIKELIHOOD     // For PWM_MAX function  
+        MAX_LIKELIHOOD,    // For PWM_MAX function
+        MAX_LIKELIHOOD_POS // For PWM_MAX_POS function - returns position
     };
 
-    PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, ScoringMode mode = TOTAL_LIKELIHOOD) 
-        : m_pssm(pssm), m_mode(mode) {
+    PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, const bool extend = true,ScoringMode mode = TOTAL_LIKELIHOOD) 
+        : m_pssm(pssm), m_extend(extend), m_mode(mode) {
         m_seqfetch.set_seqdir(genome_root + "/seq");
     }
 
     // Calculate PWM score for a given interval
-    double score_interval(const GInterval& interval, const GenomeChromKey& chromkey) {
+    float score_interval(const GInterval& interval, const GenomeChromKey& chromkey) {
         // Calculate expanded interval to include full motif coverage
         int64_t motif_length = m_pssm.size();
         GInterval expanded_interval = interval;
         
-        // Expand interval to allow scoring positions where motif partially overlaps
-        expanded_interval.start = std::max((int64_t)0, expanded_interval.start - (motif_length - 1));
-        expanded_interval.end = std::min(expanded_interval.end + (motif_length - 1), 
+        if (m_extend){
+            expanded_interval.end = std::min(expanded_interval.end + (motif_length - 1), 
                                        (int64_t)chromkey.get_chrom_size(interval.chromid));
+        } else {
+            if ((expanded_interval.end - expanded_interval.start) < motif_length) {
+                return std::numeric_limits<float>::quiet_NaN();
+            }
+        }
+        
 
         std::vector<char> seq;
         try {
@@ -46,11 +52,18 @@ public:
             } else {
                 float best_logp;
                 int best_dir;
-                m_pssm.max_like_match(target, best_logp, best_dir);
-                return best_logp;
+                string::const_iterator best_pos = m_pssm.max_like_match(target, best_logp, best_dir);
+                if (m_mode == MAX_LIKELIHOOD){
+                    return best_logp;
+                } else { // MAX_LIKELIHOOD_POS
+                    // Return signed position - negative for reverse strand match                    
+                    float pos = best_pos - target.begin();
+                    pos = pos + 1; // return a 1-based position
+                    return pos;
+                }
             }
         } catch (TGLException &e) {
-            return std::numeric_limits<double>::quiet_NaN();
+            return std::numeric_limits<float>::quiet_NaN();
         }
     }
 
@@ -103,6 +116,7 @@ public:
 
 private:
     DnaPSSM m_pssm;
+    bool m_extend = true;
     GenomeSeqFetch m_seqfetch;
     ScoringMode m_mode;
 };

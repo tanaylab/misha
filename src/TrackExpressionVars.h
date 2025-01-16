@@ -87,7 +87,7 @@ public:
     typedef vector<Track_n_imdf> Track_n_imdfs;
 
     struct Track_var {
-        enum Val_func { REG, REG_MIN, REG_MAX, REG_NEAREST, STDDEV, SUM, QUANTILE, PV, PV_MIN, PV_MAX, WEIGHTED_SUM, OCCUPIED_AREA, PWM, PWM_MAX, NUM_FUNCS };
+        enum Val_func { REG, REG_MIN, REG_MAX, REG_NEAREST, STDDEV, SUM, QUANTILE, PV, PV_MIN, PV_MAX, WEIGHTED_SUM, OCCUPIED_AREA, PWM, PWM_MAX, PWM_MAX_POS, NUM_FUNCS };
 
         static const char *FUNC_NAMES[NUM_FUNCS];
 
@@ -237,7 +237,8 @@ inline const TrackExpressionVars::Track_var *TrackExpressionVars::var(const char
 
 inline bool TrackExpressionVars::is_pwm_variable(unsigned ivar) const {
     return m_track_vars[ivar].val_func == Track_var::PWM ||
-           m_track_vars[ivar].val_func == Track_var::PWM_MAX;
+           m_track_vars[ivar].val_func == Track_var::PWM_MAX ||
+           m_track_vars[ivar].val_func == Track_var::PWM_MAX_POS;
 }
 
 #endif /* TRACKEXPRESSIONVARS_H_ */

@@ -20,7 +20,7 @@
 #include "GenomeSeqFetch.h"
 
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
-		"avg", "min", "max", "nearest", "stddev", "sum", "quantile", "global.percentile", "global.percentile.min", "global.percentile.max", "weighted.sum", "area", "pwm", "pwm.max"
+		"avg", "min", "max", "nearest", "stddev", "sum", "quantile", "global.percentile", "global.percentile.min", "global.percentile.max", "weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos"
 };
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center" };
 
@@ -288,12 +288,12 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
         string func = CHAR(STRING_ELT(rfunc, 0));
         transform(func.begin(), func.end(), func.begin(), ::tolower);
         
-        if (func == "pwm" || func == "pwm.max") {
+        if (func == "pwm" || func == "pwm.max" || func == "pwm.max.pos") {
             // Create the Track_var without a Track_n_imdf
             m_track_vars.push_back(Track_var());
             Track_var &var = m_track_vars.back();
             var.var_name = vtrack;
-            var.val_func = (func == "pwm" ? Track_var::PWM : Track_var::PWM_MAX);
+            var.val_func = (func == "pwm" ? Track_var::PWM : func == "pwm.max" ? Track_var::PWM_MAX : Track_var::PWM_MAX_POS);
             var.track_n_imdf = nullptr;  // No track needed for PWM
             
             SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
@@ -316,14 +316,26 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				bidirect = LOGICAL(rbidirect)[0];
 			}
 
+			// Get extend parameter
+			SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
+			bool extend = false;
+			if (rextend != R_NilValue){
+				if (!Rf_isLogical(rextend))
+					rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+				extend = LOGICAL(rextend)[0];
+			}
+
 			// Create PSSM and initialize PWM scorer
 			DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rpssm);
 			pssm.set_bidirect(bidirect);
 			var.pwm_scorer = std::make_unique<PWMScorer>(
-                pssm,
-                m_groot,
-                func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD : PWMScorer::MAX_LIKELIHOOD
-            );
+				pssm,
+				m_groot,
+				extend,
+				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
+				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
+				PWMScorer::MAX_LIKELIHOOD_POS
+			);
             
             var.percentile = numeric_limits<double>::quiet_NaN();
             var.requires_pv = false;
@@ -502,7 +514,7 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				if (var.percentile < 0 || var.percentile > 1)
 					verror("Virtual track %s: parameter (percentile) used for function %s is out of range", vtrack.c_str(), func.c_str());
 				
-			} else	if (ifunc == Track_var::PWM || ifunc == Track_var::PWM_MAX) {
+			} else	if (ifunc == Track_var::PWM || ifunc == Track_var::PWM_MAX || ifunc == Track_var::PWM_MAX_POS) {
 				var.percentile = numeric_limits<double>::quiet_NaN();
 				if (!Rf_isMatrix(rparams))
 					verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
@@ -609,7 +621,7 @@ void TrackExpressionVars::register_track_functions()
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
 		// Skip PWM variables since they don't have associated tracks
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX) {
+        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS) {
             continue;
         }
 		GenomeTrack1D *track1d = GenomeTrack::is_1d(ivar->track_n_imdf->type) ? (GenomeTrack1D *)ivar->track_n_imdf->track : NULL;
@@ -657,6 +669,7 @@ void TrackExpressionVars::register_track_functions()
 			break;
 		case Track_var::PWM:
 		case Track_var::PWM_MAX:
+		case Track_var::PWM_MAX_POS:
 			// PWM functions work directly on sequences, no need to register track functions
 			break;
 		default:
@@ -680,7 +693,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
 	    // Skip iterator validation for PWM variables since they don't have tracks or imdf
-        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX) {
+        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX || itrack_var->val_func == Track_var::PWM_MAX_POS) {
             continue;
         }
 
@@ -718,7 +731,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	for (Track_vars::const_iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 	{
 		// Skip PWM tracks
-		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX))
+		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS))
 		{
 			continue;
 		}
@@ -862,7 +875,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 		{
 			if (ivar->track_n_imdf == &(*itrack_n_imdf) &&
-				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX))
+				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS))
 			{
 				is_pwm_track = true;
 				break;
@@ -997,7 +1010,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		for (; pwm_var != m_track_vars.end(); ++pwm_var)
 		{
 			if (pwm_var->track_n_imdf == &(*itrack_n_imdf) &&
-				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX))
+				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX || pwm_var->val_func == Track_var::PWM_MAX_POS))
 				break;
 		}
 		if (pwm_var != m_track_vars.end())
@@ -1022,7 +1035,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		}
 
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX) {
+        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS) {
             // PWM scoring doesn't require track data
             ivar->var[idx] = ivar->pwm_scorer->score_interval(m_interval1d, m_iu.get_chromkey());
             continue;
@@ -1060,6 +1073,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					ivar->var[idx] = track.last_quantile(ivar->percentile);
 					break;
 				case Track_var::PWM_MAX:
+				case Track_var::PWM_MAX_POS:
 				case Track_var::PWM:
 					break;
 				default:
