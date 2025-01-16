@@ -56,10 +56,11 @@ public:
                 string::const_iterator best_pos = m_pssm.max_like_match(target, best_logp, best_dir, combine_strands);
                 if (m_mode == MAX_LIKELIHOOD){
                     return best_logp;
-                } else { // MAX_LIKELIHOOD_POS
-                    // Return signed position - negative for reverse strand match                    
+                } else { // MAX_LIKELIHOOD_POS                    
                     float pos = best_pos - target.begin();
                     pos = pos + 1; // return a 1-based position
+                    // Return signed position - negative for reverse strand match
+                    pos = pos * best_dir;
                     return pos;
                 }
             }
