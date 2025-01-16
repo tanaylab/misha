@@ -19,12 +19,16 @@ private:
 public:
 	int encode(char c) const {
 		switch(c) {
+			case 'a': 
 			case 'A' : return(0);
 				   break;
+			case 'c':
 			case 'C' : return(1);
 				   break;
+			case 'g':
 			case 'G' : return(2);
 				   break;
+			case 't':
 			case 'T' : return(3);
 				   break;
 			default:   return(-1);

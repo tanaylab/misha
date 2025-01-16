@@ -120,9 +120,13 @@ void DnaPSSM::init_from_seed(const string &seed, float prior)
 	for(string::const_iterator i = seed.begin(); i != seed.end(); i++) {
 		p->reset(back);
 		switch(*i) {
+			case 'a':
 			case 'A': p->set_direct_prob(0, 1 - 3*prior); break;
+			case 'c':
 			case 'C': p->set_direct_prob(1, 1 - 3*prior); break;
+			case 'g':
 			case 'G': p->set_direct_prob(2, 1 - 3*prior); break;
+			case 't':
 			case 'T': p->set_direct_prob(3, 1 - 3*prior); break;
 		}
 		p->normalize();
@@ -150,7 +154,10 @@ void DnaPSSM::calc_like(const string &target, float &logp) const
 	for(vector<DnaProbVec>::const_iterator p = m_chars.begin();
 	    p < m_chars.end();
 	    p++) {
-		if(*i != 'A' && *i != 'C' && *i != 'G' && *i != 'T') {
+		if(
+			*i != 'A' && *i != 'C' && *i != 'G' && *i != 'T' && 
+			*i != 'a' && *i != 'c' && *i != 'g' && *i != 't'
+			) {
 			logp = -_REAL(MAX);
 			return;
 		}
@@ -168,12 +175,16 @@ void DnaPSSM::calc_like_rc(const string &target, float &logp) const
 	    p++) {		
 		char c;
 		switch(*i) {
+			case 'a':
 			case 'A': c = 'T';
 				  break;
+			case 't':
 			case 'T': c = 'A';
 				  break;
+			case 'c':
 			case 'C': c = 'G';
 				  break;
+			case 'g':
 			case 'G': c = 'C';
 				  break;
 			default:  logp = -_REAL(MAX);
@@ -191,7 +202,10 @@ void DnaPSSM::calc_like(string::const_iterator &j, float &logp) const
 	for(vector<DnaProbVec>::const_iterator p = m_chars.begin();
 	    p < m_chars.end();
 	    p++) {
-		if(*i != 'A' && *i != 'C' && *i != 'G' && *i != 'T') {
+		if(
+			*i != 'A' && *i != 'C' && *i != 'G' && *i != 'T' && 
+			*i != 'a' && *i != 'c' && *i != 'g' && *i != 't'
+			) {
 			logp = -_REAL(MAX);
 			return;
 		}
@@ -212,12 +226,16 @@ void DnaPSSM::calc_like_rc(string::const_iterator &j, float &logp) const
 	    p++) {
 		char c;
 		switch(*i) {
+			case 'a':
 			case 'A': c = 'T';
 				  break;
+			case 't':
 			case 'T': c = 'A';
 				  break;
+			case 'c':
 			case 'C': c = 'G';
 				  break;
+			case 'g':
 			case 'G': c = 'C';
 				  break;
 			default:  logp = -_REAL(MAX);
@@ -243,7 +261,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 	string::const_iterator best_pos;
 	best_logp = -_REAL(MAX)/100;
 	for(string::const_iterator i = target.begin() + m_min_range;
-	    i < max_i;
+	    i <= max_i;
 	    i++) {
 		string::const_iterator j = i;
 		float logp = 0;
@@ -254,7 +272,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 				logp = -_REAL(MAX);
 				break;
 			}
-			if(*j == 'N' || *j =='*') {
+			if(*j == 'N' || *j =='*' || *j == 'n') {
 				logp += p->get_avg_log_prob();
 			} else {
 				logp += p->get_log_prob(*j);
@@ -281,16 +299,21 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 				}
 				
 				switch(*j) {
+					case 'a':
 					case 'A': logp += p->get_log_prob('T');
 						  break;
+					case 't':
 					case 'T': logp += p->get_log_prob('A');
 						  break;
+					case 'c':
 					case 'C': logp += p->get_log_prob('G');
 						  break;
+					case 'g':
 					case 'G': logp += p->get_log_prob('C');
 						  break;
 					case '*': logp += p->get_avg_log_prob();
 						  break;
+					case 'n':
 					case 'N': logp += p->get_avg_log_prob();
 						  break;
 					default:  break;
@@ -323,7 +346,7 @@ void DnaPSSM::update_like_vec(const string &target,
 	vector<float>::iterator like = likes.begin() + m_min_range;
 	vector<int1>::iterator dir = dirs.begin() + m_min_range;
 	for(string::const_iterator i = target.begin() + m_min_range;
-	    i < max_i;
+	    i <= max_i;
 	    i++) {
 		string::const_iterator j = i;
 		float logp = 0;
@@ -334,7 +357,7 @@ void DnaPSSM::update_like_vec(const string &target,
 				logp = -_REAL(MAX);
 				break;
 			}
-			if(*j == 'N' || *j =='*') {
+			if(*j == 'N' || *j =='*' || *j == 'n') {
 				logp += c_log_quarter;
 			} else {
 				logp += p->get_log_prob(*j);
@@ -355,16 +378,21 @@ void DnaPSSM::update_like_vec(const string &target,
 				}
 				
 				switch(*j) {
+					case 'a':
 					case 'A': rlogp += p->get_log_prob('T');
 						  break;
+					case 't': 
 					case 'T': rlogp += p->get_log_prob('A');
 						  break;
+					case 'c':
 					case 'C': rlogp += p->get_log_prob('G');
 						  break;
+					case 'g':
 					case 'G': rlogp += p->get_log_prob('C');
 						  break;
 					case '*': rlogp += p->get_avg_log_prob();
 						  break;
+					case 'n':
 					case 'N': rlogp += p->get_avg_log_prob();
 						  break;
 					default:  break;
@@ -394,7 +422,7 @@ void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &en
 {
 	energy = -_REAL(MAX)/100;
 	for(const char *i = min_i;
-	    i < max_i;
+	    i <= max_i;
 	    i++) {
 		const char *j = i;
 		float logp = 0;
@@ -473,7 +501,7 @@ void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> 
 	}
 	energy = -_REAL(MAX)/100;
 	for(string::const_iterator i = target.begin() + m_min_range;
-	    i < max_i;
+	    i <= max_i;
 	    i++) {
 		string::const_iterator j = i;
 		float logp = 0;
@@ -484,7 +512,7 @@ void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> 
 				logp = -_REAL(MAX);
 				break;
 			}
-			if(*j == 'N' || *j =='*') {
+			if(*j == 'N' || *j =='*' || *j == 'n') {
 				logp += c_log_quarter;
 			} else {
 				logp += p->get_log_prob(*j);
@@ -508,16 +536,21 @@ void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> 
 				}
 				
 				switch(*j) {
+					case 'a':
 					case 'A': logp += p->get_log_prob('T');
 						  break;
+					case 't':
 					case 'T': logp += p->get_log_prob('A');
 						  break;
+					case 'c':
 					case 'C': logp += p->get_log_prob('G');
 						  break;
+					case 'g':
 					case 'G': logp += p->get_log_prob('C');
 						  break;
 					case '*': logp += p->get_avg_log_prob();
 						  break;
+					case 'n':
 					case 'N': logp += p->get_avg_log_prob();
 						  break;
 					default:  break;
@@ -547,12 +580,16 @@ void DnaPSSM::count(string::const_iterator seq, float weight, int dir)
 		    i++) {
 			char c = 'N';
 			switch(*seq) {
+				case 'a':
 				case 'A': c = 'T';
 					  break;
+				case 't':
 				case 'T': c = 'A';
 					  break;
+				case 'c':
 				case 'C': c = 'G';
 					  break;
+				case 'g':
 				case 'G': c = 'C';
 					  break;
 				default: break;
@@ -578,7 +615,7 @@ void DnaPSSM::count_weighted(const string &target, vector<float> &wgts,
 	vector<float>::iterator wgt = wgts.begin() + m_min_range;
 	vector<int1>::iterator dir = dirs.begin() + m_min_range;
 	for(string::const_iterator i = target.begin() + m_min_range;
-	    i < max_i;
+	    i <= max_i;
 	    i++) {
 		//if logp is very small - ignore it
 		if(*wgt < thresh_wgt) {
@@ -591,7 +628,7 @@ void DnaPSSM::count_weighted(const string &target, vector<float> &wgts,
 			for(vector<DnaProbVec>::iterator p = m_chars.begin();
 			    p < m_chars.end();
 			    p++) {
-				if((*j) && *j != 'N' && *j !='*') {
+				if((*j) && *j != 'N' && *j !='*' && *j != 'n') {
 					p->incr_weight(*j, *wgt);
 				}
 				j++;
@@ -602,12 +639,16 @@ void DnaPSSM::count_weighted(const string &target, vector<float> &wgts,
 			    p != m_chars.rend();
 			    p++) {
 				switch(*j) {
+					case 'a':
 					case 'A': p->direct_incr_weight(3, *wgt);
 						  break;
+					case 't':
 					case 'T': p->direct_incr_weight(0, *wgt);
 						  break;
+					case 'c':
 					case 'C': p->direct_incr_weight(2, *wgt);
 						  break;
+					case 'g':
 					case 'G': p->direct_incr_weight(1, *wgt);
 						  break;
 					default:  break;
@@ -634,7 +675,7 @@ void DnaPSSM::count_log_weighted(const string &target, vector<float> &wgts,
 	vector<float>::iterator wgt = wgts.begin() + m_min_range;
 	vector<int1>::iterator dir = dirs.begin() + m_min_range;
 	for(string::const_iterator i = target.begin() + m_min_range;
-	    i < max_i;
+	    i <= max_i;
 	    i++) {
 		//if logp is very small - ignore it
 		if(*wgt < thresh_wgt) {
@@ -647,7 +688,7 @@ void DnaPSSM::count_log_weighted(const string &target, vector<float> &wgts,
 			for(vector<DnaProbVec>::iterator p = m_chars.begin();
 			    p < m_chars.end();
 			    p++) {
-				if((*j) && *j != 'N' && *j !='*') {
+				if((*j) && *j != 'N' && *j !='*' && *j != 'n') {
 					p->incr_log_weight(*j, *wgt);
 				}
 				j++;
@@ -658,12 +699,16 @@ void DnaPSSM::count_log_weighted(const string &target, vector<float> &wgts,
 			    p != m_chars.rend();
 			    p++) {
 				switch(*j) {
+					case 'a':
 					case 'A': p->direct_incr_log_weight(3, *wgt);
 						  break;
+					case 't':
 					case 'T': p->direct_incr_log_weight(0, *wgt);
 						  break;
+					case 'c':
 					case 'C': p->direct_incr_log_weight(2, *wgt);
 						  break;
+					case 'g':
 					case 'G': p->direct_incr_log_weight(1, *wgt);
 						  break;
 					default:  break;
@@ -849,7 +894,7 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 	energy = -_REAL(MAX)/100;
 	int pos = 0;
 	for(string::const_iterator i = target.begin() + m_min_range;
-	    i < max_i;
+	    i <= max_i;
 	    i++) {
 		int spat_bin = int(pos/spat_bin_size);
 		pos++;
@@ -862,7 +907,7 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 				logp = -_REAL(MAX);
 				break;
 			}
-			if(*j == 'N' || *j =='*') {
+			if(*j == 'N' || *j =='*' || *j == 'n') {
 				logp += p->get_avg_log_prob();
 			} else {
 				logp += p->get_log_prob(*j);
@@ -884,16 +929,21 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 				}
 
 				switch(*j) {
+					case 'a':
 					case 'A': logp += p->get_log_prob('T');
 						  break;
+					case 't':
 					case 'T': logp += p->get_log_prob('A');
 						  break;
+					case 'c':
 					case 'C': logp += p->get_log_prob('G');
 						  break;
+					case 'h':
 					case 'G': logp += p->get_log_prob('C');
 						  break;
 					case '*': logp += c_log_quarter;
 						  break;
+					case 'n':
 					case 'N': logp += c_log_quarter;
 						  break;
 					default:  break;
@@ -917,7 +967,7 @@ void DnaPSSM::like_thresh_match(const string &target, float thresh,
 		max_i = target.end() - m_chars.size();
 	}
 	for(string::const_iterator i = target.begin() + m_min_range;
-	    i < max_i;
+	    i <= max_i;
 	    i++) {
 		string::const_iterator j = i;
 		float logp = 0;
@@ -928,7 +978,7 @@ void DnaPSSM::like_thresh_match(const string &target, float thresh,
 				logp = -_REAL(MAX);
 				break;
 			}
-			if(*j == 'N' || *j =='*') {
+			if(*j == 'N' || *j =='*' || *j == 'n') {
 				logp += c_log_quarter;
 			} else {
 				logp += p->get_log_prob(*j);
@@ -955,16 +1005,21 @@ void DnaPSSM::like_thresh_match(const string &target, float thresh,
 				}
 
 				switch(*j) {
+					case 'a':
 					case 'A': logp += p->get_log_prob('T');
 						  break;
+					case 't':
 					case 'T': logp += p->get_log_prob('A');
 						  break;
+					case 'c':
 					case 'C': logp += p->get_log_prob('G');
 						  break;
+					case 'g':
 					case 'G': logp += p->get_log_prob('C');
 						  break;
 					case '*': logp += c_log_quarter;
 						  break;
+					case 'n':
 					case 'N': logp += c_log_quarter;
 						  break;
 					default:  break;
