@@ -1,3 +1,7 @@
+# misha 4.3.0
+
+* Added PWM functions: "pwm", "pwm.max" and "pwm.max.pos" are new virtual track functions. 
+
 # misha 4.2.14
 
 * Better error message in `gvtrack.create`.
