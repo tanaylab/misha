@@ -6,7 +6,7 @@ remove_all_vtracks <- function() {
 }
 
 # Helper function for computing log sum exp
-log_sum_log_vec <- function(x, na.rm = TRUE) {
+log_sum_exp <- function(x, na.rm = TRUE) {
     max_x <- max(x, na.rm = TRUE)
     max_x + log(sum(exp(x - max_x), na.rm = TRUE))
 }
@@ -14,11 +14,8 @@ log_sum_log_vec <- function(x, na.rm = TRUE) {
 # Helper function to create a standard PSSM for testing
 create_test_pssm <- function() {
     pssm <- matrix(c(
-        0.7, 0.1, 0.1, 0.1, # Strong A preference
-        0.1, 0.7, 0.1, 0.1, # Strong C preference
-        0.1, 0.1, 0.7, 0.1, # Strong G preference
-        0.1, 0.1, 0.7, 0.1, # Strong G preference
-        0.1, 0.1, 0.1, 0.7 # Strong T preference
+        1.0, 0.0, 0.0, 0.0, # Only A
+        0.0, 1.0, 0.0, 0.0 # Only C
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
     return(pssm)

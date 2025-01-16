@@ -190,12 +190,12 @@
 #'   \item prior: Pseudocount for frequencies (default: 0.01)
 #'   \item extend: If TRUE, computes boundary scores
 #'   \item strand: If 1, scans forward strand; if -1, scans reverse strand.
-#' for strand == 1, the energy (and position of the best match) would be at
+#' For strand == 1, the energy (and position of the best match) would be at
 #' the beginning of the match, for strand == -1, the energy (and position of
 #' the best match) would be at the end of the match.
 #' }
 #'
-#' PWM parameters accepted as list or individual parameters (see examples).
+#' PWM parameters are accepted as list or individual parameters (see examples).
 #'
 #' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 #'
