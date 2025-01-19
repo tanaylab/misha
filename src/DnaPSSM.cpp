@@ -2,6 +2,7 @@
 #include "port.h"
 #include "DnaPSSM.h"
 #include "Random.h"
+#include <R_ext/Arith.h> 
 
 #include <algorithm>
 
@@ -18,22 +19,22 @@ void DnaProbVec::normalize()
 	if(m_p[0] != 0) {
 		m_logp[0] = log(m_p[0]);
 	} else {
-		m_logp[0] = -_REAL(MAX)/100;
+		m_logp[0] = R_NegInf;
 	}
 	if(m_p[1] != 0) {
 		m_logp[1] = log(m_p[1]);
 	} else {
-		m_logp[1] = -_REAL(MAX)/100;
+		m_logp[1] = R_NegInf;
 	}
 	if(m_p[2] != 0) {
 		m_logp[2] = log(m_p[2]);
 	} else {
-		m_logp[2] = -_REAL(MAX)/100;
+		m_logp[2] = R_NegInf;
 	}
 	if(m_p[3] != 0) {
 		m_logp[3] = log(m_p[3]);
 	} else {
-		m_logp[3] = -_REAL(MAX)/100;
+		m_logp[3] = R_NegInf;
 	}
 }
 void DnaProbVec::normalize_log()
@@ -158,7 +159,7 @@ void DnaPSSM::calc_like(const string &target, float &logp) const
 			*i != 'A' && *i != 'C' && *i != 'G' && *i != 'T' && 
 			*i != 'a' && *i != 'c' && *i != 'g' && *i != 't'
 			) {
-			logp = -_REAL(MAX);
+			logp = R_NegInf;
 			return;
 		}
 		logp += p->get_log_prob(*i);
@@ -187,7 +188,7 @@ void DnaPSSM::calc_like_rc(const string &target, float &logp) const
 			case 'g':
 			case 'G': c = 'C';
 				  break;
-			default:  logp = -_REAL(MAX);
+			default:  logp = R_NegInf;
 				  return;
 		}
 		logp += p->get_log_prob(c);
@@ -206,7 +207,7 @@ void DnaPSSM::calc_like(string::const_iterator &j, float &logp) const
 			*i != 'A' && *i != 'C' && *i != 'G' && *i != 'T' && 
 			*i != 'a' && *i != 'c' && *i != 'g' && *i != 't'
 			) {
-			logp = -_REAL(MAX);
+			logp = R_NegInf;
 			return;
 		}
 		logp += p->get_log_prob(*i);
@@ -238,7 +239,7 @@ void DnaPSSM::calc_like_rc(string::const_iterator &j, float &logp) const
 			case 'g':
 			case 'G': c = 'C';
 				  break;
-			default:  logp = -_REAL(MAX);
+			default:  logp = R_NegInf;
 				  return;
 		}
 		logp += p->get_log_prob(c);
@@ -250,7 +251,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 				float &best_logp, int &best_dir, const bool &combine_strands) const
 {
 	if(target.length() < m_chars.size()) {
-		best_logp = -_REAL(MAX);
+		best_logp = R_NegInf;
 		return(target.begin());
 	}
 
@@ -259,7 +260,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 		max_i = target.end() - m_chars.size();
 	}
 	string::const_iterator best_pos;
-	best_logp = -_REAL(MAX)/100;
+	best_logp = R_NegInf;
 	for(string::const_iterator i = target.begin() + m_min_range;
 	    i <= max_i;
 	    i++) {
@@ -269,7 +270,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 		    p < m_chars.end();
 		    p++) {
 			if(!(*j)) {
-				logp = -_REAL(MAX);
+				logp = R_NegInf;
 				break;
 			}
 			if(*j == 'N' || *j =='*' || *j == 'n') {
@@ -289,7 +290,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 			    p != m_chars.rend();
 			    p++) {
 				if(!(*j)) {
-					rlogp = -_REAL(MAX);
+					rlogp = R_NegInf;
 					break;
 				}
 				
@@ -366,7 +367,7 @@ void DnaPSSM::update_like_vec(const string &target,
 		    p < m_chars.end();
 		    p++) {
 			if(!(*j)) {
-				logp = -_REAL(MAX);
+				logp = R_NegInf;
 				break;
 			}
 			if(*j == 'N' || *j =='*' || *j == 'n') {
@@ -385,7 +386,7 @@ void DnaPSSM::update_like_vec(const string &target,
 			    p != m_chars.rend();
 			    p++) {
 				if(!(*j)) {
-					rlogp = -_REAL(MAX);
+					rlogp = R_NegInf;
 					break;
 				}
 				
@@ -416,9 +417,9 @@ void DnaPSSM::update_like_vec(const string &target,
 				*dir = -1;
 			}
 		}
-		if(logp == -_REAL(MAX)) {
-			*delta = -_REAL(MAX);
-			*like = -_REAL(MAX);
+		if(logp == R_NegInf) {
+			*delta = R_NegInf;
+			*like = R_NegInf;
 		} else {
 			*delta = -(*like);
 			*delta += logp;
@@ -432,7 +433,7 @@ void DnaPSSM::update_like_vec(const string &target,
 
 void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &energy) const
 {
-	energy = -_REAL(MAX)/100;
+	energy = R_NegInf;
 	for(const char *i = min_i;
 	    i <= max_i;
 	    i++) {
@@ -442,7 +443,7 @@ void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &en
 		    p < m_chars.end();
 		    p++) {
 			if(!(*j)) {
-				logp = -_REAL(MAX);
+				logp = R_NegInf;
 				break;
 			}
 			if(*j == 'N' || *j == 'n' || *j =='*') {
@@ -464,7 +465,7 @@ void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &en
 			    p != m_chars.rend();
 			    p++) {
 				if(!(*j)) {
-					logp = -_REAL(MAX);
+					logp = R_NegInf;
 					break;
 				}
 				
@@ -503,7 +504,7 @@ void DnaPSSM::integrate_like_seg(const char *min_i, const char *max_i, float &en
 void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> *spat_dist) const
 {
 	if(target.length() < m_chars.size()) {
-		energy = -_REAL(MAX);
+		energy = R_NegInf;
 		return;
 	}
 
@@ -511,7 +512,7 @@ void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> 
 	if(max_i > target.end() - m_chars.size()) {
 		max_i = target.end() - m_chars.size();
 	}
-	energy = -_REAL(MAX)/100;
+	energy = R_NegInf;
 	for(string::const_iterator i = target.begin() + m_min_range;
 	    i <= max_i;
 	    i++) {
@@ -521,7 +522,7 @@ void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> 
 		    p < m_chars.end();
 		    p++) {
 			if(!(*j)) {
-				logp = -_REAL(MAX);
+				logp = R_NegInf;
 				break;
 			}
 			if(*j == 'N' || *j =='*' || *j == 'n') {
@@ -543,7 +544,7 @@ void DnaPSSM::integrate_like(const string &target, float &energy, vector<float> 
 			    p != m_chars.rend();
 			    p++) {
 				if(!(*j)) {
-					logp = -_REAL(MAX);
+					logp = R_NegInf;
 					break;
 				}
 				
@@ -895,7 +896,7 @@ ostream &operator<<(ostream &out, const DnaPSSM &pssm)
 void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float> &spat_func, int spat_bin_size) const
 {
 	if(target.length() < m_chars.size()) {
-		energy = -_REAL(MAX);
+		energy = R_NegInf;
 		return;
 	}
 
@@ -903,7 +904,7 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 	if(max_i > target.end() - m_chars.size()) {
 		max_i = target.end() - m_chars.size();
 	}
-	energy = -_REAL(MAX)/100;
+	energy = R_NegInf;
 	int pos = 0;
 	for(string::const_iterator i = target.begin() + m_min_range;
 	    i <= max_i;
@@ -916,7 +917,7 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 		    p < m_chars.end();
 		    p++) {
 			if(!(*j)) {
-				logp = -_REAL(MAX);
+				logp = R_NegInf;
 				break;
 			}
 			if(*j == 'N' || *j =='*' || *j == 'n') {
@@ -936,7 +937,7 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 			    p != m_chars.rend();
 			    p++) {
 				if(!(*j)) {
-					logp = -_REAL(MAX);
+					logp = R_NegInf;
 					break;
 				}
 
@@ -987,7 +988,7 @@ void DnaPSSM::like_thresh_match(const string &target, float thresh,
 		    p != m_chars.end();
 		    p++) {
 			if(!(*j)) {
-				logp = -_REAL(MAX);
+				logp = R_NegInf;
 				break;
 			}
 			if(*j == 'N' || *j =='*' || *j == 'n') {
@@ -1012,7 +1013,7 @@ void DnaPSSM::like_thresh_match(const string &target, float thresh,
 			    p != m_chars.rend();
 			    p++) {
 				if(!(*j)) {
-					logp = -_REAL(MAX);
+					logp = R_NegInf;
 					break;
 				}
 
