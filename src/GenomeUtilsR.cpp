@@ -8,7 +8,7 @@ extern "C" {
 SEXP C_revcomp(SEXP _seq) {
     try {
         if (!Rf_isString(_seq))
-            error("Sequence must be a character string");
+            Rf_error("Sequence must be a character string");
 
         SEXP ans;
         int n = Rf_length(_seq);
@@ -23,9 +23,9 @@ SEXP C_revcomp(SEXP _seq) {
         UNPROTECT(1);
         return ans;
     } catch(std::exception &e) {
-        error("Error in revcomp: %s", e.what());
+        Rf_error("Error in revcomp: %s", e.what());
     } catch(...) {
-        error("Unknown error in revcomp");
+        Rf_error("Unknown error in revcomp");
     }
     return R_NilValue; // Never reached
 }
