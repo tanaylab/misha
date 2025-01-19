@@ -7,6 +7,8 @@
 #include <list>
 #include <string>
 
+#include "config.h"
+#include "util.h"
 #include "RaList.h"
 
 class DnaProbVec {
@@ -17,12 +19,16 @@ private:
 public:
 	int encode(char c) const {
 		switch(c) {
+			case 'a': 
 			case 'A' : return(0);
 				   break;
+			case 'c':
 			case 'C' : return(1);
 				   break;
+			case 'g':
 			case 'G' : return(2);
 				   break;
+			case 't':
 			case 'T' : return(3);
 				   break;
 			default:   return(-1);
@@ -215,7 +221,7 @@ public:
 	}
 
 	string::const_iterator max_like_match(const std::string &target,
-					float &best_p, int &best_dir) const;
+					float &best_p, int &best_dir, const bool &combine_strands = false) const;
 
     void integrate_like_seg(const char *min_i, const char *max_i, float &energy) const;
 	void integrate_like(const string &target, float &energy, vector<float> *spat_dist = 0) const;

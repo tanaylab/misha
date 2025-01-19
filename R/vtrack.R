@@ -162,12 +162,48 @@
 #' strand (-1 or 1) of the interval. Distance is always positive if 'strand' is
 #' '0' or if 'strand' column is missing.
 #'
-#' Once a virtual track is created one can modify its iterator behavior by
-#' calling 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
+#' \emph{func = "pwm", params = list(pssm = matrix, bidirect = TRUE,
+#' prior = 0.01, extend = TRUE)} \cr
+#' Calculates total log-likelihood score of DNA sequence against PSSM.
+#' Uses log-sum-exp over all positions. For bidirect=TRUE, scans both
+#' strands. Prior adds pseudocounts, extend=TRUE allows scoring at boundaries.
+#'
+#' \emph{func = "pwm.max", params = list(pssm = matrix, bidirect = TRUE,
+#' prior = 0.01, extend = TRUE)} \cr
+#' Returns maximum log-likelihood score of best PSSM match. bidirect=TRUE
+#' checks both strands. Prior adds pseudocounts, extend=TRUE allows boundary
+#' scoring.
+#'
+#' \emph{func = "pwm.max.pos", params = list(pssm = matrix, bidirect = TRUE,
+#' prior = 0.01, extend = TRUE)} \cr
+#' Returns 1-based position of best PSSM match.
+#' If bidirect=TRUE, the position would be positive if the best hit was at the
+#' forward strand, and negative if it was at the reverse strand. When strand is
+#' -1 the position is still according to the forward strand, but the hit is at
+#' the end of the match.
+#' Prior adds pseudocounts, extend=TRUE allows boundary scoring.
+#'
+#' For all PWM functions:
+#' \itemize{
+#'   \item pssm: Position-specific scoring matrix (A,C,G,T frequencies)
+#'   \item bidirect: If TRUE, scans both strands; if FALSE, forward only
+#'   \item prior: Pseudocount for frequencies (default: 0.01)
+#'   \item extend: If TRUE, computes boundary scores
+#'   \item strand: If 1, scans forward strand; if -1, scans reverse strand.
+#' For strand == 1, the energy (and position of the best match) would be at
+#' the beginning of the match, for strand == -1, the energy (and position of
+#' the best match) would be at the end of the match.
+#' }
+#'
+#' PWM parameters are accepted as list or individual parameters (see examples).
+#'
+#' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 #'
 #' @param vtrack virtual track name
-#' @param src source (track or intervals)
-#' @param func,params see below
+#' @param src source (track/intervals). NULL for PWM functions
+#' @param func function name (see above)
+#' @param params function parameters (see above)
+#' @param ... additional PWM parameters
 #' @return None.
 #' @seealso \code{\link{gvtrack.info}}, \code{\link{gvtrack.iterator}},
 #' \code{\link{gvtrack.iterator.2d}}, \code{\link{gvtrack.array.slice}},
@@ -189,14 +225,116 @@
 #'
 #' gvtrack.create("vtrack3", "dense_track", "global.percentile")
 #' gvtrack.create("vtrack4", "annotations", "distance")
-#' gdist("vtrack3", seq(0, 1, l = 10), "vtrack4", seq(-500, 500, 200))
+#' gdist(
+#'     "vtrack3", seq(0, 1, l = 10), "vtrack4",
+#'     seq(-500, 500, 200)
+#' )
+#'
+#' pssm <- matrix(
+#'     c(
+#'         0.7, 0.1, 0.1, 0.1, # Example PSSM
+#'         0.1, 0.7, 0.1, 0.1,
+#'         0.1, 0.1, 0.7, 0.1,
+#'         0.1, 0.1, 0.7, 0.1,
+#'         0.1, 0.1, 0.7, 0.1,
+#'         0.1, 0.1, 0.7, 0.1
+#'     ),
+#'     ncol = 4, byrow = TRUE
+#' )
+#' colnames(pssm) <- c("A", "C", "G", "T")
+#' gvtrack.create(
+#'     "motif_score", NULL, "pwm",
+#'     list(pssm = pssm, bidirect = TRUE, prior = 0.01)
+#' )
+#' gvtrack.create("max_motif_score", NULL, "pwm.max",
+#'     pssm = pssm, bidirect = TRUE, prior = 0.01
+#' )
+#' gvtrack.create("max_motif_pos", NULL, "pwm.max.pos",
+#'     pssm = pssm
+#' )
+#' gextract(
+#'     c(
+#'         "dense_track", "motif_score", "max_motif_score",
+#'         "max_motif_pos"
+#'     ),
+#'     gintervals(1, 0, 10000),
+#'     iterator = 500
+#' )
 #'
 #' @export gvtrack.create
-gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL) {
-    if (is.null(substitute(vtrack)) || is.null(substitute(src))) {
-        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL)", call. = FALSE)
+gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...) {
+    if (is.null(substitute(vtrack))) {
+        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
+    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos"))) {
+        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
+    }
+
     .gcheckroot()
+
+    if (!is.null(func) && func %in% c("pwm", "pwm.max", "pwm.max.pos")) {
+        dots <- list(...)
+
+        if (!is.null(params)) {
+            # params list
+            if (!is.list(params) || !("pssm" %in% names(params))) {
+                stop("pwm function requires a list with at least 'pssm' matrix parameter")
+            }
+            dots <- params
+        }
+
+        if (!("pssm" %in% names(dots))) {
+            stop("pwm function requires a 'pssm' matrix parameter")
+        }
+        pssm <- dots$pssm
+        bidirect <- if (!is.null(dots$bidirect)) dots$bidirect else TRUE
+        prior <- if (!is.null(dots$prior)) dots$prior else 0.01
+        extend <- if (!is.null(dots$extend)) dots$extend else TRUE
+        strand <- if (!is.null(dots$strand)) dots$strand else 1
+
+
+        if (!all(c("A", "C", "G", "T") %in% colnames(pssm))) {
+            stop("PSSM must be a nx4 matrix with colnames A, C, G, T")
+        }
+
+        pssm <- pssm[, c("A", "C", "G", "T")]
+
+        if (is.data.frame(pssm)) {
+            pssm <- as.matrix(pssm)
+        }
+
+        if (!is.numeric(prior) || prior < 0 || prior > 1) {
+            stop("prior must be a number between 0 and 1")
+        }
+
+        if (!is.logical(bidirect)) {
+            stop("bidirect must be TRUE or FALSE")
+        }
+
+        if (!is.logical(extend)) {
+            stop("extend must be TRUE or FALSE")
+        }
+
+        if (strand != 1 && strand != -1) {
+            stop("strand must be 1 or -1")
+        }
+
+        # Normalize PSSM and add prior
+        pssm <- sweep(pssm, 1, rowSums(pssm), "/") # Normalize rows
+        if (prior > 0) {
+            pssm <- pssm + prior
+            pssm <- sweep(pssm, 1, rowSums(pssm), "/") # Renormalize after adding prior
+        }
+
+        # Set params with processed values
+        params <- list(
+            pssm = pssm,
+            bidirect = bidirect,
+            prior = prior,
+            extend = extend,
+            strand = strand
+        )
+    }
 
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())
     srcstr <- do.call(.gexpr2str, list(substitute(src)), envir = parent.frame())

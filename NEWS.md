@@ -1,3 +1,8 @@
+# misha 4.3.0
+
+* Added PWM functions: "pwm", "pwm.max" and "pwm.max.pos" are new virtual track functions. 
+* Added `grevcomp` function (reverse complement of a DNA sequence).
+
 # misha 4.2.14
 
 * Better error message in `gvtrack.create`.

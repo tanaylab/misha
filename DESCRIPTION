@@ -1,7 +1,7 @@
 Type: Package
 Package: misha
 Title: Toolkit for Analysis of Genomic Data
-Version: 4.2.14
+Version: 4.3.0
 Authors@R: c(
     person("Misha", "Hoichman", , "misha@hoichman.com", role = "aut"),
     person("Aviezer", "Lifshitz", , "aviezer.lifshitz@weizmann.ac.il", role = c("aut", "cre")),
@@ -31,6 +31,7 @@ Suggests:
     rmarkdown,
     spelling,
     stats,
+    stringr,
     testthat (>= 3.0.0),
     tibble,    
     withr

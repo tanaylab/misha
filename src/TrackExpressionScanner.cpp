@@ -548,10 +548,14 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 	vector<string> track_names;
 	vector<GenomeTrack::Type> track_types;
 
-	for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
-		track_names.push_back(vars.get_track_name(ivar));
-		track_types.push_back(vars.get_track_type(ivar));
-	}
+for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
+    // Skip PWM variables since they don't have associated tracks
+    if (vars.is_pwm_variable(ivar)) {
+        continue;
+    }
+    track_names.push_back(vars.get_track_name(ivar));
+    track_types.push_back(vars.get_track_type(ivar));
+}
 
 	if (Rf_isString(giterator) && !expr_itr) {
 		string iter_val(CHAR(STRING_ELT(giterator, 0)));
@@ -678,7 +682,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 		if (common_track_type < 0) {
 			if (num_tracks) {
 				if (track_exprs.size() == 1)
-					verror("Cannot implicitly determine iterator policy:\ntrack expression \"%s\" contains tracks in different formats.\n", track_exprs.front().c_str());
+					verror("Cannot implicitly determine iterator policy:\ntrack expression \"%s\" contains a pwm virtual track or tracks in different formats.\n", track_exprs.front().c_str());
 				verror("Cannot implicitly determine iterator policy: track expressions contain tracks in different formats.\n");
 			}
 			if (track_exprs.size() == 1)
