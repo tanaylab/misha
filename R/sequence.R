@@ -6,9 +6,9 @@
 #' @return A character vector of the same length as the input, containing the reverse
 #'         complement sequences
 #' @examples
-#' revcomp("ACTG") # Returns "CAGT"
-#' revcomp(c("ACTG", "GGCC")) # Returns c("CAGT", "GGCC")
-#' revcomp(c("ACTG", NA, "GGCC")) # Returns c("CAGT", NA, "GGCC")
+#' grevcomp("ACTG") # Returns "CAGT"
+#' grevcomp(c("ACTG", "GGCC")) # Returns c("CAGT", "GGCC")
+#' grevcomp(c("ACTG", NA, "GGCC")) # Returns c("CAGT", NA, "GGCC")
 #'
 #' @export
 grevcomp <- function(seq) {
