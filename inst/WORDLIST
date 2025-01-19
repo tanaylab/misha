@@ -39,6 +39,7 @@ PSSMs
 PV
 PWM
 PeakIntervals
+Pseudocount
 Rami
 Rprofile
 SGE
@@ -58,6 +59,7 @@ autocomplete
 autocompletion
 autocorr
 bedGraph
+bidirect
 bigset
 binsize
 bool
@@ -196,9 +198,12 @@ num
 numbins
 onexit
 params
+pos
 probs
 proj
 ps
+pseudocounts
+pssm
 pssms
 pssmset
 ptr
