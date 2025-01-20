@@ -40,6 +40,7 @@ Encoding: UTF-8
 Language: en-US
 LazyLoad: yes
 NeedsCompilation: yes
+SystemRequirements: C++14
 OS_type: unix
 RoxygenNote: 7.3.2
 VignetteBuilder: knitr
