@@ -1,6 +1,10 @@
+# misha 4.3.2 
+
+* Added requirement for C++14 standard.
+
 # misha 4.3.1 
 
-* Fixed compilation issue on ubuntu devel.
+* Fixed compilation issue on Ubuntu devel.
 
 # misha 4.3.0
 
