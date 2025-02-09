@@ -102,9 +102,11 @@ GenomeTrack::Type GenomeTrack::s_read_type(BufferedFile &bfile, const char *file
 	if (bfile.open(filename, mode))
 		TGLError<GenomeTrack>(FILE_ERROR, "Opening a track file %s: %s", filename, strerror(errno));
 
-	int format_signature __attribute__((aligned(8))) = 0;  // Initialize aligned variable
+	alignas(8) struct {
+		int signature;
+	} format = {0};
 
-	if (bfile.read((char *)&format_signature, sizeof(format_signature)) != sizeof(format_signature)) {
+	if (bfile.read((char *)&format.signature, sizeof(format.signature)) != sizeof(format.signature)) {
 		if (bfile.error())
 			TGLError<GenomeTrack>(FILE_ERROR, "Reading a track file %s: %s", filename, strerror(errno));
 		TGLError<GenomeTrack>(BAD_FORMAT, "Invalid format of track file %s", filename);
@@ -129,8 +131,11 @@ void GenomeTrack::write_type(const char *filename, const char *mode)
 	if (m_bfile.open(filename, mode))
 		TGLError<GenomeTrack>(FILE_ERROR, "Opening a track file %s: %s", filename, strerror(errno));
 
-	int aligned_signature __attribute__((aligned(8))) = FORMAT_SIGNATURES[m_type];
-	if (m_bfile.write((const char *)&aligned_signature, sizeof(aligned_signature)) != sizeof(aligned_signature)) {
+	alignas(8) struct {
+		int signature;
+	} format = {FORMAT_SIGNATURES[m_type]};
+
+	if (m_bfile.write((const char *)&format.signature, sizeof(format.signature)) != sizeof(format.signature)) {
 		if (m_bfile.error())
 			TGLError<GenomeTrack>(FILE_ERROR, "Failed to write a %s track file %s: %s", TYPE_NAMES[m_type], filename, strerror(errno));
 		TGLError<GenomeTrack>(FILE_ERROR, "Failed to write a %s track file %s", TYPE_NAMES[m_type], filename);
@@ -153,8 +158,11 @@ void GenomeTrack::load_attrs(const char *, const char *filename, TrackAttrs &att
 		TGLError<GenomeTrack>(FILE_ERROR, "Failed to read attributes file %s: %s", filename, strerror(errno));
 	}
 
-	alignas(8) char buf[1];
-	while (bfile.read(buf, 1) == 1 && (c = buf[0]) >= 0) {
+	alignas(8) struct {
+		char data;
+	} buf = {0};
+
+	while (bfile.read(&buf.data, 1) == 1 && (c = buf.data) >= 0) {
 		if (c) {
 			if (idx) 
 				val.push_back((char)c);
