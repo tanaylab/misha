@@ -18,6 +18,7 @@ using namespace std;
 
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
+#pragma pack(push, 8)  // Ensure 8-byte alignment for the class
 class GenomeTrack {
 public:
 	typedef map<string, string> TrackAttrs;
@@ -80,5 +81,7 @@ public:
 
 	static Type s_read_type(BufferedFile &bfile, const char *filename, const char *mode = "rb");
 };
+
+#pragma pack(pop)  // Restore default alignment
 
 #endif /* GENOMETRACK_H_ */

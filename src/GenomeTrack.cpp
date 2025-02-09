@@ -102,7 +102,7 @@ GenomeTrack::Type GenomeTrack::s_read_type(BufferedFile &bfile, const char *file
 	if (bfile.open(filename, mode))
 		TGLError<GenomeTrack>(FILE_ERROR, "Opening a track file %s: %s", filename, strerror(errno));
 
-	int format_signature;
+	int format_signature __attribute__((aligned(8)));  // Ensure 8-byte alignment
 
 	if (bfile.read(&format_signature, sizeof(format_signature)) != sizeof(format_signature)) {
 		if (bfile.error())
@@ -129,7 +129,8 @@ void GenomeTrack::write_type(const char *filename, const char *mode)
 	if (m_bfile.open(filename, mode))
 		TGLError<GenomeTrack>(FILE_ERROR, "Opening a track file %s: %s", filename, strerror(errno));
 
-	if (m_bfile.write(&FORMAT_SIGNATURES[m_type], sizeof(FORMAT_SIGNATURES[m_type])) != sizeof(FORMAT_SIGNATURES[m_type])) {
+	int aligned_signature __attribute__((aligned(8))) = FORMAT_SIGNATURES[m_type];
+	if (m_bfile.write(&aligned_signature, sizeof(aligned_signature)) != sizeof(aligned_signature)) {
 		if (m_bfile.error())
 			TGLError<GenomeTrack>(FILE_ERROR, "Failed to write a %s track file %s: %s", TYPE_NAMES[m_type], filename, strerror(errno));
 		TGLError<GenomeTrack>(FILE_ERROR, "Failed to write a %s track file %s", TYPE_NAMES[m_type], filename);
