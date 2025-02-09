@@ -102,11 +102,23 @@ GenomeTrack::Type GenomeTrack::s_read_type(BufferedFile &bfile, const char *file
 	if (bfile.open(filename, mode))
 		TGLError<GenomeTrack>(FILE_ERROR, "Opening a track file %s: %s", filename, strerror(errno));
 
+	// First try reading with alignment
 	alignas(8) struct {
 		int signature;
 	} format = {0};
-
-	if (bfile.read((char *)&format.signature, sizeof(format.signature)) != sizeof(format.signature)) {
+	
+	// Try aligned read first
+	size_t bytes_read = bfile.read((char *)&format.signature, sizeof(format.signature));
+	
+	if (bytes_read != sizeof(format.signature)) {
+		// If aligned read fails, try unaligned read as fallback for old files
+		bfile.seek(0, SEEK_SET);
+		int raw_signature = 0;
+		bytes_read = bfile.read((char *)&raw_signature, sizeof(raw_signature));
+		format.signature = raw_signature;
+	}
+	
+	if (bytes_read != sizeof(format.signature)) {
 		if (bfile.error())
 			TGLError<GenomeTrack>(FILE_ERROR, "Reading a track file %s: %s", filename, strerror(errno));
 		TGLError<GenomeTrack>(BAD_FORMAT, "Invalid format of track file %s", filename);
@@ -131,9 +143,11 @@ void GenomeTrack::write_type(const char *filename, const char *mode)
 	if (m_bfile.open(filename, mode))
 		TGLError<GenomeTrack>(FILE_ERROR, "Opening a track file %s: %s", filename, strerror(errno));
 
+	// Always write in aligned format for new files
 	alignas(8) struct {
 		int signature;
-	} format = {FORMAT_SIGNATURES[m_type]};
+		char padding[4];  // Ensure consistent padding across platforms
+	} format = {FORMAT_SIGNATURES[m_type], {0}};
 
 	if (m_bfile.write((const char *)&format.signature, sizeof(format.signature)) != sizeof(format.signature)) {
 		if (m_bfile.error())
