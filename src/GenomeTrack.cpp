@@ -162,7 +162,8 @@ void GenomeTrack::load_attrs(const char *, const char *filename, TrackAttrs &att
 		char data;
 	} buf = {0};
 
-	while (bfile.read(&buf.data, 1) == 1 && (c = static_cast<unsigned char>(buf.data)) != EOF) {
+	while (bfile.read(&buf.data, 1) == 1) {
+		c = static_cast<unsigned char>(buf.data);
 		if (c) {
 			if (idx) 
 				val.push_back((char)c);
