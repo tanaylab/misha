@@ -112,11 +112,11 @@ GenomeTrack::Type GenomeTrack::s_read_type(BufferedFile &bfile, const char *file
 		TGLError<GenomeTrack>(BAD_FORMAT, "Invalid format of track file %s", filename);
 	}
 
-	if (format_signature > 0)
+	if (format.signature > 0)
 		return FIXED_BIN;
 
 	for (int type = FIXED_BIN + 1; type < NUM_TYPES; ++type) {
-		if (format_signature == FORMAT_SIGNATURES[type])
+		if (format.signature == FORMAT_SIGNATURES[type])
 			return (Type)type;
 	}
 
