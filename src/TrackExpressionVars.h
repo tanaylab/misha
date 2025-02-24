@@ -106,7 +106,7 @@ public:
     typedef vector<Track_var> Track_vars;
 
     struct Interv_var {
-        enum Val_func { DIST, DIST_CENTER, NUM_FUNCS };
+        enum Val_func { DIST, DIST_CENTER, COVERAGE, NUM_FUNCS };
 
         static const char *FUNC_NAMES[NUM_FUNCS];
 
