@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.3.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.3.3</span>
       </span>
     </div>
 
@@ -152,6 +152,11 @@ the center of the closest interval. Distance can be positive or negative
 depending on the position of the coordinate relative to the interval and the
 strand (-1 or 1) of the interval. Distance is always positive if 'strand' is
 '0' or if 'strand' column is missing.</p>
+<p><em>src = [1D intervals], func = "coverage", params = NULL</em> <br>
+For each iterator interval, calculates the fraction of its length that is covered by the
+source intervals. Returns a value between 0 and 1. For example, if an iterator interval is [100,200]
+and the source intervals cover positions 120-140 and 160-170, the coverage would be 0.3
+((20 + 10) / 100 = 0.3). Overlapping source intervals are first unified.</p>
 <p><em>func = "pwm", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE)</em> <br>
 Calculates total log-likelihood score of DNA sequence against PSSM.
@@ -235,6 +240,20 @@ the best match) would be at the end of the match.</p></li>
 <span class="r-out co"><span class="r-pr">#&gt;</span> attr(,"breaks")[[2]]</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] -500 -300 -100  100  300  500</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"cov"</span>, <span class="st">"annotations"</span>, <span class="st">"coverage"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="st">"cov"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">1000</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">100</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start  end cov intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  100 0.8          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1   100  200 1.0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1   200  300 1.0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   300  400 1.0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1   400  500 1.0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1   500  600 1.0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1   600  700 1.0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1   700  800 1.0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1   800  900 1.0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1   900 1000 1.0          1</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">pssm</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>    <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span></span>
