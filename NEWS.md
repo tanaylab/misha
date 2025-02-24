@@ -1,3 +1,7 @@
+# misha 4.3.3
+
+* Added "coverage" virtual track function that calculates the fraction that iterator intervals are covered by given source intervals.
+
 # misha 4.3.2 
 
 * Added requirement for C++14 standard.
