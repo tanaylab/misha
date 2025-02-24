@@ -92,6 +92,12 @@ depending on the position of the coordinate relative to the interval and the
 strand (-1 or 1) of the interval. Distance is always positive if 'strand' is
 '0' or if 'strand' column is missing.
 
+\emph{src = [1D intervals], func = "coverage", params = NULL} \cr
+For each iterator interval, calculates the fraction of its length that is covered by the
+source intervals. Returns a value between 0 and 1. For example, if an iterator interval is [100,200]
+and the source intervals cover positions 120-140 and 160-170, the coverage would be 0.3
+((20 + 10) / 100 = 0.3). Overlapping source intervals are first unified.
+
 \emph{func = "pwm", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE)} \cr
 Calculates total log-likelihood score of DNA sequence against PSSM.
@@ -149,6 +155,9 @@ gdist(
     "vtrack3", seq(0, 1, l = 10), "vtrack4",
     seq(-500, 500, 200)
 )
+
+gvtrack.create("cov", "annotations", "coverage")
+gextract("cov", gintervals(1, 0, 1000), iterator = 100)
 
 pssm <- matrix(
     c(

@@ -22,7 +22,7 @@
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
 		"avg", "min", "max", "nearest", "stddev", "sum", "quantile", "global.percentile", "global.percentile.min", "global.percentile.max", "weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos"
 };
-const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center" };
+const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage" };
 
 using namespace rdb;
 
@@ -621,8 +621,20 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 			if (iinterv->do_touch(*(iinterv - 1)))
 				verror("Virtual track %s: intervals are overlapping and hence incompatible with %s function", vtrack.c_str(), func.c_str());
 		}
-	} else
+	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::COVERAGE])) {
+        var.val_func = Interv_var::COVERAGE;
+
+        if (!Rf_isNull(rparams))
+            verror("Virtual track %s: function %s does not accept any parameters", vtrack.c_str(), func.c_str());
+
+        var.dist_margin = 0.;
+        var.sintervs.swap(intervs1d);
+        var.sintervs.sort();
+        var.sintervs.unify_overlaps(); // Unify overlaps since we want total coverage
+	
+	} else {
 		verror("Virtual track %s: invalid function %s used with intervals", vtrack.c_str(), func.c_str());
+	}
 
 	return var;
 }
@@ -1243,5 +1255,70 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				ivar->var[idx] = dist;
 			}
 		}
+		else if (ivar->val_func == Interv_var::COVERAGE)
+		{
+			const GInterval &interval = ivar->imdf1d ? ivar->imdf1d->interval : m_interval1d;
+
+			if (ivar->imdf1d && ivar->imdf1d->out_of_range)
+			{
+				ivar->var[idx] = 0;
+				continue;
+			}
+
+			int64_t total_overlap = 0;
+			GIntervals::const_iterator iinterv;
+
+			// For non-sequential access or first access
+			if (ivar->imdf1d || ivar->siinterv == ivar->sintervs.end())
+			{
+				iinterv = lower_bound(ivar->sintervs.begin(), ivar->sintervs.end(), interval,
+									  GIntervals::compare_by_start_coord);
+
+				// Check previous interval too
+				if (iinterv != ivar->sintervs.begin())
+				{
+					auto prev = iinterv - 1;
+					if (prev->chromid == interval.chromid && prev->end > interval.start)
+					{
+						int64_t overlap_start = max(interval.start, prev->start);
+						int64_t overlap_end = min(interval.end, prev->end);
+						total_overlap += overlap_end - overlap_start;
+					}
+				}
+			}
+			else
+			{
+				// For sequential access, start from last position
+				iinterv = ivar->siinterv;
+				// But check if we need to back up
+				while (iinterv != ivar->sintervs.begin() &&
+					   (iinterv - 1)->chromid == interval.chromid &&
+					   (iinterv - 1)->end > interval.start)
+				{
+					--iinterv;
+				}
+			}
+
+			// Check forward intervals
+			while (iinterv != ivar->sintervs.end() &&
+				   iinterv->chromid == interval.chromid &&
+				   iinterv->start < interval.end)
+			{
+				if (iinterv->end > interval.start)
+				{
+					int64_t overlap_start = max(interval.start, iinterv->start);
+					int64_t overlap_end = min(interval.end, iinterv->end);
+					total_overlap += overlap_end - overlap_start;
+				}
+				++iinterv;
+			}
+
+			if (!ivar->imdf1d)
+			{
+				ivar->siinterv = iinterv;
+			}
+
+			ivar->var[idx] = (double)total_overlap / (interval.end - interval.start);
+		}
 	}
-	}
+}
