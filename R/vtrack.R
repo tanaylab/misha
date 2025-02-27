@@ -203,6 +203,23 @@
 #'
 #' PWM parameters are accepted as list or individual parameters (see examples).
 #'
+#' \emph{func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE)} \cr
+#' Counts occurrences of the specified kmer in each interval. The extend=TRUE
+#' parameter (default) allows counting kmers that span interval boundaries.
+#'
+#' \emph{func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE)} \cr
+#' Calculates the fraction of possible positions in each interval that contain
+#' the specified kmer. The extend=TRUE parameter (default) allows counting kmers
+#' that span interval boundaries.
+#'
+#' For kmer functions:
+#' \itemize{
+#'   \item kmer: The DNA sequence to count (case-insensitive)
+#'   \item extend: If TRUE, counts kmers that span interval boundaries
+#' }
+#'
+#' Kmer parameters are accepted as list or individual parameters (see examples).
+#'
 #' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 #'
 #' @param vtrack virtual track name
@@ -352,33 +369,34 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
         # Check for kmer parameter
         dots <- list(...)
 
-        # Handle both direct params argument and named kmer parameter
-        if (is.null(params)) {
-            if (!("kmer" %in% names(dots))) {
-                stop("kmer functions require a 'kmer' parameter")
+        if (!is.null(params)) {
+            # Handle as list or string parameter
+            if (is.list(params)) {
+                # params list
+                if (!is.list(params) || !("kmer" %in% names(params))) {
+                    stop("kmer function requires a list with at least 'kmer' parameter")
+                }
+                kmer_params <- params
             }
-            kmer_seq <- dots$kmer
+        } else if ("kmer" %in% names(dots)) {
+            # Use named parameters
+            kmer_params <- dots
         } else {
-            # For backward compatibility, accept params directly
-            kmer_seq <- params
-            warning("Passing kmer directly is deprecated. Use kmer=... instead")
+            stop("kmer functions require a 'kmer' parameter")
         }
 
-        # Validate kmer parameter
-        if (!is.character(kmer_seq) || length(kmer_seq) != 1) {
+        kmer_params$extend <- if (!is.null(kmer_params$extend)) kmer_params$extend else TRUE
+
+        # Validate required kmer parameter
+        if (!("kmer" %in% names(kmer_params)) || !is.character(kmer_params$kmer) || length(kmer_params$kmer) != 1) {
             stop("kmer parameter must be a single string")
         }
 
-        if (nchar(kmer_seq) == 0) {
+        if (nchar(kmer_params$kmer) == 0) {
             stop("kmer sequence cannot be empty")
         }
 
-        # src should be NULL for kmer functions
-        if (!is.null(src)) {
-            stop("src must be NULL for kmer functions")
-        }
-
-        params <- kmer_seq
+        params <- kmer_params
     }
 
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())
