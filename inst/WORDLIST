@@ -1,3 +1,4 @@
+ACGT
 ALGENOME
 ALLGENOME
 BedGraph
@@ -29,6 +30,7 @@ GWD
 Gb
 GenomeTrack
 INTERVID
+Kmer
 LTO
 NA's
 NxM
@@ -86,6 +88,7 @@ eshift
 eval
 expr
 fasta
+frac
 func
 fun’
 gapply
@@ -165,6 +168,8 @@ intervsets
 intevals
 intra
 kgID
+kmer
+kmers
 le
 libR
 liftover
@@ -182,6 +187,7 @@ maxpval
 maxread
 maxval
 mem
+mers
 mindist
 minsegment
 minval
