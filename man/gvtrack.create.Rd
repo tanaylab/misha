@@ -133,6 +133,23 @@ the best match) would be at the end of the match.
 
 PWM parameters are accepted as list or individual parameters (see examples).
 
+\emph{func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE)} \cr
+Counts occurrences of the specified kmer in each interval. The extend=TRUE
+parameter (default) allows counting kmers that span interval boundaries.
+
+\emph{func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE)} \cr
+Calculates the fraction of possible positions in each interval that contain
+the specified kmer. The extend=TRUE parameter (default) allows counting kmers
+that span interval boundaries.
+
+For kmer functions:
+\itemize{
+  \item kmer: The DNA sequence to count (case-insensitive)
+  \item extend: If TRUE, counts kmers that span interval boundaries
+}
+
+Kmer parameters are accepted as list or individual parameters (see examples).
+
 Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 }
 \examples{

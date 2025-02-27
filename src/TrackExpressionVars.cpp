@@ -354,26 +354,53 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             return;
         } else if (func == "kmer.count" || func == "kmer.frac")	{
 			// Create the Track_var without a Track_n_imdf
-            m_track_vars.push_back(Track_var());
-            Track_var &var = m_track_vars.back();
-            var.var_name = vtrack;
+			m_track_vars.push_back(Track_var());
+			Track_var &var = m_track_vars.back();
+			var.var_name = vtrack;
 			var.val_func = func == "kmer.count" ? Track_var::KMER_COUNT : Track_var::KMER_FRAC;
-			var.track_n_imdf = nullptr;  // No track needed for kmer
+			var.track_n_imdf = nullptr; // No track needed for kmer
 			var.percentile = numeric_limits<double>::quiet_NaN();
 			SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 
 			if (Rf_isNull(rparams))
 				rdb::verror("Virtual track %s: function %s requires a parameter (kmer string)", vtrack.c_str(), func.c_str());
 
-			if (!Rf_isString(rparams) || Rf_length(rparams) != 1)
-				rdb::verror("Virtual track %s: invalid parameter used for function %s (must be a kmer string)", vtrack.c_str(), func.c_str());
+			// Get extension parameter if exists, default to true (similar to PWM behavior)
+			bool extend = true;
+			if (Rf_isNewList(rparams))
+			{
+				// Handle as list params
+				SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
+				if (rextend != R_NilValue)
+				{
+					if (!Rf_isLogical(rextend))
+						rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+					extend = LOGICAL(rextend)[0];
+				}
 
-			// Get the kmer string
-			const char *kmer = CHAR(STRING_ELT(rparams, 0));
-			KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
+				// Extract kmer string from the list parameters
+				SEXP rkmer = VECTOR_ELT(rparams, findListElementIndex(rparams, "kmer"));
+				if (rkmer == R_NilValue || !Rf_isString(rkmer) || Rf_length(rkmer) != 1)
+					rdb::verror("Virtual track %s: invalid parameter used for function %s (must be a kmer string)",
+								vtrack.c_str(), func.c_str());
 
-			var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode);
-			var.val_func = func == "kmer.count" ? Track_var::KMER_COUNT : Track_var::KMER_FRAC;
+				const char *kmer = CHAR(STRING_ELT(rkmer, 0));
+				KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode, extend);
+			}
+			else if (Rf_isString(rparams) && Rf_length(rparams) == 1)
+			{
+				// Handle direct string parameter (backward compatibility)
+				const char *kmer = CHAR(STRING_ELT(rparams, 0));
+				KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode, extend);
+			}
+			else
+			{
+				rdb::verror("Virtual track %s: invalid parameter used for function %s (must be a kmer string)",
+							vtrack.c_str(), func.c_str());
+			}
+
 			var.requires_pv = false;
 			return;
 		}
