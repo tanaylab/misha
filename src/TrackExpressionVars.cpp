@@ -367,6 +367,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 
 			// Get extension parameter if exists, default to true (similar to PWM behavior)
 			bool extend = true;
+			char strand = 0;
 			if (Rf_isNewList(rparams))
 			{
 				// Handle as list params
@@ -385,15 +386,27 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 								vtrack.c_str(), func.c_str());
 
 				const char *kmer = CHAR(STRING_ELT(rkmer, 0));
+
+				SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
+				if (rstrand != R_NilValue)
+				{
+					if (!Rf_isNumeric(rstrand) || Rf_length(rstrand) != 1)
+						rdb::verror("Virtual track %s: strand parameter must be -1, 0, or 1", vtrack.c_str());
+					strand = (char)REAL(rstrand)[0];
+					if (strand != -1 && strand != 0 && strand != 1)
+						rdb::verror("Virtual track %s: strand parameter must be -1, 0, or 1", vtrack.c_str());
+				}
+
 				KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
-				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode, extend);
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode, extend, strand);
+
 			}
 			else if (Rf_isString(rparams) && Rf_length(rparams) == 1)
 			{
 				// Handle direct string parameter (backward compatibility)
 				const char *kmer = CHAR(STRING_ELT(rparams, 0));
 				KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
-				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode, extend);
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode, extend, strand);
 			}
 			else
 			{
