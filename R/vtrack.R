@@ -302,6 +302,13 @@
 #' gvtrack.create("at_both", NULL, "kmer.count", kmer = "AT", strand = 0)
 #' gextract(c("at_pos", "at_neg", "at_both"), gintervals(1, 0, 10000), iterator = 1000)
 #'
+#' # GC content
+#' gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+#' gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+#' gextract("g_frac + c_frac", gintervals(1, 0, 10000),
+#'     iterator = 1000,
+#'     colnames = "gc_content"
+#' )
 #' @export gvtrack.create
 gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...) {
     if (is.null(substitute(vtrack))) {

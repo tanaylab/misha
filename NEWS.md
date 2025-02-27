@@ -2,7 +2,6 @@
 
 * Added "kmer.count" and "kmer.frac" virtual track functions that calculate the number of k-mers and the fraction of k-mers in the current iterator interval.
 
-
 # misha 4.3.3
 
 * Added "coverage" virtual track function that calculates the fraction that iterator intervals are covered by given source intervals.

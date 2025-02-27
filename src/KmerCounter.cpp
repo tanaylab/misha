@@ -63,6 +63,11 @@ float KmerCounter::score_interval(const GInterval &interval, const GenomeChromKe
         // Return the fraction of positions that contain the kmer
         // Denominator is adjusted to count only positions where a kmer could fully fit
         size_t valid_positions = possible_positions > m_kmer.length() - 1 ? possible_positions - (m_kmer.length() - 1) : 0;
+        if (m_strand == 0)
+        {
+            // For both strands, we need to multiply by 2
+            valid_positions *= 2;
+        }
         return valid_positions > 0 ? static_cast<float>(total_count) / valid_positions : 0.0f;
     }
     else
