@@ -222,6 +222,13 @@ gvtrack.create("at_neg", NULL, "kmer.count", kmer = "AT", strand = -1)
 gvtrack.create("at_both", NULL, "kmer.count", kmer = "AT", strand = 0)
 gextract(c("at_pos", "at_neg", "at_both"), gintervals(1, 0, 10000), iterator = 1000)
 
+# GC content
+gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+gextract("g_frac + c_frac", gintervals(1, 0, 10000),
+    iterator = 1000,
+    colnames = "gc_content"
+)
 }
 \seealso{
 \code{\link{gvtrack.info}}, \code{\link{gvtrack.iterator}},
