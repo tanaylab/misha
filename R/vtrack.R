@@ -270,12 +270,17 @@
 #'     iterator = 500
 #' )
 #'
+#' # Kmer counting examples
+#' gvtrack.create("cg_count", NULL, "kmer.count", kmer = "CG")
+#' gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
+#' gextract(c("cg_count", "cg_frac"), gintervals(1, 0, 10000), iterator = 1000)
+#'
 #' @export gvtrack.create
 gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...) {
     if (is.null(substitute(vtrack))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
-    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos"))) {
+    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac"))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
 
@@ -343,6 +348,37 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
             extend = extend,
             strand = strand
         )
+    } else if (!is.null(func) && func %in% c("kmer.count", "kmer.frac")) {
+        # Check for kmer parameter
+        dots <- list(...)
+
+        # Handle both direct params argument and named kmer parameter
+        if (is.null(params)) {
+            if (!("kmer" %in% names(dots))) {
+                stop("kmer functions require a 'kmer' parameter")
+            }
+            kmer_seq <- dots$kmer
+        } else {
+            # For backward compatibility, accept params directly
+            kmer_seq <- params
+            warning("Passing kmer directly is deprecated. Use kmer=... instead")
+        }
+
+        # Validate kmer parameter
+        if (!is.character(kmer_seq) || length(kmer_seq) != 1) {
+            stop("kmer parameter must be a single string")
+        }
+
+        if (nchar(kmer_seq) == 0) {
+            stop("kmer sequence cannot be empty")
+        }
+
+        # src should be NULL for kmer functions
+        if (!is.null(src)) {
+            stop("src must be NULL for kmer functions")
+        }
+
+        params <- kmer_seq
     }
 
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())

@@ -20,8 +20,10 @@
 #include "GenomeSeqFetch.h"
 
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
-		"avg", "min", "max", "nearest", "stddev", "sum", "quantile", "global.percentile", "global.percentile.min", "global.percentile.max", "weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos"
-};
+	"avg", "min", "max", "nearest", "stddev", "sum", "quantile",
+	"global.percentile", "global.percentile.min", "global.percentile.max",
+	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac"};
+
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage" };
 
 using namespace rdb;
@@ -350,8 +352,32 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             var.percentile = numeric_limits<double>::quiet_NaN();
             var.requires_pv = false;
             return;
-        }
-    }
+        } else if (func == "kmer.count" || func == "kmer.frac")	{
+			// Create the Track_var without a Track_n_imdf
+            m_track_vars.push_back(Track_var());
+            Track_var &var = m_track_vars.back();
+            var.var_name = vtrack;
+			var.val_func = func == "kmer.count" ? Track_var::KMER_COUNT : Track_var::KMER_FRAC;
+			var.track_n_imdf = nullptr;  // No track needed for kmer
+			var.percentile = numeric_limits<double>::quiet_NaN();
+			SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
+
+			if (Rf_isNull(rparams))
+				rdb::verror("Virtual track %s: function %s requires a parameter (kmer string)", vtrack.c_str(), func.c_str());
+
+			if (!Rf_isString(rparams) || Rf_length(rparams) != 1)
+				rdb::verror("Virtual track %s: invalid parameter used for function %s (must be a kmer string)", vtrack.c_str(), func.c_str());
+
+			// Get the kmer string
+			const char *kmer = CHAR(STRING_ELT(rparams, 0));
+			KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
+
+			var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode);
+			var.val_func = func == "kmer.count" ? Track_var::KMER_COUNT : Track_var::KMER_FRAC;
+			var.requires_pv = false;
+			return;
+		}
+	}
 
 	// Only check source if not a PWM function
 	SEXP rsrc = get_rvector_col(rvtrack, "src", vtrack.c_str(), false);
@@ -534,7 +560,23 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 					pssm,
 					m_groot,
 					ifunc == Track_var::PWM ? PWMScorer::TOTAL_LIKELIHOOD : PWMScorer::MAX_LIKELIHOOD);
-			}   else{
+			} else if(ifunc == Track_var::KMER_COUNT || ifunc == Track_var::KMER_FRAC) {
+				if (Rf_isNull(rparams)){
+					verror("Virtual track %s: function %s requires a parameter (kmer string)", vtrack.c_str(), func.c_str());
+				}
+
+				if (!Rf_isString(rparams) || Rf_length(rparams) != 1){
+					verror("Virtual track %s: function %s requires a string parameter", vtrack.c_str(), func.c_str());
+				}
+				var.percentile = numeric_limits<double>::quiet_NaN();
+				// Get the kmer string
+				const char *kmer = CHAR(STRING_ELT(rparams, 0));
+				KmerCounter::CountMode mode = ifunc == Track_var::KMER_COUNT ? KmerCounter::SUM : KmerCounter::FRACTION;
+
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode);							
+				break;
+
+			} else{
 				var.percentile = numeric_limits<double>::quiet_NaN();
 				if (!Rf_isNull(rparams))
 					verror("Virtual track %s: function %s does not accept any parameters", vtrack.c_str(), func.c_str());
@@ -643,7 +685,7 @@ void TrackExpressionVars::register_track_functions()
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
 		// Skip PWM variables since they don't have associated tracks
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS) {
+        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC) {
             continue;
         }
 		GenomeTrack1D *track1d = GenomeTrack::is_1d(ivar->track_n_imdf->type) ? (GenomeTrack1D *)ivar->track_n_imdf->track : NULL;
@@ -692,6 +734,8 @@ void TrackExpressionVars::register_track_functions()
 		case Track_var::PWM:
 		case Track_var::PWM_MAX:
 		case Track_var::PWM_MAX_POS:
+		case Track_var::KMER_COUNT:
+		case Track_var::KMER_FRAC:
 			// PWM functions work directly on sequences, no need to register track functions
 			break;
 		default:
@@ -715,7 +759,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
 	    // Skip iterator validation for PWM variables since they don't have tracks or imdf
-        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX || itrack_var->val_func == Track_var::PWM_MAX_POS) {
+        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX || itrack_var->val_func == Track_var::PWM_MAX_POS || itrack_var->val_func == Track_var::KMER_COUNT || itrack_var->val_func == Track_var::KMER_FRAC) {
             continue;
         }
 
@@ -753,7 +797,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	for (Track_vars::const_iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 	{
 		// Skip PWM tracks
-		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS))
+		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
 		{
 			continue;
 		}
@@ -897,7 +941,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 		{
 			if (ivar->track_n_imdf == &(*itrack_n_imdf) &&
-				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS))
+				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
 			{
 				is_pwm_track = true;
 				break;
@@ -1032,7 +1076,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		for (; pwm_var != m_track_vars.end(); ++pwm_var)
 		{
 			if (pwm_var->track_n_imdf == &(*itrack_n_imdf) &&
-				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX || pwm_var->val_func == Track_var::PWM_MAX_POS))
+				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX || pwm_var->val_func == Track_var::PWM_MAX_POS || pwm_var->val_func == Track_var::KMER_COUNT || pwm_var->val_func == Track_var::KMER_FRAC))
 				break;
 		}
 		if (pwm_var != m_track_vars.end())
@@ -1062,6 +1106,15 @@ void TrackExpressionVars::set_vars(unsigned idx)
             ivar->var[idx] = ivar->pwm_scorer->score_interval(m_interval1d, m_iu.get_chromkey());
             continue;
         }
+		if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC)	{
+			// Kmer counting doesn't require track data
+			if (ivar->kmer_counter)	{ 
+				ivar->var[idx] = ivar->kmer_counter->count_interval(m_interval1d, m_iu.get_chromkey());
+			} else{
+				ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+			}
+			continue;
+		}
 
 		if (GenomeTrack::is_1d(ivar->track_n_imdf->type)) {
 			GenomeTrack1D &track = *(GenomeTrack1D *)ivar->track_n_imdf->track;
@@ -1097,6 +1150,8 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				case Track_var::PWM_MAX:
 				case Track_var::PWM_MAX_POS:
 				case Track_var::PWM:
+				case Track_var::KMER_COUNT:
+				case Track_var::KMER_FRAC:
 					break;
 				default:
 					verror("Internal error: unsupported function %d", ivar->val_func);
