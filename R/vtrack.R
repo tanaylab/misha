@@ -203,22 +203,27 @@
 #'
 #' PWM parameters are accepted as list or individual parameters (see examples).
 #'
-#' \emph{func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE)} \cr
+#' \emph{func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
 #' Counts occurrences of the specified kmer in each interval. The extend=TRUE
 #' parameter (default) allows counting kmers that span interval boundaries.
+#' The strand parameter can be 1 (forward strand), -1 (reverse strand), or 0 (both strands).
 #'
-#' \emph{func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE)} \cr
+#' \emph{func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
 #' Calculates the fraction of possible positions in each interval that contain
 #' the specified kmer. The extend=TRUE parameter (default) allows counting kmers
-#' that span interval boundaries.
+#' that span interval boundaries. The strand parameter can be 1 (forward strand), -1
+#' (reverse strand), or 0 (both strands).
 #'
 #' For kmer functions:
 #' \itemize{
 #'   \item kmer: The DNA sequence to count (case-insensitive)
 #'   \item extend: If TRUE, counts kmers that span interval boundaries
+#'   \item strand: If 1, counts kmers on forward strand; if -1, counts kmers on reverse strand. If
+#'  0, counts kmers on both strands. Default is 0.
 #' }
 #'
 #' Kmer parameters are accepted as list or individual parameters (see examples).
+#' Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avoid double counting.
 #'
 #' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 #'
@@ -288,9 +293,14 @@
 #' )
 #'
 #' # Kmer counting examples
-#' gvtrack.create("cg_count", NULL, "kmer.count", kmer = "CG")
-#' gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
+#' gvtrack.create("cg_count", NULL, "kmer.count", kmer = "CG", strand = 1)
+#' gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG", strand = 1)
 #' gextract(c("cg_count", "cg_frac"), gintervals(1, 0, 10000), iterator = 1000)
+#'
+#' gvtrack.create("at_pos", NULL, "kmer.count", kmer = "AT", strand = 1)
+#' gvtrack.create("at_neg", NULL, "kmer.count", kmer = "AT", strand = -1)
+#' gvtrack.create("at_both", NULL, "kmer.count", kmer = "AT", strand = 0)
+#' gextract(c("at_pos", "at_neg", "at_both"), gintervals(1, 0, 10000), iterator = 1000)
 #'
 #' @export gvtrack.create
 gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...) {
@@ -386,6 +396,7 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
         }
 
         kmer_params$extend <- if (!is.null(kmer_params$extend)) kmer_params$extend else TRUE
+        kmer_params$strand <- if (!is.null(kmer_params$strand)) kmer_params$strand else 0
 
         # Validate required kmer parameter
         if (!("kmer" %in% names(kmer_params)) || !is.character(kmer_params$kmer) || length(kmer_params$kmer) != 1) {
@@ -394,6 +405,10 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 
         if (nchar(kmer_params$kmer) == 0) {
             stop("kmer sequence cannot be empty")
+        }
+
+        if (kmer_params$kmer == grevcomp(kmer_params$kmer) && kmer_params$strand == 0) {
+            warning(paste0("kmer sequence '", kmer_params$kmer, "' is palindromic, please set strand to 1 or -1 to avoid double counting"))
         }
 
         params <- kmer_params
