@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.3.3</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.3.4</span>
       </span>
     </div>
 
@@ -57,7 +57,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Creates a new virtual track</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v4.3.3/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
     <div class="hidden name"><code>gvtrack.create.Rd</code></div>
     </div>
 
@@ -184,6 +184,21 @@ For strand == 1, the energy (and position of the best match) would be at
 the beginning of the match, for strand == -1, the energy (and position of
 the best match) would be at the end of the match.</p></li>
 </ul><p>PWM parameters are accepted as list or individual parameters (see examples).</p>
+<p><em>func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE, strand = 0)</em> <br>
+Counts occurrences of the specified kmer in each interval. The extend=TRUE
+parameter (default) allows counting kmers that span interval boundaries.
+The strand parameter can be 1 (forward strand), -1 (reverse strand), or 0 (both strands).</p>
+<p><em>func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE, strand = 0)</em> <br>
+Calculates the fraction of possible positions in each interval that contain
+the specified kmer. The extend=TRUE parameter (default) allows counting kmers
+that span interval boundaries. The strand parameter can be 1 (forward strand), -1
+(reverse strand), or 0 (both strands).</p>
+<p>For kmer functions:</p><ul><li><p>kmer: The DNA sequence to count (case-insensitive)</p></li>
+<li><p>extend: If TRUE, counts kmers that span interval boundaries</p></li>
+<li><p>strand: If 1, counts kmers on forward strand; if -1, counts kmers on reverse strand. If
+ 0, counts kmers on both strands. Default is 0.</p></li>
+</ul><p>Kmer parameters are accepted as list or individual parameters (see examples).
+Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avoid double counting.</p>
 <p>Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.</p>
     </div>
     <div id="see-also">
@@ -328,6 +343,57 @@ the best match) would be at the end of the match.</p></li>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 19          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 20          1</span>
 <span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Kmer counting examples</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"cg_count"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.count"</span>, kmer <span class="op">=</span> <span class="st">"CG"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"cg_frac"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.frac"</span>, kmer <span class="op">=</span> <span class="st">"CG"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"cg_count"</span>, <span class="st">"cg_frac"</span><span class="op">)</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">1000</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end cg_count    cg_frac intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  1000       73 0.07307307          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1  1000  2000       27 0.02702703          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  2000  3000       23 0.02302302          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  3000  4000       15 0.01501502          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  4000  5000       27 0.02702703          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  5000  6000       25 0.02502503          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  6000  7000       18 0.01801802          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  7000  8000       25 0.02502503          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  8000  9000       20 0.02002002          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  9000 10000       24 0.02402402          1</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"at_pos"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.count"</span>, kmer <span class="op">=</span> <span class="st">"AT"</span>, strand <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"at_neg"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.count"</span>, kmer <span class="op">=</span> <span class="st">"AT"</span>, strand <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"at_both"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.count"</span>, kmer <span class="op">=</span> <span class="st">"AT"</span>, strand <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>kmer sequence 'AT' is palindromic, please set strand to 1 or -1 to avoid double counting</span>
+<span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"at_pos"</span>, <span class="st">"at_neg"</span>, <span class="st">"at_both"</span><span class="op">)</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">1000</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end at_pos at_neg at_both intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  1000      4      4       8          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1  1000  2000     47     47      94          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  2000  3000     28     28      56          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  3000  4000     33     33      66          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  4000  5000     24     24      48          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  5000  6000     19     19      38          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  6000  7000     34     34      68          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  7000  8000     31     31      62          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  8000  9000     40     40      80          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  9000 10000     32     32      64          1</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># GC content</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"g_frac"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.frac"</span>, kmer <span class="op">=</span> <span class="st">"G"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"c_frac"</span>, <span class="cn">NULL</span>, <span class="st">"kmer.frac"</span>, kmer <span class="op">=</span> <span class="st">"C"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="st">"g_frac + c_frac"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">1000</span>,</span></span>
+<span class="r-in"><span>    colnames <span class="op">=</span> <span class="st">"gc_content"</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end gc_content intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  1000      0.629          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1  1000  2000      0.522          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  2000  3000      0.603          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  3000  4000      0.570          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  4000  5000      0.591          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  5000  6000      0.622          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  6000  7000      0.557          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  7000  8000      0.626          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  8000  9000      0.587          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  9000 10000      0.565          1</span>
 </code></pre></div>
     </div>
   </div>

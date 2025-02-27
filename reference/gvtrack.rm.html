@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.3.3</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.3.4</span>
       </span>
     </div>
 
@@ -57,7 +57,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Deletes a virtual track</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v4.3.3/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
     <div class="hidden name"><code>gvtrack.rm.Rd</code></div>
     </div>
 
@@ -97,12 +97,16 @@
 <span class="r-in"><span><span class="fu"><a href="gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"vtrack1"</span>, <span class="st">"dense_track"</span>, <span class="st">"max"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"vtrack2"</span>, <span class="st">"dense_track"</span>, <span class="st">"quantile"</span>, <span class="fl">0.5</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gvtrack.ls.html">gvtrack.ls</a></span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "vtrack1"         "vtrack2"         "vtrack3"         "vtrack4"        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [5] "cov"             "motif_score"     "max_motif_score" "max_motif_pos"  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  [1] "vtrack1"         "vtrack2"         "vtrack3"         "vtrack4"        </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  [5] "cov"             "motif_score"     "max_motif_score" "max_motif_pos"  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  [9] "cg_count"        "cg_frac"         "at_pos"          "at_neg"         </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [13] "at_both"         "g_frac"          "c_frac"         </span>
 <span class="r-in"><span><span class="fu">gvtrack.rm</span><span class="op">(</span><span class="st">"vtrack1"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gvtrack.ls.html">gvtrack.ls</a></span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "vtrack2"         "vtrack3"         "vtrack4"         "cov"            </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [5] "motif_score"     "max_motif_score" "max_motif_pos"  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  [1] "vtrack2"         "vtrack3"         "vtrack4"         "cov"            </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  [5] "motif_score"     "max_motif_score" "max_motif_pos"   "cg_count"       </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  [9] "cg_frac"         "at_pos"          "at_neg"          "at_both"        </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [13] "g_frac"          "c_frac"         </span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
