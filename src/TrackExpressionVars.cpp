@@ -1149,7 +1149,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC)	{
 			// Kmer counting doesn't require track data
 			if (ivar->kmer_counter)	{ 
-				ivar->var[idx] = ivar->kmer_counter->count_interval(m_interval1d, m_iu.get_chromkey());
+				ivar->var[idx] = ivar->kmer_counter->score_interval(m_interval1d, m_iu.get_chromkey());
 			} else{
 				ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
 			}
