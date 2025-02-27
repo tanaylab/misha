@@ -190,6 +190,11 @@ gextract(
     iterator = 500
 )
 
+# Kmer counting examples
+gvtrack.create("cg_count", NULL, "kmer.count", kmer = "CG")
+gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
+gextract(c("cg_count", "cg_frac"), gintervals(1, 0, 10000), iterator = 1000)
+
 }
 \seealso{
 \code{\link{gvtrack.info}}, \code{\link{gvtrack.iterator}},

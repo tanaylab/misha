@@ -550,7 +550,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 
 for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
     // Skip PWM variables since they don't have associated tracks
-    if (vars.is_pwm_variable(ivar)) {
+    if (vars.is_seq_variable(ivar)) {
         continue;
     }
     track_names.push_back(vars.get_track_name(ivar));
