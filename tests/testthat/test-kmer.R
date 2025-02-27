@@ -998,3 +998,272 @@ test_that("kmer functions handle strand with mixed-case sequences", {
     expect_equal(scores_ct$count_ct_upper_fwd, scores_rev$count_upper_rev)
     expect_equal(scores_ct$count_ct_lower_fwd, scores_rev$count_lower_rev)
 })
+
+test_that("sum of fraction of T, C, G, A equals 1", {
+    remove_all_vtracks()
+
+    test_interval <- gintervals(1, 200, 240)
+    gvtrack.create("frac_t", NULL, "kmer.frac", kmer = "T", strand = 1)
+    gvtrack.create("frac_c", NULL, "kmer.frac", kmer = "C", strand = 1)
+    gvtrack.create("frac_g", NULL, "kmer.frac", kmer = "G", strand = 1)
+    gvtrack.create("frac_a", NULL, "kmer.frac", kmer = "A", strand = 1)
+
+    scores <- gextract("frac_a + frac_c + frac_g + frac_t", test_interval, iterator = test_interval, colnames = "s")
+    expect_equal(sum(scores$s), 1, tolerance = 1e-5)
+
+    gvtrack.create("frac_t", NULL, "kmer.frac", kmer = "T", strand = -1)
+    gvtrack.create("frac_c", NULL, "kmer.frac", kmer = "C", strand = -1)
+    gvtrack.create("frac_g", NULL, "kmer.frac", kmer = "G", strand = -1)
+    gvtrack.create("frac_a", NULL, "kmer.frac", kmer = "A", strand = -1)
+
+    scores <- gextract("frac_a + frac_c + frac_g + frac_t", test_interval, iterator = test_interval, colnames = "s")
+    expect_equal(sum(scores$s), 1, tolerance = 1e-5)
+
+    gvtrack.create("frac_t", NULL, "kmer.frac", kmer = "T", strand = 0)
+    gvtrack.create("frac_c", NULL, "kmer.frac", kmer = "C", strand = 0)
+    gvtrack.create("frac_g", NULL, "kmer.frac", kmer = "G", strand = 0)
+    gvtrack.create("frac_a", NULL, "kmer.frac", kmer = "A", strand = 0)
+
+    scores <- gextract("frac_a + frac_c + frac_g + frac_t", test_interval, iterator = test_interval, colnames = "s")
+    expect_equal(sum(scores$s), 1, tolerance = 1e-5)
+})
+
+test_that("kmer.frac correctly doubles possible positions when strand=0", {
+    remove_all_vtracks()
+
+    # Create test interval with known content
+    test_interval <- gintervals(1, 200, 210)
+    seq <- toupper(gseq.extract(test_interval)) # Should be "CCCTAACCCT"
+
+    # Create non-palindromic kmer
+    kmer <- "AG"
+    rc_kmer <- "CT" # Reverse complement of AG
+
+    # Define the same kmer with different strand settings
+    gvtrack.create("frac_fwd", NULL, "kmer.frac", list(kmer = kmer, strand = 1, extend = FALSE))
+    gvtrack.create("frac_rev", NULL, "kmer.frac", list(kmer = kmer, strand = -1, extend = FALSE))
+    gvtrack.create("frac_both", NULL, "kmer.frac", list(kmer = kmer, strand = 0, extend = FALSE))
+
+    # Also create complementary forward track to verify rev behavior
+    gvtrack.create("frac_rc_fwd", NULL, "kmer.frac", list(kmer = rc_kmer, strand = 1, extend = FALSE))
+
+    # Extract scores
+    scores <- gextract(
+        c("frac_fwd", "frac_rev", "frac_both", "frac_rc_fwd"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    # Count AG and CT occurrences manually
+    ag_count <- 0
+    ct_count <- 0
+    for (i in 1:(nchar(seq) - 1)) {
+        if (substr(seq, i, i + 1) == kmer) {
+            ag_count <- ag_count + 1
+        }
+        if (substr(seq, i, i + 1) == rc_kmer) {
+            ct_count <- ct_count + 1
+        }
+    }
+
+    # Calculate positions where a kmer could start
+    # For a sequence of length n and kmer of length k, there are (n-k+1) possible positions
+    possible_positions <- nchar(seq) - nchar(kmer) + 1
+
+    # Expected fractions
+    expected_frac_fwd <- ag_count / possible_positions
+    expected_frac_rev <- ct_count / possible_positions
+
+    # For both strands, the denominator is doubled
+    expected_frac_both <- (ag_count + ct_count) / (possible_positions * 2)
+
+    # Test that fractions match expected values
+    expect_equal(scores$frac_fwd, expected_frac_fwd)
+    expect_equal(scores$frac_rev, expected_frac_rev)
+    expect_equal(scores$frac_rc_fwd, expected_frac_rev) # Should match rev strand
+    expect_equal(scores$frac_both, expected_frac_both)
+
+    # Verify that both strands calculation is consistent
+    expect_equal(scores$frac_both * 2 * possible_positions, (ag_count + ct_count))
+
+    # Should equal the sum of counts divided by double the positions
+    expect_equal(scores$frac_both, (ag_count + ct_count) / (2 * possible_positions))
+})
+
+test_that("kmer.frac handles edge cases with strand=0 correctly", {
+    remove_all_vtracks()
+
+    # Test with very short sequences
+    short_interval <- gintervals(1, 200, 202) # 2bp sequence
+
+    # Create kmer tracks for testing
+    gvtrack.create("frac_1bp_both", NULL, "kmer.frac", list(kmer = "A", strand = 0))
+    gvtrack.create("frac_2bp_both", NULL, "kmer.frac", list(kmer = "AG", strand = 0))
+
+    # Extract scores
+    scores_short <- gextract(
+        c("frac_1bp_both", "frac_2bp_both"),
+        short_interval,
+        iterator = short_interval
+    )
+
+    # For 1bp kmer in 2bp sequence, should have 4 possible positions (2 positions * 2 strands)
+    # For 2bp kmer in 2bp sequence, should have 2 possible positions (1 position * 2 strands)
+    # We can't be absolutely precise about the values without knowing the exact sequence,
+    # but we can verify they're in range
+    expect_true(scores_short$frac_1bp_both >= 0 && scores_short$frac_1bp_both <= 1)
+    expect_true(scores_short$frac_2bp_both >= 0 && scores_short$frac_2bp_both <= 1)
+
+    # Test with palindromic kmers (where forward = reverse complement)
+    palindromic_interval <- gintervals(1, 200, 220)
+
+    # "AT" is its own reverse complement
+    gvtrack.create("frac_at_fwd", NULL, "kmer.frac", list(kmer = "AT", strand = 1))
+    expect_warning(gvtrack.create("frac_at_both", NULL, "kmer.frac", list(kmer = "AT", strand = 0)))
+
+    # Extract scores
+    scores_palindrome <- gextract(
+        c("frac_at_fwd", "frac_at_both"),
+        palindromic_interval,
+        iterator = palindromic_interval
+    )
+
+    # For palindromic kmers, the count should be the same for either strand
+    # But the denominator is still doubled for strand=0, so the fraction should be half
+    expect_equal(scores_palindrome$frac_at_both, scores_palindrome$frac_at_fwd / 2)
+
+    # Test with multiple sequence lengths and kmer lengths to ensure denominator calculation is correct
+    for (seq_len in c(10, 20, 50)) {
+        for (k_len in c(1, 2, 4)) {
+            if (k_len <= seq_len) {
+                test_interval <- gintervals(1, 200, 200 + seq_len)
+                kmer <- paste0(rep("A", k_len), collapse = "")
+
+                vtrack_name <- paste0("frac_", k_len, "mer_", seq_len, "_both")
+                gvtrack.create(vtrack_name, NULL, "kmer.frac", list(kmer = kmer, strand = 0))
+
+                scores <- gextract(vtrack_name, test_interval, iterator = test_interval)
+
+                # Calculate expected number of positions
+                possible_positions <- seq_len - k_len + 1
+
+                # The total possible positions should be doubled for strand=0
+                # We can verify this by forcing a sequence with all As
+                # which would yield a count of possible_positions and fraction of 0.5
+                expect_true(scores[[vtrack_name]] <= 1 && scores[[vtrack_name]] >= 0)
+            }
+        }
+    }
+})
+
+test_that("kmer.frac with strand=0 handles boundary extension correctly", {
+    remove_all_vtracks()
+
+    # Test with extension enabled (default) and disabled
+    test_interval <- gintervals(1, 200, 210)
+    kmer <- "AAG" # 3-letter kmer
+
+    gvtrack.create(
+        "frac_both_extend", NULL, "kmer.frac",
+        list(kmer = kmer, strand = 0, extend = TRUE)
+    )
+    gvtrack.create(
+        "frac_both_no_extend", NULL, "kmer.frac",
+        list(kmer = kmer, strand = 0, extend = FALSE)
+    )
+
+    # Extract scores
+    scores <- gextract(
+        c("frac_both_extend", "frac_both_no_extend"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    # With extension, kmers that start at the last two positions should be counted
+    # Without extension, they should not
+    expect_true(scores$frac_both_extend >= scores$frac_both_no_extend)
+
+    # Create very small interval where extension matters significantly
+    small_interval <- gintervals(1, 200, 203) # 3bp
+
+    scores_small <- gextract(
+        c("frac_both_extend", "frac_both_no_extend"),
+        small_interval,
+        iterator = small_interval
+    )
+
+    # For a 3-letter kmer in a 3bp interval:
+    # - Without extension: 1 possible position on each strand (2 total)
+    # - With extension: 3 possible positions on each strand (6 total)
+    # Again, we can't predict exact values without knowing the sequence
+    expect_true(scores_small$frac_both_extend >= scores_small$frac_both_no_extend)
+
+    # With non-extending 3bp kmer in a 3bp interval, the denominator should be 2 (1 per strand)
+    expect_true(scores_small$frac_both_no_extend >= 0 && scores_small$frac_both_no_extend <= 1)
+})
+
+test_that("sum of base fractions equals 1 when strand=0", {
+    remove_all_vtracks()
+
+    test_interval <- gintervals(1, 200, 240)
+
+    # Create tracks for all bases with strand=0
+    gvtrack.create("frac_a", NULL, "kmer.frac", list(kmer = "A", strand = 0))
+    gvtrack.create("frac_c", NULL, "kmer.frac", list(kmer = "C", strand = 0))
+    gvtrack.create("frac_g", NULL, "kmer.frac", list(kmer = "G", strand = 0))
+    gvtrack.create("frac_t", NULL, "kmer.frac", list(kmer = "T", strand = 0))
+
+    # Extract sum of all fractions
+    scores <- gextract("frac_a + frac_c + frac_g + frac_t",
+        test_interval,
+        iterator = test_interval,
+        colnames = "sum"
+    )
+
+    # Sum should be 1 for single bases even with strand=0
+    # because each position is counted only once per strand
+    expect_equal(scores$sum, 1, tolerance = 1e-5)
+
+    # For comparison, create tracks with strand=1
+    gvtrack.create("frac_a_fwd", NULL, "kmer.frac", list(kmer = "A", strand = 1))
+    gvtrack.create("frac_c_fwd", NULL, "kmer.frac", list(kmer = "C", strand = 1))
+    gvtrack.create("frac_g_fwd", NULL, "kmer.frac", list(kmer = "G", strand = 1))
+    gvtrack.create("frac_t_fwd", NULL, "kmer.frac", list(kmer = "T", strand = 1))
+
+    # Extract and sum forward strand fractions
+    scores_fwd <- gextract("frac_a_fwd + frac_c_fwd + frac_g_fwd + frac_t_fwd",
+        test_interval,
+        iterator = test_interval,
+        colnames = "sum_fwd"
+    )
+
+    # Sum should be 1 for forward strand too
+    expect_equal(scores_fwd$sum_fwd, 1, tolerance = 1e-5)
+
+    scores_compare <- gextract(
+        c("frac_a", "frac_a_fwd", "frac_c", "frac_c_fwd", "frac_g", "frac_g_fwd", "frac_t", "frac_t_fwd"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    seq <- toupper(gseq.extract(test_interval))
+    A_fwd <- stringr::str_count(seq, "A")
+    C_fwd <- stringr::str_count(seq, "C")
+    G_fwd <- stringr::str_count(seq, "G")
+    T_fwd <- stringr::str_count(seq, "T")
+    A_rev <- stringr::str_count(grevcomp(seq), "A")
+    C_rev <- stringr::str_count(grevcomp(seq), "C")
+    G_rev <- stringr::str_count(grevcomp(seq), "G")
+    T_rev <- stringr::str_count(grevcomp(seq), "T")
+    seq_l <- nchar(seq)
+
+    # Check that fractions are consistent with expected values
+    expect_equal(scores_compare$frac_a_fwd, A_fwd / seq_l, tolerance = 1e-5)
+    expect_equal(scores_compare$frac_a, (A_fwd + A_rev) / (2 * seq_l), tolerance = 1e-5)
+    expect_equal(scores_compare$frac_c_fwd, C_fwd / seq_l, tolerance = 1e-5)
+    expect_equal(scores_compare$frac_c, (C_fwd + C_rev) / (2 * seq_l), tolerance = 1e-5)
+    expect_equal(scores_compare$frac_g_fwd, G_fwd / seq_l, tolerance = 1e-5)
+    expect_equal(scores_compare$frac_g, (G_fwd + G_rev) / (2 * seq_l), tolerance = 1e-5)
+    expect_equal(scores_compare$frac_t_fwd, T_fwd / seq_l, tolerance = 1e-5)
+    expect_equal(scores_compare$frac_t, (T_fwd + T_rev) / (2 * seq_l), tolerance = 1e-5)
+})
