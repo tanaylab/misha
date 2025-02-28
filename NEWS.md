@@ -1,3 +1,7 @@
+# misha 4.3.5 
+
+* Bug fix in "coverage" virtual track function: incorrect results on some cases when query intervals where from different chromosomes.
+
 # misha 4.3.4 
 
 * Added "kmer.count" and "kmer.frac" virtual track functions that calculate the number of k-mers and the fraction of k-mers in the current iterator interval.
