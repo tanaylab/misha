@@ -1,3 +1,7 @@
+# misha 4.3.6 
+
+* Fixed memory alignment issues in clang-UBSAN.    
+
 # misha 4.3.5 
 
 * Bug fix in "coverage" virtual track function: incorrect results on some cases when query intervals where from different chromosomes.
