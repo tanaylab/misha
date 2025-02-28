@@ -1984,7 +1984,7 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
 #' @keywords ~rbind
 #' @examples
 #' \dontshow{
-#' options(gmax.processes = 2)
+#' options(gmultitasking = FALSE)
 #' }
 #'
 #' gdb.init_examples()
