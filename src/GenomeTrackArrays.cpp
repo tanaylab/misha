@@ -438,7 +438,7 @@ float GenomeTrackArrays::get_sliced_val(uint64_t idx)
 			}
 
 			if (N <= 1) 
-				numeric_limits<float>::quiet_NaN();
+				return numeric_limits<float>::quiet_NaN();
 
 			double avg = sum / N;
 			return sqrt(mean_square_sum / (N - 1) - (avg * avg) * (N / (N - 1)));
