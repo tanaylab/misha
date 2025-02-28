@@ -151,17 +151,17 @@ genome sources.</p>
 <span class="r-in"><span>    <span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Downloading ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10/chromosomes/chrX.fa.gz</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Failed to download ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10/chromosomes/chrX.fa.gz</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Building Seq files...</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> chrX</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Downloading ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10/database/knownGene.txt.gz</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Downloading ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10/database/kgXref.txt.gz</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Database was successfully created</span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error:</span> No FASTA files were imported</span>
 <span class="r-in"><span><span class="fu"><a href="gdb.init.html">gdb.init</a></span><span class="op">(</span><span class="va">mm10_dir</span><span class="op">)</span></span></span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>path[1]="/tmp/RtmpvwqRIk/mm10": No such file or directory</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>cannot open file '/tmp/RtmpvwqRIk/mm10/chrom_sizes.txt': No such file or directory</span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in file(file, "rt"):</span> cannot open the connection</span>
 <span class="r-in"><span><span class="fu"><a href="gintervals.ls.html">gintervals.ls</a></span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "exons" "tss"   "utr3"  "utr5" </span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error:</span> Database root directory is not set. Please call gdb.init().</span>
 <span class="r-in"><span><span class="fu"><a href="gintervals.all.html">gintervals.all</a></span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start       end</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chrX     0 171031299</span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error:</span> Database root directory is not set. Please call gdb.init().</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
