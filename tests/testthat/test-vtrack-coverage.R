@@ -461,3 +461,183 @@ test_that("Coverage virtual track with numeric iterator respects interval bounda
     expected <- c(0, 1, 0, 0)
     expect_equal(res$boundary_cov, expected)
 })
+
+test_that("Coverage virtual track handles chromosome transitions correctly", {
+    # Test case 1:
+    # An interval on chr1 followed by interval on chr2, querying the chr2 interval
+    interv1 <- gintervals(2, 10, 20, 1)
+    interv2 <- rbind(gintervals(1, 50, 80, 1), interv1)
+
+    gvtrack.create("cov_bug", src = interv2, func = "coverage")
+    result <- gextract("cov_bug", intervals = interv1, iterator = interv1)
+
+    # Should be 1.0 (complete coverage) not 0
+    expect_equal(result$cov_bug, 1.0,
+        info = "Coverage should be 1.0 when querying an interval that exactly matches a source interval on chr2"
+    )
+
+    # Test case 2: Multiple intervals across multiple chromosomes with numeric iterator
+    # Testing behavior when crossing multiple chromosome boundaries
+    multi_chr_source <- rbind(
+        gintervals(1, 50, 150, 1),
+        gintervals(2, 10, 20, 1),
+        gintervals(3, 30, 40, 1)
+    )
+
+    query_intervals <- rbind(
+        gintervals(1, 0, 200, 1),
+        gintervals(2, 0, 30, 1),
+        gintervals(3, 0, 50, 1)
+    )
+
+    gvtrack.create("multi_chr_cov", src = multi_chr_source, func = "coverage")
+    result <- gextract("multi_chr_cov", intervals = query_intervals, iterator = 10)
+
+    # Calculate expected results with numeric iterator starting at beginning of each chromosome:
+    # Chr1: [0-10], [10-20], ...[190-200] = 20 bins, with bins [50-60]...[140-150] having coverage 1.0
+    # Chr2: [0-10], [10-20], [20-30] = 3 bins, with bin [10-20] having coverage 1.0
+    # Chr3: [0-10], [10-20], [20-30], [30-40], [40-50] = 5 bins, with bin [30-40] having coverage 1.0
+
+    chr1_expected <- numeric(20)
+    chr1_expected[6:15] <- 1.0 # Bins 50-150 have full coverage
+
+    chr2_expected <- c(0, 1, 0) # Only bin [10-20] has coverage
+
+    chr3_expected <- c(0, 0, 0, 1, 0) # Only bin [30-40] has coverage
+
+    expected <- c(chr1_expected, chr2_expected, chr3_expected)
+
+    expect_equal(result$multi_chr_cov, expected,
+        info = "Coverage with numeric iterator should correctly handle transitions across multiple chromosomes"
+    )
+
+    # Test case 3: Reversed chromosome order in source
+    # Testing behavior when source intervals are in reverse chromosome order
+    reverse_chr_source <- rbind(
+        gintervals(3, 30, 40, 1),
+        gintervals(2, 10, 20, 1),
+        gintervals(1, 50, 150, 1)
+    )
+
+    gvtrack.create("reverse_chr_cov", src = reverse_chr_source, func = "coverage")
+    result <- gextract("reverse_chr_cov", intervals = query_intervals, iterator = 10)
+
+    # Should produce identical results regardless of source interval order
+    expect_equal(result$reverse_chr_cov, expected,
+        info = "Coverage should work correctly regardless of chromosome ordering in source intervals"
+    )
+
+    # Test case 4: Back-and-forth chromosome transitions with interval iterator
+    # Create series of iterator intervals that jump between chromosomes
+    zigzag_intervals <- rbind(
+        gintervals(1, 50, 60, 1),
+        gintervals(2, 10, 20, 1),
+        gintervals(1, 100, 110, 1),
+        gintervals(2, 20, 30, 1)
+    )
+
+    gvtrack.create("zigzag_cov", src = multi_chr_source, func = "coverage")
+    result <- gextract("zigzag_cov", intervals = zigzag_intervals, iterator = zigzag_intervals)
+
+    # Expected results should be:
+    # Chr1 [50-60] = 1.0
+    # Chr2 [10-20] = 1.0
+    # Chr1 [100-110] = 1.0
+    # Chr2 [20-30] = 0.0
+    expected_zigzag <- c(1.0, 1.0, 1.0, 0.0)
+
+    expect_equal(result$zigzag_cov, expected_zigzag,
+        info = "Coverage should handle back-and-forth chromosome transitions correctly"
+    )
+
+    # Test case 5: Compare with distance function (which doesn't have the bug)
+    # This helps verify that both functions handle chromosome transitions similarly after the fix
+    gvtrack.create("dist_test", src = interv2, func = "distance")
+    gvtrack.create("cov_test", src = interv2, func = "coverage")
+
+    # Get both distance and coverage for same interval
+    result_dist <- gextract("dist_test", intervals = interv1, iterator = interv1)
+    result_cov <- gextract("cov_test", intervals = interv1, iterator = interv1)
+
+    # Distance should be 0 (interval is exactly matched)
+    # Coverage should be 1.0 (complete coverage)
+    expect_equal(result_dist$dist_test, 0,
+        info = "Distance should be 0 for exact interval match"
+    )
+    expect_equal(result_cov$cov_test, 1.0,
+        info = "Coverage should be 1.0 for exact interval match"
+    )
+
+    # Test case 6: Handling non-aligned numeric iterator
+    # Test intervals that don't align with the numeric iterator boundaries
+    nonaligned_source <- gintervals(1, 15, 35, 1)
+    nonaligned_query <- gintervals(1, 0, 50, 1)
+
+    gvtrack.create("nonaligned_cov", src = nonaligned_source, func = "coverage")
+    result <- gextract("nonaligned_cov", intervals = nonaligned_query, iterator = 10)
+
+    # Expected results:
+    # [0-10]: 0.0
+    # [10-20]: 0.5 (15-20 covered = 5/10)
+    # [20-30]: 1.0
+    # [30-40]: 0.5 (30-35 covered = 5/10)
+    # [40-50]: 0.0
+    expected_nonaligned <- c(0.0, 0.5, 1.0, 0.5, 0.0)
+
+    expect_equal(result$nonaligned_cov, expected_nonaligned,
+        info = "Coverage should handle non-aligned numeric iterator boundaries correctly"
+    )
+
+    # Test case 7: Empty chromosomes in between
+    # Tests behavior when there are chromosomes with no intervals
+    sparse_source <- rbind(
+        gintervals(1, 10, 20, 1),
+        gintervals(5, 10, 20, 1) # Skip chr 2,3,4
+    )
+
+    sparse_query <- rbind(
+        gintervals(1, 0, 30, 1),
+        gintervals(2, 0, 30, 1), # No intervals here
+        gintervals(5, 0, 30, 1)
+    )
+
+    gvtrack.create("sparse_cov", src = sparse_source, func = "coverage")
+    result <- gextract("sparse_cov", intervals = sparse_query, iterator = 10)
+
+    # Expected:
+    # Chr1 [0-10], [10-20], [20-30] = 0, 1, 0
+    # Chr2 [0-10], [10-20], [20-30] = 0, 0, 0
+    # Chr5 [0-10], [10-20], [20-30] = 0, 1, 0
+    expected_sparse <- c(0, 1, 0, 0, 0, 0, 0, 1, 0)
+
+    expect_equal(result$sparse_cov, expected_sparse,
+        info = "Coverage should handle skipped/empty chromosomes correctly"
+    )
+
+    # Test case 8: Partial query windows with explicit iterator
+    # Testing behavior with specific iterator windows
+    partial_source <- rbind(
+        gintervals(1, 50, 60, 1),
+        gintervals(2, 10, 20, 1)
+    )
+
+    # Create explicit iterator intervals to get precisely the windows we want
+    explicit_iterator <- rbind(
+        gintervals(1, 45, 55, 1),
+        gintervals(1, 55, 65, 1),
+        gintervals(2, 15, 25, 1)
+    )
+
+    gvtrack.create("partial_cov", src = partial_source, func = "coverage")
+    result <- gextract("partial_cov", intervals = explicit_iterator, iterator = explicit_iterator)
+
+    # Expected:
+    # Chr1 [45-55] = 0.5 (50-55 covered = 5/10)
+    # Chr1 [55-65] = 0.5 (55-60 covered = 5/10)
+    # Chr2 [15-25] = 0.5 (15-20 covered = 5/10)
+    expected_partial <- c(0.5, 0.5, 0.5)
+
+    expect_equal(result$partial_cov, expected_partial,
+        info = "Coverage should handle partial query windows correctly"
+    )
+})

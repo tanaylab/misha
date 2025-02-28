@@ -1385,6 +1385,11 @@ void TrackExpressionVars::set_vars(unsigned idx)
 			{
 				// For sequential access, start from last position
 				iinterv = ivar->siinterv;
+
+				// Skip past intervals from previous chromosomes
+				while (iinterv != ivar->sintervs.end() && iinterv->chromid < interval.chromid)
+					++iinterv;
+
 				// But check if we need to back up
 				while (iinterv != ivar->sintervs.begin() &&
 					   (iinterv - 1)->chromid == interval.chromid &&
