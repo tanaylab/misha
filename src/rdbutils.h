@@ -9,6 +9,33 @@
 #ifndef RDBUTILS_H_
 #define RDBUTILS_H_
 
+#if defined(__APPLE__)
+#include <sys/time.h>
+#include <mach/mach_time.h>
+#include <mach/clock.h>
+#include <mach/mach.h>
+
+// Define clock identifiers for macOS if not already defined
+#ifndef CLOCK_REALTIME
+#define CLOCK_REALTIME 0
+#endif
+
+// Implement clock_gettime for macOS if needed (pre-Sierra 10.12)
+#if !defined(HAVE_CLOCK_GETTIME)
+static int clock_gettime(int clk_id, struct timespec *t)
+{
+	struct timeval tv;
+	if (gettimeofday(&tv, NULL) < 0)
+	{
+		return -1;
+	}
+	t->tv_sec = tv.tv_sec;
+	t->tv_nsec = tv.tv_usec * 1000;
+	return 0;
+}
+#endif
+#endif
+
 #include <cstdint>
 #include <string>
 #include <vector>
