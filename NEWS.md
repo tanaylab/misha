@@ -1,3 +1,7 @@
+# misha (development version)
+
+* Fixed compilation error in old versions of macOS (`clock_gettime` is missing).
+
 # misha 4.3.6 
 
 * Fixed memory alignment issues in clang-UBSAN.    
