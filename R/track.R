@@ -530,7 +530,8 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 
                 file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
                 file.unzipped <- paste(tmp.dirname, "/", file.noext, sep = "")
-                if (system(paste("/bin/sh -c \"gunzip -q -c", file, ">", file.unzipped, "\""))) {
+                retv <- system(paste("/bin/sh -c \"gunzip -q -c", file, ">", file.unzipped, "\""), intern = FALSE)
+                if (retv != 0) {
                     stop(sprintf("Failed to unzip file %s", file), call. = FALSE)
                 }
                 file <- file.unzipped
@@ -550,8 +551,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 
                 file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
                 file.converted <- paste(tmp.dirname, "/", file.noext, ".wig", sep = "")
-                if (system(paste(get_bigWigToWig_bin(), file, file.converted))) {
-                    stop("Command failed", call. = FALSE)
+                retv <- system(paste(get_bigWigToWig_bin(), file, file.converted), intern = FALSE)
+                if (retv != 0) {
+                    stop("BigWigToWig conversion failed", call. = FALSE)
                 }
                 file <- file.converted
             }

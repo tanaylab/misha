@@ -1,6 +1,7 @@
 # misha (development version)
 
 * Fixed compilation error in old versions of macOS (`clock_gettime` is missing).
+* Fixed a bug in `gtrack.import_bigwig`: `intern` argument was not passed to `system` calls.
 
 # misha 4.3.6 
 
