@@ -59,6 +59,7 @@ extern "C" {
     extern SEXP gtrackconvert(SEXP, SEXP, SEXP);
     extern SEXP gtrack_create_meta(SEXP, SEXP);
     extern SEXP gtrackcreate_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrack_create_dense(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_create_sparse(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_create_track2d(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackcreate(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -130,6 +131,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrackconvert", (DL_FUNC)&gtrackconvert, 3},
     {"gtrack_create_meta", (DL_FUNC)&gtrack_create_meta, 2},
     {"gtrackcreate_multitask", (DL_FUNC)&gtrackcreate_multitask, 5},
+    {"gtrack_create_dense", (DL_FUNC)&gtrack_create_dense, 5},
     {"gtrack_create_sparse", (DL_FUNC)&gtrack_create_sparse, 4},
     {"gtrack_create_track2d", (DL_FUNC)&gtrack_create_track2d, 4},
     {"gtrackcreate", (DL_FUNC)&gtrackcreate, 5},
