@@ -394,8 +394,6 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
-    valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
 
     direxisted <- file.exists(trackdir)
@@ -410,7 +408,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
         {
             .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env(), silent = TRUE)
             .gdb.add_track(trackstr)
-            .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), TRUE)
+            .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, intervals, values)", trackstr), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
@@ -1380,5 +1378,107 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
             }
         }
     )
+    retv <- 0 # suppress return value
+}
+
+
+#' Creates a 'Dense' track from intervals and values
+#'
+#' Creates a 'Dense' track from intervals and values.
+#'
+#' This function creates a new 'Dense' track with values at given intervals.
+#' 'description' is added as a track attribute.
+#'
+#' @param track track name
+#' @param description a character string description
+#' @param intervals a set of one-dimensional intervals
+#' @param values an array of numeric values - one for each interval
+#' @param binsize bin size of the newly created 'Dense' track
+#' @param defval default track value for genomic regions not covered by the intervals
+#' @return None.
+#' @seealso \code{\link{gtrack.create_sparse}}, \code{\link{gtrack.import}},
+#' \code{\link{gtrack.modify}}, \code{\link{gtrack.rm}},
+#' \code{\link{gtrack.info}}
+#' @keywords ~create ~dense ~track
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' intervs <- gintervals.load("annotations")
+#' gtrack.create_dense(
+#'     "test_dense", "Test dense track", intervs,
+#'     1:dim(intervs)[1], 50, 0
+#' )
+#' gextract("test_dense", .misha$ALLGENOME)
+#' gtrack.rm("test_dense", force = TRUE)
+#'
+#' @export gtrack.create_dense
+gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NULL, values = NULL,
+                                binsize = NULL, defval = NaN) {
+    if (is.null(substitute(track)) || is.null(description) || is.null(intervals) || is.null(values) || is.null(binsize)) {
+        stop("Usage: gtrack.create_dense(track, description, intervals, values, binsize, defval = NaN)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
+    trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
+    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+
+    direxisted <- file.exists(trackdir)
+
+    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
+        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
+    }
+
+    # Create a data frame from intervals and values
+    if (length(values) != nrow(intervals)) {
+        stop("Length of values must match the number of intervals", call. = FALSE)
+    }
+
+    intervalData <- data.frame(
+        chrom = as.character(intervals$chrom),
+        start = as.numeric(intervals$start),
+        end = as.numeric(intervals$end),
+        value = as.numeric(values)
+    )
+
+    .gconfirmtrackcreate(trackstr)
+    success <- FALSE
+
+    tryCatch(
+        {
+            # Call the C++ function with the data frame
+            .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env(), silent = TRUE)
+
+            # Add the track to the database
+            .gdb.add_track(trackstr)
+
+            # Set track attributes
+            .gtrack.attr.set(
+                trackstr, "created.by",
+                sprintf("gtrack.create_dense(%s, description, intervals, values, %d, %g)", trackstr, binsize, defval), TRUE
+            )
+            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "description", description, TRUE)
+
+            # Set the track type to "dense"
+            .gtrack.attr.set(trackstr, "type", "dense", TRUE)
+
+            # Set the binsize attribute which is required for the tests
+            .gtrack.attr.set(trackstr, "binsize", binsize, TRUE)
+
+            success <- TRUE
+        },
+        finally = {
+            if (!success && !direxisted) {
+                unlink(trackdir, recursive = TRUE)
+                .gdb.rm_track(trackstr)
+            }
+        }
+    )
+
     retv <- 0 # suppress return value
 }
