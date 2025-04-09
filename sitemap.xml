@@ -76,6 +76,7 @@
 <url><loc>/reference/gtrack.attr.set.html</loc></url>
 <url><loc>/reference/gtrack.convert.html</loc></url>
 <url><loc>/reference/gtrack.create.html</loc></url>
+<url><loc>/reference/gtrack.create_dense.html</loc></url>
 <url><loc>/reference/gtrack.create_dirs.html</loc></url>
 <url><loc>/reference/gtrack.create_pwm_energy.html</loc></url>
 <url><loc>/reference/gtrack.create_sparse.html</loc></url>
