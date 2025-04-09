@@ -1,4 +1,4 @@
-# misha (development version)
+# misha 4.3.7
 
 * Added `gtrack.create_dense` function - creates a dense track from an intervals and values.
 * Fixed compilation error in old versions of macOS (`clock_gettime` is missing).
