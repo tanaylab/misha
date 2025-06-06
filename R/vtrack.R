@@ -475,6 +475,10 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
             stop("kmer parameter must be a single string")
         }
 
+        if (nchar(kmer_params$kmer) == 0) {
+            stop("kmer sequence cannot be empty")
+        }
+
         # Set defaults
         kmer_params$extend <- if (!is.null(kmer_params$extend)) kmer_params$extend else TRUE
         kmer_params$window <- if (!is.null(kmer_params$window)) kmer_params$window else "hann"
