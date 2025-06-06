@@ -155,6 +155,27 @@ For kmer functions:
 Kmer parameters are accepted as list or individual parameters (see examples).
 Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avoid double counting.
 
+\emph{func = "kmer.fft", params = list(kmer = "CG", freq = 10.2, extend = TRUE, window = "hann")} \cr
+Performs FFT analysis on kmer occurrence signal and returns the power at the specified frequency.
+The frequency is specified in cycles per base. The extend parameter allows kmers spanning interval
+boundaries. Window functions reduce spectral leakage.
+
+\emph{func = "kmer.fft.peak", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
+Returns the dominant frequency (in cycles per base) from FFT analysis of kmer occurrences.
+Useful for detecting periodic patterns in kmer distribution.
+
+\emph{func = "kmer.fft.peak.power", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
+Returns the power at the dominant frequency from FFT analysis of kmer occurrences.
+Indicates the strength of the most prominent periodic pattern.
+
+For kmer FFT functions:
+\itemize{
+  \item kmer: The DNA sequence to analyze (case-insensitive)
+  \item freq: The frequency to evaluate in cycles per base (only for kmer.fft)
+  \item extend: If TRUE, allows kmers spanning interval boundaries (default: TRUE)
+  \item window: Window function to apply ("none", "hann", "hamming", "blackman", default: "hann")
+}
+
 Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 }
 \examples{
@@ -228,6 +249,21 @@ gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
 gextract("g_frac + c_frac", gintervals(1, 0, 10000),
     iterator = 1000,
     colnames = "gc_content"
+)
+
+# FFT analysis examples
+gvtrack.create("cg_fft", NULL, "kmer.fft",
+    params = list(kmer = "CG", freq = 0.1, extend = TRUE)
+)
+gvtrack.create("cg_peak_freq", NULL, "kmer.fft.peak",
+    params = list(kmer = "CG", extend = TRUE)
+)
+gvtrack.create("cg_peak_power", NULL, "kmer.fft.peak.power",
+    params = list(kmer = "CG", extend = TRUE)
+)
+gextract(c("cg_fft", "cg_peak_freq", "cg_peak_power"),
+    gintervals(1, 0, 10000),
+    iterator = 1000
 )
 }
 \seealso{

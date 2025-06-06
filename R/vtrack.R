@@ -225,6 +225,27 @@
 #' Kmer parameters are accepted as list or individual parameters (see examples).
 #' Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avoid double counting.
 #'
+#' \emph{func = "kmer.fft", params = list(kmer = "CG", freq = 10.2, extend = TRUE, window = "hann")} \cr
+#' Performs FFT analysis on kmer occurrence signal and returns the power at the specified frequency.
+#' The frequency is specified in cycles per base. The extend parameter allows kmers spanning interval
+#' boundaries. Window functions reduce spectral leakage.
+#'
+#' \emph{func = "kmer.fft.peak", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
+#' Returns the dominant frequency (in cycles per base) from FFT analysis of kmer occurrences.
+#' Useful for detecting periodic patterns in kmer distribution.
+#'
+#' \emph{func = "kmer.fft.peak.power", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
+#' Returns the power at the dominant frequency from FFT analysis of kmer occurrences.
+#' Indicates the strength of the most prominent periodic pattern.
+#'
+#' For kmer FFT functions:
+#' \itemize{
+#'   \item kmer: The DNA sequence to analyze (case-insensitive)
+#'   \item freq: The frequency to evaluate in cycles per base (only for kmer.fft)
+#'   \item extend: If TRUE, allows kmers spanning interval boundaries (default: TRUE)
+#'   \item window: Window function to apply ("none", "hann", "hamming", "blackman", default: "hann")
+#' }
+#'
 #' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 #'
 #' @param vtrack virtual track name
@@ -309,12 +330,27 @@
 #'     iterator = 1000,
 #'     colnames = "gc_content"
 #' )
+#'
+#' # FFT analysis examples
+#' gvtrack.create("cg_fft", NULL, "kmer.fft",
+#'     params = list(kmer = "CG", freq = 0.1, extend = TRUE)
+#' )
+#' gvtrack.create("cg_peak_freq", NULL, "kmer.fft.peak",
+#'     params = list(kmer = "CG", extend = TRUE)
+#' )
+#' gvtrack.create("cg_peak_power", NULL, "kmer.fft.peak.power",
+#'     params = list(kmer = "CG", extend = TRUE)
+#' )
+#' gextract(c("cg_fft", "cg_peak_freq", "cg_peak_power"),
+#'     gintervals(1, 0, 10000),
+#'     iterator = 1000
+#' )
 #' @export gvtrack.create
 gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...) {
     if (is.null(substitute(vtrack))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
-    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac"))) {
+    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac", "kmer.fft", "kmer.fft.peak", "kmer.fft.peak.power"))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
 
@@ -416,6 +452,47 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 
         if (kmer_params$kmer == grevcomp(kmer_params$kmer) && kmer_params$strand == 0) {
             warning(paste0("kmer sequence '", kmer_params$kmer, "' is palindromic, please set strand to 1 or -1 to avoid double counting"))
+        }
+
+        params <- kmer_params
+    } else if (!is.null(func) && func %in% c("kmer.fft", "kmer.fft.peak", "kmer.fft.peak.power")) {
+        dots <- list(...)
+
+        if (!is.null(params)) {
+            if (!is.list(params) || !("kmer" %in% names(params))) {
+                stop("FFT functions require a list with at least 'kmer' parameter")
+            }
+            kmer_params <- params
+        } else if ("kmer" %in% names(dots)) {
+            kmer_params <- dots
+        } else {
+            stop("FFT functions require a 'kmer' parameter")
+        }
+
+        # Validate kmer
+        if (!is.character(kmer_params$kmer) || length(kmer_params$kmer) != 1) {
+            stop("kmer parameter must be a single string")
+        }
+
+        # Set defaults
+        kmer_params$extend <- if (!is.null(kmer_params$extend)) kmer_params$extend else TRUE
+        kmer_params$window <- if (!is.null(kmer_params$window)) kmer_params$window else "hann"
+
+        # Validate freq for kmer.fft
+        if (func == "kmer.fft") {
+            if (is.null(kmer_params$freq) || !is.numeric(kmer_params$freq) || length(kmer_params$freq) != 1) {
+                stop("kmer.fft requires a numeric 'freq' parameter")
+            }
+        }
+
+        # Validate window parameter
+        if (!is.null(kmer_params$window)) {
+            if (!is.character(kmer_params$window) || length(kmer_params$window) != 1) {
+                stop("window parameter must be a single string")
+            }
+            if (!(kmer_params$window %in% c("none", "hann", "hamming", "blackman"))) {
+                stop("window parameter must be one of: 'none', 'hann', 'hamming', 'blackman'")
+            }
         }
 
         params <- kmer_params

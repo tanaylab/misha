@@ -28,6 +28,7 @@
 #include "TrackExpressionIteratorBase.h"
 #include "PWMScorer.h"
 #include "KmerCounter.h"
+#include "KmerFFT.h"
 #include "rdbinterval.h"
 #include "rdbutils.h"
 
@@ -106,7 +107,10 @@ public:
             PWM_MAX,
             PWM_MAX_POS,
             KMER_COUNT,
-            KMER_FRAC, 
+            KMER_FRAC,
+            KMER_FFT,
+            KMER_FFT_PEAK,
+            KMER_FFT_PEAK_POWER,
             NUM_FUNCS
         };
 
@@ -122,6 +126,7 @@ public:
         Track_n_imdf       *track_n_imdf;
         std::unique_ptr<PWMScorer> pwm_scorer;
         std::unique_ptr<KmerCounter> kmer_counter;
+        std::unique_ptr<KmerFFT> kmer_fft;
         char strand;
     };
 
@@ -263,7 +268,10 @@ inline bool TrackExpressionVars::is_seq_variable(unsigned ivar) const {
            m_track_vars[ivar].val_func == Track_var::PWM_MAX ||
            m_track_vars[ivar].val_func == Track_var::PWM_MAX_POS ||
            m_track_vars[ivar].val_func == Track_var::KMER_COUNT ||
-           m_track_vars[ivar].val_func == Track_var::KMER_FRAC;
+           m_track_vars[ivar].val_func == Track_var::KMER_FRAC ||
+           m_track_vars[ivar].val_func == Track_var::KMER_FFT ||
+           m_track_vars[ivar].val_func == Track_var::KMER_FFT_PEAK ||
+           m_track_vars[ivar].val_func == Track_var::KMER_FFT_PEAK_POWER;
 }
 
 #endif /* TRACKEXPRESSIONVARS_H_ */
