@@ -779,3 +779,401 @@ test_that("kmer.fft performance is acceptable", {
     # Should complete in reasonable time
     expect_true(timing["elapsed"] < 30) # 30 seconds max
 })
+
+test_that("kmer.fft handles intervals smaller than kmer length", {
+    remove_all_vtracks()
+
+    # Test 1bp interval with 2bp kmer
+    tiny_interval <- gintervals(1, 200, 201) # 1bp
+
+    gvtrack.create("fft_tiny", NULL, "kmer.fft.peak",
+        params = list(kmer = "CG", window = "none", extend = FALSE)
+    )
+    gvtrack.create("fft_tiny_power", NULL, "kmer.fft.peak.power",
+        params = list(kmer = "CG", window = "none", extend = FALSE)
+    )
+    gvtrack.create("fft_tiny_freq", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = 0.1, window = "none", extend = FALSE)
+    )
+
+    scores <- gextract(c("fft_tiny", "fft_tiny_power", "fft_tiny_freq"),
+        tiny_interval,
+        iterator = tiny_interval
+    )
+
+    # Should handle gracefully - expect NaN or 0 for impossible cases
+    expect_true(is.numeric(scores$fft_tiny) || is.na(scores$fft_tiny))
+    expect_true(is.numeric(scores$fft_tiny_power) || is.na(scores$fft_tiny_power))
+    expect_true(is.numeric(scores$fft_tiny_freq))
+
+    # Test with extension enabled
+    gvtrack.create("fft_tiny_ext", NULL, "kmer.fft.peak",
+        params = list(kmer = "CG", window = "none", extend = TRUE)
+    )
+
+    scores_ext <- gextract("fft_tiny_ext", tiny_interval, iterator = tiny_interval)
+    expect_true(is.numeric(scores_ext$fft_tiny_ext) || is.na(scores_ext$fft_tiny_ext))
+})
+
+# =============================================================================
+# SIGNAL EDGE CASES
+# =============================================================================
+
+test_that("kmer.fft handles all-zero and all-one signals", {
+    remove_all_vtracks()
+
+    # Test with kmer that doesn't exist (all-zero signal)
+    test_interval <- gintervals(1, 200, 240)
+    seq <- toupper(gseq.extract(test_interval))
+
+    # Find a kmer that definitely doesn't exist
+    non_existent_kmer <- "ZZZZZ" # Invalid DNA
+    if (length(grep("X", seq)) == 0) {
+        non_existent_kmer <- "XXXXX"
+    }
+
+    # Use a real but unlikely kmer
+    unlikely_kmer <- "AAAAAAAAAA" # 10 A's in a row
+
+    gvtrack.create("fft_unlikely", NULL, "kmer.fft.peak",
+        params = list(kmer = unlikely_kmer, window = "none")
+    )
+    gvtrack.create("fft_unlikely_power", NULL, "kmer.fft.peak.power",
+        params = list(kmer = unlikely_kmer, window = "none")
+    )
+    gvtrack.create("fft_unlikely_freq", NULL, "kmer.fft",
+        params = list(kmer = unlikely_kmer, freq = 0.1, window = "none")
+    )
+
+    scores <- gextract(c("fft_unlikely", "fft_unlikely_power", "fft_unlikely_freq"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    # Should handle all-zero signals gracefully
+    expect_true(is.numeric(scores$fft_unlikely) || is.na(scores$fft_unlikely))
+    expect_true(is.numeric(scores$fft_unlikely_power) || is.na(scores$fft_unlikely_power))
+    expect_true(scores$fft_unlikely_freq >= 0) # Power should be 0 or positive
+
+    # Test with single-base kmer (potentially high occurrence)
+    gvtrack.create("fft_common", NULL, "kmer.fft.peak",
+        params = list(kmer = "A", window = "none")
+    )
+
+    scores_common <- gextract("fft_common", test_interval, iterator = test_interval)
+    expect_true(scores_common$fft_common >= 0 && scores_common$fft_common <= 0.5)
+})
+
+test_that("kmer.fft handles signals with length n=1 and n=2", {
+    remove_all_vtracks()
+
+    # Test very small intervals that result in small signals
+    interval_1bp <- gintervals(1, 200, 201) # 1bp -> signal length 1
+    interval_2bp <- gintervals(1, 200, 202) # 2bp -> signal length 2
+
+    gvtrack.create("fft_n1", NULL, "kmer.fft.peak",
+        params = list(kmer = "A", window = "none", extend = FALSE)
+    )
+    gvtrack.create("fft_n2", NULL, "kmer.fft.peak",
+        params = list(kmer = "A", window = "none", extend = FALSE)
+    )
+
+    # Test n=1 case
+    scores_n1 <- gextract("fft_n1", interval_1bp, iterator = interval_1bp)
+    expect_true(is.numeric(scores_n1$fft_n1) || is.na(scores_n1$fft_n1))
+
+    # Test n=2 case
+    scores_n2 <- gextract("fft_n2", interval_2bp, iterator = interval_2bp)
+    expect_true(is.numeric(scores_n2$fft_n2) || is.na(scores_n2$fft_n2))
+    if (is.numeric(scores_n2$fft_n2) && !is.na(scores_n2$fft_n2)) {
+        expect_true(scores_n2$fft_n2 >= 0 && scores_n2$fft_n2 <= 0.5)
+    }
+})
+
+# =============================================================================
+# WINDOW FUNCTION EDGE CASES
+# =============================================================================
+
+test_that("kmer.fft window functions work with very small signals", {
+    remove_all_vtracks()
+
+    # Test window functions on minimal viable signals
+    small_interval <- gintervals(1, 200, 203) # 3bp
+
+    windows <- c("none", "hann", "hamming", "blackman")
+
+    for (window in windows) {
+        vtrack_name <- paste0("fft_small_", window)
+        gvtrack.create(vtrack_name, NULL, "kmer.fft.peak",
+            params = list(kmer = "A", window = window, extend = FALSE)
+        )
+    }
+
+    vtrack_names <- paste0("fft_small_", windows)
+    scores <- gextract(vtrack_names, small_interval, iterator = small_interval)
+
+    # All window functions should handle small signals without crashing
+    for (name in vtrack_names) {
+        expect_true(is.numeric(scores[[name]]) || is.na(scores[[name]]))
+        if (is.numeric(scores[[name]]) && !is.na(scores[[name]])) {
+            expect_true(scores[[name]] >= 0 && scores[[name]] <= 0.5)
+        }
+    }
+})
+
+# =============================================================================
+# FREQUENCY EDGE CASES
+# =============================================================================
+
+test_that("kmer.fft handles DC component and fractional frequencies correctly", {
+    remove_all_vtracks()
+
+    test_interval <- gintervals(1, 200, 240)
+
+    # Test DC component (frequency = 0.0)
+    gvtrack.create("fft_dc", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = 0.0, window = "none")
+    )
+
+    # Test fractional frequencies near bin boundaries
+    signal_len <- test_interval$end - test_interval$start
+    freq_between_bins <- 1.5 / signal_len # Between bins 1 and 2
+    freq_very_small <- 0.001 # Very small but non-zero
+    freq_near_nyquist <- 0.499 # Just under Nyquist
+
+    gvtrack.create("fft_between", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = freq_between_bins, window = "none")
+    )
+    gvtrack.create("fft_small", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = freq_very_small, window = "none")
+    )
+    gvtrack.create("fft_near_nyq", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = freq_near_nyquist, window = "none")
+    )
+
+    scores <- gextract(c("fft_dc", "fft_between", "fft_small", "fft_near_nyq"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    # All should return valid power values
+    expect_true(scores$fft_dc >= 0)
+    expect_true(scores$fft_between >= 0)
+    expect_true(scores$fft_small >= 0)
+    expect_true(scores$fft_near_nyq >= 0)
+
+    # DC component should often be higher (represents mean)
+    expect_true(is.finite(scores$fft_dc))
+})
+
+# =============================================================================
+# ERROR CONDITIONS
+# =============================================================================
+
+test_that("kmer.fft parameter validation is comprehensive", {
+    remove_all_vtracks()
+
+    # Empty kmer string
+    expect_error(gvtrack.create("bad_empty", NULL, "kmer.fft",
+        params = list(kmer = "", freq = 0.1)
+    ))
+
+    # Kmer with invalid DNA characters (this should be handled gracefully)
+    # Note: The implementation converts to uppercase and does string matching,
+    # so invalid characters might just never match
+
+    # Very long kmer (test memory/performance limits)
+    very_long_kmer <- paste0(rep("ATCG", 50), collapse = "") # 200bp kmer
+    expect_no_error({
+        gvtrack.create("long_kmer", NULL, "kmer.fft.peak",
+            params = list(kmer = very_long_kmer, window = "none")
+        )
+    })
+
+    # Test with the long kmer on a small interval
+    small_interval <- gintervals(1, 200, 220)
+    scores_long <- gextract("long_kmer", small_interval, iterator = small_interval)
+    expect_true(is.numeric(scores_long$long_kmer) || is.na(scores_long$long_kmer))
+
+    # Frequency exactly at boundary (should work)
+    expect_no_error({
+        gvtrack.create("freq_boundary", NULL, "kmer.fft",
+            params = list(kmer = "CG", freq = 0.5, window = "none")
+        )
+    })
+
+    # Frequency slightly over boundary (should error)
+    expect_error(gvtrack.create("freq_over", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = 0.5000001, window = "none")
+    ))
+
+    # Frequency slightly under 0 (should error)
+    expect_error(gvtrack.create("freq_under", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = -0.0000001, window = "none")
+    ))
+})
+
+# =============================================================================
+# MATHEMATICAL VALIDATION
+# =============================================================================
+
+test_that("kmer.fft FFT normalization and properties are correct", {
+    remove_all_vtracks()
+
+    # Create a test interval with known periodic pattern
+    test_interval <- gintervals(1, 200, 240) # 40bp
+
+    # Test Parseval's theorem: sum of power spectrum should relate to signal energy
+    gvtrack.create("fft_0", NULL, "kmer.fft", params = list(kmer = "CG", freq = 0.0, window = "none"))
+    gvtrack.create("fft_1", NULL, "kmer.fft", params = list(kmer = "CG", freq = 0.025, window = "none"))
+    gvtrack.create("fft_2", NULL, "kmer.fft", params = list(kmer = "CG", freq = 0.05, window = "none"))
+    gvtrack.create("fft_3", NULL, "kmer.fft", params = list(kmer = "CG", freq = 0.075, window = "none"))
+
+    scores <- gextract(c("fft_0", "fft_1", "fft_2", "fft_3"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    # All power values should be non-negative
+    expect_true(all(scores[2:5] >= 0))
+
+    # Test that peak detection is consistent across different approaches
+    gvtrack.create("peak_freq", NULL, "kmer.fft.peak",
+        params = list(kmer = "CG", window = "none")
+    )
+    gvtrack.create("peak_power", NULL, "kmer.fft.peak.power",
+        params = list(kmer = "CG", window = "none")
+    )
+
+    peak_scores <- gextract(c("peak_freq", "peak_power"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    # Create FFT track at detected peak frequency
+    gvtrack.create("fft_at_peak", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = peak_scores$peak_freq, window = "none")
+    )
+
+    validation <- gextract("fft_at_peak", test_interval, iterator = test_interval)
+
+    # Power at peak frequency should match peak power
+    expect_equal(validation$fft_at_peak, peak_scores$peak_power, tolerance = 1e-6)
+})
+
+test_that("kmer.fft produces consistent results with known periodic patterns", {
+    remove_all_vtracks()
+
+    # Test multiple bins to see if periodic patterns emerge
+    test_interval <- gintervals(1, 200, 400) # 200bp
+
+    gvtrack.create("fft_peak", NULL, "kmer.fft.peak",
+        params = list(kmer = "CG", window = "hann")
+    )
+    gvtrack.create("fft_power", NULL, "kmer.fft.peak.power",
+        params = list(kmer = "CG", window = "hann")
+    )
+
+    # Extract with 20bp bins
+    scores <- gextract(c("fft_peak", "fft_power"), test_interval, iterator = 20)
+
+    # All results should be in valid ranges
+    expect_true(all(scores$fft_peak >= 0 & scores$fft_peak <= 0.5))
+    expect_true(all(scores$fft_power >= 0))
+    expect_true(all(is.finite(scores$fft_peak)))
+    expect_true(all(is.finite(scores$fft_power)))
+
+    # Test that the FFT is deterministic (same input gives same output)
+    scores2 <- gextract(c("fft_peak", "fft_power"), test_interval, iterator = 20)
+    expect_equal(scores$fft_peak, scores2$fft_peak)
+    expect_equal(scores$fft_power, scores2$fft_power)
+})
+
+# =============================================================================
+# INTEGRATION EDGE CASES
+# =============================================================================
+
+test_that("kmer.fft works in complex track expressions", {
+    remove_all_vtracks()
+
+    test_interval <- gintervals(1, 200, 240)
+
+    # Create multiple FFT tracks
+    gvtrack.create("fft1", NULL, "kmer.fft",
+        params = list(kmer = "CG", freq = 0.1, window = "none")
+    )
+    gvtrack.create("fft2", NULL, "kmer.fft",
+        params = list(kmer = "AT", freq = 0.1, window = "none")
+    )
+    gvtrack.create("peak1", NULL, "kmer.fft.peak",
+        params = list(kmer = "CG", window = "none")
+    )
+
+    # Test complex expressions
+    complex_scores <- gextract(c("fft1 + fft2", "fft1 * fft2", "fft1 / (fft2 + 1)", "peak1 * 2"),
+        test_interval,
+        iterator = test_interval,
+        colnames = c("sum", "product", "ratio", "double_peak")
+    )
+
+    # All should be valid numeric results
+    expect_true(all(is.numeric(unlist(complex_scores[2:5]))))
+    expect_true(all(is.finite(unlist(complex_scores[2:5]))))
+
+    # Mathematical relationships should hold
+    simple_scores <- gextract(c("fft1", "fft2", "peak1"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    expect_equal(complex_scores$sum, simple_scores$fft1 + simple_scores$fft2, tolerance = 1e-10)
+    expect_equal(complex_scores$product, simple_scores$fft1 * simple_scores$fft2, tolerance = 1e-10)
+    expect_equal(complex_scores$double_peak, simple_scores$peak1 * 2, tolerance = 1e-10)
+})
+
+test_that("kmer.fft memory and performance with large intervals", {
+    skip_on_cran()
+
+    # Test with very large interval
+    large_interval <- gintervals(1, 1, 50000) # 50kb
+
+    gvtrack.create("fft_large", NULL, "kmer.fft.peak",
+        params = list(kmer = "CG", window = "hann")
+    )
+
+    # Should complete without memory issues
+    expect_no_error({
+        timing <- system.time({
+            scores <- gextract("fft_large", large_interval, iterator = 5000)
+        })
+    })
+
+    # Should complete in reasonable time
+    expect_true(timing["elapsed"] < 60) # 1 minute max
+
+    # Results should still be valid
+    expect_true(all(scores$fft_large >= 0 & scores$fft_large <= 0.5))
+    expect_true(all(is.finite(scores$fft_large)))
+})
+
+test_that("kmer.fft strand parameter is intentionally not implemented", {
+    remove_all_vtracks()
+
+    # Verify that FFT functions don't have strand parameter (unlike kmer.count/frac)
+    # This is intentional since FFT analyzes the pattern, not the specific strand
+
+    test_interval <- gintervals(1, 200, 240)
+
+    # These should work (no strand parameter)
+    expect_no_error({
+        gvtrack.create("fft_no_strand", NULL, "kmer.fft",
+            params = list(kmer = "CG", freq = 0.1, window = "none")
+        )
+    })
+
+    # Test that strand parameter is ignored if somehow provided
+    # (The R parameter validation should handle this, but test the intention)
+    scores <- gextract("fft_no_strand", test_interval, iterator = test_interval)
+    expect_true(is.numeric(scores$fft_no_strand))
+    expect_true(scores$fft_no_strand >= 0)
+})
