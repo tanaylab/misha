@@ -39,7 +39,7 @@ private:
 
     void compute_fft(const std::vector<double>& signal, std::vector<std::complex<double>>& fft_result);
     void apply_window(std::vector<double>& signal);
-    std::vector<double> get_kmer_signal(const std::string& sequence);
+    std::vector<double> get_kmer_signal(const std::string& sequence, size_t signal_len, size_t seq_offset);
 };
 
 #endif /* KMERFFT_H_ */ 
