@@ -204,20 +204,15 @@
 #' PWM parameters are accepted as list or individual parameters (see examples).
 #'
 #' \emph{func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
-#' Counts occurrences of the specified kmer in each interval. The extend=TRUE
-#' parameter (default) allows counting kmers that span interval boundaries.
-#' The strand parameter can be 1 (forward strand), -1 (reverse strand), or 0 (both strands).
+#' Counts occurrences of the specified kmer in each interval.
 #'
 #' \emph{func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
-#' Calculates the fraction of possible positions in each interval that contain
-#' the specified kmer. The extend=TRUE parameter (default) allows counting kmers
-#' that span interval boundaries. The strand parameter can be 1 (forward strand), -1
-#' (reverse strand), or 0 (both strands).
+#' Calculates the fraction of possible positions in each interval that contain the specified kmer.
 #'
 #' For kmer functions:
 #' \itemize{
 #'   \item kmer: The DNA sequence to count (case-insensitive)
-#'   \item extend: If TRUE, counts kmers that span interval boundaries
+#'   \item extend: If TRUE (default), considers k-mers starting at any position within the interval, which may require looking at sequence data beyond the interval's end. If FALSE, the sequence is not extended, so k-mers starting near the end of the interval that would cross the boundary are not counted.
 #'   \item strand: If 1, counts kmers on forward strand; if -1, counts kmers on reverse strand. If
 #'  0, counts kmers on both strands. Default is 0.
 #' }
@@ -227,8 +222,7 @@
 #'
 #' \emph{func = "kmer.fft", params = list(kmer = "CG", freq = 10.2, extend = TRUE, window = "hann")} \cr
 #' Performs FFT analysis on kmer occurrence signal and returns the power at the specified frequency.
-#' The frequency is specified in cycles per base. The extend parameter allows kmers spanning interval
-#' boundaries. Window functions reduce spectral leakage.
+#' The frequency is specified in cycles per base. Window functions reduce spectral leakage.
 #'
 #' \emph{func = "kmer.fft.peak", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
 #' Returns the dominant frequency (in cycles per base) from FFT analysis of kmer occurrences.
@@ -242,8 +236,15 @@
 #' \itemize{
 #'   \item kmer: The DNA sequence to analyze (case-insensitive)
 #'   \item freq: The frequency to evaluate in cycles per base (only for kmer.fft)
-#'   \item extend: If TRUE, allows kmers spanning interval boundaries (default: TRUE)
-#'   \item window: Window function to apply ("none", "hann", "hamming", "blackman", default: "hann")
+#'   \item extend: If TRUE (default), considers k-mers starting at any position within the interval, which may require looking at sequence data beyond the interval's end. The FFT is computed on a signal of the interval's length. If FALSE, the sequence is not extended, so k-mers starting near the end of the interval that would cross the boundary are not counted.
+#'   \item window: Window function to apply ("none", "hann", "hamming", "blackman", default: "hann"). These functions are used to reduce spectral leakage from the FFT.
+#'     \itemize{
+#'       \item "none": No window.
+#'       \item "hann": Hann window (default). Good for general purpose.
+#'       \item "hamming": Hamming window. Minimizes the nearest side lobe.
+#'       \item "blackman": Blackman window. Better stop-band attenuation but wider main lobe.
+#'     }
+#'   For more information, see: \url{https://en.wikipedia.org/wiki/Window_function}
 #' }
 #'
 #' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
@@ -482,6 +483,9 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
         if (func == "kmer.fft") {
             if (is.null(kmer_params$freq) || !is.numeric(kmer_params$freq) || length(kmer_params$freq) != 1) {
                 stop("kmer.fft requires a numeric 'freq' parameter")
+            }
+            if (kmer_params$freq < 0 || kmer_params$freq > 0.5) {
+                stop("freq parameter must be between 0 and 0.5")
             }
         }
 

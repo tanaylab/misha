@@ -18,23 +18,31 @@ float KmerFFT::score_interval(const GInterval& interval, const GenomeChromKey& c
     // Calculate the appropriate interval based on extension setting
     GInterval expanded_interval = calculate_expanded_interval(interval, chromkey, m_kmer_len);
     
-    if (expanded_interval.start >= expanded_interval.end) {
+    if (expanded_interval.start >= expanded_interval.end && (interval.end - interval.start) > 0) {
         return std::numeric_limits<float>::quiet_NaN();
     }
     
     std::vector<char> seq_vec;
-    m_seqfetch.read_interval(expanded_interval, chromkey, seq_vec);
+    if (expanded_interval.end > expanded_interval.start) {
+        m_seqfetch.read_interval(expanded_interval, chromkey, seq_vec);
+    }
     
-    if (seq_vec.empty()) {
+    if (seq_vec.empty() && (interval.end - interval.start) > 0) {
         return std::numeric_limits<float>::quiet_NaN();
     }
     
     std::string seq(seq_vec.begin(), seq_vec.end());
     
+    size_t signal_len = interval.end - interval.start;
+    size_t seq_offset = m_extend ? interval.start - expanded_interval.start : 0;
+
     // Get the kmer occurrence signal
-    std::vector<double> signal = get_kmer_signal(seq);
+    std::vector<double> signal = get_kmer_signal(seq, signal_len, seq_offset);
     
     if (signal.size() < 2) {
+        if (m_mode == POWER_AT_FREQ) {
+            return 0;
+        }
         return std::numeric_limits<float>::quiet_NaN();
     }
     
@@ -46,7 +54,7 @@ float KmerFFT::score_interval(const GInterval& interval, const GenomeChromKey& c
     compute_fft(signal, fft_result);
     
     // Compute power spectrum
-    std::vector<double> power_spectrum(fft_result.size() / 2);
+    std::vector<double> power_spectrum(fft_result.size() / 2 + 1);
     for (size_t i = 0; i < power_spectrum.size(); ++i) {
         power_spectrum[i] = std::norm(fft_result[i]) / signal.size();
     }
@@ -66,6 +74,9 @@ float KmerFFT::score_interval(const GInterval& interval, const GenomeChromKey& c
         
         case PEAK_FREQ: {
             // Find the peak frequency (skip DC component)
+            if (power_spectrum.size() <= 1) {
+                return 0.0;
+            }
             auto max_it = std::max_element(power_spectrum.begin() + 1, power_spectrum.end());
             size_t max_idx = std::distance(power_spectrum.begin(), max_it);
             
@@ -75,6 +86,9 @@ float KmerFFT::score_interval(const GInterval& interval, const GenomeChromKey& c
         
         case PEAK_POWER: {
             // Find the peak power (skip DC component)
+            if (power_spectrum.size() <= 1) {
+                return 0.0;
+            }
             auto max_it = std::max_element(power_spectrum.begin() + 1, power_spectrum.end());
             return static_cast<float>(*max_it);
         }
@@ -83,13 +97,21 @@ float KmerFFT::score_interval(const GInterval& interval, const GenomeChromKey& c
     return std::numeric_limits<float>::quiet_NaN();
 }
 
-std::vector<double> KmerFFT::get_kmer_signal(const std::string& sequence) {
-    std::vector<double> signal(sequence.length(), 0.0);
-    
-    for (size_t i = 0; i <= sequence.length() - m_kmer_len; ++i) {
+std::vector<double> KmerFFT::get_kmer_signal(const std::string& sequence, size_t signal_len, size_t seq_offset) {
+    std::vector<double> signal(signal_len, 0.0);
+
+    if (m_kmer_len == 0 || signal_len == 0) {
+        return signal;
+    }
+
+    for (size_t i = 0; i < signal_len; ++i) {
+        size_t seq_idx = i + seq_offset;
+        if (seq_idx + m_kmer_len > sequence.length()) {
+            break;
+        }
         bool match = true;
         for (size_t j = 0; j < m_kmer_len; ++j) {
-            char seq_char = std::toupper(sequence[i + j]);
+            char seq_char = std::toupper(sequence[seq_idx + j]);
             if (seq_char != m_kmer[j]) {
                 match = false;
                 break;
