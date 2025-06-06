@@ -1,3 +1,7 @@
+# misha 4.3.8
+
+* Added `kmer.fft`, `kmer.fft.peak` and `kmer.fft.peak.power` virtual track functions that calculate the FFT of the kmer occurrence signal.
+
 # misha 4.3.7
 
 * Added `gtrack.create_dense` function - creates a dense track from an intervals and values.
