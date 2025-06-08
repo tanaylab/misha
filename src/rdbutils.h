@@ -74,7 +74,7 @@ static inline SEXP Rf_allocLang(int n)
 #endif
 
 #if R_VERSION < R_Version(4, 5, 0)
-#  define isDataFrame(x) Rf_isFrame(x) 
+#  define Rf_isDataFrame(x) Rf_isFrame(x) 
 #endif
 
 #include "TGLException.h"
