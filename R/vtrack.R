@@ -226,6 +226,7 @@
 #'
 #' \emph{func = "kmer.fft.peak", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
 #' Returns the dominant frequency (in cycles per base) from FFT analysis of kmer occurrences.
+#' The result can be converted to a period in base pairs by taking its reciprocal (e.g., period = 1 / frequency).
 #' Useful for detecting periodic patterns in kmer distribution.
 #'
 #' \emph{func = "kmer.fft.peak.power", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
@@ -235,7 +236,7 @@
 #' For kmer FFT functions:
 #' \itemize{
 #'   \item kmer: The DNA sequence to analyze (case-insensitive)
-#'   \item freq: The frequency to evaluate in cycles per base (only for kmer.fft)
+#'   \item freq: The frequency to evaluate in cycles per base (only for kmer.fft). This is the reciprocal of the period. For example, to analyze a pattern that repeats every 10 bp, you would use a frequency of 1/10 = 0.1. The valid range for this parameter is [0, 0.5], which corresponds to periods from infinity down to 2 bp.
 #'   \item extend: If TRUE (default), considers k-mers starting at any position within the interval, which may require looking at sequence data beyond the interval's end. The FFT is computed on a signal of the interval's length. If FALSE, the sequence is not extended, so k-mers starting near the end of the interval that would cross the boundary are not counted.
 #'   \item window: Window function to apply ("none", "hann", "hamming", "blackman", default: "hann"). These functions are used to reduce spectral leakage from the FFT.
 #'     \itemize{
