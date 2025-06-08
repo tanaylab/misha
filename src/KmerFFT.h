@@ -9,6 +9,9 @@
 #include "GInterval.h"
 #include "GenomeChromKey.h"
 #include "GenomeSeqScorer.h"
+#include "kiss_fft.h"
+
+
 
 class KmerFFT : public GenomeSeqScorer {
 public:

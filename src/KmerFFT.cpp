@@ -5,6 +5,10 @@
 #include <limits>
 #include <cctype>
 
+// KISS FFT Library
+// Copyright (c) 2003-2010, Mark Borgerding. All rights reserved.
+// Licensed under BSD-3-Clause - https://github.com/mborgerding/kissfft
+
 KmerFFT::KmerFFT(const std::string& kmer, const std::string& groot, Mode mode, 
                  bool extend, double freq, WindowType window)
     : GenomeSeqScorer(groot, extend, 0), m_kmer(kmer), m_mode(mode), 
@@ -156,18 +160,49 @@ void KmerFFT::apply_window(std::vector<double>& signal) {
     }
 }
 
-// Simple DFT implementation
+// KISS FFT implementation
 void KmerFFT::compute_fft(const std::vector<double>& signal, 
                           std::vector<std::complex<double>>& fft_result) {
-    size_t n = signal.size();
+    int n = signal.size();
     fft_result.resize(n);
     
-    for (size_t k = 0; k < n; ++k) {
-        std::complex<double> sum(0, 0);
-        for (size_t t = 0; t < n; ++t) {
-            double angle = -2 * M_PI * k * t / n;
-            sum += signal[t] * std::complex<double>(std::cos(angle), std::sin(angle));
+    if (n <= 1) {
+        if (n == 1) {
+            fft_result[0] = std::complex<double>(signal[0], 0.0);
         }
-        fft_result[k] = sum;
+        return;
     }
+    
+    // Allocate KISS FFT configuration
+    kiss_fft_cfg cfg = kiss_fft_alloc(n, 0, NULL, NULL); // 0 = forward FFT
+    if (!cfg) {
+        // Fallback to simple DFT if allocation fails
+        for (int k = 0; k < n; ++k) {
+            std::complex<double> sum(0, 0);
+            for (int t = 0; t < n; ++t) {
+                double angle = -2 * M_PI * k * t / n;
+                sum += signal[t] * std::complex<double>(std::cos(angle), std::sin(angle));
+            }
+            fft_result[k] = sum;
+        }
+        return;
+    }
+    
+    // Prepare input data for KISS FFT (convert to kiss_fft_cpx format)
+    std::vector<kiss_fft_cpx> cx_in(n), cx_out(n);
+    for (int i = 0; i < n; ++i) {
+        cx_in[i].r = (kiss_fft_scalar)signal[i];
+        cx_in[i].i = 0.0;
+    }
+    
+    // Perform FFT
+    kiss_fft(cfg, cx_in.data(), cx_out.data());
+    
+    // Convert results back to std::complex<double>
+    for (int i = 0; i < n; ++i) {
+        fft_result[i] = std::complex<double>(cx_out[i].r, cx_out[i].i);
+    }
+    
+    // Clean up
+    kiss_fft_free(cfg);
 } 

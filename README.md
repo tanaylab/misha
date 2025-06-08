@@ -61,3 +61,7 @@ GROOT <<- .misha$GROOT
 GWD <<- .misha$GWD
 GTRACKS <<- .misha$GTRACKS
 ```
+
+## Acknowledgments
+
+This package uses the [KISS FFT](https://github.com/mborgerding/kissfft) library by Mark Borgerding for efficient FFT computations in genomic sequence analysis.
