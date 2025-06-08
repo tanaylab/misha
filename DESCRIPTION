@@ -13,7 +13,8 @@ Description: A toolkit for analysis of genomic data. The 'misha' package
     implements an efficient data structure for storing genomic data, and
     provides a set of functions for data extraction, manipulation and
     analysis. Some of the 2D genome algorithms were described in Yaffe and Tanay
-    (2011) <doi:10.1038/ng.947>. 
+    (2011) <doi:10.1038/ng.947>. FFT functionality is provided by the KISS FFT
+    library by Mark Borgerding <https://github.com/mborgerding/kissfft>. 
 License: MIT + file LICENSE
 URL: https://tanaylab.github.io/misha/, https://github.com/tanaylab/misha
 BugReports: https://github.com/tanaylab/misha/issues
