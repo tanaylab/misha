@@ -4,6 +4,7 @@ ALLGENOME
 BedGraph
 BigWig
 BinFinder
+Blackman
 Buf
 CMD
 CTRL
@@ -29,6 +30,7 @@ GVTRACKS
 GWD
 Gb
 GenomeTrack
+Hann
 INTERVID
 Kmer
 LTO
@@ -64,6 +66,7 @@ bedGraph
 bidirect
 bigset
 binsize
+blackman
 bool
 bufsize
 canonic
@@ -88,6 +91,7 @@ eshift
 eval
 expr
 fasta
+fft
 frac
 func
 fun’
@@ -155,6 +159,7 @@ gwget
 gwilcox
 gwrite
 gz
+hann
 hg
 hostnames
 iN
