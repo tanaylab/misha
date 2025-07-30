@@ -1,3 +1,7 @@
+# misha 4.3.8
+
+* Added `colnames` parameter to `gintervals.mapply` function.
+
 # misha 4.3.7
 
 * Added `gtrack.create_dense` function - creates a dense track from an intervals and values.
