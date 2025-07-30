@@ -11,11 +11,12 @@ gintervals.mapply(
   enable.gapply.intervals = FALSE,
   iterator = NULL,
   band = NULL,
-  intervals.set.out = NULL
+  intervals.set.out = NULL,
+  colnames = "value"
 )
 }
 \arguments{
-\item{FUN}{function to apply, found via ‘match.fun’}
+\item{FUN}{function to apply, found via 'match.fun'}
 
 \item{...}{track expressions whose values are used as arguments for 'FUN'}
 
@@ -31,10 +32,14 @@ implicitly based on track expressions.}
 
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputted}
+
+\item{colnames}{name of the column that contains the return values of 'FUN'.
+Default is "value".}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a data frame representing intervals
-with an additional column that contains the return values of 'FUN'.
+with an additional column that contains the return values of 'FUN'. The name
+of this additional column is specified by the 'colnames' parameter.
 }
 \description{
 Applies a function to values of track expressions for each interval.
@@ -85,6 +90,12 @@ gintervals.mapply(
     }, "dense_track",
     "sparse_track", gintervals(c(1, 2), 0, 10000),
     iterator = "sparse_track"
+)
+# Using custom column name
+gintervals.mapply(
+    max, "dense_track",
+    gintervals(c(1, 2), 0, 10000),
+    colnames = "max_value"
 )
 
 }

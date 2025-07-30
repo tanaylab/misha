@@ -22,7 +22,7 @@ using namespace rdb;
 extern "C" {
 
 SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_intervals, SEXP _iterator_policy, SEXP _band,
-			 SEXP _report_progress, SEXP _envir)
+			 SEXP _report_progress, SEXP _colnames, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -36,6 +36,9 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 
 		if (!Rf_isLogical(_enable_gapply_intervals) || Rf_length(_enable_gapply_intervals) != 1)
 			verror("Allow GAPPLY.INTERVALS argument must be logical");
+
+		if (!Rf_isString(_colnames) || Rf_length(_colnames) != 1)
+			verror("Column name argument must be a single string");
 
 		bool enable_gapply_intervals = LOGICAL(_enable_gapply_intervals)[0];
 		unsigned num_track_exprs = (unsigned)Rf_length(_track_exprs);
@@ -163,7 +166,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		}
 
 		SET_VECTOR_ELT(answer, num_old_cols, rvals);
-		SET_STRING_ELT(col_names, num_old_cols, Rf_mkChar("value"));
+		SET_STRING_ELT(col_names, num_old_cols, STRING_ELT(_colnames, 0));
 
 		Rf_setAttrib(answer, R_NamesSymbol, col_names);
 		Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
@@ -179,7 +182,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 }
 
 SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_intervals, SEXP _iterator_policy, SEXP _band,
-					   SEXP _report_progress, SEXP _envir)
+					   SEXP _report_progress, SEXP _colnames, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -192,6 +195,9 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 
 		if (!Rf_isLogical(_enable_gapply_intervals) || Rf_length(_enable_gapply_intervals) != 1)
 			verror("Allow GAPPLY.INTERVALS argument must be logical");
+
+		if (!Rf_isString(_colnames) || Rf_length(_colnames) != 1)
+			verror("Column name argument must be a single string");
 
 		bool enable_gapply_intervals = LOGICAL(_enable_gapply_intervals)[0];
 		unsigned num_track_exprs = (unsigned)Rf_length(_track_exprs);
@@ -351,7 +357,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			}
 
 			SET_VECTOR_ELT(answer, num_old_cols, rvals);
-			SET_STRING_ELT(col_names, num_old_cols, Rf_mkChar("value"));
+			SET_STRING_ELT(col_names, num_old_cols, STRING_ELT(_colnames, 0));
 
 			Rf_setAttrib(answer, R_NamesSymbol, col_names);
 			Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
