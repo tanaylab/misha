@@ -21,6 +21,7 @@
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf(".gtrack.create_test_computer2d(%s, %g, %g, %g)", trackstr, prob.skip.chrom, max.rect, max.rect.size), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             success <- TRUE
         },
         finally = {
@@ -103,6 +104,7 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.2d.create(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -188,6 +190,7 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
                 sprintf("gtrack.2d.import(%s, description, c(\"%s\"))", trackstr, paste(file, collapse = "\", \"")), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -304,6 +307,7 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
                 TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
