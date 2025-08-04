@@ -255,6 +255,7 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
                 sprintf("gtrack.create(%s, description, %s, iterator=%s)", trackstr, exprstr, deparse(substitute(iterator), width.cutoff = 500)[1]), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -338,6 +339,7 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
                 ), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -410,6 +412,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, intervals, values)", trackstr), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -486,14 +489,58 @@ get_bigWigToWig_bin <- function() {
 #' @param binsize bin size of the newly created 'Dense' track or '0' for a
 #' 'Sparse' track
 #' @param defval default track value
+#' @param attrs a named vector or list of attributes to be set on the track after import
 #' @return None.
 #' @seealso \code{\link{gtrack.import_set}}, \code{\link{gtrack.rm}},
 #' \code{\link{gtrack.info}}, \code{\link{gdir.create}}, \code{\link{gextract}}
 #' @keywords ~wig ~bigwig ~bedgraph ~track
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' \donttest{
+#' gdb.init_examples()
+#'
+#' # Create a simple WIG file for demonstration
+#' temp_file <- tempfile(fileext = ".wig")
+#' writeLines(c(
+#'     "track type=wiggle_0 name=\"example track\"",
+#'     "fixedStep chrom=chr1 start=1 step=1",
+#'     "1.5",
+#'     "2.0",
+#'     "1.8",
+#'     "3.2"
+#' ), temp_file)
+#'
+#' # Basic import
+#' gtrack.import("example_track", "Example track from WIG file",
+#'     temp_file,
+#'     binsize = 1
+#' )
+#' gtrack.info("example_track")
+#' gtrack.rm("example_track", force = TRUE)
+#'
+#' # Import with custom attributes
+#' attrs <- c("author" = "researcher", "version" = "1.0", "experiment" = "test")
+#' gtrack.import("example_track_with_attrs", "Example track with attributes",
+#'     temp_file,
+#'     binsize = 1, attrs = attrs
+#' )
+#'
+#' # Check that attributes were set
+#' gtrack.attr.get("example_track_with_attrs", "author")
+#' gtrack.attr.get("example_track_with_attrs", "version")
+#' gtrack.attr.get("example_track_with_attrs", "experiment")
+#'
+#' # Clean up
+#' gtrack.rm("example_track_with_attrs", force = TRUE)
+#' }
+#'
 #' @export gtrack.import
-gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize = NULL, defval = NaN) {
+gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize = NULL, defval = NaN, attrs = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(file)) {
-        stop("Usage: gtrack.import(track, description, file, binsize, defval = NaN)", call. = FALSE)
+        stop("Usage: gtrack.import(track, description, file, binsize, defval = NaN, attrs = NULL)", call. = FALSE)
     }
 
     .gcheckroot()
@@ -564,10 +611,22 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
-                sprintf("gtrack.import(%s, description, \"%s\", %d, %g)", trackstr, file.original, binsize, defval), TRUE
+                sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
+
+            # Set additional attributes if provided
+            if (!is.null(attrs)) {
+                if (is.null(names(attrs)) || any(names(attrs) == "")) {
+                    stop("attrs must be a named vector or list", call. = FALSE)
+                }
+                for (attr_name in names(attrs)) {
+                    .gtrack.attr.set(trackstr, attr_name, attrs[[attr_name]], FALSE)
+                }
+            }
+
             success <- TRUE
         },
         finally = {
@@ -661,6 +720,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
                 sprintf("gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s)", trackstr, file, pileup, binsize, remove.dups), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -907,6 +967,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
                 .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", chain)", trackstr, src.track.dir), TRUE)
             }
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -1035,6 +1096,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
             created.by <- sprintf("%s, include.lowest = %s, force.binning = %s)", created.by, include.lowest, force.binning)
             .gtrack.attr.set(trackstr, "created.by", created.by, TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -1368,6 +1430,7 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
                 sprintf("gtrack.smooth(%s, description, %s, %s, %s, %s, %s)", trackstr, exprstr, as.character(winsize), as.character(weight_thr), as.character(smooth_nans), alg), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
@@ -1462,6 +1525,7 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
                 sprintf("gtrack.create_dense(%s, description, intervals, values, %d, %g)", trackstr, binsize, defval), TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
 
             # Set the track type to "dense"

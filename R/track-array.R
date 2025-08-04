@@ -379,6 +379,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
             created.by <- sprintf("gtrack.array.import(\"%s\", description, src = c(\"%s\"))", trackstr, paste(srcs, collapse = "\", \""))
             .gtrack.attr.set(trackstr, "created.by", created.by, TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
         },
