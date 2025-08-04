@@ -9,7 +9,8 @@ gtrack.import(
   description = NULL,
   file = NULL,
   binsize = NULL,
-  defval = NaN
+  defval = NaN,
+  attrs = NULL
 )
 }
 \arguments{
@@ -23,6 +24,8 @@ gtrack.import(
 'Sparse' track}
 
 \item{defval}{default track value}
+
+\item{attrs}{a named vector or list of attributes to be set on the track after import}
 }
 \value{
 None.
@@ -43,6 +46,50 @@ The values that were not defined in input file file are substituted by
 'defval' value.
 
 'description' is added as a track attribute.
+}
+\examples{
+\dontshow{
+options(gmax.processes = 2)
+}
+
+\donttest{
+gdb.init_examples()
+
+# Create a simple WIG file for demonstration
+temp_file <- tempfile(fileext = ".wig")
+writeLines(c(
+    "track type=wiggle_0 name=\"example track\"",
+    "fixedStep chrom=chr1 start=1 step=1",
+    "1.5",
+    "2.0",
+    "1.8",
+    "3.2"
+), temp_file)
+
+# Basic import
+gtrack.import("example_track", "Example track from WIG file",
+    temp_file,
+    binsize = 1
+)
+gtrack.info("example_track")
+gtrack.rm("example_track", force = TRUE)
+
+# Import with custom attributes
+attrs <- c("author" = "researcher", "version" = "1.0", "experiment" = "test")
+gtrack.import("example_track_with_attrs", "Example track with attributes",
+    temp_file,
+    binsize = 1, attrs = attrs
+)
+
+# Check that attributes were set
+gtrack.attr.get("example_track_with_attrs", "author")
+gtrack.attr.get("example_track_with_attrs", "version")
+gtrack.attr.get("example_track_with_attrs", "experiment")
+
+# Clean up
+gtrack.rm("example_track_with_attrs", force = TRUE)
+}
+
 }
 \seealso{
 \code{\link{gtrack.import_set}}, \code{\link{gtrack.rm}},

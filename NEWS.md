@@ -1,13 +1,14 @@
 # misha 4.3.8
 
 * Added `colnames` parameter to `gintervals.mapply` function.
+* Added `attrs` parameter to `gtrack.import` function.
+* Added `created.user` default attribute in track creation functions.
 
 # misha 4.3.7
 
 * Added `gtrack.create_dense` function - creates a dense track from an intervals and values.
 * Fixed compilation error in old versions of macOS (`clock_gettime` is missing).
 * Fixed a bug in `gtrack.import_bigwig`: `intern` argument was not passed to `system` calls.
-
 
 # misha 4.3.6 
 

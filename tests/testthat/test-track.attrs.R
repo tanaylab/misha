@@ -1,11 +1,11 @@
 test_that("get readonly attributes of gdb", {
-    gdb.set_readonly_attrs(c("created.by", "created.date"))
+    gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
     r <- gdb.get_readonly_attrs()
     expect_regression(r, "gdb.get_readonly_attrs")
 })
 
 test_that("set and revert readonly attributes of gdb", {
-    gdb.set_readonly_attrs(c("created.by", "created.date"))
+    gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
     old_ro_attrs <- gdb.get_readonly_attrs()
     expect_error(gdb.set_readonly_attrs(c(old_ro_attrs, "")))
     gdb.set_readonly_attrs(old_ro_attrs)
@@ -13,7 +13,7 @@ test_that("set and revert readonly attributes of gdb", {
 })
 
 test_that("set NULL and revert readonly attributes", {
-    gdb.set_readonly_attrs(c("created.by", "created.date"))
+    gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
     old_ro_attrs <- gdb.get_readonly_attrs()
     gdb.set_readonly_attrs(NULL)
     expect_null(gdb.get_readonly_attrs())
@@ -22,7 +22,7 @@ test_that("set NULL and revert readonly attributes", {
 })
 
 test_that("append and revert readonly attributes", {
-    gdb.set_readonly_attrs(c("created.by", "created.date"))
+    gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
     old_ro_attrs <- gdb.get_readonly_attrs()
     gdb.set_readonly_attrs(c(old_ro_attrs, "testattr1", "testattr2"))
     expect_equal(gdb.get_readonly_attrs(), union(old_ro_attrs, c("testattr1", "testattr2")))
@@ -31,13 +31,13 @@ test_that("append and revert readonly attributes", {
 })
 
 test_that("get attributes of track", {
-    gdb.set_readonly_attrs(c("created.by", "created.date"))
+    gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
     expect_equal(gtrack.attr.get("test.fixedbin", "created.by"), "gtrack.create(test.fixedbin, misha.AA, iterator=NULL)")
     expect_equal(gtrack.attr.get("test.fixedbin", "blablabla"), "")
 })
 
 test_that("set and get attribute after removing from readonly", {
-    gdb.set_readonly_attrs(c("created.by", "created.date"))
+    gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
     attrs <- gdb.get_readonly_attrs()
     gdb.set_readonly_attrs(c(attrs, "testattr1"))
     attrs <- attrs[attrs != "testattr1"]
