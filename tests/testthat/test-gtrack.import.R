@@ -228,6 +228,24 @@ test_that("import BED as sparse track", {
     expect_true(nrow(r) > 0)
 })
 
+test_that("import BED as dense track with binsize", {
+    gtrack.rm("test.bedtrack.dense", force = TRUE)
+    withr::defer(gtrack.rm("test.bedtrack.dense", force = TRUE))
+
+    bed_file <- tempfile(fileext = ".bed")
+    writeLines(c(
+        "chr1\t0\t10\tseg1\t2",
+        "chr1\t10\t20\tseg2\t4"
+    ), bed_file)
+    withr::defer(unlink(bed_file))
+
+    expect_no_error(
+        gtrack.import("test.bedtrack.dense", "BED dense track", bed_file, binsize = 5, defval = 0)
+    )
+    info <- gtrack.info("test.bedtrack.dense")
+    expect_equal(as.numeric(info$binsize), 5)
+})
+
 test_that("import tab-delimited with header chrom/start/end/value (sparse)", {
     gtrack.rm("test.tsvtrack", force = TRUE)
     withr::defer(gtrack.rm("test.tsvtrack", force = TRUE))

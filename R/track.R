@@ -552,11 +552,12 @@ get_bigWigToWig_bin <- function() {
 #' Columns must be separated by tabs. Coordinates must refer to chromosomes
 #' existing in the current genome. Missing values can be specified as 'NaN'.
 #'
-#' BED files (.bed/.bed.gz/.bed.zip) are also supported and are imported as
-#' 'Sparse' tracks. If the BED 'score' column (5th column) exists and is
-#' numeric, it is used as the interval value; otherwise a constant value of 1 is
-#' used. For BED inputs, 'binsize' is ignored and the track is created in
-#' 'Sparse' format.
+#' BED files (.bed/.bed.gz/.bed.zip) are also supported. If the BED 'score'
+#' column (5th column) exists and is numeric, it is used as the interval value;
+#' otherwise a constant value of 1 is used. For BED inputs, 'binsize' controls
+#' the output type: if 'binsize' is 0 the track is 'Sparse'; otherwise the track
+#' is 'Dense' with bin-averaged values based on overlaps with BED intervals (and
+#' 'defval' for regions not covered).
 #'
 #' If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 #' Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.
@@ -664,14 +665,26 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 file <- file.unzipped
             }
 
-            # BED files are imported as sparse tracks
+            # BED files can be imported as sparse (binsize==0) or dense (binsize>0)
             if (is_bed_input || length(grep("^.+\\.bed$", file, perl = TRUE))) {
-                message("Importing BED as a sparse track...\n")
+                message("Importing BED file...\n")
                 report.progress <- TRUE
                 bed_parsed <- .gtrack_read_bed(file)
-                .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env(), silent = TRUE)
-                .gdb.add_track(trackstr)
-                .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
+                if (!is.null(binsize) && !is.na(binsize) && binsize > 0) {
+                    intervalData <- data.frame(
+                        chrom = bed_parsed$intervals$chrom,
+                        start = bed_parsed$intervals$start,
+                        end = bed_parsed$intervals$end,
+                        value = as.numeric(bed_parsed$values)
+                    )
+                    .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env(), silent = TRUE)
+                    .gdb.add_track(trackstr)
+                    .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
+                } else {
+                    .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env(), silent = TRUE)
+                    .gdb.add_track(trackstr)
+                    .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
+                }
 
                 success <- TRUE
             } else if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
