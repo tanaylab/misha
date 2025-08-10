@@ -11,3 +11,5 @@ docs
 mm10
 add_include.sh
 .aider*
+/doc/
+/Meta/

@@ -2,7 +2,7 @@
 % Please edit documentation in R/track.R
 \name{gtrack.import}
 \alias{gtrack.import}
-\title{Creates a track from WIG / BigWig / BedGraph / tab-delimited file}
+\title{Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited file}
 \usage{
 gtrack.import(
   track = NULL,
@@ -31,14 +31,28 @@ gtrack.import(
 None.
 }
 \description{
-Creates a track from WIG / BigWig / BedGraph / tab-delimited file
+Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited file
 }
 \details{
 This function creates a track from WIG / BigWig / BedGraph / tab-delimited
-file.  One can learn about the format of the tab-delimited file by running
-'gextract' function on a 1D track with a 'file' parameter set to the name of
-the file. Zipped files are supported (file name must have '.gz' or '.zip'
-suffix).
+file. Zipped files are supported (file name must have '.gz' or '.zip' suffix).
+
+Tab-delimited files must start with a header line with the following column
+names (tab-separated): 'chrom', 'start', 'end', and exactly one value column
+name (e.g. 'value'). Each subsequent line provides a single interval:
+- chrom: chromosome name (e.g. 'chr1')
+- start: 0-based start coordinate (inclusive)
+- end: 0-based end coordinate (exclusive)
+- value: numeric value (floating point allowed); exactly one value column is supported
+
+Columns must be separated by tabs. Coordinates must refer to chromosomes
+existing in the current genome. Missing values can be specified as 'NaN'.
+
+BED files (.bed/.bed.gz/.bed.zip) are also supported and are imported as
+'Sparse' tracks. If the BED 'score' column (5th column) exists and is
+numeric, it is used as the interval value; otherwise a constant value of 1 is
+used. For BED inputs, 'binsize' is ignored and the track is created in
+'Sparse' format.
 
 If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.

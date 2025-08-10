@@ -203,3 +203,65 @@ test_that("import with attrs parameter - attributes don't interfere with default
     expect_true(nchar(gtrack.attr.get("test.tmptrack", "created.by")) > 0) # should contain creation info
     expect_true(nchar(gtrack.attr.get("test.tmptrack", "created.date")) > 0) # should contain creation date
 })
+
+test_that("import BED as sparse track", {
+    gtrack.rm("test.bedtrack", force = TRUE)
+    withr::defer(gtrack.rm("test.bedtrack", force = TRUE))
+
+    # Create a temporary BED file
+    bed_file <- tempfile(fileext = ".bed")
+    writeLines(c(
+        "track name=example",
+        "chr1\t0\t2\tname1\t7",
+        "chr1\t3\t5\tname2" # no score -> defaults to 1
+    ), bed_file)
+    withr::defer(unlink(bed_file))
+
+    # Import BED; binsize is ignored for BED and track is created as sparse
+    expect_no_error(
+        gtrack.import("test.bedtrack", "BED import track", bed_file, binsize = 0)
+    )
+
+    # Basic sanity: track exists and extraction works on a small interval
+    expect_true(gtrack.exists("test.bedtrack"))
+    r <- gextract("test.bedtrack", gintervals(1, 0, 6))
+    expect_true(nrow(r) > 0)
+})
+
+test_that("import tab-delimited with header chrom/start/end/value (sparse)", {
+    gtrack.rm("test.tsvtrack", force = TRUE)
+    withr::defer(gtrack.rm("test.tsvtrack", force = TRUE))
+
+    # Create a temporary TSV file with required header and one value column
+    tsv_file <- tempfile(fileext = ".tsv")
+    writeLines(c(
+        paste(c("chrom", "start", "end", "value"), collapse = "\t"),
+        paste(c("chr1", 0, 3, 2.5), collapse = "\t"),
+        paste(c("chr1", 4, 6, 1.0), collapse = "\t")
+    ), tsv_file)
+    withr::defer(unlink(tsv_file))
+
+    # Import as sparse (binsize = 0)
+    expect_no_error(
+        gtrack.import("test.tsvtrack", "TSV import track", tsv_file, binsize = 0)
+    )
+    expect_true(gtrack.exists("test.tsvtrack"))
+})
+
+test_that("import tab-delimited with multiple value columns fails", {
+    gtrack.rm("test.tsvbad", force = TRUE)
+    withr::defer(gtrack.rm("test.tsvbad", force = TRUE))
+
+    # Create a TSV with two value columns -> should fail
+    tsv_bad <- tempfile(fileext = ".tsv")
+    writeLines(c(
+        paste(c("chrom", "start", "end", "v1", "v2"), collapse = "\t"),
+        paste(c("chr1", 0, 3, 2.5, 1.1), collapse = "\t")
+    ), tsv_bad)
+    withr::defer(unlink(tsv_bad))
+
+    expect_error(
+        gtrack.import("test.tsvbad", "bad tsv", tsv_bad, binsize = 0),
+        "More than one value column appears"
+    )
+})
