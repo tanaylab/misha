@@ -3,6 +3,7 @@
 * Added `colnames` parameter to `gintervals.mapply` function.
 * Added `attrs` parameter to `gtrack.import` function.
 * Added `created.user` default attribute in track creation functions.
+* Support BED files in `gtrack.import` function.
 
 # misha 4.3.7
 

@@ -466,15 +466,97 @@ get_bigWigToWig_bin <- function() {
 }
 
 
-#' Creates a track from WIG / BigWig / BedGraph / tab-delimited file
+# Internal helpers for gtrack.import
+.gtrack_is_bed_path <- function(path) {
+    grepl("\\.bed(\\.(gz|zip))?$", path, ignore.case = TRUE, perl = TRUE)
+}
+
+.gtrack_read_bed <- function(file) {
+    bed <- utils::read.table(
+        file,
+        header = FALSE, sep = "", quote = "", comment.char = "",
+        fill = TRUE, stringsAsFactors = FALSE, colClasses = "character"
+    )
+
+    if (nrow(bed) == 0 || ncol(bed) < 3) {
+        stop(sprintf("BED file %s appears to be empty or malformed", file), call. = FALSE)
+    }
+
+    keep_rows <- rep(TRUE, nrow(bed))
+    v1 <- trimws(bed[[1]])
+    keep_rows[startsWith(v1, "track") | startsWith(v1, "browser") | startsWith(v1, "#")] <- FALSE
+    bed <- bed[keep_rows, , drop = FALSE]
+
+    if (!nrow(bed)) {
+        stop(sprintf("BED file %s contains no intervals", file), call. = FALSE)
+    }
+
+    chrom <- as.character(bed[[1]])
+    start <- suppressWarnings(as.numeric(bed[[2]]))
+    end <- suppressWarnings(as.numeric(bed[[3]]))
+
+    if (any(is.na(start)) || any(is.na(end))) {
+        stop(sprintf("Non-numeric coordinates detected in BED file %s", file), call. = FALSE)
+    }
+
+    values <- rep(1, nrow(bed))
+    if (ncol(bed) >= 5) {
+        score <- suppressWarnings(as.numeric(bed[[5]]))
+        if (!all(is.na(score))) {
+            values <- ifelse(is.na(score), 1, score)
+        }
+    }
+
+    intervals_df <- data.frame(
+        chrom = chrom,
+        start = start,
+        end = end,
+        stringsAsFactors = FALSE
+    )
+
+    list(intervals = intervals_df, values = values)
+}
+
+.gtrack_set_created_attrs <- function(trackstr, description, created_by, attrs) {
+    .gtrack.attr.set(trackstr, "created.by", created_by, TRUE)
+    .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
+    .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
+    .gtrack.attr.set(trackstr, "description", description, TRUE)
+
+    if (!is.null(attrs)) {
+        if (is.null(names(attrs)) || any(names(attrs) == "")) {
+            stop("attrs must be a named vector or list", call. = FALSE)
+        }
+        for (attr_name in names(attrs)) {
+            .gtrack.attr.set(trackstr, attr_name, attrs[[attr_name]], FALSE)
+        }
+    }
+}
+
+
+#' Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited file
 #'
-#' Creates a track from WIG / BigWig / BedGraph / tab-delimited file
+#' Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited file
 #'
 #' This function creates a track from WIG / BigWig / BedGraph / tab-delimited
-#' file.  One can learn about the format of the tab-delimited file by running
-#' 'gextract' function on a 1D track with a 'file' parameter set to the name of
-#' the file. Zipped files are supported (file name must have '.gz' or '.zip'
-#' suffix).
+#' file. Zipped files are supported (file name must have '.gz' or '.zip' suffix).
+#'
+#' Tab-delimited files must start with a header line with the following column
+#' names (tab-separated): 'chrom', 'start', 'end', and exactly one value column
+#' name (e.g. 'value'). Each subsequent line provides a single interval:
+#' - chrom: chromosome name (e.g. 'chr1')
+#' - start: 0-based start coordinate (inclusive)
+#' - end: 0-based end coordinate (exclusive)
+#' - value: numeric value (floating point allowed); exactly one value column is supported
+#'
+#' Columns must be separated by tabs. Coordinates must refer to chromosomes
+#' existing in the current genome. Missing values can be specified as 'NaN'.
+#'
+#' BED files (.bed/.bed.gz/.bed.zip) are also supported and are imported as
+#' 'Sparse' tracks. If the BED 'score' column (5th column) exists and is
+#' numeric, it is used as the interval value; otherwise a constant value of 1 is
+#' used. For BED inputs, 'binsize' is ignored and the track is created in
+#' 'Sparse' format.
 #'
 #' If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 #' Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.
@@ -564,6 +646,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     tryCatch(
         {
             report.progress <- FALSE
+            is_bed_input <- .gtrack_is_bed_path(file)
 
             if (length(grep("^.+\\.gz$", file, perl = TRUE)) || length(grep("^.+\\.zip$", file, perl = TRUE))) {
                 message("Unzipping...\n")
@@ -573,8 +656,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                     stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
                 }
 
-                file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
-                file.unzipped <- paste(tmp.dirname, "/", file.noext, sep = "")
+                file.unzipped <- paste(tmp.dirname, "/", basename(gsub("\\.(gz|zip)$", "", file, perl = TRUE)), sep = "")
                 retv <- system(paste("/bin/sh -c \"gunzip -q -c", file, ">", file.unzipped, "\""), intern = FALSE)
                 if (retv != 0) {
                     stop(sprintf("Failed to unzip file %s", file), call. = FALSE)
@@ -582,8 +664,18 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 file <- file.unzipped
             }
 
-            # looks like all bigWig files start with "fc26" in their first two bytes
-            if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
+            # BED files are imported as sparse tracks
+            if (is_bed_input || length(grep("^.+\\.bed$", file, perl = TRUE))) {
+                message("Importing BED as a sparse track...\n")
+                report.progress <- TRUE
+                bed_parsed <- .gtrack_read_bed(file)
+                .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env(), silent = TRUE)
+                .gdb.add_track(trackstr)
+                .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
+
+                success <- TRUE
+            } else if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
+                # looks like all bigWig files start with "fc26" in their first two bytes
                 system(sprintf("od -x -N 2 \"%s\"", file), intern = TRUE)[1] == "0000000 fc26") {
                 message("Converting from BigWig to WIG...\n")
                 report.progress <- TRUE
@@ -603,31 +695,19 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 file <- file.converted
             }
 
-            if (report.progress) {
-                message("Converting to track...\n")
-            }
-
-            .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env(), silent = TRUE)
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(
-                trackstr, "created.by",
-                sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), TRUE
-            )
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
-
-            # Set additional attributes if provided
-            if (!is.null(attrs)) {
-                if (is.null(names(attrs)) || any(names(attrs) == "")) {
-                    stop("attrs must be a named vector or list", call. = FALSE)
+            if (success) {
+                # BED path handled above; skip the generic wig importer
+            } else {
+                if (report.progress) {
+                    message("Converting to track...\n")
                 }
-                for (attr_name in names(attrs)) {
-                    .gtrack.attr.set(trackstr, attr_name, attrs[[attr_name]], FALSE)
-                }
-            }
 
-            success <- TRUE
+                .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env(), silent = TRUE)
+                .gdb.add_track(trackstr)
+                .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
+
+                success <- TRUE
+            }
         },
         finally = {
             if (tmp.dirname != "") {
