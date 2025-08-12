@@ -760,35 +760,26 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 
 const char *rdb::get_groot(SEXP envir)
 {
-	// no need to protect the returned value
-	SEXP groot = Rf_findVar(Rf_install("GROOT"), Rf_findVar(Rf_install(".misha"), envir));
-
-	if (!Rf_isString(groot))
-		verror("GROOT variable does not exist");
-
-	return CHAR(STRING_ELT(groot, 0));
+    SEXP groot = find_in_misha(envir, "GROOT");
+    if (!Rf_isString(groot))
+        verror("GROOT variable does not exist");
+    return CHAR(STRING_ELT(groot, 0));
 }
 
 const char *rdb::get_gwd(SEXP envir)
 {
-	// no need to protect the returned value
-	SEXP gwd = Rf_findVar(Rf_install("GWD"), Rf_findVar(Rf_install(".misha"), envir));
-
-	if (!Rf_isString(gwd))
-		verror("GWD variable does not exist");
-
-	return CHAR(STRING_ELT(gwd, 0));
+    SEXP gwd = find_in_misha(envir, "GWD");
+    if (!Rf_isString(gwd))
+        verror("GWD variable does not exist");
+    return CHAR(STRING_ELT(gwd, 0));
 }
 
 const char *rdb::get_glib_dir(SEXP envir)
 {
-	// no need to protect the returned value
-	SEXP glibdir = Rf_findVar(Rf_install(".GLIBDIR"), Rf_findVar(Rf_install(".misha"), envir));
-
-	if (!Rf_isString(glibdir))
-		verror(".GLIBDIR variable does not exist");
-
-	return CHAR(STRING_ELT(glibdir, 0));
+    SEXP glibdir = find_in_misha(envir, ".GLIBDIR");
+    if (!Rf_isString(glibdir))
+        verror(".GLIBDIR variable does not exist");
+    return CHAR(STRING_ELT(glibdir, 0));
 }
 
 string rdb::track2path(SEXP envir, const string &trackname)

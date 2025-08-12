@@ -19,7 +19,7 @@ bool GTrackIntervalsFetcher::isbig(const char *track_name, const IntervUtils &iu
 	string path = interv2path(iu.get_env(), track_name);
 	SEXP gtracks;
 
-	rprotect(gtracks = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), iu.get_env())));
+    rprotect(gtracks = find_in_misha(iu.get_env(), "GTRACKS"));
 	for (int itrack = 0; itrack < Rf_length(gtracks); ++itrack) {
 		const char *track = CHAR(STRING_ELT(gtracks, itrack));
 		if (!strcmp(track_name, track))

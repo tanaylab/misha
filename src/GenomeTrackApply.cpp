@@ -61,8 +61,8 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		vector< vector<double> > vals(num_track_exprs);
 
 		SEXP rinterv_id;
-		rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
-		Rf_defineVar(Rf_install("GAPPLY.INTERVID"), rinterv_id, Rf_findVar(Rf_install(".misha"), _envir));
+        rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
+        define_in_misha(_envir, "GAPPLY.INTERVID", rinterv_id);
 
 		GIntervals last_intervals1d;
 		GIntervals2D last_intervals2d;
@@ -121,8 +121,8 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 				}
 
 				if (enable_gapply_intervals) {
-					rlast_intervals = scanner.get_iterator()->is_1d() ? iu.convert_intervs(&last_intervals1d) : iu.convert_intervs(&last_intervals2d);
-					Rf_defineVar(Rf_install("GAPPLY.INTERVALS"), rlast_intervals, Rf_findVar(Rf_install(".misha"), _envir));
+                    rlast_intervals = scanner.get_iterator()->is_1d() ? iu.convert_intervs(&last_intervals1d) : iu.convert_intervs(&last_intervals2d);
+                    define_in_misha(_envir, "GAPPLY.INTERVALS", rlast_intervals);
 				}
 
 				SEXP res = eval_in_R(eval_expr, _envir);
@@ -228,8 +228,8 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			vector< vector<double> > vals(num_track_exprs);
 
 			SEXP rinterv_id;
-			rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
-			Rf_defineVar(Rf_install("GAPPLY.INTERVID"), rinterv_id, Rf_findVar(Rf_install(".misha"), _envir));
+            rprotect(rinterv_id = RSaneAllocVector(INTSXP, 1));
+            define_in_misha(_envir, "GAPPLY.INTERVID", rinterv_id);
 
 			GIntervals last_intervals1d;
 			GIntervals2D last_intervals2d;
@@ -287,10 +287,10 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 						}
 					}
 
-					if (enable_gapply_intervals) {
-						rlast_intervals = scanner.get_iterator()->is_1d() ? iu.convert_intervs(&last_intervals1d) : iu.convert_intervs(&last_intervals2d);
-						Rf_defineVar(Rf_install("GAPPLY.INTERVALS"), rlast_intervals, Rf_findVar(Rf_install(".misha"), _envir));
-					}
+                    if (enable_gapply_intervals) {
+                        rlast_intervals = scanner.get_iterator()->is_1d() ? iu.convert_intervs(&last_intervals1d) : iu.convert_intervs(&last_intervals2d);
+                        define_in_misha(_envir, "GAPPLY.INTERVALS", rlast_intervals);
+                    }
 
 					SEXP res = eval_in_R(eval_expr, _envir);
 					if (!Rf_isReal(res) || Rf_length(res) != 1)
