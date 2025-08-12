@@ -20,9 +20,17 @@
 #define CLOCK_REALTIME 0
 #endif
 
+// Mark intentionally unused fallback helpers to suppress warnings in units
+// that include this header but do not call them.
+#if defined(__clang__) || defined(__GNUC__)
+#define MISHA_MAYBE_UNUSED __attribute__((unused))
+#else
+#define MISHA_MAYBE_UNUSED
+#endif
+
 // Implement clock_gettime for macOS if needed (pre-Sierra 10.12)
 #if !defined(HAVE_CLOCK_GETTIME)
-static int clock_gettime(int clk_id, struct timespec *t)
+static inline MISHA_MAYBE_UNUSED int clock_gettime(int clk_id, struct timespec *t)
 {
 	struct timeval tv;
 	if (gettimeofday(&tv, NULL) < 0)
