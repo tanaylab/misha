@@ -1,3 +1,7 @@
+# misha 4.3.9
+
+* Fixed a bug in `pwm` and `kmer` virtual track functions: iterator shifts were not applied. 
+
 # misha 4.3.8
 
 * Added `colnames` parameter to `gintervals.mapply` function.
