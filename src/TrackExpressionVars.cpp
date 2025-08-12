@@ -56,34 +56,36 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 	SEXP gvtracks = R_NilValue;
 	SEXP vtracks = R_NilValue;
 
-	// retrieve track names
-	rprotect(rtracknames[TRACK] = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env())));
+    // retrieve track names (split nested calls and protect environment)
+    rprotect(rtracknames[TRACK] = find_in_misha(m_iu.get_env(), "GTRACKS"));
 	SEXPCleaner rtracknames_track_cleaner(rtracknames[TRACK]);
 
 	// retrieve virtual track names (it's more complex since virtual track names are burried in a list of lists)
-	rtracknames[VTRACK] = R_NilValue;
-	rprotect(gvtracks = Rf_findVar(Rf_install("GVTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env())));
+    rtracknames[VTRACK] = R_NilValue;
+    rprotect(gvtracks = find_in_misha(m_iu.get_env(), "GVTRACKS"));
 	SEXPCleaner gvtracks_cleaner(gvtracks);
 
-	if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) { 
-		SEXP gwds = Rf_getAttrib(gvtracks, R_NamesSymbol);
+    if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) { 
+        SEXP gwds = Rf_getAttrib(gvtracks, R_NamesSymbol);
+        // Protect names vector while making further allocating calls
+        rprotect(gwds);
 
 		if (!Rf_isVector(gvtracks) || (Rf_length(gvtracks) && !Rf_isString(gwds)) || Rf_length(gwds) != Rf_length(gvtracks))
 			verror("Invalid format of GVTRACKS variable.\n"
 				"To continue working with virtual tracks please remove this variable from the environment.");
 
-		const char *gwd = get_gwd(m_iu.get_env());
+        const char *gwd = get_gwd(m_iu.get_env());
 
 		for (int i = 0; i < Rf_length(gwds); ++i) {
 			if (!strcmp(gwd, CHAR(STRING_ELT(gwds, i)))) {
-				vtracks = VECTOR_ELT(gvtracks, i);
-				SEXP vtracknames = Rf_getAttrib(vtracks, R_NamesSymbol);
+                vtracks = VECTOR_ELT(gvtracks, i);
+                SEXP vtracknames = Rf_getAttrib(vtracks, R_NamesSymbol);
 
 				if (!Rf_isVector(vtracks) || (Rf_length(vtracks) && !Rf_isString(vtracknames)) || Rf_length(vtracknames) != Rf_length(vtracks))
 					verror("Invalid format of GVTRACKS variable.\n"
 						"To continue working with virtual tracks please remove this variable from the environment.");
 
-				rtracknames[VTRACK] = vtracknames;
+                rtracknames[VTRACK] = vtracknames;
 			}
 		}
 	}
@@ -102,7 +104,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 						if (var_type == TRACK)
 							add_track_var(track);
 						else
-							add_vtrack_var(track, VECTOR_ELT(vtracks, itrack));
+                            add_vtrack_var(track, VECTOR_ELT(vtracks, itrack));
 						break;
 					}
 					pos += track.size();
@@ -438,23 +440,23 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 		verror("Source must be specified for non-PWM virtual tracks");
 	}
 
-	if (Rf_isString(rsrc) && Rf_length(rsrc) == 1)
-	{
-		string track(CHAR(STRING_ELT(rsrc, 0)));
+    if (Rf_isString(rsrc) && Rf_length(rsrc) == 1)
+    {
+        string track(CHAR(STRING_ELT(rsrc, 0)));
 
-		SEXP gtracks = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env()));
-		if (Rf_isString(gtracks))
-		{
-			for (int itrack = 0; itrack < Rf_length(gtracks); itrack++)
-			{
-				if (!strcmp(CHAR(STRING_ELT(gtracks, itrack)), track.c_str()))
-				{
-					add_vtrack_var_src_track(rvtrack, vtrack, track);
-					return;
-				}
-			}
-		}
-	}
+        SEXP gtracks = find_in_misha(m_iu.get_env(), "GTRACKS");
+        if (Rf_isString(gtracks))
+        {
+            for (int itrack = 0; itrack < Rf_length(gtracks); itrack++)
+            {
+                if (!strcmp(CHAR(STRING_ELT(gtracks, itrack)), track.c_str()))
+                {
+                    add_vtrack_var_src_track(rvtrack, vtrack, track);
+                    return;
+                }
+            }
+        }
+    }
 
 	GIntervals intervs1d;
 	GIntervals2D intervs2d;

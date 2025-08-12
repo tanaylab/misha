@@ -98,7 +98,7 @@ void TrackExprScanner::define_r_vars(unsigned eval_buf_limit)
 		m_1d.expr_itr_intervals_ends = REAL(VECTOR_ELT(m_rexpr_itr_intervals, GInterval::END));
 		for (unsigned i = 0; i < m_eval_buf_limit; i++)
 			m_1d.expr_itr_intervals_chroms[i] = 1;
-	} else {
+    } else {
 		m_2d.cur_chromid1 = -1;
 		m_2d.cur_chromid2 = -1;
 		m_2d.expr_itr_intervals.resize(m_eval_buf_limit);
@@ -112,8 +112,9 @@ void TrackExprScanner::define_r_vars(unsigned eval_buf_limit)
 		m_2d.expr_itr_intervals_ends2 = REAL(VECTOR_ELT(m_rexpr_itr_intervals, GInterval2D::END2));
 		for (unsigned i = 0; i < m_eval_buf_limit; i++)
 			m_2d.expr_itr_intervals_chroms1[i] = m_2d.expr_itr_intervals_chroms2[i] = 1;
-	}
-	Rf_defineVar(Rf_install("GITERATOR.INTERVALS"), m_rexpr_itr_intervals, Rf_findVar(Rf_install(".misha"), m_iu.get_env()));
+    }
+    // Safely define in .misha env
+    define_in_misha(m_iu.get_env(), "GITERATOR.INTERVALS", m_rexpr_itr_intervals);
 
     for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         const TrackExpressionVars::Track_var *var = m_expr_vars.var(m_track_exprs[iexpr].c_str());
@@ -565,13 +566,14 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 				SEXP all_track_names;
 				SEXPCleaner all_track_names_cleaner(all_track_names);
 
-				rprotect(all_track_names = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env())));
+                rprotect(all_track_names = find_in_misha(m_iu.get_env(), "GTRACKS"));
 				if (Rf_isString(all_track_names)) {
 					int i;
 					for (i = 0; i < Rf_length(all_track_names); ++i) {
 						if (iter_val == CHAR(STRING_ELT(all_track_names, i)))
 							break;
-					}
+                }
+                runprotect(1); // all_track_names
 					if (i >= Rf_length(all_track_names)) 
 						verror("Invalid iterator: %s is neither a name of a track nor a name of an intervals set", iter_val.c_str());
 				}
