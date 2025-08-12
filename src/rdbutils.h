@@ -173,6 +173,29 @@ SEXP RSaneUnserialize(const char *fname);
 SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
+// Helper: safely find a symbol in the package's .misha environment.
+// Note: the returned SEXP is not protected. PROTECT it if you will perform
+// any allocations before you are done using it.
+static inline SEXP find_in_misha(SEXP envir, const char *name) {
+    SEXP misha_env = R_NilValue;
+    rprotect(misha_env = Rf_findVar(Rf_install(".misha"), envir));
+    SEXP val = Rf_findVar(Rf_install(name), misha_env);
+    runprotect(1);
+    return val;
+}
+
+// Helper: safely define a symbol in the package's .misha environment.
+// Ensures both the target environment and the value are protected
+// during the Rf_defineVar call.
+static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
+    SEXP misha_env = R_NilValue;
+    rprotect(misha_env = Rf_findVar(Rf_install(".misha"), envir));
+    SEXP tmp = value;
+    rprotect(tmp);
+    Rf_defineVar(Rf_install(name), tmp, misha_env);
+    runprotect(2);
+}
+
 
 void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
 

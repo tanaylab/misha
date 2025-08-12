@@ -43,8 +43,9 @@ IntervUtils::IntervUtils(SEXP envir)
 	m_kids_intervals1d.clear();
 	m_kids_intervals2d.clear();
 
-	
-	m_allgenome = Rf_findVar(Rf_install("ALLGENOME"), Rf_findVar(Rf_install(".misha"), m_envir));
+    {
+        m_allgenome = find_in_misha(m_envir, "ALLGENOME");
+    }
 
 	if (Rf_isNull(m_allgenome))
 		verror("ALLGENOME variable does not exist");
@@ -82,14 +83,15 @@ bool IntervUtils::track_exists(const char *track_name)
 {
 	SEXP all_track_names;
 
-	rprotect(all_track_names = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), get_env())));
+    rprotect(all_track_names = find_in_misha(get_env(), "GTRACKS"));
 	if (Rf_isString(all_track_names)) {
 		for (int i = 0; i < Rf_length(all_track_names); ++i) {
 			if (!strcmp(track_name, CHAR(STRING_ELT(all_track_names, i))))
 				return true;
 		}
 	}
-	return false;
+    runprotect(2);
+    return false;
 }
 
 void IntervUtils::get_all_genome_intervs(GIntervals &intervals) const
@@ -316,7 +318,9 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		SEXP gintervs;
 		bool interv_found = false;
 
-		rprotect(gintervs = Rf_findVar(Rf_install("GINTERVS"), Rf_findVar(Rf_install(".misha"),m_envir)));
+        {
+            rprotect(gintervs = find_in_misha(m_envir, "GINTERVS"));
+        }
 		if (Rf_isString(gintervs)) {
 			for (int iinterv = 0; iinterv < Rf_length(gintervs); ++iinterv) {
 				const char *interv = CHAR(STRING_ELT(gintervs, iinterv));
@@ -639,9 +643,10 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval)
 		tmp_intervals.push_back((GInterval)*iinterval);
 
-	SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
+    SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
 	SEXP src_chroms, src_chroms_idx, src_starts;
-	SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+    SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+    rprotect(col_names);
 	unsigned num_src_chroms = src_id2chrom.size();
 
     rprotect(src_chroms_idx = RSaneAllocVector(INTSXP, chain_intervs.size()));
@@ -656,7 +661,7 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 	for (unsigned id = 0; id < num_src_chroms; ++id)
 		SET_STRING_ELT(src_chroms, id, Rf_mkChar(src_id2chrom[id].c_str()));
 
-	for (int i = 0; i < ChainInterval::NUM_COLS; i++)
+    for (int i = 0; i < ChainInterval::NUM_COLS; i++)
 		SET_STRING_ELT(col_names, i, Rf_mkChar(ChainInterval::COL_NAMES[i]));
 
     Rf_setAttrib(src_chroms_idx, R_LevelsSymbol, src_chroms);
@@ -665,7 +670,8 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
     SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, src_chroms_idx);
     SET_VECTOR_ELT(answer, ChainInterval::START_SRC, src_starts);
 
-	return answer;
+    runprotect(1); // col_names
+    return answer;
 }
 
 DiagonalBand IntervUtils::convert_band(SEXP rband)

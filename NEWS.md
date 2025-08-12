@@ -1,6 +1,7 @@
 # misha 4.3.9
 
 * Fixed a bug in `pwm` and `kmer` virtual track functions: iterator shifts were not applied. 
+* Internal: address CRAN rchk notes and improve memory protection.
 
 # misha 4.3.8
 
