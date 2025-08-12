@@ -123,6 +123,9 @@ public:
         std::unique_ptr<PWMScorer> pwm_scorer;
         std::unique_ptr<KmerCounter> kmer_counter;
         char strand;
+        // When the virtual track is sequence-based (PWM/KMER) we may still
+        // have per-vtrack iterator modifiers; store them here.
+        Iterator_modifier1D *seq_imdf1d{NULL};
     };
 
     typedef vector<Track_var> Track_vars;

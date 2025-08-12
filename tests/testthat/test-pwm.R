@@ -95,6 +95,48 @@ test_that("pwm vtrack bidirect returns the sum of the two strands", {
     expect_true(scores$pwm_bidi[1] >= scores$pwm_fwd[1])
 })
 
+test_that("pwm honors gvtrack.iterator shifts", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm() # AC motif (length 2)
+
+    # Base interval used as both intervals and iterator (single-bin)
+    base <- gintervals(1, 2000, 2040)
+
+    # Two identical PWM vtracks differing only by per-vtrack iterator shifts
+    gvtrack.create("pwm_small_win", NULL, func = "pwm", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+    gvtrack.create("pwm_large_win", NULL, func = "pwm", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+
+    # Apply per-vtrack iterator shifts
+    gvtrack.iterator("pwm_small_win", sshift = -10, eshift = 10)
+    gvtrack.iterator("pwm_large_win", sshift = -1000, eshift = 1000)
+
+    scores <- gextract(c("pwm_small_win", "pwm_large_win"), base, iterator = base)
+
+    # Manually compute expected totals using the exact windows the scorer will read
+    motif_len <- nrow(pssm)
+
+    # NOTE: Shifts modify start and end independently (not center).
+    # For PWM with extend=TRUE and strand=1, only the end is extended by (motif_len - 1) beyond the shifted end.
+    ext_small <- base
+    ext_small$start <- pmax(0, ext_small$start - 10)
+    ext_small$end <- ext_small$end + 10 + (motif_len - 1)
+    seq_small <- toupper(gseq.extract(ext_small))
+    manual_small <- manual_pwm_scores_single_strand(seq_small, pssm, prior = 0.01)
+    expect_equal(scores$pwm_small_win[1], log_sum_exp(manual_small), tolerance = 1e-6)
+
+    ext_large <- base
+    ext_large$start <- pmax(0, ext_large$start - 1000)
+    ext_large$end <- ext_large$end + 1000 + (motif_len - 1)
+    seq_large <- toupper(gseq.extract(ext_large))
+    manual_large <- manual_pwm_scores_single_strand(seq_large, pssm, prior = 0.01)
+    # Use a slightly looser tolerance here due to accumulated floating-point error on large windows
+    expect_equal(scores$pwm_large_win[1], log_sum_exp(manual_large), tolerance = 1e-4)
+
+    # The two totals should generally differ due to different windows
+    expect_true(scores$pwm_small_win[1] != scores$pwm_large_win[1])
+})
+
 test_that("pwm scoring works correctly for forward and reverse strands", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
@@ -165,4 +207,316 @@ test_that("pwm scoring works correctly for forward and reverse strands", {
     # Test logical properties
     expect_true(scores_plus$pwm_bidi[1] >= scores_plus$pwm_fwd[1])
     expect_true(scores_plus$pwm_bidi[1] >= scores_plus$pwm_rev[1])
+})
+
+test_that("pwm honors iterator shifts across multiple magnitudes (extend=TRUE, fwd strand)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm() # AC motif (length 2)
+    motif_len <- nrow(pssm)
+
+    # Base interval used as both intervals and iterator (single-bin)
+    base <- gintervals(1, 2000, 2040)
+
+    # Build several vtracks with increasing iterator shifts
+    shift_values <- c(0, 1, 5, 10, 25, 50, 100, 250, 1000)
+    vnames <- sprintf("pwm_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(vnames[i], NULL, func = "pwm", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+        gvtrack.iterator(vnames[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(vnames, base, iterator = base)
+
+    # Manually compute expectations for each shift
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        ext <- base
+        ext$start <- pmax(0, ext$start - s)
+        ext$end <- ext$end + s + (motif_len - 1)
+        seq_ext <- toupper(gseq.extract(ext))
+        manual <- manual_pwm_scores_single_strand(seq_ext, pssm, prior = 0.01)
+
+        expected <- log_sum_exp(manual)
+        actual <- scores[[vnames[i]]][1]
+
+        tol <- if (s >= 250) 1e-4 else 1e-6
+        expect_equal(actual, expected, tolerance = tol)
+    }
+})
+
+test_that("pwm honors iterator shifts without extension (extend=FALSE, fwd strand)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm() # AC motif (length 2)
+    motif_len <- nrow(pssm)
+
+    base <- gintervals(1, 2000, 2040)
+
+    # Use a variety of shifts
+    shift_values <- c(0, 5, 10, 50, 200)
+    vnames <- sprintf("pwm_noext_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(vnames[i], NULL, func = "pwm", pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0.01)
+        gvtrack.iterator(vnames[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(vnames, base, iterator = base)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        # For extend=FALSE, no motif-length extension is applied
+        ext <- base
+        ext$start <- pmax(0, ext$start - s)
+        ext$end <- ext$end + s
+        seq_noext <- toupper(gseq.extract(ext))
+
+        manual <- manual_pwm_scores_single_strand(seq_noext, pssm, prior = 0.01)
+        expected <- log_sum_exp(manual)
+        actual <- scores[[vnames[i]]][1]
+
+        tol <- if (s >= 50) 1e-5 else 1e-6
+        expect_equal(actual, expected, tolerance = tol)
+    }
+})
+
+test_that("pwm bidirectional honors iterator shifts (extend=TRUE)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm() # AC motif (length 2)
+    motif_len <- nrow(pssm)
+
+    base <- gintervals(1, 200, 240)
+
+    # A couple of representative shifts
+    shift_values <- c(10, 200)
+    vnames <- sprintf("pwm_bidi_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(vnames[i], NULL, func = "pwm", pssm = pssm, bidirect = TRUE, extend = TRUE, prior = 0.01)
+        gvtrack.iterator(vnames[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(vnames, base, iterator = base)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        ext <- base
+        ext$start <- pmax(0, ext$start - s)
+        ext$end <- ext$end + s + (motif_len - 1)
+        seq_fwd <- toupper(gseq.extract(ext))
+        seq_rev <- grevcomp(seq_fwd)
+
+        fwd_scores <- manual_pwm_scores_single_strand(seq_fwd, pssm, prior = 0.01)
+        rev_scores <- manual_pwm_scores_single_strand(seq_rev, pssm, prior = 0.01)
+        expected <- log_sum_exp(c(fwd_scores, rev_scores))
+        actual <- scores[[vnames[i]]][1]
+
+        tol <- if (s >= 200) 1e-4 else 1e-6
+        expect_equal(actual, expected, tolerance = tol)
+    }
+})
+
+test_that("pwm.max honors iterator shifts (extend=TRUE, fwd strand)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    motif_len <- nrow(pssm)
+
+    base <- gintervals(1, 2000, 2040)
+
+    shift_values <- c(0, 1, 10, 200)
+    vnames <- sprintf("pwm_max_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(vnames[i], NULL, func = "pwm.max", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+        gvtrack.iterator(vnames[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(vnames, base, iterator = base)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        ext <- base
+        ext$start <- pmax(0, ext$start - s)
+        ext$end <- ext$end + s + (motif_len - 1)
+        seq_ext <- toupper(gseq.extract(ext))
+        manual <- manual_pwm_scores_single_strand(seq_ext, pssm, prior = 0.01)
+        expected <- max(manual)
+        actual <- scores[[vnames[i]]][1]
+        # Single-precision arithmetic in the C++ scorer can introduce tiny differences vs R double
+        tol <- if (s >= 200) 5e-6 else 5e-6
+        expect_lt(abs(actual - expected), tol)
+    }
+})
+
+test_that("pwm.max honors iterator shifts without extension (extend=FALSE, fwd strand)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+
+    base <- gintervals(1, 2000, 2040)
+
+    shift_values <- c(0, 10, 200)
+    vnames <- sprintf("pwm_max_noext_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(vnames[i], NULL, func = "pwm.max", pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0.01)
+        gvtrack.iterator(vnames[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(vnames, base, iterator = base)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        ext <- base
+        ext$start <- pmax(0, ext$start - s)
+        ext$end <- ext$end + s
+        seq_noext <- toupper(gseq.extract(ext))
+        manual <- manual_pwm_scores_single_strand(seq_noext, pssm, prior = 0.01)
+        expected <- max(manual)
+        actual <- scores[[vnames[i]]][1]
+        tol <- if (s >= 50) 5e-6 else 5e-6
+        expect_lt(abs(actual - expected), tol)
+    }
+})
+
+test_that("pwm.max.pos honors iterator shifts (extend=TRUE, fwd strand)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    motif_len <- nrow(pssm)
+
+    base <- gintervals(1, 200, 240)
+
+    shift <- 100
+    gvtrack.create("pwm_max_pos_shift", NULL, func = "pwm.max.pos", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+    gvtrack.iterator("pwm_max_pos_shift", sshift = -shift, eshift = shift)
+
+    scores <- gextract("pwm_max_pos_shift", base, iterator = base)
+
+    ext <- base
+    ext$start <- pmax(0, ext$start - shift)
+    ext$end <- ext$end + shift + (motif_len - 1)
+    seq_ext <- toupper(gseq.extract(ext))
+    manual <- manual_pwm_scores_single_strand(seq_ext, pssm, prior = 0.01)
+    expected_pos <- which.max(manual)
+
+    expect_equal(scores$pwm_max_pos_shift[1], expected_pos)
+})
+
+test_that("pwm.max bidirectional equals max of forward and reverse (extend=TRUE)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    motif_len <- nrow(pssm)
+
+    base <- gintervals(1, 200, 240)
+
+    shift <- 200
+    gvtrack.create("pwm_max_bidi", NULL, func = "pwm.max", pssm = pssm, bidirect = TRUE, extend = TRUE, prior = 0.01)
+    gvtrack.iterator("pwm_max_bidi", sshift = -shift, eshift = shift)
+
+    scores <- gextract("pwm_max_bidi", base, iterator = base)
+
+    ext <- base
+    ext$start <- pmax(0, ext$start - shift)
+    ext$end <- ext$end + shift + (motif_len - 1)
+    seq_fwd <- toupper(gseq.extract(ext))
+    seq_rev <- grevcomp(seq_fwd)
+    fwd_scores <- manual_pwm_scores_single_strand(seq_fwd, pssm, prior = 0.01)
+    rev_scores <- manual_pwm_scores_single_strand(seq_rev, pssm, prior = 0.01)
+
+    expected <- max(c(fwd_scores, rev_scores))
+    # Slightly looser tolerance due to bidirectional scanning and single-precision accumulation
+    expect_lt(abs(scores$pwm_max_bidi[1] - expected), 1e-3)
+})
+
+test_that("pwm total likelihood is monotonic with larger windows", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    motif_len <- nrow(pssm)
+
+    base <- gintervals(1, 2000, 2040)
+
+    shifts <- c(0, 10, 50, 200)
+    vnames <- sprintf("pwm_total_shift_%d", shifts)
+
+    for (i in seq_along(shifts)) {
+        s <- shifts[i]
+        gvtrack.create(vnames[i], NULL, func = "pwm", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+        gvtrack.iterator(vnames[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(vnames, base, iterator = base)
+    vals <- as.numeric(scores[1, vnames])
+    # Non-decreasing with larger windows (superset of positions)
+    expect_true(all(diff(vals) >= -1e-7))
+})
+
+test_that("iterator shift equals explicit iterator expansion for pwm (single-bin, extend=TRUE)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    motif_len <- nrow(pssm)
+
+    # Base 60bp bin
+    base60 <- gintervals(1, 2000, 2060)
+    # Expanded iterator by 10bp on each side => 80bp
+    base80 <- gintervals(1, 1990, 2070)
+
+    # Shifted vtrack over base60
+    gvtrack.create("pwm_shifted", NULL, func = "pwm", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+    gvtrack.iterator("pwm_shifted", sshift = -10, eshift = 10)
+    s_shift <- gextract("pwm_shifted", base60, iterator = base60)
+
+    # Unshifted vtrack over expanded iterator
+    gvtrack.create("pwm_unshifted", NULL, func = "pwm", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+    s_unshift <- gextract("pwm_unshifted", base80, iterator = base80)
+
+    expect_lt(abs(s_shift$pwm_shifted[1] - s_unshift$pwm_unshifted[1]), 1e-6)
+})
+
+test_that("iterator shift equals explicit iterator expansion for pwm.max (single-bin, extend=TRUE)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+
+    base60 <- gintervals(1, 2100, 2160)
+    base80 <- gintervals(1, 2090, 2170)
+
+    gvtrack.create("pwmmax_shifted", NULL, func = "pwm.max", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+    gvtrack.iterator("pwmmax_shifted", sshift = -10, eshift = 10)
+    a_shift <- gextract("pwmmax_shifted", base60, iterator = base60)
+
+    gvtrack.create("pwmmax_unshifted", NULL, func = "pwm.max", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+    a_unshift <- gextract("pwmmax_unshifted", base80, iterator = base80)
+
+    expect_lt(abs(a_shift$pwmmax_shifted[1] - a_unshift$pwmmax_unshifted[1]), 5e-6)
+})
+
+test_that("iterator shift equals explicit iterator expansion for pwm.max.pos (single-bin, extend=TRUE)", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+
+    base60 <- gintervals(1, 2200, 2260)
+    base80 <- gintervals(1, 2190, 2270)
+
+    gvtrack.create("pwmmaxpos_shifted", NULL, func = "pwm.max.pos", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+    gvtrack.iterator("pwmmaxpos_shifted", sshift = -10, eshift = 10)
+    p_shift <- gextract("pwmmaxpos_shifted", base60, iterator = base60)
+
+    gvtrack.create("pwmmaxpos_unshifted", NULL, func = "pwm.max.pos", pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01)
+    p_unshift <- gextract("pwmmaxpos_unshifted", base80, iterator = base80)
+
+    expect_equal(p_shift$pwmmaxpos_shifted[1], p_unshift$pwmmaxpos_unshifted[1])
 })

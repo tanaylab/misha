@@ -297,6 +297,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             var.var_name = vtrack;
             var.val_func = (func == "pwm" ? Track_var::PWM : func == "pwm.max" ? Track_var::PWM_MAX : Track_var::PWM_MAX_POS);
             var.track_n_imdf = nullptr;  // No track needed for PWM
+            var.seq_imdf1d = nullptr;
             
             SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 			if (!Rf_isNewList(rparams))	{
@@ -348,6 +349,11 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				PWMScorer::MAX_LIKELIHOOD_POS,
 				strand
 			);
+
+            // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
+            Iterator_modifier1D imdf1d;
+            parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+            var.seq_imdf1d = add_imdf(imdf1d);
             
             var.percentile = numeric_limits<double>::quiet_NaN();
             var.requires_pv = false;
@@ -359,6 +365,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			var.var_name = vtrack;
 			var.val_func = func == "kmer.count" ? Track_var::KMER_COUNT : Track_var::KMER_FRAC;
 			var.track_n_imdf = nullptr; // No track needed for kmer
+            var.seq_imdf1d = nullptr;
 			var.percentile = numeric_limits<double>::quiet_NaN();
 			SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 
@@ -414,7 +421,12 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 							vtrack.c_str(), func.c_str());
 			}
 
-			var.requires_pv = false;
+            // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
+            Iterator_modifier1D imdf1d;
+            parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+            var.seq_imdf1d = add_imdf(imdf1d);
+
+            var.requires_pv = false;
 			return;
 		}
 	}
@@ -1098,11 +1110,13 @@ void TrackExpressionVars::set_vars(const GInterval2D &interval, const DiagonalBa
 	m_interval2d = interval;
 	m_band = band;
 
-	for (Iterator_modifiers1D::iterator iimdf = m_imdfs1d.begin(); iimdf != m_imdfs1d.end(); ++iimdf)
-		iimdf->transform(interval, m_iu.get_chromkey());
+    for (Iterator_modifiers1D::iterator iimdf = m_imdfs1d.begin(); iimdf != m_imdfs1d.end(); ++iimdf) {
+        iimdf->transform(interval, m_iu.get_chromkey());
+    }
 
-	for (Iterator_modifiers2D::iterator iimdf = m_imdfs2d.begin(); iimdf != m_imdfs2d.end(); ++iimdf)
-		iimdf->transform(interval, m_iu.get_chromkey());
+    for (Iterator_modifiers2D::iterator iimdf = m_imdfs2d.begin(); iimdf != m_imdfs2d.end(); ++iimdf) {
+        iimdf->transform(interval, m_iu.get_chromkey());
+    }
 
 	set_vars(idx);
 }
@@ -1140,21 +1154,23 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		}
 		}
 
-	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
+    for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
         if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS) {
-            // PWM scoring doesn't require track data
-            ivar->var[idx] = ivar->pwm_scorer->score_interval(m_interval1d, m_iu.get_chromkey());
+            // PWM scoring doesn't require track data. Use per-vtrack iterator-modified interval if present.
+            const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+            ivar->var[idx] = ivar->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
             continue;
         }
-		if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC)	{
-			// Kmer counting doesn't require track data
-			if (ivar->kmer_counter)	{ 
-				ivar->var[idx] = ivar->kmer_counter->score_interval(m_interval1d, m_iu.get_chromkey());
-			} else{
-				ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
-			}
-			continue;
-		}
+        if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC)	{
+            // Kmer counting doesn't require track data. Use iterator-modified interval if present.
+            const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+            if (ivar->kmer_counter)	{
+                ivar->var[idx] = ivar->kmer_counter->score_interval(seq_interval, m_iu.get_chromkey());
+            } else{
+                ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+            }
+            continue;
+        }
 
 		if (GenomeTrack::is_1d(ivar->track_n_imdf->type)) {
 			GenomeTrack1D &track = *(GenomeTrack1D *)ivar->track_n_imdf->track;
