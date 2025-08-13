@@ -25,25 +25,26 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 	SEXP bins;
 
 	answer = iu.convert_intervs(&res_intervals, Interval::NUM_COLS + 1, false);
-	rprotect(bins = RSaneAllocVector(REALSXP, res_bins.size()));
+    bins = rprotect_ptr(RSaneAllocVector(REALSXP, res_bins.size()));
 	for (unsigned i = 0; i < res_bins.size(); i++)
 		REAL(bins)[i] = res_bins[i];
 
 	SET_VECTOR_ELT(answer, Interval::NUM_COLS, bins);
-	SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+    SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 	SET_STRING_ELT(colnames, Interval::NUM_COLS, Rf_mkChar("bin"));
 
 	SEXP range;
 	int numbins = bin_finder.get_numbins();
-	rprotect(range = RSaneAllocVector(STRSXP, numbins));
+    range = rprotect_ptr(RSaneAllocVector(STRSXP, numbins));
 	for (int bin = 0; bin < numbins; bin++) {
 		char buf[10000];
 
 		snprintf(buf, sizeof(buf), "%c%g, %g]", bin || !include_lowest ? '(' : '[', bin_finder.get_breaks()[bin], bin_finder.get_breaks()[bin + 1]);
 		SET_STRING_ELT(range, bin, Rf_mkChar(buf));
 	}
-	Rf_setAttrib(answer, Rf_install("range"), range);
-	return answer;
+    Rf_setAttrib(answer, Rf_install("range"), range);
+    runprotect(2); // colnames, range
+    return answer;
 }
 
 static void gpartition_add_interval2res(const GInterval &interval, GIntervals &res_intervals, vector<int> &res_bins, int bin,

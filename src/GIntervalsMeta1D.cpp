@@ -163,9 +163,9 @@ void GIntervalsMeta1D::save_meta(const char *path, SEXP zeroline, const vector<C
 	SEXP chroms, chroms_idx;
     SEXP rsize, roverlap_size, rtouching_size, rrange, roverlap_range, roverlaps;
 
-	rprotect(rstat = RSaneAllocVector(VECSXP, NUM_STAT_COLS));
+    rstat = rprotect_ptr(RSaneAllocVector(VECSXP, NUM_STAT_COLS));
 
-	Rf_setAttrib(rstat, R_NamesSymbol, (colnames = RSaneAllocVector(STRSXP, NUM_STAT_COLS)));
+    Rf_setAttrib(rstat, R_NamesSymbol, (colnames = rprotect_ptr(RSaneAllocVector(STRSXP, NUM_STAT_COLS))));
 	Rf_setAttrib(rstat, R_ClassSymbol, Rf_mkString("data.frame"));
 
 	for (int i = 0; i < NUM_STAT_COLS; i++)
@@ -177,15 +177,15 @@ void GIntervalsMeta1D::save_meta(const char *path, SEXP zeroline, const vector<C
 			++num_nonempty_chroms;
 	}
 
-    rprotect(chroms_idx = RSaneAllocVector(INTSXP, num_nonempty_chroms));
-    rprotect(rsize = RSaneAllocVector(REALSXP, num_nonempty_chroms));
-    rprotect(roverlap_size = RSaneAllocVector(REALSXP, num_nonempty_chroms));
-    rprotect(rtouching_size = RSaneAllocVector(REALSXP, num_nonempty_chroms));
-    rprotect(rrange = RSaneAllocVector(REALSXP, num_nonempty_chroms));
-    rprotect(roverlap_range = RSaneAllocVector(REALSXP, num_nonempty_chroms));
-    rprotect(roverlaps = RSaneAllocVector(LGLSXP, num_nonempty_chroms));
-    rprotect(rownames = RSaneAllocVector(INTSXP, num_nonempty_chroms));
-    rprotect(chroms = RSaneAllocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
+    chroms_idx = rprotect_ptr(RSaneAllocVector(INTSXP, num_nonempty_chroms));
+    rsize = rprotect_ptr(RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    roverlap_size = rprotect_ptr(RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rtouching_size = rprotect_ptr(RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    rrange = rprotect_ptr(RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    roverlap_range = rprotect_ptr(RSaneAllocVector(REALSXP, num_nonempty_chroms));
+    roverlaps = rprotect_ptr(RSaneAllocVector(LGLSXP, num_nonempty_chroms));
+    rownames = rprotect_ptr(RSaneAllocVector(INTSXP, num_nonempty_chroms));
+    chroms = rprotect_ptr(RSaneAllocVector(STRSXP, iu.get_chromkey().get_num_chroms()));
 
 	for (unsigned id = 0; id < (unsigned)iu.get_chromkey().get_num_chroms(); ++id)
 		SET_STRING_ELT(chroms, id, Rf_mkChar(iu.id2chrom(id).c_str()));
