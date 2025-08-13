@@ -695,9 +695,9 @@ SEXP IntervUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
 {
 	SEXP answer, row_names, col_names;
 
-	rprotect(answer = RSaneAllocVector(VECSXP, numcols));
-    rprotect(col_names = RSaneAllocVector(STRSXP, numcols));
-    rprotect(row_names = RSaneAllocVector(INTSXP, numrows));
+    answer = rprotect_ptr(RSaneAllocVector(VECSXP, numcols));
+    col_names = rprotect_ptr(RSaneAllocVector(STRSXP, numcols));
+    row_names = rprotect_ptr(RSaneAllocVector(INTSXP, numrows));
 
 	for (int i = 0; i < numrows; ++i)
 		INTEGER(row_names)[i] = i + 1;
@@ -708,6 +708,8 @@ SEXP IntervUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
     Rf_setAttrib(answer, R_NamesSymbol, col_names);
     Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
     Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
+
+    runprotect(3);
 
 	return answer;
 }
@@ -726,8 +728,8 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 		verror("Attempt to copy data frame columns beyond the valid size");
 
 	int numrows = Rf_length(Rf_getAttrib(tgt, R_RowNamesSymbol));
-	SEXP src_colnames = Rf_getAttrib(src, R_NamesSymbol);
-	SEXP tgt_colnames = Rf_getAttrib(tgt, R_NamesSymbol);
+    SEXP src_colnames = rprotect_ptr(Rf_getAttrib(src, R_NamesSymbol));
+    SEXP tgt_colnames = rprotect_ptr(Rf_getAttrib(tgt, R_NamesSymbol));
 
 	if (Rf_isNull(src_colnames) || !Rf_isString(src_colnames))
 		verror("Invalid source data frame for a copy");
@@ -741,7 +743,7 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 		SEXP src_col = VECTOR_ELT(src, col);
 		SEXP tgt_col;
 
-        rprotect(tgt_col = RSaneAllocVector(TYPEOF(src_col), numrows));
+        tgt_col = rprotect_ptr(RSaneAllocVector(TYPEOF(src_col), numrows));
 
 		if (!Rf_isInteger(src_col) && !Rf_isReal(src_col) && !Rf_isLogical(src_col) && !Rf_isString(src_col) && !Rf_isFactor(src_col))
 			verror("Unsupported type found in a data frame: %s", Rf_type2char(TYPEOF(src_col)));
@@ -753,6 +755,7 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 
         SET_VECTOR_ELT(tgt, col + tgt_col_offset, tgt_col);
     }
+    runprotect(2);
 }
 
 void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)
