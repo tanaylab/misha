@@ -186,8 +186,9 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 				}
 			}
 			SET_VECTOR_ELT(answer, Rf_length(_intervs1) + Rf_length(_intervs2), rdists);
-			SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+			SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2), Rf_mkChar("dist"));
+			runprotect(1);
 
 			return answer;
 		} else {   // 2D
@@ -315,9 +316,10 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			SET_VECTOR_ELT(answer, Rf_length(_intervs1) + Rf_length(_intervs2), rdists1);
 			SET_VECTOR_ELT(answer, Rf_length(_intervs1) + Rf_length(_intervs2) + 1, rdists2);
 
-			SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+			SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2), Rf_mkChar("dist1"));
 			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2) + 1, Rf_mkChar("dist2"));
+			runprotect(1);
 
 			return answer;
 		}

@@ -33,10 +33,9 @@ void GIntervalsBigSet2D::load_chrom(int chromid1, int chromid2)
 			filename += m_iu->id2chrom(chromid1);
 			filename += "-";
 			filename += m_iu->id2chrom(chromid2);
-			SEXP rintervals = RSaneUnserialize(filename.c_str());
-			rprotect(rintervals);
+			SEXP rintervals = rprotect_ptr(RSaneUnserialize(filename.c_str()));
 			m_iu->convert_rintervs(rintervals, NULL, &m_intervals);
-			runprotect(rintervals);
+			runprotect(1);
 
 			// set udata
 			uint64_t offset = 0;

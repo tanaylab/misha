@@ -57,20 +57,20 @@ SEXP gtrackdist(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _include_
 				distribution[index]++;
 		}
 
-		// pack the answer
-		SEXP answer, dim, dimnames;
-		rprotect(answer = RSaneAllocVector(REALSXP, totalbins));
+        // pack the answer
+        SEXP answer, dim, dimnames;
+        answer = rprotect_ptr(RSaneAllocVector(REALSXP, totalbins));
 		double *panswer = REAL(answer);
 
 		for (unsigned i = 0; i < totalbins; i++)
 			panswer[i] = distribution[i];
 
-		rprotect(dim = RSaneAllocVector(INTSXP, numexpr));
-		rprotect(dimnames = RSaneAllocVector(VECSXP, numexpr));
+        dim = rprotect_ptr(RSaneAllocVector(INTSXP, numexpr));
+        dimnames = rprotect_ptr(RSaneAllocVector(VECSXP, numexpr));
 		bins_manager.set_dims(dim, dimnames);
-		Rf_setAttrib(answer, R_DimSymbol, dim);
-		Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
-		return answer;
+        Rf_setAttrib(answer, R_DimSymbol, dim);
+        Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
+        return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
@@ -136,20 +136,20 @@ SEXP gtrackdist_multitask(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP
 					distribution[ibin] += kid_distribution[ibin];
 			}
 
-			// pack the answer
-			SEXP answer, dim, dimnames;
-			rprotect(answer = RSaneAllocVector(REALSXP, totalbins));
+            // pack the answer
+            SEXP answer, dim, dimnames;
+            answer = rprotect_ptr(RSaneAllocVector(REALSXP, totalbins));
 			double *panswer = REAL(answer);
 
 			for (unsigned i = 0; i < totalbins; i++)
 				panswer[i] = distribution[i];
 
-			rprotect(dim = RSaneAllocVector(INTSXP, numexpr));
-			rprotect(dimnames = RSaneAllocVector(VECSXP, numexpr));
+            dim = rprotect_ptr(RSaneAllocVector(INTSXP, numexpr));
+            dimnames = rprotect_ptr(RSaneAllocVector(VECSXP, numexpr));
 			bins_manager.set_dims(dim, dimnames);
-			Rf_setAttrib(answer, R_DimSymbol, dim);
-			Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
-			return answer;
+            Rf_setAttrib(answer, R_DimSymbol, dim);
+            Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
+            return answer;
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
