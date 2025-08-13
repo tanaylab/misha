@@ -40,8 +40,8 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 		if (type == GenomeTrack::FIXED_BIN) {
 			enum { BINSIZE = NUM_COLS, NUM_FIXED_BIN_COLS };
 
-			rprotect(answer = RSaneAllocVector(VECSXP, NUM_FIXED_BIN_COLS));
-			rprotect(names = RSaneAllocVector(STRSXP, NUM_FIXED_BIN_COLS));
+            answer = rprotect_ptr(RSaneAllocVector(VECSXP, NUM_FIXED_BIN_COLS));
+            names = rprotect_ptr(RSaneAllocVector(STRSXP, NUM_FIXED_BIN_COLS));
 
 			GenomeTrackFixedBin gtrack;
 			GIntervals all_genome_intervs;
@@ -52,19 +52,19 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 			snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), all_genome_intervs.front().chromid).c_str());
 
 			gtrack.init_read(filename, all_genome_intervs.front().chromid);
-            rprotect(rbinsize = Rf_ScalarInteger(gtrack.get_bin_size()));
+            rbinsize = rprotect_ptr(Rf_ScalarInteger(gtrack.get_bin_size()));
 			SET_VECTOR_ELT(answer, BINSIZE, rbinsize);
 			SET_STRING_ELT(names, BINSIZE, Rf_mkChar("bin.size"));
 		} else {
-			rprotect(answer = RSaneAllocVector(VECSXP, NUM_COLS));
-			rprotect(names = RSaneAllocVector(STRSXP, NUM_COLS));
+            answer = rprotect_ptr(RSaneAllocVector(VECSXP, NUM_COLS));
+            names = rprotect_ptr(RSaneAllocVector(STRSXP, NUM_COLS));
 		}
 
-        rprotect(rtype = Rf_mkString(GenomeTrack::TYPE_NAMES[type]));
+        rtype = rprotect_ptr(Rf_mkString(GenomeTrack::TYPE_NAMES[type]));
 		SET_VECTOR_ELT(answer, TYPE, rtype);
 		SET_STRING_ELT(names, TYPE, Rf_mkChar("type"));
 
-        rprotect(rdim = Rf_ScalarInteger(GenomeTrack::is_1d(type) ? 1 : 2));
+        rdim = rprotect_ptr(Rf_ScalarInteger(GenomeTrack::is_1d(type) ? 1 : 2));
 		SET_VECTOR_ELT(answer, DIM, rdim);
 		SET_STRING_ELT(names, DIM, Rf_mkChar("dimensions"));
 
@@ -80,7 +80,7 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 			totsize += buf.st_size;
 		}
 
-        rprotect(rsize = Rf_ScalarReal(totsize));
+        rsize = rprotect_ptr(Rf_ScalarReal(totsize));
 		SET_VECTOR_ELT(answer, SIZE, rsize);
 		SET_STRING_ELT(names, SIZE, Rf_mkChar("size.in.bytes"));
 
