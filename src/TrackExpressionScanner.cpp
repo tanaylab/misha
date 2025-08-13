@@ -214,18 +214,18 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 	else
 		define_r_vars((unsigned)REAL(gbufsize)[0]);
 
-	for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
+    for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         if (m_eval_exprs[iexpr] != R_NilValue) {
             SEXP res = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
 
             if (Rf_length(res) != (int)m_eval_buf_limit) {
-                runprotect(res);
+                runprotect(1);
                 define_r_vars(1);
                 break;
             }
-            runprotect(res);
+            runprotect(1);
         }
-	}
+    }
 
 	m_num_evals = 0;
 	m_last_progress_reported = -1;
