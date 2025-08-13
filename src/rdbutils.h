@@ -116,6 +116,10 @@ void verror(const char *fmt, ...);
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 
+// Like rprotect(SEXP&) but takes the object by value to avoid rchk
+// "address taken" notes for local variables.
+SEXP rprotect_ptr(SEXP expr);
+
 // Unprotect the last "count" object
 void runprotect(int count);
 
@@ -186,7 +190,7 @@ SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool erro
 // any allocations before you are done using it.
 static inline SEXP find_in_misha(SEXP envir, const char *name) {
     SEXP misha_env = R_NilValue;
-    rprotect(misha_env = Rf_findVar(Rf_install(".misha"), envir));
+    misha_env = rprotect_ptr(Rf_findVar(Rf_install(".misha"), envir));
     SEXP val = Rf_findVar(Rf_install(name), misha_env);
     runprotect(1);
     return val;
@@ -197,9 +201,9 @@ static inline SEXP find_in_misha(SEXP envir, const char *name) {
 // during the Rf_defineVar call.
 static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
     SEXP misha_env = R_NilValue;
-    rprotect(misha_env = Rf_findVar(Rf_install(".misha"), envir));
+    misha_env = rprotect_ptr(Rf_findVar(Rf_install(".misha"), envir));
     SEXP tmp = value;
-    rprotect(tmp);
+    tmp = rprotect_ptr(tmp);
     Rf_defineVar(Rf_install(name), tmp, misha_env);
     runprotect(2);
 }
@@ -428,6 +432,7 @@ private:
 	friend void rdb::runprotect(SEXP &expr);
 	friend void rdb::runprotect(vector<SEXP> &exprs);
 	friend void rdb::runprotect_all();
+		friend SEXP rdb::rprotect_ptr(SEXP expr);
 	friend void rdb::rerror(const char *fmt, ...);
 	friend void rdb::verror(const char *fmt, ...);
 	friend void rdb::prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
@@ -459,6 +464,15 @@ inline void rexit() {
 	} else {
 		rdb::verror("rexit is called from parent process");
 	}
+}
+
+inline SEXP rdb::rprotect_ptr(SEXP expr)
+{
+    if (expr != R_NilValue) {
+        RdbInitializer::s_protect_counter++;
+        return PROTECT(expr);
+    }
+    return expr;
 }
 
 inline void rdb::set_abs_timeout(int64_t delay_msec, struct timespec &req)

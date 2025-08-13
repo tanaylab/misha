@@ -177,16 +177,16 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
     		SEXP expr = R_NilValue;
 			SEXPCleaner expr_cleaner(expr);
 
-    		rprotect(expr = RSaneAllocVector(STRSXP, 1));
+			expr = rprotect_ptr(RSaneAllocVector(STRSXP, 1));
     		SET_STRING_ELT(expr, 0, Rf_mkChar(m_track_exprs[iexpr].c_str()));
 
     		// parse R expression
     		ParseStatus status;
-    		SEXP parsed_expr;
-    		rprotect(parsed_expr = R_ParseVector(expr, -1, &status, R_NilValue));
-    		if (status != PARSE_OK)
+			SEXP parsed_expr;
+			parsed_expr = rprotect_ptr(R_ParseVector(expr, -1, &status, R_NilValue));
+			if (status != PARSE_OK)
     			verror("R parsing of expression \"%s\" failed", m_track_exprs[iexpr].c_str());
-    		m_eval_exprs[iexpr] = VECTOR_ELT(parsed_expr, 0);
+			m_eval_exprs[iexpr] = VECTOR_ELT(parsed_expr, 0);
         }
 	}
 }

@@ -145,7 +145,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 
 		int num_old_cols = Rf_length(_intervals);
 		SEXP answer;
-		SEXP old_colnames = Rf_getAttrib(_intervals, R_NamesSymbol);
+		SEXP old_colnames = rprotect_ptr(Rf_getAttrib(_intervals, R_NamesSymbol));
 		SEXP col_names;
 		SEXP row_names;
 		SEXP rvals;
@@ -171,7 +171,7 @@ SEXP gmapply(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enable_gapply_i
 		Rf_setAttrib(answer, R_NamesSymbol, col_names);
 		Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
 		Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
-
+		runprotect(1);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -336,7 +336,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 
 			int num_old_cols = Rf_length(_intervals);
 			SEXP answer;
-			SEXP old_colnames = Rf_getAttrib(_intervals, R_NamesSymbol);
+			SEXP old_colnames = rprotect_ptr(Rf_getAttrib(_intervals, R_NamesSymbol));
 			SEXP col_names;
 			SEXP row_names;
 			SEXP rvals;
@@ -362,6 +362,7 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			Rf_setAttrib(answer, R_NamesSymbol, col_names);
 			Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
 			Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
+			runprotect(1);
 			rreturn(answer);
 		}
 	} catch (TGLException &e) {

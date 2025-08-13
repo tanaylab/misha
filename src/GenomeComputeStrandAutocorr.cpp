@@ -236,30 +236,30 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 		SEXP bin_stat;
 		SEXP bin_idx;
 		SEXP corr;
-        SEXP row_names;
-        SEXP total_stat_names;
-        SEXP rnames;
+		SEXP row_names;
+		SEXP total_stat_names;
+		SEXP rnames;
 		SEXP answer;
 
-		rprotect(total_stat = RSaneAllocVector(REALSXP, 4));
+		total_stat = rprotect_ptr(RSaneAllocVector(REALSXP, 4));
 		REAL(total_stat)[0] = mean_f;
 		REAL(total_stat)[1] = std_f;
 		REAL(total_stat)[2] = mean_r;
 		REAL(total_stat)[3] = std_r;
 
-        rprotect(total_stat_names = RSaneAllocVector(STRSXP, 4));
+		total_stat_names = rprotect_ptr(RSaneAllocVector(STRSXP, 4));
         SET_STRING_ELT(total_stat_names, 0, Rf_mkChar("Forward mean"));
         SET_STRING_ELT(total_stat_names, 1, Rf_mkChar("Forward stdev"));
         SET_STRING_ELT(total_stat_names, 2, Rf_mkChar("Reverse mean"));
         SET_STRING_ELT(total_stat_names, 3, Rf_mkChar("Reverse stdev"));
         Rf_setAttrib(total_stat, R_NamesSymbol, total_stat_names);
 
-		rprotect(bin_stat = RSaneAllocVector(VECSXP, 2));
-        rprotect(bin_idx = RSaneAllocVector(REALSXP, max_off - min_off));
-        rprotect(corr = RSaneAllocVector(REALSXP, max_off - min_off));
-        rprotect(row_names = RSaneAllocVector(INTSXP, max_off - min_off));
-        rprotect(rnames = RSaneAllocVector(STRSXP, 2));
-        rprotect(answer = RSaneAllocVector(VECSXP, 2));
+		bin_stat = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
+		bin_idx = rprotect_ptr(RSaneAllocVector(REALSXP, max_off - min_off));
+		corr = rprotect_ptr(RSaneAllocVector(REALSXP, max_off - min_off));
+		row_names = rprotect_ptr(RSaneAllocVector(INTSXP, max_off - min_off));
+		rnames = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
+		answer = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
 
 		for (int off = min_off; off < max_off; off++) {
 			REAL(bin_idx)[off - min_off] = off;
@@ -280,6 +280,7 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 		SET_VECTOR_ELT(answer, 0, total_stat);
 		SET_VECTOR_ELT(answer, 1, bin_stat);
 
+		runprotect(7);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
