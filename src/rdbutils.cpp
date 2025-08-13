@@ -856,18 +856,19 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 
 SEXP rdb::run_in_R(const char *command, SEXP envir)
 {
-	SEXP expr;
-	SEXP parsed_expr = R_NilValue;
-    SEXPCleaner parsed_expr_cleaner(parsed_expr);
+    SEXP expr;
+    SEXP parsed_expr = R_NilValue;
 	ParseStatus status;
 
-	rprotect(expr = RSaneAllocVector(STRSXP, 1));
+    expr = rprotect_ptr(RSaneAllocVector(STRSXP, 1));
 	SET_STRING_ELT(expr, 0, Rf_mkChar(command));
-	rprotect(parsed_expr = R_ParseVector(expr, -1, &status, R_NilValue));
+    parsed_expr = rprotect_ptr(R_ParseVector(expr, -1, &status, R_NilValue));
 	if (status != PARSE_OK)
 		verror("Failed to parse expression \"%s\"", command);
 
-	return eval_in_R(VECTOR_ELT(parsed_expr, 0), envir);
+    SEXP result = eval_in_R(VECTOR_ELT(parsed_expr, 0), envir);
+    runprotect(2);
+    return result;
 }
 
 struct RSaneSerializeData {

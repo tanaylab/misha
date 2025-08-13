@@ -29,10 +29,9 @@ void GIntervalsBigSet1D::load_chrom(int chromid)
 			string filename = interv2path(m_iu->get_env(), m_intervset);
 			filename += "/";
 			filename += m_iu->id2chrom(chromid);
-			SEXP rintervals = RSaneUnserialize(filename.c_str());
-			rprotect(rintervals);
+			SEXP rintervals = rprotect_ptr(RSaneUnserialize(filename.c_str()));
 			m_iu->convert_rintervs(rintervals, &m_intervals, NULL);
-			runprotect(rintervals);
+			runprotect(1);
 			
 			// set udata
 			uint64_t offset = 0;
