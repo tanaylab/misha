@@ -36,15 +36,15 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 		num_interv_cols = GInterval2D::NUM_COLS;
 	}
 
-	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-		SEXP expr_vals;
-		rprotect(expr_vals = RSaneAllocVector(REALSXP, values[iexpr].size()));
+    for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+        SEXP expr_vals;
+        expr_vals = rprotect_ptr(RSaneAllocVector(REALSXP, values[iexpr].size()));
 		for (unsigned i = 0; i < values[iexpr].size(); ++i)
 			REAL(expr_vals)[i] = values[iexpr][i];
         SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
 	}
 
-	SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+    SEXP col_names = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 		if (Rf_isNull(_colnames))
 			SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
@@ -52,17 +52,18 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 			SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
 	}
 
-	if (interv_ids) {
-		SEXP ids;
-		rprotect(ids = RSaneAllocVector(INTSXP, interv_ids->size()));
+    if (interv_ids) {
+        SEXP ids;
+        ids = rprotect_ptr(RSaneAllocVector(INTSXP, interv_ids->size()));
 		for (vector<unsigned>::const_iterator iid = interv_ids->begin(); iid != interv_ids->end(); ++iid)
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
 
 		SET_STRING_ELT(col_names, num_interv_cols + num_exprs, Rf_mkChar("intervalID"));
 	}
-
-	return answer;
+    
+    runprotect(1); // col_names
+    return answer;
 }
 
 

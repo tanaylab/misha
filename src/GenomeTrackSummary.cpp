@@ -86,8 +86,7 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 		num_intervs = intervals2d->size();
 	}
 
-    colnames = Rf_getAttrib(answer, R_NamesSymbol);
-    rprotect(colnames);
+    colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 
 	for (unsigned icol = 0; icol < NUM_COLS; ++icol)
 		rprotect(rsummary[icol] = RSaneAllocVector(REALSXP, num_intervs));

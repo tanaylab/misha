@@ -73,20 +73,20 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 		num_interv_cols = GInterval2D::NUM_COLS;
 	}
 
-	SEXP rvals;
-	rprotect(rvals = RSaneAllocVector(REALSXP, values.size()));
+    SEXP rvals;
+    rvals = rprotect_ptr(RSaneAllocVector(REALSXP, values.size()));
 
     for (unsigned i = 0; i < values.size(); ++i)
         REAL(rvals)[i] = values[i];
 
     SET_VECTOR_ELT(answer, num_interv_cols + VALUE, rvals);
 
-	SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+    SEXP col_names = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 	SET_STRING_ELT(col_names, num_interv_cols + VALUE, Rf_mkChar("value"));
 
 	if (interv_ids) {
-		SEXP ids;
-		rprotect(ids = RSaneAllocVector(INTSXP, interv_ids->size()));
+        SEXP ids;
+        ids = rprotect_ptr(RSaneAllocVector(INTSXP, interv_ids->size()));
 		for (vector<unsigned>::const_iterator iid = interv_ids->begin(); iid != interv_ids->end(); ++iid)
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, num_interv_cols + ID, ids);
@@ -94,7 +94,8 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 		SET_STRING_ELT(col_names, num_interv_cols + ID, Rf_mkChar("intervalID"));
 	}
 
-	return answer;
+    runprotect(2); // col_names (+ ids or not) handled consistently by count
+    return answer;
 }
 
 

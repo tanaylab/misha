@@ -943,8 +943,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 
 			if (access(pv_fname.c_str(), R_OK) < 0 && errno == ENOENT)
 			{
-				char command[1000];
-				SEXP rretv;
+                char command[1000];
 
 				REprintf("Preparing track %s for percentiles queries\n", ivar->track_n_imdf->name.c_str());
 				snprintf(command, sizeof(command),
@@ -957,7 +956,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 						 "        finally = { options(.ginteractive = .ginteractive) })"
 						 " }",
 						 ivar->track_n_imdf->name.c_str());
-				runprotect(rretv = run_in_R(command, m_iu.get_env()));
+                run_in_R(command, m_iu.get_env());
 			}
 
 			rprotect(val = RSaneUnserialize(pv_fname.c_str()));

@@ -243,7 +243,7 @@ test_that("import BED as dense track with binsize", {
         gtrack.import("test.bedtrack.dense", "BED dense track", bed_file, binsize = 5, defval = 0)
     )
     info <- gtrack.info("test.bedtrack.dense")
-    expect_equal(as.numeric(info$binsize), 5)
+    expect_equal(as.numeric(info$bin.size), 5)
 })
 
 test_that("import tab-delimited with header chrom/start/end/value (sparse)", {

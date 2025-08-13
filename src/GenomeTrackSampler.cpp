@@ -57,7 +57,7 @@ SEXP C_gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_po
 
 		SEXP answer;
 
-		rprotect(answer = RSaneAllocVector(REALSXP, sampler.samples().size()));
+		answer = rprotect_ptr(RSaneAllocVector(REALSXP, sampler.samples().size()));
 		double *vals = REAL(answer);
 
 		for (vector<double>::const_iterator ival = sampler.samples().begin(); ival != sampler.samples().end(); ++ival) {
@@ -68,6 +68,7 @@ SEXP C_gsample(SEXP _expr, SEXP _num_samples, SEXP _intervals, SEXP _iterator_po
 		// The samples need to be reshuffled since sampler does not guarantee random order.
         tgs_random_shuffle(REAL(answer), REAL(answer) + sampler.samples().size(), unif_rand);
 
+		runprotect(1);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

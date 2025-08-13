@@ -1,7 +1,7 @@
 test_that("get readonly attributes of gdb", {
     gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
     r <- gdb.get_readonly_attrs()
-    expect_regression(r, "gdb.get_readonly_attrs")
+    expect_equal(r, c("created.by", "created.date", "created.user"))
 })
 
 test_that("set and revert readonly attributes of gdb", {
