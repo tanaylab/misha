@@ -81,17 +81,17 @@ IntervUtils::~IntervUtils()
 
 bool IntervUtils::track_exists(const char *track_name)
 {
-	SEXP all_track_names;
+	SEXP all_track_names = R_NilValue;
+	SEXPCleaner all_track_names_cleaner(all_track_names);
 
-    rprotect(all_track_names = find_in_misha(get_env(), "GTRACKS"));
+	rprotect(all_track_names = find_in_misha(get_env(), "GTRACKS"));
 	if (Rf_isString(all_track_names)) {
 		for (int i = 0; i < Rf_length(all_track_names); ++i) {
 			if (!strcmp(track_name, CHAR(STRING_ELT(all_track_names, i))))
 				return true;
 		}
 	}
-    runprotect(2);
-    return false;
+	return false;
 }
 
 void IntervUtils::get_all_genome_intervs(GIntervals &intervals) const
