@@ -90,7 +90,6 @@ expr
 fasta
 frac
 func
-fun’
 gapply
 gbig
 gbins
@@ -218,6 +217,7 @@ pvals
 pwm
 pwms
 qsub
+rchk
 readonly
 rescan
 rescanned
@@ -237,6 +237,7 @@ subdir
 tapply
 tgbr
 tgt
+th
 thr
 tibbles
 tmp

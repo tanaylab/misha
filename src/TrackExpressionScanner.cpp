@@ -573,7 +573,6 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 						if (iter_val == CHAR(STRING_ELT(all_track_names, i)))
 							break;
                 }
-                runprotect(1); // all_track_names
 					if (i >= Rf_length(all_track_names)) 
 						verror("Invalid iterator: %s is neither a name of a track nor a name of an intervals set", iter_val.c_str());
 				}

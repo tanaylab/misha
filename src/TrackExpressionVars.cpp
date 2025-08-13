@@ -69,6 +69,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
         SEXP gwds = Rf_getAttrib(gvtracks, R_NamesSymbol);
         // Protect names vector while making further allocating calls
         rprotect(gwds);
+        SEXPCleaner gwds_cleaner(gwds);
 
 		if (!Rf_isVector(gvtracks) || (Rf_length(gvtracks) && !Rf_isString(gwds)) || Rf_length(gwds) != Rf_length(gvtracks))
 			verror("Invalid format of GVTRACKS variable.\n"
