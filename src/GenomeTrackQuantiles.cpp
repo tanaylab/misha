@@ -158,8 +158,8 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 		SEXP answer;
 		SEXP colnames;
 
-		rprotect(answer = RSaneAllocVector(REALSXP, percentiles.size()));
-		rprotect(colnames = RSaneAllocVector(STRSXP, percentiles.size()));
+		answer = rprotect_ptr(RSaneAllocVector(REALSXP, percentiles.size()));
+		colnames = rprotect_ptr(RSaneAllocVector(STRSXP, percentiles.size()));
 
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
@@ -172,6 +172,7 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 
 		Rf_setAttrib(answer, R_NamesSymbol, colnames);
 
+		runprotect(2);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -356,8 +357,8 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		SEXP answer;
 		SEXP colnames;
 
-		rprotect(answer = RSaneAllocVector(REALSXP, percentiles.size()));
-		rprotect(colnames = RSaneAllocVector(STRSXP, percentiles.size()));
+		answer = rprotect_ptr(RSaneAllocVector(REALSXP, percentiles.size()));
+		colnames = rprotect_ptr(RSaneAllocVector(STRSXP, percentiles.size()));
 
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
@@ -370,6 +371,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 		Rf_setAttrib(answer, R_NamesSymbol, colnames);
 
+		runprotect(2);
 		rreturn(answer);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -1045,7 +1047,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 
 		// pack the answer
 		SEXP answer, dim, dimnames;
-		rprotect(answer = RSaneAllocVector(REALSXP, totalbins * percentiles.size()));
+		answer = rprotect_ptr(RSaneAllocVector(REALSXP, totalbins * percentiles.size()));
 
 		for (unsigned i = 0; i < totalbins; i++) {
 			unsigned offset = i * percentiles.size();
@@ -1054,12 +1056,12 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 				REAL(answer)[totalbins * ip->index + i] = medians[offset + ip->index];
 		}
 
-		rprotect(dim = RSaneAllocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));
-		rprotect(dimnames = RSaneAllocVector(VECSXP, bins_manager.get_num_bin_finders() + 1));
+		dim = rprotect_ptr(RSaneAllocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));
+		dimnames = rprotect_ptr(RSaneAllocVector(VECSXP, bins_manager.get_num_bin_finders() + 1));
 		bins_manager.set_dims(dim, dimnames);
 
 		SEXP dimname;
-		rprotect(dimname = RSaneAllocVector(STRSXP, percentiles.size()));
+		dimname = rprotect_ptr(RSaneAllocVector(STRSXP, percentiles.size()));
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
@@ -1071,6 +1073,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 
 		Rf_setAttrib(answer, R_DimSymbol, dim);
 		Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
+		runprotect(4);
 		return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
