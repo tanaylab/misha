@@ -57,19 +57,14 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 	SEXP vtracks = R_NilValue;
 
     // retrieve track names (split nested calls and protect environment)
-    rprotect(rtracknames[TRACK] = find_in_misha(m_iu.get_env(), "GTRACKS"));
-	SEXPCleaner rtracknames_track_cleaner(rtracknames[TRACK]);
+    rtracknames[TRACK] = rprotect_ptr(find_in_misha(m_iu.get_env(), "GTRACKS"));
 
 	// retrieve virtual track names (it's more complex since virtual track names are burried in a list of lists)
     rtracknames[VTRACK] = R_NilValue;
-    rprotect(gvtracks = find_in_misha(m_iu.get_env(), "GVTRACKS"));
-	SEXPCleaner gvtracks_cleaner(gvtracks);
+    gvtracks = rprotect_ptr(find_in_misha(m_iu.get_env(), "GVTRACKS"));
 
     if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) { 
-        SEXP gwds = Rf_getAttrib(gvtracks, R_NamesSymbol);
-        // Protect names vector while making further allocating calls
-        rprotect(gwds);
-        SEXPCleaner gwds_cleaner(gwds);
+        SEXP gwds = rprotect_ptr(Rf_getAttrib(gvtracks, R_NamesSymbol));
 
 		if (!Rf_isVector(gvtracks) || (Rf_length(gvtracks) && !Rf_isString(gwds)) || Rf_length(gwds) != Rf_length(gvtracks))
 			verror("Invalid format of GVTRACKS variable.\n"
@@ -90,6 +85,12 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 			}
 		}
 	}
+    // Unprotect: rtracknames[TRACK], gvtracks (if non-null), gwds if we protected it
+    if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) {
+        runprotect(2); // rtracknames[TRACK], gvtracks
+    } else {
+        runprotect(1); // rtracknames[TRACK]
+    }
 
 	for (vector<string>::const_iterator iexpr = track_exprs.begin(); iexpr != track_exprs.end(); ++iexpr) {
 		for (int var_type = 0; var_type < NUM_VAR_TYPES; ++var_type) {

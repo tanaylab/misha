@@ -277,9 +277,9 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 		}
 		progress.report_last();
 
-		SEXP answer;
+        SEXP answer;
 		unsigned colidx = 0;
-		rprotect(answer = RSaneAllocVector(STRSXP, totcols));
+        answer = rprotect_ptr(RSaneAllocVector(STRSXP, totcols));
 		for (Sources::const_iterator isrc = sources.begin(); isrc != sources.end(); ++isrc) {
 			const vector<string> &colnames = (*isrc)->get_colnames();
 
@@ -289,7 +289,8 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 			}
 		}
 
-		return answer;
+        runprotect(1);
+        return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
