@@ -55,15 +55,15 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 		num_intervs = out_intervals2d->size();
 	}
 
-	for (unsigned ipercentile = 0; ipercentile < percentiles.size(); ++ipercentile) {
-		SEXP percentile_vals;
-		rprotect(percentile_vals = RSaneAllocVector(REALSXP, num_intervs));
+    for (unsigned ipercentile = 0; ipercentile < percentiles.size(); ++ipercentile) {
+        SEXP percentile_vals;
+        percentile_vals = rprotect_ptr(RSaneAllocVector(REALSXP, num_intervs));
 		for (uint64_t iinterv = 0; iinterv < num_intervs; ++iinterv)
 			REAL(percentile_vals)[iinterv] = quantiles[iinterv * percentiles.size() + ipercentile];
 		SET_VECTOR_ELT(answer, num_interv_cols + ipercentile, percentile_vals);
 	}
 
-	SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+    SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 
 	for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 		char buf[100];
@@ -72,7 +72,8 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 		SET_STRING_ELT(colnames, num_interv_cols + ip->index, Rf_mkChar(buf));
 	}
 
-	return answer;
+    runprotect(1); // colnames
+    return answer;
 }
 
 bool calc_medians(StreamPercentiler<double> &sp, vector<Percentile> &percentiles, vector<double> &medians, uint64_t offset)
