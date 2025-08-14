@@ -146,7 +146,7 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 
 		// pack the answer
 		SEXP answer, dim, dimnames, dimname;
-		rprotect(answer = RSaneAllocVector(REALSXP, 2 * bin_finder.get_numbins()));
+		answer = rprotect_ptr(RSaneAllocVector(REALSXP, 2 * bin_finder.get_numbins()));
 		double *panswer = REAL(answer);
 
 		for (unsigned i = 0; i < bin_finder.get_numbins(); i++) {
@@ -154,18 +154,18 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 			panswer[i + bin_finder.get_numbins()] = inter_domain_dist[i];
 		}
 
-		rprotect(dim = RSaneAllocVector(INTSXP, 2));
-		rprotect(dimnames = RSaneAllocVector(VECSXP, 2));
+		dim = rprotect_ptr(RSaneAllocVector(INTSXP, 2));
+		dimnames = rprotect_ptr(RSaneAllocVector(VECSXP, 2));
 
 		SEXP breaks_sets;
-		rprotect(breaks_sets = RSaneAllocVector(VECSXP, 1));
+		breaks_sets = rprotect_ptr(RSaneAllocVector(VECSXP, 1));
 		SET_VECTOR_ELT(breaks_sets, 0, _breaks);
 
 		BinsManager bins_manager(breaks_sets, _include_lowest);
 		bins_manager.set_dims(dim, dimnames);
 		INTEGER(dim)[1] = 2;
 
-		rprotect(dimname = RSaneAllocVector(STRSXP, 2));
+		dimname = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
 		SET_STRING_ELT(dimname, 0, Rf_mkChar("intra"));
 		SET_STRING_ELT(dimname, 1, Rf_mkChar("inter"));
 		SET_VECTOR_ELT(dimnames, 1, dimname);

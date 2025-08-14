@@ -21,9 +21,9 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 	uint64_t numvals = res_vals.size() / numcols;
 	vector<SEXP> rvals(numcols);
 
-	for (int icol = 0; icol < numcols; ++icol) {
-		rprotect(rvals[icol] = RSaneAllocVector(REALSXP, numvals));
-	}
+    for (int icol = 0; icol < numcols; ++icol) {
+        rvals[icol] = rprotect_ptr(RSaneAllocVector(REALSXP, numvals));
+    }
 
 	int rownum = 0;
 	for (vector<float>::const_iterator ival = res_vals.begin(); ival != res_vals.end(); ++rownum) {
@@ -33,14 +33,14 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
 		}
 	}
 
-	SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+    SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 	for (int icol = 0; icol < numcols; ++icol){
 		SET_STRING_ELT(colnames, GInterval::NUM_COLS + icol, STRING_ELT(_colnames, icol));
 	}
 
 	if (interv_ids) {
-		SEXP ids;
-		rprotect(ids = RSaneAllocVector(INTSXP, interv_ids->size()));
+        SEXP ids;
+        ids = rprotect_ptr(RSaneAllocVector(INTSXP, interv_ids->size()));
 		for (vector<unsigned>::const_iterator iid = interv_ids->begin(); iid != interv_ids->end(); ++iid)
 			INTEGER(ids)[iid - interv_ids->begin()] = *iid;
 		SET_VECTOR_ELT(answer, GInterval::NUM_COLS + numcols, ids);
@@ -50,8 +50,9 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
     for (int icol = 0; icol < numcols; ++icol) {
         SET_VECTOR_ELT(answer, GInterval::NUM_COLS + icol, rvals[icol]);
 	}
-	
-	return answer;
+    
+    runprotect(1); // colnames
+    return answer;
 }
 
 extern "C" {

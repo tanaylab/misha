@@ -86,6 +86,69 @@ test_that("kmer.count and kmer.frac vtracks work with basic inputs", {
     expect_equal(scores$count_ccc, manual_ccc_count)
 })
 
+test_that("kmer honors gvtrack.iterator shifts for count and frac", {
+    remove_all_vtracks()
+
+    test_intervals <- gintervals(1, 2000, 2040)
+    k <- "TA" # 2-mer
+
+    # Create vtracks (forward strand) and apply different iterator shifts
+    gvtrack.create("count_small", NULL, "kmer.count", kmer = k, strand = 1)
+    gvtrack.create("count_large", NULL, "kmer.count", kmer = k, strand = 1)
+    gvtrack.create("frac_small", NULL, "kmer.frac", kmer = k, strand = 1)
+    gvtrack.create("frac_large", NULL, "kmer.frac", kmer = k, strand = 1)
+
+    gvtrack.iterator("count_small", sshift = -10, eshift = 10)
+    gvtrack.iterator("frac_small", sshift = -10, eshift = 10)
+    gvtrack.iterator("count_large", sshift = -1000, eshift = 1000)
+    gvtrack.iterator("frac_large", sshift = -1000, eshift = 1000)
+
+    scores <- gextract(c("count_small", "count_large", "frac_small", "frac_large"), test_intervals, iterator = test_intervals)
+
+    # Build intervals matching how the engine applies per-vtrack iterator modifiers
+    # Small window: iterator shift of 10 on each side => original (per-vtrack) interval is shifted
+    small_orig <- test_intervals
+    small_orig$start <- pmax(0, small_orig$start - 10)
+    small_orig$end <- small_orig$end + 10
+    # Fetch interval adds extension by (k-1) at the end for forward strand
+    small_fetch <- small_orig
+    small_fetch$end <- small_fetch$end + (nchar(k) - 1)
+    seq_small <- toupper(gseq.extract(small_fetch))
+    res_small <- count_kmers_manually(seq_small, k, small_orig, small_fetch)
+
+    expect_equal(scores$count_small, res_small$count)
+    expect_equal(scores$frac_small, res_small$fraction, tolerance = 1e-5)
+
+    # Large window: iterator shift 1000 each side
+    large_orig <- test_intervals
+    large_orig$start <- pmax(0, large_orig$start - 1000)
+    large_orig$end <- large_orig$end + 1000
+    large_fetch <- large_orig
+    large_fetch$end <- large_fetch$end + (nchar(k) - 1)
+    seq_large <- toupper(gseq.extract(large_fetch))
+    res_large <- count_kmers_manually(seq_large, k, large_orig, large_fetch)
+
+    expect_equal(scores$count_large, res_large$count)
+    expect_equal(scores$frac_large, res_large$fraction, tolerance = 1e-5)
+
+    # The small and large windows should generally give different totals
+    expect_true(scores$count_small != scores$count_large || abs(scores$frac_small - scores$frac_large) > 1e-12)
+
+    # Asymmetric shift case: start-only and end-only shifts
+    gvtrack.create("count_asym", NULL, "kmer.count", kmer = k, strand = 1)
+    gvtrack.iterator("count_asym", sshift = -25, eshift = 5)
+    asym_scores <- gextract("count_asym", test_intervals, iterator = test_intervals)
+
+    asym_orig <- test_intervals
+    asym_orig$start <- pmax(0, asym_orig$start - 25)
+    asym_orig$end <- asym_orig$end + 5
+    asym_fetch <- asym_orig
+    asym_fetch$end <- asym_fetch$end + (nchar(k) - 1)
+    seq_asym <- toupper(gseq.extract(asym_fetch))
+    res_asym <- count_kmers_manually(seq_asym, k, asym_orig, asym_fetch)
+    expect_equal(asym_scores$count_asym, res_asym$count)
+})
+
 test_that("kmer.count and kmer.frac work with smaller iterator intervals", {
     remove_all_vtracks()
 
@@ -1266,4 +1329,167 @@ test_that("sum of base fractions equals 1 when strand=0", {
     expect_equal(scores_compare$frac_g, (G_fwd + G_rev) / (2 * seq_l), tolerance = 1e-5)
     expect_equal(scores_compare$frac_t_fwd, T_fwd / seq_l, tolerance = 1e-5)
     expect_equal(scores_compare$frac_t, (T_fwd + T_rev) / (2 * seq_l), tolerance = 1e-5)
+})
+
+test_that("kmer honors iterator shifts across multiple magnitudes (extend=TRUE, fwd strand)", {
+    remove_all_vtracks()
+
+    test_intervals <- gintervals(1, 2000, 2040)
+    k <- "TA" # palindromic is fine for forward-only tests
+
+    shift_values <- c(0, 1, 5, 10, 25, 50, 100, 250, 1000)
+    count_names <- sprintf("count_shift_%d", shift_values)
+    frac_names <- sprintf("frac_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(count_names[i], NULL, "kmer.count", kmer = k, strand = 1)
+        gvtrack.iterator(count_names[i], sshift = -s, eshift = s)
+        gvtrack.create(frac_names[i], NULL, "kmer.frac", kmer = k, strand = 1)
+        gvtrack.iterator(frac_names[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(c(count_names, frac_names), test_intervals, iterator = test_intervals)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        # Original (per-vtrack) iterator after shift
+        orig <- test_intervals
+        orig$start <- pmax(0, orig$start - s)
+        orig$end <- orig$end + s
+        # Fetch window extends at end by k-1 for forward strand when extend=TRUE (default)
+        fetch <- orig
+        fetch$end <- fetch$end + (nchar(k) - 1)
+        seq_ext <- toupper(gseq.extract(fetch))
+
+        res <- count_kmers_manually(seq_ext, k, orig, fetch)
+
+        # Counts should match exactly; fractions within small tolerance
+        expect_equal(scores[[count_names[i]]], res$count)
+        tol <- if (s >= 250) 1e-5 else 1e-6
+        expect_equal(scores[[frac_names[i]]], res$fraction, tolerance = tol)
+    }
+})
+
+test_that("kmer honors iterator shifts without extension (extend=FALSE, fwd strand)", {
+    remove_all_vtracks()
+
+    test_intervals <- gintervals(1, 2000, 2040)
+    k <- "TA"
+
+    shift_values <- c(0, 5, 10, 50, 200)
+    count_names <- sprintf("count_noext_shift_%d", shift_values)
+    frac_names <- sprintf("frac_noext_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(count_names[i], NULL, "kmer.count", kmer = k, strand = 1, extend = FALSE)
+        gvtrack.iterator(count_names[i], sshift = -s, eshift = s)
+        gvtrack.create(frac_names[i], NULL, "kmer.frac", kmer = k, strand = 1, extend = FALSE)
+        gvtrack.iterator(frac_names[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(c(count_names, frac_names), test_intervals, iterator = test_intervals)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        orig <- test_intervals
+        orig$start <- pmax(0, orig$start - s)
+        orig$end <- orig$end + s
+        fetch <- orig # no extension at fetch
+        seq_noext <- toupper(gseq.extract(fetch))
+
+        res <- count_kmers_manually(seq_noext, k, orig, fetch)
+
+        expect_equal(scores[[count_names[i]]], res$count)
+        tol <- if (s >= 50) 1e-5 else 1e-6
+        expect_equal(scores[[frac_names[i]]], res$fraction, tolerance = tol)
+    }
+})
+
+test_that("kmer honors iterator shifts for reverse strand (extend=TRUE)", {
+    remove_all_vtracks()
+
+    test_intervals <- gintervals(1, 2000, 2040)
+    k <- "AG" # non-palindromic; reverse complement is CT
+    rc_k <- grevcomp(k)
+
+    shift_values <- c(0, 10, 200)
+    count_names <- sprintf("count_rev_shift_%d", shift_values)
+    frac_names <- sprintf("frac_rev_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(count_names[i], NULL, "kmer.count", kmer = k, strand = -1)
+        gvtrack.iterator(count_names[i], sshift = -s, eshift = s)
+        gvtrack.create(frac_names[i], NULL, "kmer.frac", kmer = k, strand = -1)
+        gvtrack.iterator(frac_names[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(c(count_names, frac_names), test_intervals, iterator = test_intervals)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        # Original (per-vtrack) iterator after shift
+        orig <- test_intervals
+        orig$start <- pmax(0, orig$start - s)
+        orig$end <- orig$end + s
+        # For reverse strand with extend=TRUE, fetch extends at the start by k-1
+        fetch <- orig
+        fetch$start <- pmax(0, fetch$start - (nchar(k) - 1))
+        seq_ext <- toupper(gseq.extract(fetch))
+
+        # Count occurrences of reverse complement in forward sequence window
+        res <- count_kmers_manually(seq_ext, rc_k, orig, fetch)
+
+        expect_equal(scores[[count_names[i]]], res$count)
+        expect_equal(scores[[frac_names[i]]], res$fraction, tolerance = 1e-6)
+    }
+})
+
+test_that("kmer honors iterator shifts for both strands (extend=TRUE)", {
+    remove_all_vtracks()
+
+    test_intervals <- gintervals(1, 2000, 2040)
+    k <- "AG" # non-palindromic
+    rc_k <- grevcomp(k)
+
+    shift_values <- c(0, 10, 200)
+    count_names <- sprintf("count_both_shift_%d", shift_values)
+    frac_names <- sprintf("frac_both_shift_%d", shift_values)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        gvtrack.create(count_names[i], NULL, "kmer.count", list(kmer = k, strand = 0))
+        gvtrack.iterator(count_names[i], sshift = -s, eshift = s)
+        gvtrack.create(frac_names[i], NULL, "kmer.frac", list(kmer = k, strand = 0))
+        gvtrack.iterator(frac_names[i], sshift = -s, eshift = s)
+    }
+
+    scores <- gextract(c(count_names, frac_names), test_intervals, iterator = test_intervals)
+
+    for (i in seq_along(shift_values)) {
+        s <- shift_values[i]
+        orig <- test_intervals
+        orig$start <- pmax(0, orig$start - s)
+        orig$end <- orig$end + s
+        # Forward fetch extends at end; reverse fetch extends at start
+        fetch_fwd <- orig
+        fetch_fwd$end <- fetch_fwd$end + (nchar(k) - 1)
+        seq_fwd <- toupper(gseq.extract(fetch_fwd))
+        res_fwd <- count_kmers_manually(seq_fwd, k, orig, fetch_fwd)
+
+        fetch_rev <- orig
+        fetch_rev$start <- pmax(0, fetch_rev$start - (nchar(k) - 1))
+        seq_rev <- toupper(gseq.extract(fetch_rev))
+        res_rev <- count_kmers_manually(seq_rev, rc_k, orig, fetch_rev)
+
+        expected_count <- res_fwd$count + res_rev$count
+        possible_positions <- (orig$end - orig$start) - nchar(k) + 1
+        possible_positions <- max(0, possible_positions)
+        expected_frac <- if (possible_positions > 0) expected_count / (2 * possible_positions) else 0
+
+        expect_equal(scores[[count_names[i]]], expected_count)
+        expect_equal(scores[[frac_names[i]]], expected_frac, tolerance = 1e-5)
+    }
 })

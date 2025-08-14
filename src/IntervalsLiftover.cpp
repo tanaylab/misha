@@ -92,18 +92,20 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _envir)
 		} else
 			return R_NilValue;
 
-		SEXP rsrc_indices;
-		SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+        SEXP rsrc_indices;
+        SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+        rprotect(col_names);
 
         rprotect(rsrc_indices = RSaneAllocVector(INTSXP, src_indices.size()));
 
 		for (vector<int>::const_iterator iindex = src_indices.begin(); iindex != src_indices.end(); ++iindex)
 			INTEGER(rsrc_indices)[iindex - src_indices.begin()] = *iindex;
 
-		SET_STRING_ELT(col_names, num_interv_cols, Rf_mkChar("intervalID"));
+        SET_STRING_ELT(col_names, num_interv_cols, Rf_mkChar("intervalID"));
         SET_VECTOR_ELT(answer, num_interv_cols, rsrc_indices);
 
-		return answer;
+        runprotect(1); // col_names
+        return answer;
 
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

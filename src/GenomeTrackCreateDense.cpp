@@ -23,6 +23,7 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
 
         if (!Rf_isDataFrame(_data_frame))
             verror("Data frame argument is not a data frame");
+        }
 
         if ((!Rf_isReal(_binsize) && !Rf_isInteger(_binsize)) || Rf_length(_binsize) != 1)
             verror("Binsize argument is not a number");

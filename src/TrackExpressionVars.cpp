@@ -57,37 +57,41 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 	SEXP gvtracks = R_NilValue;
 	SEXP vtracks = R_NilValue;
 
-	// retrieve track names
-	rprotect(rtracknames[TRACK] = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env())));
-	SEXPCleaner rtracknames_track_cleaner(rtracknames[TRACK]);
+    // retrieve track names (split nested calls and protect environment)
+    rtracknames[TRACK] = rprotect_ptr(find_in_misha(m_iu.get_env(), "GTRACKS"));
 
 	// retrieve virtual track names (it's more complex since virtual track names are burried in a list of lists)
-	rtracknames[VTRACK] = R_NilValue;
-	rprotect(gvtracks = Rf_findVar(Rf_install("GVTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env())));
-	SEXPCleaner gvtracks_cleaner(gvtracks);
+    rtracknames[VTRACK] = R_NilValue;
+    gvtracks = rprotect_ptr(find_in_misha(m_iu.get_env(), "GVTRACKS"));
 
-	if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) { 
-		SEXP gwds = Rf_getAttrib(gvtracks, R_NamesSymbol);
+    if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) { 
+        SEXP gwds = rprotect_ptr(Rf_getAttrib(gvtracks, R_NamesSymbol));
 
 		if (!Rf_isVector(gvtracks) || (Rf_length(gvtracks) && !Rf_isString(gwds)) || Rf_length(gwds) != Rf_length(gvtracks))
 			verror("Invalid format of GVTRACKS variable.\n"
 				"To continue working with virtual tracks please remove this variable from the environment.");
 
-		const char *gwd = get_gwd(m_iu.get_env());
+        const char *gwd = get_gwd(m_iu.get_env());
 
 		for (int i = 0; i < Rf_length(gwds); ++i) {
 			if (!strcmp(gwd, CHAR(STRING_ELT(gwds, i)))) {
-				vtracks = VECTOR_ELT(gvtracks, i);
-				SEXP vtracknames = Rf_getAttrib(vtracks, R_NamesSymbol);
+                vtracks = VECTOR_ELT(gvtracks, i);
+                SEXP vtracknames = Rf_getAttrib(vtracks, R_NamesSymbol);
 
 				if (!Rf_isVector(vtracks) || (Rf_length(vtracks) && !Rf_isString(vtracknames)) || Rf_length(vtracknames) != Rf_length(vtracks))
 					verror("Invalid format of GVTRACKS variable.\n"
 						"To continue working with virtual tracks please remove this variable from the environment.");
 
-				rtracknames[VTRACK] = vtracknames;
+                rtracknames[VTRACK] = vtracknames;
 			}
 		}
 	}
+    // Unprotect: rtracknames[TRACK], gvtracks (if non-null), gwds if we protected it
+    if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) {
+        runprotect(2); // rtracknames[TRACK], gvtracks
+    } else {
+        runprotect(1); // rtracknames[TRACK]
+    }
 
 	for (vector<string>::const_iterator iexpr = track_exprs.begin(); iexpr != track_exprs.end(); ++iexpr) {
 		for (int var_type = 0; var_type < NUM_VAR_TYPES; ++var_type) {
@@ -103,7 +107,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 						if (var_type == TRACK)
 							add_track_var(track);
 						else
-							add_vtrack_var(track, VECTOR_ELT(vtracks, itrack));
+                            add_vtrack_var(track, VECTOR_ELT(vtracks, itrack));
 						break;
 					}
 					pos += track.size();
@@ -298,6 +302,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             var.var_name = vtrack;
             var.val_func = (func == "pwm" ? Track_var::PWM : func == "pwm.max" ? Track_var::PWM_MAX : Track_var::PWM_MAX_POS);
             var.track_n_imdf = nullptr;  // No track needed for PWM
+            var.seq_imdf1d = nullptr;
             
             SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 			if (!Rf_isNewList(rparams))	{
@@ -349,6 +354,11 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				PWMScorer::MAX_LIKELIHOOD_POS,
 				strand
 			);
+
+            // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
+            Iterator_modifier1D imdf1d;
+            parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+            var.seq_imdf1d = add_imdf(imdf1d);
             
             var.percentile = numeric_limits<double>::quiet_NaN();
             var.requires_pv = false;
@@ -360,6 +370,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			var.var_name = vtrack;
 			var.val_func = func == "kmer.count" ? Track_var::KMER_COUNT : Track_var::KMER_FRAC;
 			var.track_n_imdf = nullptr; // No track needed for kmer
+            var.seq_imdf1d = nullptr;
 			var.percentile = numeric_limits<double>::quiet_NaN();
 			SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 
@@ -415,7 +426,12 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 							vtrack.c_str(), func.c_str());
 			}
 
-			var.requires_pv = false;
+            // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
+            Iterator_modifier1D imdf1d;
+            parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+            var.seq_imdf1d = add_imdf(imdf1d);
+
+            var.requires_pv = false;
 			return;
 		} else if (func == "kmer.fft" || func == "kmer.fft.peak" || func == "kmer.fft.peak.power") {
 			// Create the Track_var without a Track_n_imdf
@@ -493,23 +509,23 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 		verror("Source must be specified for non-PWM virtual tracks");
 	}
 
-	if (Rf_isString(rsrc) && Rf_length(rsrc) == 1)
-	{
-		string track(CHAR(STRING_ELT(rsrc, 0)));
+    if (Rf_isString(rsrc) && Rf_length(rsrc) == 1)
+    {
+        string track(CHAR(STRING_ELT(rsrc, 0)));
 
-		SEXP gtracks = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), m_iu.get_env()));
-		if (Rf_isString(gtracks))
-		{
-			for (int itrack = 0; itrack < Rf_length(gtracks); itrack++)
-			{
-				if (!strcmp(CHAR(STRING_ELT(gtracks, itrack)), track.c_str()))
-				{
-					add_vtrack_var_src_track(rvtrack, vtrack, track);
-					return;
-				}
-			}
-		}
-	}
+        SEXP gtracks = find_in_misha(m_iu.get_env(), "GTRACKS");
+        if (Rf_isString(gtracks))
+        {
+            for (int itrack = 0; itrack < Rf_length(gtracks); itrack++)
+            {
+                if (!strcmp(CHAR(STRING_ELT(gtracks, itrack)), track.c_str()))
+                {
+                    add_vtrack_var_src_track(rvtrack, vtrack, track);
+                    return;
+                }
+            }
+        }
+    }
 
 	GIntervals intervs1d;
 	GIntervals2D intervs2d;
@@ -998,8 +1014,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 
 			if (access(pv_fname.c_str(), R_OK) < 0 && errno == ENOENT)
 			{
-				char command[1000];
-				SEXP rretv;
+                char command[1000];
 
 				REprintf("Preparing track %s for percentiles queries\n", ivar->track_n_imdf->name.c_str());
 				snprintf(command, sizeof(command),
@@ -1012,7 +1027,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 						 "        finally = { options(.ginteractive = .ginteractive) })"
 						 " }",
 						 ivar->track_n_imdf->name.c_str());
-				runprotect(rretv = run_in_R(command, m_iu.get_env()));
+                run_in_R(command, m_iu.get_env());
 			}
 
 			rprotect(val = RSaneUnserialize(pv_fname.c_str()));
@@ -1168,11 +1183,13 @@ void TrackExpressionVars::set_vars(const GInterval2D &interval, const DiagonalBa
 	m_interval2d = interval;
 	m_band = band;
 
-	for (Iterator_modifiers1D::iterator iimdf = m_imdfs1d.begin(); iimdf != m_imdfs1d.end(); ++iimdf)
-		iimdf->transform(interval, m_iu.get_chromkey());
+    for (Iterator_modifiers1D::iterator iimdf = m_imdfs1d.begin(); iimdf != m_imdfs1d.end(); ++iimdf) {
+        iimdf->transform(interval, m_iu.get_chromkey());
+    }
 
-	for (Iterator_modifiers2D::iterator iimdf = m_imdfs2d.begin(); iimdf != m_imdfs2d.end(); ++iimdf)
-		iimdf->transform(interval, m_iu.get_chromkey());
+    for (Iterator_modifiers2D::iterator iimdf = m_imdfs2d.begin(); iimdf != m_imdfs2d.end(); ++iimdf) {
+        iimdf->transform(interval, m_iu.get_chromkey());
+    }
 
 	set_vars(idx);
 }
@@ -1210,32 +1227,35 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		}
 		}
 
-	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
+    for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
         if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS) {
-            // PWM scoring doesn't require track data
-            ivar->var[idx] = ivar->pwm_scorer->score_interval(m_interval1d, m_iu.get_chromkey());
+            // PWM scoring doesn't require track data. Use per-vtrack iterator-modified interval if present.
+            const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+            ivar->var[idx] = ivar->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
             continue;
         }
-		if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC)	{
-			// Kmer counting doesn't require track data
-			if (ivar->kmer_counter)	{ 
-				ivar->var[idx] = ivar->kmer_counter->score_interval(m_interval1d, m_iu.get_chromkey());
-			} else{
-				ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
-			}
-			continue;
-		}
-		if (ivar->val_func == Track_var::KMER_FFT || 
-			ivar->val_func == Track_var::KMER_FFT_PEAK || 
-			ivar->val_func == Track_var::KMER_FFT_PEAK_POWER) {
-			// Kmer FFT doesn't require track data
-			if (ivar->kmer_fft) {
-				ivar->var[idx] = ivar->kmer_fft->score_interval(m_interval1d, m_iu.get_chromkey());
-			} else {
-				ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
-			}
-			continue;
-		}
+        if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC)	{
+            // Kmer counting doesn't require track data. Use iterator-modified interval if present.
+            const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+            if (ivar->kmer_counter)	{
+                ivar->var[idx] = ivar->kmer_counter->score_interval(seq_interval, m_iu.get_chromkey());
+            } else{
+                ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+            }
+            continue;
+        }
+        if (ivar->val_func == Track_var::KMER_FFT || 
+            ivar->val_func == Track_var::KMER_FFT_PEAK || 
+            ivar->val_func == Track_var::KMER_FFT_PEAK_POWER) {
+            // Kmer FFT doesn't require track data. Use iterator-modified interval if present.
+            const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+            if (ivar->kmer_fft) {
+                ivar->var[idx] = ivar->kmer_fft->score_interval(seq_interval, m_iu.get_chromkey());
+            } else {
+                ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+            }
+            continue;
+        }
 
 		if (GenomeTrack::is_1d(ivar->track_n_imdf->type)) {
 			GenomeTrack1D &track = *(GenomeTrack1D *)ivar->track_n_imdf->track;

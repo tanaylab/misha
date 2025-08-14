@@ -47,7 +47,7 @@ void BinsManager::set_dims(SEXP dim, SEXP dimnames) const
 		int numbins = bin_finder.get_numbins();
 		INTEGER(dim)[i] = numbins;
 		SEXP dimname;
-		rprotect(dimname = RSaneAllocVector(STRSXP, numbins));
+		dimname = rprotect_ptr(RSaneAllocVector(STRSXP, numbins));
 
 		for (int j = 0; j < numbins; j++) {
 			char buf[10000];
@@ -57,5 +57,6 @@ void BinsManager::set_dims(SEXP dim, SEXP dimnames) const
 			SET_STRING_ELT(dimname, j, Rf_mkChar(buf));
 		}
 		SET_VECTOR_ELT(dimnames, i, dimname);
+		runprotect(1);
 	}
 }

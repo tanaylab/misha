@@ -86,10 +86,11 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
 		num_intervs = intervals2d->size();
 	}
 
-	colnames = Rf_getAttrib(answer, R_NamesSymbol);
+    colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 
-	for (unsigned icol = 0; icol < NUM_COLS; ++icol)
-		rprotect(rsummary[icol] = RSaneAllocVector(REALSXP, num_intervs));
+    for (unsigned icol = 0; icol < NUM_COLS; ++icol){
+        rsummary[icol] = rprotect_ptr(RSaneAllocVector(REALSXP, num_intervs));
+	}
 
 	for (unsigned i = 0; i < num_intervs; i++) {
 		REAL(rsummary[TOTAL_BINS])[i] = summaries[i].num_bins;
@@ -106,7 +107,8 @@ static SEXP build_rintervals_summary(GIntervalsFetcher1D *intervals1d, GInterval
         SET_STRING_ELT(colnames, num_interv_cols + icol, Rf_mkChar(IntervalSummaryColNames[icol]));
     }
 
-	return answer;
+    runprotect(1); // colnames
+    return answer;
 }
 
 extern "C" {
@@ -137,11 +139,11 @@ SEXP gtracksummary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _ban
 		for (scanner.begin(_expr, intervals1d, intervals2d, _iterator_policy, _band); !scanner.isend(); scanner.next())
 			summary.update(scanner.last_real(0));
 
-		SEXP answer;
-		SEXP colnames;
+        SEXP answer;
+        SEXP colnames;
 
-		rprotect(answer = RSaneAllocVector(REALSXP, NUM_COLS));
-		rprotect(colnames = RSaneAllocVector(STRSXP, NUM_COLS));
+        answer = rprotect_ptr(RSaneAllocVector(REALSXP, NUM_COLS));
+        colnames = rprotect_ptr(RSaneAllocVector(STRSXP, NUM_COLS));
 
 		REAL(answer)[TOTAL_BINS] = summary.num_bins;
 		REAL(answer)[TOTAL_NAN_BINS] = summary.num_bins - summary.num_non_nan_bins;
@@ -154,9 +156,10 @@ SEXP gtracksummary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _ban
 		for (int i = 0; i < NUM_COLS; i++)
 			SET_STRING_ELT(colnames, i, Rf_mkChar(IntervalSummaryColNames[i]));
 
-		Rf_setAttrib(answer, R_NamesSymbol, colnames);
+        Rf_setAttrib(answer, R_NamesSymbol, colnames);
 
-		return answer;
+        runprotect(2);
+        return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
@@ -208,11 +211,11 @@ SEXP gtracksummary_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy,
 				summary.merge(kid_summary);
 			}
 
-			SEXP answer;
-			SEXP colnames;
+            SEXP answer;
+            SEXP colnames;
 
-			rprotect(answer = RSaneAllocVector(REALSXP, NUM_COLS));
-			rprotect(colnames = RSaneAllocVector(STRSXP, NUM_COLS));
+            answer = rprotect_ptr(RSaneAllocVector(REALSXP, NUM_COLS));
+            colnames = rprotect_ptr(RSaneAllocVector(STRSXP, NUM_COLS));
 
 			REAL(answer)[TOTAL_BINS] = summary.num_bins;
 			REAL(answer)[TOTAL_NAN_BINS] = summary.num_bins - summary.num_non_nan_bins;
@@ -225,9 +228,10 @@ SEXP gtracksummary_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy,
 			for (int i = 0; i < NUM_COLS; i++)
 				SET_STRING_ELT(colnames, i, Rf_mkChar(IntervalSummaryColNames[i]));
 
-			Rf_setAttrib(answer, R_NamesSymbol, colnames);
+            Rf_setAttrib(answer, R_NamesSymbol, colnames);
 
-			rreturn(answer);
+            runprotect(2);
+            rreturn(answer);
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
@@ -462,7 +466,7 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 
 		// pack the answer
 		SEXP answer, dim, dimnames;
-		rprotect(answer = RSaneAllocVector(REALSXP, totalbins * NUM_COLS));
+        answer = rprotect_ptr(RSaneAllocVector(REALSXP, totalbins * NUM_COLS));
 
 		for (unsigned i = 0; i < totalbins; i++) {
 			REAL(answer)[totalbins * TOTAL_NAN_BINS + i] = summaries[i].num_bins - summaries[i].num_non_nan_bins;
@@ -474,12 +478,12 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 			REAL(answer)[totalbins * STDEV + i] = summaries[i].num_non_nan_bins > 1 ? summaries[i].get_stdev() : numeric_limits<double>::quiet_NaN();
 		}
 
-		rprotect(dim = RSaneAllocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));
-		rprotect(dimnames = RSaneAllocVector(VECSXP, bins_manager.get_num_bin_finders() + 1));
+        dim = rprotect_ptr(RSaneAllocVector(INTSXP, bins_manager.get_num_bin_finders() + 1));
+        dimnames = rprotect_ptr(RSaneAllocVector(VECSXP, bins_manager.get_num_bin_finders() + 1));
 		bins_manager.set_dims(dim, dimnames);
 
 		SEXP dimname;
-		rprotect(dimname = RSaneAllocVector(STRSXP, NUM_COLS));
+        dimname = rprotect_ptr(RSaneAllocVector(STRSXP, NUM_COLS));
 		for (unsigned i = 0; i < NUM_COLS; i++)
 			SET_STRING_ELT(dimname, i, Rf_mkChar(IntervalSummaryColNames[i]));
 
@@ -488,7 +492,7 @@ SEXP gbins_summary(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP _
 
 		Rf_setAttrib(answer, R_DimSymbol, dim);
 		Rf_setAttrib(answer, R_DimNamesSymbol, dimnames);
-		return answer;
+        return answer;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
