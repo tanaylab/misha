@@ -50,6 +50,24 @@ test_that("gintervals.mapply works with intervals.set.out", {
     }, "test.fixedbin", intervs) %>% arrange(chrom, start, end))
 })
 
+test_that("gintervals.mapply works with custom colnames", {
+    # Test default column name
+    result_default <- gintervals.mapply(function(x) {
+        max(x + 2, na.rm = TRUE)
+    }, "test.fixedbin", gintervals(c(1, 2), 0, 100000))
+    expect_true("value" %in% colnames(result_default))
+
+    # Test custom column name
+    result_custom <- gintervals.mapply(function(x) {
+        max(x + 2, na.rm = TRUE)
+    }, "test.fixedbin", gintervals(c(1, 2), 0, 100000), colnames = "max_value")
+    expect_true("max_value" %in% colnames(result_custom))
+    expect_false("value" %in% colnames(result_custom))
+
+    # Test that the values are the same regardless of column name
+    expect_equal(result_default$value, result_custom$max_value)
+})
+
 test_that("gintervals.mapply works with intervals.set.out 2d", {
     gintervals.rm("test.testintervs_mapply", force = TRUE)
     withr::defer(gintervals.rm("test.testintervs_mapply", force = TRUE))

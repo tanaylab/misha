@@ -535,7 +535,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
             # write read-only attributes
             f <- file(paste(groot, ".ro_attributes", sep = "/"), "wb")
-            serialize(c("created.by", "created.date"), f)
+            serialize(c("created.by", "created.date", "created.user"), f)
             close(f)
 
             message("Database was successfully created")
@@ -791,7 +791,7 @@ gdb.reload <- function(rescan = TRUE) {
 .gdb.convert_attrs <- function() {
     .gcheckroot()
 
-    ro_attrs <- c("created.by", "created.date")
+    ro_attrs <- c("created.by", "created.date", "created.user")
     .gcall_noninteractive(gdb.set_readonly_attrs, ro_attrs)
 
     for (track in .misha$GTRACKS) {

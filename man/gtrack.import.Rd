@@ -2,14 +2,15 @@
 % Please edit documentation in R/track.R
 \name{gtrack.import}
 \alias{gtrack.import}
-\title{Creates a track from WIG / BigWig / BedGraph / tab-delimited file}
+\title{Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited file}
 \usage{
 gtrack.import(
   track = NULL,
   description = NULL,
   file = NULL,
   binsize = NULL,
-  defval = NaN
+  defval = NaN,
+  attrs = NULL
 )
 }
 \arguments{
@@ -23,19 +24,36 @@ gtrack.import(
 'Sparse' track}
 
 \item{defval}{default track value}
+
+\item{attrs}{a named vector or list of attributes to be set on the track after import}
 }
 \value{
 None.
 }
 \description{
-Creates a track from WIG / BigWig / BedGraph / tab-delimited file
+Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited file
 }
 \details{
 This function creates a track from WIG / BigWig / BedGraph / tab-delimited
-file.  One can learn about the format of the tab-delimited file by running
-'gextract' function on a 1D track with a 'file' parameter set to the name of
-the file. Zipped files are supported (file name must have '.gz' or '.zip'
-suffix).
+file. Zipped files are supported (file name must have '.gz' or '.zip' suffix).
+
+Tab-delimited files must start with a header line with the following column
+names (tab-separated): 'chrom', 'start', 'end', and exactly one value column
+name (e.g. 'value'). Each subsequent line provides a single interval:
+- chrom: chromosome name (e.g. 'chr1')
+- start: 0-based start coordinate (inclusive)
+- end: 0-based end coordinate (exclusive)
+- value: numeric value (floating point allowed); exactly one value column is supported
+
+Columns must be separated by tabs. Coordinates must refer to chromosomes
+existing in the current genome. Missing values can be specified as 'NaN'.
+
+BED files (.bed/.bed.gz/.bed.zip) are also supported. If the BED 'score'
+column (5th column) exists and is numeric, it is used as the interval value;
+otherwise a constant value of 1 is used. For BED inputs, 'binsize' controls
+the output type: if 'binsize' is 0 the track is 'Sparse'; otherwise the track
+is 'Dense' with bin-averaged values based on overlaps with BED intervals (and
+'defval' for regions not covered).
 
 If 'binsize' is 0 the resulted track is created in 'Sparse' format.
 Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.
@@ -43,6 +61,50 @@ The values that were not defined in input file file are substituted by
 'defval' value.
 
 'description' is added as a track attribute.
+}
+\examples{
+\dontshow{
+options(gmax.processes = 2)
+}
+
+\donttest{
+gdb.init_examples()
+
+# Create a simple WIG file for demonstration
+temp_file <- tempfile(fileext = ".wig")
+writeLines(c(
+    "track type=wiggle_0 name=\"example track\"",
+    "fixedStep chrom=chr1 start=1 step=1",
+    "1.5",
+    "2.0",
+    "1.8",
+    "3.2"
+), temp_file)
+
+# Basic import
+gtrack.import("example_track", "Example track from WIG file",
+    temp_file,
+    binsize = 1
+)
+gtrack.info("example_track")
+gtrack.rm("example_track", force = TRUE)
+
+# Import with custom attributes
+attrs <- c("author" = "researcher", "version" = "1.0", "experiment" = "test")
+gtrack.import("example_track_with_attrs", "Example track with attributes",
+    temp_file,
+    binsize = 1, attrs = attrs
+)
+
+# Check that attributes were set
+gtrack.attr.get("example_track_with_attrs", "author")
+gtrack.attr.get("example_track_with_attrs", "version")
+gtrack.attr.get("example_track_with_attrs", "experiment")
+
+# Clean up
+gtrack.rm("example_track_with_attrs", force = TRUE)
+}
+
 }
 \seealso{
 \code{\link{gtrack.import_set}}, \code{\link{gtrack.rm}},

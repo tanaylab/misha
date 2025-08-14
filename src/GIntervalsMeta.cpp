@@ -9,8 +9,7 @@ SEXP GIntervalsMeta::load_meta(const char *path)
 {
 	string filename(path);
 	filename += "/.meta";
-	SEXP meta = RSaneUnserialize(filename.c_str());
-	rprotect(meta);
+    SEXP meta = rprotect_ptr(RSaneUnserialize(filename.c_str()));
 	if (!Rf_isVector(meta) || Rf_length(meta) != 2)
 		verror("Invalid format of meta file %s", filename.c_str());
 
@@ -18,7 +17,7 @@ SEXP GIntervalsMeta::load_meta(const char *path)
 	if (!Rf_isVector(chromsizes) || (Rf_length(chromsizes) != GIntervalsMeta1D::NUM_STAT_COLS && Rf_length(chromsizes) != GIntervalsMeta2D::NUM_STAT_COLS))
 		verror("Invalid format of meta file %s", filename.c_str());
 
-	return meta;
+    return meta;
 }
 
 void GIntervalsMeta::save_meta(const char *path, SEXP stats, SEXP zeroline)
@@ -26,8 +25,8 @@ void GIntervalsMeta::save_meta(const char *path, SEXP stats, SEXP zeroline)
 	SEXP meta;
 	SEXP colnames;
 
-	rprotect(meta = RSaneAllocVector(VECSXP, NUM_META_FIELDS));
-    rprotect(colnames = RSaneAllocVector(STRSXP, NUM_META_FIELDS));
+    meta = rprotect_ptr(RSaneAllocVector(VECSXP, NUM_META_FIELDS));
+    colnames = rprotect_ptr(RSaneAllocVector(STRSXP, NUM_META_FIELDS));
 
 	SET_VECTOR_ELT(meta, STATS_FIELD, stats);
 	SET_VECTOR_ELT(meta, ZEROLINE_FIELD, zeroline);

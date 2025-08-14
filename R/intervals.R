@@ -1629,7 +1629,7 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #' set. Use this parameter if the result size exceeds the limits of the
 #' physical memory.
 #'
-#' @param FUN function to apply, found via ‘match.fun’
+#' @param FUN function to apply, found via 'match.fun'
 #' @param ... track expressions whose values are used as arguments for 'FUN'
 #' @param intervals intervals for which track expressions are calculated
 #' @param enable.gapply.intervals if 'TRUE', then a variable 'GAPPLY.INTERVALS'
@@ -1639,8 +1639,11 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
+#' @param colnames name of the column that contains the return values of 'FUN'.
+#' Default is "value".
 #' @return If 'intervals.set.out' is 'NULL' a data frame representing intervals
-#' with an additional column that contains the return values of 'FUN'.
+#' with an additional column that contains the return values of 'FUN'. The name
+#' of this additional column is specified by the 'colnames' parameter.
 #' @seealso \code{\link{mapply}}
 #' @keywords ~apply ~mapply
 #' @examples
@@ -1660,13 +1663,19 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #'     "sparse_track", gintervals(c(1, 2), 0, 10000),
 #'     iterator = "sparse_track"
 #' )
+#' # Using custom column name
+#' gintervals.mapply(
+#'     max, "dense_track",
+#'     gintervals(c(1, 2), 0, 10000),
+#'     colnames = "max_value"
+#' )
 #'
 #' @export gintervals.mapply
-gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.intervals = FALSE, iterator = NULL, band = NULL, intervals.set.out = NULL) {
+gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.intervals = FALSE, iterator = NULL, band = NULL, intervals.set.out = NULL, colnames = "value") {
     assign("GINTERVID", -1, envir = .misha)
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(intervals) && length(args) < 2 || !is.null(intervals) && length(args) < 1) {
-        stop("Usage: gintervals.mapply(FUN, [expr]+, intervals, enable.gapply.intervals = FALSE, iterator = NULL, intervals.set.out = NULL)", call. = FALSE)
+        stop("Usage: gintervals.mapply(FUN, [expr]+, intervals, enable.gapply.intervals = FALSE, iterator = NULL, intervals.set.out = NULL, colnames = \"value\")", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1690,12 +1699,13 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
+
     if (.gintervals.is_bigset(intervals) || !is.null(intervals.set.out)) {
         res <- NULL
 
         INTERVALS_FUN <- function(intervals, intervals.set.out, envir) {
             intervals <- intervals[[1]]
-            chrom_res <- .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, FALSE, .misha_env())
+            chrom_res <- .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, FALSE, colnames, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
                     assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
@@ -1722,9 +1732,9 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
         } # suppress return value
     } else {
         if (.ggetOption("gmultitasking")) {
-            .gcall("gmapply_multitask", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, TRUE, .misha_env())
+            .gcall("gmapply_multitask", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, TRUE, colnames, .misha_env())
         } else {
-            .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, TRUE, .misha_env())
+            .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, TRUE, colnames, .misha_env())
         }
     }
 }

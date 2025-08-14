@@ -760,35 +760,26 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 
 const char *rdb::get_groot(SEXP envir)
 {
-	// no need to protect the returned value
-	SEXP groot = Rf_findVar(Rf_install("GROOT"), Rf_findVar(Rf_install(".misha"), envir));
-
-	if (!Rf_isString(groot))
-		verror("GROOT variable does not exist");
-
-	return CHAR(STRING_ELT(groot, 0));
+    SEXP groot = find_in_misha(envir, "GROOT");
+    if (!Rf_isString(groot))
+        verror("GROOT variable does not exist");
+    return CHAR(STRING_ELT(groot, 0));
 }
 
 const char *rdb::get_gwd(SEXP envir)
 {
-	// no need to protect the returned value
-	SEXP gwd = Rf_findVar(Rf_install("GWD"), Rf_findVar(Rf_install(".misha"), envir));
-
-	if (!Rf_isString(gwd))
-		verror("GWD variable does not exist");
-
-	return CHAR(STRING_ELT(gwd, 0));
+    SEXP gwd = find_in_misha(envir, "GWD");
+    if (!Rf_isString(gwd))
+        verror("GWD variable does not exist");
+    return CHAR(STRING_ELT(gwd, 0));
 }
 
 const char *rdb::get_glib_dir(SEXP envir)
 {
-	// no need to protect the returned value
-	SEXP glibdir = Rf_findVar(Rf_install(".GLIBDIR"), Rf_findVar(Rf_install(".misha"), envir));
-
-	if (!Rf_isString(glibdir))
-		verror(".GLIBDIR variable does not exist");
-
-	return CHAR(STRING_ELT(glibdir, 0));
+    SEXP glibdir = find_in_misha(envir, ".GLIBDIR");
+    if (!Rf_isString(glibdir))
+        verror(".GLIBDIR variable does not exist");
+    return CHAR(STRING_ELT(glibdir, 0));
 }
 
 string rdb::track2path(SEXP envir, const string &trackname)
@@ -865,18 +856,19 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 
 SEXP rdb::run_in_R(const char *command, SEXP envir)
 {
-	SEXP expr;
-	SEXP parsed_expr = R_NilValue;
-    SEXPCleaner parsed_expr_cleaner(parsed_expr);
+    SEXP expr;
+    SEXP parsed_expr = R_NilValue;
 	ParseStatus status;
 
-	rprotect(expr = RSaneAllocVector(STRSXP, 1));
+    expr = rprotect_ptr(RSaneAllocVector(STRSXP, 1));
 	SET_STRING_ELT(expr, 0, Rf_mkChar(command));
-	rprotect(parsed_expr = R_ParseVector(expr, -1, &status, R_NilValue));
+    parsed_expr = rprotect_ptr(R_ParseVector(expr, -1, &status, R_NilValue));
 	if (status != PARSE_OK)
 		verror("Failed to parse expression \"%s\"", command);
 
-	return eval_in_R(VECTOR_ELT(parsed_expr, 0), envir);
+    SEXP result = eval_in_R(VECTOR_ELT(parsed_expr, 0), envir);
+    runprotect(2);
+    return result;
 }
 
 struct RSaneSerializeData {

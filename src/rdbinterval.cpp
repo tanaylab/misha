@@ -43,8 +43,9 @@ IntervUtils::IntervUtils(SEXP envir)
 	m_kids_intervals1d.clear();
 	m_kids_intervals2d.clear();
 
-	
-	m_allgenome = Rf_findVar(Rf_install("ALLGENOME"), Rf_findVar(Rf_install(".misha"), m_envir));
+    {
+        m_allgenome = find_in_misha(m_envir, "ALLGENOME");
+    }
 
 	if (Rf_isNull(m_allgenome))
 		verror("ALLGENOME variable does not exist");
@@ -80,9 +81,10 @@ IntervUtils::~IntervUtils()
 
 bool IntervUtils::track_exists(const char *track_name)
 {
-	SEXP all_track_names;
+	SEXP all_track_names = R_NilValue;
+	SEXPCleaner all_track_names_cleaner(all_track_names);
 
-	rprotect(all_track_names = Rf_findVar(Rf_install("GTRACKS"), Rf_findVar(Rf_install(".misha"), get_env())));
+	rprotect(all_track_names = find_in_misha(get_env(), "GTRACKS"));
 	if (Rf_isString(all_track_names)) {
 		for (int i = 0; i < Rf_length(all_track_names); ++i) {
 			if (!strcmp(track_name, CHAR(STRING_ELT(all_track_names, i))))
@@ -316,7 +318,9 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 		SEXP gintervs;
 		bool interv_found = false;
 
-		rprotect(gintervs = Rf_findVar(Rf_install("GINTERVS"), Rf_findVar(Rf_install(".misha"),m_envir)));
+        {
+            rprotect(gintervs = find_in_misha(m_envir, "GINTERVS"));
+        }
 		if (Rf_isString(gintervs)) {
 			for (int iinterv = 0; iinterv < Rf_length(gintervs); ++iinterv) {
 				const char *interv = CHAR(STRING_ELT(gintervs, iinterv));
@@ -639,9 +643,10 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval)
 		tmp_intervals.push_back((GInterval)*iinterval);
 
-	SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
+    SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
 	SEXP src_chroms, src_chroms_idx, src_starts;
-	SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+    SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+    rprotect(col_names);
 	unsigned num_src_chroms = src_id2chrom.size();
 
     rprotect(src_chroms_idx = RSaneAllocVector(INTSXP, chain_intervs.size()));
@@ -656,7 +661,7 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 	for (unsigned id = 0; id < num_src_chroms; ++id)
 		SET_STRING_ELT(src_chroms, id, Rf_mkChar(src_id2chrom[id].c_str()));
 
-	for (int i = 0; i < ChainInterval::NUM_COLS; i++)
+    for (int i = 0; i < ChainInterval::NUM_COLS; i++)
 		SET_STRING_ELT(col_names, i, Rf_mkChar(ChainInterval::COL_NAMES[i]));
 
     Rf_setAttrib(src_chroms_idx, R_LevelsSymbol, src_chroms);
@@ -665,7 +670,8 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
     SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, src_chroms_idx);
     SET_VECTOR_ELT(answer, ChainInterval::START_SRC, src_starts);
 
-	return answer;
+    runprotect(1); // col_names
+    return answer;
 }
 
 DiagonalBand IntervUtils::convert_band(SEXP rband)
@@ -689,9 +695,9 @@ SEXP IntervUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
 {
 	SEXP answer, row_names, col_names;
 
-	rprotect(answer = RSaneAllocVector(VECSXP, numcols));
-    rprotect(col_names = RSaneAllocVector(STRSXP, numcols));
-    rprotect(row_names = RSaneAllocVector(INTSXP, numrows));
+    answer = rprotect_ptr(RSaneAllocVector(VECSXP, numcols));
+    col_names = rprotect_ptr(RSaneAllocVector(STRSXP, numcols));
+    row_names = rprotect_ptr(RSaneAllocVector(INTSXP, numrows));
 
 	for (int i = 0; i < numrows; ++i)
 		INTEGER(row_names)[i] = i + 1;
@@ -702,6 +708,8 @@ SEXP IntervUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
     Rf_setAttrib(answer, R_NamesSymbol, col_names);
     Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
     Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
+
+    runprotect(3);
 
 	return answer;
 }
@@ -720,8 +728,8 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 		verror("Attempt to copy data frame columns beyond the valid size");
 
 	int numrows = Rf_length(Rf_getAttrib(tgt, R_RowNamesSymbol));
-	SEXP src_colnames = Rf_getAttrib(src, R_NamesSymbol);
-	SEXP tgt_colnames = Rf_getAttrib(tgt, R_NamesSymbol);
+    SEXP src_colnames = rprotect_ptr(Rf_getAttrib(src, R_NamesSymbol));
+    SEXP tgt_colnames = rprotect_ptr(Rf_getAttrib(tgt, R_NamesSymbol));
 
 	if (Rf_isNull(src_colnames) || !Rf_isString(src_colnames))
 		verror("Invalid source data frame for a copy");
@@ -735,7 +743,7 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 		SEXP src_col = VECTOR_ELT(src, col);
 		SEXP tgt_col;
 
-        rprotect(tgt_col = RSaneAllocVector(TYPEOF(src_col), numrows));
+        tgt_col = rprotect_ptr(RSaneAllocVector(TYPEOF(src_col), numrows));
 
 		if (!Rf_isInteger(src_col) && !Rf_isReal(src_col) && !Rf_isLogical(src_col) && !Rf_isString(src_col) && !Rf_isFactor(src_col))
 			verror("Unsupported type found in a data frame: %s", Rf_type2char(TYPEOF(src_col)));
@@ -747,6 +755,7 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 
         SET_VECTOR_ELT(tgt, col + tgt_col_offset, tgt_col);
     }
+    runprotect(2);
 }
 
 void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)
@@ -823,7 +832,6 @@ bool IntervUtils::get_multitasking() const
 {
 	if (m_multitasking < 0) {
 		SEXP r_multitasking = Rf_GetOption1(Rf_install("gmultitasking"));
-
 		if (Rf_isLogical(r_multitasking))
 			m_multitasking = (int)LOGICAL(r_multitasking)[0];
 		else
@@ -836,7 +844,6 @@ uint64_t IntervUtils::get_max_processes() const
 {
 	if (!m_max_processes) {
 		SEXP r_max_processes = Rf_GetOption1(Rf_install("gmax.processes"));
-
 		if (Rf_isReal(r_max_processes))
 			m_max_processes = (uint64_t)REAL(r_max_processes)[0];
 		else if (Rf_isInteger(r_max_processes))
@@ -900,7 +907,6 @@ uint64_t IntervUtils::get_max_mem_usage() const
 {
 	if (!m_max_mem_usage) {
 		SEXP r_max_mem_usage = Rf_GetOption1(Rf_install("gmax.mem.usage"));
-
 		if (Rf_isReal(r_max_mem_usage))
 			m_max_mem_usage = (uint64_t)REAL(r_max_mem_usage)[0] * 1000;
 		else if (Rf_isInteger(r_max_mem_usage))
@@ -931,7 +937,6 @@ uint64_t IntervUtils::get_quantile_edge_data_size() const
 {
 	if (!m_quantile_edge_data_size) {
 		SEXP r_quantile_edge_data_size = Rf_GetOption1(Rf_install("gquantile.edge.data.size"));
-
 		if (Rf_isReal(r_quantile_edge_data_size))
 			m_quantile_edge_data_size = (uint64_t)REAL(r_quantile_edge_data_size)[0];
 		else if (Rf_isInteger(r_quantile_edge_data_size))
@@ -961,7 +966,6 @@ uint64_t IntervUtils::get_track_num_chunks() const
 {
 	if (!m_track_num_chunks) {
 		SEXP r_track_num_chunks = Rf_GetOption1(Rf_install("gtrack.num.chunks"));
-
 		if (Rf_isReal(r_track_num_chunks))
 			m_track_num_chunks = (uint64_t)REAL(r_track_num_chunks)[0];
 		else if (Rf_isInteger(r_track_num_chunks))

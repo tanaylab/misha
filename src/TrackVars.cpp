@@ -133,8 +133,11 @@ SEXP gset_tracks_attrs(SEXP _attrs, SEXP _replace, SEXP _read_only_attrs, SEXP _
 		
 		SEXP rattr, rattr_names, rtracknames;
 
-		rattr_names = Rf_getAttrib(_attrs, R_NamesSymbol);
-		rtracknames = Rf_getAttrib(_attrs, R_RowNamesSymbol);
+        rattr_names = Rf_getAttrib(_attrs, R_NamesSymbol);
+        rtracknames = Rf_getAttrib(_attrs, R_RowNamesSymbol);
+        // Protect names objects across subsequent allocations/IO
+        rprotect(rattr_names);
+        rprotect(rtracknames);
 
 		if (!Rf_isString(rattr_names) || !Rf_isString(rtracknames) || Rf_length(rattr_names) != Rf_length(_attrs))
 			verror("Invalid format of attributes");
@@ -151,7 +154,7 @@ SEXP gset_tracks_attrs(SEXP _attrs, SEXP _replace, SEXP _read_only_attrs, SEXP _
 				read_only_attrs.insert(CHAR(STRING_ELT(_read_only_attrs, i)));
 		}
 
-		for (int itrack = 0; itrack < Rf_length(rtracknames); ++itrack) {
+        for (int itrack = 0; itrack < Rf_length(rtracknames); ++itrack) {
 			const char *trackname = CHAR(STRING_ELT(rtracknames, itrack));
 			bool attrs_changed = false;
 
@@ -168,7 +171,8 @@ SEXP gset_tracks_attrs(SEXP _attrs, SEXP _replace, SEXP _read_only_attrs, SEXP _
 							track_attrs.erase(icur);
 						} else
 							++itrack_attr;
-					}
+        }
+        runprotect(2);
 				}
 			}
 				 

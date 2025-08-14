@@ -28,14 +28,15 @@ static SEXP build_rintervals_wilcox(const vector<IntervalPval> &res_intervals, G
 	SEXP answer = iu.convert_intervs(&out_intervals, IntervalPval::NUM_COLS, false);
 	SEXP pvals;
 
-	rprotect(pvals = RSaneAllocVector(REALSXP, res_intervals.size()));
+    pvals = rprotect_ptr(RSaneAllocVector(REALSXP, res_intervals.size()));
 	for (unsigned i = 0; i < res_intervals.size(); i++)
 		REAL(pvals)[i] = res_intervals[i].minpval;
 
 	SET_VECTOR_ELT(answer, IntervalPval::PVAL, pvals);
-	SEXP colnames = Rf_getAttrib(answer, R_NamesSymbol);
+    SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 	SET_STRING_ELT(colnames, IntervalPval::PVAL, Rf_mkChar(IntervalPval::COL_NAMES[IntervalPval::PVAL]));
-	return answer;
+    runprotect(2); // pvals, colnames
+    return answer;
 }
 
 class GenomeTrackSlidingWilcox {
