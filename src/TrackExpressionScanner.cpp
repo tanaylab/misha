@@ -208,7 +208,7 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 	check(track_exprs, scope1d, scope2d, iterator_policy, band);
 
 	// check whether m_eval_buf_limit == 1000 will correctly work for the expression
-    SEXP gbufsize = Rf_GetOption1(Rf_install("gbuf.size"));
+	SEXP gbufsize = Rf_GetOption1(Rf_install("gbuf.size"));
 	if (!Rf_isReal(gbufsize) || REAL(gbufsize)[0] < 1)
 		define_r_vars(1000);
 	else

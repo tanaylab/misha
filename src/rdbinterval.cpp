@@ -831,8 +831,7 @@ void IntervUtils::restrict_bins(int64_t maxbins, GIntervals &intervals, unsigned
 bool IntervUtils::get_multitasking() const
 {
 	if (m_multitasking < 0) {
-        SEXP r_multitasking = Rf_GetOption1(Rf_install("gmultitasking"));
-
+		SEXP r_multitasking = Rf_GetOption1(Rf_install("gmultitasking"));
 		if (Rf_isLogical(r_multitasking))
 			m_multitasking = (int)LOGICAL(r_multitasking)[0];
 		else
@@ -844,8 +843,7 @@ bool IntervUtils::get_multitasking() const
 uint64_t IntervUtils::get_max_processes() const
 {
 	if (!m_max_processes) {
-        SEXP r_max_processes = Rf_GetOption1(Rf_install("gmax.processes"));
-
+		SEXP r_max_processes = Rf_GetOption1(Rf_install("gmax.processes"));
 		if (Rf_isReal(r_max_processes))
 			m_max_processes = (uint64_t)REAL(r_max_processes)[0];
 		else if (Rf_isInteger(r_max_processes))
@@ -861,7 +859,7 @@ uint64_t IntervUtils::get_max_processes() const
 uint64_t IntervUtils::get_max_processes2core() const
 {
 	if (!m_max_processes2core) {
-        SEXP r_max_processes2core = Rf_GetOption1(Rf_install("gmax.processes2core"));
+		SEXP r_max_processes2core = Rf_GetOption1(Rf_install("gmax.processes2core"));
 
 		if (Rf_isReal(r_max_processes2core))
 			m_max_processes2core = (uint64_t)REAL(r_max_processes2core)[0];
@@ -878,7 +876,7 @@ uint64_t IntervUtils::get_max_processes2core() const
 uint64_t IntervUtils::get_min_scope4process() const
 {
 	if (!m_min_scope4process) {
-        SEXP r_min_scope4process = Rf_GetOption1(Rf_install("gmin.scope4process"));
+		SEXP r_min_scope4process = Rf_GetOption1(Rf_install("gmin.scope4process"));
 
 		if (Rf_isReal(r_min_scope4process))
 			m_min_scope4process = (uint64_t)REAL(r_min_scope4process)[0];
@@ -893,7 +891,7 @@ uint64_t IntervUtils::get_min_scope4process() const
 uint64_t IntervUtils::get_max_data_size() const
 {
 	if (!m_max_data_size) {
-        SEXP r_max_data_size = Rf_GetOption1(Rf_install("gmax.data.size"));
+		SEXP r_max_data_size = Rf_GetOption1(Rf_install("gmax.data.size"));
 
 		if (Rf_isReal(r_max_data_size))
 			m_max_data_size = (uint64_t)REAL(r_max_data_size)[0];
@@ -908,8 +906,7 @@ uint64_t IntervUtils::get_max_data_size() const
 uint64_t IntervUtils::get_max_mem_usage() const
 {
 	if (!m_max_mem_usage) {
-        SEXP r_max_mem_usage = Rf_GetOption1(Rf_install("gmax.mem.usage"));
-
+		SEXP r_max_mem_usage = Rf_GetOption1(Rf_install("gmax.mem.usage"));
 		if (Rf_isReal(r_max_mem_usage))
 			m_max_mem_usage = (uint64_t)REAL(r_max_mem_usage)[0] * 1000;
 		else if (Rf_isInteger(r_max_mem_usage))
@@ -923,7 +920,7 @@ uint64_t IntervUtils::get_max_mem_usage() const
 uint64_t IntervUtils::get_big_intervals_size() const
 {
 	if (!m_big_intervals_size) {
-        SEXP r_big_intervals_size = Rf_GetOption1(Rf_install("gbig.intervals.size"));
+		SEXP r_big_intervals_size = Rf_GetOption1(Rf_install("gbig.intervals.size"));
 
 		if (Rf_isReal(r_big_intervals_size))
 			m_big_intervals_size = (uint64_t)REAL(r_big_intervals_size)[0];
@@ -939,8 +936,7 @@ uint64_t IntervUtils::get_big_intervals_size() const
 uint64_t IntervUtils::get_quantile_edge_data_size() const
 {
 	if (!m_quantile_edge_data_size) {
-        SEXP r_quantile_edge_data_size = Rf_GetOption1(Rf_install("gquantile.edge.data.size"));
-
+		SEXP r_quantile_edge_data_size = Rf_GetOption1(Rf_install("gquantile.edge.data.size"));
 		if (Rf_isReal(r_quantile_edge_data_size))
 			m_quantile_edge_data_size = (uint64_t)REAL(r_quantile_edge_data_size)[0];
 		else if (Rf_isInteger(r_quantile_edge_data_size))
@@ -954,7 +950,7 @@ uint64_t IntervUtils::get_quantile_edge_data_size() const
 uint64_t IntervUtils::get_track_chunk_size() const
 {
 	if (!m_track_chunk_size) {
-        SEXP r_track_chunk_size = Rf_GetOption1(Rf_install("gtrack.chunk.size"));
+		SEXP r_track_chunk_size = Rf_GetOption1(Rf_install("gtrack.chunk.size"));
 
 		if (Rf_isReal(r_track_chunk_size))
 			m_track_chunk_size = (uint64_t)REAL(r_track_chunk_size)[0];
@@ -969,8 +965,7 @@ uint64_t IntervUtils::get_track_chunk_size() const
 uint64_t IntervUtils::get_track_num_chunks() const
 {
 	if (!m_track_num_chunks) {
-        SEXP r_track_num_chunks = Rf_GetOption1(Rf_install("gtrack.num.chunks"));
-
+		SEXP r_track_num_chunks = Rf_GetOption1(Rf_install("gtrack.num.chunks"));
 		if (Rf_isReal(r_track_num_chunks))
 			m_track_num_chunks = (uint64_t)REAL(r_track_num_chunks)[0];
 		else if (Rf_isInteger(r_track_num_chunks))

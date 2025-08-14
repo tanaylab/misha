@@ -22,7 +22,8 @@
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
 	"avg", "min", "max", "nearest", "stddev", "sum", "quantile",
 	"global.percentile", "global.percentile.min", "global.percentile.max",
-	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac"};
+	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac",
+	"kmer.fft", "kmer.fft.peak", "kmer.fft.peak.power"};
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage" };
 
@@ -309,13 +310,18 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			}
 
 			// Get PSSM matrix from params
-			SEXP rpssm = VECTOR_ELT(rparams, findListElementIndex(rparams, "pssm"));
+			int pssm_idx = findListElementIndex(rparams, "pssm");
+			if (pssm_idx < 0) {
+				rdb::verror("Virtual track %s: PWM functions require a pssm parameter", vtrack.c_str());
+			}
+			SEXP rpssm = VECTOR_ELT(rparams, pssm_idx);
 			if (!Rf_isMatrix(rpssm)){
 				rdb::verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
 			}
 
 			// Get bidirect parameter
-			SEXP rbidirect = VECTOR_ELT(rparams, findListElementIndex(rparams, "bidirect"));
+			int bidirect_idx = findListElementIndex(rparams, "bidirect");
+			SEXP rbidirect = (bidirect_idx >= 0) ? VECTOR_ELT(rparams, bidirect_idx) : R_NilValue;
 			bool bidirect = true; // default value
 			if (rbidirect != R_NilValue){
 				if (!Rf_isLogical(rbidirect))
@@ -324,7 +330,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			}
 
 			// Get extend parameter
-			SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
+			int extend_idx = findListElementIndex(rparams, "extend");
+			SEXP rextend = (extend_idx >= 0) ? VECTOR_ELT(rparams, extend_idx) : R_NilValue;
 			bool extend = false;
 			if (rextend != R_NilValue){
 				if (!Rf_isLogical(rextend))
@@ -333,7 +340,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			}
 
 			// Get strand parameter (numeric)
-			SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
+			int strand_idx = findListElementIndex(rparams, "strand");
+			SEXP rstrand = (strand_idx >= 0) ? VECTOR_ELT(rparams, strand_idx) : R_NilValue;
 			char strand = 0;
 			if (rstrand != R_NilValue){
 				if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
@@ -382,7 +390,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			if (Rf_isNewList(rparams))
 			{
 				// Handle as list params
-				SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
+				int extend_idx = findListElementIndex(rparams, "extend");
+				SEXP rextend = (extend_idx >= 0) ? VECTOR_ELT(rparams, extend_idx) : R_NilValue;
 				if (rextend != R_NilValue)
 				{
 					if (!Rf_isLogical(rextend))
@@ -391,14 +400,19 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				}
 
 				// Extract kmer string from the list parameters
-				SEXP rkmer = VECTOR_ELT(rparams, findListElementIndex(rparams, "kmer"));
+				int kmer_idx = findListElementIndex(rparams, "kmer");
+				if (kmer_idx < 0) {
+					rdb::verror("Virtual track %s: kmer parameter is required for function %s", vtrack.c_str(), func.c_str());
+				}
+				SEXP rkmer = VECTOR_ELT(rparams, kmer_idx);
 				if (rkmer == R_NilValue || !Rf_isString(rkmer) || Rf_length(rkmer) != 1)
 					rdb::verror("Virtual track %s: invalid parameter used for function %s (must be a kmer string)",
 								vtrack.c_str(), func.c_str());
 
 				const char *kmer = CHAR(STRING_ELT(rkmer, 0));
 
-				SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
+				int strand_idx = findListElementIndex(rparams, "strand");
+				SEXP rstrand = (strand_idx >= 0) ? VECTOR_ELT(rparams, strand_idx) : R_NilValue;
 				if (rstrand != R_NilValue)
 				{
 					if (!Rf_isNumeric(rstrand) || Rf_length(rstrand) != 1)
@@ -431,6 +445,82 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             var.seq_imdf1d = add_imdf(imdf1d);
 
             var.requires_pv = false;
+			return;
+		} else if (func == "kmer.fft" || func == "kmer.fft.peak" || func == "kmer.fft.peak.power") {
+			// Create the Track_var without a Track_n_imdf
+			m_track_vars.push_back(Track_var());
+			Track_var &var = m_track_vars.back();
+			var.var_name = vtrack;
+			var.val_func = (func == "kmer.fft" ? Track_var::KMER_FFT : 
+							func == "kmer.fft.peak" ? Track_var::KMER_FFT_PEAK : 
+							Track_var::KMER_FFT_PEAK_POWER);
+			var.track_n_imdf = nullptr;  // No track needed
+			
+			// Parse parameters
+			SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
+			if (!Rf_isNewList(rparams)) {
+				verror("Virtual track %s: FFT functions require a list parameter", vtrack.c_str());
+			}
+			
+			// Get kmer
+			int kmer_idx = findListElementIndex(rparams, "kmer");
+			if (kmer_idx < 0) {
+				verror("Virtual track %s: kmer parameter is required", vtrack.c_str());
+			}
+			SEXP rkmer = VECTOR_ELT(rparams, kmer_idx);
+			if (rkmer == R_NilValue || !Rf_isString(rkmer) || Rf_length(rkmer) != 1) {
+				verror("Virtual track %s: kmer parameter is required", vtrack.c_str());
+			}
+			const char *kmer = CHAR(STRING_ELT(rkmer, 0));
+			
+			// Get extend parameter
+			int extend_idx = findListElementIndex(rparams, "extend");
+			SEXP rextend = (extend_idx >= 0) ? VECTOR_ELT(rparams, extend_idx) : R_NilValue;
+			bool extend = true;
+			if (rextend != R_NilValue) {
+				if (!Rf_isLogical(rextend))
+					verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+				extend = LOGICAL(rextend)[0];
+			}
+			
+			// Get frequency for kmer.fft
+			double freq = 0.0;
+			if (func == "kmer.fft") {
+				int freq_idx = findListElementIndex(rparams, "freq");
+				if (freq_idx < 0) {
+					verror("Virtual track %s: freq parameter is required for kmer.fft", vtrack.c_str());
+				}
+				SEXP rfreq = VECTOR_ELT(rparams, freq_idx);
+				if (rfreq == R_NilValue || !Rf_isReal(rfreq) || Rf_length(rfreq) != 1) {
+					verror("Virtual track %s: freq parameter is required for kmer.fft", vtrack.c_str());
+				}
+				freq = REAL(rfreq)[0];
+			}
+			
+			// Get window type
+			KmerFFT::WindowType window = KmerFFT::WINDOW_HANN;
+			int window_idx = findListElementIndex(rparams, "window");
+			SEXP rwindow = (window_idx >= 0) ? VECTOR_ELT(rparams, window_idx) : R_NilValue;
+			if (rwindow != R_NilValue) {
+				if (!Rf_isString(rwindow) || Rf_length(rwindow) != 1) {
+					verror("Virtual track %s: window parameter must be a string", vtrack.c_str());
+				}
+				const char *window_str = CHAR(STRING_ELT(rwindow, 0));
+				if (strcmp(window_str, "none") == 0) window = KmerFFT::WINDOW_NONE;
+				else if (strcmp(window_str, "hann") == 0) window = KmerFFT::WINDOW_HANN;
+				else if (strcmp(window_str, "hamming") == 0) window = KmerFFT::WINDOW_HAMMING;
+				else if (strcmp(window_str, "blackman") == 0) window = KmerFFT::WINDOW_BLACKMAN;
+				else verror("Virtual track %s: unknown window type %s", vtrack.c_str(), window_str);
+			}
+			
+			KmerFFT::Mode mode = func == "kmer.fft" ? KmerFFT::POWER_AT_FREQ :
+								 func == "kmer.fft.peak" ? KmerFFT::PEAK_FREQ :
+								 KmerFFT::PEAK_POWER;
+			
+			var.kmer_fft = std::make_unique<KmerFFT>(kmer, m_groot, mode, extend, freq, window);
+			
+			var.percentile = numeric_limits<double>::quiet_NaN();
+			var.requires_pv = false;
 			return;
 		}
 	}
@@ -741,7 +831,7 @@ void TrackExpressionVars::register_track_functions()
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
 		// Skip PWM variables since they don't have associated tracks
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC) {
+        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC || ivar->val_func == Track_var::KMER_FFT || ivar->val_func == Track_var::KMER_FFT_PEAK || ivar->val_func == Track_var::KMER_FFT_PEAK_POWER) {
             continue;
         }
 		GenomeTrack1D *track1d = GenomeTrack::is_1d(ivar->track_n_imdf->type) ? (GenomeTrack1D *)ivar->track_n_imdf->track : NULL;
@@ -792,6 +882,9 @@ void TrackExpressionVars::register_track_functions()
 		case Track_var::PWM_MAX_POS:
 		case Track_var::KMER_COUNT:
 		case Track_var::KMER_FRAC:
+		case Track_var::KMER_FFT:
+		case Track_var::KMER_FFT_PEAK:
+		case Track_var::KMER_FFT_PEAK_POWER:
 			// PWM functions work directly on sequences, no need to register track functions
 			break;
 		default:
@@ -815,7 +908,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
 	    // Skip iterator validation for PWM variables since they don't have tracks or imdf
-        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX || itrack_var->val_func == Track_var::PWM_MAX_POS || itrack_var->val_func == Track_var::KMER_COUNT || itrack_var->val_func == Track_var::KMER_FRAC) {
+        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX || itrack_var->val_func == Track_var::PWM_MAX_POS || itrack_var->val_func == Track_var::KMER_COUNT || itrack_var->val_func == Track_var::KMER_FRAC || itrack_var->val_func == Track_var::KMER_FFT || itrack_var->val_func == Track_var::KMER_FFT_PEAK || itrack_var->val_func == Track_var::KMER_FFT_PEAK_POWER) {
             continue;
         }
 
@@ -853,7 +946,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	for (Track_vars::const_iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 	{
 		// Skip PWM tracks
-		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
+		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC || ivar->val_func == Track_var::KMER_FFT || ivar->val_func == Track_var::KMER_FFT_PEAK || ivar->val_func == Track_var::KMER_FFT_PEAK_POWER))
 		{
 			continue;
 		}
@@ -996,7 +1089,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 		{
 			if (ivar->track_n_imdf == &(*itrack_n_imdf) &&
-				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
+				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC || ivar->val_func == Track_var::KMER_FFT || ivar->val_func == Track_var::KMER_FFT_PEAK || ivar->val_func == Track_var::KMER_FFT_PEAK_POWER))
 			{
 				is_pwm_track = true;
 				break;
@@ -1133,7 +1226,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		for (; pwm_var != m_track_vars.end(); ++pwm_var)
 		{
 			if (pwm_var->track_n_imdf == &(*itrack_n_imdf) &&
-				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX || pwm_var->val_func == Track_var::PWM_MAX_POS || pwm_var->val_func == Track_var::KMER_COUNT || pwm_var->val_func == Track_var::KMER_FRAC))
+				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX || pwm_var->val_func == Track_var::PWM_MAX_POS || pwm_var->val_func == Track_var::KMER_COUNT || pwm_var->val_func == Track_var::KMER_FRAC || pwm_var->val_func == Track_var::KMER_FFT || pwm_var->val_func == Track_var::KMER_FFT_PEAK || pwm_var->val_func == Track_var::KMER_FFT_PEAK_POWER))
 				break;
 		}
 		if (pwm_var != m_track_vars.end())
@@ -1170,6 +1263,18 @@ void TrackExpressionVars::set_vars(unsigned idx)
             if (ivar->kmer_counter)	{
                 ivar->var[idx] = ivar->kmer_counter->score_interval(seq_interval, m_iu.get_chromkey());
             } else{
+                ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+            }
+            continue;
+        }
+        if (ivar->val_func == Track_var::KMER_FFT || 
+            ivar->val_func == Track_var::KMER_FFT_PEAK || 
+            ivar->val_func == Track_var::KMER_FFT_PEAK_POWER) {
+            // Kmer FFT doesn't require track data. Use iterator-modified interval if present.
+            const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+            if (ivar->kmer_fft) {
+                ivar->var[idx] = ivar->kmer_fft->score_interval(seq_interval, m_iu.get_chromkey());
+            } else {
                 ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
             }
             continue;
@@ -1211,6 +1316,9 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				case Track_var::PWM:
 				case Track_var::KMER_COUNT:
 				case Track_var::KMER_FRAC:
+				case Track_var::KMER_FFT:
+				case Track_var::KMER_FFT_PEAK:
+				case Track_var::KMER_FFT_PEAK_POWER:
 					break;
 				default:
 					verror("Internal error: unsupported function %d", ivar->val_func);

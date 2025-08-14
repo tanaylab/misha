@@ -328,7 +328,7 @@ pid_t RdbInitializer::launch_process()
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
 		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);		
 		
-        SEXP r_multitasking_stdout = Rf_GetOption1(Rf_install("gmultitasking_stdout"));
+		SEXP r_multitasking_stdout = Rf_GetOption1(Rf_install("gmultitasking_stdout"));
 
 		int devnull;
 

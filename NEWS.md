@@ -1,3 +1,7 @@
+# misha 4.3.10
+
+* Added `kmer.fft`, `kmer.fft.peak` and `kmer.fft.peak.power` virtual track functions that calculate the FFT of the kmer occurrence signal.
+
 # misha 4.3.9
 
 * Fixed a bug in `pwm` and `kmer` virtual track functions: iterator shifts were not applied. 
@@ -12,7 +16,7 @@
 
 # misha 4.3.7
 
-* Added `gtrack.create_dense` function - creates a dense track from an intervals and values.
+* Added `gtrack.create_dense` function - creates a dense track from intervals and values.
 * Fixed compilation error in old versions of macOS (`clock_gettime` is missing).
 * Fixed a bug in `gtrack.import_bigwig`: `intern` argument was not passed to `system` calls.
 

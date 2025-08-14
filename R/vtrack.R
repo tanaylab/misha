@@ -204,26 +204,49 @@
 #' PWM parameters are accepted as list or individual parameters (see examples).
 #'
 #' \emph{func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
-#' Counts occurrences of the specified kmer in each interval. The extend=TRUE
-#' parameter (default) allows counting kmers that span interval boundaries.
-#' The strand parameter can be 1 (forward strand), -1 (reverse strand), or 0 (both strands).
+#' Counts occurrences of the specified kmer in each interval.
 #'
 #' \emph{func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
-#' Calculates the fraction of possible positions in each interval that contain
-#' the specified kmer. The extend=TRUE parameter (default) allows counting kmers
-#' that span interval boundaries. The strand parameter can be 1 (forward strand), -1
-#' (reverse strand), or 0 (both strands).
+#' Calculates the fraction of possible positions in each interval that contain the specified kmer.
 #'
 #' For kmer functions:
 #' \itemize{
 #'   \item kmer: The DNA sequence to count (case-insensitive)
-#'   \item extend: If TRUE, counts kmers that span interval boundaries
+#'   \item extend: If TRUE (default), considers k-mers starting at any position within the interval, which may require looking at sequence data beyond the interval's end. If FALSE, the sequence is not extended, so k-mers starting near the end of the interval that would cross the boundary are not counted.
 #'   \item strand: If 1, counts kmers on forward strand; if -1, counts kmers on reverse strand. If
 #'  0, counts kmers on both strands. Default is 0.
 #' }
 #'
 #' Kmer parameters are accepted as list or individual parameters (see examples).
 #' Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avoid double counting.
+#'
+#' \emph{func = "kmer.fft", params = list(kmer = "CG", freq = 10.2, extend = TRUE, window = "hann")} \cr
+#' Performs FFT analysis on kmer occurrence signal and returns the power at the specified frequency.
+#' The frequency is specified in cycles per base. Window functions reduce spectral leakage.
+#'
+#' \emph{func = "kmer.fft.peak", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
+#' Returns the dominant frequency (in cycles per base) from FFT analysis of kmer occurrences.
+#' The result can be converted to a period in base pairs by taking its reciprocal (e.g., period = 1 / frequency).
+#' Useful for detecting periodic patterns in kmer distribution.
+#'
+#' \emph{func = "kmer.fft.peak.power", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
+#' Returns the power at the dominant frequency from FFT analysis of kmer occurrences.
+#' Indicates the strength of the most prominent periodic pattern.
+#'
+#' For kmer FFT functions:
+#' \itemize{
+#'   \item kmer: The DNA sequence to analyze (case-insensitive)
+#'   \item freq: The frequency to evaluate in cycles per base (only for kmer.fft). This is the reciprocal of the period. For example, to analyze a pattern that repeats every 10 bp, you would use a frequency of 1/10 = 0.1. The valid range for this parameter is [0, 0.5], which corresponds to periods from infinity down to 2 bp.
+#'   \item extend: If TRUE (default), considers k-mers starting at any position within the interval, which may require looking at sequence data beyond the interval's end. The FFT is computed on a signal of the interval's length. If FALSE, the sequence is not extended, so k-mers starting near the end of the interval that would cross the boundary are not counted.
+#'   \item window: Window function to apply ("none", "hann", "hamming", "blackman", default: "hann"). These functions are used to reduce spectral leakage from the FFT.
+#'     \itemize{
+#'       \item "none": No window.
+#'       \item "hann": Hann window (default). Good for general purpose.
+#'       \item "hamming": Hamming window. Minimizes the nearest side lobe.
+#'       \item "blackman": Blackman window. Better stop-band attenuation but wider main lobe.
+#'     }
+#'   For more information, see: \url{https://en.wikipedia.org/wiki/Window_function}
+#' }
 #'
 #' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 #'
@@ -309,12 +332,27 @@
 #'     iterator = 1000,
 #'     colnames = "gc_content"
 #' )
+#'
+#' # FFT analysis examples
+#' gvtrack.create("cg_fft", NULL, "kmer.fft",
+#'     params = list(kmer = "CG", freq = 0.1, extend = TRUE)
+#' )
+#' gvtrack.create("cg_peak_freq", NULL, "kmer.fft.peak",
+#'     params = list(kmer = "CG", extend = TRUE)
+#' )
+#' gvtrack.create("cg_peak_power", NULL, "kmer.fft.peak.power",
+#'     params = list(kmer = "CG", extend = TRUE)
+#' )
+#' gextract(c("cg_fft", "cg_peak_freq", "cg_peak_power"),
+#'     gintervals(1, 0, 10000),
+#'     iterator = 1000
+#' )
 #' @export gvtrack.create
 gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...) {
     if (is.null(substitute(vtrack))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
-    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac"))) {
+    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac", "kmer.fft", "kmer.fft.peak", "kmer.fft.peak.power"))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
 
@@ -416,6 +454,54 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 
         if (kmer_params$kmer == grevcomp(kmer_params$kmer) && kmer_params$strand == 0) {
             warning(paste0("kmer sequence '", kmer_params$kmer, "' is palindromic, please set strand to 1 or -1 to avoid double counting"))
+        }
+
+        params <- kmer_params
+    } else if (!is.null(func) && func %in% c("kmer.fft", "kmer.fft.peak", "kmer.fft.peak.power")) {
+        dots <- list(...)
+
+        if (!is.null(params)) {
+            if (!is.list(params) || !("kmer" %in% names(params))) {
+                stop("FFT functions require a list with at least 'kmer' parameter")
+            }
+            kmer_params <- params
+        } else if ("kmer" %in% names(dots)) {
+            kmer_params <- dots
+        } else {
+            stop("FFT functions require a 'kmer' parameter")
+        }
+
+        # Validate kmer
+        if (!is.character(kmer_params$kmer) || length(kmer_params$kmer) != 1) {
+            stop("kmer parameter must be a single string")
+        }
+
+        if (nchar(kmer_params$kmer) == 0) {
+            stop("kmer sequence cannot be empty")
+        }
+
+        # Set defaults
+        kmer_params$extend <- if (!is.null(kmer_params$extend)) kmer_params$extend else TRUE
+        kmer_params$window <- if (!is.null(kmer_params$window)) kmer_params$window else "hann"
+
+        # Validate freq for kmer.fft
+        if (func == "kmer.fft") {
+            if (is.null(kmer_params$freq) || !is.numeric(kmer_params$freq) || length(kmer_params$freq) != 1) {
+                stop("kmer.fft requires a numeric 'freq' parameter")
+            }
+            if (kmer_params$freq < 0 || kmer_params$freq > 0.5) {
+                stop("freq parameter must be between 0 and 0.5")
+            }
+        }
+
+        # Validate window parameter
+        if (!is.null(kmer_params$window)) {
+            if (!is.character(kmer_params$window) || length(kmer_params$window) != 1) {
+                stop("window parameter must be a single string")
+            }
+            if (!(kmer_params$window %in% c("none", "hann", "hamming", "blackman"))) {
+                stop("window parameter must be one of: 'none', 'hann', 'hamming', 'blackman'")
+            }
         }
 
         params <- kmer_params

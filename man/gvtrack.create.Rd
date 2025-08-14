@@ -134,26 +134,49 @@ the best match) would be at the end of the match.
 PWM parameters are accepted as list or individual parameters (see examples).
 
 \emph{func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
-Counts occurrences of the specified kmer in each interval. The extend=TRUE
-parameter (default) allows counting kmers that span interval boundaries.
-The strand parameter can be 1 (forward strand), -1 (reverse strand), or 0 (both strands).
+Counts occurrences of the specified kmer in each interval.
 
 \emph{func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
-Calculates the fraction of possible positions in each interval that contain
-the specified kmer. The extend=TRUE parameter (default) allows counting kmers
-that span interval boundaries. The strand parameter can be 1 (forward strand), -1
-(reverse strand), or 0 (both strands).
+Calculates the fraction of possible positions in each interval that contain the specified kmer.
 
 For kmer functions:
 \itemize{
   \item kmer: The DNA sequence to count (case-insensitive)
-  \item extend: If TRUE, counts kmers that span interval boundaries
+  \item extend: If TRUE (default), considers k-mers starting at any position within the interval, which may require looking at sequence data beyond the interval's end. If FALSE, the sequence is not extended, so k-mers starting near the end of the interval that would cross the boundary are not counted.
   \item strand: If 1, counts kmers on forward strand; if -1, counts kmers on reverse strand. If
  0, counts kmers on both strands. Default is 0.
 }
 
 Kmer parameters are accepted as list or individual parameters (see examples).
 Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avoid double counting.
+
+\emph{func = "kmer.fft", params = list(kmer = "CG", freq = 10.2, extend = TRUE, window = "hann")} \cr
+Performs FFT analysis on kmer occurrence signal and returns the power at the specified frequency.
+The frequency is specified in cycles per base. Window functions reduce spectral leakage.
+
+\emph{func = "kmer.fft.peak", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
+Returns the dominant frequency (in cycles per base) from FFT analysis of kmer occurrences.
+The result can be converted to a period in base pairs by taking its reciprocal (e.g., period = 1 / frequency).
+Useful for detecting periodic patterns in kmer distribution.
+
+\emph{func = "kmer.fft.peak.power", params = list(kmer = "CG", extend = TRUE, window = "hann")} \cr
+Returns the power at the dominant frequency from FFT analysis of kmer occurrences.
+Indicates the strength of the most prominent periodic pattern.
+
+For kmer FFT functions:
+\itemize{
+  \item kmer: The DNA sequence to analyze (case-insensitive)
+  \item freq: The frequency to evaluate in cycles per base (only for kmer.fft). This is the reciprocal of the period. For example, to analyze a pattern that repeats every 10 bp, you would use a frequency of 1/10 = 0.1. The valid range for this parameter is [0, 0.5], which corresponds to periods from infinity down to 2 bp.
+  \item extend: If TRUE (default), considers k-mers starting at any position within the interval, which may require looking at sequence data beyond the interval's end. The FFT is computed on a signal of the interval's length. If FALSE, the sequence is not extended, so k-mers starting near the end of the interval that would cross the boundary are not counted.
+  \item window: Window function to apply ("none", "hann", "hamming", "blackman", default: "hann"). These functions are used to reduce spectral leakage from the FFT.
+    \itemize{
+      \item "none": No window.
+      \item "hann": Hann window (default). Good for general purpose.
+      \item "hamming": Hamming window. Minimizes the nearest side lobe.
+      \item "blackman": Blackman window. Better stop-band attenuation but wider main lobe.
+    }
+  For more information, see: \url{https://en.wikipedia.org/wiki/Window_function}
+}
 
 Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 }
@@ -228,6 +251,21 @@ gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
 gextract("g_frac + c_frac", gintervals(1, 0, 10000),
     iterator = 1000,
     colnames = "gc_content"
+)
+
+# FFT analysis examples
+gvtrack.create("cg_fft", NULL, "kmer.fft",
+    params = list(kmer = "CG", freq = 0.1, extend = TRUE)
+)
+gvtrack.create("cg_peak_freq", NULL, "kmer.fft.peak",
+    params = list(kmer = "CG", extend = TRUE)
+)
+gvtrack.create("cg_peak_power", NULL, "kmer.fft.peak.power",
+    params = list(kmer = "CG", extend = TRUE)
+)
+gextract(c("cg_fft", "cg_peak_freq", "cg_peak_power"),
+    gintervals(1, 0, 10000),
+    iterator = 1000
 )
 }
 \seealso{
