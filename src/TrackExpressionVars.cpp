@@ -310,13 +310,18 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			}
 
 			// Get PSSM matrix from params
-			SEXP rpssm = VECTOR_ELT(rparams, findListElementIndex(rparams, "pssm"));
+			int pssm_idx = findListElementIndex(rparams, "pssm");
+			if (pssm_idx < 0) {
+				rdb::verror("Virtual track %s: PWM functions require a pssm parameter", vtrack.c_str());
+			}
+			SEXP rpssm = VECTOR_ELT(rparams, pssm_idx);
 			if (!Rf_isMatrix(rpssm)){
 				rdb::verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
 			}
 
 			// Get bidirect parameter
-			SEXP rbidirect = VECTOR_ELT(rparams, findListElementIndex(rparams, "bidirect"));
+			int bidirect_idx = findListElementIndex(rparams, "bidirect");
+			SEXP rbidirect = (bidirect_idx >= 0) ? VECTOR_ELT(rparams, bidirect_idx) : R_NilValue;
 			bool bidirect = true; // default value
 			if (rbidirect != R_NilValue){
 				if (!Rf_isLogical(rbidirect))
@@ -325,7 +330,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			}
 
 			// Get extend parameter
-			SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
+			int extend_idx = findListElementIndex(rparams, "extend");
+			SEXP rextend = (extend_idx >= 0) ? VECTOR_ELT(rparams, extend_idx) : R_NilValue;
 			bool extend = false;
 			if (rextend != R_NilValue){
 				if (!Rf_isLogical(rextend))
@@ -334,7 +340,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			}
 
 			// Get strand parameter (numeric)
-			SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
+			int strand_idx = findListElementIndex(rparams, "strand");
+			SEXP rstrand = (strand_idx >= 0) ? VECTOR_ELT(rparams, strand_idx) : R_NilValue;
 			char strand = 0;
 			if (rstrand != R_NilValue){
 				if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
@@ -383,7 +390,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			if (Rf_isNewList(rparams))
 			{
 				// Handle as list params
-				SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
+				int extend_idx = findListElementIndex(rparams, "extend");
+				SEXP rextend = (extend_idx >= 0) ? VECTOR_ELT(rparams, extend_idx) : R_NilValue;
 				if (rextend != R_NilValue)
 				{
 					if (!Rf_isLogical(rextend))
@@ -392,14 +400,19 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				}
 
 				// Extract kmer string from the list parameters
-				SEXP rkmer = VECTOR_ELT(rparams, findListElementIndex(rparams, "kmer"));
+				int kmer_idx = findListElementIndex(rparams, "kmer");
+				if (kmer_idx < 0) {
+					rdb::verror("Virtual track %s: kmer parameter is required for function %s", vtrack.c_str(), func.c_str());
+				}
+				SEXP rkmer = VECTOR_ELT(rparams, kmer_idx);
 				if (rkmer == R_NilValue || !Rf_isString(rkmer) || Rf_length(rkmer) != 1)
 					rdb::verror("Virtual track %s: invalid parameter used for function %s (must be a kmer string)",
 								vtrack.c_str(), func.c_str());
 
 				const char *kmer = CHAR(STRING_ELT(rkmer, 0));
 
-				SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
+				int strand_idx = findListElementIndex(rparams, "strand");
+				SEXP rstrand = (strand_idx >= 0) ? VECTOR_ELT(rparams, strand_idx) : R_NilValue;
 				if (rstrand != R_NilValue)
 				{
 					if (!Rf_isNumeric(rstrand) || Rf_length(rstrand) != 1)
@@ -450,14 +463,19 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			}
 			
 			// Get kmer
-			SEXP rkmer = VECTOR_ELT(rparams, findListElementIndex(rparams, "kmer"));
+			int kmer_idx = findListElementIndex(rparams, "kmer");
+			if (kmer_idx < 0) {
+				verror("Virtual track %s: kmer parameter is required", vtrack.c_str());
+			}
+			SEXP rkmer = VECTOR_ELT(rparams, kmer_idx);
 			if (rkmer == R_NilValue || !Rf_isString(rkmer) || Rf_length(rkmer) != 1) {
 				verror("Virtual track %s: kmer parameter is required", vtrack.c_str());
 			}
 			const char *kmer = CHAR(STRING_ELT(rkmer, 0));
 			
 			// Get extend parameter
-			SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
+			int extend_idx = findListElementIndex(rparams, "extend");
+			SEXP rextend = (extend_idx >= 0) ? VECTOR_ELT(rparams, extend_idx) : R_NilValue;
 			bool extend = true;
 			if (rextend != R_NilValue) {
 				if (!Rf_isLogical(rextend))
@@ -468,7 +486,11 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			// Get frequency for kmer.fft
 			double freq = 0.0;
 			if (func == "kmer.fft") {
-				SEXP rfreq = VECTOR_ELT(rparams, findListElementIndex(rparams, "freq"));
+				int freq_idx = findListElementIndex(rparams, "freq");
+				if (freq_idx < 0) {
+					verror("Virtual track %s: freq parameter is required for kmer.fft", vtrack.c_str());
+				}
+				SEXP rfreq = VECTOR_ELT(rparams, freq_idx);
 				if (rfreq == R_NilValue || !Rf_isReal(rfreq) || Rf_length(rfreq) != 1) {
 					verror("Virtual track %s: freq parameter is required for kmer.fft", vtrack.c_str());
 				}
@@ -477,7 +499,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			
 			// Get window type
 			KmerFFT::WindowType window = KmerFFT::WINDOW_HANN;
-			SEXP rwindow = VECTOR_ELT(rparams, findListElementIndex(rparams, "window"));
+			int window_idx = findListElementIndex(rparams, "window");
+			SEXP rwindow = (window_idx >= 0) ? VECTOR_ELT(rparams, window_idx) : R_NilValue;
 			if (rwindow != R_NilValue) {
 				if (!Rf_isString(rwindow) || Rf_length(rwindow) != 1) {
 					verror("Virtual track %s: window parameter must be a string", vtrack.c_str());
