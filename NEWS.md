@@ -1,3 +1,7 @@
+# misha 4.3.10
+
+* Removed C++14 requirement.
+
 # misha 4.3.9
 
 * Fixed a bug in `pwm` and `kmer` virtual track functions: iterator shifts were not applied. 
