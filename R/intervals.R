@@ -1663,12 +1663,6 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
 #'     "sparse_track", gintervals(c(1, 2), 0, 10000),
 #'     iterator = "sparse_track"
 #' )
-#' # Using custom column name
-#' gintervals.mapply(
-#'     max, "dense_track",
-#'     gintervals(c(1, 2), 0, 10000),
-#'     colnames = "max_value"
-#' )
 #'
 #' @export gintervals.mapply
 gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.intervals = FALSE, iterator = NULL, band = NULL, intervals.set.out = NULL, colnames = "value") {

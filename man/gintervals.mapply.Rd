@@ -91,12 +91,6 @@ gintervals.mapply(
     "sparse_track", gintervals(c(1, 2), 0, 10000),
     iterator = "sparse_track"
 )
-# Using custom column name
-gintervals.mapply(
-    max, "dense_track",
-    gintervals(c(1, 2), 0, 10000),
-    colnames = "max_value"
-)
 
 }
 \seealso{
