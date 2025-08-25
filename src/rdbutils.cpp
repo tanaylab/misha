@@ -370,27 +370,28 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
 
         for (vector<LiveStat>::iterator ipid = s_running_pids.begin(); ipid != s_running_pids.end(); ++ipid) {
             if (ipid->pid == pid) {
-                kid_idx = ipid->index;
-                swap(*ipid, s_running_pids.back());
-                s_running_pids.pop_back();
+                int removed_kid_idx = ipid->index;
+                // Remove the entry safely; do not use 'ipid' after erase
+                s_running_pids.erase(ipid);
 
                 if (!ignore_errors && !WIFEXITED(status) && WIFSIGNALED(status) && WTERMSIG(status) != MISHA_EXIT_SIG){
-                    verror("Child process %d ended unexpectedly", (int)ipid->pid);
-				}
+                    verror("Child process %d ended unexpectedly", (int)pid);
+                }
 
-                // choose a new untouchable kid: the one with maximal memory consumption
-                if (kid_idx == s_shm->untouchable_kid_idx && s_running_pids.size()) {
-                    int untouchable_kid_idx = s_running_pids.begin()->index;
+                // Recompute untouchable kid among remaining processes (if any)
+                if (!s_running_pids.empty()) {
+                    int untouchable_kid_idx = s_running_pids.front().index;
                     int64_t max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
-                    for (vector<LiveStat>::iterator ipid2 = s_running_pids.begin() + 1; ipid2 < s_running_pids.end(); ++ipid2) {
-                        if (max_kid_mem_usage < s_shm->mem_usage[ipid2->index]) {
-                            untouchable_kid_idx = ipid->index;
+                    for (vector<LiveStat>::const_iterator it = s_running_pids.begin() + 1; it != s_running_pids.end(); ++it) {
+                        if (max_kid_mem_usage < s_shm->mem_usage[it->index]) {
+                            untouchable_kid_idx = it->index;
                             max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
                         }
                     }
                     s_shm->untouchable_kid_idx = untouchable_kid_idx;
                 }
                 s_shm->num_kids_running--;
+                kid_idx = removed_kid_idx;
                 break;
             }
         }
