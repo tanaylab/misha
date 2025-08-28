@@ -13,3 +13,6 @@ add_include.sh
 .aider*
 /doc/
 /Meta/
+misha.Rcheck/
+.claude
+ADAPTIVE_MEMORY_PLAN.md
