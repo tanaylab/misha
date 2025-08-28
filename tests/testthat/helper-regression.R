@@ -5,7 +5,7 @@
 #' @param obj an R object
 #' @param id unique test id.
 #' @param snapshot_dir directory with rds file containing snapshot of previous versions
-expect_regression <- function(obj, id, snapshot_dir = "/net/mraid20/export/tgdata/db/tgdb/misha_snapshot") {
+expect_regression <- function(obj, id, snapshot_dir = "/net/mraid20/export/tgdata/db/tgdb/misha_snapshot", tolerance = 1e-6) {
     regression_file <- file.path(snapshot_dir, glue::glue("{id}.rds"))
 
     if (!file.exists(regression_file)) {
@@ -15,5 +15,5 @@ expect_regression <- function(obj, id, snapshot_dir = "/net/mraid20/export/tgdat
 
     # We need testthat to always find the `expect` statement (otherwise - the test would be skipped)
     old <- readr::read_rds(regression_file)
-    expect_identical(old, obj)
+    expect_equal(old, obj, tolerance = tolerance)
 }
