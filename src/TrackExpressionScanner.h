@@ -50,9 +50,15 @@ public:
 	const GInterval   &last_scope_interval1d() const { return m_1d.expr_itr_scope_intervals[m_eval_buf_idx]; }
 	const GInterval2D &last_scope_interval2d() const { return m_2d.expr_itr_scope_intervals[m_eval_buf_idx]; }
 
-	int64_t last_scope_idx() const { return m_expr_itr_scope_idx[m_eval_buf_idx]; }
+	int64_t last_scope_idx() const { 
+		if (m_eval_buf_idx >= m_expr_itr_scope_idx.size()) return -1;
+		return m_expr_itr_scope_idx[m_eval_buf_idx]; 
+	}
 
-	int64_t last_scope_chrom_idx() const { return m_expr_itr_scope_chrom_idx[m_eval_buf_idx]; }
+	int64_t last_scope_chrom_idx() const { 
+		if (m_eval_buf_idx >= m_expr_itr_scope_chrom_idx.size()) return -1;
+		return m_expr_itr_scope_chrom_idx[m_eval_buf_idx]; 
+	}
 
 	const TrackExpressionIteratorBase *get_iterator() { return m_expr_itr; }
 
