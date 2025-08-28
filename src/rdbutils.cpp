@@ -384,7 +384,7 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
                     int64_t max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
                     for (vector<LiveStat>::iterator ipid2 = s_running_pids.begin() + 1; ipid2 < s_running_pids.end(); ++ipid2) {
                         if (max_kid_mem_usage < s_shm->mem_usage[ipid2->index]) {
-                            untouchable_kid_idx = ipid->index;
+                            untouchable_kid_idx = ipid2->index;
                             max_kid_mem_usage = s_shm->mem_usage[untouchable_kid_idx];
                         }
                     }

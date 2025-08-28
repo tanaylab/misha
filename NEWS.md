@@ -1,3 +1,7 @@
+# misha 4.3.12
+
+* Fixed errors in `m1-asan` build.
+
 # misha 4.3.11
 
 * Removed C++14 requirement.
