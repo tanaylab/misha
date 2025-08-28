@@ -18,3 +18,6 @@
 ^.aider.tags.cache.v3$
 ^doc$
 ^Meta$
+^\.claude$
+^misha\.Rcheck$
+^ADAPTIVE_MEMORY_PLAN\.md$
