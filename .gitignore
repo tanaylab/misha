@@ -16,3 +16,4 @@ add_include.sh
 misha.Rcheck/
 .claude
 ADAPTIVE_MEMORY_PLAN.md
+*.md
