@@ -76,7 +76,7 @@ physical memory.
 }
 \examples{
 \dontshow{
-options(gmax.processes = 2)
+options(gmultitasking = FALSE)
 }
 
 gdb.init_examples()
