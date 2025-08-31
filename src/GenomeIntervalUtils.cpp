@@ -689,6 +689,67 @@ SEXP gintervals_chrom_sizes(SEXP _intervals, SEXP _envir)
 	return R_NilValue;
 }
 
+SEXP gintervals_normalize(SEXP _intervals, SEXP _size, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+		
+		if (!Rf_isInteger(_size) || Rf_length(_size) != 1)
+			verror("Size argument must be a single integer");
+		
+		int size = INTEGER(_size)[0];
+		if (size <= 0)
+			verror("Size must be a positive integer");
+		
+		IntervUtils iu(_envir);
+		GIntervals intervals;
+		GIntervals2D intervals2d;
+		iu.convert_rintervs(_intervals, &intervals, &intervals2d);
+		
+		if (!intervals2d.empty())
+			verror("gintervals.normalize does not support 2D intervals");
+		
+		if (intervals.empty())
+			return R_NilValue;
+		
+		GIntervals result_intervals;
+		result_intervals.reserve(intervals.size());
+		
+		int expansion = size / 2;
+		
+		for (GIntervals::const_iterator it = intervals.begin(); it != intervals.end(); ++it) {
+			const GInterval &interv = *it;
+			
+			// Calculate center
+			int center = (interv.start + interv.end) / 2;
+			
+			// Create normalized interval: center ± expansion
+			int new_start = center - expansion;
+			int new_end = center + expansion;
+			
+			// Ensure we don't cross chromosome boundaries
+			int chrom_size = iu.get_chromkey().get_chrom_size(interv.chromid);
+			if (new_start < 0)
+				new_start = 0;
+			if (new_end > chrom_size)
+				new_end = chrom_size;
+			
+			// Only add if the interval is valid
+			if (new_start < new_end) {
+				result_intervals.push_back(GInterval(interv.chromid, new_start, new_end, interv.strand, interv.udata));
+			}
+		}
+		
+		return iu.convert_intervs(&result_intervals);
+		
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
+	return R_NilValue;
+}
+
 SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2, SEXP _envir)
 {
 	try {

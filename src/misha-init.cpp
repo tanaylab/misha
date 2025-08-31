@@ -28,6 +28,7 @@ extern "C" {
     extern SEXP gget_tracks_attrs(SEXP, SEXP, SEXP);
     extern SEXP gintervals_chrom_sizes(SEXP, SEXP);
     extern SEXP gintervals_import_genes(SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gintervals_normalize(SEXP, SEXP, SEXP);
     extern SEXP gintervals_quantiles(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gintervals_quantiles_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gintervals_stats(SEXP, SEXP);
@@ -100,6 +101,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gget_tracks_attrs", (DL_FUNC)&gget_tracks_attrs, 3},
     {"gintervals_chrom_sizes", (DL_FUNC)&gintervals_chrom_sizes, 2},
     {"gintervals_import_genes", (DL_FUNC)&gintervals_import_genes, 4},
+    {"gintervals_normalize", (DL_FUNC)&gintervals_normalize, 3},
     {"gintervals_quantiles", (DL_FUNC)&gintervals_quantiles, 7},
     {"gintervals_quantiles_multitask", (DL_FUNC)&gintervals_quantiles_multitask, 7},
     {"gintervals_stats", (DL_FUNC)&gintervals_stats, 2},
