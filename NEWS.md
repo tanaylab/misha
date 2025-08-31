@@ -1,5 +1,6 @@
 # misha 4.3.12
 
+* Added `gintervals.normalize` function.
 * Fixed errors in `m1-asan` build.
 
 # misha 4.3.11

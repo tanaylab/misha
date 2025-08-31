@@ -1173,7 +1173,106 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
     } # suppress return value
 }
 
+#' Normalize intervals to a fixed size
+#'
+#' This function normalizes intervals by computing their centers and then expanding
+#' them to a fixed size, while ensuring they don't cross chromosome boundaries.
+#'
+#' @param intervals intervals set
+#' @param size target size for normalized intervals (must be positive integer)
+#' @param intervals.set.out intervals set name where the function result is saved.
+#' If NULL, the result is returned to the user.
+#' @return Normalized intervals set with fixed size, or NULL if result is saved to intervals.set.out
+#' @seealso \code{\link{gintervals.force_range}}
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
+#' gintervals.normalize(intervs, 500)
+#'
+#' @export gintervals.normalize
+gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.out = NULL) {
+    if (is.null(substitute(intervals)) || is.null(size)) {
+        stop("Usage: gintervals.normalize(intervals, size, intervals.set.out = NULL)", call. = FALSE)
+    }
+    .gcheckroot()
 
+    if (!is.numeric(size) || length(size) != 1 || size <= 0) {
+        stop("Size must be a positive number", call. = FALSE)
+    }
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+    intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
+
+    res <- NULL
+    FUN <- function(intervals, intervals.set.out, envir) {
+        intervals <- intervals[[1]]
+        if (.gintervals.is2d(intervals)) {
+            stop("gintervals.normalize does not support 2D intervals", call. = FALSE)
+        }
+
+        # Get original column order and additional columns
+        original_cols <- names(intervals)
+        basic_cols <- c("chrom", "start", "end", "strand")
+        extra_cols <- setdiff(original_cols, basic_cols)
+
+        normalized <- .gcall("gintervals_normalize", intervals, as.integer(size), .misha_env())
+
+        # Preserve additional columns from original intervals in the correct order
+        if (!is.null(normalized) && nrow(normalized) > 0 && length(extra_cols) > 0) {
+            # Ensure we have the right number of rows
+            if (nrow(normalized) == nrow(intervals)) {
+                for (col in extra_cols) {
+                    normalized[[col]] <- intervals[[col]]
+                }
+            }
+        }
+
+        # Also ensure strand column exists if it was in original
+        if (!is.null(normalized) && nrow(normalized) > 0 && "strand" %in% names(intervals) && !"strand" %in% names(normalized)) {
+            normalized$strand <- intervals$strand
+        }
+
+        # Reorder columns to match original order
+        if (!is.null(normalized) && nrow(normalized) > 0) {
+            # Get the columns that exist in normalized result
+            available_cols <- intersect(original_cols, names(normalized))
+            # Reorder to match original order
+            normalized <- normalized[, available_cols, drop = FALSE]
+        }
+
+        if (is.null(intervals.set.out)) {
+            assign("res", c(get("res", envir = envir), list(normalized)), envir = envir)
+            .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+        }
+        normalized
+    }
+
+    .gintervals.apply(gintervals.chrom_sizes(intervals), intervals, intervals.set.out, FUN, intervals.set.out, environment())
+
+    if (!is.null(res) && length(res) > 0) {
+        # Filter out NULL results before rbind
+        res <- res[!sapply(res, is.null)]
+        if (length(res) > 0) {
+            res <- do.call(.grbind, res)
+        } else {
+            res <- NULL
+        }
+    } # much faster than calling rbind incrementally in FUN
+
+    if (is.null(intervals.set.out)) {
+        if (!is.null(res) && nrow(res)) {
+            res
+        } else {
+            NULL
+        }
+    } else {
+        retv <- 0
+    } # suppress return value
+}
 
 #' Imports genes and annotations from files
 #'
