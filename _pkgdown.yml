@@ -57,6 +57,8 @@ reference:
       - gintervals.diff
       - gintervals.exists
       - gintervals.force_range
+      - gintervals.normalize
+      - gintervals.annotate
       - gintervals.import_genes
       - gintervals.intersect
       - gintervals.is.bigset
