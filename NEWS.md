@@ -1,6 +1,6 @@
 # misha 4.3.12
 
-* Added `gintervals.normalize` function.
+* Added `gintervals.normalize` and `gintervals.annotate` functions.
 * Fixed errors in `m1-asan` build.
 
 # misha 4.3.11
