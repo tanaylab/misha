@@ -30,6 +30,7 @@
 <url><loc>/reference/gintervals.2d.band_intersect.html</loc></url>
 <url><loc>/reference/gintervals.2d.html</loc></url>
 <url><loc>/reference/gintervals.all.html</loc></url>
+<url><loc>/reference/gintervals.annotate.html</loc></url>
 <url><loc>/reference/gintervals.canonic.html</loc></url>
 <url><loc>/reference/gintervals.chrom_sizes.html</loc></url>
 <url><loc>/reference/gintervals.diff.html</loc></url>
@@ -45,6 +46,7 @@
 <url><loc>/reference/gintervals.ls.html</loc></url>
 <url><loc>/reference/gintervals.mapply.html</loc></url>
 <url><loc>/reference/gintervals.neighbors.html</loc></url>
+<url><loc>/reference/gintervals.normalize.html</loc></url>
 <url><loc>/reference/gintervals.quantiles.html</loc></url>
 <url><loc>/reference/gintervals.rbind.html</loc></url>
 <url><loc>/reference/gintervals.rm.html</loc></url>
