@@ -2,7 +2,7 @@ test_that("gintervals.normalize works with basic intervals", {
     # Test basic normalization with even size
     intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
     result <- gintervals.normalize(intervs, 500)
-    
+
     # Expected: center of first interval is 1500, so normalized interval should be [1250, 1750]
     # Expected: center of second interval is 5500, so normalized interval should be [5250, 5750]
     expect_equal(nrow(result), 2)
@@ -15,7 +15,7 @@ test_that("gintervals.normalize works with odd size", {
     # Test normalization with odd size
     intervs <- gintervals(1, c(1000, 5000), c(3000, 8000))
     result <- gintervals.normalize(intervs, 499)
-    
+
     # Expected: center of first interval is 2000, expansion is 249, so normalized interval should be [1751, 2249]
     # Expected: center of second interval is 6500, expansion is 249, so normalized interval should be [6251, 6749]
     expect_equal(nrow(result), 2)
@@ -28,11 +28,11 @@ test_that("gintervals.normalize handles chromosome boundaries", {
     # Test intervals near chromosome boundaries
     intervs <- gintervals(1, c(0, 247249700), c(100, 247249719))
     result <- gintervals.normalize(intervs, 1000)
-    
+
     expect_equal(nrow(result), 2)
     expect_equal(result$chrom, factor(c("chr1", "chr1"), levels = gintervals.all()$chrom))
-    expect_equal(result$start, c(0, 247249209)) 
-    expect_equal(result$end, c(550, 247249719)) 
+    expect_equal(result$start, c(0, 247249209))
+    expect_equal(result$end, c(550, 247249719))
 })
 
 test_that("gintervals.normalize respects chromosome limits", {
@@ -44,13 +44,13 @@ test_that("gintervals.normalize respects chromosome limits", {
     chrom_size <- 247249719 # chr1 size in test database
     expect_true(all(result$start >= 0))
     expect_true(all(result$end <= chrom_size))
-    
+
     # Expected: center of first interval is 25, expansion is 100, but start cannot be negative
     # Expected: center of second interval is 247249709, expansion is 100, but end cannot exceed chromosome size
     expect_equal(nrow(result), 2)
     expect_equal(result$chrom, factor(c("chr1", "chr1"), levels = gintervals.all()$chrom))
-    expect_equal(result$start, c(0, 247249609))  # max(25-100, 0) and max(247249709-100, 0)
-    expect_equal(result$end, c(125, 247249719))  # min(25+100, chrom_size) and min(247249709+100, chrom_size)
+    expect_equal(result$start, c(0, 247249609)) # max(25-100, 0) and max(247249709-100, 0)
+    expect_equal(result$end, c(125, 247249719)) # min(25+100, chrom_size) and min(247249709+100, chrom_size)
 })
 
 test_that("gintervals.normalize handles empty intervals", {
@@ -64,7 +64,7 @@ test_that("gintervals.normalize works with multiple chromosomes", {
     # Test with intervals on multiple chromosomes
     intervs <- gintervals(c(1, 2), c(1000, 2000), c(2000, 3000))
     result <- gintervals.normalize(intervs, 800)
-    
+
     # Expected: center of first interval is 1500, expansion is 400, so normalized interval should be [1100, 1900]
     # Expected: center of second interval is 2500, expansion is 400, so normalized interval should be [2100, 2900]
     expect_equal(nrow(result), 2)
@@ -85,7 +85,7 @@ test_that("gintervals.normalize preserves interval names", {
     expect_equal(result$name2, c("savta", "saba"))
     expect_equal(result$strand, c(1, -1))
     expect_equal(colnames(result), colnames(intervs))
-    
+
     # Also check that the normalized intervals are correct
     # Expected: center of first interval is 1500, expansion is 300, so normalized interval should be [1200, 1800]
     # Expected: center of second interval is 5500, expansion is 300, so normalized interval should be [5200, 5800]
@@ -119,7 +119,7 @@ test_that("gintervals.normalize with very small size", {
     # Test with very small normalization size
     intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
     result <- gintervals.normalize(intervs, 10)
-    
+
     # Expected: center of first interval is 1500, expansion is 5, so normalized interval should be [1495, 1505]
     # Expected: center of second interval is 5500, expansion is 5, so normalized interval should be [5495, 5505]
     expect_equal(nrow(result), 2)
@@ -132,7 +132,7 @@ test_that("gintervals.normalize with large size", {
     # Test with large normalization size
     intervs <- gintervals(1, c(1000000, 5000000), c(1001000, 5001000))
     result <- gintervals.normalize(intervs, 10000)
-    
+
     # Expected: center of first interval is 1000500, expansion is 5000, so normalized interval should be [995500, 1005500]
     # Expected: center of second interval is 5000500, expansion is 5000, so normalized interval should be [4995500, 5005500]
     expect_equal(nrow(result), 2)
@@ -150,7 +150,7 @@ test_that("gintervals.normalize works with intervals.set.out", {
     gintervals.normalize(intervs, 800, intervals.set.out = "test.testintervs")
 
     result <- gintervals.load("test.testintervs")
-    
+
     # Expected: center of first interval is 1500, expansion is 400, so normalized interval should be [1100, 1900]
     # Expected: center of second interval is 2500, expansion is 400, so normalized interval should be [2100, 2900]
     expect_equal(nrow(result), 2)
@@ -164,7 +164,7 @@ test_that("gintervals.normalize maintains interval count", {
     intervs <- data.frame(chrom = factor(c("chr1", "chr2", "chr1"), levels = gintervals.all()$chrom), start = c(1000, 2000, 5000), end = c(2000, 3000, 6000))
     result <- gintervals.normalize(intervs, 500)
     expect_equal(nrow(result), nrow(intervs))
-    
+
     # Also verify the normalized intervals are correct
     # Expected: centers are 1500, 2500, 5500; expansion is 250
     expect_equal(result$chrom, factor(c("chr1", "chr2", "chr1"), levels = gintervals.all()$chrom))
