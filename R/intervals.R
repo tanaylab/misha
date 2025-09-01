@@ -2067,8 +2067,8 @@ repair_names <- function(dataframe) {
 #'   columns.
 #' @param keep_order If \code{TRUE} (default), preserves the original order of
 #'   \code{intervals} rows in the output.
-#' @param intervals.set.out Placeholder for future support of writing the result
-#'   to an intervals set. Currently ignored; the result is returned.
+#' @param intervals.set.out intervals set name where the function result is
+#' optionally outputted
 #' @param ... Additional arguments forwarded to \code{gintervals.neighbors}
 #'   (e.g., \code{mindist}, \code{maxdist}).
 #'
