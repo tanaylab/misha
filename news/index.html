@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.3.12</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">4.3.13</span>
       </span>
     </div>
 
@@ -60,6 +60,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="4.3.13" id="misha-4313">misha 4.3.13<a class="anchor" aria-label="anchor" href="#misha-4313"></a></h2>
+<ul><li>Fixed a bug in <code>gintervals.neighbors</code>: a stack imbalance in the C++ code in very rare cases of 2D intervals.</li>
+<li>Fixed errors in regression tests of <code>gintervals.neighbors</code> due to unbalanced <code>rprotect</code> calls.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.3.12" id="misha-4312">misha 4.3.12<small>2025-08-31</small><a class="anchor" aria-label="anchor" href="#misha-4312"></a></h2>
 <ul><li>Added <code>gintervals.normalize</code> and <code>gintervals.annotate</code> functions.</li>
