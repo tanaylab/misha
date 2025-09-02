@@ -46,6 +46,12 @@ struct GInterval : public Segment {
 	// returns distance from this interval to interv. If touch_is_at_dist_one is true the distance between touching intervals is 1 otherwise 0.
 	int64_t dist2interv(const GInterval &interv, bool touch_is_at_dist_one = false) const;
 
+	// returns distance using query strand for directionality (for TSS analysis)
+	int64_t dist2interv_with_query_strand(const GInterval &interv, int query_strand) const;
+
+	// returns unsigned distance between intervals
+	int64_t dist2interv_unsigned(const GInterval &interv) const;
+
 	// returns distance from point coordinate to the center of interval; returns NaN if the coordinate is outside of interval
 	double dist2center(int64_t coord) const;
 

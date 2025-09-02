@@ -46,11 +46,92 @@ struct IntervNeighbor2D {
 	}
 };
 
+// Helper function to extract strand values from R data frame
+int get_strand_value(const SEXP intervals_df, int64_t row_index, bool has_strand_col) {
+    if (!has_strand_col) {
+        return 1;  // Default to + strand
+    }
+    
+    // Find strand column index
+    SEXP colnames = Rf_getAttrib(intervals_df, R_NamesSymbol);
+    int strand_col_idx = -1;
+    for (int i = 0; i < Rf_length(colnames); i++) {
+        if (strcmp(CHAR(STRING_ELT(colnames, i)), "strand") == 0) {
+            strand_col_idx = i;
+            break;
+        }
+    }
+    
+    if (strand_col_idx == -1) {
+        return 1;
+    }
+    
+    SEXP strand_col = VECTOR_ELT(intervals_df, strand_col_idx);
+    
+    // Bounds check
+    if (row_index < 0 || row_index >= Rf_length(strand_col)) {
+        return 1;  // Default if out of bounds
+    }
+    
+    if (Rf_isInteger(strand_col)) {
+        int val = INTEGER(strand_col)[row_index];
+        if (val != -1 && val != 1) {
+            rdb::verror("Invalid strand value %d at row %lld. Strand must be -1 or 1.", val, (long long)row_index + 1);
+        }
+        return val;
+    } else if (Rf_isReal(strand_col)) {
+        int val = (int)REAL(strand_col)[row_index];
+        if (val != -1 && val != 1) {
+            rdb::verror("Invalid strand value %d at row %lld. Strand must be -1 or 1.", val, (long long)row_index + 1);
+        }
+        return val;
+    } else if (Rf_isString(strand_col)) {
+        // Handle character strand column (e.g., "+", "-")
+        const char* strand_str = CHAR(STRING_ELT(strand_col, row_index));
+        if (strand_str != NULL) {
+            if (strcmp(strand_str, "+") == 0 || strcmp(strand_str, "1") == 0) {
+                return 1;
+            } else if (strcmp(strand_str, "-") == 0 || strcmp(strand_str, "-1") == 0) {
+                return -1;
+            } else {
+                return 1;  // Default to + strand
+            }
+        } else {
+            return 1;  // Default if NULL string
+        }
+    } else if (Rf_isLogical(strand_col)) {
+        // Handle logical strand column
+        int logical_val = LOGICAL(strand_col)[row_index];
+        return logical_val ? 1 : -1;
+    } else {
+        return 1;  // Default if can't parse
+    }
+}
+
+// Helper function to check if intervals data frame has strand column
+bool has_strand_column(const SEXP intervals_df) {
+    if (intervals_df == R_NilValue) {
+        return false;
+    }
+    
+    SEXP colnames = Rf_getAttrib(intervals_df, R_NamesSymbol);
+    if (colnames == R_NilValue) {
+        return false;
+    }
+    
+    for (int i = 0; i < Rf_length(colnames); i++) {
+        if (strcmp(CHAR(STRING_ELT(colnames, i)), "strand") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 extern "C" {
 
 SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _distrange_start, SEXP _distrange_end,
 					 SEXP _distrange_start1, SEXP _distrange_end1, SEXP _distrange_start2, SEXP _distrange_end2,
-					 SEXP _na_if_notfound, SEXP _report_progress, SEXP _envir)
+					 SEXP _na_if_notfound, SEXP _report_progress, SEXP _use_intervals1_strand, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -80,6 +161,11 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 		if (!Rf_isLogical(_na_if_notfound))
 			verror("na.if.notfound argument is not logical");
 		bool na_if_notfound = LOGICAL(_na_if_notfound)[0];
+
+		if (!Rf_isLogical(_use_intervals1_strand))
+			verror("use_intervals1_strand argument is not logical");
+		bool use_intervals1_strand = LOGICAL(_use_intervals1_strand)[0];
+
 
 		Progress_reporter progress;
 
@@ -114,6 +200,13 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 				progress.init(intervals1d[0].size(), 100);
 
 			for (GIntervals::const_iterator iinterv = intervals1d[0].begin(); iinterv < intervals1d[0].end(); ++iinterv) {
+				// Get strand for current query interval
+				int query_strand = 1;  // default
+				if (use_intervals1_strand) {
+					bool intervals1_has_strand = has_strand_column(_intervs1);
+					query_strand = get_strand_value(_intervs1, iu.get_orig_interv_idx(*iinterv), intervals1_has_strand);
+				}
+
 				if (iinterv->chromid != chromid) {
 					chromid = iinterv->chromid;
 					segment_finder.reset(0, iu.get_chromkey().get_chrom_size(chromid));
@@ -132,7 +225,16 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 				int num_neighbors = 0;
 				while (!inn.is_end()) {
-					int64_t dist = iinterv->dist2interv(*inn);
+					int64_t dist;
+					
+					if (use_intervals1_strand) {
+						// Use query (intervals1) strand for distance calculation
+						dist = iinterv->dist2interv_with_query_strand(*inn, query_strand);
+					} else {
+						// Original behavior - use target (intervals2) strand if available
+						dist = iinterv->dist2interv(*inn);
+					}
+					
 					if (llabs(dist) > maxdist)
 						break;
 					if (dist >= distance_start && dist <= distance_end) {
@@ -192,6 +294,11 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 			return answer;
 		} else {   // 2D
+			// For now, error if use_intervals1_strand with 2D
+			if (use_intervals1_strand) {
+				verror("use_intervals1_strand not yet supported for 2D intervals");
+			}
+
 			if (!Rf_isReal(_distrange_start1))
 				verror("mindist1 argument is not numeric");
 			int64_t distance_start1 = (int64_t)REAL(_distrange_start1)[0];
