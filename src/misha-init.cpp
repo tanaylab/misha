@@ -23,7 +23,7 @@ extern "C" {
     extern SEXP gcreate_test_computer2d_track(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gextract(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gextract_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP gfind_neighbors(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gfind_neighbors(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gfind_tracks_n_intervals(SEXP, SEXP);
     extern SEXP gget_tracks_attrs(SEXP, SEXP, SEXP);
     extern SEXP gintervals_chrom_sizes(SEXP, SEXP);
@@ -96,7 +96,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gcreate_test_computer2d_track", (DL_FUNC)&gcreate_test_computer2d_track, 5},
     {"C_gextract", (DL_FUNC)&C_gextract, 8},
     {"gextract_multitask", (DL_FUNC)&gextract_multitask, 8},
-    {"gfind_neighbors", (DL_FUNC)&gfind_neighbors, 12},
+    {"gfind_neighbors", (DL_FUNC)&gfind_neighbors, 13},
     {"gfind_tracks_n_intervals", (DL_FUNC)&gfind_tracks_n_intervals, 2},
     {"gget_tracks_attrs", (DL_FUNC)&gget_tracks_attrs, 3},
     {"gintervals_chrom_sizes", (DL_FUNC)&gintervals_chrom_sizes, 2},

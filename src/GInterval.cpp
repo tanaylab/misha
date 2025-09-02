@@ -42,6 +42,55 @@ int64_t GInterval::dist2interv(const GInterval &interv, bool touch_is_at_dist_on
 	return interv.strand ? res : llabs(res);
 }
 
+int64_t GInterval::dist2interv_with_query_strand(const GInterval &interv, int query_strand) const
+{
+	// Calculate unsigned distance
+	int64_t base_distance = dist2interv_unsigned(interv);
+	
+	if (base_distance == 0) {
+		return 0;  // overlapping intervals
+	}
+	
+	// Determine if target interval is downstream of query
+	bool target_is_downstream;
+	if (this->end <= interv.start) {
+		target_is_downstream = true;   // target starts after query ends
+	} else if (interv.end <= this->start) {
+		target_is_downstream = false;  // target ends before query starts
+	} else {
+		// Overlapping - compare midpoints
+		int64_t query_mid = (this->start + this->end) / 2;
+		int64_t target_mid = (interv.start + interv.end) / 2;
+		target_is_downstream = (target_mid > query_mid);
+	}
+	
+	// Apply strand-specific directionality
+	if (query_strand == 1) {  // + strand gene
+		return target_is_downstream ? base_distance : -base_distance;
+	} else if (query_strand == -1) {  // - strand gene
+		return target_is_downstream ? -base_distance : base_distance;
+	} else {
+		// Invalid strand, default to positive distance
+		return base_distance;
+	}
+}
+
+int64_t GInterval::dist2interv_unsigned(const GInterval &interv) const
+{
+	// do interv1 and interv2 overlap?
+	if (max(start, interv.start) < min(end, interv.end))
+		return 0;
+
+	// Calculate unsigned distance between non-overlapping intervals
+	if (this->end <= interv.start) {
+		return interv.start - this->end;
+	} else if (interv.end <= this->start) {
+		return this->start - interv.end;
+	} else {
+		return 0;  // shouldn't reach here given overlap check above
+	}
+}
+
 double GInterval::coverage_ratio(const GInterval &interv) const
 {
 	double intersect = min(end, interv.end) - max(start, interv.start);
