@@ -42,7 +42,7 @@ struct IntervNeighbor2D {
 		return
 			id1 < o.id1 ||
 			(id1 == o.id1 && llabs(dist1 + dist2) < llabs(o.dist1 + o.dist2)) ||
-			(id1 == o.id1 && llabs(dist1 + dist2) == llabs(o.dist1 + o.dist2) && id2 == o.id2);
+			(id1 == o.id1 && llabs(dist1 + dist2) == llabs(o.dist1 + o.dist2) && id2 < o.id2);
 	}
 };
 
