@@ -62,7 +62,17 @@
 
     <div class="section level2">
 <h2 class="page-header" data-toc-text="4.3.13" id="misha-4313">misha 4.3.13<a class="anchor" aria-label="anchor" href="#misha-4313"></a></h2>
-<ul><li>Fixed a bug in <code>gintervals.neighbors</code>: a stack imbalance in the C++ code in very rare cases of 2D intervals.</li>
+<ul><li>Added directional neighbor finding functions:
+<ul><li>
+<code><a href="../reference/directional-neighbors.html">gintervals.neighbors.upstream()</a></code> - Find upstream neighbors relative to query strand</li>
+<li>
+<code><a href="../reference/directional-neighbors.html">gintervals.neighbors.downstream()</a></code> - Find downstream neighbors relative to query strand<br></li>
+<li>
+<code><a href="../reference/directional-neighbors.html">gintervals.neighbors.directional()</a></code> - Find both upstream and downstream neighbors</li>
+</ul></li>
+<li>Added <code>use_intervals1_strand</code> parameter to <code><a href="../reference/gintervals.neighbors.html">gintervals.neighbors()</a></code> to use query intervals’ strand for distance directionality.</li>
+<li>Added <code>warn.ignored.strand</code> parameter to <code><a href="../reference/gintervals.neighbors.html">gintervals.neighbors()</a></code> to control warnings when query strand is ignored.</li>
+<li>Fixed a bug in <code>gintervals.neighbors</code>: a stack imbalance in the C++ code in very rare cases of 2D intervals.</li>
 <li>Fixed errors in regression tests of <code>gintervals.neighbors</code> due to unbalanced <code>rprotect</code> calls.</li>
 </ul></div>
     <div class="section level2">
