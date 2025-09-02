@@ -670,7 +670,7 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
     SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, src_chroms_idx);
     SET_VECTOR_ELT(answer, ChainInterval::START_SRC, src_starts);
 
-    runprotect(1); // col_names
+    runprotect(3);
     return answer;
 }
 
@@ -708,8 +708,6 @@ SEXP IntervUtils::create_data_frame(int numrows, int numcols, SEXP attrs_src)
     Rf_setAttrib(answer, R_NamesSymbol, col_names);
     Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
     Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
-
-    runprotect(3);
 
 	return answer;
 }
@@ -755,7 +753,6 @@ void IntervUtils::define_data_frame_cols(SEXP src, vector<SEXP> &src_cols, SEXP 
 
         SET_VECTOR_ELT(tgt, col + tgt_col_offset, tgt_col);
     }
-    runprotect(2);
 }
 
 void IntervUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_row, const vector<SEXP> &tgt_cols, int tgt_row, int tgt_col_offset)

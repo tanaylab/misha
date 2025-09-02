@@ -1,6 +1,7 @@
 # misha 4.3.13
 
 * Fixed a bug in `gintervals.neighbors`: a stack imbalance in the C++ code in very rare cases of 2D intervals.
+* Fixed errors in regression tests of `gintervals.neighbors` due to unbalanced `rprotect` calls.
 
 # misha 4.3.12
 
