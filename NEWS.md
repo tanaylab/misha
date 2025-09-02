@@ -1,5 +1,11 @@
 # misha 4.3.13
 
+* Added directional neighbor finding functions:
+  - `gintervals.neighbors.upstream()` - Find upstream neighbors relative to query strand
+  - `gintervals.neighbors.downstream()` - Find downstream neighbors relative to query strand  
+  - `gintervals.neighbors.directional()` - Find both upstream and downstream neighbors
+* Added `use_intervals1_strand` parameter to `gintervals.neighbors()` to use query intervals' strand for distance directionality.
+* Added `warn.ignored.strand` parameter to `gintervals.neighbors()` to control warnings when query strand is ignored.
 * Fixed a bug in `gintervals.neighbors`: a stack imbalance in the C++ code in very rare cases of 2D intervals.
 * Fixed errors in regression tests of `gintervals.neighbors` due to unbalanced `rprotect` calls.
 
