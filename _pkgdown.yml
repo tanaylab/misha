@@ -68,6 +68,9 @@ reference:
       - gintervals.ls
       - gintervals.mapply
       - gintervals.neighbors
+      - gintervals.neighbors.upstream
+      - gintervals.neighbors.downstream
+      - gintervals.neighbors.directional
       - gintervals.quantiles
       - gintervals.rbind
       - gintervals.rm
