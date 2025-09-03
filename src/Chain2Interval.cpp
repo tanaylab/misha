@@ -50,6 +50,10 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
 		while (1) {
 			lineno += split_line_by_space_chars(chainfile, fields, NUM_FIELDS);
 
+			// Skip comment lines (starting with #)
+			if (!fields.empty() && !fields[0].empty() && fields[0][0] == '#')
+				continue;
+
 			if (fields.size() == NUM_FIELDS) {
 				if (chrom[TGT] >= 0) {
 					if (start[SRC] != end[SRC])
