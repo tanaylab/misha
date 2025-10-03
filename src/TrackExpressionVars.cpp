@@ -341,9 +341,83 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				strand = (char)REAL(rstrand)[0];
 			}
 
+			// Optional spatial parameters
+			std::vector<float> spat_factor_vec;
+			int spat_bin = 1;
+
+			// Get spat_factor (numeric vector)
+			int spat_idx = findListElementIndex(rparams, "spat_factor");
+			SEXP rspat = R_NilValue;
+			if (spat_idx >= 0) {
+				rspat = VECTOR_ELT(rparams, spat_idx);
+			}
+			if (rspat != R_NilValue) {
+				if (!Rf_isReal(rspat))
+					rdb::verror("Virtual track %s: spat_factor must be a numeric vector", vtrack.c_str());
+				int n = Rf_length(rspat);
+				if (n <= 0)
+					rdb::verror("Virtual track %s: spat_factor must have at least one element", vtrack.c_str());
+				spat_factor_vec.resize(n);
+				for (int i = 0; i < n; ++i) {
+					spat_factor_vec[i] = REAL(rspat)[i];
+					if (spat_factor_vec[i] <= 0)
+						rdb::verror("Virtual track %s: all spat_factor values must be positive", vtrack.c_str());
+				}
+
+				// Get spat_bin (integer scalar)
+				int bin_idx = findListElementIndex(rparams, "spat_bin");
+				SEXP rbin = R_NilValue;
+				if (bin_idx >= 0) {
+					rbin = VECTOR_ELT(rparams, bin_idx);
+				}
+				if (rbin != R_NilValue) {
+					if (!Rf_isInteger(rbin) && !Rf_isReal(rbin))
+						rdb::verror("Virtual track %s: spat_bin must be numeric", vtrack.c_str());
+					spat_bin = (int)(Rf_isReal(rbin) ? REAL(rbin)[0] : INTEGER(rbin)[0]);
+					if (spat_bin <= 0)
+						rdb::verror("Virtual track %s: spat_bin must be > 0", vtrack.c_str());
+				}
+			}
+
+			// Optional spat_min/spat_max (integers)
+			int spat_min = 0;
+			int spat_max = 1000000;
+			bool has_range = false;
+
+			int smin_idx = findListElementIndex(rparams, "spat_min");
+			SEXP rsmin = R_NilValue;
+			if (smin_idx >= 0) {
+				rsmin = VECTOR_ELT(rparams, smin_idx);
+			}
+			if (rsmin != R_NilValue) {
+				if (!Rf_isInteger(rsmin) && !Rf_isReal(rsmin))
+					rdb::verror("Virtual track %s: spat_min must be numeric", vtrack.c_str());
+				spat_min = (int)(Rf_isReal(rsmin) ? REAL(rsmin)[0] : INTEGER(rsmin)[0]);
+				has_range = true;
+			}
+
+			int smax_idx = findListElementIndex(rparams, "spat_max");
+			SEXP rsmax = R_NilValue;
+			if (smax_idx >= 0) {
+				rsmax = VECTOR_ELT(rparams, smax_idx);
+			}
+			if (rsmax != R_NilValue) {
+				if (!Rf_isInteger(rsmax) && !Rf_isReal(rsmax))
+					rdb::verror("Virtual track %s: spat_max must be numeric", vtrack.c_str());
+				spat_max = (int)(Rf_isReal(rsmax) ? REAL(rsmax)[0] : INTEGER(rsmax)[0]);
+				has_range = true;
+			}
+
 			// Create PSSM and initialize PWM scorer
 			DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rpssm);
 			pssm.set_bidirect(bidirect);
+
+			// Apply optional scan range if provided
+			if (has_range) {
+				pssm.set_range(spat_min, spat_max);
+			}
+
+			// Construct scorer with optional spatial weights
 			var.pwm_scorer = std::make_unique<PWMScorer>(
 				pssm,
 				m_groot,
@@ -351,7 +425,9 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
 				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
 				PWMScorer::MAX_LIKELIHOOD_POS,
-				strand
+				strand,
+				spat_factor_vec,
+				spat_bin
 			);
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
