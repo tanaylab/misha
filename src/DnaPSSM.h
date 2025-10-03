@@ -226,6 +226,8 @@ public:
     void integrate_like_seg(const char *min_i, const char *max_i, float &energy) const;
 	void integrate_like(const string &target, float &energy, vector<float> *spat_dist = 0) const;
 	void integrate_energy(const string &target, float &energy, vector<float> &spat_func, int spat_bin_size) const;
+	void integrate_energy_logspat(const string &target, float &energy, vector<float> &spat_log_func, int spat_bin_size) const;
+	void integrate_energy_max_logspat(const string &target, float &energy, vector<float> &spat_log_func, int spat_bin_size) const;
 	float get_max_ll() const;
 
 	void calc_like(const std::string &target, float &logp) const;

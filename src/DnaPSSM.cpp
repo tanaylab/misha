@@ -910,6 +910,10 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 	    i <= max_i;
 	    i++) {
 		int spat_bin = int(pos/spat_bin_size);
+		// Clamp to valid range
+		if(spat_bin >= (int)spat_func.size()) {
+			spat_bin = spat_func.size() - 1;
+		}
 		pos++;
 		string::const_iterator j = i;
 		float logp = 0;
@@ -968,6 +972,174 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 		}
 	}
 }
+
+void DnaPSSM::integrate_energy_logspat(const string &target, float &energy, vector<float> &spat_log_func, int spat_bin_size) const
+{
+	if(target.length() < m_chars.size()) {
+		energy = R_NegInf;
+		return;
+	}
+
+	string::const_iterator max_i = target.begin() + m_max_range;
+	if(max_i > target.end() - m_chars.size()) {
+		max_i = target.end() - m_chars.size();
+	}
+	energy = R_NegInf;
+	int pos = 0;
+	for(string::const_iterator i = target.begin() + m_min_range;
+	    i <= max_i;
+	    i++) {
+		int spat_bin = int(pos/spat_bin_size);
+		// Clamp to valid range
+		if(spat_bin >= (int)spat_log_func.size()) {
+			spat_bin = spat_log_func.size() - 1;
+		}
+		pos++;
+
+		string::const_iterator j = i;
+		float logp = 0;
+		for(vector<DnaProbVec>::const_iterator p = m_chars.begin();
+		    p < m_chars.end();
+		    p++) {
+			if(!(*j)) {
+				logp = R_NegInf;
+				break;
+			}
+			if(*j == 'N' || *j =='*' || *j == 'n') {
+				logp += p->get_avg_log_prob();
+			} else {
+				logp += p->get_log_prob(*j);
+			}
+			j++;
+		}
+		logp += spat_log_func[spat_bin];
+		log_sum_log(energy, logp);
+
+		if(m_bidirect) {
+			logp = 0;
+			j = i;
+			for(vector<DnaProbVec>::const_reverse_iterator p = m_chars.rbegin();
+			    p != m_chars.rend();
+			    p++) {
+				if(!(*j)) {
+					logp = R_NegInf;
+					break;
+				}
+
+				switch(*j) {
+					case 'a':
+					case 'A': logp += p->get_log_prob('T');
+						  break;
+					case 't':
+					case 'T': logp += p->get_log_prob('A');
+						  break;
+					case 'c':
+					case 'C': logp += p->get_log_prob('G');
+						  break;
+					case 'g':
+					case 'G': logp += p->get_log_prob('C');
+						  break;
+					case '*': logp += c_log_quarter;
+						  break;
+					case 'n':
+					case 'N': logp += c_log_quarter;
+						  break;
+					default:  break;
+				}
+				j++;
+			}
+			logp += spat_log_func[spat_bin];
+			log_sum_log(energy, logp);
+		}
+	}
+}
+
+void DnaPSSM::integrate_energy_max_logspat(const string &target, float &energy, vector<float> &spat_log_func, int spat_bin_size) const
+{
+	if(target.length() < m_chars.size()) {
+		energy = R_NegInf;
+		return;
+	}
+
+	string::const_iterator max_i = target.begin() + m_max_range;
+	if(max_i > target.end() - m_chars.size()) {
+		max_i = target.end() - m_chars.size();
+	}
+
+	energy = R_NegInf;
+
+	int pos = 0;
+	for(string::const_iterator i = target.begin() + m_min_range;
+	    i <= max_i;
+	    i++) {
+		int spat_bin = int(pos/spat_bin_size);
+		// Clamp to valid range
+		if(spat_bin >= (int)spat_log_func.size()) {
+			spat_bin = spat_log_func.size() - 1;
+		}
+		pos++;
+
+		string::const_iterator j = i;
+		float logp = 0;
+		for(vector<DnaProbVec>::const_iterator p = m_chars.begin();
+		    p < m_chars.end();
+		    p++) {
+			if(!(*j)) {
+				logp = R_NegInf;
+				break;
+			}
+			if(*j == 'N' || *j =='*' || *j == 'n') {
+				logp += p->get_avg_log_prob();
+			} else {
+				logp += p->get_log_prob(*j);
+			}
+			j++;
+		}
+		logp += spat_log_func[spat_bin];
+
+		if(m_bidirect) {
+			float logp_rev = 0;
+			j = i;
+			for(vector<DnaProbVec>::const_reverse_iterator p = m_chars.rbegin();
+			    p != m_chars.rend();
+			    p++) {
+				if(!(*j)) {
+					logp_rev = R_NegInf;
+					break;
+				}
+
+				switch(*j) {
+					case 'a':
+					case 'A': logp_rev += p->get_log_prob('T');
+						  break;
+					case 't':
+					case 'T': logp_rev += p->get_log_prob('A');
+						  break;
+					case 'c':
+					case 'C': logp_rev += p->get_log_prob('G');
+						  break;
+					case 'g':
+					case 'G': logp_rev += p->get_log_prob('C');
+						  break;
+					case '*': logp_rev += c_log_quarter;
+						  break;
+					case 'n':
+					case 'N': logp_rev += c_log_quarter;
+						  break;
+					default:  break;
+				}
+				j++;
+			}
+			logp_rev += spat_log_func[spat_bin];
+			log_sum_log(logp, logp_rev);
+		}
+
+		if(logp > energy) {
+			energy = logp;
+		}
+	}
+}
+
 void DnaPSSM::like_thresh_match(const string &target, float thresh,
 		list<int> &poss, list<float> &vals, list<int> &dirs)
 {
