@@ -99,37 +99,59 @@ and the source intervals cover positions 120-140 and 160-170, the coverage would
 ((20 + 10) / 100 = 0.3). Overlapping source intervals are first unified.
 
 \emph{func = "pwm", params = list(pssm = matrix, bidirect = TRUE,
-prior = 0.01, extend = TRUE)} \cr
+prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
+spat_min = NULL, spat_max = NULL)} \cr
 Calculates total log-likelihood score of DNA sequence against PSSM.
 Uses log-sum-exp over all positions. For bidirect=TRUE, scans both
 strands. Prior adds pseudocounts, extend=TRUE allows scoring at boundaries.
+Optional spatial weighting allows position-dependent weights.
 
 \emph{func = "pwm.max", params = list(pssm = matrix, bidirect = TRUE,
-prior = 0.01, extend = TRUE)} \cr
+prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
+spat_min = NULL, spat_max = NULL)} \cr
 Returns maximum log-likelihood score of best PSSM match. bidirect=TRUE
 checks both strands. Prior adds pseudocounts, extend=TRUE allows boundary
-scoring.
+scoring. Optional spatial weighting allows position-dependent weights.
 
 \emph{func = "pwm.max.pos", params = list(pssm = matrix, bidirect = TRUE,
-prior = 0.01, extend = TRUE)} \cr
+prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
+spat_min = NULL, spat_max = NULL)} \cr
 Returns 1-based position of best PSSM match.
 If bidirect=TRUE, the position would be positive if the best hit was at the
 forward strand, and negative if it was at the reverse strand. When strand is
 -1 the position is still according to the forward strand, but the hit is at
 the end of the match.
 Prior adds pseudocounts, extend=TRUE allows boundary scoring.
+Optional spatial weighting allows position-dependent weights.
 
 For all PWM functions:
 \itemize{
-  \item pssm: Position-specific scoring matrix (A,C,G,T frequencies)
-  \item bidirect: If TRUE, scans both strands; if FALSE, forward only
-  \item prior: Pseudocount for frequencies (default: 0.01)
-  \item extend: If TRUE, computes boundary scores
-  \item strand: If 1, scans forward strand; if -1, scans reverse strand.
-For strand == 1, the energy (and position of the best match) would be at
-the beginning of the match, for strand == -1, the energy (and position of
-the best match) would be at the end of the match.
+  \item pssm: Position-specific scoring matrix (nx4 matrix with columns A,C,G,T containing frequencies)
+  \item bidirect: If TRUE, scans both strands; if FALSE, forward only (default: TRUE)
+  \item prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
+  \item extend: If TRUE, allows scoring at interval boundaries (default: TRUE)
+  \item strand: If 1, scans forward strand; if -1, scans reverse strand (default: 1).
+For strand == 1, the position of the best match is at the beginning of the match.
+For strand == -1, the position is at the end of the match.
+  \item spat_factor: Optional numeric vector of positive spatial weights (one per bin).
+Weights are applied in log-space: weighted_score = log_likelihood + log(spat_factor[bin]).
+If NULL (default), no spatial weighting is applied.
+  \item spat_bin: Integer bin size in base pairs (required if spat_factor provided).
+Must be > 0. Bins are 0-indexed from scan start: bin = floor(position / spat_bin).
+  \item spat_min: Optional 1-based position defining start of scanning window (default: 1).
+Use with spat_max to restrict scanning to a specific region.
+  \item spat_max: Optional 1-based position defining end of scanning window (default: interval length).
+Actual last scanned position may be earlier to accommodate motif length.
 }
+
+\strong{Spatial Weighting:}
+Enables position-dependent weighting for modeling positional biases. Bins are 0-indexed from the
+scan start. When using gvtrack.iterator() shifts (e.g., sshift=-50, eshift=50), bins index from
+the expanded scan window start, not the original interval. Both strands use the same bin at each
+genomic position. Positions beyond the last bin use the last bin's weight. If the window size is
+not divisible by spat_bin, the last bin will be smaller (e.g., 500bp window with 40bp bins creates
+bins 0-11 of 40bp each, plus bin 12 of 20bp). Use spat_min and spat_max to restrict scanning to a
+range divisible by spat_bin if needed.
 
 PWM parameters are accepted as list or individual parameters (see examples).
 
@@ -229,6 +251,79 @@ gextract("g_frac + c_frac", gintervals(1, 0, 10000),
     iterator = 1000,
     colnames = "gc_content"
 )
+
+# Spatial PWM examples
+# Create a PWM with higher weight in the center of intervals
+pssm <- matrix(
+    c(
+        0.7, 0.1, 0.1, 0.1,
+        0.1, 0.7, 0.1, 0.1,
+        0.1, 0.1, 0.7, 0.1,
+        0.1, 0.1, 0.1, 0.7
+    ),
+    ncol = 4, byrow = TRUE
+)
+colnames(pssm) <- c("A", "C", "G", "T")
+
+# Spatial factors: low weight at edges, high in center
+# For 200bp intervals with 40bp bins: bins 0, 40, 80, 120, 160
+spatial_weights <- c(0.5, 1.0, 2.0, 1.0, 0.5)
+
+gvtrack.create(
+    "spatial_pwm", NULL, "pwm",
+    list(
+        pssm = pssm,
+        bidirect = TRUE,
+        spat_factor = spatial_weights,
+        spat_bin = 40L
+    )
+)
+
+# Compare with non-spatial PWM
+gvtrack.create(
+    "regular_pwm", NULL, "pwm",
+    list(pssm = pssm, bidirect = TRUE)
+)
+
+gextract(c("spatial_pwm", "regular_pwm"),
+    gintervals(1, 0, 10000),
+    iterator = 200
+)
+
+# Using spatial parameters with iterator shifts
+gvtrack.create(
+    "spatial_extended", NULL, "pwm.max",
+    pssm = pssm,
+    spat_factor = c(0.5, 1.0, 2.0, 2.5, 2.0, 1.0, 0.5),
+    spat_bin = 40L
+)
+# Scan window will be 280bp (100bp + 2*90bp)
+gvtrack.iterator("spatial_extended", sshift = -90, eshift = 90)
+gextract("spatial_extended", gintervals(1, 0, 10000), iterator = 100)
+
+# Using spat_min/spat_max to restrict scanning to a window
+# For 500bp intervals, scan only positions 30-470 (440bp window)
+gvtrack.create(
+    "window_pwm", NULL, "pwm",
+    pssm = pssm,
+    bidirect = TRUE,
+    spat_min = 30, # 1-based position
+    spat_max = 470 # 1-based position
+)
+gextract("window_pwm", gintervals(1, 0, 10000), iterator = 500)
+
+# Combining spatial weighting with window restriction
+# Scan positions 50-450 with spatial weights favoring the center
+gvtrack.create(
+    "window_spatial_pwm", NULL, "pwm",
+    pssm = pssm,
+    bidirect = TRUE,
+    spat_factor = c(0.5, 1.0, 2.0, 2.5, 2.0, 1.0, 0.5, 1.0, 0.5, 0.5),
+    spat_bin = 40L,
+    spat_min = 50,
+    spat_max = 450
+)
+gextract("window_spatial_pwm", gintervals(1, 0, 10000), iterator = 500)
 }
 \seealso{
 \code{\link{gvtrack.info}}, \code{\link{gvtrack.iterator}},
