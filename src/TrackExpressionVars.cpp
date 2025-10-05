@@ -36,6 +36,7 @@ TrackExpressionVars::TrackExpressionVars(rdb::IntervUtils &iu) :
 	m_imdfs2d.reserve(10000);
 	m_track_n_imdfs.reserve(10000);
 	m_groot = get_groot(m_iu.get_env());
+	m_shared_seqfetch.set_seqdir(m_groot + "/seq");
 }
 
 TrackExpressionVars::~TrackExpressionVars()
@@ -417,10 +418,10 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				pssm.set_range(spat_min, spat_max);
 			}
 
-			// Construct scorer with optional spatial weights
+			// Construct scorer with shared sequence fetcher for caching
 			var.pwm_scorer = std::make_unique<PWMScorer>(
 				pssm,
-				m_groot,
+				&m_shared_seqfetch,
 				extend,
 				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
 				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
@@ -485,7 +486,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				}
 
 				KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
-				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode, extend, strand);
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, &m_shared_seqfetch, mode, extend, strand);
 
 			}
 			else if (Rf_isString(rparams) && Rf_length(rparams) == 1)
@@ -493,7 +494,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				// Handle direct string parameter (backward compatibility)
 				const char *kmer = CHAR(STRING_ELT(rparams, 0));
 				KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
-				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode, extend, strand);
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, &m_shared_seqfetch, mode, extend, strand);
 			}
 			else
 			{
@@ -690,7 +691,8 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rparams);
 				var.pwm_scorer = std::make_unique<PWMScorer>(
 					pssm,
-					m_groot,
+					&m_shared_seqfetch,
+					true,  // extend
 					ifunc == Track_var::PWM ? PWMScorer::TOTAL_LIKELIHOOD : PWMScorer::MAX_LIKELIHOOD);
 			} else if(ifunc == Track_var::KMER_COUNT || ifunc == Track_var::KMER_FRAC) {
 				if (Rf_isNull(rparams)){
@@ -705,7 +707,7 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				const char *kmer = CHAR(STRING_ELT(rparams, 0));
 				KmerCounter::CountMode mode = ifunc == Track_var::KMER_COUNT ? KmerCounter::SUM : KmerCounter::FRACTION;
 
-				var.kmer_counter = std::make_unique<KmerCounter>(kmer, m_groot, mode);							
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, &m_shared_seqfetch, mode);
 				break;
 
 			} else{

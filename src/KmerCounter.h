@@ -15,7 +15,11 @@ public:
         FRACTION // Calculate fraction of kmer in sequence
     };
 
-    KmerCounter(const std::string &kmer, const std::string &genome_root, 
+    KmerCounter(const std::string &kmer, const std::string &genome_root,
+                CountMode mode = SUM, bool extend = true, char strand = 0);
+
+    // Constructor with shared GenomeSeqFetch for caching
+    KmerCounter(const std::string &kmer, GenomeSeqFetch* shared_seqfetch,
                 CountMode mode = SUM, bool extend = true, char strand = 0);
 
     // Implement the virtual function from the base class

@@ -21,6 +21,23 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool e
     }
 }
 
+PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool extend,
+                     ScoringMode mode, char strand,
+                     const std::vector<float>& spat_factor, int spat_bin_size)
+    : GenomeSeqScorer(shared_seqfetch, extend, strand), m_pssm(pssm), m_mode(mode)
+{
+    if (!spat_factor.empty()) {
+        m_use_spat = true;
+        m_spat_bin_size = std::max(1, spat_bin_size);
+
+        // Precompute log of spatial factors
+        m_spat_log_factors.resize(spat_factor.size());
+        for (size_t i = 0; i < spat_factor.size(); ++i) {
+            m_spat_log_factors[i] = std::log(std::max(1e-30f, spat_factor[i]));
+        }
+    }
+}
+
 float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
 {
     // Calculate expanded interval to include full motif coverage
@@ -35,7 +52,7 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
 
     std::vector<char> seq;
     try {
-        m_seqfetch.read_interval(expanded_interval, chromkey, seq);
+        m_seqfetch_ptr->read_interval(expanded_interval, chromkey, seq);
         std::string target(seq.begin(), seq.end());
 
         if (!m_use_spat) {

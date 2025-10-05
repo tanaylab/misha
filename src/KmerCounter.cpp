@@ -1,11 +1,27 @@
 #include "KmerCounter.h"
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <limits>
 
-KmerCounter::KmerCounter(const std::string &kmer, const std::string &genome_root, 
+KmerCounter::KmerCounter(const std::string &kmer, const std::string &genome_root,
                         CountMode mode, bool extend, char strand)
     : GenomeSeqScorer(genome_root, extend, strand), m_kmer(kmer), m_mode(mode)
+{
+    // Validate kmer
+    if (m_kmer.empty())
+    {
+        rdb::verror("Kmer string cannot be empty");
+    }
+
+    // Convert kmer to uppercase
+    std::transform(m_kmer.begin(), m_kmer.end(), m_kmer.begin(),
+                   [](unsigned char c) { return std::toupper(c); });
+}
+
+KmerCounter::KmerCounter(const std::string &kmer, GenomeSeqFetch* shared_seqfetch,
+                        CountMode mode, bool extend, char strand)
+    : GenomeSeqScorer(shared_seqfetch, extend, strand), m_kmer(kmer), m_mode(mode)
 {
     // Validate kmer
     if (m_kmer.empty())
@@ -84,7 +100,7 @@ size_t KmerCounter::count_in_interval(const GInterval &fetch_interval, const Gen
     std::vector<char> seq;
     try
     {
-        m_seqfetch.read_interval(fetch_interval, chromkey, seq);
+        m_seqfetch_ptr->read_interval(fetch_interval, chromkey, seq);
 
         // If sequence is too short to contain even one kmer
         if (seq.size() < m_kmer.length())
@@ -123,11 +139,16 @@ size_t KmerCounter::count_in_interval(const GInterval &fetch_interval, const Gen
 
         // Count occurrences of kmer in the sequence
         // Only count kmers whose start position falls within the original interval
+        const char* target_data = target.data();
+        const char* kmer_data = m_kmer.data();
+        const size_t kmer_len = m_kmer.length();
+
         for (size_t pos = original_start_pos;
-             pos < original_end_pos && pos <= target.length() - m_kmer.length();
+             pos < original_end_pos && pos <= target.length() - kmer_len;
              pos++)
         {
-            if (target.compare(pos, m_kmer.length(), m_kmer) == 0)
+            // Use memcmp for faster fixed-length comparison
+            if (std::memcmp(target_data + pos, kmer_data, kmer_len) == 0)
             {
                 count++;
             }

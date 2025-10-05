@@ -584,7 +584,7 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 
     .gvtrack.set(vtrackstr, var)
 
-    retv <- NULL
+    invisible(vtrackstr)
 }
 
 

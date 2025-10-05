@@ -6,10 +6,22 @@
 
 void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromKey &chromkey, vector<char> &result)
 {
+	// Check cache first
+	if (m_cache_valid &&
+	    m_cached_interval.chromid == interval.chromid &&
+	    m_cached_interval.start == interval.start &&
+	    m_cached_interval.end == interval.end &&
+	    m_cached_interval.strand == interval.strand) {
+		// Cache hit! Return cached sequence
+		result = m_cached_seq;
+		return;
+	}
+
 	if (m_cur_chromid != interval.chromid) {
 		char filename[PATH_MAX];
 
 		m_cur_chromid = interval.chromid;
+		m_cache_valid = false;  // Invalidate cache on chromosome change
 		snprintf(filename, sizeof(filename), "%s/%s.seq", m_seqdir.c_str(), chromkey.id2chrom(interval.chromid).c_str());
 		m_bfile.close();
 		m_bfile.open(filename, "rb");
@@ -44,4 +56,9 @@ void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromK
 			*i = basepair2complementary(*i);
 		reverse(result.begin(), result.end());
 	}
+
+	// Update cache with the newly read sequence
+	m_cached_interval = interval;
+	m_cached_seq = result;
+	m_cache_valid = true;
 }
