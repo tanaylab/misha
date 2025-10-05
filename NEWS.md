@@ -1,3 +1,7 @@
+# misha 4.3.14
+
+* Added spatial factors to pwm virtual tracks.
+
 # misha 4.3.13
 
 * Added directional neighbor finding functions:
