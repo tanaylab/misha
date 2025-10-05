@@ -2,9 +2,15 @@
 #include <algorithm>
 
 GenomeSeqScorer::GenomeSeqScorer(const std::string &genome_root, bool extend, char strand)
-    : m_extend(extend), m_strand(strand)
+    : m_extend(extend), m_strand(strand), m_seqfetch_ptr(&m_seqfetch_owned)
 {
-    m_seqfetch.set_seqdir(genome_root + "/seq");
+    m_seqfetch_owned.set_seqdir(genome_root + "/seq");
+}
+
+GenomeSeqScorer::GenomeSeqScorer(GenomeSeqFetch* shared_seqfetch, bool extend, char strand)
+    : m_extend(extend), m_strand(strand), m_seqfetch_ptr(shared_seqfetch)
+{
+    // Using shared seqfetch, no need to initialize m_seqfetch_owned
 }
 
 GInterval GenomeSeqScorer::calculate_expanded_interval(const GInterval &interval, const GenomeChromKey &chromkey, int64_t pattern_length)

@@ -23,7 +23,7 @@ class GenomeSeqFetch {
 public:
 	enum Errors { FILE_READ_FAILED };
 
-	GenomeSeqFetch() : m_cur_chromid(-1) {}
+	GenomeSeqFetch() : m_cur_chromid(-1), m_cache_valid(false) {}
 
 	void set_seqdir(const std::string &dir) { m_seqdir = dir; }
 	void read_interval(const GInterval &interval, const GenomeChromKey &chromkey, std::vector<char> &result);
@@ -32,6 +32,11 @@ private:
 	std::string  m_seqdir;
 	int          m_cur_chromid;
 	BufferedFile m_bfile;
+
+	// Single-interval cache for sequence-based vtracks
+	bool               m_cache_valid;
+	GInterval          m_cached_interval;
+	std::vector<char>  m_cached_seq;
 };
 
 #endif /* GENOMESEQFETCH_H_ */
