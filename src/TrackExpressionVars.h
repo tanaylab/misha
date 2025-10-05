@@ -28,6 +28,7 @@
 #include "TrackExpressionIteratorBase.h"
 #include "PWMScorer.h"
 #include "KmerCounter.h"
+#include "GenomeSeqFetch.h"
 #include "rdbinterval.h"
 #include "rdbutils.h"
 
@@ -180,6 +181,9 @@ private:
 	GInterval               m_interval1d;
 	GInterval2D             m_interval2d;
 	DiagonalBand            m_band;
+
+	// Shared sequence fetcher for all sequence-based vtracks to enable caching
+	GenomeSeqFetch          m_shared_seqfetch;
 
 	void                 parse_imdf(SEXP rvtrack, const string &vtrack, Iterator_modifier1D *imdf1d, Iterator_modifier2D *imdf2d);
 	Iterator_modifier1D *add_imdf(const Iterator_modifier1D &imdf1d);

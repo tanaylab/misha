@@ -22,6 +22,12 @@ public:
               const std::vector<float>& spat_factor = std::vector<float>(),
               int spat_bin_size = 1);
 
+    // Constructor with shared GenomeSeqFetch for caching
+    PWMScorer(const DnaPSSM &pssm, GenomeSeqFetch* shared_seqfetch, bool extend = true,
+              ScoringMode mode = TOTAL_LIKELIHOOD, char strand = 1,
+              const std::vector<float>& spat_factor = std::vector<float>(),
+              int spat_bin_size = 1);
+
     // Implement the virtual function from the base class
     float score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
 
