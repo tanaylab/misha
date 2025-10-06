@@ -201,6 +201,12 @@ private:
 	void start_chrom(const GInterval2D &interval);
 	void set_vars(unsigned idx);
 
+	// Batch processing for sequence-based vtracks
+	void batch_process_sequence_vtracks(vector<Track_var*> &kmer_vtracks,
+	                                    vector<Track_var*> &pwm_vtracks,
+	                                    const GInterval &interval,
+	                                    unsigned idx);
+
 	bool is_var(const string &str, uint64_t start, uint64_t end) const { return (!start || !rdb::is_R_var_char(str[start - 1])) && (end == str.size() || !rdb::is_R_var_char(str[end])); }
 
     static int findListElementIndex(SEXP list, const char* name) {
