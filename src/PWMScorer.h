@@ -14,19 +14,20 @@ public:
     {
         TOTAL_LIKELIHOOD,  // For PWM function
         MAX_LIKELIHOOD,    // For PWM_MAX function
-        MAX_LIKELIHOOD_POS // For PWM_MAX_POS function - returns position
+        MAX_LIKELIHOOD_POS, // For PWM_MAX_POS function - returns position
+        MOTIF_COUNT        // For PWM_COUNT function - counts hits >= threshold
     };
 
     PWMScorer(const DnaPSSM &pssm, const std::string &genome_root, bool extend = true,
               ScoringMode mode = TOTAL_LIKELIHOOD, char strand = 1,
               const std::vector<float>& spat_factor = std::vector<float>(),
-              int spat_bin_size = 1);
+              int spat_bin_size = 1, float score_thresh = 0.0f);
 
     // Constructor with shared GenomeSeqFetch for caching
     PWMScorer(const DnaPSSM &pssm, GenomeSeqFetch* shared_seqfetch, bool extend = true,
               ScoringMode mode = TOTAL_LIKELIHOOD, char strand = 1,
               const std::vector<float>& spat_factor = std::vector<float>(),
-              int spat_bin_size = 1);
+              int spat_bin_size = 1, float score_thresh = 0.0f);
 
     // Implement the virtual function from the base class
     float score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
@@ -37,6 +38,7 @@ public:
 private:
     DnaPSSM m_pssm;
     ScoringMode m_mode;
+    float m_score_thresh = 0.0f;
 
     // Optional spatial weighting
     bool m_use_spat = false;

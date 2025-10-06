@@ -194,6 +194,13 @@
 #' Prior adds pseudocounts, extend=TRUE allows boundary scoring.
 #' Optional spatial weighting allows position-dependent weights.
 #'
+#' \emph{func = "pwm.count", params = list(pssm = matrix, score.thresh = 0,
+#' bidirect = TRUE, prior = 0.01, extend = TRUE, strand = 1)} \cr
+#' Counts motif hits with score >= threshold inside each interval. Returns the
+#' number of positions where the log-likelihood score meets or exceeds score.thresh.
+#' For bidirect=TRUE, counts hits on both strands (each position and strand counted
+#' separately). Prior adds pseudocounts, extend=TRUE allows scoring at boundaries.
+#'
 #' For all PWM functions:
 #' \itemize{
 #'   \item pssm: Position-specific scoring matrix (nx4 matrix with columns A,C,G,T containing frequencies)
@@ -203,6 +210,8 @@
 #'   \item strand: If 1, scans forward strand; if -1, scans reverse strand (default: 1).
 #' For strand == 1, the position of the best match is at the beginning of the match.
 #' For strand == -1, the position is at the end of the match.
+#'   \item score.thresh: Score threshold for pwm.count (default: 0). Only positions with
+#' log-likelihood >= score.thresh are counted.
 #'   \item spat_factor: Optional numeric vector of positive spatial weights (one per bin).
 #' Weights are applied in log-space: weighted_score = log_likelihood + log(spat_factor[bin]).
 #' If NULL (default), no spatial weighting is applied.
@@ -409,13 +418,13 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
     if (is.null(substitute(vtrack))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
-    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac"))) {
+    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac"))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
     }
 
     .gcheckroot()
 
-    if (!is.null(func) && func %in% c("pwm", "pwm.max", "pwm.max.pos")) {
+    if (!is.null(func) && func %in% c("pwm", "pwm.max", "pwm.max.pos", "pwm.count")) {
         dots <- list(...)
 
         if (!is.null(params)) {
@@ -440,6 +449,9 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
         spat_bin <- dots$spat_bin
         spat_min <- dots$spat_min
         spat_max <- dots$spat_max
+
+        # Optional score threshold for pwm.count
+        score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
 
         if (!all(c("A", "C", "G", "T") %in% colnames(pssm))) {
             stop("PSSM must be a nx4 matrix with colnames A, C, G, T")
@@ -494,7 +506,8 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
             bidirect = bidirect,
             prior = prior,
             extend = extend,
-            strand = strand
+            strand = strand,
+            score.thresh = score.thresh
         )
 
         # Handle spat_min/spat_max coordinate conversion (independent of spatial factors)

@@ -1,6 +1,7 @@
 # misha 4.3.14
 
 * Added spatial factors to pwm virtual tracks.
+* Added `pwm.count` virtual track function that counts the number of occurrences of a PWM in the current iterator interval.
 
 # misha 4.3.13
 

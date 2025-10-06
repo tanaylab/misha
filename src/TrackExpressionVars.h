@@ -106,8 +106,9 @@ public:
             PWM,
             PWM_MAX,
             PWM_MAX_POS,
+            PWM_COUNT,
             KMER_COUNT,
-            KMER_FRAC, 
+            KMER_FRAC,
             NUM_FUNCS
         };
 
@@ -275,6 +276,7 @@ inline bool TrackExpressionVars::is_seq_variable(unsigned ivar) const {
     return m_track_vars[ivar].val_func == Track_var::PWM ||
            m_track_vars[ivar].val_func == Track_var::PWM_MAX ||
            m_track_vars[ivar].val_func == Track_var::PWM_MAX_POS ||
+           m_track_vars[ivar].val_func == Track_var::PWM_COUNT ||
            m_track_vars[ivar].val_func == Track_var::KMER_COUNT ||
            m_track_vars[ivar].val_func == Track_var::KMER_FRAC;
 }
