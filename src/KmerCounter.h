@@ -2,7 +2,7 @@
 #define KMER_COUNTER_H_
 
 #include <string>
-#include <memory>
+#include <vector>
 
 #include "GenomeSeqScorer.h"
 
@@ -24,6 +24,18 @@ public:
 
     // Implement the virtual function from the base class
     float score_interval(const GInterval &interval, const GenomeChromKey &chromkey) override;
+
+    // Batch processing accessors
+    const std::string &get_kmer() const { return m_kmer; }
+    char get_strand() const { return m_strand; }
+    bool get_extend() const { return m_extend; }
+    CountMode get_mode() const { return m_mode; }
+
+    // Score from pre-found positions (for batch processing)
+    float score_from_positions(const std::vector<size_t> &fwd_positions,
+                               const std::vector<size_t> &rev_positions,
+                               const GInterval &original_interval,
+                               const GInterval &fetch_interval) const;
 
 private:
     std::string m_kmer;

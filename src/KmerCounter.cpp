@@ -166,3 +166,65 @@ size_t KmerCounter::count_in_interval(const GInterval &fetch_interval, const Gen
         return 0;
     }
 }
+
+float KmerCounter::score_from_positions(const std::vector<size_t> &fwd_positions,
+                                        const std::vector<size_t> &rev_positions,
+                                        const GInterval &original_interval,
+                                        const GInterval &fetch_interval) const
+{
+    // Calculate the bounds within the fetched sequence that correspond to the original interval
+    size_t original_start_pos = 0;
+    if (fetch_interval.start < original_interval.start) {
+        original_start_pos = original_interval.start - fetch_interval.start;
+    }
+
+    size_t original_end_pos = fetch_interval.end - fetch_interval.start;
+    if (fetch_interval.end > original_interval.end) {
+        original_end_pos = original_end_pos - (fetch_interval.end - original_interval.end);
+    }
+
+    size_t kmer_len = m_kmer.length();
+
+    // Count positions based on strand parameter
+    size_t total_count = 0;
+    size_t total_possible_positions = 0;
+
+    // Count forward strand if needed
+    if (m_strand == 0 || m_strand == 1) {
+        size_t fwd_count = 0;
+        for (size_t pos : fwd_positions) {
+            if (pos >= original_start_pos && pos < original_end_pos) {
+                fwd_count++;
+            }
+        }
+        total_count += fwd_count;
+
+        // Calculate possible positions for forward strand
+        size_t possible = original_end_pos > original_start_pos ? original_end_pos - original_start_pos : 0;
+        size_t valid_fwd = possible > kmer_len - 1 ? possible - (kmer_len - 1) : 0;
+        total_possible_positions += valid_fwd;
+    }
+
+    // Count reverse strand if needed
+    if (m_strand == 0 || m_strand == -1) {
+        size_t rev_count = 0;
+        for (size_t pos : rev_positions) {
+            if (pos >= original_start_pos && pos < original_end_pos) {
+                rev_count++;
+            }
+        }
+        total_count += rev_count;
+
+        // Calculate possible positions for reverse strand
+        size_t possible = original_end_pos > original_start_pos ? original_end_pos - original_start_pos : 0;
+        size_t valid_rev = possible > kmer_len - 1 ? possible - (kmer_len - 1) : 0;
+        total_possible_positions += valid_rev;
+    }
+
+    // Return based on mode
+    if (m_mode == FRACTION) {
+        return total_possible_positions > 0 ? static_cast<float>(total_count) / total_possible_positions : 0.0f;
+    } else {
+        return static_cast<float>(total_count);
+    }
+}
