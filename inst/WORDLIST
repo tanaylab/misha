@@ -65,6 +65,7 @@ bidirect
 bigset
 binsize
 bool
+bp
 bufsize
 canonic
 cd
@@ -202,6 +203,7 @@ noRemap
 notfound
 num
 numbins
+nx
 onexit
 params
 pos
