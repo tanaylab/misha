@@ -23,7 +23,7 @@
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
 	"avg", "min", "max", "nearest", "stddev", "sum", "quantile",
 	"global.percentile", "global.percentile.min", "global.percentile.max",
-	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "kmer.count", "kmer.frac"};
+	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac"};
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage" };
 
@@ -296,12 +296,15 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
         string func = CHAR(STRING_ELT(rfunc, 0));
         transform(func.begin(), func.end(), func.begin(), ::tolower);
         
-        if (func == "pwm" || func == "pwm.max" || func == "pwm.max.pos") {
+        if (func == "pwm" || func == "pwm.max" || func == "pwm.max.pos" || func == "pwm.count") {
             // Create the Track_var without a Track_n_imdf
             m_track_vars.push_back(Track_var());
             Track_var &var = m_track_vars.back();
             var.var_name = vtrack;
-            var.val_func = (func == "pwm" ? Track_var::PWM : func == "pwm.max" ? Track_var::PWM_MAX : Track_var::PWM_MAX_POS);
+            var.val_func = (func == "pwm" ? Track_var::PWM :
+                           func == "pwm.max" ? Track_var::PWM_MAX :
+                           func == "pwm.max.pos" ? Track_var::PWM_MAX_POS :
+                           Track_var::PWM_COUNT);
             var.track_n_imdf = nullptr;  // No track needed for PWM
             var.seq_imdf1d = nullptr;
             
@@ -311,36 +314,49 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			}
 
 			// Get PSSM matrix from params
-			SEXP rpssm = VECTOR_ELT(rparams, findListElementIndex(rparams, "pssm"));
+			int pssm_idx = findListElementIndex(rparams, "pssm");
+			if (pssm_idx < 0) {
+				rdb::verror("Virtual track %s: PWM functions require a 'pssm' parameter", vtrack.c_str());
+			}
+			SEXP rpssm = VECTOR_ELT(rparams, pssm_idx);
 			if (!Rf_isMatrix(rpssm)){
 				rdb::verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
 			}
 
 			// Get bidirect parameter
-			SEXP rbidirect = VECTOR_ELT(rparams, findListElementIndex(rparams, "bidirect"));
 			bool bidirect = true; // default value
-			if (rbidirect != R_NilValue){
-				if (!Rf_isLogical(rbidirect))
-					rdb::verror("Virtual track %s: bidirect parameter must be logical", vtrack.c_str());
-				bidirect = LOGICAL(rbidirect)[0];
+			int bidirect_idx = findListElementIndex(rparams, "bidirect");
+			if (bidirect_idx >= 0) {
+				SEXP rbidirect = VECTOR_ELT(rparams, bidirect_idx);
+				if (rbidirect != R_NilValue){
+					if (!Rf_isLogical(rbidirect))
+						rdb::verror("Virtual track %s: bidirect parameter must be logical", vtrack.c_str());
+					bidirect = LOGICAL(rbidirect)[0];
+				}
 			}
 
 			// Get extend parameter
-			SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
-			bool extend = false;
-			if (rextend != R_NilValue){
-				if (!Rf_isLogical(rextend))
-					rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
-				extend = LOGICAL(rextend)[0];
+			bool extend = true;  // default to TRUE (matching R default)
+			int extend_idx = findListElementIndex(rparams, "extend");
+			if (extend_idx >= 0) {
+				SEXP rextend = VECTOR_ELT(rparams, extend_idx);
+				if (rextend != R_NilValue){
+					if (!Rf_isLogical(rextend))
+						rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+					extend = LOGICAL(rextend)[0];
+				}
 			}
 
 			// Get strand parameter (numeric)
-			SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
-			char strand = 0;
-			if (rstrand != R_NilValue){
-				if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
-					rdb::verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
-				strand = (char)REAL(rstrand)[0];
+			char strand = 1;  // default to forward strand (matching R default)
+			int strand_idx = findListElementIndex(rparams, "strand");
+			if (strand_idx >= 0) {
+				SEXP rstrand = VECTOR_ELT(rparams, strand_idx);
+				if (rstrand != R_NilValue){
+					if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
+						rdb::verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
+					strand = (char)REAL(rstrand)[0];
+				}
 			}
 
 			// Optional spatial parameters
@@ -419,6 +435,21 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				pssm.set_range(spat_min, spat_max);
 			}
 
+			// Get score_thresh parameter (for pwm.count)
+			float score_thresh = 0.0f;
+			if (func == "pwm.count") {
+				int thresh_idx = findListElementIndex(rparams, "score.thresh");
+				SEXP rthresh = R_NilValue;
+				if (thresh_idx >= 0) {
+					rthresh = VECTOR_ELT(rparams, thresh_idx);
+				}
+				if (rthresh != R_NilValue) {
+					if (!Rf_isReal(rthresh) || Rf_length(rthresh) != 1)
+						rdb::verror("Virtual track %s: score.thresh parameter must be numeric", vtrack.c_str());
+					score_thresh = REAL(rthresh)[0];
+				}
+			}
+
 			// Construct scorer with shared sequence fetcher for caching
 			var.pwm_scorer = std::make_unique<PWMScorer>(
 				pssm,
@@ -426,10 +457,12 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				extend,
 				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
 				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
-				PWMScorer::MAX_LIKELIHOOD_POS,
+				func == "pwm.max.pos" ? PWMScorer::MAX_LIKELIHOOD_POS :
+				PWMScorer::MOTIF_COUNT,
 				strand,
 				spat_factor_vec,
-				spat_bin
+				spat_bin,
+				score_thresh
 			);
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
@@ -684,10 +717,37 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				if (var.percentile < 0 || var.percentile > 1)
 					verror("Virtual track %s: parameter (percentile) used for function %s is out of range", vtrack.c_str(), func.c_str());
 				
-			} else	if (ifunc == Track_var::PWM || ifunc == Track_var::PWM_MAX || ifunc == Track_var::PWM_MAX_POS) {
+			} else	if (ifunc == Track_var::PWM || ifunc == Track_var::PWM_MAX || ifunc == Track_var::PWM_MAX_POS || ifunc == Track_var::PWM_COUNT) {
 				var.percentile = numeric_limits<double>::quiet_NaN();
-				if (!Rf_isMatrix(rparams))
+
+				// For PWM functions, params could be either a matrix (for pwm/pwm.max/pwm.max.pos)
+				// or a list (for pwm.count with additional parameters)
+				SEXP rpssm = rparams;
+				float score_thresh = 0.0f;
+
+				if (Rf_isNewList(rparams)) {
+					// params is a list - extract pssm and other parameters
+					int pssm_idx = findListElementIndex(rparams, "pssm");
+					if (pssm_idx < 0) {
+						verror("Virtual track %s: PWM params list must contain 'pssm'", vtrack.c_str());
+					}
+					rpssm = VECTOR_ELT(rparams, pssm_idx);
+
+					// Get score.thresh if present
+					if (ifunc == Track_var::PWM_COUNT) {
+						int thresh_idx = findListElementIndex(rparams, "score.thresh");
+						if (thresh_idx >= 0) {
+							SEXP rthresh = VECTOR_ELT(rparams, thresh_idx);
+							if (!Rf_isNull(rthresh) && Rf_isReal(rthresh) && Rf_length(rthresh) == 1) {
+								score_thresh = REAL(rthresh)[0];
+							}
+						}
+					}
+				}
+
+				if (!Rf_isMatrix(rpssm)) {
 					verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
+				}
 
 				// Read extend parameter from vtrack
 				SEXP rextend = get_rvector_col(rvtrack, "extend", vtrack.c_str(), false);
@@ -698,12 +758,19 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 					extend = LOGICAL(rextend)[0];
 				}
 
-				DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rparams);
+				DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rpssm);
 				var.pwm_scorer = std::make_unique<PWMScorer>(
 					pssm,
 					&m_shared_seqfetch,
 					extend,
-					ifunc == Track_var::PWM ? PWMScorer::TOTAL_LIKELIHOOD : PWMScorer::MAX_LIKELIHOOD);
+					ifunc == Track_var::PWM ? PWMScorer::TOTAL_LIKELIHOOD :
+					ifunc == Track_var::PWM_MAX ? PWMScorer::MAX_LIKELIHOOD :
+					ifunc == Track_var::PWM_MAX_POS ? PWMScorer::MAX_LIKELIHOOD_POS :
+					PWMScorer::MOTIF_COUNT,
+					1,  // strand
+					std::vector<float>(),  // no spatial factors in this path
+					1,  // spat_bin_size
+					score_thresh);
 			} else if(ifunc == Track_var::KMER_COUNT || ifunc == Track_var::KMER_FRAC) {
 				if (Rf_isNull(rparams)){
 					verror("Virtual track %s: function %s requires a parameter (kmer string)", vtrack.c_str(), func.c_str());
@@ -848,7 +915,7 @@ void TrackExpressionVars::register_track_functions()
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
 		// Skip PWM variables since they don't have associated tracks
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC) {
+        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC) {
             continue;
         }
 		GenomeTrack1D *track1d = GenomeTrack::is_1d(ivar->track_n_imdf->type) ? (GenomeTrack1D *)ivar->track_n_imdf->track : NULL;
@@ -897,6 +964,7 @@ void TrackExpressionVars::register_track_functions()
 		case Track_var::PWM:
 		case Track_var::PWM_MAX:
 		case Track_var::PWM_MAX_POS:
+		case Track_var::PWM_COUNT:
 		case Track_var::KMER_COUNT:
 		case Track_var::KMER_FRAC:
 			// PWM functions work directly on sequences, no need to register track functions
@@ -922,7 +990,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
 	    // Skip iterator validation for PWM variables since they don't have tracks or imdf
-        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX || itrack_var->val_func == Track_var::PWM_MAX_POS || itrack_var->val_func == Track_var::KMER_COUNT || itrack_var->val_func == Track_var::KMER_FRAC) {
+        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX || itrack_var->val_func == Track_var::PWM_MAX_POS || itrack_var->val_func == Track_var::PWM_COUNT || itrack_var->val_func == Track_var::KMER_COUNT || itrack_var->val_func == Track_var::KMER_FRAC) {
             continue;
         }
 
@@ -960,7 +1028,7 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	for (Track_vars::const_iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 	{
 		// Skip PWM tracks
-		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
+		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
 		{
 			continue;
 		}
@@ -1103,7 +1171,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 		{
 			if (ivar->track_n_imdf == &(*itrack_n_imdf) &&
-				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
+				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
 			{
 				is_pwm_track = true;
 				break;
@@ -1240,7 +1308,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		for (; pwm_var != m_track_vars.end(); ++pwm_var)
 		{
 			if (pwm_var->track_n_imdf == &(*itrack_n_imdf) &&
-				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX || pwm_var->val_func == Track_var::PWM_MAX_POS || pwm_var->val_func == Track_var::KMER_COUNT || pwm_var->val_func == Track_var::KMER_FRAC))
+				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX || pwm_var->val_func == Track_var::PWM_MAX_POS || pwm_var->val_func == Track_var::PWM_COUNT || pwm_var->val_func == Track_var::KMER_COUNT || pwm_var->val_func == Track_var::KMER_FRAC))
 				break;
 		}
 		if (pwm_var != m_track_vars.end())
@@ -1269,7 +1337,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
     vector<Track_var*> pwm_vtracks;
 
     for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS) {
+        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT) {
             pwm_vtracks.push_back(&*ivar);
         } else if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC) {
             kmer_vtracks.push_back(&*ivar);
@@ -1299,7 +1367,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
     for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
         // Skip sequence-based vtracks (already processed above)
         if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX ||
-            ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT ||
+            ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT || ivar->val_func == Track_var::KMER_COUNT ||
             ivar->val_func == Track_var::KMER_FRAC) {
             continue;
         }
@@ -1338,6 +1406,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				case Track_var::PWM_MAX:
 				case Track_var::PWM_MAX_POS:
 				case Track_var::PWM:
+				case Track_var::PWM_COUNT:
 				case Track_var::KMER_COUNT:
 				case Track_var::KMER_FRAC:
 					break;

@@ -6,8 +6,8 @@
 
 PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool extend,
                      ScoringMode mode, char strand,
-                     const std::vector<float>& spat_factor, int spat_bin_size)
-    : GenomeSeqScorer(genome_root, extend, strand), m_pssm(pssm), m_mode(mode)
+                     const std::vector<float>& spat_factor, int spat_bin_size, float score_thresh)
+    : GenomeSeqScorer(genome_root, extend, strand), m_pssm(pssm), m_mode(mode), m_score_thresh(score_thresh)
 {
     if (!spat_factor.empty()) {
         m_use_spat = true;
@@ -23,8 +23,8 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool e
 
 PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool extend,
                      ScoringMode mode, char strand,
-                     const std::vector<float>& spat_factor, int spat_bin_size)
-    : GenomeSeqScorer(shared_seqfetch, extend, strand), m_pssm(pssm), m_mode(mode)
+                     const std::vector<float>& spat_factor, int spat_bin_size, float score_thresh)
+    : GenomeSeqScorer(shared_seqfetch, extend, strand), m_pssm(pssm), m_mode(mode), m_score_thresh(score_thresh)
 {
     if (!spat_factor.empty()) {
         m_use_spat = true;
@@ -61,6 +61,45 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                 float energy;
                 m_pssm.integrate_like(target, energy);
                 return energy;
+            } else if (m_mode == MOTIF_COUNT) {
+                // Count hits >= threshold
+                // Safety checks
+                if (motif_length <= 0) {
+                    return std::numeric_limits<float>::quiet_NaN();
+                }
+                if (target.empty() || target.length() < (size_t)motif_length) {
+                    return 0.0f;
+                }
+
+                int count = 0;
+
+                // Scan forward strand
+                if (m_strand != -1) {
+                    size_t max_pos = target.length() - motif_length;
+                    for (size_t i = 0; i <= max_pos; ++i) {
+                        float logp = 0;
+                        std::string::const_iterator it = target.begin() + i;
+                        m_pssm.calc_like(it, logp);
+                        if (logp >= m_score_thresh) {
+                            count++;
+                        }
+                    }
+                }
+
+                // Scan reverse strand if bidirectional
+                if (m_pssm.is_bidirect() && m_strand != 1) {
+                    size_t max_pos = target.length() - motif_length;
+                    for (size_t i = 0; i <= max_pos; ++i) {
+                        float logp_rc = 0;
+                        std::string::const_iterator it = target.begin() + i;
+                        m_pssm.calc_like_rc(it, logp_rc);
+                        if (logp_rc >= m_score_thresh) {
+                            count++;
+                        }
+                    }
+                }
+
+                return static_cast<float>(count);
             } else {
                 float best_logp;
                 int best_dir;
@@ -105,6 +144,56 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
             float energy;
             m_pssm.integrate_energy_max_logspat(target, energy, m_spat_log_factors, m_spat_bin_size);
             return energy;
+        }
+
+        if (m_mode == MOTIF_COUNT) {
+            // Count hits >= threshold with spatial weighting
+            if (target.length() < (size_t)motif_length) {
+                return 0.0f;
+            }
+
+            int count = 0;
+            size_t max_pos = target.length() - motif_length;
+
+            // Scan forward strand
+            if (m_strand != -1) {
+                for (size_t i = 0; i <= max_pos; ++i) {
+                    int spat_bin = int(i / m_spat_bin_size);
+                    if (spat_bin >= (int)m_spat_log_factors.size()) {
+                        spat_bin = m_spat_log_factors.size() - 1;
+                    }
+                    float spat_log = m_spat_log_factors[spat_bin];
+
+                    float logp = 0;
+                    std::string::const_iterator it = target.begin() + i;
+                    m_pssm.calc_like(it, logp);
+                    float val = logp + spat_log;
+                    if (val >= m_score_thresh) {
+                        count++;
+                    }
+                }
+            }
+
+            // Scan reverse strand if bidirectional
+            if (m_pssm.is_bidirect() && m_strand != 1) {
+                for (size_t i = 0; i <= max_pos; ++i) {
+                    int spat_bin = int(i / m_spat_bin_size);
+                    if (spat_bin >= (int)m_spat_log_factors.size()) {
+                        spat_bin = m_spat_log_factors.size() - 1;
+                    }
+                    float spat_log = m_spat_log_factors[spat_bin];
+
+                    float logp_rc = 0;
+                    std::string::const_iterator it = target.begin() + i;
+                    m_pssm.calc_like_rc(it, logp_rc);
+                    float val_rc = logp_rc + spat_log;
+                    if (val_rc >= m_score_thresh) {
+                        count++;
+                    }
+                }
+            }
+
+            return static_cast<float>(count);
         }
 
         // m_mode == MAX_LIKELIHOOD_POS with spatial weighting:
