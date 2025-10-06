@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cmath>
 #include <unistd.h>
+#include <unordered_map>
 
 #include "rdbutils.h"
 
@@ -688,11 +689,20 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 				if (!Rf_isMatrix(rparams))
 					verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
 
+				// Read extend parameter from vtrack
+				SEXP rextend = get_rvector_col(rvtrack, "extend", vtrack.c_str(), false);
+				bool extend = true; // default value (matching constructor default)
+				if (!Rf_isNull(rextend)) {
+					if (!Rf_isLogical(rextend))
+						verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+					extend = LOGICAL(rextend)[0];
+				}
+
 				DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rparams);
 				var.pwm_scorer = std::make_unique<PWMScorer>(
 					pssm,
 					&m_shared_seqfetch,
-					true,  // extend
+					extend,
 					ifunc == Track_var::PWM ? PWMScorer::TOTAL_LIKELIHOOD : PWMScorer::MAX_LIKELIHOOD);
 			} else if(ifunc == Track_var::KMER_COUNT || ifunc == Track_var::KMER_FRAC) {
 				if (Rf_isNull(rparams)){
@@ -703,11 +713,30 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 					verror("Virtual track %s: function %s requires a string parameter", vtrack.c_str(), func.c_str());
 				}
 				var.percentile = numeric_limits<double>::quiet_NaN();
+
+				// Read extend parameter from vtrack
+				SEXP rextend = get_rvector_col(rvtrack, "extend", vtrack.c_str(), false);
+				bool extend = true; // default value (matching constructor default)
+				if (!Rf_isNull(rextend)) {
+					if (!Rf_isLogical(rextend))
+						verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+					extend = LOGICAL(rextend)[0];
+				}
+
+				// Read strand parameter from vtrack
+				SEXP rstrand = get_rvector_col(rvtrack, "strand", vtrack.c_str(), false);
+				char strand = 0; // default value (both strands)
+				if (!Rf_isNull(rstrand)) {
+					if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
+						verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
+					strand = (char)REAL(rstrand)[0];
+				}
+
 				// Get the kmer string
 				const char *kmer = CHAR(STRING_ELT(rparams, 0));
 				KmerCounter::CountMode mode = ifunc == Track_var::KMER_COUNT ? KmerCounter::SUM : KmerCounter::FRACTION;
 
-				var.kmer_counter = std::make_unique<KmerCounter>(kmer, &m_shared_seqfetch, mode);
+				var.kmer_counter = std::make_unique<KmerCounter>(kmer, &m_shared_seqfetch, mode, extend, strand);
 				break;
 
 			} else{
@@ -1235,21 +1264,43 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		}
 		}
 
+    // Collect sequence-based vtracks for potential batch processing
+    vector<Track_var*> kmer_vtracks;
+    vector<Track_var*> pwm_vtracks;
+
     for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
         if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS) {
-            // PWM scoring doesn't require track data. Use per-vtrack iterator-modified interval if present.
+            pwm_vtracks.push_back(&*ivar);
+        } else if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC) {
+            kmer_vtracks.push_back(&*ivar);
+        }
+    }
+
+    // Batch process if we have multiple sequence vtracks (threshold: 4+)
+    if (kmer_vtracks.size() + pwm_vtracks.size() >= 4) {
+        batch_process_sequence_vtracks(kmer_vtracks, pwm_vtracks, m_interval1d, idx);
+    } else {
+        // Process individually if too few
+        for (Track_var* ivar : pwm_vtracks) {
             const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
             ivar->var[idx] = ivar->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
-            continue;
         }
-        if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC)	{
-            // Kmer counting doesn't require track data. Use iterator-modified interval if present.
+        for (Track_var* ivar : kmer_vtracks) {
             const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
-            if (ivar->kmer_counter)	{
+            if (ivar->kmer_counter) {
                 ivar->var[idx] = ivar->kmer_counter->score_interval(seq_interval, m_iu.get_chromkey());
-            } else{
+            } else {
                 ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
             }
+        }
+    }
+
+    // Process regular track vtracks
+    for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
+        // Skip sequence-based vtracks (already processed above)
+        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX ||
+            ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::KMER_COUNT ||
+            ivar->val_func == Track_var::KMER_FRAC) {
             continue;
         }
 
@@ -1517,5 +1568,115 @@ void TrackExpressionVars::set_vars(unsigned idx)
 
 			ivar->var[idx] = (double)total_overlap / (interval.end - interval.start);
 		}
+	}
+}
+
+void TrackExpressionVars::batch_process_sequence_vtracks(vector<Track_var*> &kmer_vtracks,
+                                                         vector<Track_var*> &pwm_vtracks,
+                                                         const GInterval &interval,
+                                                         unsigned idx)
+{
+	// Group kmers by: (interval, extend_params, strand)
+	// Key: "chromid:start-end:max_extension:strand"
+	std::unordered_map<std::string, vector<Track_var*>> kmer_groups;
+
+	for (Track_var* var : kmer_vtracks) {
+		if (!var->kmer_counter) continue;
+
+		const GInterval &base_interval = var->seq_imdf1d ? var->seq_imdf1d->interval : interval;
+		char strand = var->kmer_counter->get_strand();
+		int64_t extension = var->kmer_counter->get_extend() ? (int64_t)(var->kmer_counter->get_kmer().length() - 1) : 0;
+
+		std::string key = std::to_string(base_interval.chromid) + ":" +
+		                  std::to_string(base_interval.start) + "-" +
+		                  std::to_string(base_interval.end) + ":" +
+		                  std::to_string(extension) + ":" +
+		                  std::to_string((int)strand);
+		kmer_groups[key].push_back(var);
+	}
+
+	// Process each kmer group with HashMap optimization
+	for (const auto& [key, group] : kmer_groups) {
+		if (group.empty()) continue;
+
+		Track_var* first = group[0];
+		const GInterval &base_interval = first->seq_imdf1d ? first->seq_imdf1d->interval : interval;
+		char strand = first->kmer_counter->get_strand();
+		int64_t extension = first->kmer_counter->get_extend() ? (int64_t)(first->kmer_counter->get_kmer().length() - 1) : 0;
+
+		// Calculate fetch interval with extension
+		GInterval fetch_interval = base_interval;
+		if (extension > 0) {
+			fetch_interval.start = std::max((int64_t)0, base_interval.start - extension);
+			fetch_interval.end = std::min((int64_t)m_iu.get_chromkey().get_chrom_size(base_interval.chromid),
+			                              base_interval.end + extension);
+		}
+
+		// Build HashMap for forward and/or reverse strands
+		std::unordered_map<std::string, std::vector<size_t>> fwd_positions;
+		std::unordered_map<std::string, std::vector<size_t>> rev_positions;
+
+		// Get max kmer length for this group
+		size_t max_kmer_len = 0;
+		for (Track_var* var : group) {
+			max_kmer_len = std::max(max_kmer_len, var->kmer_counter->get_kmer().length());
+		}
+
+		// Fetch and process forward strand if needed
+		if (strand == 0 || strand == 1) {
+			GInterval fwd_interval = fetch_interval;
+			fwd_interval.strand = 1;
+			std::vector<char> seq;
+			m_shared_seqfetch.read_interval(fwd_interval, m_iu.get_chromkey(), seq);
+			std::string sequence(seq.begin(), seq.end());
+			std::transform(sequence.begin(), sequence.end(), sequence.begin(),
+			               [](unsigned char c) { return std::toupper(c); });
+
+			// Build HashMap: scan once, record all kmer positions
+			for (size_t pos = 0; pos + max_kmer_len <= sequence.length(); pos++) {
+				for (size_t k = 1; k <= max_kmer_len && pos + k <= sequence.length(); k++) {
+					std::string kmer = sequence.substr(pos, k);
+					fwd_positions[kmer].push_back(pos);
+				}
+			}
+		}
+
+		// Fetch and process reverse strand if needed
+		if (strand == 0 || strand == -1) {
+			GInterval rev_interval = fetch_interval;
+			rev_interval.strand = -1;
+			std::vector<char> seq;
+			m_shared_seqfetch.read_interval(rev_interval, m_iu.get_chromkey(), seq);
+			std::string sequence(seq.begin(), seq.end());
+			std::transform(sequence.begin(), sequence.end(), sequence.begin(),
+			               [](unsigned char c) { return std::toupper(c); });
+
+			// Build HashMap for reverse strand
+			for (size_t pos = 0; pos + max_kmer_len <= sequence.length(); pos++) {
+				for (size_t k = 1; k <= max_kmer_len && pos + k <= sequence.length(); k++) {
+					std::string kmer = sequence.substr(pos, k);
+					rev_positions[kmer].push_back(pos);
+				}
+			}
+		}
+
+		// Distribute to all kmer counters in this group
+		for (Track_var* var : group) {
+			const GInterval &var_interval = var->seq_imdf1d ? var->seq_imdf1d->interval : interval;
+			const std::string &target_kmer = var->kmer_counter->get_kmer();
+
+			var->var[idx] = var->kmer_counter->score_from_positions(
+				fwd_positions[target_kmer],
+				rev_positions[target_kmer],
+				var_interval,
+				fetch_interval);
+		}
+	}
+
+	// Process PWM vtracks using score_interval
+	// The shared cache prevents redundant disk I/O
+	for (Track_var* var : pwm_vtracks) {
+		const GInterval &seq_interval = var->seq_imdf1d ? var->seq_imdf1d->interval : interval;
+		var->var[idx] = var->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
 	}
 }
