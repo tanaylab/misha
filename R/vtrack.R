@@ -629,7 +629,25 @@ gvtrack.info <- function(vtrack = NULL) {
     .gcheckroot()
 
     vtrackstr <- do.call(.gvtrack, list(substitute(vtrack)), envir = parent.frame())
-    .gvtrack.get(vtrackstr)
+    info <- .gvtrack.get(vtrackstr)
+
+    # If filter is present, add filter statistics
+    if (!is.null(info$filter)) {
+        filter_info <- tryCatch(
+            {
+                .gcall("C_get_filter_info", info$filter, .misha_env())
+            },
+            error = function(e) {
+                NULL
+            }
+        )
+
+        if (!is.null(filter_info)) {
+            info$filter_stats <- filter_info
+        }
+    }
+
+    info
 }
 
 
@@ -926,4 +944,220 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
     .gvtrack.set(vtrackstr, var)
 
     retv <- NULL
+}
+
+
+
+#' Attach or clear a genomic mask filter on a virtual track
+#'
+#' Attaches or clears a genomic mask filter on a virtual track. When a filter is attached,
+#' the virtual track function is evaluated only over the unmasked regions (i.e., regions
+#' not covered by the filter intervals).
+#'
+#' @param vtrack virtual track name
+#' @param filter genomic mask to apply. Can be:
+#'   \itemize{
+#'     \item A data.frame with columns 'chrom', 'start', 'end' (intervals to mask)
+#'     \item A character string naming an intervals set
+#'     \item A character string naming a track (must be intervals-type track)
+#'     \item A list of any combination of the above (all will be unified)
+#'     \item NULL to clear the filter
+#'   }
+#' @details
+#' The filter defines regions to \emph{exclude} from virtual track evaluation.
+#' The virtual track function will be evaluated only on the complement of the filter.
+#' Once a filter is attached to a virtual track, it applies to \strong{all subsequent extractions}
+#' of that virtual track until explicitly cleared with \code{filter = NULL}.
+#'
+#' \strong{Order of Operations:}
+#'
+#' Filters are applied \emph{after} iterator modifiers (sshift/eshift/dim). The order is:
+#' \enumerate{
+#'   \item Apply iterator modifiers (gvtrack.iterator with sshift/eshift)
+#'   \item Subtract mask from the modified intervals
+#'   \item Evaluate virtual track function over unmasked regions
+#' }
+#'
+#' \strong{Semantics by function type:}
+#' \itemize{
+#'   \item \strong{Aggregations (avg/sum/min/max/stddev/quantile):} Length-weighted over unmasked regions
+#'   \item \strong{coverage:} Returns (covered length in unmasked region) / (total unmasked length)
+#'   \item \strong{distance/distance.center:} Unaffected by mask (pure geometry)
+#'   \item \strong{PWM/kmer:} Masked bases act as hard boundaries; matches cannot span masked regions.
+#'         \strong{Important:} When \code{extend=TRUE} (the default), motifs at the boundaries of unmasked
+#'         segments can use bases from the adjacent masked regions to complete the motif scoring.
+#'         For example, if a 4bp motif starts at position 1998 in an unmasked region that ends at 2000,
+#'         and positions 2000-2002 are masked, the motif will still be scored using the masked bases.
+#'         In other words, motif matches \emph{starting positions} must be in unmasked regions,
+#'         but the motif sequence itself can extend into masked regions when \code{extend=TRUE}.
+#'         Set \code{extend=FALSE} to prevent any use of masked bases in scoring.
+#' }
+#'
+#' \strong{Completely Masked Intervals:}
+#' If an entire iterator interval is masked, the function returns \code{NA} (not 0).
+#'
+#'
+#' @return None (invisibly).
+#' @seealso \code{\link{gvtrack.create}}, \code{\link{gvtrack.iterator}}, \code{\link{gvtrack.info}}
+#' @keywords ~virtual ~filter
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#'
+#' ## Basic usage: Excluding specific regions
+#' gvtrack.create("vtrack1", "dense_track", func = "avg")
+#'
+#' # Create intervals to mask (e.g., repetitive regions)
+#' repeats <- gintervals(c(1, 1), c(100, 500), c(200, 600))
+#'
+#' # Attach filter - track will be evaluated excluding these regions
+#' gvtrack.filter("vtrack1", filter = repeats)
+#'
+#' # Extract values - masked regions are excluded from calculation
+#' result_filtered <- gextract("vtrack1", gintervals(1, 0, 1000))
+#'
+#' # Check filter info
+#' gvtrack.info("vtrack1")
+#'
+#' # Clear the filter and compare
+#' gvtrack.filter("vtrack1", filter = NULL)
+#' result_unfiltered <- gextract("vtrack1", gintervals(1, 0, 1000))
+#'
+#' ## Using multiple filter sources (combined automatically)
+#' centromeres <- gintervals(1, 10000, 15000)
+#' telomeres <- gintervals(1, 0, 1000)
+#' combined_mask <- list(repeats, centromeres, telomeres)
+#'
+#' gvtrack.filter("vtrack1", filter = combined_mask)
+#' result_multi_filter <- gextract("vtrack1", gintervals(1, 0, 20000))
+#'
+#' ## Filters work with iterator modifiers
+#' gvtrack.create("vtrack2", "dense_track", func = "sum")
+#' gvtrack.filter("vtrack2", filter = repeats)
+#' gvtrack.iterator("vtrack2", sshift = -50, eshift = 50)
+#'
+#' # Iterator shifts applied first, then mask subtracted
+#' result_shifted <- gextract("vtrack2", gintervals(1, 1000, 2000), iterator = 100)
+#'
+#' @export
+gvtrack.filter <- function(vtrack = NULL, filter = NULL) {
+    if (is.null(substitute(vtrack))) {
+        stop("Usage: gvtrack.filter(vtrack, filter = NULL)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    vtrackstr <- do.call(.gvtrack, list(substitute(vtrack)), envir = parent.frame())
+    var <- .gvtrack.get(vtrackstr)
+
+    # Clear filter if NULL
+    if (is.null(filter)) {
+        var$filter <- NULL
+        .gvtrack.set(vtrackstr, var)
+        return(invisible(NULL))
+    }
+
+    # Resolve filter to canonical intervals
+    filter_df <- .resolve_filter_sources(filter)
+
+    # Canonicalize: sort, merge overlaps, validate
+    filter_df <- gintervals.canonic(filter_df, unify_touching_intervals = TRUE)
+
+    # Generate cache key
+    key <- .make_filter_key(filter_df, substitute(filter))
+
+    # Ensure filter is compiled (calls C to register if needed)
+    .ensure_filter_compiled(filter_df, key)
+
+    # Attach filter key to vtrack
+    var$filter <- key
+    .gvtrack.set(vtrackstr, var)
+
+    invisible(NULL)
+}
+
+
+# Helper: resolve filter sources to a unified data.frame
+.resolve_filter_sources <- function(filter) {
+    if (is.null(filter)) {
+        return(NULL)
+    }
+
+    # If it's a list, union all elements
+    if (is.list(filter) && !is.data.frame(filter)) {
+        parts <- lapply(filter, .resolve_filter_sources)
+        if (length(parts) == 0) {
+            return(data.frame(chrom = character(0), start = integer(0), end = integer(0)))
+        }
+        result <- parts[[1]]
+        if (length(parts) > 1) {
+            for (i in 2:length(parts)) {
+                result <- gintervals.union(result, parts[[i]])
+            }
+        }
+        return(result)
+    }
+
+    # If it's a data.frame, validate columns
+    if (is.data.frame(filter)) {
+        if (!all(c("chrom", "start", "end") %in% names(filter))) {
+            stop("Filter data frame must have columns: chrom, start, end", call. = FALSE)
+        }
+        return(filter[, c("chrom", "start", "end"), drop = FALSE])
+    }
+
+    # If it's a string, check if it's an intervals set or track
+    if (is.character(filter) && length(filter) == 1) {
+        # Check if it's an intervals set
+        if (filter %in% gintervals.ls()) {
+            return(gintervals.load(filter))
+        }
+
+        # Check if it's a track
+        if (filter %in% gtrack.ls()) {
+            track_info <- gtrack.info(filter)
+            if (track_info$type %in% c("sparse", "intervals")) {
+                # Extract intervals from track
+                return(gextract(filter, gintervals.all()))
+            } else {
+                stop(sprintf("Track '%s' is not an intervals-type track", filter), call. = FALSE)
+            }
+        }
+
+        stop(sprintf("Filter '%s' is neither an intervals set nor a track", filter), call. = FALSE)
+    }
+
+    stop("Filter must be a data.frame, intervals set name, track name, or list of these", call. = FALSE)
+}
+
+
+# Helper: generate a unique cache key for a filter
+.make_filter_key <- function(filter_df, filter_expr) {
+    # Get DB path and genome ID for cache key
+    gwd <- get("GWD", envir = .misha)
+
+    hash <- digest::digest(
+        filter_df[, c("chrom", "start", "end")],
+        algo = "xxhash64",
+        serialize = TRUE
+    )
+
+    key <- sprintf(
+        "filter_%s_%d_%s",
+        gsub("[^a-zA-Z0-9]", "_", gwd),
+        nrow(filter_df),
+        hash
+    )
+
+    return(key)
+}
+
+
+# Helper: ensure filter is compiled in C registry
+.ensure_filter_compiled <- function(filter_df, key) {
+    # Call C function to register filter (idempotent - returns early if already registered)
+    .gcall("C_register_filter", filter_df, key, .misha_env())
+    invisible(NULL)
 }

@@ -21,6 +21,8 @@
 #include <Rinternals.h>
 
 #include "BinFinder.h"
+#include "Filter.h"
+#include "FilterRegistry.h"
 #include "GenomeTrack.h"
 #include "GenomeTrackArrays.h"
 #include "GInterval.h"
@@ -128,6 +130,8 @@ public:
         // When the virtual track is sequence-based (PWM/KMER) we may still
         // have per-vtrack iterator modifiers; store them here.
         Iterator_modifier1D *seq_imdf1d{NULL};
+        // Filter for masking genomic regions (applied after iterator modifiers)
+        std::shared_ptr<Genome1DFilter> filter;
     };
 
     typedef vector<Track_var> Track_vars;
@@ -148,6 +152,8 @@ public:
         GIntervals::const_iterator siinterv;
         GIntervals::const_iterator eiinterv;
         double                     dist_margin;
+        // Filter for masking genomic regions (applied after iterator modifiers)
+        std::shared_ptr<Genome1DFilter> filter;
     };
 
     typedef vector<Interv_var> Interv_vars;
@@ -196,6 +202,8 @@ private:
 	void                 add_vtrack_var(const string &track, SEXP rvtrack);
 	Track_var           &add_vtrack_var_src_track(SEXP rvtrack, const string &vtrack, const string &track);
 	Interv_var          &add_vtrack_var_src_interv(SEXP rvtrack, const string &vtrack, GIntervals &intervs1d, GIntervals2D &intervs2d);
+	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, Track_var &var);
+	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, Interv_var &var);
 	void                 register_track_functions();
 
 	void start_chrom(const GInterval &interval);
