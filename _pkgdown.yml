@@ -44,6 +44,7 @@ reference:
       - gvtrack.iterator.2d
       - gvtrack.ls
       - gvtrack.rm
+      - gvtrack.filter
   - title: Intervals functions
     desc:  Functions to manipulate and create intervals
     contents:
