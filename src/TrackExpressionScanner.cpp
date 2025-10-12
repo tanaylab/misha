@@ -88,6 +88,11 @@ void TrackExprScanner::define_r_vars(unsigned eval_buf_limit)
 	m_eval_buf_limit = eval_buf_limit;
 	m_expr_vars.define_r_vars(eval_buf_limit);
 
+	// Prepare R-visible buffers that mirror the current chunk of iterator intervals.
+	// For 1D we expose CHROM/START/END; for 2D CHROM1/START1/END1/CHROM2/START2/END2.
+	// Chromosome ids are 1-based on the R side. We also preinitialize the entire
+	// buffer with safe defaults so that partially filled buffers (at EOF) remain valid.
+
 	if (m_expr_itr->is_1d()) {
 		m_1d.cur_chromid = -1;
 		m_1d.expr_itr_intervals.resize(m_eval_buf_limit);
@@ -113,7 +118,7 @@ void TrackExprScanner::define_r_vars(unsigned eval_buf_limit)
 		for (unsigned i = 0; i < m_eval_buf_limit; i++)
 			m_2d.expr_itr_intervals_chroms1[i] = m_2d.expr_itr_intervals_chroms2[i] = 1;
     }
-    // Safely define in .misha env
+	// Expose the current-batch intervals to R under GITERATOR.INTERVALS in the .misha env
     define_in_misha(m_iu.get_env(), "GITERATOR.INTERVALS", m_rexpr_itr_intervals);
 
     for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
@@ -143,6 +148,7 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
     runprotect(m_eval_exprs);
 
     m_track_exprs.reserve(track_exprs.size());
+	// Normalize input expressions: trim whitespace and store canonical forms.
     for (vector<string>::const_iterator iexpr = track_exprs.begin(); iexpr != track_exprs.end(); ++iexpr) {
         // trim spaces from the track expression
         string::const_iterator istr_start, istr_end;
@@ -180,7 +186,7 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 			expr = rprotect_ptr(RSaneAllocVector(STRSXP, 1));
     		SET_STRING_ELT(expr, 0, Rf_mkChar(m_track_exprs[iexpr].c_str()));
 
-    		// parse R expression
+			// Parse the user R expression once and keep the parsed form for repeated evaluation
     		ParseStatus status;
 			SEXP parsed_expr;
 			parsed_expr = rprotect_ptr(R_ParseVector(expr, -1, &status, R_NilValue));
@@ -207,7 +213,9 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 {
 	check(track_exprs, scope1d, scope2d, iterator_policy, band);
 
-	// check whether m_eval_buf_limit == 1000 will correctly work for the expression
+	// Decide evaluation buffer size. Prefer vectorized evaluation (large buffers)
+	// but gracefully fall back to scalar evaluation (buffer size 1) if expressions
+	// cannot produce vectors of the requested size.
     SEXP gbufsize = Rf_GetOption1(Rf_install("gbuf.size"));
 	if (!Rf_isReal(gbufsize) || REAL(gbufsize)[0] < 1)
 		define_r_vars(1000);
@@ -220,7 +228,7 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 
             if (Rf_length(res) != (int)m_eval_buf_limit) {
                 runprotect(1);
-                define_r_vars(1);
+				define_r_vars(1); // switch to scalar mode
                 break;
             }
             runprotect(1);
@@ -248,6 +256,7 @@ bool TrackExprScanner::next()
 	if (isend())
 		return false;
 
+	// Advance within the current buffer; if depleted, refill from the iterator
 	if (eval_next())
 		return true;
 
@@ -269,13 +278,14 @@ bool TrackExprScanner::eval_next()
 {
 	m_eval_buf_idx++;
 
-	// do we need to read more track samples to the buffer?
+	// Refill the evaluation buffer when exhausted (batch processing for speed)
 	if (m_eval_buf_idx >= m_eval_buf_limit) {
 		m_eval_buf_idx = 0;
 		if (m_expr_itr->is_1d()) {
 			for (m_eval_buf_size = 0; m_eval_buf_size < m_eval_buf_limit; ++m_eval_buf_size) {
                 if (m_expr_itr->isend()) {
-                    for (unsigned i = m_eval_buf_size; i < m_eval_buf_limit; ++i) {
+					// Pad the remainder with sentinel values so R-side vectors remain valid
+					for (unsigned i = m_eval_buf_size; i < m_eval_buf_limit; ++i) {
                         m_1d.expr_itr_intervals_chroms[i] = 1;
                         m_1d.expr_itr_intervals_starts[i] = -1.;
                         m_1d.expr_itr_intervals_ends[i] = -1.;
@@ -294,13 +304,15 @@ bool TrackExprScanner::eval_next()
 
                 m_expr_itr_scope_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_idx();
                 m_expr_itr_scope_chrom_idx[m_eval_buf_size] = ((TrackExpression1DIterator *)m_expr_itr)->get_cur_scope_chrom_idx();
-                m_expr_vars.set_vars(interval, m_eval_buf_size);
+				// Publish iterator-derived variables for this slot so expressions can use them
+				m_expr_vars.set_vars(interval, m_eval_buf_size);
                 m_expr_itr->next();
 			}
 		}
 		else {
 			for (m_eval_buf_size = 0; m_eval_buf_size < m_eval_buf_limit; ++m_eval_buf_size) {
 				if (m_expr_itr->isend()) {
+					// Pad the remainder with sentinel values in 2D as well
 					for (unsigned i = m_eval_buf_size; i < m_eval_buf_limit; ++i) {
 						m_2d.expr_itr_intervals_chroms1[i] = 1;
 						m_2d.expr_itr_intervals_starts1[i] = -1.;
@@ -334,10 +346,11 @@ bool TrackExprScanner::eval_next()
 
         check_interrupt();
 
-        for (unsigned iexpr = 0; iexpr < m_eval_exprs.size(); ++iexpr) {
+		for (unsigned iexpr = 0; iexpr < m_eval_exprs.size(); ++iexpr) {
             if (m_eval_exprs[iexpr] != R_NilValue) {
                 runprotect(m_eval_bufs[iexpr]);
-                m_eval_bufs[iexpr] = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
+				// Evaluate the parsed R expression over the current batch; only numeric or logical vectors are supported
+				m_eval_bufs[iexpr] = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
                 if (Rf_length(m_eval_bufs[iexpr]) != (int)m_eval_buf_limit)
                     verror("Evaluation of expression \"%s\" produces a vector of size %d while expecting size %d",
                             m_track_exprs[iexpr].c_str(), Rf_length(m_eval_bufs[iexpr]), m_eval_buf_limit);
@@ -369,13 +382,14 @@ void TrackExprScanner::report_progress()
         uint64_t curclock = get_cur_clock();
         double delta = curclock - m_last_report_clock;
 
-        if (delta)
+		// Adapt the next reporting step to aim for roughly REPORT_INTERVAL ms between prints
+		if (delta)
             m_report_step = (int)(m_report_step * (REPORT_INTERVAL / delta) + .5);
         else
             m_report_step *= 10;
 
         if (delta > MIN_REPORT_INTERVAL) {
-            if (m_last_progress_reported < 0 && m_eval_buf_limit == 1)
+			if (m_last_progress_reported < 0 && m_eval_buf_limit == 1)
                 REprintf("Warning: track expression(s) cannot be evaluated as a vector. Run-times might be slow.\n");
 
             int progress;
@@ -387,7 +401,8 @@ void TrackExprScanner::report_progress()
                 progress = !((TrackExpression2DIterator *)m_expr_itr)->get_scope()->size() ? 0 :
                     (int)(100. * (((TrackExpression2DIterator *)m_expr_itr)->get_cur_scope_idx()) / ((TrackExpression2DIterator *)m_expr_itr)->get_scope()->size());
 
-            progress = max(progress, m_last_progress_reported);  // in 2D scope idx can sometimes go backward
+			// In 2D the scope index may momentarily decrease; ensure monotonic progress display
+			progress = max(progress, m_last_progress_reported);
             if (progress != 100) {
                 if (progress != m_last_progress_reported) {
                     REprintf("%d%%...", progress);
@@ -443,6 +458,11 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 
 	TrackExpressionIteratorBase *expr_itr = NULL;
 	SEXP class_name = Rf_getAttrib(giterator, R_ClassSymbol);
+
+	// Resolve the iterator policy from the user-provided argument when possible
+	// (fixed bin/rect, cartesian grid, big sets, explicit intervals). If not provided
+	// explicitly, attempt to infer a sensible default from the tracks referenced in
+	// the expressions, while verifying track format consistency.
 
 	if ((Rf_isReal(giterator) || Rf_isInteger(giterator)) && Rf_length(giterator) == 1) {            // giterator == binsize
 		verify_1d_iter(scope1d, scope2d);
@@ -550,7 +570,7 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 	vector<GenomeTrack::Type> track_types;
 
 for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
-    // Skip PWM variables since they don't have associated tracks
+    // Skip sequence-based variables since they don't have associated tracks
     if (vars.is_seq_variable(ivar)) {
         continue;
     }
