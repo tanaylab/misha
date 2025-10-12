@@ -36,6 +36,9 @@ public:
 	float last_sum() const { return m_last_sum; }
 	float last_quantile(double percentile);
 
+	// Access to stream percentiler for combining quantiles across intervals
+	const StreamPercentiler<float>& get_percentiler() const { return m_sp; }
+
 	const string &file_name() const { return m_bfile.file_name(); }
 
 protected:

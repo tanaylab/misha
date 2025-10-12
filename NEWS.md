@@ -1,3 +1,7 @@
+# misha 5.0.0
+
+* Added `gvtrack.filters`: per vtrack genomic masks.
+
 # misha 4.3.14
 
 * Added spatial factors to pwm virtual tracks.
