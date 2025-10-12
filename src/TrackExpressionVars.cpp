@@ -274,6 +274,48 @@ TrackExpressionVars::Track_n_imdf &TrackExpressionVars::add_track_n_imdf(const s
 	return track_n_imdf;
 }
 
+void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrack, Track_var &var)
+{
+	// Check for filter field in rvtrack
+	SEXP rfilter = get_rvector_col(rvtrack, "filter", vtrack.c_str(), false);
+
+	if (Rf_isNull(rfilter) || !Rf_isString(rfilter) || Rf_length(rfilter) != 1) {
+		var.filter = nullptr;
+		return;
+	}
+
+	// Get filter key
+	const char *filter_key = CHAR(STRING_ELT(rfilter, 0));
+
+	// Look up filter in registry
+	var.filter = FilterRegistry::instance().get(filter_key);
+
+	if (var.filter == nullptr) {
+		verror("Virtual track %s: filter with key '%s' not found in registry", vtrack.c_str(), filter_key);
+	}
+}
+
+void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrack, Interv_var &var)
+{
+	// Check for filter field in rvtrack
+	SEXP rfilter = get_rvector_col(rvtrack, "filter", vtrack.c_str(), false);
+
+	if (Rf_isNull(rfilter) || !Rf_isString(rfilter) || Rf_length(rfilter) != 1) {
+		var.filter = nullptr;
+		return;
+	}
+
+	// Get filter key
+	const char *filter_key = CHAR(STRING_ELT(rfilter, 0));
+
+	// Look up filter in registry
+	var.filter = FilterRegistry::instance().get(filter_key);
+
+	if (var.filter == nullptr) {
+		verror("Virtual track %s: filter with key '%s' not found in registry", vtrack.c_str(), filter_key);
+	}
+}
+
 void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 {
 	// Check for existing track vars
@@ -469,9 +511,12 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             Iterator_modifier1D imdf1d;
             parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
             var.seq_imdf1d = add_imdf(imdf1d);
-            
+
             var.percentile = numeric_limits<double>::quiet_NaN();
             var.requires_pv = false;
+
+            // Attach filter if present
+            attach_filter_to_var(rvtrack, vtrack, var);
             return;
         } else if (func == "kmer.count" || func == "kmer.frac")	{
 			// Create the Track_var without a Track_n_imdf
@@ -542,6 +587,9 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             var.seq_imdf1d = add_imdf(imdf1d);
 
             var.requires_pv = false;
+
+            // Attach filter if present
+            attach_filter_to_var(rvtrack, vtrack, var);
 			return;
 		}
 	}
@@ -821,6 +869,15 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 	if (ifunc >= Track_var::NUM_FUNCS)
         verror("Virtual track %s: invalid function %s used for a virtual track", vtrack.c_str(), func.c_str());
 
+	// Attach filter if present
+	// Check if filter is being applied to 2D track
+	SEXP rfilter = get_rvector_col(rvtrack, "filter", vtrack.c_str(), false);
+	if (!Rf_isNull(rfilter) && GenomeTrack::is_2d(track_type)) {
+		verror("Virtual track %s: Filters are not yet supported for 2D tracks", vtrack.c_str());
+	}
+
+	attach_filter_to_var(rvtrack, vtrack, var);
+
 	return var;
 }
 
@@ -907,6 +964,9 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 	} else {
 		verror("Virtual track %s: invalid function %s used with intervals", vtrack.c_str(), func.c_str());
 	}
+
+	// Attach filter if present
+	attach_filter_to_var(rvtrack, vtrack, var);
 
 	return var;
 }
@@ -1344,19 +1404,121 @@ void TrackExpressionVars::set_vars(unsigned idx)
         }
     }
 
-    // Batch process if we have multiple sequence vtracks (threshold: 4+)
-    if (kmer_vtracks.size() + pwm_vtracks.size() >= 4) {
+    // Check if any sequence vtrack has a filter
+    bool any_filtered = false;
+    for (Track_var* ivar : pwm_vtracks) {
+        if (ivar->filter) {
+            any_filtered = true;
+            break;
+        }
+    }
+    if (!any_filtered) {
+        for (Track_var* ivar : kmer_vtracks) {
+            if (ivar->filter) {
+                any_filtered = true;
+                break;
+            }
+        }
+    }
+
+    // Batch process if we have multiple sequence vtracks (threshold: 4+) AND no filters
+    // (batch processing with filters is complex due to variable-length segments)
+    if (!any_filtered && kmer_vtracks.size() + pwm_vtracks.size() >= 4) {
         batch_process_sequence_vtracks(kmer_vtracks, pwm_vtracks, m_interval1d, idx);
     } else {
         // Process individually if too few
         for (Track_var* ivar : pwm_vtracks) {
             const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
-            ivar->var[idx] = ivar->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
+
+            // Check if filter applies
+            if (ivar->filter) {
+                std::vector<GInterval> unmasked_parts;
+                ivar->filter->subtract(seq_interval, unmasked_parts);
+
+                if (unmasked_parts.empty()) {
+                    // Completely masked
+                    ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+                } else if (unmasked_parts.size() == 1) {
+                    // Single unmasked part
+                    ivar->var[idx] = ivar->pwm_scorer->score_interval(unmasked_parts[0], m_iu.get_chromkey());
+                } else {
+                    // Multiple unmasked parts - score each and aggregate
+                    // For PWM: sum scores (additive in log space), max, or count
+                    double result = 0.0;
+                    bool first = true;
+
+                    for (const auto& part : unmasked_parts) {
+                        double part_score = ivar->pwm_scorer->score_interval(part, m_iu.get_chromkey());
+
+                        if (ivar->val_func == Track_var::PWM_MAX) {
+                            if (first || part_score > result) {
+                                result = part_score;
+                            }
+                        } else if (ivar->val_func == Track_var::PWM_MAX_POS) {
+                            // For position, take the position with max score
+                            if (first || part_score > result) {
+                                result = part_score;
+                            }
+                        } else if (ivar->val_func == Track_var::PWM_COUNT) {
+                            // Sum counts
+                            result += part_score;
+                        } else {
+                            // PWM (total likelihood) - sum in log space
+                            result += part_score;
+                        }
+                        first = false;
+                    }
+
+                    ivar->var[idx] = result;
+                }
+            } else {
+                // No filter
+                ivar->var[idx] = ivar->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
+            }
         }
         for (Track_var* ivar : kmer_vtracks) {
             const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+
             if (ivar->kmer_counter) {
-                ivar->var[idx] = ivar->kmer_counter->score_interval(seq_interval, m_iu.get_chromkey());
+                // Check if filter applies
+                if (ivar->filter) {
+                    std::vector<GInterval> unmasked_parts;
+                    ivar->filter->subtract(seq_interval, unmasked_parts);
+
+                    if (unmasked_parts.empty()) {
+                        // Completely masked
+                        ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+                    } else if (unmasked_parts.size() == 1) {
+                        // Single unmasked part
+                        ivar->var[idx] = ivar->kmer_counter->score_interval(unmasked_parts[0], m_iu.get_chromkey());
+                    } else {
+                        // Multiple unmasked parts - score each and aggregate
+                        double total_count = 0.0;
+                        int64_t total_bases = 0;
+
+                        for (const auto& part : unmasked_parts) {
+                            double part_score = ivar->kmer_counter->score_interval(part, m_iu.get_chromkey());
+
+                            if (ivar->val_func == Track_var::KMER_COUNT) {
+                                // Sum counts
+                                total_count += part_score;
+                            } else {
+                                // KMER_FRAC - need to weight by length
+                                total_count += part_score * part.range();
+                                total_bases += part.range();
+                            }
+                        }
+
+                        if (ivar->val_func == Track_var::KMER_FRAC && total_bases > 0) {
+                            ivar->var[idx] = total_count / total_bases;
+                        } else {
+                            ivar->var[idx] = total_count;
+                        }
+                    }
+                } else {
+                    // No filter
+                    ivar->var[idx] = ivar->kmer_counter->score_interval(seq_interval, m_iu.get_chromkey());
+                }
             } else {
                 ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
             }
@@ -1378,7 +1540,199 @@ void TrackExpressionVars::set_vars(unsigned idx)
 			if (ivar->track_n_imdf->imdf1d && ivar->track_n_imdf->imdf1d->out_of_range)
 				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
 			else {
-				switch (ivar->val_func) {
+				// Check if filter applies and get unmasked parts
+				std::vector<GInterval> unmasked_parts;
+				bool has_filter = false;
+
+				if (ivar->filter) {
+					const GInterval &eval_interval = ivar->track_n_imdf->imdf1d ?
+						ivar->track_n_imdf->imdf1d->interval : m_interval1d;
+
+					ivar->filter->subtract(eval_interval, unmasked_parts);
+					has_filter = true;
+
+					if (unmasked_parts.empty()) {
+						// Completely masked - return NaN
+						ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+						continue;
+					}
+				}
+
+				// If filter exists and resulted in multiple unmasked parts, aggregate across them
+				// If only one part (or filter but no filtering needed), use normal path below
+				if (has_filter && unmasked_parts.size() > 1) {
+					// Aggregate over unmasked parts
+					double result = std::numeric_limits<double>::quiet_NaN();
+
+					switch (ivar->val_func) {
+					case Track_var::REG:
+					case Track_var::PV:
+					case Track_var::STDDEV: {
+						// Weighted average or stddev - need to aggregate with proper weighting
+						long double total_weight = 0;
+						long double total_weighted_sum = 0;
+						long double M2 = 0;  // For stddev
+
+						for (const auto& part : unmasked_parts) {
+							track.read_interval(part);
+							if (ivar->val_func == Track_var::STDDEV) {
+								// For stddev, we need variance aggregation
+								double part_avg = track.last_avg();
+								double part_stddev = track.last_stddev();
+								double part_len = part.end - part.start;
+
+								if (!std::isnan(part_avg) && !std::isnan(part_stddev)) {
+									// Welford online algorithm for combining variances
+									double delta = part_avg - (total_weight > 0 ? total_weighted_sum / total_weight : 0);
+									total_weight += part_len;
+									total_weighted_sum += part_avg * part_len;
+									M2 += part_stddev * part_stddev * part_len + part_len * total_weight / (total_weight + part_len) * delta * delta;
+								}
+							} else {
+								// For avg
+								double part_avg = track.last_avg();
+								if (!std::isnan(part_avg)) {
+									double part_len = part.end - part.start;
+									total_weighted_sum += part_avg * part_len;
+									total_weight += part_len;
+								}
+							}
+						}
+
+						if (total_weight > 0) {
+							if (ivar->val_func == Track_var::STDDEV) {
+								result = std::sqrt(M2 / total_weight);
+							} else {
+								result = total_weighted_sum / total_weight;
+							}
+						}
+						break;
+					}
+					case Track_var::SUM: {
+						// Sum across all parts
+						double total_sum = 0;
+						bool has_value = false;
+
+						for (const auto& part : unmasked_parts) {
+							track.read_interval(part);
+							double part_sum = track.last_sum();
+							if (!std::isnan(part_sum)) {
+								total_sum += part_sum;
+								has_value = true;
+							}
+						}
+
+						if (has_value) {
+							result = total_sum;
+						}
+						break;
+					}
+					case Track_var::REG_MIN:
+					case Track_var::PV_MIN: {
+						// Min across all parts
+						double min_val = std::numeric_limits<double>::infinity();
+
+						for (const auto& part : unmasked_parts) {
+							track.read_interval(part);
+							double part_min = track.last_min();
+							if (!std::isnan(part_min)) {
+								min_val = std::min(min_val, part_min);
+							}
+						}
+
+						if (min_val != std::numeric_limits<double>::infinity()) {
+							result = min_val;
+						}
+						break;
+					}
+					case Track_var::REG_MAX:
+					case Track_var::PV_MAX: {
+						// Max across all parts
+						double max_val = -std::numeric_limits<double>::infinity();
+
+						for (const auto& part : unmasked_parts) {
+							track.read_interval(part);
+							double part_max = track.last_max();
+							if (!std::isnan(part_max)) {
+								max_val = std::max(max_val, part_max);
+							}
+						}
+
+						if (max_val != -std::numeric_limits<double>::infinity()) {
+							result = max_val;
+						}
+						break;
+					}
+					case Track_var::REG_NEAREST: {
+						// For nearest, use the first unmasked part (closest to start)
+						track.read_interval(unmasked_parts[0]);
+						result = track.last_nearest();
+						break;
+					}
+					case Track_var::QUANTILE: {
+						// For quantile across multiple parts, we need to:
+						// 1. Collect all samples from all unmasked parts
+						// 2. Compute weighted quantile from combined samples
+
+						// We'll use the same approach as the track does internally:
+						// Create a temporary StreamPercentiler and add all samples
+						StreamPercentiler<float> combined_sp;
+						combined_sp.init(m_iu.get_max_data_size(),
+						                 m_iu.get_quantile_edge_data_size(),
+						                 m_iu.get_quantile_edge_data_size());
+
+						// Read each part and collect its samples
+						for (const auto& part : unmasked_parts) {
+							track.read_interval(part);
+
+							// Access the StreamPercentiler from the track
+							// We need to get the samples, lowest_vals, and highest_vals
+							const auto& sp = track.get_percentiler();
+							const auto& samples = sp.samples();
+							const auto& lowest = sp.lowest_vals();
+							const auto& highest = sp.highest_vals();
+
+						// Add all values to our combined percentiler using R RNG
+						for (const auto& val : lowest) {
+							if (!std::isnan(val)) {
+								combined_sp.add(val, unif_rand);
+							}
+						}
+						for (const auto& val : samples) {
+							if (!std::isnan(val)) {
+								combined_sp.add(val, unif_rand);
+							}
+						}
+						for (const auto& val : highest) {
+							if (!std::isnan(val)) {
+								combined_sp.add(val, unif_rand);
+							}
+						}
+						}
+
+						// Compute quantile from combined samples
+						if (combined_sp.stream_size() > 0) {
+							bool is_estimated;
+							result = combined_sp.get_percentile(ivar->percentile, is_estimated);
+						}
+						break;
+					}
+					case Track_var::PWM_MAX:
+					case Track_var::PWM_MAX_POS:
+					case Track_var::PWM:
+					case Track_var::PWM_COUNT:
+					case Track_var::KMER_COUNT:
+					case Track_var::KMER_FRAC:
+						// Sequence-based - already handled above
+						break;
+					default:
+						verror("Internal error: unsupported function %d", ivar->val_func);
+					}
+
+					ivar->var[idx] = result;
+				} else {
+					// No filter or single unmasked part - use normal path
+					switch (ivar->val_func) {
 				case Track_var::REG:
 				case Track_var::PV:
 					ivar->var[idx] = track.last_avg();
@@ -1414,17 +1768,18 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					verror("Internal error: unsupported function %d", ivar->val_func);
 				}
 
-				if (ivar->requires_pv) {
-					double val = ivar->var[idx];
-					if (!std::isnan(val)) {
-						int bin = ivar->pv_binned.binfinder.val2bin(val);
-						if (bin < 0) {
-							if (val <= ivar->pv_binned.binfinder.get_breaks().front())
-								ivar->var[idx] = ivar->pv_binned.bins[0];
-							else
-								ivar->var[idx] = 1.;
-						} else
-							ivar->var[idx] = ivar->pv_binned.bins[bin];
+					if (ivar->requires_pv) {
+						double val = ivar->var[idx];
+						if (!std::isnan(val)) {
+							int bin = ivar->pv_binned.binfinder.val2bin(val);
+							if (bin < 0) {
+								if (val <= ivar->pv_binned.binfinder.get_breaks().front())
+									ivar->var[idx] = ivar->pv_binned.bins[0];
+								else
+									ivar->var[idx] = 1.;
+							} else
+								ivar->var[idx] = ivar->pv_binned.bins[bin];
+						}
 					}
 				}
 			}
@@ -1577,65 +1932,86 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				continue;
 			}
 
+			// Apply filter if present
+			std::vector<GInterval> eval_intervals;
+			if (ivar->filter) {
+				ivar->filter->subtract(interval, eval_intervals);
+				if (eval_intervals.empty()) {
+					ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+					continue;
+				}
+			} else {
+				eval_intervals.push_back(interval);
+			}
+
 			int64_t total_overlap = 0;
-			GIntervals::const_iterator iinterv;
+			int64_t total_unmasked_length = 0;
 
-			// For non-sequential access or first access
-			if (ivar->imdf1d || ivar->siinterv == ivar->sintervs.end())
-			{
-				iinterv = lower_bound(ivar->sintervs.begin(), ivar->sintervs.end(), interval,
-									  GIntervals::compare_by_start_coord);
+			// Calculate coverage for each unmasked sub-interval
+			for (const auto &eval_interval : eval_intervals) {
+				total_unmasked_length += eval_interval.range();
+				int64_t sub_overlap = 0;
+				GIntervals::const_iterator iinterv;
 
-				// Check previous interval too
-				if (iinterv != ivar->sintervs.begin())
+				// For non-sequential access or first access
+				if (ivar->imdf1d || ivar->siinterv == ivar->sintervs.end())
 				{
-					auto prev = iinterv - 1;
-					if (prev->chromid == interval.chromid && prev->end > interval.start)
+					iinterv = lower_bound(ivar->sintervs.begin(), ivar->sintervs.end(), eval_interval,
+										  GIntervals::compare_by_start_coord);
+
+					// Check previous interval too
+					if (iinterv != ivar->sintervs.begin())
 					{
-						int64_t overlap_start = max(interval.start, prev->start);
-						int64_t overlap_end = min(interval.end, prev->end);
-						total_overlap += overlap_end - overlap_start;
+						auto prev = iinterv - 1;
+						if (prev->chromid == eval_interval.chromid && prev->end > eval_interval.start)
+						{
+							int64_t overlap_start = max(eval_interval.start, prev->start);
+							int64_t overlap_end = min(eval_interval.end, prev->end);
+							sub_overlap += overlap_end - overlap_start;
+						}
 					}
 				}
-			}
-			else
-			{
-				// For sequential access, start from last position
-				iinterv = ivar->siinterv;
+				else
+				{
+					// For sequential access, start from last position
+					iinterv = ivar->siinterv;
 
-				// Skip past intervals from previous chromosomes
-				while (iinterv != ivar->sintervs.end() && iinterv->chromid < interval.chromid)
+					// Skip past intervals from previous chromosomes
+					while (iinterv != ivar->sintervs.end() && iinterv->chromid < eval_interval.chromid)
+						++iinterv;
+
+					// But check if we need to back up
+					while (iinterv != ivar->sintervs.begin() &&
+						   (iinterv - 1)->chromid == eval_interval.chromid &&
+						   (iinterv - 1)->end > eval_interval.start)
+					{
+						--iinterv;
+					}
+				}
+
+				// Check forward intervals
+				while (iinterv != ivar->sintervs.end() &&
+					   iinterv->chromid == eval_interval.chromid &&
+					   iinterv->start < eval_interval.end)
+				{
+					if (iinterv->end > eval_interval.start)
+					{
+						int64_t overlap_start = max(eval_interval.start, iinterv->start);
+						int64_t overlap_end = min(eval_interval.end, iinterv->end);
+						sub_overlap += overlap_end - overlap_start;
+					}
 					++iinterv;
-
-				// But check if we need to back up
-				while (iinterv != ivar->sintervs.begin() &&
-					   (iinterv - 1)->chromid == interval.chromid &&
-					   (iinterv - 1)->end > interval.start)
-				{
-					--iinterv;
 				}
-			}
 
-			// Check forward intervals
-			while (iinterv != ivar->sintervs.end() &&
-				   iinterv->chromid == interval.chromid &&
-				   iinterv->start < interval.end)
-			{
-				if (iinterv->end > interval.start)
+				if (!ivar->imdf1d)
 				{
-					int64_t overlap_start = max(interval.start, iinterv->start);
-					int64_t overlap_end = min(interval.end, iinterv->end);
-					total_overlap += overlap_end - overlap_start;
+					ivar->siinterv = iinterv;
 				}
-				++iinterv;
+
+				total_overlap += sub_overlap;
 			}
 
-			if (!ivar->imdf1d)
-			{
-				ivar->siinterv = iinterv;
-			}
-
-			ivar->var[idx] = (double)total_overlap / (interval.end - interval.start);
+			ivar->var[idx] = (double)total_overlap / total_unmasked_length;
 		}
 	}
 }
