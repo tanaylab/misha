@@ -18,6 +18,7 @@
 #include "GenomeTrackRects.h"
 #include "GenomeTrackSparse.h"
 #include "TrackExpressionVars.h"
+#include "TrackExpressionParams.h"
 #include "GenomeSeqFetch.h"
 
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
@@ -351,160 +352,23 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             var.seq_imdf1d = nullptr;
             
             SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
-			if (!Rf_isNewList(rparams))	{
-				verror("Virtual track %s: PWM functions require a list parameter with pssm matrix", vtrack.c_str());
-			}
 
-			// Get PSSM matrix from params
-			int pssm_idx = findListElementIndex(rparams, "pssm");
-			if (pssm_idx < 0) {
-				rdb::verror("Virtual track %s: PWM functions require a 'pssm' parameter", vtrack.c_str());
-			}
-			SEXP rpssm = VECTOR_ELT(rparams, pssm_idx);
-			if (!Rf_isMatrix(rpssm)){
-				rdb::verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
-			}
-
-			// Get bidirect parameter
-			bool bidirect = true; // default value
-			int bidirect_idx = findListElementIndex(rparams, "bidirect");
-			if (bidirect_idx >= 0) {
-				SEXP rbidirect = VECTOR_ELT(rparams, bidirect_idx);
-				if (rbidirect != R_NilValue){
-					if (!Rf_isLogical(rbidirect))
-						rdb::verror("Virtual track %s: bidirect parameter must be logical", vtrack.c_str());
-					bidirect = LOGICAL(rbidirect)[0];
-				}
-			}
-
-			// Get extend parameter
-			bool extend = true;  // default to TRUE (matching R default)
-			int extend_idx = findListElementIndex(rparams, "extend");
-			if (extend_idx >= 0) {
-				SEXP rextend = VECTOR_ELT(rparams, extend_idx);
-				if (rextend != R_NilValue){
-					if (!Rf_isLogical(rextend))
-						rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
-					extend = LOGICAL(rextend)[0];
-				}
-			}
-
-			// Get strand parameter (numeric)
-			char strand = 1;  // default to forward strand (matching R default)
-			int strand_idx = findListElementIndex(rparams, "strand");
-			if (strand_idx >= 0) {
-				SEXP rstrand = VECTOR_ELT(rparams, strand_idx);
-				if (rstrand != R_NilValue){
-					if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
-						rdb::verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
-					strand = (char)REAL(rstrand)[0];
-				}
-			}
-
-			// Optional spatial parameters
-			std::vector<float> spat_factor_vec;
-			int spat_bin = 1;
-
-			// Get spat_factor (numeric vector)
-			int spat_idx = findListElementIndex(rparams, "spat_factor");
-			SEXP rspat = R_NilValue;
-			if (spat_idx >= 0) {
-				rspat = VECTOR_ELT(rparams, spat_idx);
-			}
-			if (rspat != R_NilValue) {
-				if (!Rf_isReal(rspat))
-					rdb::verror("Virtual track %s: spat_factor must be a numeric vector", vtrack.c_str());
-				int n = Rf_length(rspat);
-				if (n <= 0)
-					rdb::verror("Virtual track %s: spat_factor must have at least one element", vtrack.c_str());
-				spat_factor_vec.resize(n);
-				for (int i = 0; i < n; ++i) {
-					spat_factor_vec[i] = REAL(rspat)[i];
-					if (spat_factor_vec[i] <= 0)
-						rdb::verror("Virtual track %s: all spat_factor values must be positive", vtrack.c_str());
-				}
-
-				// Get spat_bin (integer scalar)
-				int bin_idx = findListElementIndex(rparams, "spat_bin");
-				SEXP rbin = R_NilValue;
-				if (bin_idx >= 0) {
-					rbin = VECTOR_ELT(rparams, bin_idx);
-				}
-				if (rbin != R_NilValue) {
-					if (!Rf_isInteger(rbin) && !Rf_isReal(rbin))
-						rdb::verror("Virtual track %s: spat_bin must be numeric", vtrack.c_str());
-					spat_bin = (int)(Rf_isReal(rbin) ? REAL(rbin)[0] : INTEGER(rbin)[0]);
-					if (spat_bin <= 0)
-						rdb::verror("Virtual track %s: spat_bin must be > 0", vtrack.c_str());
-				}
-			}
-
-			// Optional spat_min/spat_max (integers)
-			int spat_min = 0;
-			int spat_max = 1000000;
-			bool has_range = false;
-
-			int smin_idx = findListElementIndex(rparams, "spat_min");
-			SEXP rsmin = R_NilValue;
-			if (smin_idx >= 0) {
-				rsmin = VECTOR_ELT(rparams, smin_idx);
-			}
-			if (rsmin != R_NilValue) {
-				if (!Rf_isInteger(rsmin) && !Rf_isReal(rsmin))
-					rdb::verror("Virtual track %s: spat_min must be numeric", vtrack.c_str());
-				spat_min = (int)(Rf_isReal(rsmin) ? REAL(rsmin)[0] : INTEGER(rsmin)[0]);
-				has_range = true;
-			}
-
-			int smax_idx = findListElementIndex(rparams, "spat_max");
-			SEXP rsmax = R_NilValue;
-			if (smax_idx >= 0) {
-				rsmax = VECTOR_ELT(rparams, smax_idx);
-			}
-			if (rsmax != R_NilValue) {
-				if (!Rf_isInteger(rsmax) && !Rf_isReal(rsmax))
-					rdb::verror("Virtual track %s: spat_max must be numeric", vtrack.c_str());
-				spat_max = (int)(Rf_isReal(rsmax) ? REAL(rsmax)[0] : INTEGER(rsmax)[0]);
-				has_range = true;
-			}
-
-			// Create PSSM and initialize PWM scorer
-			DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rpssm);
-			pssm.set_bidirect(bidirect);
-
-			// Apply optional scan range if provided
-			if (has_range) {
-				pssm.set_range(spat_min, spat_max);
-			}
-
-			// Get score_thresh parameter (for pwm.count)
-			float score_thresh = 0.0f;
-			if (func == "pwm.count") {
-				int thresh_idx = findListElementIndex(rparams, "score.thresh");
-				SEXP rthresh = R_NilValue;
-				if (thresh_idx >= 0) {
-					rthresh = VECTOR_ELT(rparams, thresh_idx);
-				}
-				if (rthresh != R_NilValue) {
-					if (!Rf_isReal(rthresh) || Rf_length(rthresh) != 1)
-						rdb::verror("Virtual track %s: score.thresh parameter must be numeric", vtrack.c_str());
-					score_thresh = REAL(rthresh)[0];
-				}
-			}
+			// Parse PWM parameters using helper struct
+			TrackExprParams::PWMParams pwm_params = TrackExprParams::PWMParams::parse(rparams, vtrack);
 
 			// Construct scorer with shared sequence fetcher for caching
 			var.pwm_scorer = std::make_unique<PWMScorer>(
-				pssm,
+				pwm_params.pssm,
 				&m_shared_seqfetch,
-				extend,
+				pwm_params.extend,
 				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
 				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
 				func == "pwm.max.pos" ? PWMScorer::MAX_LIKELIHOOD_POS :
 				PWMScorer::MOTIF_COUNT,
-				strand,
-				spat_factor_vec,
-				spat_bin,
-				score_thresh
+				pwm_params.strand,
+				pwm_params.spat_factor,
+				pwm_params.spat_bin,
+				pwm_params.score_thresh
 			);
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
@@ -529,57 +393,12 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			var.percentile = numeric_limits<double>::quiet_NaN();
 			SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 
-			if (Rf_isNull(rparams))
-				rdb::verror("Virtual track %s: function %s requires a parameter (kmer string)", vtrack.c_str(), func.c_str());
+			// Parse KMER parameters using helper struct
+			TrackExprParams::KmerParams kmer_params = TrackExprParams::KmerParams::parse(rparams, vtrack);
 
-			// Get extension parameter if exists, default to true (similar to PWM behavior)
-			bool extend = true;
-			char strand = 0;
-			if (Rf_isNewList(rparams))
-			{
-				// Handle as list params
-				SEXP rextend = VECTOR_ELT(rparams, findListElementIndex(rparams, "extend"));
-				if (rextend != R_NilValue)
-				{
-					if (!Rf_isLogical(rextend))
-						rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
-					extend = LOGICAL(rextend)[0];
-				}
-
-				// Extract kmer string from the list parameters
-				SEXP rkmer = VECTOR_ELT(rparams, findListElementIndex(rparams, "kmer"));
-				if (rkmer == R_NilValue || !Rf_isString(rkmer) || Rf_length(rkmer) != 1)
-					rdb::verror("Virtual track %s: invalid parameter used for function %s (must be a kmer string)",
-								vtrack.c_str(), func.c_str());
-
-				const char *kmer = CHAR(STRING_ELT(rkmer, 0));
-
-				SEXP rstrand = VECTOR_ELT(rparams, findListElementIndex(rparams, "strand"));
-				if (rstrand != R_NilValue)
-				{
-					if (!Rf_isNumeric(rstrand) || Rf_length(rstrand) != 1)
-						rdb::verror("Virtual track %s: strand parameter must be -1, 0, or 1", vtrack.c_str());
-					strand = (char)REAL(rstrand)[0];
-					if (strand != -1 && strand != 0 && strand != 1)
-						rdb::verror("Virtual track %s: strand parameter must be -1, 0, or 1", vtrack.c_str());
-				}
-
-				KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
-				var.kmer_counter = std::make_unique<KmerCounter>(kmer, &m_shared_seqfetch, mode, extend, strand);
-
-			}
-			else if (Rf_isString(rparams) && Rf_length(rparams) == 1)
-			{
-				// Handle direct string parameter (backward compatibility)
-				const char *kmer = CHAR(STRING_ELT(rparams, 0));
-				KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
-				var.kmer_counter = std::make_unique<KmerCounter>(kmer, &m_shared_seqfetch, mode, extend, strand);
-			}
-			else
-			{
-				rdb::verror("Virtual track %s: invalid parameter used for function %s (must be a kmer string)",
-							vtrack.c_str(), func.c_str());
-			}
+			KmerCounter::CountMode mode = func == "kmer.count" ? KmerCounter::SUM : KmerCounter::FRACTION;
+			var.kmer_counter = std::make_unique<KmerCounter>(kmer_params.kmer.c_str(), &m_shared_seqfetch, mode,
+			                                                   kmer_params.extend, kmer_params.strand);
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
             Iterator_modifier1D imdf1d;
@@ -974,8 +793,8 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 void TrackExpressionVars::register_track_functions()
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
-		// Skip PWM variables since they don't have associated tracks
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC) {
+		// Skip sequence-based variables since they don't have associated tracks
+        if (TrackExpressionVars::is_sequence_based_function(ivar->val_func)) {
             continue;
         }
 		GenomeTrack1D *track1d = GenomeTrack::is_1d(ivar->track_n_imdf->type) ? (GenomeTrack1D *)ivar->track_n_imdf->track : NULL;
@@ -1021,16 +840,11 @@ void TrackExpressionVars::register_track_functions()
 		case Track_var::OCCUPIED_AREA:
 			track2d->register_function(GenomeTrack2D::OCCUPIED_AREA);
 			break;
-		case Track_var::PWM:
-		case Track_var::PWM_MAX:
-		case Track_var::PWM_MAX_POS:
-		case Track_var::PWM_COUNT:
-		case Track_var::KMER_COUNT:
-		case Track_var::KMER_FRAC:
-			// PWM functions work directly on sequences, no need to register track functions
-			break;
+		// Sequence-based functions work directly on sequences, no need to register track functions
 		default:
-			verror("Unrecognized virtual track function");
+			if (!TrackExpressionVars::is_sequence_based_function((Track_var::Val_func)ivar->val_func))
+				verror("Unrecognized virtual track function");
+			break;
 		}
 
 		if (ivar->track_n_imdf->type == GenomeTrack::ARRAYS) {
@@ -1049,8 +863,8 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	// First validate iterator compatibility
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
-	    // Skip iterator validation for PWM variables since they don't have tracks or imdf
-        if (itrack_var->val_func == Track_var::PWM || itrack_var->val_func == Track_var::PWM_MAX || itrack_var->val_func == Track_var::PWM_MAX_POS || itrack_var->val_func == Track_var::PWM_COUNT || itrack_var->val_func == Track_var::KMER_COUNT || itrack_var->val_func == Track_var::KMER_FRAC) {
+	    // Skip iterator validation for sequence-based variables since they don't have tracks or imdf
+        if (TrackExpressionVars::is_sequence_based_function(itrack_var->val_func)) {
             continue;
         }
 
@@ -1087,8 +901,8 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 
 	for (Track_vars::const_iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 	{
-		// Skip PWM tracks
-		if ((ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
+		// Skip sequence-based tracks
+		if (TrackExpressionVars::is_sequence_based_function(ivar->val_func))
 		{
 			continue;
 		}
@@ -1226,18 +1040,18 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 {
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 	{
-		// Skip track initialization for PWM-only tracks
-		bool is_pwm_track = false;
+		// Skip track initialization for sequence-based tracks
+		bool is_sequence_track = false;
 		for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 		{
 			if (ivar->track_n_imdf == &(*itrack_n_imdf) &&
-				(ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT || ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC))
+				TrackExpressionVars::is_sequence_based_function(ivar->val_func))
 			{
-				is_pwm_track = true;
+				is_sequence_track = true;
 				break;
 			}
 		}
-		if (is_pwm_track)
+		if (is_sequence_track)
 			continue;
 
 		try
@@ -1363,15 +1177,15 @@ void TrackExpressionVars::set_vars(unsigned idx)
 {
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 	{
-		// Skip track setup for PWM-only tracks
-		Track_vars::iterator pwm_var = m_track_vars.begin();
-		for (; pwm_var != m_track_vars.end(); ++pwm_var)
+		// Skip track setup for sequence-based tracks
+		Track_vars::iterator seq_var = m_track_vars.begin();
+		for (; seq_var != m_track_vars.end(); ++seq_var)
 		{
-			if (pwm_var->track_n_imdf == &(*itrack_n_imdf) &&
-				(pwm_var->val_func == Track_var::PWM || pwm_var->val_func == Track_var::PWM_MAX || pwm_var->val_func == Track_var::PWM_MAX_POS || pwm_var->val_func == Track_var::PWM_COUNT || pwm_var->val_func == Track_var::KMER_COUNT || pwm_var->val_func == Track_var::KMER_FRAC))
+			if (seq_var->track_n_imdf == &(*itrack_n_imdf) &&
+				TrackExpressionVars::is_sequence_based_function(seq_var->val_func))
 				break;
 		}
-		if (pwm_var != m_track_vars.end())
+		if (seq_var != m_track_vars.end())
 			continue;
 		try {
 			if (GenomeTrack::is_2d(itrack_n_imdf->type)) {
@@ -1397,9 +1211,9 @@ void TrackExpressionVars::set_vars(unsigned idx)
     vector<Track_var*> pwm_vtracks;
 
     for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX || ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT) {
+        if (TrackExpressionVars::is_pwm_function(ivar->val_func)) {
             pwm_vtracks.push_back(&*ivar);
-        } else if (ivar->val_func == Track_var::KMER_COUNT || ivar->val_func == Track_var::KMER_FRAC) {
+        } else if (TrackExpressionVars::is_kmer_function(ivar->val_func)) {
             kmer_vtracks.push_back(&*ivar);
         }
     }
@@ -1528,9 +1342,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
     // Process regular track vtracks
     for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
         // Skip sequence-based vtracks (already processed above)
-        if (ivar->val_func == Track_var::PWM || ivar->val_func == Track_var::PWM_MAX ||
-            ivar->val_func == Track_var::PWM_MAX_POS || ivar->val_func == Track_var::PWM_COUNT || ivar->val_func == Track_var::KMER_COUNT ||
-            ivar->val_func == Track_var::KMER_FRAC) {
+        if (TrackExpressionVars::is_sequence_based_function(ivar->val_func)) {
             continue;
         }
 
@@ -1561,172 +1373,41 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				// If filter exists and resulted in multiple unmasked parts, aggregate across them
 				// If only one part (or filter but no filtering needed), use normal path below
 				if (has_filter && unmasked_parts.size() > 1) {
-					// Aggregate over unmasked parts
+					// Aggregate over unmasked parts using helper methods
 					double result = std::numeric_limits<double>::quiet_NaN();
 
 					switch (ivar->val_func) {
 					case Track_var::REG:
 					case Track_var::PV:
-					case Track_var::STDDEV: {
-						// Weighted average or stddev - need to aggregate with proper weighting
-						long double total_weight = 0;
-						long double total_weighted_sum = 0;
-						long double M2 = 0;  // For stddev
-
-						for (const auto& part : unmasked_parts) {
-							track.read_interval(part);
-							if (ivar->val_func == Track_var::STDDEV) {
-								// For stddev, we need variance aggregation
-								double part_avg = track.last_avg();
-								double part_stddev = track.last_stddev();
-								double part_len = part.end - part.start;
-
-								if (!std::isnan(part_avg) && !std::isnan(part_stddev)) {
-									// Welford online algorithm for combining variances
-									double delta = part_avg - (total_weight > 0 ? total_weighted_sum / total_weight : 0);
-									total_weight += part_len;
-									total_weighted_sum += part_avg * part_len;
-									M2 += part_stddev * part_stddev * part_len + part_len * total_weight / (total_weight + part_len) * delta * delta;
-								}
-							} else {
-								// For avg
-								double part_avg = track.last_avg();
-								if (!std::isnan(part_avg)) {
-									double part_len = part.end - part.start;
-									total_weighted_sum += part_avg * part_len;
-									total_weight += part_len;
-								}
-							}
-						}
-
-						if (total_weight > 0) {
-							if (ivar->val_func == Track_var::STDDEV) {
-								result = std::sqrt(M2 / total_weight);
-							} else {
-								result = total_weighted_sum / total_weight;
-							}
-						}
+						result = aggregate_avg_with_filter(track, unmasked_parts);
 						break;
-					}
-					case Track_var::SUM: {
-						// Sum across all parts
-						double total_sum = 0;
-						bool has_value = false;
-
-						for (const auto& part : unmasked_parts) {
-							track.read_interval(part);
-							double part_sum = track.last_sum();
-							if (!std::isnan(part_sum)) {
-								total_sum += part_sum;
-								has_value = true;
-							}
-						}
-
-						if (has_value) {
-							result = total_sum;
-						}
+					case Track_var::STDDEV:
+						result = aggregate_stddev_with_filter(track, unmasked_parts);
 						break;
-					}
+					case Track_var::SUM:
+						result = aggregate_sum_with_filter(track, unmasked_parts);
+						break;
 					case Track_var::REG_MIN:
-					case Track_var::PV_MIN: {
-						// Min across all parts
-						double min_val = std::numeric_limits<double>::infinity();
-
-						for (const auto& part : unmasked_parts) {
-							track.read_interval(part);
-							double part_min = track.last_min();
-							if (!std::isnan(part_min)) {
-								min_val = std::min(min_val, part_min);
-							}
-						}
-
-						if (min_val != std::numeric_limits<double>::infinity()) {
-							result = min_val;
-						}
+					case Track_var::PV_MIN:
+						result = aggregate_min_with_filter(track, unmasked_parts);
 						break;
-					}
 					case Track_var::REG_MAX:
-					case Track_var::PV_MAX: {
-						// Max across all parts
-						double max_val = -std::numeric_limits<double>::infinity();
-
-						for (const auto& part : unmasked_parts) {
-							track.read_interval(part);
-							double part_max = track.last_max();
-							if (!std::isnan(part_max)) {
-								max_val = std::max(max_val, part_max);
-							}
-						}
-
-						if (max_val != -std::numeric_limits<double>::infinity()) {
-							result = max_val;
-						}
+					case Track_var::PV_MAX:
+						result = aggregate_max_with_filter(track, unmasked_parts);
 						break;
-					}
-					case Track_var::REG_NEAREST: {
+					case Track_var::REG_NEAREST:
 						// For nearest, use the first unmasked part (closest to start)
 						track.read_interval(unmasked_parts[0]);
 						result = track.last_nearest();
 						break;
-					}
-					case Track_var::QUANTILE: {
-						// For quantile across multiple parts, we need to:
-						// 1. Collect all samples from all unmasked parts
-						// 2. Compute weighted quantile from combined samples
-
-						// We'll use the same approach as the track does internally:
-						// Create a temporary StreamPercentiler and add all samples
-						StreamPercentiler<float> combined_sp;
-						combined_sp.init(m_iu.get_max_data_size(),
-						                 m_iu.get_quantile_edge_data_size(),
-						                 m_iu.get_quantile_edge_data_size());
-
-						// Read each part and collect its samples
-						for (const auto& part : unmasked_parts) {
-							track.read_interval(part);
-
-							// Access the StreamPercentiler from the track
-							// We need to get the samples, lowest_vals, and highest_vals
-							const auto& sp = track.get_percentiler();
-							const auto& samples = sp.samples();
-							const auto& lowest = sp.lowest_vals();
-							const auto& highest = sp.highest_vals();
-
-						// Add all values to our combined percentiler using R RNG
-						for (const auto& val : lowest) {
-							if (!std::isnan(val)) {
-								combined_sp.add(val, unif_rand);
-							}
-						}
-						for (const auto& val : samples) {
-							if (!std::isnan(val)) {
-								combined_sp.add(val, unif_rand);
-							}
-						}
-						for (const auto& val : highest) {
-							if (!std::isnan(val)) {
-								combined_sp.add(val, unif_rand);
-							}
-						}
-						}
-
-						// Compute quantile from combined samples
-						if (combined_sp.stream_size() > 0) {
-							bool is_estimated;
-							result = combined_sp.get_percentile(ivar->percentile, is_estimated);
-						}
+					case Track_var::QUANTILE:
+						result = aggregate_quantile_with_filter(track, unmasked_parts, ivar->percentile);
 						break;
-					}
-					case Track_var::PWM_MAX:
-					case Track_var::PWM_MAX_POS:
-					case Track_var::PWM:
-					case Track_var::PWM_COUNT:
-					case Track_var::KMER_COUNT:
-					case Track_var::KMER_FRAC:
-						// Sequence-based - already handled above
-						break;
+					// Sequence-based functions are already handled above
 					default:
-						verror("Internal error: unsupported function %d", ivar->val_func);
+						if (!TrackExpressionVars::is_sequence_based_function(ivar->val_func))
+							verror("Internal error: unsupported function %d", ivar->val_func);
+						break;
 					}
 
 					ivar->var[idx] = result;
@@ -1757,15 +1438,11 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				case Track_var::QUANTILE:
 					ivar->var[idx] = track.last_quantile(ivar->percentile);
 					break;
-				case Track_var::PWM_MAX:
-				case Track_var::PWM_MAX_POS:
-				case Track_var::PWM:
-				case Track_var::PWM_COUNT:
-				case Track_var::KMER_COUNT:
-				case Track_var::KMER_FRAC:
-					break;
+				// Sequence-based functions are already handled above
 				default:
-					verror("Internal error: unsupported function %d", ivar->val_func);
+					if (!TrackExpressionVars::is_sequence_based_function(ivar->val_func))
+						verror("Internal error: unsupported function %d", ivar->val_func);
+					break;
 				}
 
 					if (ivar->requires_pv) {
@@ -2124,4 +1801,136 @@ void TrackExpressionVars::batch_process_sequence_vtracks(vector<Track_var*> &kme
 		const GInterval &seq_interval = var->seq_imdf1d ? var->seq_imdf1d->interval : interval;
 		var->var[idx] = var->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
 	}
+}
+
+// Filter aggregation helper methods
+double TrackExpressionVars::aggregate_avg_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	long double total_weight = 0;
+	long double total_weighted_sum = 0;
+
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		double part_avg = track.last_avg();
+		if (!std::isnan(part_avg)) {
+			double part_len = part.end - part.start;
+			total_weighted_sum += part_avg * part_len;
+			total_weight += part_len;
+		}
+	}
+
+	return (total_weight > 0) ? (total_weighted_sum / total_weight) : numeric_limits<double>::quiet_NaN();
+}
+
+double TrackExpressionVars::aggregate_sum_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	double total_sum = 0;
+	bool has_value = false;
+
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		double part_sum = track.last_sum();
+		if (!std::isnan(part_sum)) {
+			total_sum += part_sum;
+			has_value = true;
+		}
+	}
+
+	return has_value ? total_sum : numeric_limits<double>::quiet_NaN();
+}
+
+double TrackExpressionVars::aggregate_min_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	double min_val = numeric_limits<double>::infinity();
+
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		double part_min = track.last_min();
+		if (!std::isnan(part_min)) {
+			min_val = std::min(min_val, part_min);
+		}
+	}
+
+	return (min_val != numeric_limits<double>::infinity()) ? min_val : numeric_limits<double>::quiet_NaN();
+}
+
+double TrackExpressionVars::aggregate_max_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	double max_val = -numeric_limits<double>::infinity();
+
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		double part_max = track.last_max();
+		if (!std::isnan(part_max)) {
+			max_val = std::max(max_val, part_max);
+		}
+	}
+
+	return (max_val != -numeric_limits<double>::infinity()) ? max_val : numeric_limits<double>::quiet_NaN();
+}
+
+double TrackExpressionVars::aggregate_stddev_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	long double total_weight = 0;
+	long double total_weighted_sum = 0;
+	long double M2 = 0;  // For variance calculation
+
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		double part_avg = track.last_avg();
+		double part_stddev = track.last_stddev();
+		double part_len = part.end - part.start;
+
+		if (!std::isnan(part_avg) && !std::isnan(part_stddev)) {
+			// Welford online algorithm for combining variances
+			double delta = part_avg - (total_weight > 0 ? total_weighted_sum / total_weight : 0);
+			total_weight += part_len;
+			total_weighted_sum += part_avg * part_len;
+			M2 += part_stddev * part_stddev * part_len + part_len * total_weight / (total_weight + part_len) * delta * delta;
+		}
+	}
+
+	return (total_weight > 0) ? std::sqrt(M2 / total_weight) : numeric_limits<double>::quiet_NaN();
+}
+
+double TrackExpressionVars::aggregate_quantile_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double percentile)
+{
+	// Create a combined percentiler and add all samples from all parts
+	StreamPercentiler<float> combined_sp;
+	combined_sp.init(m_iu.get_max_data_size(),
+	                 m_iu.get_quantile_edge_data_size(),
+	                 m_iu.get_quantile_edge_data_size());
+
+	for (const auto& part : parts) {
+		track.read_interval(part);
+
+		const auto& sp = track.get_percentiler();
+		const auto& samples = sp.samples();
+		const auto& lowest = sp.lowest_vals();
+		const auto& highest = sp.highest_vals();
+
+		// Add all values to combined percentiler
+		for (const auto& val : lowest) {
+			if (!std::isnan(val)) {
+				combined_sp.add(val, unif_rand);
+			}
+		}
+		for (const auto& val : samples) {
+			if (!std::isnan(val)) {
+				combined_sp.add(val, unif_rand);
+			}
+		}
+		for (const auto& val : highest) {
+			if (!std::isnan(val)) {
+				combined_sp.add(val, unif_rand);
+			}
+		}
+	}
+
+	if (combined_sp.stream_size() > 0) {
+		bool is_estimated;
+		return combined_sp.get_percentile(percentile, is_estimated);
+	}
+
+	return numeric_limits<double>::quiet_NaN();
 }
