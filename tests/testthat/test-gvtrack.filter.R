@@ -1023,8 +1023,9 @@ test_that("gvtrack.filter does not leak state to unfiltered vtracks sharing same
     )
 
     # Verify that the filtered vtrack actually does something different
-    expect_true(any(is.na(result_with_filtered$filtered_vtrack) |
-        result_with_filtered$filtered_vtrack != result_with_filtered$unfiltered_vtrack),
+    expect_true(
+        any(is.na(result_with_filtered$filtered_vtrack) |
+            result_with_filtered$filtered_vtrack != result_with_filtered$unfiltered_vtrack),
         label = "Filtered vtrack should produce different results than unfiltered"
     )
 
