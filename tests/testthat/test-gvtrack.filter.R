@@ -982,3 +982,53 @@ test_that("gvtrack.filter kmer.count respects filter with single-interval iterat
     gvtrack.rm("test_kmer_filter_single")
     gvtrack.rm("test_kmer_no_filter")
 })
+
+test_that("gvtrack.filter does not leak state to unfiltered vtracks sharing same source", {
+    # Regression test for bug where filtered vtracks corrupted unfiltered vtracks
+    # sharing the same Track_n_imdf (same source + iterator modifiers).
+    # The bug: aggregate_*_with_filter() functions call track.read_interval() which
+    # modifies shared track state, causing subsequent unfiltered vtracks to return
+    # wrong values.
+
+    # Create intervals for filtering
+    mask <- gintervals(c(1, 1), c(1500, 3500), c(2500, 4500))
+
+    # Create filtered vtrack with iterator modifier
+    gvtrack.create("filtered_vtrack", "test.fixedbin", func = "sum")
+    gvtrack.iterator("filtered_vtrack", sshift = -100, eshift = 100)
+    gvtrack.filter("filtered_vtrack", mask)
+
+    # Create unfiltered vtrack with SAME source and iterator modifier
+    # (this causes them to share the same Track_n_imdf)
+    gvtrack.create("unfiltered_vtrack", "test.fixedbin", func = "sum")
+    gvtrack.iterator("unfiltered_vtrack", sshift = -100, eshift = 100)
+
+    # Extract intervals
+    query <- gintervals(c(1, 1, 1), c(1000, 2000, 4000), c(1200, 2200, 4200))
+
+    # Extract both vtracks together (this would trigger the bug)
+    result_with_filtered <- gextract(c("filtered_vtrack", "unfiltered_vtrack"),
+        intervals = query,
+        iterator = query
+    )
+
+    # Extract only the unfiltered vtrack (baseline)
+    result_alone <- gextract("unfiltered_vtrack", intervals = query, iterator = query)
+
+    # The unfiltered vtrack should return IDENTICAL values in both cases
+    # Before the fix, result_with_filtered$unfiltered_vtrack would be corrupted
+    # by the filtered vtrack's read_interval() calls
+    expect_equal(result_with_filtered$unfiltered_vtrack, result_alone$unfiltered_vtrack,
+        label = "Unfiltered vtrack values should not be affected by filtered vtrack sharing same source"
+    )
+
+    # Verify that the filtered vtrack actually does something different
+    expect_true(any(is.na(result_with_filtered$filtered_vtrack) |
+        result_with_filtered$filtered_vtrack != result_with_filtered$unfiltered_vtrack),
+        label = "Filtered vtrack should produce different results than unfiltered"
+    )
+
+    # Clean up
+    gvtrack.rm("filtered_vtrack")
+    gvtrack.rm("unfiltered_vtrack")
+})

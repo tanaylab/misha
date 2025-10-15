@@ -1411,6 +1411,53 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					}
 
 					ivar->var[idx] = result;
+
+					// Restore track state after filter processing
+					// The aggregate functions call track.read_interval() which modifies the shared track state.
+					// Other vtracks sharing this Track_n_imdf need the original interval restored.
+					const GInterval &orig_interval = ivar->track_n_imdf->imdf1d ?
+						ivar->track_n_imdf->imdf1d->interval : m_interval1d;
+					track.read_interval(orig_interval);
+				} else if (has_filter && unmasked_parts.size() == 1) {
+					// Single unmasked part - read just that part
+					track.read_interval(unmasked_parts[0]);
+
+					switch (ivar->val_func) {
+					case Track_var::REG:
+					case Track_var::PV:
+						ivar->var[idx] = track.last_avg();
+						break;
+					case Track_var::REG_MIN:
+					case Track_var::PV_MIN:
+						ivar->var[idx] = track.last_min();
+						break;
+					case Track_var::REG_MAX:
+					case Track_var::PV_MAX:
+						ivar->var[idx] = track.last_max();
+						break;
+					case Track_var::REG_NEAREST:
+						ivar->var[idx] = track.last_nearest();
+						break;
+					case Track_var::STDDEV:
+						ivar->var[idx] = track.last_stddev();
+						break;
+					case Track_var::SUM:
+						ivar->var[idx] = track.last_sum();
+						break;
+					case Track_var::QUANTILE:
+						ivar->var[idx] = track.last_quantile(ivar->percentile);
+						break;
+					// Sequence-based functions are already handled above
+					default:
+						if (!TrackExpressionVars::is_sequence_based_function(ivar->val_func))
+							verror("Internal error: unsupported function %d", ivar->val_func);
+						break;
+					}
+
+					// Restore track state after processing single filtered part
+					const GInterval &orig_interval = ivar->track_n_imdf->imdf1d ?
+						ivar->track_n_imdf->imdf1d->interval : m_interval1d;
+					track.read_interval(orig_interval);
 				} else {
 					// No filter or single unmasked part - use normal path
 					switch (ivar->val_func) {
