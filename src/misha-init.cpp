@@ -77,6 +77,8 @@ extern "C" {
     extern SEXP gtracksummary_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gwilcox(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_revcomp(SEXP);
+    extern SEXP C_gseq_pwm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -150,6 +152,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtracksummary_multitask", (DL_FUNC)&gtracksummary_multitask, 5},
     {"C_gwilcox", (DL_FUNC)&C_gwilcox, 10},
     {"C_revcomp", (DL_FUNC)&C_revcomp, 1},
+    {"C_gseq_pwm", (DL_FUNC)&C_gseq_pwm, 11},
+    {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 7},
     {NULL, NULL, 0}
 };
 
