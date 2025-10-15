@@ -143,8 +143,6 @@
 }
 
 
-
-
 #' Returns values from 'Array' track
 #'
 #' Returns values from 'Array' track.
@@ -245,7 +243,6 @@ gtrack.array.extract <- function(track = NULL, slice = NULL, intervals = NULL, f
 }
 
 
-
 #' Returns column names of array track
 #'
 #' Returns column names of array track.
@@ -274,7 +271,6 @@ gtrack.array.get_colnames <- function(track = NULL) {
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     names(.gtrack.array.get_colnames(trackstr))
 }
-
 
 
 #' Creates an array track from array tracks or files
@@ -392,7 +388,6 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     )
     retv <- 0 # suppress return value
 }
-
 
 
 #' Sets column names of array track

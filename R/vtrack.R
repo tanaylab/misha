@@ -89,7 +89,6 @@
 }
 
 
-
 #' Creates a new virtual track
 #'
 #' Creates a new virtual track.
@@ -601,7 +600,6 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 }
 
 
-
 #' Returns the definition of a virtual track
 #'
 #' Returns the definition of a virtual track.
@@ -649,7 +647,6 @@ gvtrack.info <- function(vtrack = NULL) {
 
     info
 }
-
 
 
 #' Defines modification rules for a one-dimensional iterator in a virtual track
@@ -715,7 +712,6 @@ gvtrack.iterator <- function(vtrack = NULL, dim = NULL, sshift = 0, eshift = 0) 
 }
 
 
-
 #' Defines modification rules for a two-dimensional iterator in a virtual track
 #'
 #' Defines modification rules for a two-dimensional iterator in a virtual
@@ -769,7 +765,6 @@ gvtrack.iterator.2d <- function(vtrack = NULL, sshift1 = 0, eshift1 = 0, sshift2
     .gvtrack.set(vtrackstr, var)
     retv <- NULL
 }
-
 
 
 #' Returns a list of virtual track names
@@ -834,7 +829,6 @@ gvtrack.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = 
 }
 
 
-
 #' Deletes a virtual track
 #'
 #' Deletes a virtual track.
@@ -868,7 +862,6 @@ gvtrack.rm <- function(vtrack = NULL) {
     .gvtrack.set(vtrackstr, NULL)
     retv <- NULL
 }
-
 
 
 #' Defines rules for a single value calculation of a virtual 'Array' track
@@ -945,7 +938,6 @@ gvtrack.array.slice <- function(vtrack = NULL, slice = NULL, func = "avg", param
 
     retv <- NULL
 }
-
 
 
 #' Attach or clear a genomic mask filter on a virtual track

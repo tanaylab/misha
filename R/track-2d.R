@@ -35,8 +35,6 @@
 }
 
 
-
-
 #' Creates a 'Rectangles' track from intervals and values
 #'
 #' Creates a 'Rectangles' track from intervals and values.
@@ -117,7 +115,6 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     )
     retv <- 0 # suppress return value
 }
-
 
 
 #' Creates a 2D track from tab-delimited file
@@ -203,7 +200,6 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
     )
     retv <- 0 # suppress return value
 }
-
 
 
 #' Creates a track from a file of inter-genomic contacts

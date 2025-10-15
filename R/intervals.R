@@ -699,7 +699,6 @@
 }
 
 
-
 #' Creates a set of 1D intervals
 #'
 #' Creates a set of 1D intervals.
@@ -750,7 +749,6 @@ gintervals <- function(chroms = NULL, starts = 0, ends = -1, strands = NULL) {
     intervals <- .gintervals(chroms, starts, ends, strands)
     .gcall("gintervsort", intervals, .misha_env())
 }
-
 
 
 #' Creates a set of 2D intervals
@@ -818,7 +816,6 @@ gintervals.2d <- function(chroms1 = NULL, starts1 = 0, ends1 = -1, chroms2 = NUL
 }
 
 
-
 #' Returns 2D intervals that cover the whole genome
 #'
 #' Returns 2D intervals that cover the whole genome.
@@ -836,7 +833,6 @@ gintervals.2d.all <- function() {
 }
 
 
-
 #' Returns 1D intervals that cover the whole genome
 #'
 #' Returns 1D intervals that cover the whole genome.
@@ -852,7 +848,6 @@ gintervals.all <- function() {
     .gcheckroot()
     get("ALLGENOME", envir = .misha)[[1]]
 }
-
 
 
 #' Intersects two-dimensional intervals with a band
@@ -925,7 +920,6 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
         res
     }
 }
-
 
 
 #' Converts intervals to canonic form
@@ -1020,7 +1014,6 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
 }
 
 
-
 #' Calculates difference of two intervals sets
 #'
 #' Returns difference of two sets of intervals.
@@ -1100,7 +1093,6 @@ gintervals.diff <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.
 }
 
 
-
 #' Tests for a named intervals set existence
 #'
 #' Tests for a named intervals set existence.
@@ -1132,7 +1124,6 @@ gintervals.exists <- function(intervals.set = NULL) {
     intervals.set <- do.call(.gexpr2str, list(substitute(intervals.set)), envir = parent.frame())
     !is.na(match(intervals.set, get("GINTERVS", envir = .misha)))
 }
-
 
 
 #' Limits intervals to chromosomal range
@@ -1408,7 +1399,6 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
 }
 
 
-
 #' Calculates an intersection of two sets of intervals
 #'
 #' Calculates an intersection of two sets of intervals.
@@ -1493,7 +1483,6 @@ gintervals.intersect <- function(intervals1 = NULL, intervals2 = NULL, intervals
 }
 
 
-
 #' Returns number of intervals per chromosome
 #'
 #' Returns number of intervals per chromosome (or chromosome pair).
@@ -1544,7 +1533,6 @@ gintervals.chrom_sizes <- function(intervals = NULL) {
 }
 
 
-
 #' Tests for big intervals set
 #'
 #' Tests for big intervals set.
@@ -1578,7 +1566,6 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 
     .gintervals.is_bigset(intervals.set) && !.gintervals.loadable(intervals.set)
 }
-
 
 
 #' Converts intervals from another assembly
@@ -1633,7 +1620,6 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL) {
 }
 
 
-
 #' Loads a named intervals set
 #'
 #' Loads a named intervals set.
@@ -1673,7 +1659,6 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 }
 
 
-
 #' Loads assembly conversion table from a chain file
 #'
 #' Loads assembly conversion table from a chain file.
@@ -1707,7 +1692,6 @@ gintervals.load_chain <- function(file = NULL) {
 }
 
 
-
 #' Returns a list of named intervals sets
 #'
 #' Returns a list of named intervals sets in Genomic Database.
@@ -1737,7 +1721,6 @@ gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed
     .gcheckroot()
     grep(pattern, get("GINTERVS", envir = .misha), value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
 }
-
 
 
 #' Applies a function to values of track expressions
@@ -2202,7 +2185,6 @@ gintervals.annotate <- function(intervals,
 }
 
 
-
 #' Calculates quantiles of a track expression for intervals
 #'
 #' Calculates quantiles of a track expression for intervals.
@@ -2285,7 +2267,6 @@ gintervals.quantiles <- function(expr = NULL, percentiles = 0.5, intervals = NUL
         retv <- 0 # suppress return value
     }
 }
-
 
 
 #' Combines several sets of intervals
@@ -2392,7 +2373,6 @@ gintervals.rbind <- function(..., intervals.set.out = NULL) {
 }
 
 
-
 #' Deletes a named intervals set
 #'
 #' Deletes a named intervals set.
@@ -2463,7 +2443,6 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
 }
 
 
-
 #' Creates a named intervals set
 #'
 #' Saves intervals to a named intervals set.
@@ -2503,7 +2482,6 @@ gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
     })
     retv <- NULL
 }
-
 
 
 #' Updates a named intervals set
@@ -2706,7 +2684,6 @@ gintervals.update <- function(intervals.set = NULL, intervals = "", chrom = NULL
 }
 
 
-
 #' Calculates summary statistics of track expression for intervals
 #'
 #' Calculates summary statistics of track expression for intervals.
@@ -2784,7 +2761,6 @@ gintervals.summary <- function(expr = NULL, intervals = NULL, iterator = NULL, b
         res
     }
 }
-
 
 
 #' Calculates a union of two sets of intervals
@@ -2876,8 +2852,6 @@ gintervals.union <- function(intervals1 = NULL, intervals2 = NULL, intervals.set
         res
     }
 }
-
-
 
 
 #' Creates a cartesian-grid iterator
@@ -2981,7 +2955,6 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
     .gcall("gcheck_iterator", r, .misha_env())
     r
 }
-
 
 
 #' Returns iterator intervals
