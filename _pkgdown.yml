@@ -103,6 +103,7 @@ reference:
       - gsummary
   - title: Sequence functions 
     desc: Sequence functions 
+    contents:
       - gseq.extract 
       - gseq.pwm 
       - gseq.kmer 
