@@ -1,6 +1,10 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Random.h>
+
+// Undefine R macros that conflict with C++ standard library
+#undef length
+
 #include "GenomeUtils.h"
 #include "GIntervals.h"
 #include "GInterval.h"
@@ -194,7 +198,6 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
 
                 // Expand filter by size to ensure no overlap
                 filt_start = std::max((int64_t)0, filt_start - size + 1);
-                filt_end = filt_end;
 
                 filter_by_chrom[chromid].push_back(GInterval(chromid, filt_start, filt_end, 0));
             }
