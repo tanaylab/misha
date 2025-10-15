@@ -472,23 +472,77 @@ get_bigWigToWig_bin <- function() {
 }
 
 .gtrack_read_bed <- function(file) {
-    bed <- utils::read.table(
-        file,
-        header = FALSE, sep = "", quote = "", comment.char = "",
-        fill = TRUE, stringsAsFactors = FALSE, colClasses = "character"
-    )
+    # Try to use data.table::fread if available, with fallback to read.table
+    # Pre-filter header lines with grep (if available) before reading
+    bed <- NULL
 
-    if (nrow(bed) == 0 || ncol(bed) < 3) {
-        stop(sprintf("BED file %s appears to be empty or malformed", file), call. = FALSE)
+    # Try data.table::fread (fastest option)
+    if (requireNamespace("data.table", quietly = TRUE)) {
+        tryCatch(
+            {
+                # Check if grep is available for pre-filtering
+                can_grep <- nzchar(Sys.which("grep"))
+                if (can_grep) {
+                    # Use grep to filter out header lines BEFORE reading
+                    cmd <- sprintf("grep -vE '^(track|browser|#|$)' %s", shQuote(file))
+                    bed <- data.table::fread(
+                        cmd = cmd,
+                        header = FALSE, sep = "\t", quote = "",
+                        fill = TRUE, stringsAsFactors = FALSE,
+                        data.table = FALSE, showProgress = FALSE
+                    )
+                } else {
+                    # No grep: read then filter in R
+                    bed <- data.table::fread(
+                        file,
+                        header = FALSE, sep = "\t", quote = "",
+                        fill = TRUE, stringsAsFactors = FALSE,
+                        data.table = FALSE, showProgress = FALSE
+                    )
+                    # Filter header lines in R if we got data
+                    if (!is.null(bed) && nrow(bed) > 0) {
+                        v1 <- trimws(bed[[1]])
+                        keep <- !(startsWith(v1, "track") | startsWith(v1, "browser") |
+                            startsWith(v1, "#") | v1 == "")
+                        bed <- bed[keep, , drop = FALSE]
+                    }
+                }
+
+                # Validate: ensure we got reasonable data
+                if (is.null(bed) || nrow(bed) == 0 || ncol(bed) < 3) {
+                    bed <- NULL
+                }
+            },
+            error = function(e) {
+                bed <<- NULL
+            }
+        )
     }
 
-    keep_rows <- rep(TRUE, nrow(bed))
-    v1 <- trimws(bed[[1]])
-    keep_rows[startsWith(v1, "track") | startsWith(v1, "browser") | startsWith(v1, "#")] <- FALSE
-    bed <- bed[keep_rows, , drop = FALSE]
+    # Fall back to utils::read.table if fread failed
+    if (is.null(bed)) {
+        bed <- utils::read.table(
+            file,
+            header = FALSE, sep = "", quote = "", comment.char = "",
+            fill = TRUE, stringsAsFactors = FALSE, colClasses = "character"
+        )
 
-    if (!nrow(bed)) {
-        stop(sprintf("BED file %s contains no intervals", file), call. = FALSE)
+        # Filter header lines
+        if (nrow(bed) > 0) {
+            v1 <- trimws(bed[[1]])
+            keep <- !(startsWith(v1, "track") | startsWith(v1, "browser") |
+                startsWith(v1, "#") | v1 == "")
+            bed <- bed[keep, , drop = FALSE]
+        }
+    }
+
+    # Validate the final result
+    if (is.null(bed) || nrow(bed) == 0) {
+        stop(sprintf("BED file %s appears to be empty or contains no data intervals", file), call. = FALSE)
+    }
+
+    if (ncol(bed) < 3) {
+        stop(sprintf("BED file %s appears to be malformed (less than 3 columns)", file), call. = FALSE)
     }
 
     chrom <- as.character(bed[[1]])
