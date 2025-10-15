@@ -1,3 +1,7 @@
+# misha 5.1.0
+
+* Added `gseq.pwm` and `gseq.kmer` functions that compute pwm and kmer scores on sequences without the need for a genome database.
+
 # misha 5.0.0
 
 * Added `gvtrack.filters`: per vtrack genomic masks.
