@@ -3214,3 +3214,142 @@ grandom_genome <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL, fi
 
     return(result)
 }
+
+
+#' Calculate total base pairs covered by intervals
+#'
+#' Returns the total number of base pairs covered by a set of intervals.
+#'
+#' This function first canonicalizes the intervals to remove overlaps and
+#' touching intervals, then sums up the lengths of all resulting intervals.
+#' Overlapping intervals are counted only once.
+#'
+#' @param intervals set of one-dimensional intervals
+#' @return A single numeric value representing the total number of base pairs
+#' covered by the intervals.
+#' @seealso \code{\link{gintervals}}, \code{\link{gintervals.canonic}},
+#' \code{\link{gintervals.coverage_fraction}}
+#' @keywords ~coverage ~genomics
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#'
+#' # Create some intervals
+#' intervs <- gintervals(
+#'     c("chr1", "chr1", "chr2"),
+#'     c(100, 150, 1000),
+#'     c(200, 250, 2000)
+#' )
+#'
+#' # Calculate total bp covered
+#' # Note: intervals [100,200) and [150,250) overlap,
+#' # so total is (200-100) + (250-150) + (2000-1000) = 100 + 100 + 1000 = 1200
+#' # But after canonicalization: [100,250) + [1000,2000) = 150 + 1000 = 1150
+#' gintervals.covered_bp(intervs)
+#'
+#' @export gintervals.covered_bp
+gintervals.covered_bp <- function(intervals = NULL) {
+    if (is.null(intervals)) {
+        stop("Usage: gintervals.covered_bp(intervals)", call. = FALSE)
+    }
+
+    # Handle empty intervals before rescue_ALLGENOME
+    if (is.data.frame(intervals) && nrow(intervals) == 0) {
+        return(0)
+    }
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
+    # Canonicalize to remove overlaps
+    canonical <- gintervals.canonic(intervals, unify_touching_intervals = TRUE)
+
+    if (is.null(canonical) || nrow(canonical) == 0) {
+        return(0)
+    }
+
+    # Sum up the lengths
+    sum(canonical$end - canonical$start)
+}
+
+
+#' Calculate fraction of genomic space covered by intervals
+#'
+#' Returns the fraction of a genomic space that is covered by a set of intervals.
+#'
+#' This function calculates what fraction of 'intervals2' is covered by
+#' 'intervals1'. If 'intervals2' is NULL, it calculates the fraction of the
+#' entire genome that is covered by 'intervals1'. Overlapping intervals in
+#' either set are automatically unified before calculation.
+#'
+#' @param intervals1 set of one-dimensional intervals (the covering set)
+#' @param intervals2 set of one-dimensional intervals to be covered (default:
+#' NULL, meaning the entire genome)
+#' @return A single numeric value between 0 and 1 representing the fraction of
+#' 'intervals2' (or the genome) covered by 'intervals1'.
+#' @seealso \code{\link{gintervals}}, \code{\link{gintervals.intersect}},
+#' \code{\link{gintervals.covered_bp}}, \code{\link{gintervals.all}}
+#' @keywords ~coverage ~genomics
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#'
+#' # Create some intervals
+#' intervs1 <- gscreen("dense_track > 0.15")
+#' intervs2 <- gintervals(c("chr1", "chr2"), 0, c(100000, 100000))
+#'
+#' # Calculate fraction of intervs2 covered by intervs1
+#' gintervals.coverage_fraction(intervs1, intervs2)
+#'
+#' # Calculate fraction of entire genome covered by intervs1
+#' gintervals.coverage_fraction(intervs1)
+#'
+#' @export gintervals.coverage_fraction
+gintervals.coverage_fraction <- function(intervals1 = NULL, intervals2 = NULL) {
+    if (is.null(intervals1)) {
+        stop("Usage: gintervals.coverage_fraction(intervals1, intervals2 = NULL)", call. = FALSE)
+    }
+
+    # Handle empty intervals1 before rescue_ALLGENOME
+    if (is.data.frame(intervals1) && nrow(intervals1) == 0) {
+        return(0)
+    }
+
+    intervals1 <- rescue_ALLGENOME(intervals1, as.character(substitute(intervals1)))
+
+    # If intervals2 is NULL, use entire genome
+    if (is.null(intervals2)) {
+        intervals2 <- gintervals.all()
+    } else {
+        # Handle empty intervals2 before rescue_ALLGENOME
+        if (is.data.frame(intervals2) && nrow(intervals2) == 0) {
+            return(0)
+        }
+        intervals2 <- rescue_ALLGENOME(intervals2, as.character(substitute(intervals2)))
+    }
+
+    # Calculate total bp in intervals2
+    total_bp <- gintervals.covered_bp(intervals2)
+
+    if (total_bp == 0) {
+        return(0)
+    }
+
+    # Calculate intersection
+    intersection <- gintervals.intersect(intervals1, intervals2)
+
+    if (is.null(intersection) || nrow(intersection) == 0) {
+        return(0)
+    }
+
+    # Calculate covered bp in intersection
+    covered_bp <- gintervals.covered_bp(intersection)
+
+    # Return fraction
+    covered_bp / total_bp
+}
