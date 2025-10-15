@@ -349,7 +349,6 @@ test_that("misha PWM exactly matches prego on genome sequences - no spatial, no 
     withr::defer(remove_all_vtracks())
 
 
-
     # Create test intervals
     test_intervals <- gintervals(1, 10000, 10100)
     test_intervals <- rbind(test_intervals, gintervals(1, 20000, 20100))
@@ -400,7 +399,6 @@ test_that("misha PWM exactly matches prego on genome sequences - with spatial, n
 
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
-
 
 
     # Create test intervals
@@ -461,7 +459,6 @@ test_that("misha PWM max mode exactly matches prego on genome sequences", {
 
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
-
 
 
     # Create test intervals
