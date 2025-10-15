@@ -12,5 +12,7 @@ static struct Complementary_basepair_initializer {
 inline char basepair2complementary(char c) { return s_complementary_basepair[(int)c]; }
 
 std::string seq2reverse_complementary(const std::string &seq);
+std::string seq2reverse(const std::string &seq);
+std::string seq2complementary(const std::string &seq);
 
 #endif

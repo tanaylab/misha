@@ -11,7 +11,9 @@ gseq.kmer(
   strand = 0L,
   start_pos = NULL,
   end_pos = NULL,
-  extend = FALSE
+  extend = FALSE,
+  skip_gaps = FALSE,
+  gap_chars = c("-", ".")
 )
 }
 \arguments{
@@ -28,6 +30,11 @@ gseq.kmer(
 \item{end_pos}{integer or NULL; 1-based inclusive end of ROI (default: sequence length)}
 
 \item{extend}{logical or integer; extension of allowed window starts (default: FALSE)}
+
+\item{skip_gaps}{logical; if TRUE, treat gap characters as holes and skip them while
+scanning. Windows are k consecutive non-gap bases (default: FALSE)}
+
+\item{gap_chars}{character vector; which characters count as gaps (default: c("-", "."))}
 }
 \value{
 Numeric vector with counts (for "count" mode) or fractions (for "frac" mode).
@@ -46,6 +53,11 @@ a genomics database. For detailed documentation on k-mer counting parameters, se
 The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
 The \code{extend} parameter controls whether k-mer matches can extend beyond the ROI boundaries.
 For palindromic k-mers, use \code{strand=1} or \code{-1} to avoid double counting.
+
+When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
+Windows are defined as k consecutive non-gap bases. The \code{frac} denominator counts the
+number of possible logical starts (non-gap windows) in the region. \code{start_pos} and
+\code{end_pos} are interpreted as physical coordinates on the full sequence.
 }
 \examples{
 \dontrun{
