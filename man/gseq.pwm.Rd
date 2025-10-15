@@ -18,7 +18,9 @@ gseq.pwm(
   spat.bin = 1L,
   spat.min = NULL,
   spat.max = NULL,
-  return_strand = FALSE
+  return_strand = FALSE,
+  skip_gaps = FALSE,
+  gap_chars = c("-", ".")
 )
 }
 \arguments{
@@ -50,6 +52,11 @@ gseq.pwm(
 
 \item{return_strand}{logical; if TRUE and \code{mode="pos"}, returns data.frame with
 \code{pos} and \code{strand} columns}
+
+\item{skip_gaps}{logical; if TRUE, treat gap characters as holes and skip them while
+scanning. Windows are w consecutive non-gap bases (default: FALSE)}
+
+\item{gap_chars}{character vector; which characters count as gaps (default: c("-", "."))}
 }
 \value{
 Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),
@@ -69,6 +76,11 @@ see \code{\link{gvtrack.create}} (functions "pwm", "pwm.max", "pwm.max.pos", "pw
 
 The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
 The \code{extend} parameter controls whether motif matches can extend beyond the ROI boundaries.
+
+When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
+Windows are defined as w consecutive non-gap bases. All positions (\code{pos}) are reported
+as 1-based indices on the original full sequence (including gaps). \code{start_pos} and
+\code{end_pos} are interpreted as physical coordinates on the full sequence.
 }
 \examples{
 \dontrun{

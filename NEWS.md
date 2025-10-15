@@ -1,6 +1,9 @@
 # misha 5.1.0
 
 * Added `gseq.pwm` and `gseq.kmer` functions that compute pwm and kmer scores on sequences without the need for a genome database.
+* Added `gseq.rev` and `gseq.comp` functions that reverse and complement DNA sequences without the need for a genome database.
+* Added `gseq.revcomp` alias for `grevcomp` function.
+* Added `grandom_genome` function that generates random genome intervals.
 
 # misha 5.0.0
 

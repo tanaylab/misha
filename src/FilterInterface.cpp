@@ -32,7 +32,7 @@ SEXP C_register_filter(SEXP r_df, SEXP r_key, SEXP envir)
         if (!Rf_isString(r_key) || Rf_length(r_key) != 1)
             verror("Key argument must be a single string");
 
-        if (!Rf_isFrame(r_df))
+        if (!Rf_inherits(r_df, "data.frame"))
             verror("Filter argument must be a data frame");
 
         const char *key = CHAR(STRING_ELT(r_key, 0));

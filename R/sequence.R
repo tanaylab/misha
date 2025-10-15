@@ -26,6 +26,77 @@ grevcomp <- function(seq) {
     return(rev_s)
 }
 
+#' Get reverse complement of DNA sequence
+#'
+#' Alias for \code{\link{grevcomp}}. Takes a DNA sequence string and returns its reverse complement.
+#'
+#' @return A character vector of the same length as the input, containing the reverse
+#'         complement sequences
+#' @examples
+#' gseq.revcomp("ACTG") # Returns "CAGT"
+#' gseq.revcomp(c("ACTG", "GGCC")) # Returns c("CAGT", "GGCC")
+#'
+#' @inheritParams grevcomp
+#' @export
+#' @seealso \code{\link{grevcomp}}, \code{\link{gseq.rev}}, \code{\link{gseq.comp}}
+gseq.revcomp <- grevcomp
+
+#' Reverse DNA sequence
+#'
+#' Takes a DNA sequence string and returns its reverse (without complementing).
+#'
+#' @param seq A character vector containing DNA sequences. Preserves case and handles NA values.
+#' @return A character vector of the same length as the input, containing the reversed sequences
+#' @examples
+#' gseq.rev("ACTG") # Returns "GTCA"
+#' gseq.rev(c("ACTG", "GGCC")) # Returns c("GTCA", "CCGG")
+#' gseq.rev(c("ACTG", NA, "GGCC")) # Returns c("GTCA", NA, "CCGG")
+#'
+#' @export
+#' @seealso \code{\link{gseq.revcomp}}, \code{\link{gseq.comp}}
+gseq.rev <- function(seq) {
+    if (!is.character(seq)) {
+        stop("Sequence must be a character string")
+    }
+    rev_s <- .Call("C_rev", seq)
+    if (anyNA(seq)) {
+        rev_s[is.na(seq)] <- NA_character_
+    }
+
+    if (!is.null(names(seq))) {
+        names(rev_s) <- names(seq)
+    }
+    return(rev_s)
+}
+
+#' Complement DNA sequence
+#'
+#' Takes a DNA sequence string and returns its complement (without reversing).
+#'
+#' @param seq A character vector containing DNA sequences (using A,C,G,T). Preserves case and handles NA values.
+#' @return A character vector of the same length as the input, containing the complemented sequences
+#' @examples
+#' gseq.comp("ACTG") # Returns "TGAC"
+#' gseq.comp(c("ACTG", "GGCC")) # Returns c("TGAC", "CCGG")
+#' gseq.comp(c("ACTG", NA, "GGCC")) # Returns c("TGAC", NA, "CCGG")
+#'
+#' @export
+#' @seealso \code{\link{gseq.revcomp}}, \code{\link{gseq.rev}}
+gseq.comp <- function(seq) {
+    if (!is.character(seq)) {
+        stop("Sequence must be a character string")
+    }
+    comp_s <- .Call("C_comp", seq)
+    if (anyNA(seq)) {
+        comp_s[is.na(seq)] <- NA_character_
+    }
+
+    if (!is.null(names(seq))) {
+        names(comp_s) <- names(seq)
+    }
+    return(comp_s)
+}
+
 # Helper function to normalize ROI bounds for sequence scoring
 .normalize_bounds <- function(seqs, start_pos, end_pos, w, extend) {
     n <- length(seqs)
@@ -84,6 +155,9 @@ grevcomp <- function(seq) {
 #' @param spat.max numeric; end of scanning window
 #' @param return_strand logical; if TRUE and \code{mode="pos"}, returns data.frame with
 #'   \code{pos} and \code{strand} columns
+#' @param skip_gaps logical; if TRUE, treat gap characters as holes and skip them while
+#'   scanning. Windows are w consecutive non-gap bases (default: FALSE)
+#' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
 #'
 #' @return Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),
 #'   or data.frame with \code{pos} and \code{strand} columns (for "pos" mode with
@@ -96,6 +170,11 @@ grevcomp <- function(seq) {
 #'
 #' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
 #' The \code{extend} parameter controls whether motif matches can extend beyond the ROI boundaries.
+#'
+#' When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
+#' Windows are defined as w consecutive non-gap bases. All positions (\code{pos}) are reported
+#' as 1-based indices on the original full sequence (including gaps). \code{start_pos} and
+#' \code{end_pos} are interpreted as physical coordinates on the full sequence.
 #'
 #' @seealso \code{\link{gvtrack.create}} for detailed PWM parameter documentation
 #'
@@ -160,7 +239,9 @@ gseq.pwm <- function(seqs,
                      spat.bin = 1L,
                      spat.min = NULL,
                      spat.max = NULL,
-                     return_strand = FALSE) {
+                     return_strand = FALSE,
+                     skip_gaps = FALSE,
+                     gap_chars = c("-", ".")) {
     # Validate inputs
     mode <- match.arg(mode)
 
@@ -193,6 +274,20 @@ gseq.pwm <- function(seqs,
         strand <- 0L
     }
 
+    # Validate gap parameters
+    skip_gaps <- as.logical(skip_gaps)[1]
+    if (skip_gaps) {
+        if (!is.character(gap_chars) || length(gap_chars) == 0) {
+            stop("gap_chars must be a non-empty character vector")
+        }
+        if (any(nchar(gap_chars) != 1)) {
+            stop("gap_chars must be single characters")
+        }
+        if (length(gap_chars) != length(unique(gap_chars))) {
+            stop("gap_chars must be distinct")
+        }
+    }
+
     # Normalize bounds
     b <- .normalize_bounds(seqs, start_pos, end_pos, w, extend)
 
@@ -217,7 +312,9 @@ gseq.pwm <- function(seqs,
         as.integer(b$roi_end),
         extend,
         spat_params,
-        as.logical(return_strand)
+        as.logical(return_strand),
+        skip_gaps,
+        as.character(gap_chars)
     )
 
     # For mode="pos" with return_strand=TRUE, ensure it's a proper data.frame
@@ -241,6 +338,9 @@ gseq.pwm <- function(seqs,
 #' @param start_pos integer or NULL; 1-based inclusive start of ROI (default: 1)
 #' @param end_pos integer or NULL; 1-based inclusive end of ROI (default: sequence length)
 #' @param extend logical or integer; extension of allowed window starts (default: FALSE)
+#' @param skip_gaps logical; if TRUE, treat gap characters as holes and skip them while
+#'   scanning. Windows are k consecutive non-gap bases (default: FALSE)
+#' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
 #'
 #' @return Numeric vector with counts (for "count" mode) or fractions (for "frac" mode).
 #'   Returns 0 when sequence is too short or ROI is invalid.
@@ -253,6 +353,11 @@ gseq.pwm <- function(seqs,
 #' The ROI (region of interest) is defined by \code{start_pos} and \code{end_pos}.
 #' The \code{extend} parameter controls whether k-mer matches can extend beyond the ROI boundaries.
 #' For palindromic k-mers, use \code{strand=1} or \code{-1} to avoid double counting.
+#'
+#' When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated as gaps.
+#' Windows are defined as k consecutive non-gap bases. The \code{frac} denominator counts the
+#' number of possible logical starts (non-gap windows) in the region. \code{start_pos} and
+#' \code{end_pos} are interpreted as physical coordinates on the full sequence.
 #'
 #' @seealso \code{\link{gvtrack.create}} for detailed k-mer parameter documentation
 #'
@@ -296,7 +401,9 @@ gseq.kmer <- function(seqs,
                       strand = 0L,
                       start_pos = NULL,
                       end_pos = NULL,
-                      extend = FALSE) {
+                      extend = FALSE,
+                      skip_gaps = FALSE,
+                      gap_chars = c("-", ".")) {
     # Validate inputs
     mode <- match.arg(mode)
 
@@ -320,11 +427,25 @@ gseq.kmer <- function(seqs,
         stop("strand must be -1, 0, or 1")
     }
 
+    # Validate gap parameters
+    skip_gaps <- as.logical(skip_gaps)[1]
+    if (skip_gaps) {
+        if (!is.character(gap_chars) || length(gap_chars) == 0) {
+            stop("gap_chars must be a non-empty character vector")
+        }
+        if (any(nchar(gap_chars) != 1)) {
+            stop("gap_chars must be single characters")
+        }
+        if (length(gap_chars) != length(unique(gap_chars))) {
+            stop("gap_chars must be distinct")
+        }
+    }
+
     # Normalize bounds
     b <- .normalize_bounds(seqs, start_pos, end_pos, w, extend)
 
-    # Call C++ implementation (always returns counts)
-    counts <- .Call(
+    # Call C++ implementation (returns counts or fractions depending on mode)
+    result <- .Call(
         "C_gseq_kmer",
         seqs,
         kmer,
@@ -332,14 +453,10 @@ gseq.kmer <- function(seqs,
         strand,
         as.integer(b$roi_start),
         as.integer(b$roi_end),
-        extend
+        extend,
+        skip_gaps,
+        as.character(gap_chars)
     )
 
-    # Compute fraction if requested
-    if (mode == "frac") {
-        nstarts <- pmax.int(0L, b$start_max - b$start_min + 1L)
-        counts <- ifelse(nstarts == 0L, 0, counts / nstarts)
-    }
-
-    return(counts)
+    return(result)
 }

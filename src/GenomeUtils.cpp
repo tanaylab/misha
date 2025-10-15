@@ -34,3 +34,23 @@ std::string seq2reverse_complementary(const std::string &seq)
 		*ires++ = basepair2complementary(*iseq);
 	return res;
 }
+
+std::string seq2reverse(const std::string &seq)
+{
+	string res;
+	res.resize(seq.length());
+	string::iterator ires = res.begin();
+	for (string::const_reverse_iterator iseq = seq.rbegin(); iseq != seq.rend(); ++iseq)
+		*ires++ = *iseq;
+	return res;
+}
+
+std::string seq2complementary(const std::string &seq)
+{
+	string res;
+	res.resize(seq.length());
+	string::iterator ires = res.begin();
+	for (string::const_iterator iseq = seq.begin(); iseq != seq.end(); ++iseq)
+		*ires++ = basepair2complementary(*iseq);
+	return res;
+}
