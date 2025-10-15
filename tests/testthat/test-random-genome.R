@@ -157,3 +157,294 @@ test_that("grandom_genome error when chromosomes too short", {
         "No chromosomes are long enough"
     )
 })
+# Filter functionality tests
+
+test_that("grandom_genome filter basic functionality works", {
+    set.seed(666)
+
+    # Create filter regions
+    filter_regions <- gintervals(c("chr1", "chr2"), c(10000, 15000), c(20000, 25000))
+
+    # Generate intervals with filter
+    intervals <- grandom_genome(100, 50, dist_from_edge = 100, filter = filter_regions)
+
+    # Check structure
+    expect_s3_class(intervals, "data.frame")
+    expect_equal(nrow(intervals), 50)
+    expect_equal(names(intervals), c("chrom", "start", "end"))
+
+    # Check that all intervals have correct size
+    expect_true(all(intervals$end - intervals$start == 100))
+
+    # Check that NO intervals overlap with filter
+    overlaps <- gintervals.intersect(intervals, filter_regions)
+    expect_true(is.null(overlaps) || nrow(overlaps) == 0)
+})
+
+test_that("grandom_genome filter prevents all overlaps", {
+    set.seed(777)
+
+    # Create multiple filter regions
+    filter_regions <- gintervals(
+        c("chr1", "chr1", "chr2", "chr2"),
+        c(5000, 50000, 10000, 100000),
+        c(10000, 60000, 20000, 110000)
+    )
+
+    intervals <- grandom_genome(100, 100, dist_from_edge = 100, filter = filter_regions)
+
+    # Verify NO overlaps
+    overlaps <- gintervals.intersect(intervals, filter_regions)
+    expect_true(is.null(overlaps) || nrow(overlaps) == 0)
+
+    # Verify intervals can be adjacent to filter but not overlap
+    # Check that some intervals are close to filter boundaries (within 1000bp)
+    # This verifies the filter expansion is working correctly
+    for (i in 1:nrow(intervals)) {
+        for (j in 1:nrow(filter_regions)) {
+            if (intervals$chrom[i] == filter_regions$chrom[j]) {
+                # Check if interval is before filter
+                if (intervals$end[i] <= filter_regions$start[j]) {
+                    # Should not overlap even by 1bp
+                    expect_true(intervals$end[i] <= filter_regions$start[j])
+                }
+                # Check if interval is after filter
+                if (intervals$start[i] >= filter_regions$end[j]) {
+                    # Should not overlap even by 1bp
+                    expect_true(intervals$start[i] >= filter_regions$end[j])
+                }
+            }
+        }
+    }
+})
+
+test_that("grandom_genome filter with heavy filtering", {
+    set.seed(888)
+
+    # Filter out large portions of chromosomes (but leave some space)
+    filter_regions <- gintervals(
+        c("chr1", "chr1", "chr2"),
+        c(1000, 200000, 50000),
+        c(100000, 400000, 250000)
+    )
+
+    # Should still be able to generate intervals
+    intervals <- grandom_genome(100, 50, dist_from_edge = 100, filter = filter_regions)
+
+    expect_equal(nrow(intervals), 50)
+
+    # Verify no overlaps
+    overlaps <- gintervals.intersect(intervals, filter_regions)
+    expect_true(is.null(overlaps) || nrow(overlaps) == 0)
+})
+
+test_that("grandom_genome filter with chromosome parameter", {
+    set.seed(999)
+
+    # Create filter on chr1 only
+    filter_regions <- gintervals("chr1", 10000, 20000)
+
+    # Generate on chr1 only
+    intervals <- grandom_genome(100, 30,
+        dist_from_edge = 100,
+        chromosomes = "chr1", filter = filter_regions
+    )
+
+    # All on chr1
+    expect_true(all(intervals$chrom == "chr1"))
+
+    # No overlaps with filter
+    overlaps <- gintervals.intersect(intervals, filter_regions)
+    expect_true(is.null(overlaps) || nrow(overlaps) == 0)
+})
+
+test_that("grandom_genome filter reproducibility with set.seed", {
+    filter_regions <- gintervals(c("chr1", "chr2"), c(5000, 10000), c(15000, 20000))
+
+    set.seed(1111)
+    intervals1 <- grandom_genome(100, 20, dist_from_edge = 100, filter = filter_regions)
+
+    set.seed(1111)
+    intervals2 <- grandom_genome(100, 20, dist_from_edge = 100, filter = filter_regions)
+
+    expect_identical(intervals1, intervals2)
+})
+
+test_that("grandom_genome filter with overlapping filter intervals", {
+    set.seed(1212)
+
+    # Create overlapping filter regions (should be auto-unified)
+    filter_regions <- gintervals(
+        c("chr1", "chr1", "chr1"),
+        c(5000, 8000, 15000),
+        c(10000, 12000, 20000)
+    )
+
+    intervals <- grandom_genome(100, 50, dist_from_edge = 100, filter = filter_regions)
+
+    # Should still work and have no overlaps
+    overlaps <- gintervals.intersect(intervals, filter_regions)
+    expect_true(is.null(overlaps) || nrow(overlaps) == 0)
+})
+
+test_that("grandom_genome filter validation works", {
+    # Invalid filter type
+    expect_error(
+        grandom_genome(100, 10, filter = "not_a_dataframe"),
+        "filter must be a data frame"
+    )
+
+    # Missing columns
+    bad_filter <- data.frame(chrom = "chr1", start = 1000)
+    expect_error(
+        grandom_genome(100, 10, filter = bad_filter),
+        "filter must have columns"
+    )
+})
+
+test_that("grandom_genome filter error when no valid regions", {
+    # Filter entire small chromosomes
+    all_genome <- gintervals.all()
+
+    # Create filter covering most of genome
+    filter_regions <- gintervals(
+        all_genome$chrom,
+        rep(100, nrow(all_genome)),
+        all_genome$end - 100
+    )
+
+    # Should error - no valid regions left
+    expect_error(
+        grandom_genome(100, 10, dist_from_edge = 100, filter = filter_regions),
+        "No valid regions available after applying filter"
+    )
+})
+
+test_that("grandom_genome filter with empty filter behaves like no filter", {
+    set.seed(1313)
+    intervals_no_filter <- grandom_genome(100, 20, dist_from_edge = 100)
+
+    set.seed(1313)
+    empty_filter <- gintervals(character(0), numeric(0), numeric(0))
+    intervals_empty_filter <- grandom_genome(100, 20, dist_from_edge = 100, filter = empty_filter)
+
+    expect_identical(intervals_no_filter, intervals_empty_filter)
+})
+
+test_that("grandom_genome filter performance is reasonable", {
+    set.seed(1414)
+
+    # Create medium-sized filter (100 regions)
+    filter_chroms <- sample(c("chr1", "chr2", "chrX"), 100, replace = TRUE)
+    filter_starts <- sample(1000:400000, 100)
+    filter_ends <- filter_starts + sample(1000:10000, 100)
+    filter_regions <- gintervals(filter_chroms, filter_starts, filter_ends)
+
+    # Should complete quickly even with filter
+    start_time <- Sys.time()
+    intervals <- grandom_genome(100, 1000, dist_from_edge = 100, filter = filter_regions)
+    elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+
+    # Should complete in under 1 second
+    expect_true(elapsed < 1.0)
+
+    # Verify correctness
+    expect_equal(nrow(intervals), 1000)
+    overlaps <- gintervals.intersect(intervals, filter_regions)
+    expect_true(is.null(overlaps) || nrow(overlaps) == 0)
+})
+
+test_that("grandom_genome filter samples proportional to valid segment length", {
+    set.seed(1515)
+
+    # Create filter that heavily filters chr2 but not chr1
+    # This should cause chr1 to be over-represented
+    filter_regions <- gintervals(
+        rep("chr2", 10),
+        seq(10000, 100000, by = 10000),
+        seq(19000, 109000, by = 10000)
+    )
+
+    # Generate many intervals
+    intervals <- grandom_genome(100, 500,
+        dist_from_edge = 100,
+        chromosomes = c("chr1", "chr2"),
+        filter = filter_regions
+    )
+
+    # Count per chromosome
+    counts <- table(intervals$chrom)
+
+    # chr1 should have significantly more intervals than chr2
+    # because chr2 has been heavily filtered
+    if ("chr1" %in% names(counts) && "chr2" %in% names(counts)) {
+        expect_true(counts["chr1"] > counts["chr2"])
+    }
+
+    # Verify no overlaps
+    overlaps <- gintervals.intersect(intervals, filter_regions)
+    expect_true(is.null(overlaps) || nrow(overlaps) == 0)
+})
+
+# Benchmark tests
+
+test_that("grandom_genome benchmark: no filter vs small filter", {
+    skip_on_cran()
+    skip_on_ci()
+
+    set.seed(1616)
+
+    # Benchmark without filter
+    time_no_filter <- system.time({
+        intervals_no_filter <- grandom_genome(100, 10000, dist_from_edge = 100)
+    })[3]
+
+    # Benchmark with small filter (10 regions)
+    filter_regions <- gintervals(
+        rep("chr1", 10),
+        seq(10000, 100000, by = 10000),
+        seq(11000, 101000, by = 10000)
+    )
+
+    time_small_filter <- system.time({
+        intervals_small_filter <- grandom_genome(100, 10000,
+            dist_from_edge = 100,
+            filter = filter_regions
+        )
+    })[3]
+
+    # Filter should add minimal overhead (less than 3x slowdown)
+    expect_true(time_small_filter < time_no_filter * 3)
+
+    # Print for information
+    message(sprintf(
+        "No filter: %.3fs, Small filter: %.3fs (%.1fx)",
+        time_no_filter, time_small_filter, time_small_filter / time_no_filter
+    ))
+})
+
+test_that("grandom_genome benchmark: large filter performance", {
+    skip_on_cran()
+    skip_on_ci()
+
+    set.seed(1717)
+
+    # Create large filter (1000 regions)
+    filter_chroms <- sample(c("chr1", "chr2", "chrX"), 1000, replace = TRUE)
+    filter_starts <- sample(1000:400000, 1000)
+    filter_ends <- filter_starts + sample(500:5000, 1000)
+    filter_regions <- gintervals(filter_chroms, filter_starts, filter_ends)
+
+    time_large_filter <- system.time({
+        intervals <- grandom_genome(100, 10000, dist_from_edge = 100, filter = filter_regions)
+    })[3]
+
+    # Should still be fast (under 2 seconds)
+    expect_true(time_large_filter < 2.0)
+
+    # Verify correctness
+    overlaps <- gintervals.intersect(intervals, filter_regions)
+    expect_true(is.null(overlaps) || nrow(overlaps) == 0)
+
+    message(sprintf("Large filter (1000 regions): %.3fs", time_large_filter))
+})

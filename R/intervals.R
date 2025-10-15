@@ -3070,6 +3070,7 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
 #' @param n The number of intervals to generate
 #' @param dist_from_edge The minimum distance from the edge of the chromosome for a region to start or end (default: 3e6)
 #' @param chromosomes The chromosomes to sample from (default: all chromosomes). Can be a character vector of chromosome names.
+#' @param filter A set of intervals to exclude from sampling (default: NULL). Generated intervals will not overlap with these regions.
 #'
 #' @return A data.frame with columns chrom, start, and end representing genomic intervals
 #'
@@ -3080,7 +3081,12 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
 #'   \item Be of the specified size
 #'   \item Start and end at least \code{dist_from_edge} bases away from chromosome boundaries
 #'   \item Fall entirely within a single chromosome
+#'   \item Not overlap with any intervals in the \code{filter} (if provided)
 #' }
+#'
+#' When a filter is provided, the function pre-computes valid genome segments (regions not in the filter)
+#' and samples from these segments. Note that this can be slow
+#' when the filter contains many intervals.
 #'
 #' The function uses R's random number generator, so \code{set.seed()} can be used for reproducibility.
 #'
@@ -3097,6 +3103,14 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
 #' # Generate intervals only on chr1 and chr2
 #' intervals <- grandom_genome(100, 1000, chromosomes = c("chr1", "chr2"))
 #'
+#' # Generate intervals avoiding specific regions
+#' filter_regions <- gintervals(c("chr1", "chr2"), c(1000, 5000), c(2000, 6000))
+#' intervals <- grandom_genome(100, 1000, filter = filter_regions)
+#'
+#' # Verify no overlaps with filter
+#' overlaps <- gintervals.intersect(intervals, filter_regions)
+#' nrow(overlaps) # Should be 0
+#'
 #' # For reproducibility
 #' set.seed(123)
 #' intervals1 <- grandom_genome(100, 100)
@@ -3106,7 +3120,7 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
 #' }
 #'
 #' @export
-grandom_genome <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL) {
+grandom_genome <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL, filter = NULL) {
     # Check that database is initialized
     .gcheckroot()
 
@@ -3121,6 +3135,30 @@ grandom_genome <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL) {
         stop("dist_from_edge must be a non-negative number", call. = FALSE)
     }
 
+    # Validate filter if provided
+    if (!is.null(filter)) {
+        if (!is.data.frame(filter)) {
+            stop("filter must be a data frame", call. = FALSE)
+        }
+        if (!all(c("chrom", "start", "end") %in% names(filter))) {
+            stop("filter must have columns: chrom, start, end", call. = FALSE)
+        }
+        if (nrow(filter) > 0) {
+            # Validate filter intervals
+            if (any(filter$start < 0)) {
+                stop("filter intervals must have start >= 0", call. = FALSE)
+            }
+            if (any(filter$start >= filter$end)) {
+                stop("filter intervals must have start < end", call. = FALSE)
+            }
+            # Sort and unify overlapping filter intervals for efficiency
+            filter <- filter[order(filter$chrom, filter$start), ]
+            filter <- gintervals.canonic(filter)
+        } else {
+            filter <- NULL # Empty filter same as no filter
+        }
+    }
+
     # Get all chromosomes
     all_genome <- gintervals.all()
 
@@ -3133,22 +3171,32 @@ grandom_genome <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL) {
         if (nrow(all_genome) == 0) {
             stop("No chromosomes named ", paste(chromosomes, collapse = ", "), " found in the genome", call. = FALSE)
         }
+        # Also filter the filter intervals to only include selected chromosomes
+        if (!is.null(filter)) {
+            filter <- filter[filter$chrom %in% chromosomes, , drop = FALSE]
+            if (nrow(filter) == 0) {
+                filter <- NULL
+            }
+        }
     }
 
-    # Pre-filter: remove chromosomes that are too short
-    chrom_lengths <- all_genome$end - all_genome$start
-    min_required_length <- size + 2 * dist_from_edge
-    valid_chroms <- chrom_lengths >= min_required_length
+    # Pre-filter: remove chromosomes that are too short (only if no filter)
+    # With filter, C++ will handle this more intelligently
+    if (is.null(filter)) {
+        chrom_lengths <- all_genome$end - all_genome$start
+        min_required_length <- size + 2 * dist_from_edge
+        valid_chroms <- chrom_lengths >= min_required_length
 
-    if (!any(valid_chroms)) {
-        stop("No chromosomes are long enough for intervals of size ", size,
-            " with dist_from_edge ", dist_from_edge,
-            " (minimum required chromosome length: ", min_required_length, ")",
-            call. = FALSE
-        )
+        if (!any(valid_chroms)) {
+            stop("No chromosomes are long enough for intervals of size ", size,
+                " with dist_from_edge ", dist_from_edge,
+                " (minimum required chromosome length: ", min_required_length, ")",
+                call. = FALSE
+            )
+        }
+
+        all_genome <- all_genome[valid_chroms, , drop = FALSE]
     }
-
-    all_genome <- all_genome[valid_chroms, , drop = FALSE]
 
     # Call C++ function
     result <- .Call("C_grandom_genome",
@@ -3156,6 +3204,7 @@ grandom_genome <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL) {
         as.integer(n),
         as.numeric(dist_from_edge),
         all_genome,
+        filter,
         PACKAGE = "misha"
     )
 

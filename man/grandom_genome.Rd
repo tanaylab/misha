@@ -4,7 +4,13 @@
 \alias{grandom_genome}
 \title{Generate random genome intervals}
 \usage{
-grandom_genome(size, n, dist_from_edge = 3000000, chromosomes = NULL)
+grandom_genome(
+  size,
+  n,
+  dist_from_edge = 3000000,
+  chromosomes = NULL,
+  filter = NULL
+)
 }
 \arguments{
 \item{size}{The size of the intervals to generate (in base pairs)}
@@ -14,6 +20,8 @@ grandom_genome(size, n, dist_from_edge = 3000000, chromosomes = NULL)
 \item{dist_from_edge}{The minimum distance from the edge of the chromosome for a region to start or end (default: 3e6)}
 
 \item{chromosomes}{The chromosomes to sample from (default: all chromosomes). Can be a character vector of chromosome names.}
+
+\item{filter}{A set of intervals to exclude from sampling (default: NULL). Generated intervals will not overlap with these regions.}
 }
 \value{
 A data.frame with columns chrom, start, and end representing genomic intervals
@@ -29,7 +37,12 @@ Each interval is guaranteed to:
   \item Be of the specified size
   \item Start and end at least \code{dist_from_edge} bases away from chromosome boundaries
   \item Fall entirely within a single chromosome
+  \item Not overlap with any intervals in the \code{filter} (if provided)
 }
+
+When a filter is provided, the function pre-computes valid genome segments (regions not in the filter)
+and samples from these segments. Note that this can be slow
+when the filter contains many intervals.
 
 The function uses R's random number generator, so \code{set.seed()} can be used for reproducibility.
 
@@ -45,6 +58,14 @@ head(intervals)
 
 # Generate intervals only on chr1 and chr2
 intervals <- grandom_genome(100, 1000, chromosomes = c("chr1", "chr2"))
+
+# Generate intervals avoiding specific regions
+filter_regions <- gintervals(c("chr1", "chr2"), c(1000, 5000), c(2000, 6000))
+intervals <- grandom_genome(100, 1000, filter = filter_regions)
+
+# Verify no overlaps with filter
+overlaps <- gintervals.intersect(intervals, filter_regions)
+nrow(overlaps) # Should be 0
 
 # For reproducibility
 set.seed(123)

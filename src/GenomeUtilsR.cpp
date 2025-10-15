@@ -2,9 +2,12 @@
 #include <Rinternals.h>
 #include <R_ext/Random.h>
 #include "GenomeUtils.h"
+#include "GIntervals.h"
+#include "GInterval.h"
 #include <vector>
 #include <string>
 #include <map>
+#include <algorithm>
 
 extern "C" {
 
@@ -86,8 +89,18 @@ SEXP C_comp(SEXP _seq) {
     return R_NilValue; // Never reached
 }
 
+// Helper structure for valid genome segments
+struct ValidSegment {
+    int chromid;
+    std::string chrom_name;
+    int64_t start;
+    int64_t end;
+    int64_t length;
+    double cum_prob;
+};
+
 // Generate random genome intervals
-SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df) {
+SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df, SEXP _filter) {
     try {
         // Validate inputs
         if (!Rf_isInteger(_size) && !Rf_isReal(_size))
@@ -121,56 +134,167 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df)
         if (num_chroms == 0)
             Rf_error("No chromosomes provided");
 
-        // Build chromosome info: name, length, and sampling probabilities
-        struct ChromInfo {
-            std::string name;
-            int64_t length;
-            double prob;
-            double cum_prob;
-        };
-
-        std::vector<ChromInfo> chrom_info;
-        chrom_info.reserve(num_chroms);
-
-        double total_length = 0.0;
+        // Build chromosome name to id mapping
+        std::map<std::string, int> chrom_name_to_id;
+        std::vector<std::string> chrom_id_to_name(num_chroms);
+        std::vector<int64_t> chrom_starts(num_chroms);
+        std::vector<int64_t> chrom_ends(num_chroms);
 
         for (int i = 0; i < num_chroms; i++) {
-            ChromInfo info;
-
-            // Get chromosome name
+            std::string chrom_name;
             if (Rf_isString(chroms)) {
-                info.name = CHAR(STRING_ELT(chroms, i));
+                chrom_name = CHAR(STRING_ELT(chroms, i));
             } else if (Rf_isFactor(chroms)) {
-                int level_idx = INTEGER(chroms)[i] - 1; // R factors are 1-indexed
+                int level_idx = INTEGER(chroms)[i] - 1;
                 if (level_idx < 0 || level_idx >= Rf_length(chrom_levels))
                     Rf_error("Invalid factor level in chrom column");
-                info.name = CHAR(STRING_ELT(chrom_levels, level_idx));
+                chrom_name = CHAR(STRING_ELT(chrom_levels, level_idx));
             } else {
                 Rf_error("chrom column must be character or factor");
             }
 
-            // Get chromosome length (end - start)
-            int64_t start = Rf_isReal(starts) ? (int64_t)REAL(starts)[i] : (int64_t)INTEGER(starts)[i];
-            int64_t end = Rf_isReal(ends) ? (int64_t)REAL(ends)[i] : (int64_t)INTEGER(ends)[i];
-            info.length = end - start;
-
-            // Validate chromosome length
-            if (info.length < size + 2 * dist_from_edge) {
-                Rf_error("Chromosome %s is too short (length: %lld, required: %lld)",
-                         info.name.c_str(), (long long)info.length,
-                         (long long)(size + 2 * dist_from_edge));
-            }
-
-            total_length += info.length;
-            chrom_info.push_back(info);
+            chrom_name_to_id[chrom_name] = i;
+            chrom_id_to_name[i] = chrom_name;
+            chrom_starts[i] = Rf_isReal(starts) ? (int64_t)REAL(starts)[i] : (int64_t)INTEGER(starts)[i];
+            chrom_ends[i] = Rf_isReal(ends) ? (int64_t)REAL(ends)[i] : (int64_t)INTEGER(ends)[i];
         }
 
-        // Calculate sampling probabilities and cumulative probabilities
-        double cum_prob = 0.0;
-        for (size_t i = 0; i < chrom_info.size(); i++) {
-            chrom_info[i].prob = chrom_info[i].length / total_length;
-            cum_prob += chrom_info[i].prob;
-            chrom_info[i].cum_prob = cum_prob;
+        // Parse filter intervals if provided
+        std::vector<ValidSegment> valid_segments;
+        bool use_filter = !Rf_isNull(_filter) && Rf_isFrame(_filter) && Rf_length(VECTOR_ELT(_filter, 0)) > 0;
+
+        if (use_filter) {
+            // Parse filter data frame
+            SEXP filter_chroms = VECTOR_ELT(_filter, 0);
+            SEXP filter_starts = VECTOR_ELT(_filter, 1);
+            SEXP filter_ends = VECTOR_ELT(_filter, 2);
+            SEXP filter_chrom_levels = Rf_getAttrib(filter_chroms, R_LevelsSymbol);
+            int num_filter = Rf_length(filter_chroms);
+
+            // Build filter intervals per chromosome
+            std::map<int, GIntervals> filter_by_chrom;
+
+            for (int i = 0; i < num_filter; i++) {
+                std::string filt_chrom_name;
+                if (Rf_isString(filter_chroms)) {
+                    filt_chrom_name = CHAR(STRING_ELT(filter_chroms, i));
+                } else if (Rf_isFactor(filter_chroms)) {
+                    int level_idx = INTEGER(filter_chroms)[i] - 1;
+                    if (level_idx >= 0 && level_idx < Rf_length(filter_chrom_levels))
+                        filt_chrom_name = CHAR(STRING_ELT(filter_chrom_levels, level_idx));
+                }
+
+                // Skip if chromosome not in our list
+                if (chrom_name_to_id.find(filt_chrom_name) == chrom_name_to_id.end())
+                    continue;
+
+                int chromid = chrom_name_to_id[filt_chrom_name];
+                int64_t filt_start = Rf_isReal(filter_starts) ? (int64_t)REAL(filter_starts)[i] : (int64_t)INTEGER(filter_starts)[i];
+                int64_t filt_end = Rf_isReal(filter_ends) ? (int64_t)REAL(filter_ends)[i] : (int64_t)INTEGER(filter_ends)[i];
+
+                // Expand filter by size to ensure no overlap
+                filt_start = std::max((int64_t)0, filt_start - size + 1);
+                filt_end = filt_end;
+
+                filter_by_chrom[chromid].push_back(GInterval(chromid, filt_start, filt_end, 0));
+            }
+
+            // Compute valid segments for each chromosome
+            for (int chromid = 0; chromid < num_chroms; chromid++) {
+                int64_t chrom_start = chrom_starts[chromid];
+                int64_t chrom_end = chrom_ends[chromid];
+                int64_t chrom_len = chrom_end - chrom_start;
+
+                // Apply dist_from_edge constraints
+                int64_t valid_start = chrom_start + (int64_t)dist_from_edge;
+                int64_t valid_end = chrom_end - (int64_t)dist_from_edge - size;
+
+                if (valid_start >= valid_end)
+                    continue; // Chromosome too short
+
+                // Create full chromosome interval
+                GIntervals chrom_interval;
+                chrom_interval.push_back(GInterval(chromid, valid_start, valid_end, 0));
+
+                GIntervals result;
+                if (filter_by_chrom.find(chromid) != filter_by_chrom.end()) {
+                    // Sort and unify filter intervals
+                    filter_by_chrom[chromid].sort(GIntervals::compare_by_start_coord);
+                    filter_by_chrom[chromid].unify_overlaps();
+
+                    // Compute difference: chromosome - filter
+                    GIntervals::diff(chrom_interval, filter_by_chrom[chromid], result);
+                } else {
+                    result = chrom_interval;
+                }
+
+                // Add valid segments
+                for (size_t i = 0; i < result.size(); i++) {
+                    int64_t seg_len = result[i].end - result[i].start;
+                    if (seg_len >= size) {
+                        ValidSegment seg;
+                        seg.chromid = chromid;
+                        seg.chrom_name = chrom_id_to_name[chromid];
+                        seg.start = result[i].start;
+                        seg.end = result[i].end;
+                        seg.length = seg_len;
+                        valid_segments.push_back(seg);
+                    }
+                }
+            }
+
+            if (valid_segments.empty()) {
+                Rf_error("No valid regions available after applying filter");
+            }
+
+            // Calculate cumulative probabilities
+            double total_length = 0.0;
+            for (size_t i = 0; i < valid_segments.size(); i++) {
+                total_length += valid_segments[i].length;
+            }
+
+            double cum_prob = 0.0;
+            for (size_t i = 0; i < valid_segments.size(); i++) {
+                cum_prob += valid_segments[i].length / total_length;
+                valid_segments[i].cum_prob = cum_prob;
+            }
+
+        } else {
+            // No filter: use simple chromosome-based sampling
+            for (int chromid = 0; chromid < num_chroms; chromid++) {
+                int64_t chrom_start = chrom_starts[chromid];
+                int64_t chrom_end = chrom_ends[chromid];
+                int64_t chrom_len = chrom_end - chrom_start;
+
+                int64_t valid_start = chrom_start + (int64_t)dist_from_edge;
+                int64_t valid_end = chrom_end - (int64_t)dist_from_edge - size;
+
+                if (valid_start >= valid_end) {
+                    Rf_error("Chromosome %s is too short (length: %lld, required: %lld)",
+                             chrom_id_to_name[chromid].c_str(), (long long)chrom_len,
+                             (long long)(size + 2 * dist_from_edge));
+                }
+
+                ValidSegment seg;
+                seg.chromid = chromid;
+                seg.chrom_name = chrom_id_to_name[chromid];
+                seg.start = valid_start;
+                seg.end = valid_end;
+                seg.length = valid_end - valid_start;
+                valid_segments.push_back(seg);
+            }
+
+            // Calculate cumulative probabilities
+            double total_length = 0.0;
+            for (size_t i = 0; i < valid_segments.size(); i++) {
+                total_length += valid_segments[i].length;
+            }
+
+            double cum_prob = 0.0;
+            for (size_t i = 0; i < valid_segments.size(); i++) {
+                cum_prob += valid_segments[i].length / total_length;
+                valid_segments[i].cum_prob = cum_prob;
+            }
         }
 
         // Allocate output vectors
@@ -181,43 +305,44 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df)
         PROTECT(out_chroms_idx = Rf_allocVector(INTSXP, n));
         PROTECT(out_starts = Rf_allocVector(REALSXP, n));
         PROTECT(out_ends = Rf_allocVector(REALSXP, n));
-        PROTECT(out_chroms_levels = Rf_allocVector(STRSXP, chrom_info.size()));
+        PROTECT(out_chroms_levels = Rf_allocVector(STRSXP, num_chroms));
         PROTECT(col_names = Rf_allocVector(STRSXP, 3));
         PROTECT(row_names = Rf_allocVector(INTSXP, n));
 
         // Set chromosome levels
-        for (size_t i = 0; i < chrom_info.size(); i++) {
-            SET_STRING_ELT(out_chroms_levels, i, Rf_mkChar(chrom_info[i].name.c_str()));
+        for (int i = 0; i < num_chroms; i++) {
+            SET_STRING_ELT(out_chroms_levels, i, Rf_mkChar(chrom_id_to_name[i].c_str()));
         }
 
         // Generate random intervals
-        GetRNGstate(); // Get R's random number generator state
+        GetRNGstate();
 
         for (int64_t i = 0; i < n; i++) {
-            // Sample chromosome using inverse transform sampling
+            // Sample segment using inverse transform sampling
             double u = unif_rand();
-            size_t chrom_idx = 0;
-            for (size_t j = 0; j < chrom_info.size(); j++) {
-                if (u <= chrom_info[j].cum_prob) {
-                    chrom_idx = j;
+            size_t seg_idx = 0;
+            for (size_t j = 0; j < valid_segments.size(); j++) {
+                if (u <= valid_segments[j].cum_prob) {
+                    seg_idx = j;
                     break;
                 }
             }
 
-            // Generate random start position
-            int64_t chrom_len = chrom_info[chrom_idx].length;
-            int64_t valid_range = chrom_len - size - 2 * (int64_t)dist_from_edge;
-            int64_t start = (int64_t)dist_from_edge + (int64_t)(unif_rand() * valid_range);
+            const ValidSegment &seg = valid_segments[seg_idx];
+
+            // Generate random position within segment
+            int64_t valid_range = seg.length - size;
+            int64_t start = seg.start + (int64_t)(unif_rand() * valid_range);
             int64_t end = start + size;
 
-            // Store in output vectors (R is 1-indexed for factors)
-            INTEGER(out_chroms_idx)[i] = chrom_idx + 1;
+            // Store in output vectors
+            INTEGER(out_chroms_idx)[i] = seg.chromid + 1; // R is 1-indexed
             REAL(out_starts)[i] = (double)start;
             REAL(out_ends)[i] = (double)end;
             INTEGER(row_names)[i] = i + 1;
         }
 
-        PutRNGstate(); // Update R's random number generator state
+        PutRNGstate();
 
         // Set up chromosome factor
         Rf_setAttrib(out_chroms_idx, R_LevelsSymbol, out_chroms_levels);
