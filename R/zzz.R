@@ -42,9 +42,7 @@
     assign(".GLIBDIR", path.package("misha"), envir = .misha)
 }
 
-.onDetach <- function(lib) {
-
-}
+.onDetach <- function(lib) {}
 
 .onUnload <- function(lib) {
     if (exists(".GFUNCS", envir = .misha)) {

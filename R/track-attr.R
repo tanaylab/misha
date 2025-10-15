@@ -18,8 +18,6 @@
 }
 
 
-
-
 #' Returns track attributes values
 #'
 #' Returns track attributes values.
@@ -84,7 +82,6 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
 
     .gcall("gget_tracks_attrs", tracks, attrs, .misha_env())
 }
-
 
 
 #' Imports track attributes values
@@ -161,7 +158,6 @@ gtrack.attr.import <- function(table = NULL, remove.others = FALSE) {
 }
 
 
-
 #' Returns value of a track attribute
 #'
 #' Returns value of a track attribute.
@@ -195,7 +191,6 @@ gtrack.attr.get <- function(track = NULL, attr = NULL) {
     res <- gtrack.attr.export(trackstr, attr)
     res[1, 1]
 }
-
 
 
 #' Assigns value to a track attribute

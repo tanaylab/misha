@@ -91,7 +91,6 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 }
 
 
-
 #' Calculates distribution of track expressions
 #'
 #' Calculates distribution of track expressions' values over the given set of
@@ -174,7 +173,6 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
     attr(res, "breaks") <- breaks
     res
 }
-
 
 
 #' Returns evaluated track expression
@@ -308,7 +306,6 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 }
 
 
-
 #' Partitions the values of track expression
 #'
 #' Converts the values of track expression to intervals that match
@@ -399,7 +396,6 @@ gpartition <- function(expr = NULL, breaks = NULL, intervals = NULL, include.low
 }
 
 
-
 #' Calculates quantiles of a track expression
 #'
 #' Calculates the quantiles of a track expression for the given percentiles.
@@ -455,7 +451,6 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
     }
     res
 }
-
 
 
 #' Returns values from a lookup table based on track expression
@@ -591,7 +586,6 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
 }
 
 
-
 #' Returns samples from the values of track expression
 #'
 #' Returns a sample of the specified size from the values of track expression.
@@ -639,8 +633,6 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
 
     .gcall("C_gsample", exprstr, n, intervals, .iterator, band, .misha_env())
 }
-
-
 
 
 #' Finds intervals that match track expression
@@ -726,7 +718,6 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL,
         res
     }
 }
-
 
 
 #' Divides track expression into segments
@@ -819,7 +810,6 @@ gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed =
 }
 
 
-
 #' Calculates summary statistics of track expression
 #'
 #' Calculates summary statistics of track expression.
@@ -867,8 +857,6 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
     }
     res
 }
-
-
 
 
 #' Calculates Wilcoxon test on sliding windows over track expression
@@ -971,7 +959,6 @@ gwilcox <- function(expr = NULL, winsize1 = NULL, winsize2 = NULL, maxpval = 0.0
 }
 
 
-
 #' Calculates quantiles of a track expression for bins
 #'
 #' Calculates quantiles of a track expression for bins.
@@ -1047,7 +1034,6 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
     attr(res, "breaks") <- breaks
     res
 }
-
 
 
 #' Calculates summary statistics of a track expression for bins
@@ -1185,9 +1171,6 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
 }
 
 
-
-
-
 #' Returns DNA sequences
 #'
 #' Returns DNA sequences for given intervals
@@ -1221,8 +1204,6 @@ gseq.extract <- function(intervals = NULL) {
     res <- .gcall("gseqread", intervals, .misha_env())
     res
 }
-
-
 
 
 #' Computes auto-correlation between the strands for a file of mapped sequences

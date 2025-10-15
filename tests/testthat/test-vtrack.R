@@ -872,7 +872,6 @@ test_that("vtrack.fixedbin_iterator2d_v1", {
 })
 
 
-
 # Test for track type test.rects with 2D iterator having custom shifts and 2D extraction with test.rects
 test_that("vtrack.rects_iterator2d_customShifts_gintervals2d_testrects", {
     remove_all_vtracks()

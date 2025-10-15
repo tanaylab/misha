@@ -84,7 +84,6 @@ manual_pwm_scores_single_strand <- function(seq, pssm, prior = 0.01) {
 }
 
 
-
 # Helper function to create a standard PSSM for testing
 create_test_pssm <- function() {
     pssm <- matrix(c(
