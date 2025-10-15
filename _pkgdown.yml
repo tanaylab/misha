@@ -55,6 +55,8 @@ reference:
       - gintervals.all
       - gintervals.canonic
       - gintervals.chrom_sizes
+      - gintervals.covered_bp
+      - gintervals.coverage_fraction
       - gintervals.diff
       - gintervals.exists
       - gintervals.force_range

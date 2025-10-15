@@ -203,7 +203,6 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
             for (int chromid = 0; chromid < num_chroms; chromid++) {
                 int64_t chrom_start = chrom_starts[chromid];
                 int64_t chrom_end = chrom_ends[chromid];
-                int64_t chrom_len = chrom_end - chrom_start;
 
                 // Apply dist_from_edge constraints
                 int64_t valid_start = chrom_start + (int64_t)dist_from_edge;

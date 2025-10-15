@@ -579,10 +579,10 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
         }
         
         // Prepare result vectors
-        SEXP r_result;
+        SEXP r_result = R_NilValue;
         SEXP r_pos = R_NilValue;
         SEXP r_strand_out = R_NilValue;
-        
+
         if (mode == "pos") {
             PROTECT(r_pos = Rf_allocVector(INTSXP, n_seqs));
             if (return_strand) {
