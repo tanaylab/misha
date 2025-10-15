@@ -67,18 +67,18 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
         // Process data and create intervals
         GIntervals data;
         vector<float> values;
-        
+
         // Convert data frame to GIntervals and values
         for (int i = 0; i < num_rows; i++) {
             const char *chrom = CHAR(STRING_ELT(chrom_col, i));
             double start = Rf_isReal(start_col) ? REAL(start_col)[i] : INTEGER(start_col)[i];
             double end = Rf_isReal(end_col) ? REAL(end_col)[i] : INTEGER(end_col)[i];
             float value = Rf_isReal(value_col) ? REAL(value_col)[i] : INTEGER(value_col)[i];
-            
+
             int chromid = iu.get_chromkey().chrom2id(chrom);
             if (chromid < 0)
                 continue; // Skip unknown chromosomes
-                
+
             GInterval interval;
             interval.chromid = chromid;
             interval.start = (int64_t)start;
@@ -86,14 +86,14 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
             data.push_back(interval);
             values.push_back(value);
         }
-        
+
         // Sort intervals
         vector<int> sorted_idx(data.size());
         for (size_t i = 0; i < sorted_idx.size(); ++i)
             sorted_idx[i] = i;
-            
-        sort(sorted_idx.begin(), sorted_idx.end(), 
-            [&data](int i1, int i2) { 
+
+        sort(sorted_idx.begin(), sorted_idx.end(),
+            [&data](int i1, int i2) {
                 // Compare chromid first
                 if (data[i1].chromid != data[i2].chromid)
                     return data[i1].chromid < data[i2].chromid;
@@ -103,14 +103,14 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
                 // Then end coordinate
                 return data[i1].end < data[i2].end;
             });
-            
+
         GIntervals sorted_data;
         vector<float> sorted_values;
         for (int idx : sorted_idx) {
             sorted_data.push_back(data[idx]);
             sorted_values.push_back(values[idx]);
         }
-        
+
         // Get all genome intervals
         GIntervals all_genome_intervs;
         iu.get_all_genome_intervs(all_genome_intervs);
@@ -126,60 +126,92 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
             uint64_t chromsize = iu.get_chromkey().get_chrom_size(chromid);
             char filename[FILENAME_MAX];
 
-            snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), 
+            snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(),
                      GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 
             GenomeTrackFixedBin gtrack;
             gtrack.init_write(filename, binsize, chromid);
 
+            // Batch writing: accumulate bins and write in batches
+            vector<float> bin_batch;
+            bin_batch.reserve(10000);
+            uint64_t bins_since_progress = 0;
+
+            // Skip intervals from previous chromosomes
+            while (data_idx < sorted_data.size() && sorted_data[data_idx].chromid < chromid) {
+                data_idx++;
+            }
+
             // Process each bin in the chromosome
             for (uint64_t start_coord = 0; start_coord < chromsize; start_coord += binsize) {
                 double sum = 0;
-                uint64_t num_non_nans = 0;
+                uint64_t covered_bases = 0;
                 uint64_t end_coord = min(start_coord + binsize, chromsize);
 
                 // Advance to the first interval that might overlap with the current bin
-                while (data_idx < sorted_data.size() && 
-                       (sorted_data[data_idx].chromid < chromid || 
-                        (sorted_data[data_idx].chromid == chromid && (uint64_t)sorted_data[data_idx].end <= start_coord))) {
+                while (data_idx < sorted_data.size() &&
+                       sorted_data[data_idx].chromid == chromid &&
+                       (uint64_t)sorted_data[data_idx].end <= start_coord) {
                     data_idx++;
                 }
 
                 // Process all intervals that overlap with the current bin
                 size_t cur_idx = data_idx;
-                while (cur_idx < sorted_data.size() && 
-                       sorted_data[cur_idx].chromid == chromid && 
+                while (cur_idx < sorted_data.size() &&
+                       sorted_data[cur_idx].chromid == chromid &&
                        (uint64_t)sorted_data[cur_idx].start < end_coord) {
-                    
+
                     // Calculate overlap between interval and current bin
                     uint64_t overlap_start = max(start_coord, (uint64_t)sorted_data[cur_idx].start);
                     uint64_t overlap_end = min(end_coord, (uint64_t)sorted_data[cur_idx].end);
                     uint64_t overlap_size = overlap_end - overlap_start;
-                    
+
                     if (overlap_size > 0 && !std::isnan(sorted_values[cur_idx])) {
                         sum += sorted_values[cur_idx] * overlap_size;
-                        num_non_nans += overlap_size;
+                        covered_bases += overlap_size;
                     }
-                    
+
                     cur_idx++;
                 }
 
-                // If no overlapping intervals with values, use default value
-                float bin_value;
-                if (num_non_nans > 0) {
-                    bin_value = sum / num_non_nans;
-                } else {
-                    bin_value = defvalue;
+                // Fill uncovered bases with default value
+                uint64_t bin_size_actual = end_coord - start_coord;
+                if (covered_bases < bin_size_actual && !std::isnan(defvalue)) {
+                    uint64_t uncovered = bin_size_actual - covered_bases;
+                    sum += defvalue * uncovered;
+                    covered_bases += uncovered;
                 }
 
-                gtrack.write_next_bin(bin_value);
-                progress.report(0);
-                check_interrupt();
+                // Calculate bin value
+                float bin_value = covered_bases ? (sum / covered_bases) : numeric_limits<float>::quiet_NaN();
+                bin_batch.push_back(bin_value);
+
+                // Write in batches of 10000 bins
+                if (bin_batch.size() >= 10000) {
+                    gtrack.write_next_bins(bin_batch.data(), bin_batch.size());
+                    bin_batch.clear();
+                    progress.report(0);
+                    check_interrupt();
+                    bins_since_progress = 0;
+                } else {
+                    ++bins_since_progress;
+                    // Report progress every 10000 bins even if batch not full
+                    if (bins_since_progress >= 10000) {
+                        progress.report(0);
+                        check_interrupt();
+                        bins_since_progress = 0;
+                    }
+                }
             }
-            
+
+            // Write remaining bins
+            if (!bin_batch.empty()) {
+                gtrack.write_next_bins(bin_batch.data(), bin_batch.size());
+            }
+
             progress.report(1);
         }
-        
+
         progress.report_last();
     } catch (TGLException &e) {
         rerror("%s", e.msg());
@@ -190,4 +222,4 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
     return R_NilValue;
 }
 
-} 
+}
