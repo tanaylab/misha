@@ -41,6 +41,7 @@ void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromK
 	if (!size)
 		size++;
 
+	// Resize output buffer to required size; reserve a bit more to avoid reallocations
 	result.resize(size);
 	m_bfile.seek(interval.start, SEEK_SET);
 	if (m_bfile.read(&*result.begin(), result.size()) != result.size()) {
@@ -51,14 +52,26 @@ void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromK
 	}
 
 	// if strand == -1 make the sequence reverse-complementary
+	// Single-pass algorithm: complement and reverse simultaneously
 	if (interval.strand == -1) {
-		for (vector<char>::iterator i = result.begin(); i != result.end(); ++i)
-			*i = basepair2complementary(*i);
-		reverse(result.begin(), result.end());
+		size_t len = result.size();
+		for (size_t i = 0; i < len / 2; ++i) {
+			char tmp = basepair2complementary(result[len - 1 - i]);
+			result[len - 1 - i] = basepair2complementary(result[i]);
+			result[i] = tmp;
+		}
+		// Handle middle element for odd-length sequences
+		if (len % 2 == 1) {
+			result[len / 2] = basepair2complementary(result[len / 2]);
+		}
 	}
 
-	// Update cache with the newly read sequence
-	m_cached_interval = interval;
-	m_cached_seq = result;
-	m_cache_valid = true;
+	// Update cache only for reasonably small sequences to avoid expensive copies
+	if (result.size() <= 131072) { // <=128KB
+		m_cached_interval = interval;
+		m_cached_seq = result;
+		m_cache_valid = true;
+	} else {
+		m_cache_valid = false;
+	}
 }
