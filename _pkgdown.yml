@@ -73,6 +73,7 @@ reference:
       - gintervals.neighbors.downstream
       - gintervals.neighbors.directional
       - gintervals.quantiles
+      - grandom_genome
       - gintervals.rbind
       - gintervals.rm
       - gintervals.save
@@ -97,8 +98,16 @@ reference:
       - gsample
       - gscreen
       - gsegment
-      - gseq.extract
       - gsummary
+  - title: Sequence functions 
+    desc: Sequence functions 
+      - gseq.extract 
+      - gseq.pwm 
+      - gseq.kmer 
+      - gseq.revcomp 
+      - grevcomp
+      - gseq.rev 
+      - gseq.comp 
   - title: Database functions
     desc: Database functions
     contents:
@@ -119,4 +128,3 @@ reference:
       - gcluster.run
       - gwget
       - gwilcox
-      - grevcomp

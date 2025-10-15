@@ -3060,3 +3060,108 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
         res
     }
 }
+
+#' Generate random genome intervals
+#'
+#' Generate random genome intervals with a specified number of regions of a specified size.
+#' This function samples intervals uniformly across the genome, weighted by chromosome length.
+#'
+#' @param size The size of the intervals to generate (in base pairs)
+#' @param n The number of intervals to generate
+#' @param dist_from_edge The minimum distance from the edge of the chromosome for a region to start or end (default: 3e6)
+#' @param chromosomes The chromosomes to sample from (default: all chromosomes). Can be a character vector of chromosome names.
+#'
+#' @return A data.frame with columns chrom, start, and end representing genomic intervals
+#'
+#' @details
+#' The function samples intervals randomly across the genome, with chromosomes weighted by their length.
+#' Each interval is guaranteed to:
+#' \itemize{
+#'   \item Be of the specified size
+#'   \item Start and end at least \code{dist_from_edge} bases away from chromosome boundaries
+#'   \item Fall entirely within a single chromosome
+#' }
+#'
+#' The function uses R's random number generator, so \code{set.seed()} can be used for reproducibility.
+#'
+#' This function is implemented in C++ for high performance and can generate millions of intervals quickly.
+#'
+#' @examples
+#' \dontrun{
+#' gdb.init_examples()
+#'
+#' # Generate 1000 random intervals of 100bp
+#' intervals <- grandom_genome(100, 1000)
+#' head(intervals)
+#'
+#' # Generate intervals only on chr1 and chr2
+#' intervals <- grandom_genome(100, 1000, chromosomes = c("chr1", "chr2"))
+#'
+#' # For reproducibility
+#' set.seed(123)
+#' intervals1 <- grandom_genome(100, 100)
+#' set.seed(123)
+#' intervals2 <- grandom_genome(100, 100)
+#' identical(intervals1, intervals2) # TRUE
+#' }
+#'
+#' @export
+grandom_genome <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL) {
+    # Check that database is initialized
+    .gcheckroot()
+
+    # Validate inputs
+    if (!is.numeric(size) || length(size) != 1 || size <= 0) {
+        stop("size must be a positive number", call. = FALSE)
+    }
+    if (!is.numeric(n) || length(n) != 1 || n <= 0) {
+        stop("n must be a positive number", call. = FALSE)
+    }
+    if (!is.numeric(dist_from_edge) || length(dist_from_edge) != 1 || dist_from_edge < 0) {
+        stop("dist_from_edge must be a non-negative number", call. = FALSE)
+    }
+
+    # Get all chromosomes
+    all_genome <- gintervals.all()
+
+    # Filter by chromosomes if specified
+    if (!is.null(chromosomes)) {
+        if (!is.character(chromosomes)) {
+            stop("chromosomes must be a character vector", call. = FALSE)
+        }
+        all_genome <- all_genome[all_genome$chrom %in% chromosomes, , drop = FALSE]
+        if (nrow(all_genome) == 0) {
+            stop("No chromosomes named ", paste(chromosomes, collapse = ", "), " found in the genome", call. = FALSE)
+        }
+    }
+
+    # Pre-filter: remove chromosomes that are too short
+    chrom_lengths <- all_genome$end - all_genome$start
+    min_required_length <- size + 2 * dist_from_edge
+    valid_chroms <- chrom_lengths >= min_required_length
+
+    if (!any(valid_chroms)) {
+        stop("No chromosomes are long enough for intervals of size ", size,
+            " with dist_from_edge ", dist_from_edge,
+            " (minimum required chromosome length: ", min_required_length, ")",
+            call. = FALSE
+        )
+    }
+
+    all_genome <- all_genome[valid_chroms, , drop = FALSE]
+
+    # Call C++ function
+    result <- .Call("C_grandom_genome",
+        as.integer(size),
+        as.integer(n),
+        as.numeric(dist_from_edge),
+        all_genome,
+        PACKAGE = "misha"
+    )
+
+    # Force range to ensure intervals are within chromosome boundaries
+    # (should already be satisfied, but this is a safety check)
+    result <- gintervals.force_range(result)
+
+    return(result)
+}
