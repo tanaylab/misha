@@ -75,7 +75,7 @@ reference:
       - gintervals.neighbors.downstream
       - gintervals.neighbors.directional
       - gintervals.quantiles
-      - grandom_genome
+      - gintervals.random
       - gintervals.rbind
       - gintervals.rm
       - gintervals.save
