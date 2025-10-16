@@ -111,7 +111,11 @@ prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 spat_min = NULL, spat_max = NULL)} \cr
 Returns maximum log-likelihood score of best PSSM match. bidirect=TRUE
 checks both strands. Prior adds pseudocounts, extend=TRUE allows boundary
-scoring. Optional spatial weighting allows position-dependent weights.
+scoring. Neutral characters (\code{N}, \code{n}, \code{*} by default) are scored with the mean
+log-probability of each PSSM column on both strands, so the same penalty applies regardless of
+orientation. The reported value is the single best-strand score after spatial weighting—forward
+and reverse orientations are compared, not summed. Optional spatial weighting allows
+position-dependent weights.
 
 \emph{func = "pwm.max.pos", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
@@ -137,6 +141,8 @@ For all PWM functions:
   \item bidirect: If TRUE, scans both strands; if FALSE, forward only (default: TRUE)
   \item prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
   \item extend: If TRUE, allows scoring at interval boundaries (default: TRUE)
+  \item neutral characters: By default \code{N}, \code{n}, and \code{*} are treated as unknown bases
+and contribute the average log-probability of the corresponding PSSM column on both strands.
   \item strand: If 1, scans forward strand; if -1, scans reverse strand (default: 1).
 For strand == 1, the position of the best match is at the beginning of the match.
 For strand == -1, the position is at the end of the match.
