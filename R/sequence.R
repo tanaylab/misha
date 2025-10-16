@@ -179,6 +179,14 @@ gseq.comp <- function(seq) {
 #' as 1-based indices on the original full sequence (including gaps). \code{start_pos} and
 #' \code{end_pos} are interpreted as physical coordinates on the full sequence.
 #'
+#' Neutral characters (\code{neutral_chars}, default \code{c("N", "n", "*")}) are treated as
+#' unknown bases in both orientations. Each neutral contributes the mean log-probability of the
+#' corresponding PSSM column, yielding identical penalties on forward and reverse strands without
+#' hard-coded background scores. In \code{mode = "max"} the reported value is the single best
+#' strand score after applying any spatial weights; forward and reverse contributions are not
+#' aggregated. This matches the default behaviour of the PWM virtual tracks (\code{pwm.max},
+#' \code{pwm.max.pos}, etc.).
+#'
 #' @seealso \code{\link{gvtrack.create}} for detailed PWM parameter documentation
 #'
 #' @examples

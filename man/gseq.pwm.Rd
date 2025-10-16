@@ -60,7 +60,8 @@ scanning. Windows are w consecutive non-gap bases (default: TRUE)}
 
 \item{gap_chars}{character vector; which characters count as gaps (default: c("-", "."))}
 
-\item{neutral_chars}{character vector; bases treated as unknown and scored with the average log probability per position (default: c("N", "n", "*"))}
+\item{neutral_chars}{character vector; bases treated as unknown and scored with the average
+log probability per position (default: c("N", "n", "*"))}
 
 \item{prior}{numeric; pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.}
 }
@@ -87,6 +88,14 @@ When \code{skip_gaps=TRUE}, characters specified in \code{gap_chars} are treated
 Windows are defined as w consecutive non-gap bases. All positions (\code{pos}) are reported
 as 1-based indices on the original full sequence (including gaps). \code{start_pos} and
 \code{end_pos} are interpreted as physical coordinates on the full sequence.
+
+Neutral characters (\code{neutral_chars}, default \code{c("N", "n", "*")}) are treated as
+unknown bases in both orientations. Each neutral contributes the mean log-probability of the
+corresponding PSSM column, yielding identical penalties on forward and reverse strands without
+hard-coded background scores. In \code{mode = "max"} the reported value is the single best
+strand score after applying any spatial weights; forward and reverse contributions are not
+aggregated. This matches the default behaviour of the PWM virtual tracks (\code{pwm.max},
+\code{pwm.max.pos}, etc.).
 }
 \examples{
 \dontrun{
