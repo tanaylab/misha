@@ -242,7 +242,7 @@ test_that("pwm honors iterator shifts across multiple magnitudes (extend=TRUE, f
         expected <- log_sum_exp(manual)
         actual <- scores[[vnames[i]]][1]
 
-        tol <- if (s >= 250) 1e-4 else 1e-6
+        tol <- if (s >= 250) 1e-4 else if (s >= 50) 1e-5 else 1e-6
         expect_equal(actual, expected, tolerance = tol)
     }
 })

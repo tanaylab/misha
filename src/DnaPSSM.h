@@ -241,6 +241,9 @@ public:
 	void normalize();
 	void normalize_logs();
 
+	// Add uniform Dirichlet prior and renormalize each position
+	void add_dirichlet_prior(float prior);
+
 	void count(string::const_iterator seq, float weight = 1, int dir = 1);
 	void count_weighted(const string &target, vector<float> &wgts,
 					vector<int1> &dirs, float thresh_wgt);
