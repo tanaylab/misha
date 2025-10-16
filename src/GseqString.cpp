@@ -5,12 +5,17 @@
 #include <cstdint>
 #include "port.h"
 
+#include <algorithm>
+#include <cmath>
+#include <climits>
+
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Arith.h>
 
 #include "DnaPSSM.h"
 #include "PWMScorer.h"
+#include "PwmCoreParams.h"
 #include "GenomeUtils.h"
 
 // Helper struct for score results
@@ -123,22 +128,17 @@ static void compute_bounds(int L, int w, int roi_start, int roi_end, int extend_
 static ScoreResult score_pwm_over_range(
     const std::string& seq,
     int start_min0, int start_max0,
-    const DnaPSSM& pssm,
     const std::string& mode,
-    bool bidirect,
-    int strand_mode,  // 0=both, +1=fwd, -1=rev
-    double score_thresh,
     int roi_start1,
-    const std::vector<float>& spat_log_factors,
-    int spat_bin_size,
+    const PwmCoreParams& params,
     bool skip_gaps = false,
-    const GapCharset* gaps = nullptr
+    const GapCharset* gaps = nullptr,
+    const std::vector<char>* neutral_chars = nullptr
 ) {
     ScoreResult result;
-    int w = pssm.size();
-    bool use_spat = !spat_log_factors.empty();
+    int w = params.pssm.size();
+    bool use_spat = !params.spat_log_factors.empty();
 
-    // Helper lambda for log-sum-exp
     auto log_sum_exp_add = [](double a, double b) -> double {
         if (a == R_NegInf) return b;
         if (b == R_NegInf) return a;
@@ -149,10 +149,48 @@ static ScoreResult score_pwm_over_range(
         }
     };
 
-    // Branch on gap-skipping mode
+    auto is_neutral = [&](char c) -> bool {
+        if (!neutral_chars) return false;
+        for (char nc : *neutral_chars) {
+            if (c == nc) return true;
+        }
+        return false;
+    };
+
+    auto window_log_prob = [&](const std::string& window, bool reverse) -> double {
+        double logp = 0.0;
+        if (!reverse) {
+            for (int idx = 0; idx < w; ++idx) {
+                char c = window[idx];
+                if (is_neutral(c)) {
+                    logp += params.pssm[idx].get_avg_log_prob();
+                } else {
+                    int code = params.pssm[idx].encode(c);
+                    if (code < 0) return R_NegInf;
+                    logp += params.pssm[idx].get_log_prob(c);
+                }
+            }
+        } else {
+            for (int idx = 0; idx < w; ++idx) {
+                char c = window[idx];
+                if (is_neutral(c)) {
+                    logp += params.pssm[w - idx - 1].get_avg_log_prob();
+                } else {
+                    switch (c) {
+                        case 'a': case 'A': c = 'T'; break;
+                        case 't': case 'T': c = 'A'; break;
+                        case 'c': case 'C': c = 'G'; break;
+                        case 'g': case 'G': c = 'C'; break;
+                        default: return R_NegInf;
+                    }
+                    logp += params.pssm[w - idx - 1].get_log_prob(c);
+                }
+            }
+        }
+        return logp;
+    };
+
     if (!skip_gaps || gaps == nullptr) {
-        // ========== Original contiguous path ==========
-        // Handle empty range
         if (start_max0 < start_min0) {
             if (mode == "count") {
                 result.value = 0.0;
@@ -168,52 +206,42 @@ static ScoreResult score_pwm_over_range(
         double total = R_NegInf;
         int count = 0;
 
-        // Scan all allowed starts
         for (int s0 = start_min0; s0 <= start_max0; ++s0) {
-            // Compute spatial weight
             int offset_from_roi = (s0 + 1) - roi_start1;
             float spat_log = 0.0f;
             if (use_spat) {
-                int spat_bin = offset_from_roi / spat_bin_size;
+                int spat_bin = offset_from_roi / params.spat_bin_size;
                 if (spat_bin < 0) spat_bin = 0;
-                if (spat_bin >= (int)spat_log_factors.size()) {
-                    spat_bin = spat_log_factors.size() - 1;
+                if (spat_bin >= (int)params.spat_log_factors.size()) {
+                    spat_bin = params.spat_log_factors.size() - 1;
                 }
-                spat_log = spat_log_factors[spat_bin];
+                spat_log = params.spat_log_factors[spat_bin];
             }
 
-            // Score forward and/or reverse strand
-            float fwd_score = R_NegInf;
-            float rev_score = R_NegInf;
-
-            // Extract substring for this window
             std::string window = seq.substr(s0, w);
 
-            if (strand_mode >= 0) {  // forward or both
-                float logp = 0;
-                pssm.calc_like(window, logp);
-                fwd_score = logp;
+            double fwd_score = R_NegInf;
+            double rev_score = R_NegInf;
+
+            if (params.strand_mode >= 0) {
+                fwd_score = window_log_prob(window, false);
             }
 
-            if ((bidirect || strand_mode <= 0) && strand_mode != 1) {  // reverse or both
-                float logp = 0;
-                pssm.calc_like_rc(window, logp);
-                rev_score = logp;
+            if ((params.bidirect || params.strand_mode <= 0) && params.strand_mode != 1) {
+                rev_score = window_log_prob(window, true);
             }
 
-            // Apply spatial weighting
             if (use_spat) {
                 if (fwd_score > R_NegInf) fwd_score += spat_log;
                 if (rev_score > R_NegInf) rev_score += spat_log;
             }
 
-            // Process based on mode
             if (mode == "lse") {
-                if (bidirect) {
+                if (params.bidirect) {
                     total = log_sum_exp_add(total, fwd_score);
                     total = log_sum_exp_add(total, rev_score);
                 } else {
-                    double this_score = (strand_mode >= 0) ? fwd_score : rev_score;
+                    double this_score = (params.strand_mode >= 0) ? fwd_score : rev_score;
                     total = log_sum_exp_add(total, this_score);
                 }
             } else if (mode == "max") {
@@ -223,11 +251,10 @@ static ScoreResult score_pwm_over_range(
                 }
             } else if (mode == "count") {
                 double this_max = std::max(fwd_score, rev_score);
-                if (this_max >= score_thresh) {
+                if (this_max >= params.score_thresh) {
                     count++;
                 }
             } else if (mode == "pos") {
-                // Tie-breaking: prefer smaller start, then prefer forward strand
                 if (fwd_score > best_score ||
                     (fwd_score == best_score && s0 < best_start0) ||
                     (fwd_score == best_score && s0 == best_start0 && best_strand == -1)) {
@@ -244,7 +271,6 @@ static ScoreResult score_pwm_over_range(
             }
         }
 
-        // Set result based on mode
         if (mode == "lse") {
             result.value = total;
         } else if (mode == "max") {
@@ -263,18 +289,13 @@ static ScoreResult score_pwm_over_range(
         return result;
 
     } else {
-        // ========== Gap-skipping path ==========
-        // Compute the full physical range that windows can span
         int end_lim_phys0 = start_max0 + w - 1;
 
-        // Build gap projector over the full physical range
         GapProjector gp = GapProjector::build(seq, *gaps, start_min0, end_lim_phys0);
 
-        // Compute logical bounds
         int j_min = gp.first_log_ge_phys(start_min0);
         int j_max = gp.last_log_window_end_le_phys(end_lim_phys0, w);
 
-        // Check if we have enough non-gap bases
         if (j_min < 0 || j_max < j_min || static_cast<int>(gp.comp.size()) < w) {
             if (mode == "count") {
                 result.value = 0.0;
@@ -290,55 +311,45 @@ static ScoreResult score_pwm_over_range(
         double total = R_NegInf;
         int count = 0;
 
-        // Scan logical starts
         for (int j = j_min; j <= j_max; ++j) {
             int start_phys0 = gp.log_to_phys[j];
             int start_phys1 = start_phys0 + 1;
 
-            // Compute spatial weight based on physical position
             int offset_from_roi = start_phys1 - roi_start1;
             float spat_log = 0.0f;
             if (use_spat) {
-                int spat_bin = offset_from_roi / spat_bin_size;
+                int spat_bin = offset_from_roi / params.spat_bin_size;
                 if (spat_bin < 0) spat_bin = 0;
-                if (spat_bin >= (int)spat_log_factors.size()) {
-                    spat_bin = spat_log_factors.size() - 1;
+                if (spat_bin >= (int)params.spat_log_factors.size()) {
+                    spat_bin = params.spat_log_factors.size() - 1;
                 }
-                spat_log = spat_log_factors[spat_bin];
+                spat_log = params.spat_log_factors[spat_bin];
             }
 
-            // Score using compacted sequence
-            float fwd_score = R_NegInf;
-            float rev_score = R_NegInf;
-
-            // Extract window from compacted sequence
             std::string window = gp.comp.substr(j, w);
 
-            if (strand_mode >= 0) {
-                float logp = 0;
-                pssm.calc_like(window, logp);
-                fwd_score = logp;
+            double fwd_score = R_NegInf;
+            double rev_score = R_NegInf;
+
+            if (params.strand_mode >= 0) {
+                fwd_score = window_log_prob(window, false);
             }
 
-            if ((bidirect || strand_mode <= 0) && strand_mode != 1) {
-                float logp = 0;
-                pssm.calc_like_rc(window, logp);
-                rev_score = logp;
+            if ((params.bidirect || params.strand_mode <= 0) && params.strand_mode != 1) {
+                rev_score = window_log_prob(window, true);
             }
 
-            // Apply spatial weighting
             if (use_spat) {
                 if (fwd_score > R_NegInf) fwd_score += spat_log;
                 if (rev_score > R_NegInf) rev_score += spat_log;
             }
 
-            // Process based on mode
             if (mode == "lse") {
-                if (bidirect) {
+                if (params.bidirect) {
                     total = log_sum_exp_add(total, fwd_score);
                     total = log_sum_exp_add(total, rev_score);
                 } else {
-                    double this_score = (strand_mode >= 0) ? fwd_score : rev_score;
+                    double this_score = (params.strand_mode >= 0) ? fwd_score : rev_score;
                     total = log_sum_exp_add(total, this_score);
                 }
             } else if (mode == "max") {
@@ -348,11 +359,10 @@ static ScoreResult score_pwm_over_range(
                 }
             } else if (mode == "count") {
                 double this_max = std::max(fwd_score, rev_score);
-                if (this_max >= score_thresh) {
+                if (this_max >= params.score_thresh) {
                     count++;
                 }
             } else if (mode == "pos") {
-                // Tie-breaking: prefer smaller physical start, then prefer forward strand
                 if (fwd_score > best_score ||
                     (fwd_score == best_score && start_phys0 < (best_j >= 0 ? gp.log_to_phys[best_j] : INT_MAX)) ||
                     (fwd_score == best_score && start_phys0 == (best_j >= 0 ? gp.log_to_phys[best_j] : 0) && best_strand == -1)) {
@@ -369,7 +379,6 @@ static ScoreResult score_pwm_over_range(
             }
         }
 
-        // Set result based on mode
         if (mode == "lse") {
             result.value = total;
         } else if (mode == "max") {
@@ -379,7 +388,7 @@ static ScoreResult score_pwm_over_range(
         } else if (mode == "pos") {
             if (best_j >= 0) {
                 result.has_pos = true;
-                result.pos_1based = gp.log_to_phys[best_j] + 1;  // physical position, 1-based
+                result.pos_1based = gp.log_to_phys[best_j] + 1;
                 result.strand = best_strand;
             }
             result.value = best_score;
@@ -388,6 +397,8 @@ static ScoreResult score_pwm_over_range(
         return result;
     }
 }
+
+
 
 // Score k-mer over a range (with optional gap support)
 // Returns count or fraction depending on return_frac
@@ -508,7 +519,7 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
                 SEXP r_strand_mode, SEXP r_score_thresh,
                 SEXP r_roi_start, SEXP r_roi_end, SEXP r_extend,
                 SEXP r_spat_params, SEXP r_return_strand,
-                SEXP r_skip_gaps, SEXP r_gap_chars) {
+                SEXP r_skip_gaps, SEXP r_gap_chars, SEXP r_prior, SEXP r_neutral_chars) {
     try {
         // Validate and extract inputs
         if (!Rf_isString(r_seqs)) {
@@ -523,18 +534,21 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             return Rf_allocVector(REALSXP, 0);
         }
 
-        // Extract PSSM
-        DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(r_pssm);
-        int w = pssm.size();
-
-        // Extract parameters
+        // Extract core PWM parameters
         std::string mode = CHAR(STRING_ELT(r_mode, 0));
-        bool bidirect = Rf_asLogical(r_bidirect);
-        int strand_mode = Rf_asInteger(r_strand_mode);
-        double score_thresh = Rf_asReal(r_score_thresh);
         bool return_strand = Rf_asLogical(r_return_strand);
 
-        // Handle extend parameter
+        PwmCoreParams core;
+        core.pssm = PWMScorer::create_pssm_from_matrix(r_pssm);
+        int w = core.pssm.size();
+
+        core.prior = Rf_asReal(r_prior);
+        core.apply_prior();
+
+        core.bidirect = Rf_asLogical(r_bidirect);
+        core.strand_mode = Rf_asInteger(r_strand_mode);
+        core.score_thresh = Rf_asReal(r_score_thresh);
+
         int extend_val;
         if (Rf_isLogical(r_extend)) {
             extend_val = Rf_asLogical(r_extend) ? (w - 1) : 0;
@@ -542,8 +556,8 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             extend_val = Rf_asInteger(r_extend);
             if (extend_val < 0) extend_val = 0;
         }
+        core.extend = extend_val;
 
-        // Extract gap parameters
         bool skip_gaps = Rf_asLogical(r_skip_gaps);
         GapCharset gap_charset;
         if (skip_gaps && !Rf_isNull(r_gap_chars) && Rf_isString(r_gap_chars)) {
@@ -556,20 +570,30 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             }
         }
 
-        // Extract spatial parameters
-        std::vector<float> spat_log_factors;
+        std::vector<char> neutral_chars;
+        if (!Rf_isNull(r_neutral_chars) && Rf_isString(r_neutral_chars)) {
+            int n_chars = Rf_length(r_neutral_chars);
+            neutral_chars.reserve(n_chars);
+            for (int i = 0; i < n_chars; ++i) {
+                const char* ch = CHAR(STRING_ELT(r_neutral_chars, i));
+                if (ch && ch[0] != '\0') {
+                    neutral_chars.push_back(ch[0]);
+                }
+            }
+        }
+
+        std::vector<float> spat_factors;
         int spat_bin_size = 1;
         if (!Rf_isNull(r_spat_params) && Rf_isNewList(r_spat_params)) {
-            SEXP spat_factor = VECTOR_ELT(r_spat_params, 0);  // spat.factor
-            SEXP spat_bin = VECTOR_ELT(r_spat_params, 1);      // spat.bin
-            // spat.min and spat.max are at indices 2, 3 but we don't use them here
+            SEXP spat_factor = VECTOR_ELT(r_spat_params, 0);
+            SEXP spat_bin = VECTOR_ELT(r_spat_params, 1);
 
             if (!Rf_isNull(spat_factor) && Rf_length(spat_factor) > 0) {
                 int n_spat = Rf_length(spat_factor);
-                spat_log_factors.resize(n_spat);
+                spat_factors.resize(n_spat);
                 double* spat_vals = REAL(spat_factor);
                 for (int i = 0; i < n_spat; ++i) {
-                    spat_log_factors[i] = log(std::max(1e-30, spat_vals[i]));
+                    spat_factors[i] = static_cast<float>(spat_vals[i]);
                 }
             }
 
@@ -577,8 +601,12 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
                 spat_bin_size = std::max(1, Rf_asInteger(spat_bin));
             }
         }
-        
-        // Prepare result vectors
+
+        if (!spat_factors.empty()) {
+            core.set_spatial_factors(spat_factors, spat_bin_size);
+        }
+
+// Prepare result vectors
         SEXP r_result = R_NilValue;
         SEXP r_pos = R_NilValue;
         SEXP r_strand_out = R_NilValue;
@@ -623,9 +651,9 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             
             // Score the sequence
             ScoreResult result = score_pwm_over_range(
-                seq, start_min0, start_max0, pssm, mode, bidirect, strand_mode,
-                score_thresh, roi_start, spat_log_factors, spat_bin_size,
-                skip_gaps, skip_gaps ? &gap_charset : nullptr
+                seq, start_min0, start_max0, mode, roi_start, core,
+                skip_gaps, skip_gaps ? &gap_charset : nullptr,
+                neutral_chars.empty() ? nullptr : &neutral_chars
             );
             
             // Store result
@@ -768,4 +796,3 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
 }
 
 }  // extern "C"
-
