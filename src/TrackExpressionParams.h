@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <limits>
+#include <algorithm>
 
 #ifndef R_NO_REMAP
 #  define R_NO_REMAP
@@ -20,6 +21,7 @@
 
 #include "DnaPSSM.h"
 #include "PWMScorer.h"
+#include "PwmCoreParams.h"
 #include "rdbutils.h"
 
 using namespace std;
@@ -42,154 +44,186 @@ inline int findListElementIndex(SEXP list, const char* name) {
 
 // PWM parameters structure
 struct PWMParams {
-    DnaPSSM pssm;
-    bool bidirect;
-    bool extend;
-    char strand;
-    std::vector<float> spat_factor;
-    int spat_bin;
+    PwmCoreParams core;
+    bool extend_flag;
     int spat_min;
     int spat_max;
     bool has_range;
-    float score_thresh;
 
     PWMParams()
-        : bidirect(true), extend(true), strand(1),
-          spat_bin(1), spat_min(0), spat_max(1000000),
-          has_range(false), score_thresh(0.0f) {}
+        : extend_flag(true), spat_min(0), spat_max(1000000),
+          has_range(false) {
+        core.bidirect = true;
+        core.strand_mode = 1;
+        core.score_thresh = 0.0;
+        core.extend = 0;
+        core.spat_bin_size = 1;
+    }
 
-    // Parse PWM parameters from R list
     static PWMParams parse(SEXP rparams, const string& vtrack) {
         PWMParams params;
 
-        if (!Rf_isNewList(rparams)) {
-            rdb::verror("Virtual track %s: PWM functions require a list parameter with pssm matrix", vtrack.c_str());
+        SEXP rpssm = R_NilValue;
+        bool params_is_list = false;
+        if (Rf_isMatrix(rparams)) {
+            rpssm = rparams;
+        } else {
+            if (!Rf_isNewList(rparams)) {
+                rdb::verror("Virtual track %s: PWM functions require a matrix or parameter list", vtrack.c_str());
+            }
+            params_is_list = true;
+            int pssm_idx = findListElementIndex(rparams, "pssm");
+            if (pssm_idx < 0) {
+                rdb::verror("Virtual track %s: PWM functions require a 'pssm' parameter", vtrack.c_str());
+            }
+            rpssm = VECTOR_ELT(rparams, pssm_idx);
         }
 
-        // Get PSSM matrix (required)
-        int pssm_idx = findListElementIndex(rparams, "pssm");
-        if (pssm_idx < 0) {
-            rdb::verror("Virtual track %s: PWM functions require a 'pssm' parameter", vtrack.c_str());
-        }
-        SEXP rpssm = VECTOR_ELT(rparams, pssm_idx);
         if (!Rf_isMatrix(rpssm)) {
             rdb::verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
         }
-        params.pssm = PWMScorer::create_pssm_from_matrix(rpssm);
+        params.core.pssm = PWMScorer::create_pssm_from_matrix(rpssm);
 
-        // Get bidirect parameter (optional, default: true)
-        int bidirect_idx = findListElementIndex(rparams, "bidirect");
-        if (bidirect_idx >= 0) {
-            SEXP rbidirect = VECTOR_ELT(rparams, bidirect_idx);
-            if (rbidirect != R_NilValue) {
-                if (!Rf_isLogical(rbidirect))
-                    rdb::verror("Virtual track %s: bidirect parameter must be logical", vtrack.c_str());
-                params.bidirect = LOGICAL(rbidirect)[0];
+        if (params_is_list) {
+            int bidirect_idx = findListElementIndex(rparams, "bidirect");
+            if (bidirect_idx >= 0) {
+                SEXP rbidirect = VECTOR_ELT(rparams, bidirect_idx);
+                if (rbidirect != R_NilValue) {
+                    if (!Rf_isLogical(rbidirect))
+                        rdb::verror("Virtual track %s: bidirect parameter must be logical", vtrack.c_str());
+                    params.core.bidirect = LOGICAL(rbidirect)[0];
+                }
             }
         }
-        params.pssm.set_bidirect(params.bidirect);
+        params.core.pssm.set_bidirect(params.core.bidirect);
 
-        // Get extend parameter (optional, default: true)
-        int extend_idx = findListElementIndex(rparams, "extend");
-        if (extend_idx >= 0) {
-            SEXP rextend = VECTOR_ELT(rparams, extend_idx);
-            if (rextend != R_NilValue) {
-                if (!Rf_isLogical(rextend))
-                    rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
-                params.extend = LOGICAL(rextend)[0];
-            }
-        }
-
-        // Get strand parameter (optional, default: 1)
-        int strand_idx = findListElementIndex(rparams, "strand");
-        if (strand_idx >= 0) {
-            SEXP rstrand = VECTOR_ELT(rparams, strand_idx);
-            if (rstrand != R_NilValue) {
-                if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
-                    rdb::verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
-                params.strand = (char)REAL(rstrand)[0];
+        if (params_is_list) {
+            int extend_idx = findListElementIndex(rparams, "extend");
+            if (extend_idx >= 0) {
+                SEXP rextend = VECTOR_ELT(rparams, extend_idx);
+                if (rextend != R_NilValue) {
+                    if (!Rf_isLogical(rextend))
+                        rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
+                    params.extend_flag = LOGICAL(rextend)[0];
+                }
             }
         }
 
-        // Get spat_factor (optional)
-        int spat_idx = findListElementIndex(rparams, "spat_factor");
-        SEXP rspat = R_NilValue;
-        if (spat_idx >= 0) {
-            rspat = VECTOR_ELT(rparams, spat_idx);
+        if (params_is_list) {
+            int prior_idx = findListElementIndex(rparams, "prior");
+            if (prior_idx >= 0) {
+                SEXP rprior = VECTOR_ELT(rparams, prior_idx);
+                if (rprior != R_NilValue) {
+                    if (!Rf_isReal(rprior) || Rf_length(rprior) != 1)
+                        rdb::verror("Virtual track %s: prior parameter must be numeric", vtrack.c_str());
+                    params.core.prior = REAL(rprior)[0];
+                }
+            }
+        } else {
+            params.core.prior = 0.0;
         }
-        if (rspat != R_NilValue) {
-            if (!Rf_isReal(rspat))
-                rdb::verror("Virtual track %s: spat_factor must be a numeric vector", vtrack.c_str());
-            int n = Rf_length(rspat);
-            if (n <= 0)
-                rdb::verror("Virtual track %s: spat_factor must have at least one element", vtrack.c_str());
-            params.spat_factor.resize(n);
-            for (int i = 0; i < n; ++i) {
-                params.spat_factor[i] = REAL(rspat)[i];
-                if (params.spat_factor[i] <= 0)
-                    rdb::verror("Virtual track %s: all spat_factor values must be positive", vtrack.c_str());
-            }
+        if (params.core.prior < 0 || params.core.prior > 1) {
+            rdb::verror("Virtual track %s: prior must be between 0 and 1", vtrack.c_str());
+        }
+        params.core.apply_prior();
 
-            // Get spat_bin (optional, default: 1)
-            int bin_idx = findListElementIndex(rparams, "spat_bin");
-            SEXP rbin = R_NilValue;
-            if (bin_idx >= 0) {
-                rbin = VECTOR_ELT(rparams, bin_idx);
-            }
-            if (rbin != R_NilValue) {
-                if (!Rf_isInteger(rbin) && !Rf_isReal(rbin))
-                    rdb::verror("Virtual track %s: spat_bin must be numeric", vtrack.c_str());
-                params.spat_bin = (int)(Rf_isReal(rbin) ? REAL(rbin)[0] : INTEGER(rbin)[0]);
-                if (params.spat_bin <= 0)
-                    rdb::verror("Virtual track %s: spat_bin must be > 0", vtrack.c_str());
+        if (params_is_list) {
+            int strand_idx = findListElementIndex(rparams, "strand");
+            if (strand_idx >= 0) {
+                SEXP rstrand = VECTOR_ELT(rparams, strand_idx);
+                if (rstrand != R_NilValue) {
+                    if (!Rf_isReal(rstrand) || Rf_length(rstrand) != 1)
+                        rdb::verror("Virtual track %s: strand parameter must be numeric", vtrack.c_str());
+                    params.core.strand_mode = (int)REAL(rstrand)[0];
+                }
             }
         }
 
-        // Get spat_min/spat_max (optional)
-        int smin_idx = findListElementIndex(rparams, "spat_min");
-        SEXP rsmin = R_NilValue;
-        if (smin_idx >= 0) {
-            rsmin = VECTOR_ELT(rparams, smin_idx);
-        }
-        if (rsmin != R_NilValue) {
-            if (!Rf_isInteger(rsmin) && !Rf_isReal(rsmin))
-                rdb::verror("Virtual track %s: spat_min must be numeric", vtrack.c_str());
-            params.spat_min = (int)(Rf_isReal(rsmin) ? REAL(rsmin)[0] : INTEGER(rsmin)[0]);
-            params.has_range = true;
+        if (params_is_list) {
+            int spat_idx = findListElementIndex(rparams, "spat_factor");
+            SEXP rspat = R_NilValue;
+            if (spat_idx >= 0) {
+                rspat = VECTOR_ELT(rparams, spat_idx);
+            }
+            if (rspat != R_NilValue) {
+                if (!Rf_isReal(rspat))
+                    rdb::verror("Virtual track %s: spat_factor must be a numeric vector", vtrack.c_str());
+                int n = Rf_length(rspat);
+                if (n <= 0)
+                    rdb::verror("Virtual track %s: spat_factor must have at least one element", vtrack.c_str());
+                std::vector<float> factors(n);
+                for (int i = 0; i < n; ++i) {
+                    factors[i] = REAL(rspat)[i];
+                    if (factors[i] <= 0)
+                        rdb::verror("Virtual track %s: all spat_factor values must be positive", vtrack.c_str());
+                }
+
+                int bin_idx = findListElementIndex(rparams, "spat_bin");
+                SEXP rbin = R_NilValue;
+                if (bin_idx >= 0) {
+                    rbin = VECTOR_ELT(rparams, bin_idx);
+                }
+                int spat_bin = 1;
+                if (rbin != R_NilValue) {
+                    if (!Rf_isInteger(rbin) && !Rf_isReal(rbin))
+                        rdb::verror("Virtual track %s: spat_bin must be numeric", vtrack.c_str());
+                    spat_bin = (int)(Rf_isReal(rbin) ? REAL(rbin)[0] : INTEGER(rbin)[0]);
+                    if (spat_bin <= 0)
+                        rdb::verror("Virtual track %s: spat_bin must be > 0", vtrack.c_str());
+                }
+
+                params.core.set_spatial_factors(factors, spat_bin);
+            }
         }
 
-        int smax_idx = findListElementIndex(rparams, "spat_max");
-        SEXP rsmax = R_NilValue;
-        if (smax_idx >= 0) {
-            rsmax = VECTOR_ELT(rparams, smax_idx);
-        }
-        if (rsmax != R_NilValue) {
-            if (!Rf_isInteger(rsmax) && !Rf_isReal(rsmax))
-                rdb::verror("Virtual track %s: spat_max must be numeric", vtrack.c_str());
-            params.spat_max = (int)(Rf_isReal(rsmax) ? REAL(rsmax)[0] : INTEGER(rsmax)[0]);
-            params.has_range = true;
+        if (params_is_list) {
+            int smin_idx = findListElementIndex(rparams, "spat_min");
+            SEXP rsmin = R_NilValue;
+            if (smin_idx >= 0) {
+                rsmin = VECTOR_ELT(rparams, smin_idx);
+            }
+            if (rsmin != R_NilValue) {
+                if (!Rf_isInteger(rsmin) && !Rf_isReal(rsmin))
+                    rdb::verror("Virtual track %s: spat_min must be numeric", vtrack.c_str());
+                params.spat_min = (int)(Rf_isReal(rsmin) ? REAL(rsmin)[0] : INTEGER(rsmin)[0]);
+                params.has_range = true;
+            }
+
+            int smax_idx = findListElementIndex(rparams, "spat_max");
+            SEXP rsmax = R_NilValue;
+            if (smax_idx >= 0) {
+                rsmax = VECTOR_ELT(rparams, smax_idx);
+            }
+            if (rsmax != R_NilValue) {
+                if (!Rf_isInteger(rsmax) && !Rf_isReal(rsmax))
+                    rdb::verror("Virtual track %s: spat_max must be numeric", vtrack.c_str());
+                params.spat_max = (int)(Rf_isReal(rsmax) ? REAL(rsmax)[0] : INTEGER(rsmax)[0]);
+                params.has_range = true;
+            }
         }
 
-        // Apply range if provided
         if (params.has_range) {
-            params.pssm.set_range(params.spat_min, params.spat_max);
+            params.core.pssm.set_range(params.spat_min, params.spat_max);
         }
 
-        // Get score_thresh parameter (for pwm.count)
-        int thresh_idx = findListElementIndex(rparams, "score.thresh");
-        SEXP rthresh = R_NilValue;
-        if (thresh_idx >= 0) {
-            rthresh = VECTOR_ELT(rparams, thresh_idx);
-        }
-        if (rthresh != R_NilValue) {
-            if (!Rf_isReal(rthresh) || Rf_length(rthresh) != 1)
-                rdb::verror("Virtual track %s: score.thresh parameter must be numeric", vtrack.c_str());
-            params.score_thresh = REAL(rthresh)[0];
+        if (params_is_list) {
+            int thresh_idx = findListElementIndex(rparams, "score.thresh");
+            SEXP rthresh = R_NilValue;
+            if (thresh_idx >= 0) {
+                rthresh = VECTOR_ELT(rparams, thresh_idx);
+            }
+            if (rthresh != R_NilValue) {
+                if (!Rf_isReal(rthresh) || Rf_length(rthresh) != 1)
+                    rdb::verror("Virtual track %s: score.thresh parameter must be numeric", vtrack.c_str());
+                params.core.score_thresh = REAL(rthresh)[0];
+            }
         }
 
         return params;
     }
 };
+
+// KMER parameters structure};
 
 // KMER parameters structure
 struct KmerParams {

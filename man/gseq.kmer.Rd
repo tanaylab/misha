@@ -12,7 +12,7 @@ gseq.kmer(
   start_pos = NULL,
   end_pos = NULL,
   extend = FALSE,
-  skip_gaps = FALSE,
+  skip_gaps = TRUE,
   gap_chars = c("-", ".")
 )
 }
@@ -32,7 +32,7 @@ gseq.kmer(
 \item{extend}{logical or integer; extension of allowed window starts (default: FALSE)}
 
 \item{skip_gaps}{logical; if TRUE, treat gap characters as holes and skip them while
-scanning. Windows are k consecutive non-gap bases (default: FALSE)}
+scanning. Windows are k consecutive non-gap bases (default: TRUE)}
 
 \item{gap_chars}{character vector; which characters count as gaps (default: c("-", "."))}
 }

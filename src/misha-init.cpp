@@ -154,7 +154,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gwilcox", (DL_FUNC)&C_gwilcox, 10},
     {"C_revcomp", (DL_FUNC)&C_revcomp, 1},
     {"C_grandom_genome", (DL_FUNC)&C_grandom_genome, 5},
-    {"C_gseq_pwm", (DL_FUNC)&C_gseq_pwm, 13},
+    {"C_gseq_pwm", (DL_FUNC)&C_gseq_pwm, 14},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
     {NULL, NULL, 0}
 };

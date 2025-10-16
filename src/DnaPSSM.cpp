@@ -751,6 +751,24 @@ void DnaPSSM::normalize_logs()
 	}
 }
 
+void DnaPSSM::add_dirichlet_prior(float prior)
+{
+	if (prior <= 0)
+		return;
+
+	vector<float> freqs(4);
+	for (vector<DnaProbVec>::iterator i = m_chars.begin();
+	     i != m_chars.end();
+	     ++i) {
+		freqs[0] = i->get_direct_prob(0) + prior;
+		freqs[1] = i->get_direct_prob(1) + prior;
+		freqs[2] = i->get_direct_prob(2) + prior;
+		freqs[3] = i->get_direct_prob(3) + prior;
+		i->reset(freqs);
+		i->normalize();
+	}
+}
+
 void DnaPSSM::reset_prior(const vector<float> &prior)
 {
 	for(vector<DnaProbVec>::iterator i = m_chars.begin();

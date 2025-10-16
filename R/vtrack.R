@@ -452,15 +452,12 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
         # Optional score threshold for pwm.count
         score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
 
-        if (!all(c("A", "C", "G", "T") %in% colnames(pssm))) {
-            stop("PSSM must be a nx4 matrix with colnames A, C, G, T")
-        }
-
-        pssm <- pssm[, c("A", "C", "G", "T")]
-
-        if (is.data.frame(pssm)) {
-            pssm <- as.matrix(pssm)
-        }
+        pssm <- .coerce_pssm_matrix(
+            pssm,
+            numeric_msg = "PSSM must be a numeric matrix",
+            ncol_msg = "PSSM must be a nx4 matrix with colnames A, C, G, T",
+            colnames_msg = "PSSM must be a nx4 matrix with colnames A, C, G, T"
+        )
 
         if (!is.numeric(prior) || prior < 0 || prior > 1) {
             stop("prior must be a number between 0 and 1")
@@ -490,13 +487,6 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
                 stop("spat_bin must be a positive integer")
             }
             spat_bin <- as.integer(spat_bin)
-        }
-
-        # Normalize PSSM and add prior
-        pssm <- sweep(pssm, 1, rowSums(pssm), "/") # Normalize rows
-        if (prior > 0) {
-            pssm <- pssm + prior
-            pssm <- sweep(pssm, 1, rowSums(pssm), "/") # Renormalize after adding prior
         }
 
         # Set params with processed values

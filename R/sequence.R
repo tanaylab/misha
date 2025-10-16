@@ -156,8 +156,11 @@ gseq.comp <- function(seq) {
 #' @param return_strand logical; if TRUE and \code{mode="pos"}, returns data.frame with
 #'   \code{pos} and \code{strand} columns
 #' @param skip_gaps logical; if TRUE, treat gap characters as holes and skip them while
-#'   scanning. Windows are w consecutive non-gap bases (default: FALSE)
+#'   scanning. Windows are w consecutive non-gap bases (default: TRUE)
 #' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
+#' @param neutral_chars character vector; bases treated as unknown and scored with the average
+#'   log probability per position (default: c("N", "n", "*"))
+#' @param prior numeric; pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
 #'
 #' @return Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),
 #'   or data.frame with \code{pos} and \code{strand} columns (for "pos" mode with
@@ -240,23 +243,19 @@ gseq.pwm <- function(seqs,
                      spat.min = NULL,
                      spat.max = NULL,
                      return_strand = FALSE,
-                     skip_gaps = FALSE,
-                     gap_chars = c("-", ".")) {
+                     skip_gaps = TRUE,
+                     gap_chars = c("-", "."),
+                     neutral_chars = c("N", "n", "*"),
+                     prior = 0.01) {
     # Validate inputs
     mode <- match.arg(mode)
 
-    if (!is.matrix(pssm) || !is.numeric(pssm)) {
-        stop("pssm must be a numeric matrix")
-    }
-    if (ncol(pssm) != 4L) {
-        stop("pssm must have exactly 4 columns")
-    }
-    if (!setequal(colnames(pssm), c("A", "C", "G", "T"))) {
-        stop("pssm columns must be named A, C, G, T")
-    }
-
-    # Reorder columns to A, C, G, T
-    pssm <- pssm[, c("A", "C", "G", "T"), drop = FALSE]
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "pssm must be a numeric matrix",
+        ncol_msg = "pssm must have exactly 4 columns",
+        colnames_msg = "pssm columns must be named A, C, G, T"
+    )
 
     seqs <- as.character(seqs)
     seqs <- toupper(seqs)
@@ -276,6 +275,14 @@ gseq.pwm <- function(seqs,
 
     # Validate gap parameters
     skip_gaps <- as.logical(skip_gaps)[1]
+
+    neutral_chars <- as.character(neutral_chars)
+    if (length(neutral_chars) > 0) {
+        if (any(nchar(neutral_chars) != 1)) {
+            stop("neutral_chars must contain only single characters")
+        }
+    }
+
     if (skip_gaps) {
         if (!is.character(gap_chars) || length(gap_chars) == 0) {
             stop("gap_chars must be a non-empty character vector")
@@ -286,6 +293,11 @@ gseq.pwm <- function(seqs,
         if (length(gap_chars) != length(unique(gap_chars))) {
             stop("gap_chars must be distinct")
         }
+    }
+
+    # Validate prior parameter
+    if (!is.numeric(prior) || prior < 0 || prior > 1) {
+        stop("prior must be a number between 0 and 1")
     }
 
     # Normalize bounds
@@ -314,7 +326,9 @@ gseq.pwm <- function(seqs,
         spat_params,
         as.logical(return_strand),
         skip_gaps,
-        as.character(gap_chars)
+        as.character(gap_chars),
+        as.numeric(prior),
+        as.character(neutral_chars)
     )
 
     # For mode="pos" with return_strand=TRUE, ensure it's a proper data.frame
@@ -339,7 +353,7 @@ gseq.pwm <- function(seqs,
 #' @param end_pos integer or NULL; 1-based inclusive end of ROI (default: sequence length)
 #' @param extend logical or integer; extension of allowed window starts (default: FALSE)
 #' @param skip_gaps logical; if TRUE, treat gap characters as holes and skip them while
-#'   scanning. Windows are k consecutive non-gap bases (default: FALSE)
+#'   scanning. Windows are k consecutive non-gap bases (default: TRUE)
 #' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
 #'
 #' @return Numeric vector with counts (for "count" mode) or fractions (for "frac" mode).
@@ -402,7 +416,7 @@ gseq.kmer <- function(seqs,
                       start_pos = NULL,
                       end_pos = NULL,
                       extend = FALSE,
-                      skip_gaps = FALSE,
+                      skip_gaps = TRUE,
                       gap_chars = c("-", ".")) {
     # Validate inputs
     mode <- match.arg(mode)

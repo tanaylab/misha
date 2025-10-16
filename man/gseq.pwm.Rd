@@ -19,8 +19,10 @@ gseq.pwm(
   spat.min = NULL,
   spat.max = NULL,
   return_strand = FALSE,
-  skip_gaps = FALSE,
-  gap_chars = c("-", ".")
+  skip_gaps = TRUE,
+  gap_chars = c("-", "."),
+  neutral_chars = c("N", "n", "*"),
+  prior = 0.01
 )
 }
 \arguments{
@@ -54,9 +56,13 @@ gseq.pwm(
 \code{pos} and \code{strand} columns}
 
 \item{skip_gaps}{logical; if TRUE, treat gap characters as holes and skip them while
-scanning. Windows are w consecutive non-gap bases (default: FALSE)}
+scanning. Windows are w consecutive non-gap bases (default: TRUE)}
 
 \item{gap_chars}{character vector; which characters count as gaps (default: c("-", "."))}
+
+\item{neutral_chars}{character vector; bases treated as unknown and scored with the average log probability per position (default: c("N", "n", "*"))}
+
+\item{prior}{numeric; pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.}
 }
 \value{
 Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),

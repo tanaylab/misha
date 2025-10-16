@@ -358,17 +358,17 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 
 			// Construct scorer with shared sequence fetcher for caching
 			var.pwm_scorer = std::make_unique<PWMScorer>(
-				pwm_params.pssm,
+				pwm_params.core.pssm,
 				&m_shared_seqfetch,
-				pwm_params.extend,
+				pwm_params.extend_flag,
 				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
 				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
 				func == "pwm.max.pos" ? PWMScorer::MAX_LIKELIHOOD_POS :
 				PWMScorer::MOTIF_COUNT,
-				pwm_params.strand,
-				pwm_params.spat_factor,
-				pwm_params.spat_bin,
-				pwm_params.score_thresh
+				static_cast<char>(pwm_params.core.strand_mode),
+				pwm_params.core.spat_factor,
+				pwm_params.core.spat_bin_size,
+				static_cast<float>(pwm_params.core.score_thresh)
 			);
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
@@ -587,36 +587,9 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 			} else	if (ifunc == Track_var::PWM || ifunc == Track_var::PWM_MAX || ifunc == Track_var::PWM_MAX_POS || ifunc == Track_var::PWM_COUNT) {
 				var.percentile = numeric_limits<double>::quiet_NaN();
 
-				// For PWM functions, params could be either a matrix (for pwm/pwm.max/pwm.max.pos)
-				// or a list (for pwm.count with additional parameters)
-				SEXP rpssm = rparams;
-				float score_thresh = 0.0f;
+				TrackExprParams::PWMParams pwm_params = TrackExprParams::PWMParams::parse(rparams, vtrack);
 
-				if (Rf_isNewList(rparams)) {
-					// params is a list - extract pssm and other parameters
-					int pssm_idx = findListElementIndex(rparams, "pssm");
-					if (pssm_idx < 0) {
-						verror("Virtual track %s: PWM params list must contain 'pssm'", vtrack.c_str());
-					}
-					rpssm = VECTOR_ELT(rparams, pssm_idx);
-
-					// Get score.thresh if present
-					if (ifunc == Track_var::PWM_COUNT) {
-						int thresh_idx = findListElementIndex(rparams, "score.thresh");
-						if (thresh_idx >= 0) {
-							SEXP rthresh = VECTOR_ELT(rparams, thresh_idx);
-							if (!Rf_isNull(rthresh) && Rf_isReal(rthresh) && Rf_length(rthresh) == 1) {
-								score_thresh = REAL(rthresh)[0];
-							}
-						}
-					}
-				}
-
-				if (!Rf_isMatrix(rpssm)) {
-					verror("Virtual track %s: PWM functions require a matrix parameter", vtrack.c_str());
-				}
-
-				// Read extend parameter from vtrack
+				// Read extend parameter from vtrack (overrides default)
 				SEXP rextend = get_rvector_col(rvtrack, "extend", vtrack.c_str(), false);
 				bool extend = true; // default value (matching constructor default)
 				if (!Rf_isNull(rextend)) {
@@ -624,20 +597,21 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 						verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
 					extend = LOGICAL(rextend)[0];
 				}
+				pwm_params.extend_flag = extend;
+				pwm_params.core.extend = extend ? std::max(0, (int)pwm_params.core.pssm.size() - 1) : 0;
 
-				DnaPSSM pssm = PWMScorer::create_pssm_from_matrix(rpssm);
 				var.pwm_scorer = std::make_unique<PWMScorer>(
-					pssm,
+					pwm_params.core.pssm,
 					&m_shared_seqfetch,
-					extend,
+					pwm_params.extend_flag,
 					ifunc == Track_var::PWM ? PWMScorer::TOTAL_LIKELIHOOD :
 					ifunc == Track_var::PWM_MAX ? PWMScorer::MAX_LIKELIHOOD :
 					ifunc == Track_var::PWM_MAX_POS ? PWMScorer::MAX_LIKELIHOOD_POS :
 					PWMScorer::MOTIF_COUNT,
-					1,  // strand
-					std::vector<float>(),  // no spatial factors in this path
-					1,  // spat_bin_size
-					score_thresh);
+					static_cast<char>(pwm_params.core.strand_mode),
+					pwm_params.core.spat_factor,
+					pwm_params.core.spat_bin_size,
+					static_cast<float>(pwm_params.core.score_thresh));
 			} else if(ifunc == Track_var::KMER_COUNT || ifunc == Track_var::KMER_FRAC) {
 				if (Rf_isNull(rparams)){
 					verror("Virtual track %s: function %s requires a parameter (kmer string)", vtrack.c_str(), func.c_str());
