@@ -42,6 +42,7 @@ PV
 PWM
 PeakIntervals
 Pseudocount
+ROI
 Rami
 Rprofile
 SGE
@@ -68,6 +69,7 @@ bool
 bp
 bufsize
 canonic
+canonicalizes
 cd
 chr
 chrX
@@ -177,6 +179,7 @@ liftover
 loadall
 logN
 logics
+lse
 magrittr
 makepvals
 mappedseq
@@ -188,6 +191,7 @@ maxpval
 maxread
 maxval
 mem
+mer
 mers
 mindist
 minsegment
@@ -207,9 +211,11 @@ nx
 onexit
 params
 pos
+pre
 probs
 proj
 ps
+pseudocount
 pseudocounts
 pssm
 pssms
@@ -222,6 +228,7 @@ pwms
 qsub
 rchk
 readonly
+reproducibility
 rescan
 rescanned
 rescanning
