@@ -3097,15 +3097,15 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
 #' gdb.init_examples()
 #'
 #' # Generate 1000 random intervals of 100bp
-#' intervals <- grandom_genome(100, 1000)
+#' intervals <- gintervals.random(100, 1000)
 #' head(intervals)
 #'
 #' # Generate intervals only on chr1 and chr2
-#' intervals <- grandom_genome(100, 1000, chromosomes = c("chr1", "chr2"))
+#' intervals <- gintervals.random(100, 1000, chromosomes = c("chr1", "chr2"))
 #'
 #' # Generate intervals avoiding specific regions
 #' filter_regions <- gintervals(c("chr1", "chr2"), c(1000, 5000), c(2000, 6000))
-#' intervals <- grandom_genome(100, 1000, filter = filter_regions)
+#' intervals <- gintervals.random(100, 1000, filter = filter_regions)
 #'
 #' # Verify no overlaps with filter
 #' overlaps <- gintervals.intersect(intervals, filter_regions)
@@ -3113,14 +3113,14 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
 #'
 #' # For reproducibility
 #' set.seed(123)
-#' intervals1 <- grandom_genome(100, 100)
+#' intervals1 <- gintervals.random(100, 100)
 #' set.seed(123)
-#' intervals2 <- grandom_genome(100, 100)
+#' intervals2 <- gintervals.random(100, 100)
 #' identical(intervals1, intervals2) # TRUE
 #' }
 #'
 #' @export
-grandom_genome <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL, filter = NULL) {
+gintervals.random <- function(size, n, dist_from_edge = 3e6, chromosomes = NULL, filter = NULL) {
     # Check that database is initialized
     .gcheckroot()
 

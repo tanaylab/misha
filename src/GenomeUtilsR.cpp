@@ -369,9 +369,9 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
         return out_df;
 
     } catch(std::exception &e) {
-        Rf_error("Error in grandom_genome: %s", e.what());
+        Rf_error("Error in gintervals.random: %s", e.what());
     } catch(...) {
-        Rf_error("Unknown error in grandom_genome");
+        Rf_error("Unknown error in gintervals.random");
     }
     return R_NilValue; // Never reached
 }
