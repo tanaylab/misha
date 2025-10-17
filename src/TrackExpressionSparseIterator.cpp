@@ -26,7 +26,8 @@ bool TrackExpressionSparseIterator::next()
 			}
 
 			// const GInterval &scope_interval = m_scope->cur_interval();
-			string track_filename = m_track_dir + "/" + GenomeTrack::get_1d_filename(m_iu.get_chromkey(), m_chromid);
+			string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), m_track_dir, m_chromid);
+			string track_filename = m_track_dir + "/" + resolved;
 
 			if (m_track_type == GenomeTrack::ARRAYS) {
 				m_track_arrays.init_read(track_filename.c_str(), m_chromid);

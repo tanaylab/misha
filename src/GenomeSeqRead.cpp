@@ -1,6 +1,7 @@
 #include <cstdint>
 #include "GIntervalsBigSet1D.h"
 #include "GenomeSeqFetch.h"
+#include "GenomeIndex.h"
 #include "rdbinterval.h"
 #include "rdbutils.h"
 
@@ -44,6 +45,32 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 			check_interrupt();
 		}
 		return answer;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
+	return R_NilValue;
+}
+
+// Validate genome index file (called during gdb.init)
+// Throws error if index is corrupt or has checksum mismatch
+SEXP gseq_validate_index(SEXP _seqdir, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_seqdir) || Rf_length(_seqdir) != 1)
+			verror("seqdir argument must be a string");
+
+		const char *seqdir = CHAR(STRING_ELT(_seqdir, 0));
+		string idx_path = string(seqdir) + "/genome.idx";
+
+		// Try to load index - will throw TGLException if corrupt
+		GenomeIndex index;
+		index.load(idx_path);
+
+		return R_NilValue;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {

@@ -1,8 +1,46 @@
 #include <errno.h>
+#include <sys/stat.h>
 
 #include "port.h"
 
 #include "GenomeSeqFetch.h"
+#include "GenomeIndex.h"
+
+GenomeSeqFetch::GenomeSeqFetch()
+    : m_cur_chromid(-1), m_cache_valid(false), m_indexed_mode(false), m_index(nullptr) {}
+
+GenomeSeqFetch::~GenomeSeqFetch() {
+    if (m_index) {
+        delete m_index;
+    }
+}
+
+void GenomeSeqFetch::set_seqdir(const std::string &dir) {
+    m_seqdir = dir;
+
+    // Check for indexed format (genome.idx exists)
+    std::string idx_path = m_seqdir + "/genome.idx";
+    struct stat st;
+
+    if (stat(idx_path.c_str(), &st) == 0) {
+        // Indexed mode: load index and open main genome.seq file
+        m_indexed_mode = true;
+        m_index = new GenomeIndex();
+        m_index->load(idx_path);
+
+        // Open the consolidated genome.seq file
+        std::string seq_path = m_seqdir + "/genome.seq";
+        m_bfile.open(seq_path.c_str(), "rb");
+        if (m_bfile.error()) {
+            TGLError<GenomeSeqFetch>(FILE_READ_FAILED,
+                "Failed to open genome.seq: %s", strerror(errno));
+        }
+    } else {
+        // Legacy per-chromosome mode
+        m_indexed_mode = false;
+        m_index = nullptr;
+    }
+}
 
 void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromKey &chromkey, vector<char> &result)
 {
@@ -17,42 +55,97 @@ void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromK
 		return;
 	}
 
-	if (m_cur_chromid != interval.chromid) {
-		char filename[PATH_MAX];
-
-		m_cur_chromid = interval.chromid;
-		m_cache_valid = false;  // Invalidate cache on chromosome change
-		snprintf(filename, sizeof(filename), "%s/%s.seq", m_seqdir.c_str(), chromkey.id2chrom(interval.chromid).c_str());
-		m_bfile.close();
-		m_bfile.open(filename, "rb");
-
-		if (m_bfile.error())
-			TGLError<GenomeSeqFetch>(FILE_READ_FAILED, "Reading sequence file %s failed: %s", filename, strerror(errno));
-	}
-
-	interval.verify(chromkey, false);
 	result.clear();
 
-	int64_t size = min(interval.end, m_bfile.file_size()) - interval.start;
+	if (m_indexed_mode) {
+		// INDEXED MODE: Read from consolidated genome.seq using index
+		const ContigIndexEntry *entry = m_index->get_entry(interval.chromid);
+		if (!entry) {
+			TGLError<GenomeSeqFetch>(FILE_READ_FAILED,
+				"Contig ID %d not found in genome index", interval.chromid);
+		}
 
-	if (size < 0)
-		return;
+		// Validate interval bounds
+		if (interval.start < 0 || interval.end < 0) {
+			TGLError<GenomeSeqFetch>(INVALID_INTERVAL,
+				"Invalid interval coordinates: start=%ld end=%ld",
+				interval.start, interval.end);
+		}
 
-	if (!size)
-		size++;
+		if (interval.end > (int64_t)entry->length) {
+			TGLError<GenomeSeqFetch>(INVALID_INTERVAL,
+				"Interval end %ld exceeds contig length %lu for contig %s",
+				interval.end, entry->length, entry->name.c_str());
+		}
 
-	// Resize output buffer to required size; reserve a bit more to avoid reallocations
-	result.resize(size);
-	m_bfile.seek(interval.start, SEEK_SET);
-	if (m_bfile.read(&*result.begin(), result.size()) != result.size()) {
-		if (m_bfile.error())
-			TGLError<GenomeSeqFetch>(FILE_READ_FAILED, "Reading sequence file %s failed: %s", m_bfile.file_name().c_str(), strerror(errno));
+		// Calculate absolute position in genome.seq
+		uint64_t abs_offset = entry->offset + interval.start;
+		int64_t size = interval.end - interval.start;
 
-		TGLError<GenomeSeqFetch>(FILE_READ_FAILED, "Reading sequence file %s failed", m_bfile.file_name().c_str());
+		if (size <= 0) {
+			if (size == 0)
+				size = 1;
+			else
+				return;
+		}
+
+		// Seek and read from consolidated file
+		result.resize(size);
+		m_bfile.seek(abs_offset, SEEK_SET);
+		if (m_bfile.read(&*result.begin(), result.size()) != result.size()) {
+			if (m_bfile.error())
+				TGLError<GenomeSeqFetch>(FILE_READ_FAILED,
+					"Failed to read sequence data from genome.seq: %s", strerror(errno));
+			TGLError<GenomeSeqFetch>(FILE_READ_FAILED,
+				"Failed to read sequence data from genome.seq");
+		}
+
+	} else {
+		// LEGACY MODE: Per-chromosome files
+		if (m_cur_chromid != interval.chromid) {
+			char filename[PATH_MAX];
+			const char *chrom_name = chromkey.id2chrom(interval.chromid).c_str();
+
+			m_cur_chromid = interval.chromid;
+			m_cache_valid = false;  // Invalidate cache on chromosome change
+
+			// Try chromosome name as-is first
+			snprintf(filename, sizeof(filename), "%s/%s.seq", m_seqdir.c_str(), chrom_name);
+			m_bfile.close();
+			m_bfile.open(filename, "rb");
+
+			// If file doesn't exist and name doesn't start with "chr", try with "chr" prefix (backward compatibility)
+			if (m_bfile.error() && strncmp(chrom_name, "chr", 3) != 0) {
+				snprintf(filename, sizeof(filename), "%s/chr%s.seq", m_seqdir.c_str(), chrom_name);
+				m_bfile.open(filename, "rb");
+			}
+
+			if (m_bfile.error())
+				TGLError<GenomeSeqFetch>(FILE_READ_FAILED, "Reading sequence file %s failed: %s", filename, strerror(errno));
+		}
+
+		interval.verify(chromkey, false);
+
+		int64_t size = min(interval.end, m_bfile.file_size()) - interval.start;
+
+		if (size < 0)
+			return;
+
+		if (!size)
+			size++;
+
+		// Resize output buffer to required size; reserve a bit more to avoid reallocations
+		result.resize(size);
+		m_bfile.seek(interval.start, SEEK_SET);
+		if (m_bfile.read(&*result.begin(), result.size()) != result.size()) {
+			if (m_bfile.error())
+				TGLError<GenomeSeqFetch>(FILE_READ_FAILED, "Reading sequence file %s failed: %s", m_bfile.file_name().c_str(), strerror(errno));
+
+			TGLError<GenomeSeqFetch>(FILE_READ_FAILED, "Reading sequence file %s failed", m_bfile.file_name().c_str());
+		}
 	}
 
-	// if strand == -1 make the sequence reverse-complementary
-	// Single-pass algorithm: complement and reverse simultaneously
+	// Apply reverse-complement if needed (same for both modes)
 	if (interval.strand == -1) {
 		size_t len = result.size();
 		for (size_t i = 0; i < len / 2; ++i) {

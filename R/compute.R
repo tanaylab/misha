@@ -85,6 +85,10 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
+    src <- .gnormalize_chrom_names(src)
+    domain <- .gnormalize_chrom_names(domain)
+    intervals <- .gnormalize_chrom_names(intervals)
+
     res <- .gcall("C_gcis_decay", exprstr, breaks, src, domain, intervals, include.lowest, .iterator, band, .misha_env())
     attr(res, "breaks") <- breaks
     res
@@ -164,6 +168,8 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
     }
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+
+    intervals <- .gnormalize_chrom_names(intervals)
 
     if (.ggetOption("gmultitasking")) {
         res <- .gcall("gtrackdist_multitask", intervals, exprs, breaks, include.lowest, .iterator, band, .misha_env())
@@ -292,6 +298,18 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
             }
         }
     )
+
+    normalize_output <- function(x) {
+        if (is.data.frame(x)) {
+            return(.gnormalize_chrom_names(x))
+        }
+        if (is.list(x)) {
+            return(lapply(x, normalize_output))
+        }
+        x
+    }
+
+    res <- normalize_output(res)
 
     # refresh the list of GINTERVS, etc.
     if (!is.null(intervals.set.out)) {
@@ -1136,9 +1154,18 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
             files <- c(files, other_files)
 
             message("Building Seq files...")
-            fastas <- files[grep("^chr.+$", basename(files), perl = TRUE)]
+            # Accept FASTA files with any naming convention, not just chr* prefix
+            # Look for common FASTA extensions
+            fasta_pattern <- "\\.(fa|fasta|fna|seq)(\\.gz)?$"
+            fastas <- files[grep(fasta_pattern, basename(files), perl = TRUE, ignore.case = TRUE)]
+
             for (fasta in fastas) {
-                chrom <- gsub("^chr(\\w+)(\\..*)*$", "\\1", basename(fasta), perl = TRUE)
+                # Extract chromosome name from filename
+                # Remove common FASTA extensions and .gz suffix
+                # Use the filename (without extension) as the chromosome name directly
+                base_name <- basename(fasta)
+                chrom <- gsub("\\.(fa|fasta|fna|seq)(\\.gz)?$", "", base_name, perl = TRUE, ignore.case = TRUE)
+
                 if (!is.na(match(chrom, chroms))) {
                     next
                 }
@@ -1155,9 +1182,10 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
                     fasta <- fasta.unzipped
                 }
 
-                seq <- sprintf("%s/seq/chr%s.seq", groot, chrom)
+                # Output without forcing chr prefix - use chromosome name as-is
+                seq <- sprintf("%s/seq/%s.seq", groot, chrom)
 
-                message(sprintf("chr%s", chrom))
+                message(sprintf("%s", chrom))
                 .gcall("gseqimport", fasta, seq, .misha_env(), silent = TRUE)
 
                 chroms <- c(chroms, chrom)
@@ -1168,6 +1196,84 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
         }
     )
     chroms
+}
+
+# Internal function: Import multi-FASTA file to indexed genome format
+# Creates genome.seq and genome.idx files
+.gseq.import_multifasta <- function(groot = NULL, fasta = NULL) {
+    if (is.null(groot) || is.null(fasta)) {
+        stop("Usage: .gseq.import_multifasta(groot, fasta)", call. = FALSE)
+    }
+
+    if (length(fasta) != 1) {
+        stop("Multi-FASTA import requires exactly one input file", call. = FALSE)
+    }
+
+    if (!file.exists(fasta)) {
+        stop(sprintf("FASTA file %s does not exist", fasta), call. = FALSE)
+    }
+
+    # Handle gzipped files
+    fasta.original <- fasta
+    tmp.dirname <- NULL
+    cleanup_files <- c()
+
+    tryCatch(
+        {
+            if (grepl("\\.gz$", fasta, perl = TRUE)) {
+                tmp.dirname <- tempfile(pattern = "", tmpdir = paste(groot, "/downloads", sep = ""))
+                if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+                    stop(sprintf("Failed to create temp directory %s", tmp.dirname), call. = FALSE)
+                }
+
+                fasta.unzipped <- file.path(tmp.dirname, gsub("\\.gz$", "", basename(fasta)))
+                cmd <- sprintf("/bin/sh -c \"gunzip -q -c '%s' > '%s'\"", fasta, fasta.unzipped)
+                if (system(cmd) != 0) {
+                    stop(sprintf("Failed to decompress file: %s", cmd), call. = FALSE)
+                }
+                fasta <- fasta.unzipped
+                cleanup_files <- c(cleanup_files, fasta.unzipped)
+            }
+
+            # Output paths
+            seq_path <- file.path(groot, "seq", "genome.seq")
+            index_path <- file.path(groot, "seq", "genome.idx")
+
+            # Call C++ import function
+            # It will: parse FASTA, sanitize headers, sort by name,
+            # assign chromids 0..N-1 in sorted order, write genome.seq and genome.idx,
+            # and return a data frame with contig names and sizes (sorted alphabetically)
+            message("Importing multi-FASTA file...")
+            contig_info <- .gcall(
+                "gseq_multifasta_import",
+                fasta,
+                seq_path,
+                index_path,
+                .misha_env(),
+                silent = TRUE
+            )
+
+            if (nrow(contig_info) == 0) {
+                stop("No contigs were imported from FASTA file", call. = FALSE)
+            }
+
+            message(sprintf("Successfully imported %d contigs", nrow(contig_info)))
+
+            # Return contig info data frame with columns: name, size
+            contig_info
+        },
+        finally = {
+            # Cleanup temp files
+            for (f in cleanup_files) {
+                if (file.exists(f)) {
+                    unlink(f)
+                }
+            }
+            if (!is.null(tmp.dirname) && dir.exists(tmp.dirname)) {
+                unlink(tmp.dirname, recursive = TRUE)
+            }
+        }
+    )
 }
 
 
@@ -1259,9 +1365,8 @@ gcompute_strands_autocorr <- function(file = NULL, chrom = NULL, binsize = NULL,
     }
     .gcheckroot()
 
-    if (substr(chrom, 1, 3) != "chr") {
-        chrom <- paste("chr", chrom, sep = "")
-    }
+    # Normalize chromosome name using aliases (handles legacy databases)
+    chrom <- as.character(.gchroms(as.character(chrom)))
 
     res <- .gcall("C_gcompute_strands_autocorr", file, chrom, binsize, maxread, cols.order, min.coord, max.coord, .misha_env())
     res

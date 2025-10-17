@@ -777,7 +777,8 @@ SEXP gtrack_intervals_load(SEXP _track, SEXP _chrom, SEXP _chrom1, SEXP _chrom2,
 			const char *chrom = Rf_isString(_chrom) ? CHAR(STRING_ELT(_chrom, 0)) : CHAR(STRING_ELT(chrom_levels, INTEGER(_chrom)[0] - 1));
 			int chromid = iu.chrom2id(chrom);
 
-			string filename(trackpath + "/" + GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid));
+			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, chromid);
+			string filename(trackpath + "/" + resolved);
 
 			if (track_type == GenomeTrack::SPARSE) {
 				track = unique_ptr<GenomeTrack1D>(new GenomeTrackSparse());

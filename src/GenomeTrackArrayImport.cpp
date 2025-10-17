@@ -50,7 +50,8 @@ public:
 		else {
 			char filename[FILENAME_MAX];
 
-			snprintf(filename, sizeof(filename), "%s/%s", m_dir.c_str(), GenomeTrack::get_1d_filename(m_chromkey, chromid).c_str());
+			string resolved = GenomeTrack::find_existing_1d_filename(m_chromkey, m_dir, chromid);
+			snprintf(filename, sizeof(filename), "%s/%s", m_dir.c_str(), resolved.c_str());
 			m_track.init_read(filename, chromid);
 			m_intervals = (GIntervals *)&m_track.get_intervals();
 		}
@@ -210,7 +211,8 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 		progress.init(max_chromid, 1);
 
 		for (int chromid = 0; chromid < max_chromid; ++chromid) {
-			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), dirname, chromid);
+			snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), resolved.c_str());
 			track.init_write(filename, chromid);
 
 			for (Sources::iterator isrc = sources.begin(); isrc != sources.end(); ++isrc) {
@@ -301,4 +303,3 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 }
 
 }
-

@@ -52,6 +52,7 @@ extern "C" {
     extern SEXP gscreen_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsegment(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqimport(SEXP, SEXP, SEXP);
+    extern SEXP gseq_multifasta_import(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqread(SEXP, SEXP);
     extern SEXP gset_tracks_attrs(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gsmooth(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -129,6 +130,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gscreen_multitask", (DL_FUNC)&gscreen_multitask, 6},
     {"C_gsegment", (DL_FUNC)&C_gsegment, 8},
     {"gseqimport", (DL_FUNC)&gseqimport, 3},
+    {"gseq_multifasta_import", (DL_FUNC)&gseq_multifasta_import, 4},
     {"gseqread", (DL_FUNC)&gseqread, 2},
     {"gset_tracks_attrs", (DL_FUNC)&gset_tracks_attrs, 4},
     {"gsmooth", (DL_FUNC)&gsmooth, 8},

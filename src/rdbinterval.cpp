@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include <cctype>
 #include <fstream>
 #include <time.h>
 #include <unistd.h>
@@ -65,6 +66,27 @@ IntervUtils::IntervUtils(SEXP envir)
 			m_chrom_key.add_chrom(chrom, (uint64_t)chrom_size);
 		} catch (TGLException &e) {
 			verror("Reading ALLGENOME: %s", e.msg());
+		}
+	}
+
+	// Populate chromosome aliases from R CHROM_ALIAS map
+	SEXP chrom_alias = find_in_misha(m_envir, "CHROM_ALIAS");
+	if (!Rf_isNull(chrom_alias) && Rf_isVector(chrom_alias)) {
+		SEXP alias_names = Rf_getAttrib(chrom_alias, R_NamesSymbol);
+		if (!Rf_isNull(alias_names)) {
+			int n_aliases = Rf_length(chrom_alias);
+			for (int i = 0; i < n_aliases; i++) {
+				const char *alias = CHAR(STRING_ELT(alias_names, i));
+				const char *canonical = CHAR(STRING_ELT(chrom_alias, i));
+
+				// Find the chromid for the canonical chromosome name
+				try {
+					int chrom_id = m_chrom_key.chrom2id(canonical);
+					m_chrom_key.add_chrom_alias(alias, chrom_id);
+				} catch (TGLException &) {
+					// Silently skip aliases that point to non-existent chromosomes
+				}
+			}
 		}
 	}
 
@@ -1332,4 +1354,3 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 	}
 	return hint - 1;
 }
-

@@ -177,6 +177,8 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
             intervals2 <- intervals[[2]]
+            intervals1 <- .gnormalize_chrom_names(intervals1)
+            intervals2 <- .gnormalize_chrom_names(intervals2)
             chrom_res <- .gcall("gfind_neighbors", intervals1, intervals2, maxneighbors, mindist, maxdist, mindist1, maxdist1, mindist2, maxdist2, na.if.notfound, FALSE, use_intervals1_strand, .misha_env())
             if (!is.null(chrom_res) && is.null(intervals.set.out)) {
                 assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
@@ -211,6 +213,8 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
     } else {
         intervals1 <- .gintervals.load_ext(intervals1)
         intervals2 <- .gintervals.load_ext(intervals2)
+        intervals1 <- .gnormalize_chrom_names(intervals1)
+        intervals2 <- .gnormalize_chrom_names(intervals2)
         res <- .gcall("gfind_neighbors", intervals1, intervals2, maxneighbors, mindist, maxdist, mindist1, maxdist1, mindist2, maxdist2, na.if.notfound, TRUE, use_intervals1_strand, .misha_env())
         repair_names(res)
     }

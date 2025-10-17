@@ -741,18 +741,21 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 	struct dirent *dirp;
 
 	while ((dirp = readdir(dir))) {
-		if (!strncmp(dirp->d_name, CHROM_FILE_PREFIX, CHROM_FILE_PREFIX_LEN)) {
-            if (dirp->d_type == DT_REG)
-                chrom_files.push_back(dirp->d_name);
-            else if (dirp->d_type == DT_UNKNOWN) {
-                struct stat sbuf;
-                char filename[PATH_MAX];
+		if (!strcmp(dirp->d_name, ".") || !strcmp(dirp->d_name, ".."))
+			continue;
+		if (dirp->d_name[0] == '.')
+			continue;
 
-                snprintf(filename, sizeof(filename), "%s/%s", dirname, dirp->d_name);
-                if (!stat(filename, &sbuf) && S_ISREG(sbuf.st_mode))
-                    chrom_files.push_back(dirp->d_name);
-            }
-        }
+		if (dirp->d_type == DT_REG)
+			chrom_files.push_back(dirp->d_name);
+		else if (dirp->d_type == DT_UNKNOWN) {
+			struct stat sbuf;
+			char filename[PATH_MAX];
+
+			snprintf(filename, sizeof(filename), "%s/%s", dirname, dirp->d_name);
+			if (!stat(filename, &sbuf) && S_ISREG(sbuf.st_mode))
+				chrom_files.push_back(dirp->d_name);
+		}
 	}
 
 	closedir(dir);
@@ -996,4 +999,3 @@ SEXP rdb::get_rvector_col(SEXP v, const char *colname, const char *varname, bool
 		verror("Invalid format of %s: missing %s column", varname, colname);
 	return R_NilValue;
 }
-
