@@ -52,6 +52,7 @@ public:
 	static void save_attrs(const char *track, const char *filename, const TrackAttrs &attrs);
 
 	static const string &get_1d_filename(const GenomeChromKey &chromkey, int chromid) { return chromkey.id2chrom(chromid); }
+	static string find_existing_1d_filename(const GenomeChromKey &chromkey, const string &track_dir, int chromid);
 
 	static const string get_2d_filename(const GenomeChromKey &chromkey, int chromid1, int chromid2) {
 		return chromkey.id2chrom(chromid1) + "-" + chromkey.id2chrom(chromid2);

@@ -90,7 +90,9 @@ void GTrackIntervalsFetcher1D<Track>::load_chrom(int chromid)
 	m_iter_chrom_index = 0;
 	if (get_num_intervals(chromid)) {
 		if (m_intervals.empty() || m_intervals.front().chromid != chromid) {
-			string filename(track2path(m_iu->get_env(), m_track_name) + "/" + GenomeTrack::get_1d_filename(*m_chromkey, chromid));
+			string track_dir = track2path(m_iu->get_env(), m_track_name);
+			string resolved = GenomeTrack::find_existing_1d_filename(*m_chromkey, track_dir, chromid);
+			string filename = track_dir + "/" + resolved;
 			Track track;
 			track.init_read(filename.c_str(), chromid);
 			m_intervals = track.get_intervals();
@@ -233,4 +235,3 @@ void GTrackIntervalsFetcher1D<Track>::unify_overlaps(bool unify_touching_interva
 }
 
 #endif
-

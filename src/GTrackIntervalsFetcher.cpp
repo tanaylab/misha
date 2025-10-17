@@ -50,7 +50,8 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		progress.init(iu.get_chromkey().get_num_chroms(), 1);
 
 		for (uint64_t chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); chromid++) {
-			string filename(trackpath + "/" + GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid));
+			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, chromid);
+			string filename(trackpath + "/" + resolved);
 
 			if (access(filename.c_str(), R_OK) && errno == ENOENT) {
 				progress.report(1);

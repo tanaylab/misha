@@ -49,7 +49,8 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 			char filename[FILENAME_MAX];
             SEXP rbinsize;
 
-			snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), all_genome_intervs.front().chromid).c_str());
+			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, all_genome_intervs.front().chromid);
+			snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), resolved.c_str());
 
 			gtrack.init_read(filename, all_genome_intervs.front().chromid);
             rbinsize = rprotect_ptr(Rf_ScalarInteger(gtrack.get_bin_size()));

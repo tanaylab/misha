@@ -1030,7 +1030,9 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 
 		try
 		{
-			string filename(track2path(m_iu.get_env(), itrack_n_imdf->name) + "/" + GenomeTrack::get_1d_filename(m_iu.get_chromkey(), interval.chromid));
+			string track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
+			string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
+			string filename(track_dir + "/" + resolved);
 
 			delete itrack_n_imdf->track;
 			if (itrack_n_imdf->type == GenomeTrack::FIXED_BIN)
@@ -1083,7 +1085,9 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 					verror("Internal error: no 2D to 1D conversion for track %s", itrack_n_imdf->name.c_str());
 
 				if (chromid != itrack_n_imdf->imdf1d->interval.chromid) {
-					string filename(track2path(m_iu.get_env(), itrack_n_imdf->name) + "/" + GenomeTrack::get_1d_filename(m_iu.get_chromkey(), chromid));
+					string track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
+					string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, chromid);
+					string filename(track_dir + "/" + resolved);
 
 					delete itrack_n_imdf->track;
 					if (itrack_n_imdf->type == GenomeTrack::FIXED_BIN) {

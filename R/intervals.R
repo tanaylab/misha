@@ -829,7 +829,32 @@ gintervals.2d <- function(chroms1 = NULL, starts1 = 0, ends1 = -1, chroms2 = NUL
 #' @export gintervals.2d.all
 gintervals.2d.all <- function() {
     .gcheckroot()
-    get("ALLGENOME", envir = .misha)[[2]]
+    intervals2d <- get("ALLGENOME", envir = .misha)[[2]]
+
+    # Check if 2D is deferred and generate on demand
+    if (.is_2d_deferred(intervals2d)) {
+        mode <- getOption("gmulticontig.2d.mode", "diagonal")
+        n_contigs <- attr(intervals2d, "n_contigs")
+
+        if (mode == "full") {
+            warning(sprintf(
+                "Generating full 2D genome with %d contigs (%d pairs). This may take time and use significant memory.",
+                n_contigs, n_contigs * n_contigs
+            ))
+        }
+
+        intervals <- get("ALLGENOME", envir = .misha)[[1]]
+        intervals2d <- .generate_2d_on_demand(intervals, mode)
+
+        # Cache if requested
+        if (getOption("gmulticontig.2d.cache", FALSE)) {
+            allgenome <- get("ALLGENOME", envir = .misha)
+            allgenome[[2]] <- intervals2d
+            assign("ALLGENOME", allgenome, envir = .misha)
+        }
+    }
+
+    intervals2d
 }
 
 

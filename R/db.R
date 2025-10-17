@@ -3,15 +3,163 @@
         chroms <- as.character(chroms)
     }
 
-    idx <- substr(chroms, 1, 3) != "chr"
-    chroms[idx] <- paste("chr", chroms[idx], sep = "")
+    if (exists("CHROM_ALIAS", envir = .misha, inherits = FALSE)) {
+        alias_map <- get("CHROM_ALIAS", envir = .misha)
+        if (length(alias_map)) {
+            mapped <- alias_map[chroms]
+            matched <- !is.na(mapped)
+            if (any(matched)) {
+                chroms[matched] <- mapped[matched]
+            }
+        }
+    }
 
-    indices <- match(chroms, get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    allchroms <- get("ALLGENOME", envir = .misha)[[1]]$chrom
+    indices <- match(chroms, allchroms)
+
     err.chroms <- chroms[is.na(indices)]
     if (length(err.chroms) > 0) {
         stop(sprintf("Chromosome %s does not exist in the database", err.chroms[1]))
     }
-    get("ALLGENOME", envir = .misha)[[1]]$chrom[indices] # return factor
+    allchroms[indices]
+}
+
+.gnormalize_chrom_names <- function(intervals) {
+    if (!is.data.frame(intervals)) {
+        return(intervals)
+    }
+
+    normalize_col <- function(df, col) {
+        if (col %in% colnames(df)) {
+            df[[col]] <- .gchroms(as.character(df[[col]]))
+        }
+        df
+    }
+
+    intervals <- normalize_col(intervals, "chrom")
+    intervals <- normalize_col(intervals, "chrom1")
+    intervals <- normalize_col(intervals, "chrom2")
+    intervals
+}
+
+.is_legacy_db <- function(groot, chromsizes) {
+    if (file.exists(file.path(groot, "seq", "genome.idx"))) {
+        return(FALSE)
+    }
+
+    if (!nrow(chromsizes)) {
+        return(FALSE)
+    }
+
+    names_chr <- chromsizes$chrom
+    no_prefix <- names_chr[!startsWith(names_chr, "chr")]
+
+    if (!length(no_prefix)) {
+        return(FALSE)
+    }
+
+    if (length(no_prefix) < 0.8 * length(names_chr)) {
+        return(FALSE)
+    }
+
+    seq_dir <- file.path(groot, "seq")
+    sample_names <- head(no_prefix, 5)
+    prefixed_exist <- vapply(sample_names, function(name) {
+        file.exists(file.path(seq_dir, paste0("chr", name, ".seq")))
+    }, logical(1))
+
+    if (!all(prefixed_exist)) {
+        return(FALSE)
+    }
+
+    unprefixed_exist <- vapply(sample_names, function(name) {
+        file.exists(file.path(seq_dir, paste0(name, ".seq")))
+    }, logical(1))
+
+    if (any(unprefixed_exist)) {
+        return(FALSE)
+    }
+
+    TRUE
+}
+
+.compute_chrom_aliases <- function(chroms) {
+    chroms <- unique(as.character(chroms))
+    alias <- stats::setNames(chroms, chroms)
+
+    maybe_add <- function(name, target) {
+        if (!nzchar(name)) {
+            return()
+        }
+        if (name %in% names(alias)) {
+            return()
+        }
+        if (name %in% chroms) {
+            return()
+        }
+        alias[[name]] <<- target
+    }
+
+    for (chrom in chroms) {
+        unprefixed <- sub("^chr", "", chrom, perl = TRUE)
+        prefixed <- paste0("chr", unprefixed)
+
+        if (!identical(unprefixed, chrom)) {
+            maybe_add(unprefixed, chrom)
+        }
+
+        if (!identical(prefixed, chrom)) {
+            maybe_add(prefixed, chrom)
+        }
+
+        upper_unprefixed <- toupper(unprefixed)
+        upper_chrom <- toupper(chrom)
+
+        if (upper_unprefixed %in% c("M", "MT") || upper_chrom %in% c("CHRM", "CHRMT")) {
+            maybe_add("M", chrom)
+            maybe_add("MT", chrom)
+            maybe_add("chrM", chrom)
+        }
+    }
+
+    alias
+}
+
+.store_chrom_aliases <- function(chroms) {
+    alias_map <- .compute_chrom_aliases(chroms)
+    assign("CHROM_ALIAS", alias_map, envir = .misha)
+}
+
+# Helper function for lazy 2D genome generation
+.generate_2d_on_demand <- function(intervals, mode = "full") {
+    if (mode == "diagonal") {
+        # Only intra-chromosomal pairs (chrom1 == chrom2)
+        intervals2d <- cbind(intervals, intervals)
+        names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
+    } else if (mode == "full") {
+        # Full cartesian product of all chromosome pairs
+        cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
+        intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
+        names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
+    } else {
+        stop("Unknown 2D generation mode: ", mode, ". Must be 'diagonal' or 'full'")
+    }
+
+    rownames(intervals2d) <- 1:nrow(intervals2d)
+    intervals2d
+}
+
+# Helper function to create deferred 2D placeholder
+.create_deferred_2d <- function(n_contigs) {
+    intervals2d <- list() # Use empty list instead of NULL so we can set attributes
+    attr(intervals2d, "deferred") <- TRUE
+    attr(intervals2d, "n_contigs") <- n_contigs
+    intervals2d
+}
+
+# Helper function to check if 2D is deferred
+.is_2d_deferred <- function(intervals2d) {
+    is.null(intervals2d) || !is.null(attr(intervals2d, "deferred"))
 }
 
 
@@ -60,13 +208,46 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 
     assign("ALLGENOME", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)
+    assign("CHROM_ALIAS", NULL, envir = .misha)
 
-    chromsizes <- read.csv(paste(groot, "chrom_sizes.txt", sep = "/"), sep = "\t", header = FALSE)
-    colnames(chromsizes) <- c("chrom", "size")
-    intervals <- data.frame(
-        chrom = as.factor(paste("chr", as.character(chromsizes$chrom), sep = "")),
-        start = 0, end = as.numeric(chromsizes$size)
+    chromsizes <- read.csv(
+        paste(groot, "chrom_sizes.txt", sep = "/"),
+        sep = "\t",
+        header = FALSE,
+        col.names = c("chrom", "size"),
+        colClasses = c("character", "numeric")
     )
+
+    is_legacy <- .is_legacy_db(groot, chromsizes)
+    assign("DB_IS_LEGACY", is_legacy, envir = .misha)
+
+    canonical_names <- chromsizes$chrom
+
+    # For legacy databases, add "chr" prefix to match seq file names
+    if (is_legacy) {
+        # Add chr prefix to names that don't have it
+        needs_prefix <- !startsWith(canonical_names, "chr")
+        canonical_names[needs_prefix] <- paste0("chr", canonical_names[needs_prefix])
+    }
+
+    alias_map <- NULL
+    if (is_legacy) {
+        # Compute aliases from the original names in chrom_sizes.txt
+        alias_map <- .compute_chrom_aliases(canonical_names)
+    }
+
+    intervals <- data.frame(
+        chrom = canonical_names,
+        start = 0,
+        end = as.numeric(chromsizes$size)
+    )
+    intervals$chrom <- as.factor(intervals$chrom)
+
+    # Validate genome.idx if it exists (indexed format)
+    idx_path <- file.path(groot, "seq", "genome.idx")
+    if (file.exists(idx_path)) {
+        .gcall("gseq_validate_index", file.path(groot, "seq"), .misha_env(), silent = TRUE)
+    }
 
     if (nrow(intervals) == 0) {
         stop("chrom_sizes.txt file does not contain any chromosomes", call. = FALSE)
@@ -80,14 +261,32 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     intervals <- intervals[order(intervals$chrom), ]
     rownames(intervals) <- 1:nrow(intervals)
 
-    cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
-    intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
-    names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
-    rownames(intervals2d) <- 1:nrow(intervals2d)
+    # Lazy 2D generation: only materialize for small genomes
+    contig_threshold <- getOption("gmulticontig.2d.threshold", 100)
+
+    if (nrow(intervals) <= contig_threshold) {
+        # Small genome: materialize full 2D grid
+        cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
+        intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
+        names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
+        rownames(intervals2d) <- 1:nrow(intervals2d)
+    } else {
+        # Large genome: defer 2D generation
+        intervals2d <- .create_deferred_2d(nrow(intervals))
+        message(sprintf(
+            "Deferring 2D genome generation (%d contigs > threshold %d). Use gintervals.2d() for specific pairs.",
+            nrow(intervals), contig_threshold
+        ))
+    }
 
     assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
     assign("GROOT", groot, envir = .misha)
     assign("GWD", groot, envir = .misha)
+    if (!is.null(alias_map)) {
+        assign("CHROM_ALIAS", alias_map, envir = .misha)
+    } else {
+        assign("CHROM_ALIAS", NULL, envir = .misha)
+    }
 
     success <- FALSE
     tryCatch(
@@ -113,6 +312,8 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
                 assign("ALLGENOME", NULL, envir = .misha)
                 assign("GROOT", NULL, envir = .misha)
                 assign("GWD", NULL, envir = .misha)
+                assign("CHROM_ALIAS", NULL, envir = .misha)
+                assign("DB_IS_LEGACY", NULL, envir = .misha)
             }
         }
     )
@@ -472,46 +673,95 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
     success <- FALSE
     allgenome.old <- NULL
     groot.old <- NULL
+    chrom_alias.old <- NULL
+    db_legacy.old <- NULL
     if (exists("ALLGENOME", envir = .misha)) {
         allgenome.old <- get("ALLGENOME", envir = .misha)
     }
     if (exists("GROOT", envir = .misha)) {
         groot.old <- get("GROOT", envir = .misha)
     }
+    if (exists("CHROM_ALIAS", envir = .misha)) {
+        chrom_alias.old <- get("CHROM_ALIAS", envir = .misha)
+    }
+    if (exists("DB_IS_LEGACY", envir = .misha)) {
+        db_legacy.old <- get("DB_IS_LEGACY", envir = .misha)
+    }
 
     tryCatch(
         {
+            assign("CHROM_ALIAS", NULL, envir = .misha)
+            assign("DB_IS_LEGACY", FALSE, envir = .misha)
             dir.create(groot, showWarnings = FALSE, recursive = TRUE, mode = "0777")
             dir.create(paste(groot, "pssms", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
             dir.create(paste(groot, "seq", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
             dir.create(paste(groot, "tracks", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
 
-            chroms <- .gseq.import(groot, fasta)
+            # Detect import mode: multi-FASTA (indexed) vs per-chromosome (legacy)
+            use_indexed_format <- getOption("gmulticontig.indexed_format", TRUE)
+            is_single_file <- (length(fasta) == 1 && file.exists(fasta))
 
-            if (!length(chroms)) {
-                stop("No FASTA files were imported", call. = FALSE)
+            chroms <- NULL
+            chrom.sizes <- NULL
+
+            if (use_indexed_format && is_single_file) {
+                # Multi-FASTA import to indexed format
+                # C++ function parses FASTA, creates genome.seq and genome.idx,
+                # and returns a data frame with columns: name, size (sorted alphabetically)
+                contig_info <- .gseq.import_multifasta(groot, fasta)
+
+                if (nrow(contig_info) == 0) {
+                    stop("No contigs were imported from multi-FASTA file", call. = FALSE)
+                }
+
+                # Use the data frame directly (already sorted by name, matching ALLGENOME order)
+                chrom.sizes <- data.frame(chrom = contig_info$name, size = contig_info$size)
+            } else {
+                # Legacy per-chromosome import
+                message("Creating legacy per-chromosome genome format...")
+                chroms <- .gseq.import(groot, fasta)
+
+                if (!length(chroms)) {
+                    stop("No FASTA files were imported", call. = FALSE)
+                }
+
+                # Use chromosome names as-is (no chr prefix)
+                seq.files <- paste(chroms, ".seq", sep = "")
+                seq.files <- paste(paste(groot, "seq", sep = "/"), seq.files, sep = "/")
+                chrom.sizes <- data.frame(chrom = chroms, size = file.info(seq.files)$size)
             }
 
-            seq.files <- paste("chr", chroms, ".seq", sep = "")
-            seq.files <- paste(paste(groot, "seq", sep = "/"), seq.files, sep = "/")
-            chrom.sizes <- data.frame(chrom = chroms, size = file.info(seq.files)$size)
             utils::write.table(chrom.sizes, paste(groot, "chrom_sizes.txt", sep = "/"), quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE)
 
             # before calling gintervals.import_genes new ALLGENOME must be set
             intervals <- data.frame(
-                chrom = as.factor(paste("chr", as.character(chrom.sizes$chrom), sep = "")),
+                chrom = as.factor(as.character(chrom.sizes$chrom)), # Preserve original names
                 start = 0, end = as.numeric(chrom.sizes$size)
             )
             intervals <- intervals[order(intervals$chrom), ]
             rownames(intervals) <- 1:nrow(intervals)
 
-            cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
-            intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
-            names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
-            rownames(intervals2d) <- 1:nrow(intervals2d)
+            # Lazy 2D generation: only materialize for small genomes
+            contig_threshold <- getOption("gmulticontig.2d.threshold", 100)
+
+            if (nrow(intervals) <= contig_threshold) {
+                # Small genome: materialize full 2D grid
+                cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
+                intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
+                names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
+                rownames(intervals2d) <- 1:nrow(intervals2d)
+            } else {
+                # Large genome: defer 2D generation
+                intervals2d <- .create_deferred_2d(nrow(intervals))
+                message(sprintf(
+                    "Deferring 2D genome generation (%d contigs > threshold %d). Use gintervals.2d() for specific pairs.",
+                    nrow(intervals), contig_threshold
+                ))
+            }
 
             assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
             assign("GROOT", groot, envir = .misha)
+            .store_chrom_aliases(levels(intervals$chrom))
 
             if (!is.null(genes.file)) {
                 intervs <- gintervals.import_genes(genes.file, annots.file, annots.names)
@@ -535,12 +785,251 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
         finally = {
             assign("ALLGENOME", allgenome.old, envir = .misha)
             assign("GROOT", groot.old, envir = .misha)
+            assign("CHROM_ALIAS", chrom_alias.old, envir = .misha)
+            assign("DB_IS_LEGACY", db_legacy.old, envir = .misha)
             if (!success) {
                 unlink(groot, recursive = TRUE)
             }
         }
     )
     retv <- 0 # suppress return value
+}
+
+#' Upgrade Database to Indexed Genome Format
+#'
+#' Upgrades a legacy per-chromosome database to the new indexed genome format
+#' with a single consolidated genome.seq file and genome.idx index.
+#'
+#' @param groot Root directory of the database to upgrade. If NULL, uses the currently active database.
+#' @param remove_old_files Logical. If TRUE, removes old per-chromosome .seq files after successful upgrade. Default: FALSE.
+#' @param interactive Logical. If TRUE, prompts for confirmation before upgrading. Default: TRUE.
+#' @param validate Logical. If TRUE, validates the upgrade by comparing sequences. Default: TRUE.
+#'
+#' @return Invisible NULL
+#'
+#' @details
+#' This function converts a legacy database (with per-chromosome .seq files) to
+#' the new indexed format (single genome.seq + genome.idx). The indexed format
+#' provides better performance and supports arbitrary chromosome naming.
+#'
+#' The upgrade process:
+#' \enumerate{
+#'   \item Checks if database is already in indexed format
+#'   \item Reads existing chromosome information from chrom_sizes.txt
+#'   \item Consolidates all per-chromosome .seq files into genome.seq
+#'   \item Creates genome.idx with CRC64 checksum
+#'   \item Optionally validates the upgrade
+#'   \item Optionally removes old .seq files
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Upgrade current database
+#' gdb.upgrade()
+#'
+#' # Upgrade specific database
+#' gdb.upgrade(groot = "/path/to/database")
+#'
+#' # Upgrade and remove old files
+#' gdb.upgrade(remove_old_files = TRUE)
+#' }
+#'
+#' @seealso \code{\link{gdb.create}}, \code{\link{gdb.init}}
+#' @export gdb.upgrade
+gdb.upgrade <- function(groot = NULL, remove_old_files = FALSE, interactive = TRUE, validate = TRUE) {
+    # Use current database if not specified
+    if (is.null(groot)) {
+        groot <- get("GROOT", envir = .misha)
+        if (is.null(groot) || groot == "") {
+            stop("No database is currently active. Please call gdb.init() or specify groot parameter.", call. = FALSE)
+        }
+    }
+
+    # Check if database exists
+    if (!dir.exists(groot)) {
+        stop(sprintf("Database directory does not exist: %s", groot), call. = FALSE)
+    }
+
+    seq_dir <- file.path(groot, "seq")
+    if (!dir.exists(seq_dir)) {
+        stop(sprintf("seq directory does not exist: %s", seq_dir), call. = FALSE)
+    }
+
+    # Check if already in indexed format
+    index_path <- file.path(seq_dir, "genome.idx")
+    genome_seq_path <- file.path(seq_dir, "genome.seq")
+
+    if (file.exists(index_path) && file.exists(genome_seq_path)) {
+        message("Database is already in indexed format.")
+        return(invisible(NULL))
+    }
+
+    # Read chromosome information
+    chrom_sizes_path <- file.path(groot, "chrom_sizes.txt")
+    if (!file.exists(chrom_sizes_path)) {
+        stop(sprintf("chrom_sizes.txt not found: %s", chrom_sizes_path), call. = FALSE)
+    }
+
+    chrom_sizes <- read.table(chrom_sizes_path, header = FALSE, stringsAsFactors = FALSE, sep = "\t")
+    colnames(chrom_sizes) <- c("chrom", "size")
+
+    # Sort by chromosome name (to match ALLGENOME order)
+    chrom_sizes <- chrom_sizes[order(chrom_sizes$chrom), ]
+
+    # Check that per-chromosome .seq files exist
+    seq_files <- file.path(seq_dir, paste0(chrom_sizes$chrom, ".seq"))
+    missing_files <- seq_files[!file.exists(seq_files)]
+
+    if (length(missing_files) > 0) {
+        stop(sprintf("Missing sequence files: %s", paste(basename(missing_files), collapse = ", ")), call. = FALSE)
+    }
+
+    # Interactive confirmation
+    if (interactive) {
+        cat(sprintf("About to upgrade database: %s\n", groot))
+        cat(sprintf("  Chromosomes: %d\n", nrow(chrom_sizes)))
+        cat(sprintf("  Total size: %.2f MB\n", sum(chrom_sizes$size) / 1024^2))
+        if (remove_old_files) {
+            cat("  Old .seq files will be REMOVED after upgrade\n")
+        }
+        response <- readline("Proceed with upgrade? (yes/no): ")
+        if (tolower(response) != "yes") {
+            message("Upgrade cancelled.")
+            return(invisible(NULL))
+        }
+    }
+
+    message("Upgrading database to indexed format...")
+
+    # Create temporary FASTA file from .seq files
+    temp_fasta <- tempfile(fileext = ".fasta")
+    on.exit(unlink(temp_fasta), add = TRUE)
+
+    tryCatch(
+        {
+            # Write multi-FASTA file
+            message("Creating temporary multi-FASTA file...")
+            fasta_con <- file(temp_fasta, "w")
+
+            for (i in seq_len(nrow(chrom_sizes))) {
+                chrom <- chrom_sizes$chrom[i]
+                seq_file <- seq_files[i]
+
+                # Write header
+                cat(sprintf(">%s\n", chrom), file = fasta_con)
+
+                # Read and write sequence (chunk by chunk to handle large chromosomes)
+                seq_con <- file(seq_file, "rb")
+                chunk_size <- 1048576 # 1 MB chunks
+
+                repeat {
+                    chunk <- readBin(seq_con, "raw", n = chunk_size)
+                    if (length(chunk) == 0) break
+
+                    # Convert to character and write
+                    seq_str <- rawToChar(chunk)
+                    # Write in lines of 80 characters (standard FASTA format)
+                    seq_chars <- strsplit(seq_str, "")[[1]]
+                    for (j in seq(1, length(seq_chars), 80)) {
+                        end_idx <- min(j + 79, length(seq_chars))
+                        cat(paste(seq_chars[j:end_idx], collapse = ""), "\n", file = fasta_con)
+                    }
+                }
+
+                close(seq_con)
+
+                if ((i %% 10) == 0 || i == nrow(chrom_sizes)) {
+                    message(sprintf("  Processed %d/%d chromosomes", i, nrow(chrom_sizes)))
+                }
+            }
+
+            close(fasta_con)
+
+            # Call C++ import function
+            message("Creating indexed format...")
+            contig_info <- .gcall(
+                "gseq_multifasta_import",
+                temp_fasta,
+                genome_seq_path,
+                index_path,
+                .misha_env(),
+                silent = TRUE
+            )
+
+            message("Index created successfully")
+
+            # Validate if requested
+            if (validate) {
+                message("Validating upgrade...")
+
+                # Sample validation: check first 100 bases of each chromosome
+                validation_failed <- FALSE
+                for (i in seq_len(min(10, nrow(chrom_sizes)))) { # Check first 10 chroms
+                    chrom <- chrom_sizes$chrom[i]
+                    seq_file <- seq_files[i]
+
+                    # Read from old file
+                    old_con <- file(seq_file, "rb")
+                    old_seq <- rawToChar(readBin(old_con, "raw", n = 100))
+                    close(old_con)
+
+                    # Read from new indexed format (need to reload database first)
+                    # Save current state
+                    old_groot <- NULL
+                    if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+                        old_groot <- get("GROOT", envir = .misha)
+                    }
+
+                    tryCatch({
+                        # Temporarily init the upgraded database
+                        suppressMessages(gdb.init(groot))
+
+                        # Extract from new format
+                        new_seq <- gseq.extract(gintervals(chrom, 0, min(100, chrom_sizes$size[i])))
+
+                        if (old_seq != new_seq) {
+                            warning(sprintf("Validation failed for chromosome %s", chrom))
+                            validation_failed <- TRUE
+                        }
+                    }, finally = {
+                        # Restore old state
+                        if (!is.null(old_groot) && old_groot != "") {
+                            suppressMessages(gdb.init(old_groot))
+                        }
+                    })
+                }
+
+                if (validation_failed) {
+                    stop("Validation failed! Upgrade may be corrupted. Old files have NOT been removed.", call. = FALSE)
+                } else {
+                    message("Validation passed")
+                }
+            }
+
+            # Remove old files if requested
+            if (remove_old_files) {
+                message("Removing old .seq files...")
+                for (seq_file in seq_files) {
+                    unlink(seq_file)
+                }
+                message(sprintf("Removed %d old .seq files", length(seq_files)))
+            }
+
+            message(sprintf("Database upgrade complete: %s", groot))
+        },
+        error = function(e) {
+            # Clean up partial files on error
+            if (file.exists(genome_seq_path)) {
+                unlink(genome_seq_path)
+            }
+            if (file.exists(index_path)) {
+                unlink(index_path)
+            }
+            stop(sprintf("Upgrade failed: %s", conditionMessage(e)), call. = FALSE)
+        }
+    )
+
+    invisible(NULL)
 }
 
 #' Create and Load a Genome Database

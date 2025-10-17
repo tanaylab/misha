@@ -432,6 +432,12 @@ rescue_ALLGENOME <- function(intervals, intervals_name) {
     if (intervals_name[1] == "ALLGENOME[[2]]") {
         warning("ALLGENOME[[2]] was deprecated at version 4.2.0. Use .misha$ALLGENOME[[2]] instead.", call. = FALSE)
         intervals <- .misha$ALLGENOME[[2]]
+
+        # Check if 2D is deferred and generate on demand
+        if (.is_2d_deferred(intervals)) {
+            warning("2D genome structure is deferred for this multi-contig genome. Use gintervals.2d.all() to generate the full structure, or gintervals.2d() for specific pairs.", call. = FALSE)
+            # Return deferred structure as-is - users should use gintervals.2d.all()
+        }
     }
     return(intervals)
 }
