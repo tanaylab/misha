@@ -7,7 +7,7 @@
 gintervals.random(
   size,
   n,
-  dist_from_edge = 3000000,
+  dist_from_edge = 3e+06,
   chromosomes = NULL,
   filter = NULL
 )
