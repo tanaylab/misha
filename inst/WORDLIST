@@ -6,6 +6,7 @@ BigWig
 BinFinder
 Buf
 CMD
+CRC
 CTRL
 ChIP
 Ctrl
@@ -62,6 +63,7 @@ autocomplete
 autocompletion
 autocorr
 bedGraph
+behaviour
 bidirect
 bigset
 binsize

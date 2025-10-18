@@ -944,7 +944,7 @@ test_that("misha PWM with spat_min/spat_max exactly matches prego gextract_pwm_o
 
     test_pssm$motif <- "test"
 
-    prego_scores <- prego::gextract_pwm_old(
+    prego_scores <- prego:::gextract_pwm_old(
         test_intervals,
         dataset = test_pssm,
         spat = spat_df,
@@ -979,7 +979,7 @@ test_that("misha PWM with spat_min/spat_max exactly matches prego gextract_pwm_o
 
     misha_nospatial <- gextract("pwm_range_nospatial", test_intervals, iterator = test_intervals)
 
-    prego_nospatial <- prego::gextract_pwm_old(
+    prego_nospatial <- prego:::gextract_pwm_old(
         test_intervals,
         dataset = test_pssm,
         spat = NULL,
