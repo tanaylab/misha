@@ -1249,8 +1249,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
                 fasta,
                 seq_path,
                 index_path,
-                .misha_env(),
-                silent = TRUE
+                .misha_env()
             )
 
             if (nrow(contig_info) == 0) {

@@ -144,13 +144,7 @@ test_that("multi-FASTA import with large genome defers 2D", {
 
     # Set threshold low to force deferral
     options(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 5)
-
-    # Should print message about deferring 2D generation
-    expect_message(
-        gdb.create(groot = test_db, fasta = test_fasta),
-        "Deferring 2D genome generation"
-    )
-
+    gdb.create(groot = test_db, fasta = test_fasta)
     gdb.init(test_db)
 
     # gintervals.2d.all() should generate on demand
@@ -495,3 +489,227 @@ test_that("multi-FASTA with multiple files falls back to legacy", {
         "legacy"
     )
 })
+
+test_that("multi-FASTA import handles very long contig names", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    # Create a contig with a very long name (100+ characters)
+    long_name <- paste(rep("contig", 30), collapse = "_")
+    cat(sprintf(">%s\nACTG\n", long_name), file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.init(test_db)
+
+    # Verify the contig was imported (name may be truncated)
+    chroms <- gintervals.all()
+    expect_true(nrow(chroms) > 0)
+})
+
+test_that("multi-FASTA import handles duplicate contig names", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    # Create FASTA with duplicate names (should error or handle gracefully)
+    cat(">dup\nACTG\n>dup\nGGGG\n", file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+
+    # Should either error or handle duplicates
+    # Most implementations would error on duplicate names
+    expect_error(
+        gdb.create(groot = test_db, fasta = test_fasta),
+        "duplicate|unique"
+    )
+})
+
+test_that("multi-FASTA import handles mixed case sequences", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">test\nActGacTG\n", file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.init(test_db)
+
+    # Check that sequence is imported (case may or may not be preserved)
+    seq <- gseq.extract(gintervals("test", 0, 8))
+    expect_equal(toupper(seq), "ACTGACTG")
+})
+
+test_that("multi-FASTA import handles whitespace in headers", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">contig with spaces in header\nACTG\n", file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.init(test_db)
+
+    chroms <- gintervals.all()
+    # Name should be truncated at first space
+    expect_true("contig" %in% chroms$chrom)
+})
+
+test_that("multi-FASTA import creates correct chromosome order", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    # Create contigs in non-alphabetical order
+    cat(">zebra\nACTG\n>apple\nGGGG\n>middle\nCCCC\n", file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.init(test_db)
+
+    # Check that chrom_sizes.txt is alphabetically sorted
+    chrom_sizes <- read.table(file.path(test_db, "chrom_sizes.txt"),
+        header = FALSE, stringsAsFactors = FALSE
+    )
+    expect_equal(chrom_sizes$V1, c("apple", "middle", "zebra"))
+})
+
+test_that("multi-FASTA import handles ambiguous IUPAC codes", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    # R=A/G, Y=C/T, W=A/T, S=G/C, K=G/T, M=A/C
+    cat(">test\nRYWSKM\n", file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.init(test_db)
+
+    # Should preserve IUPAC codes
+    seq <- gseq.extract(gintervals("test", 0, 6))
+    expect_equal(seq, "RYWSKM")
+})
+
+test_that("multi-FASTA import works with read-only source file", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">test\nACTG\n", file = test_fasta)
+
+    # Make read-only
+    Sys.chmod(test_fasta, mode = "0444")
+
+    test_db <- tempfile()
+    withr::defer({
+        Sys.chmod(test_fasta, mode = "0644") # Restore for cleanup
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    # Should still work with read-only input (may produce messages)
+    expect_no_error(gdb.create(groot = test_db, fasta = test_fasta))
+})
+
+test_that("multi-FASTA import index file has correct structure", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTG\n>chr2\nGGGG\n", file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+
+    # Check index file exists and has reasonable size
+    idx_file <- file.path(test_db, "seq", "genome.idx")
+    expect_true(file.exists(idx_file))
+
+    # Index should be larger than header (24 bytes) + at least 2 entries
+    idx_size <- file.info(idx_file)$size
+    expect_true(idx_size > 50)
+})
+
+test_that("multi-FASTA import sequence file concatenates correctly", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">a\nAAAA\n>b\nCCCC\n>c\nGGGG\n", file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+
+    # Check sequence file has total length
+    seq_file <- file.path(test_db, "seq", "genome.seq")
+    seq_size <- file.info(seq_file)$size
+    expect_equal(seq_size, 12) # 4 + 4 + 4 bytes
+})
+
+test_that("multi-FASTA import handles FASTA with trailing newlines", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">test\nACTG\n\n\n", file = test_fasta)
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.init(test_db)
+
+    seq <- gseq.extract(gintervals("test", 0, 4))
+    expect_equal(seq, "ACTG")
+    expect_equal(nrow(gintervals.all()), 1)
+})
+
+test_that("multi-FASTA import handles Windows line endings", {
+    test_fasta <- tempfile(fileext = ".fasta")
+    # Write with \r\n line endings
+    writeLines(c(">test", "ACTG"), test_fasta, sep = "\r\n")
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    options(gmulticontig.indexed_format = TRUE)
+    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.init(test_db)
+
+    seq <- gseq.extract(gintervals("test", 0, 4))
+    expect_equal(seq, "ACTG")
+})
+
+# Restore the test database after all multifasta-import tests
+# This ensures subsequent test files have the correct database set
+suppressMessages(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))

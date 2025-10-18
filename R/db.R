@@ -952,8 +952,7 @@ gdb.upgrade <- function(groot = NULL, remove_old_files = FALSE, interactive = TR
                 temp_fasta,
                 genome_seq_path,
                 index_path,
-                .misha_env(),
-                silent = TRUE
+                .misha_env()
             )
 
             message("Index created successfully")
