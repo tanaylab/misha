@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.0.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.0</span>
       </span>
     </div>
 
@@ -260,6 +260,14 @@
         </td>
         <td><p>Returns number of intervals per chromosome</p></td>
       </tr><tr><td>
+          <p><code><a href="gintervals.covered_bp.html">gintervals.covered_bp()</a></code> </p>
+        </td>
+        <td><p>Calculate total base pairs covered by intervals</p></td>
+      </tr><tr><td>
+          <p><code><a href="gintervals.coverage_fraction.html">gintervals.coverage_fraction()</a></code> </p>
+        </td>
+        <td><p>Calculate fraction of genomic space covered by intervals</p></td>
+      </tr><tr><td>
           <p><code><a href="gintervals.diff.html">gintervals.diff()</a></code> </p>
         </td>
         <td><p>Calculates difference of two intervals sets</p></td>
@@ -323,6 +331,10 @@
           <p><code><a href="gintervals.quantiles.html">gintervals.quantiles()</a></code> </p>
         </td>
         <td><p>Calculates quantiles of a track expression for intervals</p></td>
+      </tr><tr><td>
+          <p><code><a href="gintervals.random.html">gintervals.random()</a></code> </p>
+        </td>
+        <td><p>Generate random genome intervals</p></td>
       </tr><tr><td>
           <p><code><a href="gintervals.rbind.html">gintervals.rbind()</a></code> </p>
         </td>
@@ -408,13 +420,41 @@
         </td>
         <td><p>Divides track expression into segments</p></td>
       </tr><tr><td>
+          <p><code><a href="gsummary.html">gsummary()</a></code> </p>
+        </td>
+        <td><p>Calculates summary statistics of track expression</p></td>
+      </tr></tbody><tbody><tr><th colspan="2">
+          <h2 id="sequence-functions">Sequence functions <a href="#sequence-functions" class="anchor" aria-hidden="true"></a></h2>
+          <p class="section-desc"></p><p>Sequence functions</p>
+        </th>
+      </tr></tbody><tbody><tr><td>
           <p><code><a href="gseq.extract.html">gseq.extract()</a></code> </p>
         </td>
         <td><p>Returns DNA sequences</p></td>
       </tr><tr><td>
-          <p><code><a href="gsummary.html">gsummary()</a></code> </p>
+          <p><code><a href="gseq.pwm.html">gseq.pwm()</a></code> </p>
         </td>
-        <td><p>Calculates summary statistics of track expression</p></td>
+        <td><p>Score DNA sequences with a PWM over a region of interest</p></td>
+      </tr><tr><td>
+          <p><code><a href="gseq.kmer.html">gseq.kmer()</a></code> </p>
+        </td>
+        <td><p>Score DNA sequences with a k-mer over a region of interest</p></td>
+      </tr><tr><td>
+          <p><code><a href="gseq.revcomp.html">gseq.revcomp()</a></code> </p>
+        </td>
+        <td><p>Get reverse complement of DNA sequence</p></td>
+      </tr><tr><td>
+          <p><code><a href="grevcomp.html">grevcomp()</a></code> </p>
+        </td>
+        <td><p>Get reverse complement of DNA sequence</p></td>
+      </tr><tr><td>
+          <p><code><a href="gseq.rev.html">gseq.rev()</a></code> </p>
+        </td>
+        <td><p>Reverse DNA sequence</p></td>
+      </tr><tr><td>
+          <p><code><a href="gseq.comp.html">gseq.comp()</a></code> </p>
+        </td>
+        <td><p>Complement DNA sequence</p></td>
       </tr></tbody><tbody><tr><th colspan="2">
           <h2 id="database-functions">Database functions <a href="#database-functions" class="anchor" aria-hidden="true"></a></h2>
           <p class="section-desc"></p><p>Database functions</p>
@@ -479,10 +519,6 @@
           <p><code><a href="gwilcox.html">gwilcox()</a></code> </p>
         </td>
         <td><p>Calculates Wilcoxon test on sliding windows over track expression</p></td>
-      </tr><tr><td>
-          <p><code><a href="grevcomp.html">grevcomp()</a></code> </p>
-        </td>
-        <td><p>Get reverse complement of DNA sequence</p></td>
       </tr></tbody></table></div>
 
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">

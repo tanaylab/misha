@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.0.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.0</span>
       </span>
     </div>
 
@@ -57,9 +57,17 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/5.0.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.1.0" id="misha-510">misha 5.1.0<a class="anchor" aria-label="anchor" href="#misha-510"></a></h2>
+<ul><li>Added <code>gseq.pwm</code> and <code>gseq.kmer</code> functions that compute pwm and kmer scores on sequences without the need for a genome database.</li>
+<li>Added <code>gseq.rev</code> and <code>gseq.comp</code> functions that reverse and complement DNA sequences without the need for a genome database.</li>
+<li>Added <code>gseq.revcomp</code> alias for <code>grevcomp</code> function.</li>
+<li>Added <code>gintervals.random</code> function that generates random genome intervals.</li>
+<li>Added <code>gintervals.covered_bp</code> and <code>gintervals.coverage_fraction</code> functions that calculate the number of base pairs and the fraction of base pairs covered by a set of intervals.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.0.0" id="misha-500">misha 5.0.0<a class="anchor" aria-label="anchor" href="#misha-500"></a></h2>
 <ul><li>Added <code>gvtrack.filters</code>: per vtrack genomic masks.</li>
