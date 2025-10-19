@@ -50,7 +50,10 @@ hg38/              <- Genomic Database root directory
       mypssm.data        <- ...
       mypssm.key         <- ...
    seq/               <- (optional)
-      chr1.seq           <- seq (sequence) files
+      genome.seq         <- indexed format: single sequence file
+      genome.idx         <- indexed format: index file
+      OR
+      chr1.seq           <- per-chromosome format: separate files
       chr2.seq           <- ...
       chr3.seq           <- ...
    tracks/
@@ -95,15 +98,48 @@ Y    57772954
 ```
 
 
-### Seq File
+### Seq Files
 
-*Seq* (aka sequence) files are located in `seq` directory. Each of the Seq files contains a genomic sequence for a given chromosome as a contiguous string of ASCII characters. The length of the string should match the length of the chromosome. The file must be called `chrXXX.seq` where `XXX` indicates the name of the chromosome as it appears in `chrom_sizes.txt` file.
+Genomic sequences are stored in the `seq` directory. Two formats are supported:
 
-Here is an example of an unusually short (25 base pairs) Seq file:
+#### Indexed Format (Recommended)
+
+The indexed format uses two files:
+- `genome.seq`: Single binary file containing concatenated sequences for all contigs
+- `genome.idx`: Binary index mapping contig names to positions in genome.seq
+
+This format provides better performance and scalability, especially for genomes with many contigs. It is the default format created by `gdb.create()`.
+
+**Format Specifications:**
+
+The `genome.idx` file has the following structure:
+- **Header (24 bytes)**:
+  - Magic number: `"MISHAIDX"` (8 bytes)
+  - Index version: `uint32_t` (4 bytes, currently 1)
+  - Number of contigs: `uint32_t` (4 bytes)
+  - CRC64-ECMA checksum: `uint64_t` (8 bytes)
+
+- **Entries** (one per contig):
+  - Chromosome ID: `uint32_t` (4 bytes) - alphabetical rank (0, 1, 2, ...)
+  - Name length: `uint16_t` (2 bytes)
+  - Name: UTF-8 string (not null-terminated)
+  - Offset in genome.seq: `uint64_t` (8 bytes)
+  - Sequence length: `uint64_t` (8 bytes)
+  - Reserved: `uint64_t` (8 bytes, currently zeros)
+
+All multi-byte integers are stored in little-endian byte order.
+
+#### Per-Chromosome Format
+
+Each contig has a separate `.seq` file containing its genomic sequence as a contiguous string of ASCII characters. Files are named `chrXXX.seq` where `XXX` is the contig name from `chrom_sizes.txt`.
+
+Example of a short (25 base pairs) Seq file:
 
 ```csv
 ggtgaAGccctggagattcttatta
 ```
+
+To create a database in the per-chromosome format, use `gdb.create(..., format = "per-chromosome")`.
 
 
 ### PSSM Set

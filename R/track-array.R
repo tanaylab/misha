@@ -56,7 +56,7 @@
 #     success <- FALSE
 #     tryCatch(
 #         {
-#             colnames <- .gcall("gcreate_arrays_track", trackstr, minsize, maxsize, "1", intervals, .iterator, .misha_env(), silent = TRUE)
+#             colnames <- .gcall("gcreate_arrays_track", trackstr, minsize, maxsize, "1", intervals, .iterator, .misha_env())
 #             .gdb.add_track(trackstr)
 #             .gtrack.array.set_colnames(trackstr, colnames, FALSE)
 #             .gtrack.attr.set(trackstr, "created.by", ".gtrack.create_test_arrays", TRUE)
@@ -369,7 +369,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     success <- FALSE
     tryCatch(
         {
-            colnames <- .gcall("garrays_import", trackstr, srcs, colnames, .misha_env(), silent = TRUE)
+            colnames <- .gcall("garrays_import", trackstr, srcs, colnames, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.array.set_colnames(trackstr, colnames, FALSE)
             created.by <- sprintf("gtrack.array.import(\"%s\", description, src = c(\"%s\"))", trackstr, paste(srcs, collapse = "\", \""))

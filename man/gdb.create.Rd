@@ -9,7 +9,9 @@ gdb.create(
   fasta = NULL,
   genes.file = NULL,
   annots.file = NULL,
-  annots.names = NULL
+  annots.names = NULL,
+  format = NULL,
+  verbose = FALSE
 )
 }
 \arguments{
@@ -25,6 +27,10 @@ genes are imported}
 annotations are imported}
 
 \item{annots.names}{annotations names}
+
+\item{format}{database format: "indexed" (default, single genome.seq + genome.idx)
+or "per-chromosome" (separate .seq file per contig). If NULL, uses the value from
+\code{getOption("gmulticontig.indexed_format", TRUE)}}
 }
 \value{
 None.
@@ -36,6 +42,14 @@ Creates a new Genomic Database.
 This function creates a new Genomic Database at the location specified by
 'groot'. FASTA files are converted to 'Seq' format and appropriate
 'chrom_sizes.txt' file is generated (see "User Manual" for more details).
+
+Two database formats are supported:
+\itemize{
+  \item \strong{indexed}: Single genome.seq + genome.idx (default). Recommended for
+        genomes with many contigs. Provides better performance and scalability.
+  \item \strong{per-chromosome}: Separate .seq file per contig. May be useful for
+        specific legacy workflows.
+}
 
 If 'genes.file' is not 'NULL' four sets of intervals are created in the
 database: \code{tss}, \code{exons}, \code{utr3} and \code{utr5}. See

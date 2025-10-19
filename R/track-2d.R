@@ -17,7 +17,7 @@
     success <- FALSE
     tryCatch(
         {
-            .gcall("gcreate_test_computer2d_track", trackstr, prob.skip.chrom, max.rect, max.rect.size, .misha_env(), silent = TRUE)
+            .gcall("gcreate_test_computer2d_track", trackstr, prob.skip.chrom, max.rect, max.rect.size, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf(".gtrack.create_test_computer2d(%s, %g, %g, %g)", trackstr, prob.skip.chrom, max.rect, max.rect.size), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -98,7 +98,7 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_create_track2d", trackstr, intervals, values, .misha_env(), silent = TRUE)
+            .gcall("gtrack_create_track2d", trackstr, intervals, values, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.2d.create(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -180,7 +180,7 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
 
     tryCatch(
         {
-            .gcall("gtrack_2d_import", trackstr, file, .misha_env(), silent = TRUE)
+            .gcall("gtrack_2d_import", trackstr, file, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -292,7 +292,7 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_import_contacts", trackstr, contacts, fends, allow.duplicates, .misha_env(), silent = TRUE)
+            .gcall("gtrack_import_contacts", trackstr, contacts, fends, allow.duplicates, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",

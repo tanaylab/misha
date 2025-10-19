@@ -246,7 +246,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     # Validate genome.idx if it exists (indexed format)
     idx_path <- file.path(groot, "seq", "genome.idx")
     if (file.exists(idx_path)) {
-        .gcall("gseq_validate_index", file.path(groot, "seq"), .misha_env(), silent = TRUE)
+        .gcall("gseq_validate_index", file.path(groot, "seq"), .misha_env())
     }
 
     if (nrow(intervals) == 0) {
@@ -525,7 +525,7 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
             answer <- "Y"
 
             if (recursive && !force) {
-                res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env(), silent = TRUE)
+                res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env())
                 tracks <- res[[1]]
                 intervals <- res[[2]]
 
@@ -601,6 +601,106 @@ gdb.set_readonly_attrs <- function(attrs) {
 }
 
 
+
+#' Get Database Information
+#'
+#' Returns information about a misha genome database including format, number of chromosomes,
+#' total genome size, and whether it uses the indexed format.
+#'
+#' @param groot Root directory of the database. If NULL, uses the currently active database.
+#' @return A list with database information:
+#' \itemize{
+#'   \item \code{path} - Full path to the database
+#'   \item \code{is_db} - TRUE if this is a valid misha database
+#'   \item \code{format} - "indexed" or "per-chromosome"
+#'   \item \code{num_chromosomes} - Number of chromosomes/contigs
+#'   \item \code{genome_size} - Total length of genome in bases
+#'   \item \code{chromosomes} - Data frame with chromosome names and sizes
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Get info about currently active database
+#' info <- gdb.info()
+#' cat("Database format:", info$format, "\n")
+#' cat("Genome size:", info$genome_size / 1e6, "Mb\n")
+#'
+#' # Get info about specific database
+#' info <- gdb.info("/path/to/database")
+#' }
+#'
+#' @export gdb.info
+gdb.info <- function(groot = NULL) {
+    # Use current database if not specified
+    if (is.null(groot)) {
+        if (!exists("GROOT", envir = .misha) || is.null(get("GROOT", envir = .misha))) {
+            stop("No database is currently active. Please call gdb.init() or specify groot parameter.", call. = FALSE)
+        }
+        groot <- get("GROOT", envir = .misha)
+    }
+
+    # Normalize path
+    groot <- normalizePath(groot, mustWork = FALSE)
+
+    # Check if directory exists
+    if (!dir.exists(groot)) {
+        return(list(
+            path = groot,
+            is_db = FALSE,
+            error = "Directory does not exist"
+        ))
+    }
+
+    # Check for chrom_sizes.txt
+    chrom_sizes_path <- file.path(groot, "chrom_sizes.txt")
+    if (!file.exists(chrom_sizes_path)) {
+        return(list(
+            path = groot,
+            is_db = FALSE,
+            error = "Not a misha database (chrom_sizes.txt not found)"
+        ))
+    }
+
+    # Read chromosome information
+    chrom_sizes <- tryCatch(
+        read.csv(chrom_sizes_path,
+            sep = "\t", header = FALSE,
+            col.names = c("chrom", "size"), colClasses = c("character", "numeric")
+        ),
+        error = function(e) NULL
+    )
+
+    if (is.null(chrom_sizes)) {
+        return(list(
+            path = groot,
+            is_db = FALSE,
+            error = "Invalid chrom_sizes.txt format"
+        ))
+    }
+
+    # Detect format
+    idx_path <- file.path(groot, "seq", "genome.idx")
+    genome_seq_path <- file.path(groot, "seq", "genome.seq")
+
+    if (file.exists(idx_path) && file.exists(genome_seq_path)) {
+        format <- "indexed"
+    } else {
+        format <- "per-chromosome"
+    }
+
+    # Calculate total genome size
+    genome_size <- sum(chrom_sizes$size)
+
+    list(
+        path = groot,
+        is_db = TRUE,
+        format = format,
+        num_chromosomes = nrow(chrom_sizes),
+        genome_size = genome_size,
+        chromosomes = chrom_sizes
+    )
+}
+
 #' Creates a new Genomic Database
 #'
 #' Creates a new Genomic Database.
@@ -608,6 +708,14 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' This function creates a new Genomic Database at the location specified by
 #' 'groot'. FASTA files are converted to 'Seq' format and appropriate
 #' 'chrom_sizes.txt' file is generated (see "User Manual" for more details).
+#'
+#' Two database formats are supported:
+#' \itemize{
+#'   \item \strong{indexed}: Single genome.seq + genome.idx (default). Recommended for
+#'         genomes with many contigs. Provides better performance and scalability.
+#'   \item \strong{per-chromosome}: Separate .seq file per contig. May be useful for
+#'         specific legacy workflows.
+#' }
 #'
 #' If 'genes.file' is not 'NULL' four sets of intervals are created in the
 #' database: \code{tss}, \code{exons}, \code{utr3} and \code{utr5}. See
@@ -630,6 +738,9 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' @param annots.file name of URL file that contains annotations. If 'NULL' no
 #' annotations are imported
 #' @param annots.names annotations names
+#' @param format database format: "indexed" (default, single genome.seq + genome.idx)
+#' or "per-chromosome" (separate .seq file per contig). If NULL, uses the value from
+#' \code{getOption("gmulticontig.indexed_format", TRUE)}
 #' @return None.
 #' @seealso \code{\link{gdb.init}}, \code{\link{gdb.reload}},
 #' \code{\link{gintervals.import_genes}}
@@ -661,10 +772,21 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' }
 #'
 #' @export gdb.create
-gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.file = NULL, annots.names = NULL) {
+gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.file = NULL, annots.names = NULL, format = NULL, verbose = FALSE) {
     if (is.null(groot) || is.null(fasta)) {
-        stop("Usage: gdb.create(groot, fasta, genes.file = NULL, annots.file = NULL, annots.names = NULL)", call. = FALSE)
+        stop("Usage: gdb.create(groot, fasta, genes.file = NULL, annots.file = NULL, annots.names = NULL, format = 'indexed', verbose = FALSE)", call. = FALSE)
     }
+
+    # Determine format: parameter overrides option
+    if (is.null(format)) {
+        # Check for legacy option for backward compatibility
+        use_indexed_format <- getOption("gmulticontig.indexed_format", TRUE)
+        format <- if (use_indexed_format) "indexed" else "per-chromosome"
+    } else {
+        # Validate format parameter
+        format <- match.arg(format, c("indexed", "per-chromosome"))
+    }
+    use_indexed_format <- (format == "indexed")
 
     if (file.exists(groot)) {
         stop(sprintf("Directory %s already exists", groot), call. = FALSE)
@@ -697,8 +819,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             dir.create(paste(groot, "seq", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
             dir.create(paste(groot, "tracks", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
 
-            # Detect import mode: multi-FASTA (indexed) vs per-chromosome (legacy)
-            use_indexed_format <- getOption("gmulticontig.indexed_format", TRUE)
+            # Detect import mode: multi-FASTA (indexed) vs per-chromosome
             is_single_file <- (length(fasta) == 1 && file.exists(fasta))
 
             chroms <- NULL
@@ -708,7 +829,8 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
                 # Multi-FASTA import to indexed format
                 # C++ function parses FASTA, creates genome.seq and genome.idx,
                 # and returns a data frame with columns: name, size (sorted alphabetically)
-                contig_info <- .gseq.import_multifasta(groot, fasta)
+                if (verbose) message("Creating indexed genome format...")
+                contig_info <- .gseq.import_multifasta(groot, fasta, verbose)
 
                 if (nrow(contig_info) == 0) {
                     stop("No contigs were imported from multi-FASTA file", call. = FALSE)
@@ -717,8 +839,8 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
                 # Use the data frame directly (already sorted by name, matching ALLGENOME order)
                 chrom.sizes <- data.frame(chrom = contig_info$name, size = contig_info$size)
             } else {
-                # Legacy per-chromosome import
-                message("Creating legacy per-chromosome genome format...")
+                # Per-chromosome import
+                if (verbose) message("Creating per-chromosome genome format...")
                 chroms <- .gseq.import(groot, fasta)
 
                 if (!length(chroms)) {
@@ -753,10 +875,12 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             } else {
                 # Large genome: defer 2D generation
                 intervals2d <- .create_deferred_2d(nrow(intervals))
-                message(sprintf(
-                    "Deferring 2D genome generation (%d contigs > threshold %d). Use gintervals.2d() for specific pairs.",
-                    nrow(intervals), contig_threshold
-                ))
+                if (verbose) {
+                    message(sprintf(
+                        "Deferring 2D genome generation (%d contigs > threshold %d). Use gintervals.2d() for specific pairs.",
+                        nrow(intervals), contig_threshold
+                    ))
+                }
             }
 
             assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
@@ -779,7 +903,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             serialize(c("created.by", "created.date", "created.user"), f)
             close(f)
 
-            message("Database was successfully created")
+            if (verbose) message("Database was successfully created")
             success <- TRUE
         },
         finally = {
@@ -797,20 +921,20 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
 #' Upgrade Database to Indexed Genome Format
 #'
-#' Upgrades a legacy per-chromosome database to the new indexed genome format
+#' Converts a per-chromosome database to indexed genome format
 #' with a single consolidated genome.seq file and genome.idx index.
 #'
 #' @param groot Root directory of the database to upgrade. If NULL, uses the currently active database.
-#' @param remove_old_files Logical. If TRUE, removes old per-chromosome .seq files after successful upgrade. Default: FALSE.
+#' @param remove_old_files Logical. If TRUE, removes per-chromosome .seq files after successful upgrade. Default: FALSE.
 #' @param interactive Logical. If TRUE, prompts for confirmation before upgrading. Default: TRUE.
 #' @param validate Logical. If TRUE, validates the upgrade by comparing sequences. Default: TRUE.
 #'
 #' @return Invisible NULL
 #'
 #' @details
-#' This function converts a legacy database (with per-chromosome .seq files) to
-#' the new indexed format (single genome.seq + genome.idx). The indexed format
-#' provides better performance and supports arbitrary chromosome naming.
+#' This function converts a per-chromosome database (with separate .seq files per contig) to
+#' indexed format (single genome.seq + genome.idx). The indexed format
+#' provides better performance and scalability, especially for genomes with many contigs.
 #'
 #' The upgrade process:
 #' \enumerate{
@@ -972,7 +1096,7 @@ gdb.upgrade <- function(groot = NULL, remove_old_files = FALSE, interactive = TR
                     old_seq <- rawToChar(readBin(old_con, "raw", n = 100))
                     close(old_con)
 
-                    # Read from new indexed format (need to reload database first)
+                    # Read from indexed format (need to reload database first)
                     # Save current state
                     old_groot <- NULL
                     if (exists("GROOT", envir = .misha, inherits = FALSE)) {
@@ -983,7 +1107,7 @@ gdb.upgrade <- function(groot = NULL, remove_old_files = FALSE, interactive = TR
                         # Temporarily init the upgraded database
                         suppressMessages(gdb.init(groot))
 
-                        # Extract from new format
+                        # Extract from indexed format
                         new_seq <- gseq.extract(gintervals(chrom, 0, min(100, chrom_sizes$size[i])))
 
                         if (old_seq != new_seq) {
@@ -1231,7 +1355,7 @@ gdb.reload <- function(rescan = TRUE) {
         }
 
         if (rescan) {
-            res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env(), silent = TRUE)
+            res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env())
             if (get("GWD", envir = .misha) == paste(get("GROOT", envir = .misha), "tracks", sep = "/")) {
                 try(
                     {
@@ -1291,7 +1415,7 @@ gdb.reload <- function(rescan = TRUE) {
     for (track in .misha$GTRACKS) {
         try(
             {
-                retv <- try(.gcall_noninteractive(gtrack.info, track), silent = TRUE)
+                retv <- try(.gcall_noninteractive(gtrack.info, track))
                 if (inherits(retv, "try-error") & length(grep("obsolete", retv)) > 0) {
                     message(sprintf("Converting track %s", track))
                     .gcall_noninteractive(gtrack.convert, track)

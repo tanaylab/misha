@@ -82,7 +82,7 @@ test_that("gdb.upgrade skips if already upgraded", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
 
     # Try to upgrade - should skip
     expect_message(
@@ -105,7 +105,7 @@ test_that("gdb.upgrade validates upgraded sequences", {
 
     # Create a proper database with legacy format
     options(gmulticontig.indexed_format = FALSE)
-    suppressMessages(gdb.create(groot = test_db, fasta = test_fasta))
+    suppressMessages(gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE))
 
     # Now upgrade with validation enabled
     expect_message(
