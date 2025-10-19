@@ -34,6 +34,8 @@
 <url><loc>/reference/gintervals.annotate.html</loc></url>
 <url><loc>/reference/gintervals.canonic.html</loc></url>
 <url><loc>/reference/gintervals.chrom_sizes.html</loc></url>
+<url><loc>/reference/gintervals.coverage_fraction.html</loc></url>
+<url><loc>/reference/gintervals.covered_bp.html</loc></url>
 <url><loc>/reference/gintervals.diff.html</loc></url>
 <url><loc>/reference/gintervals.exists.html</loc></url>
 <url><loc>/reference/gintervals.force_range.html</loc></url>
@@ -49,6 +51,7 @@
 <url><loc>/reference/gintervals.neighbors.html</loc></url>
 <url><loc>/reference/gintervals.normalize.html</loc></url>
 <url><loc>/reference/gintervals.quantiles.html</loc></url>
+<url><loc>/reference/gintervals.random.html</loc></url>
 <url><loc>/reference/gintervals.rbind.html</loc></url>
 <url><loc>/reference/gintervals.rm.html</loc></url>
 <url><loc>/reference/gintervals.save.html</loc></url>
@@ -64,7 +67,12 @@
 <url><loc>/reference/gsample.html</loc></url>
 <url><loc>/reference/gscreen.html</loc></url>
 <url><loc>/reference/gsegment.html</loc></url>
+<url><loc>/reference/gseq.comp.html</loc></url>
 <url><loc>/reference/gseq.extract.html</loc></url>
+<url><loc>/reference/gseq.kmer.html</loc></url>
+<url><loc>/reference/gseq.pwm.html</loc></url>
+<url><loc>/reference/gseq.rev.html</loc></url>
+<url><loc>/reference/gseq.revcomp.html</loc></url>
 <url><loc>/reference/gsummary.html</loc></url>
 <url><loc>/reference/gtrack.2d.create.html</loc></url>
 <url><loc>/reference/gtrack.2d.import.html</loc></url>
