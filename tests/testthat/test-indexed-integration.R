@@ -11,7 +11,7 @@ test_that("indexed format works with gseq.extract on all strands", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
     # Forward strand
@@ -38,7 +38,7 @@ test_that("indexed format works with multiple interval extraction", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
     # Extract from multiple chromosomes
@@ -63,7 +63,7 @@ test_that("indexed format works with gintervals.all()", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
     all_intervals <- gintervals.all()
@@ -86,7 +86,7 @@ test_that("indexed format works with gintervals.2d.all() for small genomes", {
 
     # Set threshold high so 2D is materialized
     options(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 100)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
     genome_2d <- gintervals.2d.all()
@@ -108,7 +108,7 @@ test_that("indexed format defers 2D for large genomes", {
     # Set threshold low to force deferral
     options(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 5)
     expect_message(
-        gdb.create(groot = test_db, fasta = test_fasta),
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE),
         "Deferring 2D genome generation"
     )
 
@@ -132,7 +132,7 @@ test_that("indexed format works with chromosome name lookups", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
     # Test that all chromosome names are accessible
@@ -157,7 +157,7 @@ test_that("indexed format handles boundary conditions", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
     # Extract from start
@@ -187,7 +187,7 @@ test_that("indexed format persists across database reloads", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
     # Extract sequence
@@ -214,7 +214,7 @@ test_that("indexed format is compatible with gdb.reload()", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
     # Reload should work
@@ -236,7 +236,7 @@ test_that("indexed format validates on init", {
     })
 
     options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta)
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
 
     # Corrupt the index file
     idx_file <- file.path(test_db, "seq", "genome.idx")

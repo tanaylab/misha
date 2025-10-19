@@ -1186,7 +1186,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
                 seq <- sprintf("%s/seq/%s.seq", groot, chrom)
 
                 message(sprintf("%s", chrom))
-                .gcall("gseqimport", fasta, seq, .misha_env(), silent = TRUE)
+                .gcall("gseqimport", fasta, seq, .misha_env())
 
                 chroms <- c(chroms, chrom)
             }
@@ -1200,9 +1200,9 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
 
 # Internal function: Import multi-FASTA file to indexed genome format
 # Creates genome.seq and genome.idx files
-.gseq.import_multifasta <- function(groot = NULL, fasta = NULL) {
+.gseq.import_multifasta <- function(groot = NULL, fasta = NULL, verbose = TRUE) {
     if (is.null(groot) || is.null(fasta)) {
-        stop("Usage: .gseq.import_multifasta(groot, fasta)", call. = FALSE)
+        stop("Usage: .gseq.import_multifasta(groot, fasta, verbose = TRUE)", call. = FALSE)
     }
 
     if (length(fasta) != 1) {
@@ -1243,7 +1243,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
             # It will: parse FASTA, sanitize headers, sort by name,
             # assign chromids 0..N-1 in sorted order, write genome.seq and genome.idx,
             # and return a data frame with contig names and sizes (sorted alphabetically)
-            message("Importing multi-FASTA file...")
+            if (verbose) message("Importing multi-FASTA file...")
             contig_info <- .gcall(
                 "gseq_multifasta_import",
                 fasta,
@@ -1256,7 +1256,7 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
                 stop("No contigs were imported from FASTA file", call. = FALSE)
             }
 
-            message(sprintf("Successfully imported %d contigs", nrow(contig_info)))
+            if (verbose) message(sprintf("Successfully imported %d contigs", nrow(contig_info)))
 
             # Return contig info data frame with columns: name, size
             contig_info

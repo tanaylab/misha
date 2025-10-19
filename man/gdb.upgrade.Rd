@@ -14,7 +14,7 @@ gdb.upgrade(
 \arguments{
 \item{groot}{Root directory of the database to upgrade. If NULL, uses the currently active database.}
 
-\item{remove_old_files}{Logical. If TRUE, removes old per-chromosome .seq files after successful upgrade. Default: FALSE.}
+\item{remove_old_files}{Logical. If TRUE, removes per-chromosome .seq files after successful upgrade. Default: FALSE.}
 
 \item{interactive}{Logical. If TRUE, prompts for confirmation before upgrading. Default: TRUE.}
 
@@ -24,13 +24,13 @@ gdb.upgrade(
 Invisible NULL
 }
 \description{
-Upgrades a legacy per-chromosome database to the new indexed genome format
+Converts a per-chromosome database to indexed genome format
 with a single consolidated genome.seq file and genome.idx index.
 }
 \details{
-This function converts a legacy database (with per-chromosome .seq files) to
-the new indexed format (single genome.seq + genome.idx). The indexed format
-provides better performance and supports arbitrary chromosome naming.
+This function converts a per-chromosome database (with separate .seq files per contig) to
+indexed format (single genome.seq + genome.idx). The indexed format
+provides better performance and scalability, especially for genomes with many contigs.
 
 The upgrade process:
 \enumerate{

@@ -144,7 +144,7 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
 
     tryCatch(
         {
-            .gcall("gtrackconvert", src.trackstr, tgt.trackstr, .misha_env(), silent = TRUE)
+            .gcall("gtrackconvert", src.trackstr, tgt.trackstr, .misha_env())
 
             # copy all supplimentary data of a track (vars, etc.)
             if (!system(sprintf("cp -r -u %s/. %s", src.dirname, tgt.dirname))) {
@@ -243,9 +243,9 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     tryCatch(
         {
             if (.ggetOption("gmultitasking")) {
-                .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env(), silent = TRUE)
+                .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env())
             } else {
-                .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env(), silent = TRUE)
+                .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env())
             }
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
@@ -323,9 +323,9 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     tryCatch(
         {
             if (.ggetOption("gmultitasking")) {
-                .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, .misha_env(), silent = TRUE)
+                .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
             } else {
-                .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, .misha_env(), silent = TRUE)
+                .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
             }
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
@@ -404,7 +404,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env(), silent = TRUE)
+            .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, intervals, values)", trackstr), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -726,11 +726,11 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                         end = bed_parsed$intervals$end,
                         value = as.numeric(bed_parsed$values)
                     )
-                    .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env(), silent = TRUE)
+                    .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
                     .gdb.add_track(trackstr)
                     .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
                 } else {
-                    .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env(), silent = TRUE)
+                    .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
                     .gdb.add_track(trackstr)
                     .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
                 }
@@ -764,7 +764,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                     message("Converting to track...\n")
                 }
 
-                .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env(), silent = TRUE)
+                .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env())
                 .gdb.add_track(trackstr)
                 .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
 
@@ -854,7 +854,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     success <- FALSE
     tryCatch(
         {
-            retv <- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env(), silent = TRUE)
+            retv <- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -1097,7 +1097,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, .misha_env(), silent = TRUE)
+            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, .misha_env())
             .gdb.add_track(trackstr)
             if (is.character(chain)) {
                 .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), TRUE)
@@ -1224,7 +1224,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_bintransform", trackstr, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, .misha_env(), silent = TRUE)
+            .gcall("gtrack_bintransform", trackstr, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, .misha_env())
             .gdb.add_track(trackstr)
             created.by <- sprintf("gtrack.lookup(%s, description, lookup_table", trackstr)
             for (i in (1:length(exprs))) {
@@ -1556,7 +1556,7 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
     success <- FALSE
     tryCatch(
         {
-            .gcall("gsmooth", trackstr, exprstr, winsize, weight_thr, smooth_nans, alg, .iterator, .misha_env(), silent = TRUE)
+            .gcall("gsmooth", trackstr, exprstr, winsize, weight_thr, smooth_nans, alg, .iterator, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -1647,7 +1647,7 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
     tryCatch(
         {
             # Call the C++ function with the data frame
-            .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env(), silent = TRUE)
+            .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
 
             # Add the track to the database
             .gdb.add_track(trackstr)
