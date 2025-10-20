@@ -28,7 +28,7 @@ gseq.pwm(
 \arguments{
 \item{seqs}{character vector of DNA sequences (A/C/G/T/N; case-insensitive)}
 
-\item{pssm}{numeric matrix with 4 columns named A, C, G, T}
+\item{pssm}{numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored)}
 
 \item{mode}{character; one of "lse", "max", "pos", or "count"}
 

@@ -137,7 +137,7 @@ separately). Prior adds pseudocounts, extend=TRUE allows scoring at boundaries.
 
 For all PWM functions:
 \itemize{
-  \item pssm: Position-specific scoring matrix (nx4 matrix with columns A,C,G,T containing frequencies)
+  \item pssm: Position-specific scoring matrix (matrix or data frame with columns A,C,G,T containing frequencies; additional columns are allowed and will be ignored)
   \item bidirect: If TRUE, scans both strands; if FALSE, forward only (default: TRUE)
   \item prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
   \item extend: If TRUE, allows scoring at interval boundaries (default: TRUE)

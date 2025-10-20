@@ -141,7 +141,7 @@ gseq.comp <- function(seq) {
 #' All reported positions are on the full input sequence.
 #'
 #' @param seqs character vector of DNA sequences (A/C/G/T/N; case-insensitive)
-#' @param pssm numeric matrix with 4 columns named A, C, G, T
+#' @param pssm numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored)
 #' @param mode character; one of "lse", "max", "pos", or "count"
 #' @param bidirect logical; if TRUE, scans both strands (default: TRUE)
 #' @param strand integer; 1=forward, -1=reverse, 0=both strands (default: 0)
@@ -260,9 +260,9 @@ gseq.pwm <- function(seqs,
 
     pssm <- .coerce_pssm_matrix(
         pssm,
-        numeric_msg = "pssm must be a numeric matrix",
-        ncol_msg = "pssm must have exactly 4 columns",
-        colnames_msg = "pssm columns must be named A, C, G, T"
+        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "pssm must have columns named A, C, G, T",
+        colnames_msg = "pssm must have columns named A, C, G, T"
     )
 
     seqs <- as.character(seqs)
