@@ -594,9 +594,11 @@ test_that("gseq.pwm accepts PSSM columns in different order", {
 
     # Create reference with standard order
     pssm_regular <- matrix(
-        c(0.1, 0.7, 0.1, 0.1,
-          0.1, 0.1, 0.7, 0.1,
-          0.1, 0.1, 0.1, 0.7),
+        c(
+            0.1, 0.7, 0.1, 0.1,
+            0.1, 0.1, 0.7, 0.1,
+            0.1, 0.1, 0.1, 0.7
+        ),
         ncol = 4, byrow = TRUE
     )
     colnames(pssm_regular) <- c("A", "C", "G", "T")
