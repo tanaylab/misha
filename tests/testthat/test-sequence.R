@@ -439,9 +439,9 @@ test_that("gseq.pwm validates inputs correctly", {
     # Bad PSSM: not a matrix
     expect_error(gseq.pwm(seqs, c(1, 2, 3, 4), mode = "lse", prior = 0), "matrix")
 
-    # Bad PSSM: wrong number of columns
+    # Bad PSSM: missing required column names
     bad_pssm <- matrix(1:6, nrow = 2)
-    expect_error(gseq.pwm(seqs, bad_pssm, mode = "lse", prior = 0), "4 columns")
+    expect_error(gseq.pwm(seqs, bad_pssm, mode = "lse", prior = 0), "A, C, G, T")
 
     # Bad PSSM: wrong column names
     bad_pssm <- pssm
