@@ -1,3 +1,7 @@
+# misha 5.1.1
+
+* Allow data frames as input in `pssm` parameter of `gvtrack.create` and `gseq.pwm` functions.
+
 # misha 5.1.0
 
 * Added `gseq.pwm` and `gseq.kmer` functions that compute pwm and kmer scores on sequences without the need for a genome database.

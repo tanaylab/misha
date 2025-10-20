@@ -206,7 +206,7 @@
 #'
 #' For all PWM functions:
 #' \itemize{
-#'   \item pssm: Position-specific scoring matrix (nx4 matrix with columns A,C,G,T containing frequencies)
+#'   \item pssm: Position-specific scoring matrix (matrix or data frame with columns A,C,G,T containing frequencies; additional columns are allowed and will be ignored)
 #'   \item bidirect: If TRUE, scans both strands; if FALSE, forward only (default: TRUE)
 #'   \item prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
 #'   \item extend: If TRUE, allows scoring at interval boundaries (default: TRUE)
@@ -460,9 +460,9 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 
         pssm <- .coerce_pssm_matrix(
             pssm,
-            numeric_msg = "PSSM must be a numeric matrix",
-            ncol_msg = "PSSM must be a nx4 matrix with colnames A, C, G, T",
-            colnames_msg = "PSSM must be a nx4 matrix with colnames A, C, G, T"
+            numeric_msg = "PSSM must be a numeric matrix or data frame with numeric columns",
+            ncol_msg = "PSSM must have columns named A, C, G, T",
+            colnames_msg = "PSSM must have columns named A, C, G, T"
         )
 
         if (!is.numeric(prior) || prior < 0 || prior > 1) {
