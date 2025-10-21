@@ -130,6 +130,9 @@ public:
 	float get_log_prob(char c) const {
 		return(m_logp[encode(c)]);
 	}
+	float get_log_prob_from_code(int code) const {
+		return m_logp[code];
+	}
 
 	float get_avg_log_prob() const {
 		return((m_logp[0]+m_logp[1]+m_logp[2]+m_logp[3])/4);

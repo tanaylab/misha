@@ -160,6 +160,10 @@ gseq.comp <- function(seq) {
 #' @param gap_chars character vector; which characters count as gaps (default: c("-", "."))
 #' @param neutral_chars character vector; bases treated as unknown and scored with the average
 #'   log probability per position (default: c("N", "n", "*"))
+#' @param neutral_chars_policy character string; how to treat neutral characters. One of
+#'   \code{"average"} (default; use the column's mean log-probability), \code{"log_quarter"}
+#'   (always use \code{log(1/4)}), or \code{"na"} (return NA when a neutral character is
+#'   encountered in the scanning window).
 #' @param prior numeric; pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
 #'
 #' @return Numeric vector (for "lse"/"max"/"count" modes), integer vector (for "pos" mode),
@@ -254,6 +258,7 @@ gseq.pwm <- function(seqs,
                      skip_gaps = TRUE,
                      gap_chars = c("-", "."),
                      neutral_chars = c("N", "n", "*"),
+                     neutral_chars_policy = c("average", "log_quarter", "na"),
                      prior = 0.01) {
     # Validate inputs
     mode <- match.arg(mode)
@@ -266,7 +271,6 @@ gseq.pwm <- function(seqs,
     )
 
     seqs <- as.character(seqs)
-    seqs <- toupper(seqs)
 
     w <- nrow(pssm)
 
@@ -290,6 +294,8 @@ gseq.pwm <- function(seqs,
             stop("neutral_chars must contain only single characters")
         }
     }
+
+    neutral_chars_policy <- match.arg(neutral_chars_policy)
 
     if (skip_gaps) {
         if (!is.character(gap_chars) || length(gap_chars) == 0) {
@@ -319,25 +325,49 @@ gseq.pwm <- function(seqs,
         spat.max = spat.max
     )
 
-    # Call C++ implementation
-    out <- .Call(
-        "C_gseq_pwm",
-        seqs,
-        pssm,
-        mode,
-        as.logical(bidirect),
-        strand,
-        as.numeric(score.thresh),
-        as.integer(b$roi_start),
-        as.integer(b$roi_end),
-        extend,
-        spat_params,
-        as.logical(return_strand),
-        skip_gaps,
-        as.character(gap_chars),
-        as.numeric(prior),
-        as.character(neutral_chars)
-    )
+    # Call C++ implementation (multitask or sequential)
+    if (.ggetOption("gmultitasking")) {
+        out <- .Call(
+            "C_gseq_pwm_multitask",
+            seqs,
+            pssm,
+            mode,
+            as.logical(bidirect),
+            strand,
+            as.numeric(score.thresh),
+            as.integer(b$roi_start),
+            as.integer(b$roi_end),
+            extend,
+            spat_params,
+            as.logical(return_strand),
+            skip_gaps,
+            as.character(gap_chars),
+            as.numeric(prior),
+            as.character(neutral_chars),
+            neutral_chars_policy,
+            .misha_env()
+        )
+    } else {
+        out <- .Call(
+            "C_gseq_pwm",
+            seqs,
+            pssm,
+            mode,
+            as.logical(bidirect),
+            strand,
+            as.numeric(score.thresh),
+            as.integer(b$roi_start),
+            as.integer(b$roi_end),
+            extend,
+            spat_params,
+            as.logical(return_strand),
+            skip_gaps,
+            as.character(gap_chars),
+            as.numeric(prior),
+            as.character(neutral_chars),
+            neutral_chars_policy
+        )
+    }
 
     # For mode="pos" with return_strand=TRUE, ensure it's a proper data.frame
     if (mode == "pos" && return_strand && is.list(out)) {
@@ -439,7 +469,6 @@ gseq.kmer <- function(seqs,
     }
 
     seqs <- as.character(seqs)
-    seqs <- toupper(seqs)
 
     w <- nchar(kmer, type = "chars")
 

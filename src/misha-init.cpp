@@ -75,10 +75,11 @@ extern "C" {
     extern SEXP gtrack_modify(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtracksummary(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtracksummary_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP C_gwilcox(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gwilcox(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);    
     extern SEXP C_revcomp(SEXP);
     extern SEXP C_grandom_genome(SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP C_gseq_pwm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_pwm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_pwm_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 }
 
@@ -151,10 +152,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrack_modify", (DL_FUNC)&gtrack_modify, 5},
     {"gtracksummary", (DL_FUNC)&gtracksummary, 5},
     {"gtracksummary_multitask", (DL_FUNC)&gtracksummary_multitask, 5},
-    {"C_gwilcox", (DL_FUNC)&C_gwilcox, 10},
+    {"C_gwilcox", (DL_FUNC)&C_gwilcox, 10},    
     {"C_revcomp", (DL_FUNC)&C_revcomp, 1},
     {"C_grandom_genome", (DL_FUNC)&C_grandom_genome, 5},
-    {"C_gseq_pwm", (DL_FUNC)&C_gseq_pwm, 14},
+    {"C_gseq_pwm", (DL_FUNC)&C_gseq_pwm, 16},
+    {"C_gseq_pwm_multitask", (DL_FUNC)&C_gseq_pwm_multitask, 17},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
     {NULL, NULL, 0}
 };
