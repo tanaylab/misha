@@ -1,6 +1,7 @@
 # misha 5.1.1
 
 * Allow data frames as input in `pssm` parameter of `gvtrack.create` and `gseq.pwm` functions.
+* Implemented parallelism in `gseq.pwm` and added neutral_chars_policy parameter.
 
 # misha 5.1.0
 

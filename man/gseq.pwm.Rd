@@ -22,6 +22,7 @@ gseq.pwm(
   skip_gaps = TRUE,
   gap_chars = c("-", "."),
   neutral_chars = c("N", "n", "*"),
+  neutral_chars_policy = c("average", "log_quarter", "na"),
   prior = 0.01
 )
 }
@@ -62,6 +63,11 @@ scanning. Windows are w consecutive non-gap bases (default: TRUE)}
 
 \item{neutral_chars}{character vector; bases treated as unknown and scored with the average
 log probability per position (default: c("N", "n", "*"))}
+
+\item{neutral_chars_policy}{character string; how to treat neutral characters. One of
+\code{"average"} (default; use the column's mean log-probability), \code{"log_quarter"}
+(always use \code{log(1/4)}), or \code{"na"} (return NA when a neutral character is
+encountered in the scanning window).}
 
 \item{prior}{numeric; pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.}
 }

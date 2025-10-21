@@ -523,6 +523,72 @@ test_that("gseq.pwm handles ROI bounds correctly", {
     expect_equal(result, 0)
 })
 
+test_that("gseq.pwm neutral_chars_policy options alter neutral scoring", {
+    pssm <- matrix(
+        c(
+            0.8, 0.1, 0.05, 0.05,
+            0.1, 0.2, 0.3, 0.4
+        ),
+        ncol = 4, byrow = TRUE
+    )
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    manual_score <- function(seq, policy) {
+        chars <- strsplit(seq, "")[[1]]
+        log_pssm <- log(pssm)
+        neutral_chars <- "N"
+        val <- 0
+        for (i in seq_along(chars)) {
+            base <- chars[[i]]
+            row <- log_pssm[i, ]
+            if (base %in% colnames(pssm)) {
+                val <- val + row[[base]]
+            } else if (base %in% neutral_chars) {
+                if (policy == "average") {
+                    val <- val + mean(row)
+                } else if (policy == "log_quarter") {
+                    val <- val + log(0.25)
+                } else if (policy == "na") {
+                    return(NA_real_)
+                }
+            } else {
+                return(-Inf)
+            }
+        }
+        val
+    }
+
+    seqs <- c("AN", "AT")
+
+    res_avg <- gseq.pwm(
+        seqs, pssm,
+        mode = "max", bidirect = FALSE, strand = 1L,
+        skip_gaps = FALSE, neutral_chars = "N", prior = 0,
+        neutral_chars_policy = "average"
+    )
+    res_lq <- gseq.pwm(
+        seqs, pssm,
+        mode = "max", bidirect = FALSE, strand = 1L,
+        skip_gaps = FALSE, neutral_chars = "N", prior = 0,
+        neutral_chars_policy = "log_quarter"
+    )
+    res_na <- gseq.pwm(
+        seqs, pssm,
+        mode = "max", bidirect = FALSE, strand = 1L,
+        skip_gaps = FALSE, neutral_chars = "N", prior = 0,
+        neutral_chars_policy = "na"
+    )
+
+    expect_equal(res_avg[1], manual_score("AN", "average"), tolerance = 1e-6)
+    expect_equal(res_avg[2], manual_score("AT", "average"), tolerance = 1e-6)
+
+    expect_equal(res_lq[1], manual_score("AN", "log_quarter"), tolerance = 1e-6)
+    expect_equal(res_lq[2], manual_score("AT", "average"), tolerance = 1e-6)
+
+    expect_true(is.na(res_na[1]))
+    expect_equal(res_na[2], manual_score("AT", "average"), tolerance = 1e-6)
+})
+
 test_that("gseq.pwm extend parameter works correctly", {
     # Create PSSM for "AC" (using probabilities)
     pssm <- matrix(c(

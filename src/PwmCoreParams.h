@@ -6,6 +6,12 @@
 #include "port.h"
 #include "DnaPSSM.h"
 
+enum NeutralPolicy {
+    NEUTRAL_POLICY_AVERAGE = 0,
+    NEUTRAL_POLICY_LOG_QUARTER = 1,
+    NEUTRAL_POLICY_NA = 2
+};
+
 struct PwmCoreParams {
     DnaPSSM pssm;
     bool bidirect = true;
@@ -16,6 +22,7 @@ struct PwmCoreParams {
     std::vector<float> spat_log_factors;
     int spat_bin_size = 1;
     double prior = 0.0;
+    NeutralPolicy neutral_policy = NEUTRAL_POLICY_AVERAGE;
 
     void set_spatial_factors(const std::vector<float>& factors, int bin_size);
     void apply_prior();

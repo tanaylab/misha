@@ -887,6 +887,21 @@ uint64_t IntervUtils::get_min_scope4process() const
 	return m_min_scope4process;
 }
 
+uint64_t IntervUtils::get_min_seqs_work4process() const
+{
+	if (!m_min_seqs_work4process) {
+        SEXP r_min_seqs_work4process = Rf_GetOption1(Rf_install("gmin.seqs.work4process"));
+
+		if (Rf_isReal(r_min_seqs_work4process))
+			m_min_seqs_work4process = (uint64_t)REAL(r_min_seqs_work4process)[0];
+		else if (Rf_isInteger(r_min_seqs_work4process))
+			m_min_seqs_work4process = INTEGER(r_min_seqs_work4process)[0];
+		else
+			m_min_seqs_work4process = 100000;
+	}
+	return m_min_seqs_work4process;
+}
+
 uint64_t IntervUtils::get_max_data_size() const
 {
 	if (!m_max_data_size) {
