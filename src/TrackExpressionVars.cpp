@@ -1059,6 +1059,13 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		}
 	}
 	register_track_functions();
+
+	// Invalidate PWM scorer caches on chromosome change
+	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
+		if (ivar->pwm_scorer) {
+			ivar->pwm_scorer->invalidate_cache();
+		}
+	}
 }
 
 void TrackExpressionVars::start_chrom(const GInterval2D &interval)
@@ -1112,6 +1119,13 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 		}
 	}
 	register_track_functions();
+
+	// Invalidate PWM scorer caches on chromosome change
+	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
+		if (ivar->pwm_scorer) {
+			ivar->pwm_scorer->invalidate_cache();
+		}
+	}
 }
 
 void TrackExpressionVars::set_vars(const GInterval &interval, unsigned idx)
