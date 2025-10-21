@@ -7,7 +7,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <climits>
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include <R.h>
 #include <Rinternals.h>
@@ -17,6 +21,10 @@
 #include "PWMScorer.h"
 #include "PwmCoreParams.h"
 #include "GenomeUtils.h"
+#include "rdbinterval.h"
+#include "rdbutils.h"
+
+static const double kLogQuarter = std::log(0.25);
 
 // Helper struct for score results
 struct ScoreResult {
@@ -40,6 +48,25 @@ struct GapCharset {
 
     void add_gap_char(char c) {
         is_gap[static_cast<unsigned char>(c)] = true;
+    }
+};
+
+// Neutral character set for fast O(1) lookup
+struct NeutralCharset {
+    bool is_neutral[256];
+
+    NeutralCharset() {
+        for (int i = 0; i < 256; ++i) {
+            is_neutral[i] = false;
+        }
+    }
+
+    void add_neutral_char(char c) {
+        is_neutral[static_cast<unsigned char>(c)] = true;
+    }
+
+    bool check(char c) const {
+        return is_neutral[static_cast<unsigned char>(c)];
     }
 };
 
@@ -133,7 +160,8 @@ static ScoreResult score_pwm_over_range(
     const PwmCoreParams& params,
     bool skip_gaps = false,
     const GapCharset* gaps = nullptr,
-    const std::vector<char>* neutral_chars = nullptr
+    const NeutralCharset* neutral_chars = nullptr,
+    NeutralPolicy neutral_policy = NEUTRAL_POLICY_AVERAGE
 ) {
     ScoreResult result;
     int w = params.pssm.size();
@@ -149,41 +177,60 @@ static ScoreResult score_pwm_over_range(
         }
     };
 
-    auto is_neutral = [&](char c) -> bool {
-        if (!neutral_chars) return false;
-        for (char nc : *neutral_chars) {
-            if (c == nc) return true;
-        }
-        return false;
+    auto make_na_result = [&]() {
+        ScoreResult na;
+        na.value = R_NaReal;
+        na.has_pos = false;
+        na.pos_1based = NA_INTEGER;
+        na.strand = 1;
+        return na;
     };
 
-    auto window_log_prob = [&](const std::string& window, bool reverse) -> double {
+    // Allocation-free window scoring using const char* and O(1) neutral char lookup
+    auto window_log_prob_ptr = [&](const char* window_start, bool reverse) -> double {
         double logp = 0.0;
         if (!reverse) {
             for (int idx = 0; idx < w; ++idx) {
-                char c = window[idx];
-                if (is_neutral(c)) {
-                    logp += params.pssm[idx].get_avg_log_prob();
+                char c = window_start[idx];
+                // O(1) lookup instead of O(n) linear scan
+                if (neutral_chars && neutral_chars->check(c)) {
+                    if (neutral_policy == NEUTRAL_POLICY_AVERAGE) {
+                        logp += params.pssm[idx].get_avg_log_prob();
+                    } else if (neutral_policy == NEUTRAL_POLICY_LOG_QUARTER) {
+                        logp += kLogQuarter;
+                    } else {
+                        return std::numeric_limits<double>::quiet_NaN();
+                    }
                 } else {
                     int code = params.pssm[idx].encode(c);
                     if (code < 0) return R_NegInf;
-                    logp += params.pssm[idx].get_log_prob(c);
+                    logp += params.pssm[idx].get_log_prob_from_code(code);
                 }
             }
         } else {
             for (int idx = 0; idx < w; ++idx) {
-                char c = window[idx];
-                if (is_neutral(c)) {
-                    logp += params.pssm[w - idx - 1].get_avg_log_prob();
+                char c = window_start[idx];
+                int rev_idx = w - idx - 1;
+                // O(1) lookup instead of O(n) linear scan
+                if (neutral_chars && neutral_chars->check(c)) {
+                    if (neutral_policy == NEUTRAL_POLICY_AVERAGE) {
+                        logp += params.pssm[rev_idx].get_avg_log_prob();
+                    } else if (neutral_policy == NEUTRAL_POLICY_LOG_QUARTER) {
+                        logp += kLogQuarter;
+                    } else {
+                        return std::numeric_limits<double>::quiet_NaN();
+                    }
                 } else {
+                    int code;
+                    // Complement base mapping: A->T(3), T->A(0), C->G(2), G->C(1)
                     switch (c) {
-                        case 'a': case 'A': c = 'T'; break;
-                        case 't': case 'T': c = 'A'; break;
-                        case 'c': case 'C': c = 'G'; break;
-                        case 'g': case 'G': c = 'C'; break;
+                        case 'a': case 'A': code = 3; break;
+                        case 't': case 'T': code = 0; break;
+                        case 'c': case 'C': code = 2; break;
+                        case 'g': case 'G': code = 1; break;
                         default: return R_NegInf;
                     }
-                    logp += params.pssm[w - idx - 1].get_log_prob(c);
+                    logp += params.pssm[rev_idx].get_log_prob_from_code(code);
                 }
             }
         }
@@ -206,6 +253,9 @@ static ScoreResult score_pwm_over_range(
         double total = R_NegInf;
         int count = 0;
 
+        // Get pointer to sequence data for allocation-free scanning
+        const char* seq_data = seq.data();
+
         for (int s0 = start_min0; s0 <= start_max0; ++s0) {
             int offset_from_roi = (s0 + 1) - roi_start1;
             float spat_log = 0.0f;
@@ -218,18 +268,27 @@ static ScoreResult score_pwm_over_range(
                 spat_log = params.spat_log_factors[spat_bin];
             }
 
-            std::string window = seq.substr(s0, w);
+            // Use pointer arithmetic instead of substr to avoid allocation
+        const char* window_start = seq_data + s0;
 
-            double fwd_score = R_NegInf;
-            double rev_score = R_NegInf;
+        double fwd_score = R_NegInf;
+        double rev_score = R_NegInf;
+        bool fwd_eval = false;
+        bool rev_eval = false;
 
-            if (params.strand_mode >= 0) {
-                fwd_score = window_log_prob(window, false);
-            }
+        if (params.strand_mode >= 0) {
+            fwd_score = window_log_prob_ptr(window_start, false);
+            fwd_eval = true;
+        }
 
-            if ((params.bidirect || params.strand_mode <= 0) && params.strand_mode != 1) {
-                rev_score = window_log_prob(window, true);
-            }
+        if ((params.bidirect || params.strand_mode <= 0) && params.strand_mode != 1) {
+            rev_score = window_log_prob_ptr(window_start, true);
+            rev_eval = true;
+        }
+
+        if ((fwd_eval && std::isnan(fwd_score)) || (rev_eval && std::isnan(rev_score))) {
+            return make_na_result();
+        }
 
             if (use_spat) {
                 if (fwd_score > R_NegInf) fwd_score += spat_log;
@@ -311,6 +370,9 @@ static ScoreResult score_pwm_over_range(
         double total = R_NegInf;
         int count = 0;
 
+        // Get pointer to compacted sequence data for allocation-free scanning
+        const char* gp_data = gp.comp.data();
+
         for (int j = j_min; j <= j_max; ++j) {
             int start_phys0 = gp.log_to_phys[j];
             int start_phys1 = start_phys0 + 1;
@@ -326,17 +388,26 @@ static ScoreResult score_pwm_over_range(
                 spat_log = params.spat_log_factors[spat_bin];
             }
 
-            std::string window = gp.comp.substr(j, w);
+            // Use pointer arithmetic instead of substr to avoid allocation
+            const char* window_start = gp_data + j;
 
             double fwd_score = R_NegInf;
             double rev_score = R_NegInf;
+            bool fwd_eval = false;
+            bool rev_eval = false;
 
             if (params.strand_mode >= 0) {
-                fwd_score = window_log_prob(window, false);
+                fwd_score = window_log_prob_ptr(window_start, false);
+                fwd_eval = true;
             }
 
             if ((params.bidirect || params.strand_mode <= 0) && params.strand_mode != 1) {
-                rev_score = window_log_prob(window, true);
+                rev_score = window_log_prob_ptr(window_start, true);
+                rev_eval = true;
+            }
+
+            if ((fwd_eval && std::isnan(fwd_score)) || (rev_eval && std::isnan(rev_score))) {
+                return make_na_result();
             }
 
             if (use_spat) {
@@ -519,7 +590,8 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
                 SEXP r_strand_mode, SEXP r_score_thresh,
                 SEXP r_roi_start, SEXP r_roi_end, SEXP r_extend,
                 SEXP r_spat_params, SEXP r_return_strand,
-                SEXP r_skip_gaps, SEXP r_gap_chars, SEXP r_prior, SEXP r_neutral_chars) {
+                SEXP r_skip_gaps, SEXP r_gap_chars, SEXP r_prior,
+                SEXP r_neutral_chars, SEXP r_neutral_policy) {
     try {
         // Validate and extract inputs
         if (!Rf_isString(r_seqs)) {
@@ -570,17 +642,35 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             }
         }
 
-        std::vector<char> neutral_chars;
+        NeutralCharset neutral_charset;
+        bool has_neutral_chars = false;
         if (!Rf_isNull(r_neutral_chars) && Rf_isString(r_neutral_chars)) {
             int n_chars = Rf_length(r_neutral_chars);
-            neutral_chars.reserve(n_chars);
-            for (int i = 0; i < n_chars; ++i) {
-                const char* ch = CHAR(STRING_ELT(r_neutral_chars, i));
-                if (ch && ch[0] != '\0') {
-                    neutral_chars.push_back(ch[0]);
+            if (n_chars > 0) {
+                has_neutral_chars = true;
+                for (int i = 0; i < n_chars; ++i) {
+                    const char* ch = CHAR(STRING_ELT(r_neutral_chars, i));
+                    if (ch && ch[0] != '\0') {
+                        neutral_charset.add_neutral_char(ch[0]);
+                    }
                 }
             }
         }
+
+        NeutralPolicy neutral_policy = NEUTRAL_POLICY_AVERAGE;
+        if (!Rf_isNull(r_neutral_policy) && Rf_isString(r_neutral_policy) && Rf_length(r_neutral_policy) > 0) {
+            std::string policy = CHAR(STRING_ELT(r_neutral_policy, 0));
+            if (policy == "average") {
+                neutral_policy = NEUTRAL_POLICY_AVERAGE;
+            } else if (policy == "log_quarter") {
+                neutral_policy = NEUTRAL_POLICY_LOG_QUARTER;
+            } else if (policy == "na") {
+                neutral_policy = NEUTRAL_POLICY_NA;
+            } else {
+                Rf_error("Unknown neutral_chars_policy value: %s", policy.c_str());
+            }
+        }
+        core.neutral_policy = neutral_policy;
 
         std::vector<float> spat_factors;
         int spat_bin_size = 1;
@@ -653,7 +743,8 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             ScoreResult result = score_pwm_over_range(
                 seq, start_min0, start_max0, mode, roi_start, core,
                 skip_gaps, skip_gaps ? &gap_charset : nullptr,
-                neutral_chars.empty() ? nullptr : &neutral_chars
+                has_neutral_chars ? &neutral_charset : nullptr,
+                core.neutral_policy
             );
             
             // Store result
@@ -791,6 +882,263 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
         Rf_error("Error in C_gseq_kmer: %s", e.what());
     } catch (...) {
         Rf_error("Unknown error in C_gseq_kmer");
+    }
+    return R_NilValue;
+}
+
+// Multi-tasking version of C_gseq_pwm
+SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
+                          SEXP r_strand_mode, SEXP r_score_thresh,
+                          SEXP r_roi_start, SEXP r_roi_end, SEXP r_extend,
+                          SEXP r_spat_params, SEXP r_return_strand,
+                          SEXP r_skip_gaps, SEXP r_gap_chars, SEXP r_prior,
+                          SEXP r_neutral_chars, SEXP r_neutral_policy, SEXP _envir) {
+    try {
+        // Basic validation
+        if (!Rf_isString(r_seqs)) {
+            Rf_error("seqs must be a character vector");
+        }
+        if (!Rf_isMatrix(r_pssm) || !Rf_isReal(r_pssm)) {
+            Rf_error("pssm must be a numeric matrix");
+        }
+
+        int n_seqs = Rf_length(r_seqs);
+        if (n_seqs == 0) {
+            return Rf_allocVector(REALSXP, 0);
+        }
+
+        // Get parameters for workload estimation
+        int w = Rf_nrows(r_pssm);  // PSSM width
+        bool bidirect = Rf_asLogical(r_bidirect);
+        int strand_mode = Rf_asInteger(r_strand_mode);
+
+        // Estimate average sequence length (sample first few)
+        int sample_size = std::min(100, n_seqs);
+        uint64_t total_len = 0;
+        for (int i = 0; i < sample_size; ++i) {
+            const char* seq_str = CHAR(STRING_ELT(r_seqs, i));
+            total_len += strlen(seq_str);
+        }
+        uint64_t avg_len = (sample_size > 0) ? (total_len / sample_size) : 100;
+
+        // Estimate total workload: n_seqs × avg_length × pssm_width × strands
+        uint64_t total_work = (uint64_t)n_seqs * avg_len * w;
+        if (bidirect || strand_mode == 0) {
+            total_work *= 2;
+        }
+
+        // Get threshold from options
+        rdb::IntervUtils iu(_envir);
+        uint64_t min_work = iu.get_min_seqs_work4process();
+
+        // If workload is below threshold, use sequential version
+        if (total_work < min_work) {
+            return C_gseq_pwm(r_seqs, r_pssm, r_mode, r_bidirect, r_strand_mode,
+                            r_score_thresh, r_roi_start, r_roi_end, r_extend,
+                            r_spat_params, r_return_strand, r_skip_gaps,
+                            r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy);
+        }
+
+        // Get number of processes
+        int num_cores = std::max(1, (int)sysconf(_SC_NPROCESSORS_ONLN));
+        int max_processes = std::min(
+            (int)iu.get_max_processes2core() * num_cores,
+            (int)iu.get_max_processes()
+        );
+        int num_processes = std::min(max_processes, n_seqs);
+
+        if (num_processes <= 1) {
+            // Not enough work to parallelize
+            return C_gseq_pwm(r_seqs, r_pssm, r_mode, r_bidirect, r_strand_mode,
+                            r_score_thresh, r_roi_start, r_roi_end, r_extend,
+                            r_spat_params, r_return_strand, r_skip_gaps,
+                            r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy);
+        }
+
+        // Determine result types
+        std::string mode = CHAR(STRING_ELT(r_mode, 0));
+        bool return_strand = Rf_asLogical(r_return_strand);
+        bool is_pos_mode = (mode == "pos");
+
+        // Create shared memory for results
+        size_t result_size;
+        if (is_pos_mode && return_strand) {
+            result_size = n_seqs * 2 * sizeof(int);  // pos + strand
+        } else if (is_pos_mode) {
+            result_size = n_seqs * sizeof(int);
+        } else {
+            result_size = n_seqs * sizeof(double);
+        }
+
+        void* shared_mem = mmap(NULL, result_size, PROT_READ | PROT_WRITE,
+                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        if (shared_mem == MAP_FAILED) {
+            Rf_error("Failed to allocate shared memory");
+        }
+
+        // Fork child processes
+        std::vector<pid_t> children;
+        int chunk_size = (n_seqs + num_processes - 1) / num_processes;
+
+        for (int proc_id = 0; proc_id < num_processes; ++proc_id) {
+            int start_idx = proc_id * chunk_size;
+            int end_idx = std::min(start_idx + chunk_size, n_seqs);
+
+            if (start_idx >= n_seqs) break;
+
+            pid_t pid = fork();
+
+            if (pid < 0) {
+                // Fork failed - kill existing children and error
+                for (pid_t child : children) {
+                    kill(child, SIGKILL);
+                }
+                munmap(shared_mem, result_size);
+                Rf_error("Failed to fork process");
+            }
+
+            if (pid == 0) {
+                // Child process: process chunk and write to shared memory
+                try {
+                    // Create subset of sequences for this chunk
+                    SEXP r_seqs_chunk = PROTECT(Rf_allocVector(STRSXP, end_idx - start_idx));
+                    for (int i = start_idx; i < end_idx; ++i) {
+                        SET_STRING_ELT(r_seqs_chunk, i - start_idx, STRING_ELT(r_seqs, i));
+                    }
+
+                    // Create corresponding ROI subsets if needed
+                    SEXP r_roi_start_chunk = R_NilValue;
+                    SEXP r_roi_end_chunk = R_NilValue;
+
+                    if (!Rf_isNull(r_roi_start) && Rf_length(r_roi_start) > 1) {
+                        r_roi_start_chunk = PROTECT(Rf_allocVector(INTSXP, end_idx - start_idx));
+                        for (int i = start_idx; i < end_idx; ++i) {
+                            INTEGER(r_roi_start_chunk)[i - start_idx] =
+                                INTEGER(r_roi_start)[i % Rf_length(r_roi_start)];
+                        }
+                    } else {
+                        r_roi_start_chunk = PROTECT(r_roi_start);
+                    }
+
+                    if (!Rf_isNull(r_roi_end) && Rf_length(r_roi_end) > 1) {
+                        r_roi_end_chunk = PROTECT(Rf_allocVector(INTSXP, end_idx - start_idx));
+                        for (int i = start_idx; i < end_idx; ++i) {
+                            INTEGER(r_roi_end_chunk)[i - start_idx] =
+                                INTEGER(r_roi_end)[i % Rf_length(r_roi_end)];
+                        }
+                    } else {
+                        r_roi_end_chunk = PROTECT(r_roi_end);
+                    }
+
+                    // Call sequential version on chunk
+                    SEXP chunk_result = C_gseq_pwm(
+                        r_seqs_chunk, r_pssm, r_mode, r_bidirect, r_strand_mode,
+                        r_score_thresh, r_roi_start_chunk, r_roi_end_chunk, r_extend,
+                        r_spat_params, r_return_strand, r_skip_gaps,
+                        r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy
+                    );
+
+                    // Write results to shared memory
+                    if (is_pos_mode && return_strand) {
+                        int* pos_mem = (int*)shared_mem;
+                        int* strand_mem = pos_mem + n_seqs;
+                        SEXP pos_vec = VECTOR_ELT(chunk_result, 0);
+                        SEXP strand_vec = VECTOR_ELT(chunk_result, 1);
+                        for (int i = 0; i < end_idx - start_idx; ++i) {
+                            pos_mem[start_idx + i] = INTEGER(pos_vec)[i];
+                            strand_mem[start_idx + i] = INTEGER(strand_vec)[i];
+                        }
+                    } else if (is_pos_mode) {
+                        int* mem = (int*)shared_mem;
+                        for (int i = 0; i < end_idx - start_idx; ++i) {
+                            mem[start_idx + i] = INTEGER(chunk_result)[i];
+                        }
+                    } else {
+                        double* mem = (double*)shared_mem;
+                        for (int i = 0; i < end_idx - start_idx; ++i) {
+                            mem[start_idx + i] = REAL(chunk_result)[i];
+                        }
+                    }
+
+                    UNPROTECT(4);  // seqs_chunk, roi_start_chunk, roi_end_chunk, and one more
+                    _exit(0);  // Child exits successfully
+
+                } catch (...) {
+                    _exit(1);  // Child exits with error
+                }
+            } else {
+                // Parent process: record child PID
+                children.push_back(pid);
+            }
+        }
+
+        // Parent: wait for all children
+        bool all_success = true;
+        for (pid_t child : children) {
+            int status;
+            waitpid(child, &status, 0);
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                all_success = false;
+            }
+        }
+
+        if (!all_success) {
+            munmap(shared_mem, result_size);
+            Rf_error("One or more child processes failed");
+        }
+
+        // Assemble final result from shared memory
+        SEXP result;
+        if (is_pos_mode && return_strand) {
+            SEXP r_pos = PROTECT(Rf_allocVector(INTSXP, n_seqs));
+            SEXP r_strand_out = PROTECT(Rf_allocVector(INTSXP, n_seqs));
+
+            int* pos_mem = (int*)shared_mem;
+            int* strand_mem = pos_mem + n_seqs;
+
+            for (int i = 0; i < n_seqs; ++i) {
+                INTEGER(r_pos)[i] = pos_mem[i];
+                INTEGER(r_strand_out)[i] = strand_mem[i];
+            }
+
+            SEXP df = PROTECT(Rf_allocVector(VECSXP, 2));
+            SET_VECTOR_ELT(df, 0, r_pos);
+            SET_VECTOR_ELT(df, 1, r_strand_out);
+
+            SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
+            SET_STRING_ELT(names, 0, Rf_mkChar("pos"));
+            SET_STRING_ELT(names, 1, Rf_mkChar("strand"));
+            Rf_setAttrib(df, R_NamesSymbol, names);
+
+            result = df;
+            UNPROTECT(4);
+        } else if (is_pos_mode) {
+            SEXP r_pos = PROTECT(Rf_allocVector(INTSXP, n_seqs));
+            int* mem = (int*)shared_mem;
+            for (int i = 0; i < n_seqs; ++i) {
+                INTEGER(r_pos)[i] = mem[i];
+            }
+            result = r_pos;
+            UNPROTECT(1);
+        } else {
+            SEXP r_result = PROTECT(Rf_allocVector(REALSXP, n_seqs));
+            double* mem = (double*)shared_mem;
+            for (int i = 0; i < n_seqs; ++i) {
+                REAL(r_result)[i] = mem[i];
+            }
+            result = r_result;
+            UNPROTECT(1);
+        }
+
+        // Clean up shared memory
+        munmap(shared_mem, result_size);
+
+        return result;
+
+    } catch (std::exception& e) {
+        Rf_error("Error in C_gseq_pwm_multitask: %s", e.what());
+    } catch (...) {
+        Rf_error("Unknown error in C_gseq_pwm_multitask");
     }
     return R_NilValue;
 }
