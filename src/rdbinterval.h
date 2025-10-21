@@ -202,6 +202,9 @@ public:
 	// Returns minimal scope range per process for parallel computation
 	uint64_t get_min_scope4process() const;
 
+	// Returns minimal sequence workload per process for parallel computation (for gseq.pwm, gseq.kmer)
+	uint64_t get_min_seqs_work4process() const;
+
 	// Returns the upper limit for data size
 	uint64_t get_max_data_size() const;
 
@@ -267,6 +270,7 @@ private:
 	mutable uint64_t              m_max_processes{0};
 	mutable uint64_t              m_max_processes2core{0};
 	mutable uint64_t              m_min_scope4process{0};
+	mutable uint64_t              m_min_seqs_work4process{0};
 	mutable uint64_t              m_quantile_edge_data_size{0};
 	mutable uint64_t              m_track_chunk_size{0};
 	mutable uint64_t              m_track_num_chunks{0};
