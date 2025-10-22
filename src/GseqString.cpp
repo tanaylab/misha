@@ -1061,10 +1061,13 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
                     }
 
                     UNPROTECT(4);  // seqs_chunk, roi_start_chunk, roi_end_chunk, and one more
-                    _exit(0);  // Child exits successfully
+                    // Use signal-based exit to avoid CRAN issues with _exit()
+                    // (similar to rexit() but without RdbInitializer dependency)
+                    kill(getpid(), MISHA_EXIT_SIG);
 
                 } catch (...) {
-                    _exit(1);  // Child exits with error
+                    // Use signal-based exit for error case as well
+                    kill(getpid(), MISHA_EXIT_SIG);
                 }
             } else {
                 // Parent process: record child PID
@@ -1077,7 +1080,17 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
         for (pid_t child : children) {
             int status;
             waitpid(child, &status, 0);
-            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            // Child processes use rexit() which sends MISHA_EXIT_SIG (SIGTERM)
+            // Check for both normal exit with status 0 and signal termination with MISHA_EXIT_SIG
+            if (WIFEXITED(status)) {
+                if (WEXITSTATUS(status) != 0) {
+                    all_success = false;
+                }
+            } else if (WIFSIGNALED(status)) {
+                if (WTERMSIG(status) != MISHA_EXIT_SIG) {
+                    all_success = false;
+                }
+            } else {
                 all_success = false;
             }
         }
