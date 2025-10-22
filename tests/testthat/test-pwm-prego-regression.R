@@ -1,18 +1,16 @@
-test_that("misha PWM matches prego results - basic case without spatial", {
+test_that("misha PWM matches prego results - basic case without spatial, extend=FALSE", {
     skip_if_not_installed("prego")
 
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
-    # Load prego and get test sequences
-    # Using prego:: namespace instead of # Using prego:: namespace instead of library(prego)
+    # Create test intervals on real genome
+    test_intervals <- gintervals(1, 10000, 10100)
+    test_intervals <- rbind(test_intervals, gintervals(1, 20000, 20100))
+    test_intervals <- rbind(test_intervals, gintervals(2, 15000, 15100))
 
-    # Use a subset of prego's test sequences for speed
-    test_seqs <- prego::cluster_sequences_example[1:50]
-    all_same_length <- length(unique(nchar(test_seqs))) == 1
-    expect_true(all_same_length)
-
-    seq_len <- nchar(test_seqs[1])
+    # Extract sequences from genome
+    seqs <- gseq.extract(test_intervals)
 
     # Create test PSSM - simple 4bp motif
     test_pssm <- data.frame(
@@ -22,26 +20,61 @@ test_that("misha PWM matches prego results - basic case without spatial", {
         G = c(0.1, 0.1, 0.7, 0.1),
         T = c(0.1, 0.1, 0.1, 0.7)
     )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
 
-    # Compute PWM using prego's compute_pwm
+    # Compute with prego
     prego_scores <- prego::compute_pwm(
-        sequences = test_seqs,
+        sequences = seqs,
         pssm = test_pssm,
         spat = NULL,
         bidirect = TRUE,
-        prior = 0.01
+        prior = 0.01,
+        func = "logSumExp"
     )
 
-    # Convert pssm to matrix for misha
-    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
-
-    # Create test intervals from sequences
-    test_intervals <- gintervals(1, 1000, 1000 + seq_len, names(test_seqs))
-
-    # Create a mock sequence track by writing sequences to a temporary location
-    # For this test, we'll use gvtrack with direct PWM scoring
+    # Compute with misha (extend=FALSE to match exact interval)
     gvtrack.create(
         "pwm_test", NULL, "pwm",
+        list(
+            pssm = pssm_mat,
+            bidirect = TRUE,
+            extend = FALSE,
+            prior = 0.01
+        )
+    )
+
+    result <- gextract("pwm_test", test_intervals, iterator = test_intervals)
+
+    # Compare - should be very close
+    expect_equal(result$pwm_test, prego_scores, tolerance = 1e-6)
+    expect_regression(result, "pwm_basic_no_extend")
+})
+
+test_that("misha PWM matches prego results - basic case without spatial, extend=TRUE", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test intervals on real genome
+    test_intervals <- gintervals(1, 10000, 10100)
+    test_intervals <- rbind(test_intervals, gintervals(1, 20000, 20100))
+    test_intervals <- rbind(test_intervals, gintervals(2, 15000, 15100))
+
+    # Create test PSSM - simple 4bp motif
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+    motif_len <- nrow(pssm_mat)
+
+    # Compute with misha using extend=TRUE (no iterator shifts needed)
+    gvtrack.create(
+        "pwm_test_extend", NULL, "pwm",
         list(
             pssm = pssm_mat,
             bidirect = TRUE,
@@ -50,30 +83,37 @@ test_that("misha PWM matches prego results - basic case without spatial", {
         )
     )
 
-    # Extract scores (this tests the integrate_like path)
-    # Note: We can't directly test against real genome sequences here,
-    # but we validate that the parameters are correctly passed through
+    result <- gextract("pwm_test_extend", test_intervals, iterator = test_intervals)
 
-    # Instead, let's validate the PSSM object was created correctly
-    expect_true("pwm_test" %in% gvtrack.ls())
+    # For extend=TRUE, misha automatically extends the END by (motif_len - 1)
+    # Create extended intervals for prego to match this behavior
+    extended_intervals <- test_intervals
+    extended_intervals$end <- extended_intervals$end + (motif_len - 1)
+
+    # Extract sequences from extended intervals
+    extended_seqs <- gseq.extract(extended_intervals)
+
+    # Compute with prego on extended sequences
+    prego_scores <- prego::compute_pwm(
+        sequences = extended_seqs,
+        pssm = test_pssm,
+        spat = NULL,
+        bidirect = TRUE,
+        prior = 0.01,
+        func = "logSumExp"
+    )
+
+    # Compare - should be very close
+    expect_equal(result$pwm_test_extend, prego_scores, tolerance = 1e-6)
+    expect_regression(result, "pwm_basic_with_extend")
 })
 
-test_that("misha PWM matches prego results - with spatial weighting", {
+test_that("Misha PWM matches prego with iterator shifts", {
     skip_if_not_installed("prego")
 
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
-    # Load prego
-
-
-    # Create spatial model
-    spat_df <- data.frame(
-        bin = c(0, 40, 80, 120, 160, 200, 240),
-        spat_factor = c(0.5, 1.0, 2.0, 2.5, 2.0, 1.0, 0.5)
-    )
-
-    # Create test PSSM
     test_pssm <- data.frame(
         pos = 1:4,
         A = c(0.7, 0.1, 0.1, 0.1),
@@ -84,9 +124,125 @@ test_that("misha PWM matches prego results - with spatial weighting", {
 
     pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
 
-    # Create vtrack with spatial parameters
+    # Load prego
+    gvtrack.create(
+        "pwm_shift", NULL, "pwm",
+        list(
+            pssm = pssm_mat,
+            bidirect = TRUE,
+            extend = FALSE,
+            prior = 0.01
+        )
+    )
+    gvtrack.iterator("pwm_shift", sshift = -100, eshift = 100)
+
+    result <- gextract("pwm_shift", gintervals(1, 1000, 2000), iterator = 200)
+    test_intervals <- result %>%
+        mutate(start = start - 100, end = end + 100)
+    result_prego <- prego::compute_pwm(
+        sequences = gseq.extract(test_intervals),
+        pssm = test_pssm,
+        spat = NULL,
+        bidirect = TRUE,
+        prior = 0.01
+    )
+    expect_equal(result$pwm_shift, result_prego, tolerance = 1e-5)
+    expect_regression(result, "pwm_prego_regression_test_1")
+})
+
+test_that("misha PWM matches prego results - with spatial weighting, extend=FALSE", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test intervals (280bp to match spatial model)
+    test_intervals <- gintervals(1, 10000, 10280)
+    test_intervals <- rbind(test_intervals, gintervals(1, 20000, 20280))
+    test_intervals <- rbind(test_intervals, gintervals(2, 15000, 15280))
+
+    # Extract sequences from genome
+    seqs <- gseq.extract(test_intervals)
+
+    # Create test PSSM
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+
+    # Create spatial model
+    spat_df <- data.frame(
+        bin = seq(0, 240, by = 40),
+        spat_factor = c(0.5, 1.0, 2.0, 2.5, 2.0, 1.0, 0.5)
+    )
+
+    # Compute with prego
+    prego_scores <- prego::compute_pwm(
+        sequences = seqs,
+        pssm = test_pssm,
+        spat = spat_df,
+        bidirect = TRUE,
+        prior = 0.01,
+        func = "logSumExp"
+    )
+
+    # Compute with misha
     gvtrack.create(
         "pwm_spatial_test", NULL, "pwm",
+        list(
+            pssm = pssm_mat,
+            bidirect = TRUE,
+            extend = FALSE,
+            prior = 0.01,
+            spat_factor = spat_df$spat_factor,
+            spat_bin = 40L
+        )
+    )
+
+    result <- gextract("pwm_spatial_test", test_intervals, iterator = test_intervals)
+
+    # Compare - should be very close
+    expect_equal(result$pwm_spatial_test, prego_scores, tolerance = 1e-6)
+    expect_regression(result, "pwm_spatial_no_extend")
+})
+
+test_that("misha PWM matches prego results - with spatial weighting, extend=TRUE", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test intervals (280bp for spatial model)
+    test_intervals <- gintervals(1, 10000, 10280)
+    test_intervals <- rbind(test_intervals, gintervals(1, 20000, 20280))
+    test_intervals <- rbind(test_intervals, gintervals(2, 15000, 15280))
+
+    # Create test PSSM
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+    motif_len <- nrow(pssm_mat)
+
+    # Create spatial model
+    # Extended range: 280 + (motif_len-1) = 283bp
+    # With 40bp bins: need 8 bins to cover this
+    spat_df <- data.frame(
+        bin = seq(0, 280, by = 40),
+        spat_factor = c(0.5, 1.0, 2.0, 2.5, 2.0, 1.0, 0.5, 0.5)
+    )
+
+    # Compute with misha using extend=TRUE (no iterator shifts)
+    gvtrack.create(
+        "pwm_spatial_extend", NULL, "pwm",
         list(
             pssm = pssm_mat,
             bidirect = TRUE,
@@ -97,31 +253,43 @@ test_that("misha PWM matches prego results - with spatial weighting", {
         )
     )
 
-    expect_true("pwm_spatial_test" %in% gvtrack.ls())
+    result <- gextract("pwm_spatial_extend", test_intervals, iterator = test_intervals)
+
+    # For extend=TRUE, misha automatically extends the END by (motif_len - 1)
+    extended_intervals <- test_intervals
+    extended_intervals$end <- extended_intervals$end + (motif_len - 1)
+
+    # Extract sequences from extended intervals
+    extended_seqs <- gseq.extract(extended_intervals)
+
+    # Compute with prego on extended sequences
+    prego_scores <- prego::compute_pwm(
+        sequences = extended_seqs,
+        pssm = test_pssm,
+        spat = spat_df,
+        bidirect = TRUE,
+        prior = 0.01,
+        func = "logSumExp"
+    )
+
+    # Compare - should be very close
+    expect_equal(result$pwm_spatial_extend, prego_scores, tolerance = 1e-6)
+    expect_regression(result, "pwm_spatial_with_extend")
 })
 
-test_that("misha spatial PWM numerical agreement with prego - synthetic sequences", {
+test_that("misha spatial PWM numerical agreement with prego - genome sequences", {
     skip_if_not_installed("prego")
 
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
-    # Load prego
+    # Create test intervals (280bp to match spatial model)
+    test_intervals <- gintervals(c(1, 1, 2), c(10000, 20000, 15000), c(10280, 20280, 15280))
 
+    # Extract sequences from genome
+    seqs <- gseq.extract(test_intervals)
 
-    # Create synthetic test sequences with known motif instances
-    # All sequences same length for easier comparison
-    set.seed(42)
-    n_seq <- 10
-    seq_len <- 280
-
-    # Generate random sequences
-    bases <- c("A", "C", "G", "T")
-    test_seqs <- sapply(1:n_seq, function(i) {
-        paste0(sample(bases, seq_len, replace = TRUE), collapse = "")
-    })
-
-    # Create a simple PSSM (AC motif)
+    # Create a simple PSSM (2bp motif for speed)
     test_pssm <- data.frame(
         pos = 1:2,
         A = c(0.9, 0.05),
@@ -129,7 +297,6 @@ test_that("misha spatial PWM numerical agreement with prego - synthetic sequence
         G = c(0.025, 0.025),
         T = c(0.025, 0.025)
     )
-
     pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
 
     # Create spatial model
@@ -138,9 +305,9 @@ test_that("misha spatial PWM numerical agreement with prego - synthetic sequence
         spat_factor = c(0.5, 1.0, 2.0, 2.5, 2.0, 1.0, 0.5)
     )
 
-    # Compute using prego
+    # Compute using prego - no spatial
     prego_scores_nospatial <- prego::compute_pwm(
-        sequences = test_seqs,
+        sequences = seqs,
         pssm = test_pssm,
         spat = NULL,
         bidirect = FALSE,
@@ -148,8 +315,9 @@ test_that("misha spatial PWM numerical agreement with prego - synthetic sequence
         func = "logSumExp"
     )
 
+    # Compute using prego - with spatial
     prego_scores_spatial <- prego::compute_pwm(
-        sequences = test_seqs,
+        sequences = seqs,
         pssm = test_pssm,
         spat = spat_df,
         bidirect = FALSE,
@@ -157,32 +325,53 @@ test_that("misha spatial PWM numerical agreement with prego - synthetic sequence
         func = "logSumExp"
     )
 
-    # Validate that spatial factors increase the scores (due to weighting)
-    # This tests that the spatial model is being applied
-    expect_true(length(prego_scores_nospatial) == n_seq)
-    expect_true(length(prego_scores_spatial) == n_seq)
+    # Compute with misha - no spatial
+    gvtrack.create(
+        "pwm_nospatial", NULL, "pwm",
+        list(pssm = pssm_mat, bidirect = FALSE, extend = FALSE, prior = 0.01)
+    )
+    result_nospatial <- gextract("pwm_nospatial", test_intervals, iterator = test_intervals)
 
-    # The spatial scores should generally be different from non-spatial
-    # (unless by chance all motifs are in low-weight regions)
+    # Compute with misha - with spatial
+    gvtrack.create(
+        "pwm_spatial", NULL, "pwm",
+        list(
+            pssm = pssm_mat,
+            bidirect = FALSE,
+            extend = FALSE,
+            prior = 0.01,
+            spat_factor = spat_df$spat_factor,
+            spat_bin = 40L
+        )
+    )
+    result_spatial <- gextract("pwm_spatial", test_intervals, iterator = test_intervals)
+
+    # Compare misha with prego
+    expect_equal(result_nospatial$pwm_nospatial, prego_scores_nospatial, tolerance = 1e-6)
+    expect_equal(result_spatial$pwm_spatial, prego_scores_spatial, tolerance = 1e-6)
+
+    # Validate that spatial factors change the scores
     expect_true(any(abs(prego_scores_spatial - prego_scores_nospatial) > 0.01))
+    expect_true(any(abs(result_spatial$pwm_spatial - result_nospatial$pwm_nospatial) > 0.01))
+
+    # Regression tracking
+    expect_regression(result_nospatial, "pwm_genome_nospatial")
+    expect_regression(result_spatial, "pwm_genome_spatial")
 })
 
-test_that("misha max PWM mode matches prego max mode", {
+test_that("misha max PWM mode matches prego max mode, extend=FALSE", {
     skip_if_not_installed("prego")
 
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
-    # Load prego
+    # Create test intervals
+    test_intervals <- gintervals(1, 10000, 10100)
+    test_intervals <- rbind(test_intervals, gintervals(1, 20000, 20100))
+    test_intervals <- rbind(test_intervals, gintervals(2, 15000, 15100))
 
-
-    # Create simple sequences
-    set.seed(123)
-    test_seqs <- c(
-        "ACGTACGTACGT",
-        "TGCATGCATGCA",
-        "AAAACCCCGGGG"
-    )
+    # Extract sequences
+    seqs <- gseq.extract(test_intervals)
 
     # Create test PSSM
     test_pssm <- data.frame(
@@ -192,12 +381,11 @@ test_that("misha max PWM mode matches prego max mode", {
         G = c(0.1, 0.1, 0.7, 0.1),
         T = c(0.1, 0.1, 0.1, 0.7)
     )
-
     pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
 
-    # Test max mode with prego
-    prego_max_scores <- prego::compute_pwm(
-        sequences = test_seqs,
+    # Compute with prego
+    prego_scores <- prego::compute_pwm(
+        sequences = seqs,
         pssm = test_pssm,
         spat = NULL,
         bidirect = TRUE,
@@ -205,9 +393,49 @@ test_that("misha max PWM mode matches prego max mode", {
         func = "max"
     )
 
-    # Create misha vtrack for max mode
+    # Compute with misha
     gvtrack.create(
         "pwm_max_test", NULL, "pwm.max",
+        list(
+            pssm = pssm_mat,
+            bidirect = TRUE,
+            extend = FALSE,
+            prior = 0.01
+        )
+    )
+
+    result <- gextract("pwm_max_test", test_intervals, iterator = test_intervals)
+
+    # Compare
+    expect_equal(result$pwm_max_test, prego_scores, tolerance = 1e-6)
+    expect_regression(result, "pwm_max_no_extend")
+})
+
+test_that("misha max PWM mode matches prego max mode, extend=TRUE", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test intervals
+    test_intervals <- gintervals(1, 10000, 10100)
+    test_intervals <- rbind(test_intervals, gintervals(1, 20000, 20100))
+    test_intervals <- rbind(test_intervals, gintervals(2, 15000, 15100))
+
+    # Create test PSSM
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+    motif_len <- nrow(pssm_mat)
+
+    # Compute with misha using extend=TRUE (no iterator shifts)
+    gvtrack.create(
+        "pwm_max_extend", NULL, "pwm.max",
         list(
             pssm = pssm_mat,
             bidirect = TRUE,
@@ -216,31 +444,72 @@ test_that("misha max PWM mode matches prego max mode", {
         )
     )
 
-    expect_true("pwm_max_test" %in% gvtrack.ls())
-    expect_equal(length(prego_max_scores), 3)
+    result <- gextract("pwm_max_extend", test_intervals, iterator = test_intervals)
+
+    # For extend=TRUE, misha automatically extends the END by (motif_len - 1)
+    extended_intervals <- test_intervals
+    extended_intervals$end <- extended_intervals$end + (motif_len - 1)
+
+    # Extract sequences from extended intervals
+    extended_seqs <- gseq.extract(extended_intervals)
+
+    # Compute with prego on extended sequences
+    prego_scores <- prego::compute_pwm(
+        sequences = extended_seqs,
+        pssm = test_pssm,
+        spat = NULL,
+        bidirect = TRUE,
+        prior = 0.01,
+        func = "max"
+    )
+
+    # Compare
+    expect_equal(result$pwm_max_extend, prego_scores, tolerance = 1e-6)
+    expect_regression(result, "pwm_max_with_extend")
 })
 
 test_that("spatial binning is 0-indexed from scan start like prego", {
     # This test validates the spatial binning logic
     # In prego: bins are 0-indexed from the start of the scan range
     # Same bin for both strands
+    skip_if_not_installed("prego")
 
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
+    # Create test intervals (300bp)
+    test_intervals <- gintervals(c(1, 2), c(10000, 15000), c(10300, 15300))
+
+    # Extract sequences
+    seqs <- gseq.extract(test_intervals)
+
     # Create a PSSM
-    pssm_mat <- matrix(
-        c(
-            0.7, 0.1, 0.1, 0.1,
-            0.1, 0.7, 0.1, 0.1
-        ),
-        nrow = 2, byrow = TRUE
+    test_pssm <- data.frame(
+        pos = 1:2,
+        A = c(0.7, 0.1),
+        C = c(0.1, 0.7),
+        G = c(0.1, 0.1),
+        T = c(0.1, 0.1)
     )
-    colnames(pssm_mat) <- c("A", "C", "G", "T")
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
 
     # Create spatial factors - higher weight in first bin
     spat_factors <- c(10.0, 1.0, 1.0)
     spat_bin <- 100L
+    spat_df <- data.frame(
+        bin = c(0, 100, 200),
+        spat_factor = spat_factors
+    )
+
+    # Compute with prego
+    prego_scores <- prego::compute_pwm(
+        sequences = seqs,
+        pssm = test_pssm,
+        spat = spat_df,
+        bidirect = FALSE,
+        prior = 0.01,
+        func = "logSumExp"
+    )
 
     # Create vtrack
     gvtrack.create(
@@ -248,20 +517,25 @@ test_that("spatial binning is 0-indexed from scan start like prego", {
         list(
             pssm = pssm_mat,
             bidirect = FALSE,
-            extend = TRUE,
+            extend = FALSE,
             prior = 0.01,
             spat_factor = spat_factors,
             spat_bin = spat_bin
         )
     )
 
-    # Extract on a test interval
-    test_int <- gintervals(1, 1000, 1300)
-    scores <- gextract("pwm_bintest", test_int, iterator = test_int)
+    # Extract on test intervals
+    result <- gextract("pwm_bintest", test_intervals, iterator = test_intervals)
 
-    # Should return a valid score (testing that binning doesn't crash)
-    expect_false(is.na(scores$pwm_bintest[1]))
-    expect_false(is.infinite(scores$pwm_bintest[1]))
+    # Compare with prego
+    expect_equal(result$pwm_bintest, prego_scores, tolerance = 1e-6)
+
+    # Verify scores are valid
+    expect_false(any(is.na(result$pwm_bintest)))
+    expect_false(any(is.infinite(result$pwm_bintest)))
+
+    # Regression tracking
+    expect_regression(result, "pwm_spatial_binning")
 })
 
 test_that("spatial parameters validation matches prego behavior", {
