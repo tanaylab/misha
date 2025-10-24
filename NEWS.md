@@ -1,7 +1,8 @@
 # misha 5.1.1
 
 * Allow data frames as input in `pssm` parameter of `gvtrack.create` and `gseq.pwm` functions.
-* Implemented parallelism in `gseq.pwm` and added neutral_chars_policy parameter.
+* Implemented parallelism in `gseq.pwm` and added `neutral_chars_policy` parameter.
+* Implemented sliding window optimization for PWM scoring modes (`pwm`, `pwm.max` and `pwm.count`) for dense iterators when spatial weighting is disabled, providing significant performance improvements for consecutive genomic intervals.
 
 # misha 5.1.0
 
