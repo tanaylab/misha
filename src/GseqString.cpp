@@ -1060,7 +1060,7 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
                         }
                     }
 
-                    UNPROTECT(4);  // seqs_chunk, roi_start_chunk, roi_end_chunk, and one more
+                    UNPROTECT(3);  // seqs_chunk, roi_start_chunk, roi_end_chunk
                     // Use signal-based exit to avoid CRAN issues with _exit()
                     // (similar to rexit() but without RdbInitializer dependency)
                     kill(getpid(), MISHA_EXIT_SIG);

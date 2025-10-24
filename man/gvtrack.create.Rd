@@ -121,6 +121,7 @@ position-dependent weights.
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 spat_min = NULL, spat_max = NULL)} \cr
 Returns 1-based position of best PSSM match.
+This position is 1-based relative to the start of the final scan window, which is determined after applying any iterator shifts (e.g., \code{sshift} from \code{\link{gvtrack.iterator}}) or the \code{spat_min} parameter. In case of ties, the position of the first match (most 5' / smallest coordinate) encountered during the scan is returned. The forward strand is checked before the reverse strand at each position, so it will win in a direct tie at the same location.
 If bidirect=TRUE, the position would be positive if the best hit was at the
 forward strand, and negative if it was at the reverse strand. When strand is
 -1 the position is still according to the forward strand, but the hit is at

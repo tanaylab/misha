@@ -445,6 +445,7 @@ test_that("PWM sliding window MAX_POS mode works with iterator=1", {
     )
 
     result <- gextract("pwm_pos_test", gintervals(1, 10000, 11000), iterator = 1)
+    expect_regression(result, "pwm_sliding_window_test_34")
 
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_pos_test)))
@@ -466,7 +467,7 @@ test_that("PWM sliding window MAX_POS mode works with iterator=20 and shifts", {
     )
     gvtrack.iterator("pwm_pos_iter20", sshift = -150, eshift = 150)
 
-    result <- gextract("pwm_pos_iter20", gintervals(1, 1000000, 1100000), iterator = 20)
+    expect_regression(result, "pwm_sliding_window_test_35")
 
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_pos_iter20)))
@@ -488,6 +489,8 @@ test_that("PWM sliding window MAX_POS mode without shifts works with iterator=50
     )
 
     result <- gextract("pwm_pos_no_shift", gintervals(1, 1000000, 1050000), iterator = 50)
+
+    expect_regression(result, "pwm_sliding_window_test_36")
 
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_pos_no_shift)))
@@ -513,6 +516,8 @@ test_that("PWM sliding window MAX_POS mode with various iterators and shifts", {
 
     result_10 <- gextract("pwm_pos_var", interval, iterator = 10)
     result_100 <- gextract("pwm_pos_var", interval, iterator = 100)
+    expect_regression(result_10, "pwm_sliding_window_test_37")
+    expect_regression(result_100, "pwm_sliding_window_test_38")
 
     # Larger iterator should give fewer results
     expect_true(nrow(result_10) > nrow(result_100))
@@ -843,7 +848,6 @@ test_that("PWM regression: MAX_POS mode iterator=1 with shifts", {
     gvtrack.iterator("pwm_pos_reg1", sshift = -150, eshift = 150)
 
     result <- gextract("pwm_pos_reg1", gintervals(1, 1000000, 1050000), iterator = 1)
-
     expect_regression(result, "pwm_sliding_window_pos_iter1_shifts")
 })
 
@@ -863,7 +867,6 @@ test_that("PWM regression: MAX_POS mode iterator=20 with shifts", {
     gvtrack.iterator("pwm_pos_reg20", sshift = -150, eshift = 150)
 
     result <- gextract("pwm_pos_reg20", gintervals(1, 1000000, 1100000), iterator = 20)
-
     expect_regression(result, "pwm_sliding_window_pos_iter20_shifts")
 })
 
@@ -882,7 +885,6 @@ test_that("PWM regression: MAX_POS mode iterator=20 without shifts", {
     )
 
     result <- gextract("pwm_pos_reg_no_shift", gintervals(1, 1000000, 1100000), iterator = 20)
-
     expect_regression(result, "pwm_sliding_window_pos_iter20_no_shifts")
 })
 
@@ -902,6 +904,5 @@ test_that("PWM regression: MAX_POS mode iterator=100 with shifts", {
     gvtrack.iterator("pwm_pos_reg100", sshift = -200, eshift = 200)
 
     result <- gextract("pwm_pos_reg100", gintervals(1, 1000000, 1100000), iterator = 100)
-
     expect_regression(result, "pwm_sliding_window_pos_iter100_shifts")
 })
