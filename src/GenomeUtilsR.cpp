@@ -113,7 +113,7 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
             Rf_error("n must be numeric");
         if (!Rf_isReal(_dist_from_edge) && !Rf_isInteger(_dist_from_edge))
             Rf_error("dist_from_edge must be numeric");
-        if (!Rf_isFrame(_chrom_df))
+        if (!Rf_inherits(_chrom_df, "data.frame"))        
             Rf_error("chrom_df must be a data frame");
 
         // Parse parameters
