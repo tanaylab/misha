@@ -63,11 +63,14 @@ private:
     };
 
     // Sliding window methods
-    float score_with_sliding_window(const std::string& target, const GInterval& interval,
+    float score_with_sliding_window(const std::string& target, const GInterval& original_interval,
+                                     const GInterval& expanded_interval,
                                      size_t i_min, size_t i_max, size_t motif_len);
-    float seed_sliding_window(const std::string& target, const GInterval& interval,
+    float seed_sliding_window(const std::string& target, const GInterval& original_interval,
+                              const GInterval& expanded_interval,
                               size_t i_min, size_t i_max, size_t motif_len);
-    float try_slide_window(const std::string& target, const GInterval& interval,
+    float try_slide_window(const std::string& target, const GInterval& original_interval,
+                           const GInterval& expanded_interval,
                            size_t i_min, size_t i_max, size_t motif_len, size_t stride);
     
     // Scoring methods

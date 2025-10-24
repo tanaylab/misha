@@ -17,3 +17,11 @@ expect_regression <- function(obj, id, snapshot_dir = "/net/mraid20/export/tgdat
     old <- readr::read_rds(regression_file)
     expect_equal(old, obj, tolerance = tolerance)
 }
+
+load_regression_file <- function(id, snapshot_dir = "/net/mraid20/export/tgdata/db/tgdb/misha_snapshot") {
+    file_path <- file.path(snapshot_dir, glue::glue("{id}.rds"))
+    if (!file.exists(file_path)) {
+        cli::cli_abort("Regression file {.file {id}} not found")
+    }
+    readr::read_rds(file_path)
+}

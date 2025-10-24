@@ -6,50 +6,101 @@
 #include <limits>
 #include <vector>
 
-// Sliding-window maximum over floats with indices
+// Sliding-window maximum over floats with genomic positions and strand direction
 struct RunningMaxDeque {
-    // store pairs (index, value) with decreasing value
-    std::deque<std::pair<size_t, float>> dq;
-    size_t base_index = 0; // index of the first element in the window
+    // store triples (genomic_position, value, direction) with decreasing value
+    struct Entry {
+        int64_t genomic_pos;  // Absolute genomic coordinate (not target-relative)
+        float val;
+        int dir;  // 1 for forward strand, -1 for reverse strand
+
+        Entry(int64_t pos, float v, int d) : genomic_pos(pos), val(v), dir(d) {}
+    };
+
+    std::deque<Entry> dq;
+    int64_t base_genomic_pos = -1; // genomic position of the first element in the window
 
     void clear() {
         dq.clear();
-        base_index = 0;
+        base_genomic_pos = -1;
+    }
+
+    void init(const std::vector<float>& vals, const std::vector<int>& dirs, const std::vector<int64_t>& genomic_positions) {
+        clear();
+        for (size_t k = 0; k < vals.size(); ++k) {
+            int dir = (k < dirs.size()) ? dirs[k] : 1;
+            int64_t pos = (k < genomic_positions.size()) ? genomic_positions[k] : int64_t(k);
+            push(vals[k], dir, pos);
+        }
+    }
+
+    void init(const std::vector<float>& vals, const std::vector<int>& dirs) {
+        // For backward compatibility - use sequential indices as positions
+        std::vector<int64_t> positions(vals.size());
+        for (size_t i = 0; i < vals.size(); ++i) positions[i] = int64_t(i);
+        init(vals, dirs, positions);
     }
 
     void init(const std::vector<float>& vals) {
-        clear();
-        for (size_t k = 0; k < vals.size(); ++k) push(vals[k]);
+        // For backward compatibility - assume forward strand, sequential positions
+        std::vector<int> dirs(vals.size(), 1);
+        std::vector<int64_t> positions(vals.size());
+        for (size_t i = 0; i < vals.size(); ++i) positions[i] = int64_t(i);
+        init(vals, dirs, positions);
     }
 
-    // push value at next index (base_index + window_size_so_far)
-    void push(float v) {
-        size_t idx = base_index + size();
-        while (!dq.empty() && dq.back().second <= v) dq.pop_back();
-        dq.emplace_back(idx, v);
+    // push value with genomic position and direction
+    void push(float v, int dir, int64_t genomic_pos) {
+        if (dq.empty()) {
+            base_genomic_pos = genomic_pos;
+        }
+        while (!dq.empty() && dq.back().val < v) dq.pop_back();
+        dq.emplace_back(genomic_pos, v, dir);
     }
 
-    // pop one value from the front (advances base_index by 1)
+    // Backward compatibility: push without explicit genomic position
+    void push(float v, int dir = 1) {
+        int64_t pos = dq.empty() ? 0 : (dq.back().genomic_pos + 1);
+        push(v, dir, pos);
+    }
+
+    // pop all entries before new_base_genomic_pos (for sliding window)
+    void pop_front(int64_t new_base_genomic_pos) {
+        while (!dq.empty() && dq.front().genomic_pos < new_base_genomic_pos) {
+            dq.pop_front();
+        }
+        base_genomic_pos = new_base_genomic_pos;
+    }
+
+    // Backward compatibility: pop one position
     void pop_front() {
-        if (!dq.empty() && dq.front().first == base_index) dq.pop_front();
-        ++base_index;
+        pop_front(base_genomic_pos + 1);
     }
 
     size_t size() const {
-        // window size = (last_idx - base_index + 1). We only need dq to eject front at base_index
-        // but callers track size externally when needed.
-        if (dq.empty()) return 0;
-        return dq.back().first - base_index + 1; // not exact window size; callers shouldn't rely on this.
+        // Return number of elements in deque (not necessarily window size)
+        return dq.size();
     }
 
     float value() const {
         if (dq.empty()) return -std::numeric_limits<float>::infinity();
-        return dq.front().second;
+        return dq.front().val;
     }
 
-    // Argmax index within the logical stream (for MAX_POS)
+    // Argmax genomic position (for MAX_POS)
+    int64_t argmax_genomic_position() const {
+        return dq.empty() ? -1 : dq.front().genomic_pos;
+    }
+
+    // Backward compatibility: return as size_t (deprecated)
     size_t argmax_index() const {
-        return dq.empty() ? size_t(-1) : dq.front().first;
+        int64_t pos = argmax_genomic_position();
+        return (pos < 0) ? size_t(-1) : size_t(pos);
+    }
+
+    // Get the direction of the argmax (for MAX_POS with bidirectional PSSMs)
+    int argmax_direction() const {
+        return dq.empty() ? 1 : dq.front().dir;
     }
 };
 
