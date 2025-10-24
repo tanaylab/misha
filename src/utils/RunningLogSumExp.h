@@ -8,12 +8,15 @@
 
 // Maintains logsumexp over a fixed-size sliding window in O(1) amortized time.
 // Numerically stable via max-trick and single rescaling when max changes.
+// Includes periodic recomputation to prevent numerical drift over very long runs.
 struct RunningLogSumExp {
     double M = -std::numeric_limits<double>::infinity(); // current max
     double sum_scaled = 0.0;                              // sum exp(x - M)
     std::deque<float> window;                             // raw values (ℓ_i)
     std::deque<float> maxdq;                              // monotonic decreasing queue of candidates for M
     size_t W = 0;                                         // target window size (optional)
+    size_t steps_since_refresh = 0;                       // counter for numerical stability
+    static constexpr size_t REFRESH_INTERVAL = 50000;    // recompute every 50k steps
 
     void clear() {
         M = -std::numeric_limits<double>::infinity();
@@ -21,6 +24,7 @@ struct RunningLogSumExp {
         window.clear();
         maxdq.clear();
         W = 0;
+        steps_since_refresh = 0;
     }
 
     // Initialize from a full window of values.
@@ -39,7 +43,39 @@ struct RunningLogSumExp {
         }
     }
 
+    // Recompute sum_scaled from scratch to prevent accumulated floating-point error
+    // Called periodically during long runs (millions of slides)
+    void refresh() {
+        if (window.empty()) return;
+
+        // Find new max
+        M = -std::numeric_limits<double>::infinity();
+        for (float v : window) {
+            if (v > M) M = v;
+        }
+
+        // Recompute sum_scaled
+        sum_scaled = 0.0;
+        for (float v : window) {
+            sum_scaled += std::exp(double(v) - M);
+        }
+
+        // Rebuild maxdq
+        maxdq.clear();
+        for (float v : window) {
+            while (!maxdq.empty() && maxdq.back() < v) maxdq.pop_back();
+            maxdq.push_back(v);
+        }
+
+        steps_since_refresh = 0;
+    }
+
     inline void push(float x) {
+        // Periodic refresh for numerical stability
+        if (++steps_since_refresh >= REFRESH_INTERVAL) {
+            refresh();
+        }
+
         // If we track W and caller wants fixed size behavior, they should pop beforehand.
         if (x > M) {
             // Rescale once
