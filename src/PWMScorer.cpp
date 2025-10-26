@@ -7,32 +7,62 @@
 // Forward declaration for log_sum_log (defined in util.h)
 extern inline void log_sum_log(float& a, float b);
 
+// Helpers that return scores in ORIGINAL-genome strand meaning
+// When strand_mode == -1, target is reverse-complemented, so we need to invert the functions
+static inline float score_forward_original(const DnaPSSM& pssm,
+                                           const std::string& target,
+                                           size_t i,
+                                           char strand_mode) {
+    float s = 0.f;
+    auto it = target.begin() + i;
+    if (strand_mode == -1) {
+        // target is reverse-complemented -> forward(original) == rc(target)
+        pssm.calc_like_rc(it, s);
+    } else {
+        pssm.calc_like(it, s);
+    }
+    return s;
+}
+
+static inline float score_reverse_original(const DnaPSSM& pssm,
+                                           const std::string& target,
+                                           size_t i,
+                                           char strand_mode) {
+    float s = 0.f;
+    auto it = target.begin() + i;
+    if (strand_mode == -1) {
+        // target is reverse-complemented -> reverse(original) == forward(target)
+        pssm.calc_like(it, s);
+    } else {
+        pssm.calc_like_rc(it, s);
+    }
+    return s;
+}
+
 // Compute log-likelihood at position i with spatial weighting
 // Combines forward and reverse complement strands using logsumexp if bidirectional
 // This is used for TOTAL_LIKELIHOOD mode
 static inline float pos_value_with_spat(const DnaPSSM& pssm,
                                         const std::string& target,
                                         size_t i,
-                                        char strand_mode,      // 1=plus, -1=minus, 0=both
+                                        char strand_mode,      // 1=plus, -1=minus
                                         float spat_log)        // log(spatial_factor)
 {
-    float has = -std::numeric_limits<float>::infinity();
-
-    // Evaluate forward strand
-    float f = 0.f;
-    auto it = target.begin() + i;
-    pssm.calc_like(it, f);
-    has = f;
-
-    // Evaluate reverse strand if bidirectional
+    // Score in ORIGINAL-genome meaning to match non-sliding implementations
+    float val = -std::numeric_limits<float>::infinity();
     if (pssm.is_bidirect()) {
-        float rc = 0.f;
-        auto it2 = target.begin() + i;
-        pssm.calc_like_rc(it2, rc);
-        log_sum_log(has, rc);
+        // LSE union of forward & reverse
+        float fwd = score_forward_original(pssm, target, i, strand_mode);
+        float rev = score_reverse_original(pssm, target, i, strand_mode);
+        val = fwd;
+        log_sum_log(val, rev);
+    } else {
+        // Single selected strand
+        val = (strand_mode == -1)
+              ? score_reverse_original(pssm, target, i, strand_mode)
+              : score_forward_original(pssm, target, i, strand_mode);
     }
-
-    return has + spat_log;
+    return val + spat_log;
 }
 
 // Compute best log-likelihood and its direction at position i with spatial weighting
@@ -59,10 +89,7 @@ static inline float pos_value_with_dir(const DnaPSSM& pssm,
 
     // Evaluate forward strand
     if (check_forward) {
-        float f = 0.f;
-        auto it = target.begin() + i;
-        pssm.calc_like(it, f);
-        float val_f = f + spat_log;
+        float val_f = score_forward_original(pssm, target, i, strand_mode) + spat_log;
         if (val_f > best_val) {
             best_val = val_f;
             best_dir = 1;
@@ -71,10 +98,7 @@ static inline float pos_value_with_dir(const DnaPSSM& pssm,
 
     // Evaluate reverse strand
     if (check_reverse) {
-        float rc = 0.f;
-        auto it2 = target.begin() + i;
-        pssm.calc_like_rc(it2, rc);
-        float val_rc = rc + spat_log;
+        float val_rc = score_reverse_original(pssm, target, i, strand_mode) + spat_log;
         if (val_rc > best_val) {
             best_val = val_rc;
             best_dir = -1;
@@ -163,31 +187,29 @@ float PWMScorer::count_motif_hits_no_spatial(const std::string& target, size_t m
         return 0.0f;
     }
 
+    // Decide which strands to scan:
+    // - If bidirect, scan both strands regardless of m_strand
+    // - If not bidirect, scan the strand indicated by m_strand (1 or -1)
+    const bool scan_both = m_pssm.is_bidirect();
+    const bool scan_fwd  = scan_both || (m_strand == 1);
+    const bool scan_rev  = scan_both || (m_strand == -1);
+
     int count = 0;
     size_t max_pos = target.length() - motif_length;
 
-    // Scan forward strand
-    if (m_strand != -1) {
-        for (size_t i = 0; i <= max_pos; ++i) {
-            float logp = 0;
-            std::string::const_iterator it = target.begin() + i;
-            m_pssm.calc_like(it, logp);
-            if (logp >= m_score_thresh) {
-                count++;
-            }
+    // Per-position union (LSE) across permitted strands
+    for (size_t i = 0; i <= max_pos; ++i) {
+        float comb = -std::numeric_limits<float>::infinity();
+        bool have = false;
+        if (scan_fwd) {
+            comb = score_forward_original(m_pssm, target, i, m_strand);
+            have = true;
         }
-    }
-
-    // Scan reverse strand if bidirectional
-    if (m_pssm.is_bidirect() && m_strand != 1) {
-        for (size_t i = 0; i <= max_pos; ++i) {
-            float logp_rc = 0;
-            std::string::const_iterator it = target.begin() + i;
-            m_pssm.calc_like_rc(it, logp_rc);
-            if (logp_rc >= m_score_thresh) {
-                count++;
-            }
+        if (scan_rev) {
+            float rc = score_reverse_original(m_pssm, target, i, m_strand);
+            if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
         }
+        if (comb >= m_score_thresh) count++;
     }
 
     return static_cast<float>(count);
@@ -200,45 +222,28 @@ float PWMScorer::count_motif_hits_with_spatial(const std::string& target, size_t
         return 0.0f;
     }
 
+    // Decide which strands to scan (same rules as non-spatial)
+    const bool scan_both = m_pssm.is_bidirect();
+    const bool scan_fwd  = scan_both || (m_strand == 1);
+    const bool scan_rev  = scan_both || (m_strand == -1);
+
     int count = 0;
     size_t max_pos = target.length() - motif_length;
 
-    // Scan forward strand
-    if (m_strand != -1) {
-        for (size_t i = 0; i <= max_pos; ++i) {
-            int spat_bin = int(i / m_spat_bin_size);
-            if (spat_bin >= (int)m_spat_log_factors.size()) {
-                spat_bin = m_spat_log_factors.size() - 1;
-            }
-            float spat_log = m_spat_log_factors[spat_bin];
-
-            float logp = 0;
-            std::string::const_iterator it = target.begin() + i;
-            m_pssm.calc_like(it, logp);
-            float val = logp + spat_log;
-            if (val >= m_score_thresh) {
-                count++;
-            }
+    // Per-position union (LSE) across permitted strands, with spatial offset
+    for (size_t i = 0; i <= max_pos; ++i) {
+        float spat_log = get_spatial_log_factor(i);
+        float comb = -std::numeric_limits<float>::infinity();
+        bool have = false;
+        if (scan_fwd) {
+            comb = score_forward_original(m_pssm, target, i, m_strand);
+            have = true;
         }
-    }
-
-    // Scan reverse strand if bidirectional
-    if (m_pssm.is_bidirect() && m_strand != 1) {
-        for (size_t i = 0; i <= max_pos; ++i) {
-            int spat_bin = int(i / m_spat_bin_size);
-            if (spat_bin >= (int)m_spat_log_factors.size()) {
-                spat_bin = m_spat_log_factors.size() - 1;
-            }
-            float spat_log = m_spat_log_factors[spat_bin];
-
-            float logp_rc = 0;
-            std::string::const_iterator it = target.begin() + i;
-            m_pssm.calc_like_rc(it, logp_rc);
-            float val_rc = logp_rc + spat_log;
-            if (val_rc >= m_score_thresh) {
-                count++;
-            }
+        if (scan_rev) {
+            float rc = score_reverse_original(m_pssm, target, i, m_strand);
+            if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
         }
+        if (comb + spat_log >= m_score_thresh) count++;
     }
 
     return static_cast<float>(count);
@@ -370,20 +375,41 @@ float PWMScorer::try_slide_window(const std::string& target,
     char strand_mode = m_strand;
 
     if (m_mode == TOTAL_LIKELIHOOD) {
-        // Pop outgoing values
-        for (size_t k = 0; k < stride; ++k) {
-            m_slide.rlse.pop_front();
-        }
+        // For minus strand, sliding direction is reversed
+        bool is_minus = (strand_mode == -1);
 
-        // Push incoming values
-        for (size_t k = 0; k < stride; ++k) {
-            size_t incoming_i = i_max - (stride - 1 - k);
-            if (incoming_i + motif_len > tlen) {
-                return std::numeric_limits<float>::quiet_NaN(); // Signal failure
+        if (is_minus) {
+            // Minus strand: pop from back, push to front
+            for (size_t k = 0; k < stride; ++k) {
+                m_slide.rlse.pop_back();
             }
-            float val = pos_value_with_spat(m_pssm, target, incoming_i, strand_mode,
-                                            get_spatial_log_factor(first_incoming_pos + k));
-            m_slide.rlse.push(val);
+
+            // Push incoming values at front (in reverse order to maintain position correspondence)
+            for (size_t k = 0; k < stride; ++k) {
+                size_t incoming_i = i_min + k;
+                if (incoming_i + motif_len > tlen) {
+                    return std::numeric_limits<float>::quiet_NaN();
+                }
+                float val = pos_value_with_spat(m_pssm, target, incoming_i, strand_mode,
+                                                get_spatial_log_factor(first_incoming_pos + k));
+                m_slide.rlse.push_front(val);
+            }
+        } else {
+            // Plus strand: pop from front, push to back
+            for (size_t k = 0; k < stride; ++k) {
+                m_slide.rlse.pop_front();
+            }
+
+            // Push incoming values
+            for (size_t k = 0; k < stride; ++k) {
+                size_t incoming_i = i_max - (stride - 1 - k);
+                if (incoming_i + motif_len > tlen) {
+                    return std::numeric_limits<float>::quiet_NaN();
+                }
+                float val = pos_value_with_spat(m_pssm, target, incoming_i, strand_mode,
+                                                get_spatial_log_factor(first_incoming_pos + k));
+                m_slide.rlse.push(val);
+            }
         }
 
         // Update cache state
@@ -462,25 +488,72 @@ float PWMScorer::try_slide_window(const std::string& target,
     }
 
     if (m_mode == MOTIF_COUNT) {
-        // Pop outgoing values
-        for (size_t k = 0; k < stride && !m_slide.hits.empty(); ++k) {
-            m_slide.hit_count -= m_slide.hits.front();
-            m_slide.hits.pop_front();
-        }
+        bool is_minus = (strand_mode == -1);
 
-        // Push incoming values
-        for (size_t k = 0; k < stride; ++k) {
-            size_t incoming_i = i_max - (stride - 1 - k);
-            if (incoming_i + motif_len > tlen) {
-                return std::numeric_limits<float>::quiet_NaN();
+        const bool scan_both = m_pssm.is_bidirect();
+        const bool scan_fwd  = scan_both || (strand_mode == 1);
+        const bool scan_rev  = scan_both || (strand_mode == -1);
+
+        if (is_minus) {
+            // Minus strand: pop from back, push to front
+            for (size_t k = 0; k < stride && !m_slide.hits.empty(); ++k) {
+                m_slide.hit_count -= m_slide.hits.back();
+                m_slide.hits.pop_back();
             }
-            int best_dir = 1;
-            float v = pos_value_with_dir(m_pssm, target, incoming_i, strand_mode,
-                                         get_spatial_log_factor(first_incoming_pos + k),
-                                         best_dir);
-            uint8_t hit = (v >= m_score_thresh) ? 1 : 0;
-            m_slide.hits.push_back(hit);
-            m_slide.hit_count += hit;
+
+            // Push incoming union hits at front
+            for (size_t k = 0; k < stride; ++k) {
+                size_t incoming_i = i_min + k;
+                if (incoming_i + motif_len > tlen) {
+                    return std::numeric_limits<float>::quiet_NaN();
+                }
+                float spat_log = get_spatial_log_factor(first_incoming_pos + k);
+
+                float comb = -std::numeric_limits<float>::infinity();
+                bool have = false;
+                if (scan_fwd) {
+                    float f = score_forward_original(m_pssm, target, incoming_i, strand_mode);
+                    comb = f; have = true;
+                }
+                if (scan_rev) {
+                    float rc = score_reverse_original(m_pssm, target, incoming_i, strand_mode);
+                    if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
+                }
+
+                uint8_t hit = ((comb + spat_log) >= m_score_thresh) ? 1 : 0;
+                m_slide.hits.push_front(hit);
+                m_slide.hit_count += hit;
+            }
+        } else {
+            // Plus strand: pop from front, push to back
+            for (size_t k = 0; k < stride && !m_slide.hits.empty(); ++k) {
+                m_slide.hit_count -= m_slide.hits.front();
+                m_slide.hits.pop_front();
+            }
+
+            // Push incoming union hits (0/1 per position)
+            for (size_t k = 0; k < stride; ++k) {
+                size_t incoming_i = i_max - (stride - 1 - k);
+                if (incoming_i + motif_len > tlen) {
+                    return std::numeric_limits<float>::quiet_NaN();
+                }
+                float spat_log = get_spatial_log_factor(first_incoming_pos + k);
+
+                float comb = -std::numeric_limits<float>::infinity();
+                bool have = false;
+                if (scan_fwd) {
+                    float f = score_forward_original(m_pssm, target, incoming_i, strand_mode);
+                    comb = f; have = true;
+                }
+                if (scan_rev) {
+                    float rc = score_reverse_original(m_pssm, target, incoming_i, strand_mode);
+                    if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
+                }
+
+                uint8_t hit = ((comb + spat_log) >= m_score_thresh) ? 1 : 0;
+                m_slide.hits.push_back(hit);
+                m_slide.hit_count += hit;
+            }
         }
 
         // Update cache state
@@ -526,9 +599,8 @@ float PWMScorer::seed_sliding_window(const std::string& target,
             dirs.push_back(1);  // Direction doesn't matter for these modes
             genomic_positions.push_back(expanded_interval.start + int64_t(i));
         }
-    } else {
-        // Use strand-aware helper for MAX_LIKELIHOOD_POS and MOTIF_COUNT
-        // These modes need to track which strand gave the best score
+    } else if (m_mode == MAX_LIKELIHOOD_POS) {
+        // Need best score and direction per position
         for (size_t i = i_min; i <= i_max; ++i) {
             int best_dir = 1;
             float v = pos_value_with_dir(m_pssm, target, i, strand_mode,
@@ -538,9 +610,11 @@ float PWMScorer::seed_sliding_window(const std::string& target,
             dirs.push_back(best_dir);
             genomic_positions.push_back(expanded_interval.start + int64_t(i));
         }
+    } else { // MOTIF_COUNT: handled separately below (per-position union)
+        // no-op: we don't need vals/dirs here
     }
 
-    size_t W = vals.size();
+    size_t W = (m_mode == MOTIF_COUNT) ? (i_max - i_min + 1) : vals.size();
 
     // Store geometry (using original interval for cache coherency)
     m_slide.valid = true;
@@ -582,8 +656,27 @@ float PWMScorer::seed_sliding_window(const std::string& target,
     if (m_mode == MOTIF_COUNT) {
         m_slide.hits.clear();
         m_slide.hit_count = 0;
-        for (float v : vals) {
-            uint8_t hit = (v >= m_score_thresh) ? 1 : 0;
+
+        const bool scan_both = m_pssm.is_bidirect();
+        const bool scan_fwd  = scan_both || (strand_mode == 1);
+        const bool scan_rev  = scan_both || (strand_mode == -1);
+
+        size_t pos0_local = 0;
+        for (size_t i = i_min; i <= i_max; ++i, ++pos0_local) {
+            float spat_log = get_spatial_log_factor(pos0_local);
+
+            float comb = -std::numeric_limits<float>::infinity();
+            bool have = false;
+            if (scan_fwd) {
+                float f = score_forward_original(m_pssm, target, i, strand_mode);
+                comb = f; have = true;
+            }
+            if (scan_rev) {
+                float rc = score_reverse_original(m_pssm, target, i, strand_mode);
+                if (have) log_sum_log(comb, rc); else { comb = rc; have = true; }
+            }
+
+            uint8_t hit = ((comb + spat_log) >= m_score_thresh) ? 1 : 0;
             m_slide.hits.push_back(hit);
             m_slide.hit_count += hit;
         }

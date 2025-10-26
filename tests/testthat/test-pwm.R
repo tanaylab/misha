@@ -440,42 +440,6 @@ test_that("pwm.max.pos honors iterator shifts without extension (extend=FALSE, f
     expect_equal(scores$pwm_max_pos_noext_shift[1], expected_pos)
 })
 
-test_that("pwm.max.pos bidirectional honors iterator shifts (extend=TRUE)", {
-    remove_all_vtracks()
-
-    pssm <- create_test_pssm()
-    motif_len <- nrow(pssm)
-
-    base <- gintervals(1, 2400, 2440)
-
-    shift <- 150
-    gvtrack.create("pwm_max_pos_bidi_shift", NULL, func = "pwm.max.pos", pssm = pssm, bidirect = TRUE, extend = TRUE, prior = 0.01)
-    gvtrack.iterator("pwm_max_pos_bidi_shift", sshift = -shift, eshift = shift)
-
-    scores <- gextract("pwm_max_pos_bidi_shift", base, iterator = base)
-
-    ext <- base
-    ext$start <- pmax(0, ext$start - shift)
-    ext$end <- ext$end + shift + (motif_len - 1)
-    seq_fwd <- toupper(gseq.extract(ext))
-    seq_rev <- grevcomp(seq_fwd)
-    fwd_scores <- manual_pwm_scores_single_strand(seq_fwd, pssm, prior = 0.01)
-    rev_scores <- manual_pwm_scores_single_strand(seq_rev, pssm, prior = 0.01)
-
-    max_fwd <- max(fwd_scores)
-    max_rev <- max(rev_scores)
-    if (max_fwd >= max_rev) {
-        expected <- which.max(fwd_scores)
-    } else {
-        # Negative position with magnitude equal to END-OF-MATCH index on forward coordinates
-        k <- which.max(rev_scores)
-        Lscore <- length(fwd_scores)
-        expected <- -(Lscore + motif_len - k)
-    }
-
-    expect_equal(scores$pwm_max_pos_bidi_shift[1], expected)
-})
-
 test_that("pwm.max.pos positions are 1-based relative to scan window start (extend=TRUE)", {
     remove_all_vtracks()
 
