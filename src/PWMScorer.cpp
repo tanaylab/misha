@@ -146,6 +146,7 @@ void PWMScorer::invalidate_cache()
 {
     m_slide.valid = false;
     m_slide.stride = 0;
+    m_spat_slide.valid = false;
 }
 
 // Get spatial log factor for a given position index
@@ -375,23 +376,29 @@ float PWMScorer::try_slide_window(const std::string& target,
     char strand_mode = m_strand;
 
     if (m_mode == TOTAL_LIKELIHOOD) {
-        // For minus strand, sliding direction is reversed
-        bool is_minus = (strand_mode == -1);
+        // Strand-specific push/pop order:
+        // Plus strand: target is normal, advancing = higher indices
+        //   Old positions at front (low indices), new at back (high indices)
+        //   Pop from front, push to back
+        // Minus strand: target is RC'd, advancing = lower indices
+        //   Old positions at back (high indices), new at front (low indices)
+        //   Pop from back, push to front
 
-        if (is_minus) {
-            // Minus strand: pop from back, push to front
+        if (m_strand == -1) {
+            // Minus strand: pop from back, push incoming to front
             for (size_t k = 0; k < stride; ++k) {
                 m_slide.rlse.pop_back();
             }
 
-            // Push incoming values at front (in reverse order to maintain position correspondence)
-            for (size_t k = 0; k < stride; ++k) {
-                size_t incoming_i = i_min + k;
+            // Push incoming values from the left side (lower indices)
+            // Process in reverse order to maintain deque ordering
+            for (size_t k = stride; k > 0; --k) {
+                size_t incoming_i = i_min + (k - 1);
                 if (incoming_i + motif_len > tlen) {
                     return std::numeric_limits<float>::quiet_NaN();
                 }
                 float val = pos_value_with_spat(m_pssm, target, incoming_i, strand_mode,
-                                                get_spatial_log_factor(first_incoming_pos + k));
+                                                get_spatial_log_factor(first_incoming_pos + (stride - k)));
                 m_slide.rlse.push_front(val);
             }
         } else {
@@ -400,7 +407,7 @@ float PWMScorer::try_slide_window(const std::string& target,
                 m_slide.rlse.pop_front();
             }
 
-            // Push incoming values
+            // Push incoming values from the right side
             for (size_t k = 0; k < stride; ++k) {
                 size_t incoming_i = i_max - (stride - 1 - k);
                 if (incoming_i + motif_len > tlen) {
@@ -425,6 +432,7 @@ float PWMScorer::try_slide_window(const std::string& target,
 
     if (m_mode == MAX_LIKELIHOOD) {
         // Pop outgoing values - advance base by stride
+        // Uses genomic positions, so same for both strands
         m_slide.rmax.pop_front(m_slide.rmax.base_genomic_pos + stride);
 
         // Push incoming values (log-summed strands, like TOTAL_LIKELIHOOD)
@@ -749,22 +757,60 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
         m_seqfetch_ptr->read_interval(expanded_interval, chromkey, seq);
         std::string target(seq.begin(), seq.end());
 
-        // Sliding window optimization for contiguous intervals
-        // Enabled for all modes when spatial weighting is disabled, except for MAX_LIKELIHOOD_POS
-        if (!m_use_spat && m_mode != MAX_LIKELIHOOD_POS) {
-            const size_t tlen = target.size();
-            const size_t motif_len = m_pssm.size();
+        const size_t tlen = target.size();
+        const size_t motif_len = m_pssm.size();
 
-            if (tlen >= motif_len) {
-                // Calculate allowed start range
-                size_t i_min = std::max(0, m_pssm.get_min_range());
-                size_t i_max = std::min<size_t>(m_pssm.get_max_range(), tlen - motif_len);
+        if (tlen >= motif_len) {
+            // Calculate allowed start range
+            size_t i_min = std::max(0, m_pssm.get_min_range());
+            size_t i_max = std::min<size_t>(m_pssm.get_max_range(), tlen - motif_len);
 
-                // Ensure valid range
-                if (i_min > i_max) {
-                    i_min = 0;
+            // Ensure valid range
+            if (i_min > i_max) {
+                i_min = 0;
+            }
+
+            // Try spatial sliding window optimization
+            if (m_use_spat) {
+                size_t stride = 0;
+                if (can_use_spatial_sliding(interval, expanded_interval, i_min, i_max, motif_len, stride)) {
+                    if (stride == 0) {
+                        // Need to seed
+                        spat_seed(target, expanded_interval, i_min, i_max, motif_len);
+                    } else {
+                        // Can slide - loop stride times to handle stride>1
+                        for (size_t s = 0; s < stride; ++s) {
+                            spat_slide_once(target, expanded_interval, i_min, i_max, motif_len);
+                            if (!m_spat_slide.valid) {
+                                // Sliding failed, reseed
+                                spat_seed(target, expanded_interval, i_min, i_max, motif_len);
+                                break;
+                            }
+                        }
+                    }
+
+                    // Update cache state
+                    m_spat_slide.last_interval_start = interval.start;
+                    m_spat_slide.last_interval_end = interval.end;
+                    m_spat_slide.last_i_min = i_min;
+                    m_spat_slide.last_i_max = i_max;
+
+                    // Return answer based on mode
+                    switch (m_mode) {
+                        case TOTAL_LIKELIHOOD:   return spat_answer_TOTAL();
+                        case MAX_LIKELIHOOD:     return spat_answer_MAX();
+                        case MAX_LIKELIHOOD_POS: return spat_answer_MAXPOS(target, expanded_interval, motif_len, i_min);
+                        case MOTIF_COUNT:        return spat_answer_COUNT();
+                        default: break;
+                    }
                 }
 
+                // Fallback to standard spatial scoring
+                return score_with_spatial(target, motif_length);
+            }
+
+            // Non-spatial sliding window optimization (original code)
+            if (!m_use_spat && m_mode != MAX_LIKELIHOOD_POS) {
                 return score_with_sliding_window(target, interval, expanded_interval, i_min, i_max, motif_len);
             }
         }
@@ -779,6 +825,549 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
     } catch (TGLException &e) {
         return std::numeric_limits<float>::quiet_NaN();
     }
+}
+
+// ============================================================================
+// Spatial Sliding Window Implementation
+// ============================================================================
+
+// Ring buffer and bin helpers
+inline size_t PWMScorer::ring_idx_from_j(size_t j) const {
+    return (m_spat_slide.head + j) % m_spat_slide.W;
+}
+
+inline size_t PWMScorer::j_from_ring_idx(size_t ridx) const {
+    const size_t W = m_spat_slide.W;
+    return (ridx + W - m_spat_slide.head) % W;
+}
+
+// Map j to spatial bin index, clamped to last bin (bins-1)
+inline size_t PWMScorer::bin_of_j(size_t j) const {
+    size_t b = j / (size_t)m_spat_slide.B;
+    if (b >= m_spat_slide.bins) b = m_spat_slide.bins - 1;
+    return b;
+}
+
+// Compute motif(s) at target offset `i_in_target` (0-based in expanded interval)
+void PWMScorer::compute_motif_at(const std::string& target, size_t i_in_target,
+                                 float& fwd, float& rc, uint8_t& has_f, uint8_t& has_r) {
+    has_f = 0; has_r = 0;
+    fwd = -std::numeric_limits<float>::infinity();
+    rc = -std::numeric_limits<float>::infinity();
+
+    // Respect strand / bidirect rules
+    const bool check_fwd = (m_pssm.is_bidirect() || m_strand != -1);
+    const bool check_rc  = (m_pssm.is_bidirect() || m_strand != +1);
+
+    if (check_fwd) {
+        float v = 0.f;
+        auto it = target.begin() + i_in_target;
+        m_pssm.calc_like(it, v);
+        fwd = v; has_f = 1;
+    }
+    if (check_rc) {
+        float v = 0.f;
+        auto it = target.begin() + i_in_target;
+        m_pssm.calc_like_rc(it, v);
+        rc = v; has_r = 1;
+    }
+}
+
+// COUNT helper: is this motif score a hit in bin b?
+inline bool PWMScorer::is_hit(float m, size_t b) const {
+    if (!std::isfinite(m)) return false;
+    const float Lb = m_spat_log_factors[b];
+    return (m + Lb) >= m_score_thresh;
+}
+
+// TOTAL per-bin LSE maintenance
+void PWMScorer::bin_total_recompute(size_t b) {
+    SpatSlideCache& S = m_spat_slide;
+    const size_t j0 = b * (size_t)S.B;
+    const size_t j1 = (b == S.bins - 1) ? (S.W - 1) : (std::min(S.W, (b+1)*(size_t)S.B) - 1);
+
+    double a = -std::numeric_limits<double>::infinity();
+    // find joint anchor (max over all strands present in bin)
+    for (size_t j = j0; j <= j1; ++j) {
+        const size_t ridx = ring_idx_from_j(j);
+        if (S.has_fwd[ridx]) a = std::max(a, (double)S.motif_fwd[ridx]);
+        if (S.has_rc[ridx])  a = std::max(a, (double)S.motif_rc[ridx]);
+    }
+    if (!std::isfinite(a)) a = -std::numeric_limits<double>::infinity(); // empty bin
+
+    double sf = 0.0, sr = 0.0;
+    if (std::isfinite(a)) {
+        for (size_t j = j0; j <= j1; ++j) {
+            const size_t ridx = ring_idx_from_j(j);
+            if (S.has_fwd[ridx]) sf += std::exp((double)S.motif_fwd[ridx] - a);
+            if (S.has_rc[ridx])  sr += std::exp((double)S.motif_rc[ridx]  - a);
+        }
+    }
+    S.bin_anchor[b] = a;
+    S.bin_sum_fwd[b] = sf;
+    S.bin_sum_rc[b]  = sr;
+    S.bin_dirty[b] = 0;
+}
+
+// Add a single motif value to bin b; rebase if it becomes new anchor
+void PWMScorer::bin_total_add(size_t b, float m, bool is_rc) {
+    SpatSlideCache& S = m_spat_slide;
+    double& a  = S.bin_anchor[b];
+    double& sf = S.bin_sum_fwd[b];
+    double& sr = S.bin_sum_rc[b];
+    if (!std::isfinite(m)) return;
+
+    if (!std::isfinite(a)) {
+        a = m;
+        if (is_rc) sr = 1.0; else sf = 1.0;
+        return;
+    }
+
+    if ((double)m <= a) {
+        double e = std::exp((double)m - a);
+        if (is_rc) sr += e; else sf += e;
+    } else {
+        // new anchor -> rescale
+        double scale = std::exp(a - (double)m);
+        sf *= scale; sr *= scale; a = m;
+        if (is_rc) sr += 1.0; else sf += 1.0;
+    }
+}
+
+// Remove a single motif value from bin b
+void PWMScorer::bin_total_remove(size_t b, float m, bool is_rc) {
+    SpatSlideCache& S = m_spat_slide;
+    if (!std::isfinite(m)) return;
+    double& a  = S.bin_anchor[b];
+    double& sf = S.bin_sum_fwd[b];
+    double& sr = S.bin_sum_rc[b];
+
+    if (!std::isfinite(a)) return;
+
+    const double e = std::exp((double)m - a);
+    if (is_rc) { sr -= e; if (sr < 0) sr = 0; }
+    else       { sf -= e; if (sf < 0) sf = 0; }
+
+    // If we removed (one of) the anchor elements, sums may get tiny/inaccurate — mark dirty.
+    if (e > 0.5 || sf + sr < 1e-12) S.bin_dirty[b] = 1;
+}
+
+// MAX / MAX_POS per-bin maintenance
+void PWMScorer::bin_max_maybe_recompute(size_t b) {
+    SpatSlideCache& S = m_spat_slide;
+    const size_t j0 = b * (size_t)S.B;
+    const size_t j1 = (b == S.bins - 1) ? (S.W - 1) : (std::min(S.W, (b+1)*(size_t)S.B) - 1);
+
+    float best = -std::numeric_limits<float>::infinity();
+    int best_idx = -1;
+    int best_dir = +1;
+
+    // For MAX_LIKELIHOOD with bidirectional, use LSE of strands (matching legacy behavior)
+    // For MAX_LIKELIHOOD_POS, pick the best single strand to track direction
+    const bool use_lse = (m_mode == MAX_LIKELIHOOD && m_pssm.is_bidirect());
+
+    for (size_t j = j0; j <= j1; ++j) {
+        const size_t ridx = ring_idx_from_j(j);
+
+        if (use_lse && S.has_fwd[ridx] && S.has_rc[ridx]) {
+            // Combine forward and reverse using log-sum-exp
+            float combined = S.motif_fwd[ridx];
+            log_sum_log(combined, S.motif_rc[ridx]);
+            if (combined > best) {
+                best = combined;
+                best_idx = (int)ridx;
+                best_dir = +1;  // Direction doesn't matter for MAX_LIKELIHOOD
+            }
+        } else {
+            // MAX_POS or single strand: pick the best strand
+            if (S.has_fwd[ridx] && S.motif_fwd[ridx] > best) {
+                best = S.motif_fwd[ridx];
+                best_idx = (int)ridx;
+                best_dir = +1;
+            }
+            if (S.has_rc[ridx] && S.motif_rc[ridx] > best) {
+                best = S.motif_rc[ridx];
+                best_idx = (int)ridx;
+                best_dir = -1;
+            }
+        }
+    }
+    S.bin_max[b] = { best, best_idx, best_dir };
+}
+
+void PWMScorer::bin_max_consider(size_t b, float m, int ridx, int dir) {
+    SpatSlideCache& S = m_spat_slide;
+    if (m > S.bin_max[b].val) {
+        S.bin_max[b] = { m, ridx, dir };
+    }
+}
+
+// Initialize the spatial sliding cache
+void PWMScorer::spat_seed(const std::string& target, const GInterval& expd,
+                          size_t i_min, size_t i_max, size_t motif_len) {
+    SpatSlideCache& S = m_spat_slide;
+    S.valid = false;
+    S.head = 0;
+
+    S.W = i_max - i_min + 1;
+    S.B = m_spat_bin_size;
+    const size_t spat_len = m_spat_log_factors.size();
+    S.bins = std::min((size_t)std::ceil((double)S.W / (double)S.B), spat_len);
+
+    // Allocate contiguous buffers
+    S.motif_fwd.assign(S.W, -std::numeric_limits<float>::infinity());
+    S.motif_rc.assign(S.W, -std::numeric_limits<float>::infinity());
+    S.has_fwd.assign(S.W, 0);
+    S.has_rc.assign(S.W, 0);
+
+    S.bin_anchor.assign(S.bins, -std::numeric_limits<double>::infinity());
+    S.bin_sum_fwd.assign(S.bins, 0.0);
+    S.bin_sum_rc.assign(S.bins, 0.0);
+    S.bin_dirty.assign(S.bins, 0);
+
+    S.bin_max.assign(S.bins, SpatSlideCache::BinMax{});
+    S.bin_hits_fwd.assign(S.bins, 0);
+    S.bin_hits_rc.assign(S.bins, 0);
+
+    // Fill motifs at j=0..W-1
+    for (size_t j = 0; j < S.W; ++j) {
+        const size_t i = i_min + j; // offset inside target/expanded
+        if (i + motif_len > target.size()) {
+            break; // Safety check
+        }
+        float fwd, rc;
+        uint8_t hf, hr;
+        compute_motif_at(target, i, fwd, rc, hf, hr);
+        S.motif_fwd[j] = fwd;
+        S.motif_rc[j] = rc;
+        S.has_fwd[j] = hf;
+        S.has_rc[j] = hr;
+    }
+
+    // Build per-bin aggregates
+    for (size_t b = 0; b < S.bins; ++b) {
+        bin_total_recompute(b);      // sets anchor/sums from the current j-range in bin b
+        bin_max_maybe_recompute(b);  // sets max/idx/dir for bin b
+
+        // COUNT: compute initial counts
+        int cf = 0, cr = 0;
+        const size_t j_start = b * (size_t)S.B;
+        const size_t j_end   = std::min(S.W, (b+1)*(size_t)S.B);
+        const float Lb = m_spat_log_factors[std::min(b, S.bins-1)];
+        for (size_t j = j_start; j < j_end; ++j) {
+            if (S.has_fwd[j] && (S.motif_fwd[j] + Lb) >= m_score_thresh) ++cf;
+            if (S.has_rc[j]  && (S.motif_rc[j]  + Lb) >= m_score_thresh) ++cr;
+        }
+        S.bin_hits_fwd[b] = cf;
+        S.bin_hits_rc[b] = cr;
+    }
+
+    S.strand_mode = m_strand;
+    S.chromid = expd.chromid;
+    S.valid = true;
+}
+
+// Slide the spatial window by one position
+void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd,
+                                size_t i_min, size_t i_max, size_t motif_len) {
+    SpatSlideCache& S = m_spat_slide;
+    const size_t W = S.W;
+    const int B = S.B;
+
+    // Strand-specific sliding direction:
+    // Plus strand: target is forward, sliding forward means j=0 goes out, j=W-1 comes in
+    // Minus strand: target is RC'd, sliding forward means j=W-1 goes out, j=0 comes in
+    const bool is_minus = (m_strand == -1);
+
+    // 1) OUTGOING position
+    const size_t j_out = is_minus ? (W - 1) : 0;
+    {
+        const size_t ridx_out = ring_idx_from_j(j_out);
+        const size_t b_out = bin_of_j(j_out);
+
+        // TOTAL remove
+        if (S.has_fwd[ridx_out]) bin_total_remove(b_out, S.motif_fwd[ridx_out], false);
+        if (S.has_rc[ridx_out])  bin_total_remove(b_out, S.motif_rc[ridx_out],  true);
+
+        // MAX remove if outgoing was argmax (needs re-scan)
+        if (S.bin_max[b_out].idx == (int)ridx_out) {
+            bin_max_maybe_recompute(b_out);
+        }
+
+        // COUNT decrement hits if any (use L_b)
+        const float Lb = m_spat_log_factors[b_out];
+        if (S.has_fwd[ridx_out] && (S.motif_fwd[ridx_out] + Lb) >= m_score_thresh) {
+            S.bin_hits_fwd[b_out]--;
+        }
+        if (S.has_rc[ridx_out] && (S.motif_rc[ridx_out] + Lb) >= m_score_thresh) {
+            S.bin_hits_rc[b_out]--;
+        }
+    }
+
+    // 2) BOUNDARY MOVERS
+    // Plus strand: When j→j-1 (sliding forward), boundaries at j=B, 2B, 3B, ... cross to adjacent bin
+    // Minus strand: When j→j+1 (sliding forward with RC), boundaries at j=B-1, 2B-1, ... cross to adjacent bin
+    // Restrict to respect clamping
+    const size_t max_mover_j = std::min(W, S.bins * (size_t)B);
+
+    // Collect boundary positions that will cross bins after head advance
+    std::vector<size_t> boundary_j_vals;
+    if (is_minus) {
+        // For minus strand, check j=B-1, 2B-1, 3B-1, ... (they become j=B, 2B, 3B after head decrement)
+        for (size_t j_old = (size_t)B - 1; j_old < max_mover_j && j_old < W; j_old += (size_t)B) {
+            boundary_j_vals.push_back(j_old);
+        }
+    } else {
+        // For plus strand, check j=B, 2B, 3B, ... (they become j=B-1, 2B-1, 3B-1 after head increment)
+        for (size_t j_old = (size_t)B; j_old < max_mover_j; j_old += (size_t)B) {
+            boundary_j_vals.push_back(j_old);
+        }
+    }
+
+    for (size_t j_old : boundary_j_vals) {
+        const size_t ridx = ring_idx_from_j(j_old);
+        const size_t b_old = bin_of_j(j_old);
+        const size_t j_new = is_minus ? ((j_old + 1) % W) : ((j_old + W - 1) % W);
+        const size_t b_new = bin_of_j(j_new);
+
+        if (b_new == b_old) continue; // no bin change
+
+        // move TOTAL contributions: old bin -> new bin
+        if (S.has_fwd[ridx]) {
+            bin_total_remove(b_old, S.motif_fwd[ridx], false);
+            bin_total_add(b_new,  S.motif_fwd[ridx], false);
+        }
+        if (S.has_rc[ridx]) {
+            bin_total_remove(b_old, S.motif_rc[ridx],  true);
+            bin_total_add(b_new,  S.motif_rc[ridx],  true);
+        }
+
+        // move MAX participation
+        if (S.bin_max[b_old].idx == (int)ridx) {
+            bin_max_maybe_recompute(b_old);
+        }
+
+        // consider as candidate in new bin (motif-only)
+        // For MAX_LIKELIHOOD with bidirectional, use LSE; for MAX_POS, consider each strand
+        const bool use_lse = (m_mode == MAX_LIKELIHOOD && m_pssm.is_bidirect());
+        if (use_lse && S.has_fwd[ridx] && S.has_rc[ridx]) {
+            float combined = S.motif_fwd[ridx];
+            log_sum_log(combined, S.motif_rc[ridx]);
+            bin_max_consider(b_new, combined, (int)ridx, +1);
+        } else {
+            if (S.has_fwd[ridx]) bin_max_consider(b_new, S.motif_fwd[ridx], (int)ridx, +1);
+            if (S.has_rc[ridx])  bin_max_consider(b_new, S.motif_rc[ridx],  (int)ridx, -1);
+        }
+
+        // COUNT: re-evaluate hit against new bin threshold
+        const float L_old = m_spat_log_factors[b_old];
+        const float L_new = m_spat_log_factors[b_new];
+        if (S.has_fwd[ridx]) {
+            const bool was = (S.motif_fwd[ridx] + L_old) >= m_score_thresh;
+            const bool now = (S.motif_fwd[ridx] + L_new) >= m_score_thresh;
+            if (was && !now) S.bin_hits_fwd[b_old]--;
+            else if (!was && now) S.bin_hits_fwd[b_new]++;
+            else if (was && now) { S.bin_hits_fwd[b_old]--; S.bin_hits_fwd[b_new]++; }
+        }
+        if (S.has_rc[ridx]) {
+            const bool was = (S.motif_rc[ridx] + L_old) >= m_score_thresh;
+            const bool now = (S.motif_rc[ridx] + L_new) >= m_score_thresh;
+            if (was && !now) S.bin_hits_rc[b_old]--;
+            else if (!was && now) S.bin_hits_rc[b_new]++;
+            else if (was && now) { S.bin_hits_rc[b_old]--; S.bin_hits_rc[b_new]++; }
+        }
+    }
+
+    // 3) ADVANCE HEAD (j relabel)
+    // Plus strand: j→j-1 means head advances forward (increment)
+    // Minus strand: j→j+1 means head advances backward (decrement) due to RC reversal
+    if (is_minus) {
+        S.head = (S.head + W - 1) % W;  // decrement
+    } else {
+        S.head = (S.head + 1) % W;       // increment
+    }
+
+    // 4) INCOMING position
+    const size_t j_in = is_minus ? 0 : (W - 1);
+    {
+        const size_t ridx_in = ring_idx_from_j(j_in);
+        const size_t i_in_target = i_min + j_in; // new sequence offset
+        if (i_in_target + motif_len > target.size()) {
+            // Safety: mark invalid if we're out of bounds
+            S.valid = false;
+            return;
+        }
+
+        float fwd, rc;
+        uint8_t hf, hr;
+        compute_motif_at(target, i_in_target, fwd, rc, hf, hr);
+
+        S.motif_fwd[ridx_in] = fwd;
+        S.has_fwd[ridx_in] = hf;
+        S.motif_rc[ridx_in]  = rc;
+        S.has_rc[ridx_in]  = hr;
+
+        const size_t b_in = bin_of_j(j_in);
+
+        // TOTAL add
+        if (hf) bin_total_add(b_in, fwd, false);
+        if (hr) bin_total_add(b_in, rc,  true);
+
+        // MAX consider
+        // For MAX_LIKELIHOOD with bidirectional, use LSE; for MAX_POS, consider each strand
+        const bool use_lse = (m_mode == MAX_LIKELIHOOD && m_pssm.is_bidirect());
+        if (use_lse && hf && hr) {
+            float combined = fwd;
+            log_sum_log(combined, rc);
+            bin_max_consider(b_in, combined, (int)ridx_in, +1);
+        } else {
+            if (hf) bin_max_consider(b_in, fwd, (int)ridx_in, +1);
+            if (hr) bin_max_consider(b_in, rc,  (int)ridx_in, -1);
+        }
+
+        // COUNT add
+        const float Lb = m_spat_log_factors[b_in];
+        if (hf && (fwd + Lb) >= m_score_thresh) S.bin_hits_fwd[b_in]++;
+        if (hr && (rc  + Lb) >= m_score_thresh) S.bin_hits_rc[b_in]++;
+    }
+}
+
+// Answer functions
+float PWMScorer::spat_answer_TOTAL() {
+    SpatSlideCache& S = m_spat_slide;
+
+    // Recompute dirty bins (rare)
+    for (size_t b = 0; b < S.bins; ++b) {
+        if (S.bin_dirty[b]) bin_total_recompute(b);
+    }
+
+    // A = max_b (a_b + L_b)
+    double A = -std::numeric_limits<double>::infinity();
+    for (size_t b = 0; b < S.bins; ++b) {
+        const double Lb = (double)m_spat_log_factors[b];
+        A = std::max(A, S.bin_anchor[b] + Lb);
+    }
+    if (!std::isfinite(A)) return -std::numeric_limits<float>::infinity();
+
+    // sum_b exp(a_b + L_b - A) * (s_f + s_r)
+    double Ssum = 0.0;
+    for (size_t b = 0; b < S.bins; ++b) {
+        const double Lb = (double)m_spat_log_factors[b];
+        const double w  = std::exp( (S.bin_anchor[b] + Lb) - A );
+        Ssum += w * (S.bin_sum_fwd[b] + S.bin_sum_rc[b]);
+    }
+    if (Ssum <= 0.0) return (float)A; // degenerate
+    return (float)(A + std::log(Ssum));
+}
+
+float PWMScorer::spat_answer_MAX() {
+    SpatSlideCache& S = m_spat_slide;
+    float best = -std::numeric_limits<float>::infinity();
+    for (size_t b = 0; b < S.bins; ++b) {
+        const float cand = S.bin_max[b].val + m_spat_log_factors[b];
+        if (cand > best) best = cand;
+    }
+    return best;
+}
+
+float PWMScorer::spat_answer_MAXPOS(const std::string& target,
+                                    const GInterval& expd, size_t motif_len, size_t i_min) {
+    SpatSlideCache& S = m_spat_slide;
+
+    // Find best bin then best overall (include spatial log)
+    float best_val = -std::numeric_limits<float>::infinity();
+    int best_idx = -1;
+    int best_dir = +1;
+    for (size_t b = 0; b < S.bins; ++b) {
+        const float cand = S.bin_max[b].val + m_spat_log_factors[b];
+        if (cand > best_val) {
+            best_val = cand;
+            best_idx = S.bin_max[b].idx;
+            best_dir = S.bin_max[b].dir;
+        }
+    }
+    if (best_idx < 0) return std::numeric_limits<float>::quiet_NaN();
+
+    // Convert ring index to relative j, then to absolute target index
+    const size_t j = j_from_ring_idx((size_t)best_idx);
+    const size_t target_idx = i_min + j;
+
+    // Use existing position computation
+    return compute_position_result(target_idx, target.length(), motif_len, best_dir);
+}
+
+float PWMScorer::spat_answer_COUNT() const {
+    const SpatSlideCache& S = m_spat_slide;
+    int total = 0;
+    for (size_t b = 0; b < S.bins; ++b) {
+        total += (S.bin_hits_fwd[b] + S.bin_hits_rc[b]);
+    }
+    return (float)total;
+}
+
+// Check if we can use spatial sliding window optimization
+bool PWMScorer::can_use_spatial_sliding(const GInterval& orig, const GInterval& expd,
+                                        size_t i_min, size_t i_max, size_t motif_len,
+                                        size_t& stride) const {
+    // Must have spatial enabled
+    if (!m_use_spat) return false;
+
+    // Mode must be supported
+    if (m_mode != TOTAL_LIKELIHOOD && m_mode != MAX_LIKELIHOOD &&
+        m_mode != MAX_LIKELIHOOD_POS && m_mode != MOTIF_COUNT) {
+        return false;
+    }
+
+    // Check for environment variable to disable
+    const char* disable_env = std::getenv("MISHA_DISABLE_SPATIAL_SLIDING");
+    if (disable_env && std::string(disable_env) == "1") {
+        return false;
+    }
+
+    // Minus strand now supported with reverse sliding direction
+    // (no restriction needed)
+
+    // MAX modes now correctly use LSE for bidirectional motifs
+    // (no restriction needed)
+
+    const size_t W = i_max - i_min + 1;
+    if (W == 0) return false;
+
+    // If not valid, we can't slide (but we can seed)
+    if (!m_spat_slide.valid) {
+        stride = 0;
+        return true; // we'll seed
+    }
+
+    // Check geometry consistency
+    if (m_spat_slide.chromid != orig.chromid) return false;
+    if (m_spat_slide.strand_mode != m_strand) return false;
+    if (m_spat_slide.W != W) return false;
+
+    // Calculate stride from original interval movement
+    int64_t step_start = orig.start - m_spat_slide.last_interval_start;
+    int64_t step_end = orig.end - m_spat_slide.last_interval_end;
+
+    // Must be consistent forward movement
+    if (step_start != step_end || step_start <= 0) return false;
+
+    stride = static_cast<size_t>(step_start);
+
+    // Stride must be reasonable (not larger than window)
+    if (stride > W) return false;
+
+    // Limit maximum stride to avoid excessive looping.
+    // This is a heuristic: for very large strides (e.g., >100bp), the cost of
+    // looping `spat_slide_once` `stride` times can exceed the cost of a full re-seed.
+    // Falling back to reseeding is safer and often faster in such cases.
+    if (stride > 100) return false;
+
+    // Check i_min, i_max consistency
+    if (i_min != m_spat_slide.last_i_min || i_max != m_spat_slide.last_i_max) {
+        return false;
+    }
+
+    return true;
 }
 
 DnaPSSM PWMScorer::create_pssm_from_matrix(SEXP matrix)
