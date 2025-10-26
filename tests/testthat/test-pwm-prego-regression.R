@@ -997,3 +997,261 @@ test_that("misha PWM with spat_min/spat_max exactly matches prego gextract_pwm_o
         info = "Misha PWM with spat_min/spat_max (no spatial) should match prego"
     )
 })
+
+test_that("misha PWM with sliding optimization matches prego - no spatial", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test PSSM
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+    motif_len <- nrow(pssm_mat)
+
+    # Use a larger region to trigger sliding optimization
+    # Query 5kb region with iterator=1 (stride-1 overlapping windows)
+    query_region <- gintervals(1, 10000, 15000)
+
+    # Create misha vtrack
+    gvtrack.create(
+        "pwm_sliding", NULL, "pwm",
+        list(
+            pssm = pssm_mat,
+            bidirect = TRUE,
+            extend = TRUE,
+            prior = 0.01
+        )
+    )
+    gvtrack.iterator("pwm_sliding", sshift = 0, eshift = 0)
+
+    # Extract with sliding (iterator=1 means stride-1)
+    misha_result <- gextract("pwm_sliding", query_region, iterator = 1)
+
+    # For prego comparison, compute scores for each position
+    # Each position needs an extended sequence
+    prego_scores <- numeric(nrow(misha_result))
+    for (i in seq_len(nrow(misha_result))) {
+        interval <- gintervals(
+            misha_result$chrom[i],
+            misha_result$start[i],
+            misha_result$end[i] + (motif_len - 1) # extend=TRUE adds motif_len-1
+        )
+        seq <- gseq.extract(interval)
+        prego_scores[i] <- prego::compute_pwm(
+            sequences = seq,
+            pssm = test_pssm,
+            spat = NULL,
+            bidirect = TRUE,
+            prior = 0.01,
+            func = "logSumExp"
+        )
+    }
+
+    # Compare sliding results with prego
+    expect_equal(misha_result$pwm_sliding, prego_scores, tolerance = 1e-6)
+    # expect_regression(misha_result, "pwm_sliding_no_spatial")
+})
+
+test_that("misha PWM with sliding optimization matches prego - with spatial", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test PSSM
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+    motif_len <- nrow(pssm_mat)
+
+    # Create spatial model: 280bp coverage
+    spat_df <- data.frame(
+        bin = seq(0, 240, by = 40),
+        spat_factor = c(0.5, 1.0, 2.0, 2.5, 2.0, 1.0, 0.5)
+    )
+
+    # Query region: 1kb with sliding window
+    # Each position will be scored within a 280bp context
+    query_region <- gintervals(1, 10000, 11000)
+
+    # Create misha vtrack with spatial
+    gvtrack.create(
+        "pwm_sliding_spatial", NULL, "pwm",
+        list(
+            pssm = pssm_mat,
+            bidirect = TRUE,
+            extend = TRUE,
+            prior = 0.01,
+            spat_factor = spat_df$spat_factor,
+            spat_bin = 40L
+        )
+    )
+    gvtrack.iterator("pwm_sliding_spatial", sshift = 0, eshift = 279) # 280bp window
+
+    # Extract with sliding (iterator=1)
+    misha_result <- gextract("pwm_sliding_spatial", query_region, iterator = 1)
+
+    # For prego comparison - compute scores for each position
+    prego_scores <- numeric(nrow(misha_result))
+    for (i in seq_len(nrow(misha_result))) {
+        # Get the extended interval (with motif extension)
+        interval <- gintervals(
+            misha_result$chrom[i],
+            misha_result$start[i],
+            misha_result$end[i] + 279 + (motif_len - 1) # eshift + extend
+        )
+        seq <- gseq.extract(interval)
+        prego_scores[i] <- prego::compute_pwm(
+            sequences = seq,
+            pssm = test_pssm,
+            spat = spat_df,
+            bidirect = TRUE,
+            prior = 0.01,
+            func = "logSumExp"
+        )
+    }
+
+    # Compare sliding results with prego
+    expect_equal(misha_result$pwm_sliding_spatial, prego_scores, tolerance = 1e-5)
+    # expect_regression(misha_result, "pwm_sliding_with_spatial")
+})
+
+test_that("misha PWM.max with sliding optimization matches prego", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test PSSM
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+    motif_len <- nrow(pssm_mat)
+
+    # Use smaller region for max mode (slower to compute in prego)
+    query_region <- gintervals(1, 10000, 11000)
+
+    # Create misha vtrack
+    gvtrack.create(
+        "pwm_max_sliding", NULL, "pwm.max",
+        list(
+            pssm = pssm_mat,
+            bidirect = TRUE,
+            extend = TRUE,
+            prior = 0.01
+        )
+    )
+    gvtrack.iterator("pwm_max_sliding", sshift = 0, eshift = 0)
+
+    # Extract with sliding
+    misha_result <- gextract("pwm_max_sliding", query_region, iterator = 1)
+
+    # For prego comparison - compute max scores for each position
+    prego_scores <- numeric(nrow(misha_result))
+    for (i in seq_len(nrow(misha_result))) {
+        interval <- gintervals(
+            misha_result$chrom[i],
+            misha_result$start[i],
+            misha_result$end[i] + (motif_len - 1)
+        )
+        seq <- gseq.extract(interval)
+        prego_scores[i] <- prego::compute_pwm(
+            sequences = seq,
+            pssm = test_pssm,
+            spat = NULL,
+            bidirect = TRUE,
+            prior = 0.01,
+            func = "max"
+        )
+    }
+
+    # Compare
+    expect_equal(misha_result$pwm_max_sliding, prego_scores, tolerance = 1e-6)
+    # expect_regression(misha_result, "pwm_max_sliding")
+})
+
+test_that("misha PWM with sliding optimization matches prego - minus strand with spatial", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test PSSM
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+    motif_len <- nrow(pssm_mat)
+
+    # Create spatial model
+    spat_df <- data.frame(
+        bin = seq(0, 240, by = 40),
+        spat_factor = c(0.5, 1.0, 2.0, 2.5, 2.0, 1.0, 0.5)
+    )
+
+    # Query region with sliding window
+    query_region <- gintervals(1, 10000, 11000)
+
+    # Create misha vtrack for minus strand with spatial
+    gvtrack.create(
+        "pwm_minus_sliding_spatial", NULL, "pwm",
+        list(
+            pssm = pssm_mat,
+            bidirect = FALSE,
+            strand = -1,
+            extend = TRUE,
+            prior = 0.01,
+            spat_factor = spat_df$spat_factor,
+            spat_bin = 40L
+        )
+    )
+    gvtrack.iterator("pwm_minus_sliding_spatial", sshift = 0, eshift = 279)
+
+    # Extract with sliding
+    misha_result <- gextract("pwm_minus_sliding_spatial", query_region, iterator = 1)
+
+    # For prego comparison - need reverse complement
+    prego_scores <- numeric(nrow(misha_result))
+    for (i in seq_len(nrow(misha_result))) {
+        # Get the extended interval (with motif extension)
+        # Follow the same pattern as the working test
+        interval <- gintervals(
+            misha_result$chrom[i],
+            misha_result$start[i],
+            misha_result$end[i] + 279 + (motif_len - 1) # eshift + extend
+        )
+        seq_rc <- gseq.extract(interval)
+        prego_scores[i] <- prego::compute_pwm(
+            sequences = seq_rc,
+            pssm = test_pssm,
+            spat = spat_df,
+            bidirect = FALSE,
+            prior = 0.01,
+            func = "logSumExp"
+        )
+    }
+
+    expect_equal(misha_result$pwm_minus_sliding_spatial, prego_scores, tolerance = 1e-6)
+    # expect_regression(misha_result, "pwm_minus_sliding_spatial")
+})

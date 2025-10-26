@@ -225,7 +225,6 @@ test_that("pwm.count bidirectional equals per-position union (LSE) of strands", 
         pssm = pssm, bidirect = TRUE, extend = TRUE,
         prior = 0.01, score.thresh = -10
     )
-
     pwm_result <- gextract(c("pwm_plus", "pwm_minus", "pwm_bidi"), test_interval, iterator = 1)
     n_pwm_plus <- sum(pwm_result$pwm_plus > -10)
     n_pwm_minus <- sum(pwm_result$pwm_minus > -10)

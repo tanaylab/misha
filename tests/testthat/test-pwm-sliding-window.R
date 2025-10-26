@@ -937,7 +937,7 @@ test_that("pwm (TOTAL_LIKELIHOOD): plus-strand sliding equals spatial (no-slidin
     expect_equal(res$pwm_plus_slide, res$pwm_plus_spatial_ref, tolerance = 1e-6)
 })
 
-test_that("pwm (TOTAL_LIKELIHOOD): minus-strand sliding equals spatial (no-sliding) baseline", {
+test_that("pwm (TOTAL_LIKELIHOOD): minus-strand spatial sliding equals spatial (no-sliding) baseline", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -949,18 +949,21 @@ test_that("pwm (TOTAL_LIKELIHOOD): minus-strand sliding equals spatial (no-slidi
     ends <- starts + 60L
     ivs <- gintervals(rep(1L, n), starts, ends)
 
-    # Non-spatial -> sliding path is enabled
+    # Spatial with weights=1 -> spatial sliding path enabled
     gvtrack.create("pwm_minus_slide", NULL, "pwm",
-        pssm = pssm, bidirect = FALSE, strand = -1,
-        extend = TRUE, prior = 0.01, score.thresh = -10
-    )
-
-    # Spatial with weights=1 -> no sliding path, but numerically identical
-    gvtrack.create("pwm_minus_spatial_ref", NULL, "pwm",
         pssm = pssm, bidirect = FALSE, strand = -1,
         extend = TRUE, prior = 0.01, score.thresh = -10,
         spat_factor = rep(1.0, 5), spat_bin = 20L
     )
+
+    # Spatial with weights=1, sliding disabled -> baseline
+    withr::with_envvar(c(MISHA_DISABLE_SPATIAL_SLIDING = "1"), {
+        gvtrack.create("pwm_minus_spatial_ref", NULL, "pwm",
+            pssm = pssm, bidirect = FALSE, strand = -1,
+            extend = TRUE, prior = 0.01, score.thresh = -10,
+            spat_factor = rep(1.0, 5), spat_bin = 20L
+        )
+    })
 
     res <- gextract(c("pwm_minus_slide", "pwm_minus_spatial_ref"),
         ivs,
@@ -968,6 +971,72 @@ test_that("pwm (TOTAL_LIKELIHOOD): minus-strand sliding equals spatial (no-slidi
     )
 
     expect_equal(res$pwm_minus_slide, res$pwm_minus_spatial_ref, tolerance = 1e-6)
+})
+
+test_that("pwm (TOTAL_LIKELIHOOD): minus-strand non-spatial sliding matches manual baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+    motif_len <- nrow(pssm)
+
+    # Overlapping minus-strand intervals that advance by 1bp to force sliding
+    n <- 40
+    starts <- 3000 + 0:(n - 1)
+    ends <- starts + 60L
+    ivs <- gintervals(rep(1L, n), starts, ends)
+
+    gvtrack.create("pwm_minus_slide_manual", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01
+    )
+
+    slide_res <- gextract("pwm_minus_slide_manual",
+        ivs,
+        iterator = ivs
+    )
+
+    manual_totals <- vapply(seq_len(nrow(ivs)), function(idx) {
+        ext_iv <- ivs[idx, , drop = FALSE]
+        ext_iv$start <- pmax(0L, ext_iv$start - motif_len + 1L)
+        ext_iv$strand <- -1L
+        seq_rev_ext <- toupper(gseq.extract(ext_iv))
+        log_sum_exp(manual_pwm_scores_single_strand(seq_rev_ext, pssm, prior = 0.01))
+    }, numeric(1))
+
+    expect_equal(slide_res$pwm_minus_slide_manual, manual_totals, tolerance = 1e-6)
+})
+
+test_that("pwm spatial sliding with stride>1 reuses each incoming position exactly once", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    params <- list(
+        pssm = pssm,
+        bidirect = FALSE,
+        strand = 1,
+        extend = TRUE,
+        prior = 0.01,
+        spat_factor = c(0.2, 1.0, 3.0, 1.0, 0.5),
+        spat_bin = 20L
+    )
+
+    gvtrack.create("pwm_spat_stride_slide", NULL, "pwm", params)
+
+    withr::with_envvar(c(MISHA_DISABLE_SPATIAL_SLIDING = "1"), {
+        gvtrack.create("pwm_spat_stride_ref", NULL, "pwm", params)
+    })
+
+    interval <- gintervals(1, 12000, 12250)
+
+    res <- gextract(c("pwm_spat_stride_slide", "pwm_spat_stride_ref"),
+        interval,
+        iterator = 5
+    )
+
+    expect_equal(res$pwm_spat_stride_slide, res$pwm_spat_stride_ref, tolerance = 1e-6)
 })
 
 test_that("pwm.max (MAX_LIKELIHOOD): plus-strand sliding equals spatial (no-sliding) baseline", {
@@ -1121,4 +1190,72 @@ test_that("bidirect ignores strand parameter under sliding (union semantics)", {
     )
 
     expect_equal(out$count_bidi_s1_slide, out$count_bidi_sneg1_slide, tolerance = 1e-8)
+})
+
+test_that("misha PWM with sliding without spatial matches prego reference", {
+    skip_if_not_installed("prego")
+
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create test PSSM
+    test_pssm <- data.frame(
+        pos = 1:4,
+        A = c(0.7, 0.1, 0.1, 0.1),
+        C = c(0.1, 0.7, 0.1, 0.1),
+        G = c(0.1, 0.1, 0.7, 0.1),
+        T = c(0.1, 0.1, 0.1, 0.7)
+    )
+    pssm_mat <- as.matrix(test_pssm[, c("A", "C", "G", "T")])
+    motif_len <- nrow(pssm_mat)
+
+    # Create overlapping intervals to trigger sliding window optimization
+    # Each interval is 100bp, overlapping by 99bp (stride=1)
+    n_intervals <- 50
+    starts <- 10000 + 0:(n_intervals - 1)
+    ends <- starts + 100
+    test_intervals <- gintervals(rep(1L, n_intervals), starts, ends)
+
+    # Create misha vtrack without spatial parameters (triggers sliding optimization)
+    gvtrack.create(
+        "pwm_sliding_no_spatial", NULL, "pwm",
+        list(
+            pssm = pssm_mat,
+            bidirect = TRUE,
+            extend = TRUE,
+            prior = 0.01
+        )
+    )
+
+    # Extract with sliding (iterator=1 means stride-1 overlapping windows)
+    misha_result <- gextract("pwm_sliding_no_spatial", test_intervals, iterator = 1)
+
+    # For prego comparison, compute scores for each position
+    # Each position needs an extended sequence (extend=TRUE adds motif_len-1)
+    prego_scores <- numeric(nrow(misha_result))
+    for (i in seq_len(nrow(misha_result))) {
+        interval <- gintervals(
+            misha_result$chrom[i],
+            misha_result$start[i],
+            misha_result$end[i] + (motif_len - 1) # extend=TRUE adds motif_len-1
+        )
+        seq <- gseq.extract(interval)
+        prego_scores[i] <- prego::compute_pwm(
+            sequences = seq,
+            pssm = test_pssm,
+            spat = NULL,  # No spatial weighting
+            bidirect = TRUE,
+            prior = 0.01,
+            func = "logSumExp"
+        )
+    }
+
+    # Compare sliding results with prego reference
+    expect_equal(misha_result$pwm_sliding_no_spatial, prego_scores, tolerance = 1e-6)
+    
+    # Verify we got the expected number of results
+    expect_true(nrow(misha_result) > 0)
+    expect_false(any(is.na(misha_result$pwm_sliding_no_spatial)))
+    expect_true(all(is.finite(misha_result$pwm_sliding_no_spatial)))
+    
 })
