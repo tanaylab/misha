@@ -1243,7 +1243,7 @@ test_that("misha PWM with sliding without spatial matches prego reference", {
         prego_scores[i] <- prego::compute_pwm(
             sequences = seq,
             pssm = test_pssm,
-            spat = NULL,  # No spatial weighting
+            spat = NULL, # No spatial weighting
             bidirect = TRUE,
             prior = 0.01,
             func = "logSumExp"
@@ -1252,10 +1252,9 @@ test_that("misha PWM with sliding without spatial matches prego reference", {
 
     # Compare sliding results with prego reference
     expect_equal(misha_result$pwm_sliding_no_spatial, prego_scores, tolerance = 1e-6)
-    
+
     # Verify we got the expected number of results
     expect_true(nrow(misha_result) > 0)
     expect_false(any(is.na(misha_result$pwm_sliding_no_spatial)))
     expect_true(all(is.finite(misha_result$pwm_sliding_no_spatial)))
-    
 })
