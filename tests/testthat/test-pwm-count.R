@@ -234,10 +234,10 @@ test_that("pwm.count bidirectional equals per-position union (LSE) of strands", 
 
     result <- gextract(c("count_plus", "count_minus", "count_bidi"), test_interval, iterator = test_interval)
 
-    expect_equal(result$count_plus[1],  n_pwm_plus)
+    expect_equal(result$count_plus[1], n_pwm_plus)
     expect_equal(result$count_minus[1], n_pwm_minus)
     # New union semantics: bidi count equals number of positions passing LSE-combined pwm
-    expect_equal(result$count_bidi[1],  n_pwm_bidi)
+    expect_equal(result$count_bidi[1], n_pwm_bidi)
 })
 
 test_that("pwm.count: bidi equals union (LSE) and matches pwm thresholding", {
@@ -290,10 +290,10 @@ test_that("pwm.count: bidi equals union (LSE) and matches pwm thresholding", {
     )
 
     # Strand-specific counts still match strand-specific PWM thresholding
-    expect_equal(result$count_plus[1],  n_pwm_plus,  ignore_attr = TRUE)
+    expect_equal(result$count_plus[1], n_pwm_plus, ignore_attr = TRUE)
     expect_equal(result$count_minus[1], n_pwm_minus, ignore_attr = TRUE)
     # New union semantics: bidi equals LSE-combined pwm thresholding per position
-    expect_equal(result$count_bidi[1],  n_pwm_bidi,  ignore_attr = TRUE)
+    expect_equal(result$count_bidi[1], n_pwm_bidi, ignore_attr = TRUE)
 })
 
 
