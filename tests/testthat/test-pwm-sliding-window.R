@@ -966,7 +966,7 @@ test_that("pwm (TOTAL_LIKELIHOOD): minus-strand sliding equals spatial (no-slidi
         ivs,
         iterator = ivs
     )
-    
+
     expect_equal(res$pwm_minus_slide, res$pwm_minus_spatial_ref, tolerance = 1e-6)
 })
 
