@@ -135,18 +135,20 @@ Optional spatial weighting allows position-dependent weights.
 bidirect = TRUE, prior = 0.01, extend = TRUE, strand = 1)} \cr
 Counts motif hits with score >= threshold inside each interval.
 For \code{bidirect=FALSE}, only the strand given by \code{strand} is checked.
-For \code{bidirect=TRUE}, \emph{both} strands are checked \emph{independently} and
-counted \emph{per strand}; each genomic position can contribute 0, 1, or 2 to the total.
-(This is a \emph{per-strand sum}, unlike \code{pwm} or \code{pwm.max}, which are per-position union.)
-Returns the total number of passing strand-hits. Prior adds pseudocounts; \code{extend=TRUE}
+For \code{bidirect=TRUE}, both strands are evaluated at each position and the
+\emph{combined} score is tested against the threshold. The default combination is
+log-sum-exp (LSE), consistent with \code{pwm}. Each position contributes at most 1
+to the count (per-position union), not a per-strand sum.
+Returns the total number of passing positions. Prior adds pseudocounts; \code{extend=TRUE}
 allows scoring at boundaries. If spatial weights are provided, the threshold is applied
-to the spatially weighted score for each strand separately.
+to the spatially weighted combined score.
 
 For all PWM functions:
 \itemize{
   \item pssm: Position-specific scoring matrix (matrix or data frame with columns A,C,G,T containing frequencies; additional columns are allowed and will be ignored)
-  \item bidirect: If TRUE, scans both strands; when TRUE the \code{strand} parameter is ignored
-    for PWM scoring modes. If FALSE, only the strand given by \code{strand} is scanned (default: TRUE)
+  \item bidirect: If TRUE, scans both strands and combines them per position (union).
+    When TRUE, \code{strand} is ignored. If FALSE, only the strand given by \code{strand}
+    is scanned (default: TRUE).
   \item prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
   \item extend: If TRUE, allows scoring at interval boundaries (default: TRUE)
   \item neutral characters: By default \code{N}, \code{n}, and \code{*} are treated as unknown bases
