@@ -2,19 +2,32 @@
 #define _GINTERVALSBIGSET1D_H_INCLUDED_
 
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <map>
 #include "GInterval.h"
 #include "GIntervalsBigSet.h"
 #include "GIntervalsMeta1D.h"
 #include "rdbinterval.h"
+
+// Forward declarations
+class IntervalsIndex1D;
 
 //------------------------------------- GIntervalsBigSet1D --------------------------------------
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
 class GIntervalsBigSet1D : public GIntervalsBigSet, public GIntervalsMeta1D {
 public:
-	GIntervalsBigSet1D() {}
-	GIntervalsBigSet1D(const char *intervset, SEXP meta, const IntervUtils &iu) { init(intervset, meta, iu); }
-	virtual ~GIntervalsBigSet1D() {}
+	GIntervalsBigSet1D() : m_dat_fp(nullptr), m_dat_open(false) {}
+	GIntervalsBigSet1D(const char *intervset, SEXP meta, const IntervUtils &iu) : m_dat_fp(nullptr), m_dat_open(false) { init(intervset, meta, iu); }
+	virtual ~GIntervalsBigSet1D() {
+		// Close file handle if open
+		if (m_dat_open && m_dat_fp) {
+			fclose(m_dat_fp);
+			m_dat_fp = nullptr;
+			m_dat_open = false;
+		}
+	}
 
 	void init(const char *intervset, SEXP meta, const IntervUtils &iu);
 
@@ -80,6 +93,21 @@ private:
 	bool                       m_do_sort;
 	bool                       m_do_unify_overlaps;
 	bool                       m_unify_touching_intervals;
+
+	// State for indexed format "smart handle"
+	std::string m_dat_path;         // Path to currently open intervals.dat
+	FILE*       m_dat_fp;           // Open file pointer for intervals.dat
+	bool        m_dat_open;         // Whether m_dat_fp is valid
+
+	// Static index cache (thread-safe)
+	static std::map<std::string, std::shared_ptr<IntervalsIndex1D>> s_index_cache;
+	static std::mutex s_cache_mutex;
+
+	// Helper to get or load index from cache
+	static std::shared_ptr<IntervalsIndex1D> get_intervals_index(const std::string &intervset_dir);
+
+	// Helper to get interval set directory from intervset name
+	static std::string get_intervset_dir(const std::string &intervset, SEXP envir);
 };
 
 //------------------------------------- IMPLEMENTATION ------------------------------------------

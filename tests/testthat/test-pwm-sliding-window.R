@@ -1,7 +1,7 @@
 # Test sliding window optimization for PWM virtual tracks
-# These tests verify that the fast path produces identical results to the legacy path
+# These tests verify that the fast path produces identical results to the per-chromosome path
 
-test_that("PWM sliding window gives same results as legacy - TOTAL_LIKELIHOOD", {
+test_that("PWM sliding window gives same results as per-chromosome - TOTAL_LIKELIHOOD", {
     pwm <- rbind(
         c(0.25, 0.25, 0.25, 0.25),
         c(0.8, 0.1, 0.05, 0.05),

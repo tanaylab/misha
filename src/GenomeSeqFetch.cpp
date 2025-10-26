@@ -36,7 +36,7 @@ void GenomeSeqFetch::set_seqdir(const std::string &dir) {
                 "Failed to open genome.seq: %s", strerror(errno));
         }
     } else {
-        // Legacy per-chromosome mode
+        // Per-chromosome mode
         m_indexed_mode = false;
         m_index = nullptr;
     }
@@ -101,7 +101,7 @@ void GenomeSeqFetch::read_interval(const GInterval &interval, const GenomeChromK
 		}
 
 	} else {
-		// LEGACY MODE: Per-chromosome files
+		// PER-CHROMOSOME MODE: Read from per-chromosome files
 		if (m_cur_chromid != interval.chromid) {
 			char filename[PATH_MAX];
 			const char *chrom_name = chromkey.id2chrom(interval.chromid).c_str();

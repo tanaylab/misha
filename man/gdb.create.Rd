@@ -47,8 +47,7 @@ Two database formats are supported:
 \itemize{
   \item \strong{indexed}: Single genome.seq + genome.idx (default). Recommended for
         genomes with many contigs. Provides better performance and scalability.
-  \item \strong{per-chromosome}: Separate .seq file per contig. May be useful for
-        specific legacy workflows.
+  \item \strong{per-chromosome}: Separate .seq file per contig.
 }
 
 If 'genes.file' is not 'NULL' four sets of intervals are created in the

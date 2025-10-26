@@ -9,12 +9,17 @@
 #define GENOMETRACK_H_
 
 #include <map>
+#include <memory>
+#include <mutex>
 #include <string>
 
 #include "BufferedFile.h"
 #include "GenomeChromKey.h"
 
 using namespace std;
+
+// Forward declaration
+class TrackIndex;
 
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
@@ -80,6 +85,17 @@ public:
 	static Type s_read_type(const char *filename, const char *mode = "rb");
 
 	static Type s_read_type(BufferedFile &bfile, const char *filename, const char *mode = "rb");
+
+protected:
+	// Track index cache (thread-safe)
+	static std::map<std::string, std::shared_ptr<TrackIndex>> s_index_cache;
+	static std::mutex s_cache_mutex;
+
+	// Helper to get-or-load the track index
+	static std::shared_ptr<TrackIndex> get_track_index(const std::string &track_dir);
+
+	// Helper to extract track directory from a per-chrom filename
+	static std::string get_track_dir(const std::string &filename);
 };
 
 #endif /* GENOMETRACK_H_ */

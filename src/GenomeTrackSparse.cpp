@@ -3,8 +3,10 @@
 #include <sys/types.h>
 
 #include "GenomeTrackSparse.h"
+#include "TrackIndex.h"
 
 const int GenomeTrackSparse::RECORD_SIZE = 2 * sizeof(int64_t) + sizeof(float);
+constexpr size_t GenomeTrackSparse::kSparseRecBytes;
 
 GenomeTrackSparse::GenomeTrackSparse() :
 	GenomeTrack1D(SPARSE),
@@ -12,21 +14,79 @@ GenomeTrackSparse::GenomeTrackSparse() :
 	m_num_records(0)
 {}
 
+void GenomeTrackSparse::read_header_at_current_pos_(BufferedFile &bf)
+{
+	int32_t format_signature = 0;
+	if (bf.read(&format_signature, sizeof(format_signature)) != sizeof(format_signature))
+		TGLError<GenomeTrackSparse>("Corrupt sparse header in %s", bf.file_name().c_str());
+	if (format_signature >= 0)
+		TGLError<GenomeTrackSparse>("Invalid sparse header signature in %s", bf.file_name().c_str());
+}
+
 void GenomeTrackSparse::init_read(const char *filename, int chromid)
 {
-	m_bfile.close();
-	m_loaded = false;
+	m_loaded = false; // Critical for read_file_into_mem()
+	uint64_t header_start = 0;
+	uint64_t total_bytes = 0;
 
-	read_type(filename);
+	// Check for indexed format FIRST
+	const std::string track_dir = GenomeTrack::get_track_dir(filename);
+	const std::string idx_path = track_dir + "/track.idx";
 
-	// determine the number of records in the file
-	double num_records = (m_bfile.file_size() - m_bfile.tell()) / (double)RECORD_SIZE;
+	struct stat idx_st;
+	if (stat(idx_path.c_str(), &idx_st) == 0) {
+		// --- INDEXED PATH ---
+		const std::string dat_path  = track_dir + "/track.dat";
 
-	if (num_records != (int64_t)num_records)
+		// "Smart Handle" logic - reopen if path or mode changed
+		if (!m_dat_open || m_dat_path != dat_path || m_dat_mode != "rb") {
+			m_bfile.close();
+			if (m_bfile.open(dat_path.c_str(), "rb"))
+				TGLError<GenomeTrackSparse>("Cannot open %s: %s", dat_path.c_str(), strerror(errno));
+			m_dat_open = true;
+			m_dat_path = dat_path;
+			m_dat_mode = "rb";
+		}
+
+		auto idx   = get_track_index(track_dir);
+		if (!idx)
+			TGLError<GenomeTrackSparse>("Failed to load track index for %s", track_dir.c_str());
+
+		auto entry = idx->get_entry(chromid);
+		if (!entry)
+			TGLError<GenomeTrackSparse>("Chromosome %d not found in index for %s", chromid, track_dir.c_str());
+
+		if (entry->length == 0) {
+			m_num_records = 0;
+			m_chromid = chromid;
+			return; // Empty contig
+		}
+
+		if (m_bfile.seek(entry->offset, SEEK_SET))
+			TGLError<GenomeTrackSparse>("Failed to seek to offset %llu in %s",
+				(unsigned long long)entry->offset, dat_path.c_str());
+
+		header_start = entry->offset;
+		read_header_at_current_pos_(m_bfile);
+		total_bytes = entry->length;
+	} else {
+		// --- PER-CHROMOSOME PATH ---
+		m_bfile.close(); // Close previous file (if any)
+		m_dat_open = false;
+		read_type(filename); // This opens m_bfile and reads header
+
+		header_start = 0;
+		total_bytes = m_bfile.file_size();
+	}
+
+	// --- COMMON LOGIC ---
+	const uint64_t header_size  = m_bfile.tell() - header_start;
+	const double n = (total_bytes - header_size) / (double)kSparseRecBytes;
+
+	if (n != (int64_t)n)
 		TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s", filename);
 
-	m_num_records = (int64_t)num_records;
-
+	m_num_records = (int64_t)n;
 	m_chromid = chromid;
 }
 

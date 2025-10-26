@@ -1,5 +1,7 @@
-test_that("gdb.upgrade upgrades legacy database to indexed format", {
-    # Create a small legacy database with per-chromosome .seq files
+test_that("gdb.convert_to_indexed converts per-chromosome database to indexed format", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create a small per-chromosome database with per-chromosome .seq files
     test_db <- tempfile()
     dir.create(test_db)
     dir.create(file.path(test_db, "seq"))
@@ -15,14 +17,14 @@ test_that("gdb.upgrade upgrades legacy database to indexed format", {
         row.names = FALSE, col.names = FALSE, sep = "\t", quote = FALSE
     )
 
-    # Create legacy .seq files (raw sequence data)
+    # Create per-chromosome .seq files (raw sequence data)
     writeBin(charToRaw("ACTGACTGACTG"), file.path(test_db, "seq", "chr1.seq"))
     writeBin(charToRaw("GGGGCCCC"), file.path(test_db, "seq", "chr2.seq"))
 
-    # Upgrade to indexed format (skip validation for minimal test DB)
+    # Convert to indexed format (skip validation for minimal test DB)
     expect_message(
-        gdb.upgrade(groot = test_db, interactive = FALSE, validate = FALSE),
-        "Upgrading database to indexed format"
+        gdb.convert_to_indexed(groot = test_db, force = TRUE, validate = FALSE, verbose = TRUE),
+        "Converting database to indexed format"
     )
 
     # Check that indexed files were created
@@ -38,8 +40,10 @@ test_that("gdb.upgrade upgrades legacy database to indexed format", {
     expect_equal(seq_size, 20)
 })
 
-test_that("gdb.upgrade with remove_old_files removes legacy .seq files", {
-    # Create a small legacy database
+test_that("gdb.convert_to_indexed with remove_old_files removes per-chromosome .seq files", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create a small per-chromosome database
     test_db <- tempfile()
     dir.create(test_db)
     dir.create(file.path(test_db, "seq"))
@@ -55,12 +59,12 @@ test_that("gdb.upgrade with remove_old_files removes legacy .seq files", {
         row.names = FALSE, col.names = FALSE, sep = "\t", quote = FALSE
     )
 
-    # Create legacy .seq file
+    # Create per-chromosome .seq file
     seq_file <- file.path(test_db, "seq", "test.seq")
     writeBin(charToRaw("ACTGACTG"), seq_file)
 
-    # Upgrade with removal (skip validation for minimal test DB)
-    gdb.upgrade(groot = test_db, remove_old_files = TRUE, interactive = FALSE, validate = FALSE)
+    # Convert with removal (skip validation for minimal per-chromosome test DB)
+    gdb.convert_to_indexed(groot = test_db, remove_old_files = TRUE, force = TRUE, validate = FALSE)
 
     # Check that old file was removed
     expect_false(file.exists(seq_file))
@@ -70,7 +74,9 @@ test_that("gdb.upgrade with remove_old_files removes legacy .seq files", {
     expect_true(file.exists(file.path(test_db, "seq", "genome.seq")))
 })
 
-test_that("gdb.upgrade skips if already upgraded", {
+test_that("gdb.convert_to_indexed skips if already converted", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
     # Create a database in indexed format
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">test\nACTG\n", file = test_fasta)
@@ -81,18 +87,20 @@ test_that("gdb.upgrade skips if already upgraded", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
-
-    # Try to upgrade - should skip
-    expect_message(
-        gdb.upgrade(groot = test_db, interactive = FALSE),
-        "already in indexed format"
-    )
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+        # Try to convert - should skip
+        expect_message(
+            gdb.convert_to_indexed(groot = test_db, force = TRUE, verbose = TRUE),
+            "already in indexed format"
+        )
+    })
 })
 
-test_that("gdb.upgrade validates upgraded sequences", {
-    # Create a proper database first, then simulate legacy format
+test_that("gdb.convert_to_indexed validates converted sequences", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create a proper database first, then simulate per-chromosome format
     test_fasta <- tempfile(fileext = ".fasta")
     seq_data <- paste(rep("ACTG", 50), collapse = "")
     cat(">chr1\n", seq_data, "\n", sep = "", file = test_fasta)
@@ -103,25 +111,22 @@ test_that("gdb.upgrade validates upgraded sequences", {
         unlink(test_fasta)
     })
 
-    # Create a proper database with legacy format
+    # Create a proper database with per-chromosome format
     options(gmulticontig.indexed_format = FALSE)
     suppressMessages(gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE))
 
-    # Now upgrade with validation enabled
+    # Now conversion with validation enabled
     expect_message(
-        gdb.upgrade(groot = test_db, interactive = FALSE, validate = TRUE),
-        "Validating upgrade"
+        gdb.convert_to_indexed(groot = test_db, force = TRUE, validate = TRUE, verbose = TRUE),
+        "Validating conversion"
     )
 
     # Check that validation passed
     expect_message(
         expect_message(
-            gdb.upgrade(groot = test_db, interactive = FALSE, validate = TRUE),
+            gdb.convert_to_indexed(groot = test_db, force = TRUE, validate = TRUE, verbose = TRUE),
             "already in indexed format"
         ),
-        NA # Should not get validation message since already upgraded
+        NA # Should not get validation message since already converted
     )
 })
-
-# Restore the test database after all upgrade tests
-suppressMessages(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))

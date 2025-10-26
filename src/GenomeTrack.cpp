@@ -13,6 +13,7 @@
 #include <unordered_set>
 
 #include "GenomeTrack.h"
+#include "TrackIndex.h"
 #include "TGLException.h"
 #include "rdbutils.h"
 
@@ -21,6 +22,44 @@ const bool  GenomeTrack::IS_1D_TRACK[NUM_TYPES] =             { true,    true,  
 const int   GenomeTrack::FORMAT_SIGNATURES[NUM_TYPES] =       { 0,       -1,       -8,       -9,           -10,      -11,        -4,                    -6,                    -3,                  -5,                  -7 };
 
 double (*GenomeTrack::s_rnd_func)() = drand48;
+
+// Static members for track index cache
+std::map<std::string, std::shared_ptr<TrackIndex>> GenomeTrack::s_index_cache;
+std::mutex GenomeTrack::s_cache_mutex;
+
+std::shared_ptr<TrackIndex> GenomeTrack::get_track_index(const std::string &track_dir) {
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+
+	// Check if already in cache
+	auto it = s_index_cache.find(track_dir);
+	if (it != s_index_cache.end()) {
+		return it->second;
+	}
+
+	// Create new index and try to load
+	auto idx = std::make_shared<TrackIndex>();
+	std::string idx_path = track_dir + "/track.idx";
+
+	if (!idx->load(idx_path)) {
+		// Index file doesn't exist - return nullptr
+		return nullptr;
+	}
+
+	// Cache and return
+	s_index_cache[track_dir] = idx;
+	return idx;
+}
+
+std::string GenomeTrack::get_track_dir(const std::string &filename) {
+	// Extract directory from filename
+	// filename is typically like "/path/to/trackdir/chrN"
+	size_t pos = filename.find_last_of("/");
+	if (pos == std::string::npos) {
+		// No path separator - assume current directory
+		return ".";
+	}
+	return filename.substr(0, pos);
+}
 
 const pair<int, int> GenomeTrack::get_chromid_2d(const GenomeChromKey &chromkey, const string &filename)
 {
@@ -70,6 +109,29 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 	if (access(track_dir, F_OK))
 		TGLError<GenomeTrack>(FILE_ERROR, "Accessing directory %s: %s\n", track_dir, strerror(errno));
 
+	// First, try to read from track.idx if it exists
+	std::string idx_path = std::string(track_dir) + "/track.idx";
+	struct stat st;
+	if (stat(idx_path.c_str(), &st) == 0) {
+		try {
+			auto idx = get_track_index(track_dir);
+			if (idx) {
+				// Map MishaTrackType to GenomeTrack::Type
+				switch (idx->get_track_type()) {
+					case MishaTrackType::DENSE:  return FIXED_BIN;
+					case MishaTrackType::SPARSE: return SPARSE;
+					case MishaTrackType::ARRAY:  return ARRAYS;
+					default:
+						// Unknown type, fall through to per-chromosome probing
+						break;
+				}
+			}
+		} catch (...) {
+			// Fall through to per-chromosome probing on any index error
+		}
+	}
+
+	// Fall back to per-chromosome probing (per-chrom files)
 	vector<string> filenames;
 	rdb::get_chrom_files(track_dir, filenames);
 

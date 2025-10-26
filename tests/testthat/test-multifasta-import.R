@@ -1,4 +1,5 @@
 test_that("multi-FASTA import creates indexed format", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     # Create a small test multi-FASTA file
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">contig1\nACTGACTGACTG\n>contig2\nGGGGCCCC\n>contig3\nTATATA\n", file = test_fasta)
@@ -10,19 +11,21 @@ test_that("multi-FASTA import creates indexed format", {
     })
 
     # Create database
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
 
     # Check indexed format files exist
     expect_true(file.exists(file.path(test_db, "seq", "genome.idx")))
     expect_true(file.exists(file.path(test_db, "seq", "genome.seq")))
 
-    # Check legacy files don't exist
+    # Check per-chromosome files don't exist
     expect_false(file.exists(file.path(test_db, "seq", "chrcontig1.seq")))
     expect_false(file.exists(file.path(test_db, "seq", "contig1.seq")))
 })
 
 test_that("multi-FASTA import extracts sequences correctly", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">seq1\nACTGACTGACTG\n>seq2\nGGGGCCCC\n>seq3\nTATATA\n", file = test_fasta)
 
@@ -32,8 +35,9 @@ test_that("multi-FASTA import extracts sequences correctly", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     # Extract and verify sequences
@@ -52,6 +56,7 @@ test_that("multi-FASTA import extracts sequences correctly", {
 })
 
 test_that("multi-FASTA import handles reverse complement", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">test\nACTGACTG\n", file = test_fasta)
 
@@ -61,8 +66,9 @@ test_that("multi-FASTA import handles reverse complement", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     # Forward strand
@@ -75,6 +81,7 @@ test_that("multi-FASTA import handles reverse complement", {
 })
 
 test_that("multi-FASTA import sanitizes contig names", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Test various header formats
     cat(">lcl|scaffold_1 description here\nACTG\n", file = test_fasta)
@@ -88,8 +95,9 @@ test_that("multi-FASTA import sanitizes contig names", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     chroms <- gintervals.all()
@@ -106,6 +114,7 @@ test_that("multi-FASTA import sanitizes contig names", {
 })
 
 test_that("multi-FASTA import with small genome materializes 2D", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">chr1\nACTG\n>chr2\nGGGG\n>chr3\nCCCC\n", file = test_fasta)
 
@@ -116,8 +125,9 @@ test_that("multi-FASTA import with small genome materializes 2D", {
     })
 
     # Set threshold high to force materialization
-    options(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 100)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 100), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     # 2D genome should be materialized (3 contigs < 100)
@@ -128,6 +138,7 @@ test_that("multi-FASTA import with small genome materializes 2D", {
 })
 
 test_that("multi-FASTA import with large genome defers 2D", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Create 10 small contigs
     for (i in 1:10) {
@@ -143,8 +154,9 @@ test_that("multi-FASTA import with large genome defers 2D", {
     })
 
     # Set threshold low to force deferral
-    options(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 5)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 5), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     # gintervals.2d.all() should generate on demand
@@ -154,6 +166,7 @@ test_that("multi-FASTA import with large genome defers 2D", {
 })
 
 test_that("multi-FASTA import handles gzipped files", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">test1\nACTGACTG\n>test2\nGGGGCCCC\n", file = test_fasta)
 
@@ -168,8 +181,9 @@ test_that("multi-FASTA import handles gzipped files", {
         unlink(test_fasta_gz)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta_gz)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta_gz)
+    })
     gdb.init(test_db)
 
     # Verify sequences
@@ -181,6 +195,7 @@ test_that("multi-FASTA import handles gzipped files", {
 })
 
 test_that("multi-FASTA import validates chromosome sizes", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">chr1\nACTGACTGACTGACTG\n>chr2\nGG\n>chr3\nTATATATATATATATA\n", file = test_fasta)
 
@@ -190,8 +205,9 @@ test_that("multi-FASTA import validates chromosome sizes", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     chroms <- gintervals.all()
@@ -203,6 +219,7 @@ test_that("multi-FASTA import validates chromosome sizes", {
 })
 
 test_that("multi-FASTA import handles multi-line sequences", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Write sequence across multiple lines (common FASTA format)
     cat(">multiline\n", file = test_fasta)
@@ -216,8 +233,9 @@ test_that("multi-FASTA import handles multi-line sequences", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     # Extract and verify concatenated sequence
@@ -231,6 +249,7 @@ test_that("multi-FASTA import handles multi-line sequences", {
 })
 
 test_that("multi-FASTA import handles N characters and gaps", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">withN\nACTGNNNNACTG\n>withGap\nACTG---ACTG\n", file = test_fasta)
 
@@ -240,8 +259,9 @@ test_that("multi-FASTA import handles N characters and gaps", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     # N characters should be preserved (12 chars: 4 + 4 + 4)
@@ -254,6 +274,7 @@ test_that("multi-FASTA import handles N characters and gaps", {
 })
 
 test_that("multi-FASTA import rejects invalid characters", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Include invalid character (digit)
     cat(">invalid\nACTG1234ACTG\n", file = test_fasta)
@@ -264,8 +285,9 @@ test_that("multi-FASTA import rejects invalid characters", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     # Should error on invalid character
     expect_error(
         gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE),
@@ -274,6 +296,7 @@ test_that("multi-FASTA import rejects invalid characters", {
 })
 
 test_that("multi-FASTA import handles empty contigs gracefully", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Include contig with no sequence (should be skipped or have size 0)
     cat(">contig1\nACTG\n>empty\n>contig2\nGGGG\n", file = test_fasta)
@@ -284,7 +307,9 @@ test_that("multi-FASTA import handles empty contigs gracefully", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
 
     # This may error or create a 0-length contig depending on implementation
     # At minimum, it shouldn't crash
@@ -306,6 +331,7 @@ test_that("multi-FASTA import handles empty contigs gracefully", {
 })
 
 test_that("multi-FASTA import preserves exact sequence boundaries", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">boundary1\nAAAAAAAAAAAAAAAA\n>boundary2\nTTTTTTTTTTTTTTTT\n", file = test_fasta)
 
@@ -315,7 +341,9 @@ test_that("multi-FASTA import preserves exact sequence boundaries", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -339,6 +367,7 @@ test_that("multi-FASTA import preserves exact sequence boundaries", {
 })
 
 test_that("multi-FASTA import index checksum is valid", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">test\nACTGACTG\n", file = test_fasta)
 
@@ -348,8 +377,9 @@ test_that("multi-FASTA import index checksum is valid", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
 
     idx_path <- file.path(test_db, "seq", "genome.idx")
     expect_true(file.exists(idx_path))
@@ -371,6 +401,7 @@ test_that("multi-FASTA import index checksum is valid", {
 })
 
 test_that("multi-FASTA import works with various contig name formats", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Test various naming conventions
     cat(">1\nACTG\n", file = test_fasta) # Numeric (Ensembl style)
@@ -386,7 +417,7 @@ test_that("multi-FASTA import works with various contig name formats", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -407,6 +438,7 @@ test_that("multi-FASTA import works with various contig name formats", {
 })
 
 test_that("multi-FASTA import handles large contigs efficiently", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Create a larger contig (1KB)
     large_seq <- paste(rep("ACTG", 250), collapse = "")
@@ -424,8 +456,9 @@ test_that("multi-FASTA import handles large contigs efficiently", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     # Verify full sequence
@@ -444,7 +477,8 @@ test_that("multi-FASTA import handles large contigs efficiently", {
     expect_equal(chunk3, substr(large_seq, 901, 1000))
 })
 
-test_that("legacy format option disables indexed format", {
+test_that("per-chromosome format option disables indexed format", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">test\nACTGACTG\n", file = test_fasta)
 
@@ -455,7 +489,7 @@ test_that("legacy format option disables indexed format", {
     })
 
     # Disable indexed format
-    options(gmulticontig.indexed_format = FALSE)
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
 
     # Should use per-chromosome format
     expect_message(
@@ -468,7 +502,8 @@ test_that("legacy format option disables indexed format", {
     expect_false(file.exists(file.path(test_db, "seq", "genome.seq")))
 })
 
-test_that("multi-FASTA with multiple files falls back to legacy", {
+test_that("multi-FASTA with multiple files falls back to per-chromosome", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta1 <- tempfile(fileext = ".fasta")
     test_fasta2 <- tempfile(fileext = ".fasta")
     cat(">chr1\nACTG\n", file = test_fasta1)
@@ -481,7 +516,7 @@ test_that("multi-FASTA with multiple files falls back to legacy", {
         unlink(test_fasta2)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     # Multiple files should trigger multi-chromosome mode
     expect_message(
         gdb.create(groot = test_db, fasta = c(test_fasta1, test_fasta2), verbose = TRUE),
@@ -490,6 +525,7 @@ test_that("multi-FASTA with multiple files falls back to legacy", {
 })
 
 test_that("multi-FASTA import handles very long contig names", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Create a contig with a very long name (100+ characters)
     long_name <- paste(rep("contig", 30), collapse = "_")
@@ -501,7 +537,7 @@ test_that("multi-FASTA import handles very long contig names", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -511,6 +547,7 @@ test_that("multi-FASTA import handles very long contig names", {
 })
 
 test_that("multi-FASTA import handles duplicate contig names", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Create FASTA with duplicate names (should error or handle gracefully)
     cat(">dup\nACTG\n>dup\nGGGG\n", file = test_fasta)
@@ -521,7 +558,7 @@ test_that("multi-FASTA import handles duplicate contig names", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
 
     # Should either error or handle duplicates
     # Most implementations would error on duplicate names
@@ -532,6 +569,7 @@ test_that("multi-FASTA import handles duplicate contig names", {
 })
 
 test_that("multi-FASTA import handles mixed case sequences", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">test\nActGacTG\n", file = test_fasta)
 
@@ -541,7 +579,7 @@ test_that("multi-FASTA import handles mixed case sequences", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -551,6 +589,7 @@ test_that("multi-FASTA import handles mixed case sequences", {
 })
 
 test_that("multi-FASTA import handles whitespace in headers", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">contig with spaces in header\nACTG\n", file = test_fasta)
 
@@ -560,7 +599,7 @@ test_that("multi-FASTA import handles whitespace in headers", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -570,6 +609,7 @@ test_that("multi-FASTA import handles whitespace in headers", {
 })
 
 test_that("multi-FASTA import creates correct chromosome order", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Create contigs in non-alphabetical order
     cat(">zebra\nACTG\n>apple\nGGGG\n>middle\nCCCC\n", file = test_fasta)
@@ -580,7 +620,7 @@ test_that("multi-FASTA import creates correct chromosome order", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -592,6 +632,7 @@ test_that("multi-FASTA import creates correct chromosome order", {
 })
 
 test_that("multi-FASTA import handles ambiguous IUPAC codes", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # R=A/G, Y=C/T, W=A/T, S=G/C, K=G/T, M=A/C
     cat(">test\nRYWSKM\n", file = test_fasta)
@@ -602,7 +643,7 @@ test_that("multi-FASTA import handles ambiguous IUPAC codes", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -612,6 +653,7 @@ test_that("multi-FASTA import handles ambiguous IUPAC codes", {
 })
 
 test_that("multi-FASTA import works with read-only source file", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">test\nACTG\n", file = test_fasta)
 
@@ -625,12 +667,13 @@ test_that("multi-FASTA import works with read-only source file", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     # Should still work with read-only input (may produce messages)
     expect_no_error(gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE))
 })
 
 test_that("multi-FASTA import index file has correct structure", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">chr1\nACTG\n>chr2\nGGGG\n", file = test_fasta)
 
@@ -640,8 +683,9 @@ test_that("multi-FASTA import index file has correct structure", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
 
     # Check index file exists and has reasonable size
     idx_file <- file.path(test_db, "seq", "genome.idx")
@@ -653,6 +697,7 @@ test_that("multi-FASTA import index file has correct structure", {
 })
 
 test_that("multi-FASTA import sequence file concatenates correctly", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">a\nAAAA\n>b\nCCCC\n>c\nGGGG\n", file = test_fasta)
 
@@ -662,8 +707,9 @@ test_that("multi-FASTA import sequence file concatenates correctly", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
 
     # Check sequence file has total length
     seq_file <- file.path(test_db, "seq", "genome.seq")
@@ -672,6 +718,7 @@ test_that("multi-FASTA import sequence file concatenates correctly", {
 })
 
 test_that("multi-FASTA import handles FASTA with trailing newlines", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">test\nACTG\n\n\n", file = test_fasta)
 
@@ -681,8 +728,9 @@ test_that("multi-FASTA import handles FASTA with trailing newlines", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     seq <- gseq.extract(gintervals("test", 0, 4))
@@ -691,6 +739,7 @@ test_that("multi-FASTA import handles FASTA with trailing newlines", {
 })
 
 test_that("multi-FASTA import handles Windows line endings", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
     test_fasta <- tempfile(fileext = ".fasta")
     # Write with \r\n line endings
     writeLines(c(">test", "ACTG"), test_fasta, sep = "\r\n")
@@ -701,14 +750,13 @@ test_that("multi-FASTA import handles Windows line endings", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+    })
     gdb.init(test_db)
 
     seq <- gseq.extract(gintervals("test", 0, 4))
     expect_equal(seq, "ACTG")
 })
 
-# Restore the test database after all multifasta-import tests
-# This ensures subsequent test files have the correct database set
-suppressMessages(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/")

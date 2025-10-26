@@ -39,9 +39,20 @@ protected:
 	int64_t       m_num_records;
 	GIntervals::const_iterator m_icur_interval;
 
+	// State for indexed "smart handle"
+	std::string m_dat_path;
+	std::string m_dat_mode;
+	bool        m_dat_open{false};
+
 	void read_file_into_mem();
 	void calc_vals(const GInterval &interval);
 	bool check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2);
+
+	// Helper to parse header at current file position
+	void read_header_at_current_pos_(BufferedFile &bf);
+
+	// On-disk record size constant (matches RECORD_SIZE)
+	static constexpr size_t kSparseRecBytes = sizeof(int64_t) * 2 + sizeof(float);
 };
 
 
