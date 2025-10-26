@@ -1364,7 +1364,7 @@ gcompute_strands_autocorr <- function(file = NULL, chrom = NULL, binsize = NULL,
     }
     .gcheckroot()
 
-    # Normalize chromosome name using aliases (handles legacy databases)
+    # Normalize chromosome name using aliases (handles per-chromosome databases)
     chrom <- as.character(.gchroms(as.character(chrom)))
 
     res <- .gcall("C_gcompute_strands_autocorr", file, chrom, binsize, maxread, cols.order, min.coord, max.coord, .misha_env())

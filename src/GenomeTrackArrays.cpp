@@ -4,6 +4,7 @@
 #include <sys/types.h>
 
 #include "GenomeTrackArrays.h"
+#include "TrackIndex.h"
 
 const char *GenomeTrackArrays::SLICE_FUNCTION_NAMES[GenomeTrackArrays::NUM_S_FUNCS] = { "avg", "min", "max", "stddev", "sum", "quantile" };
 const int GenomeTrackArrays::RECORD_SIZE = 2 * sizeof(int64_t) + sizeof(long);
@@ -29,13 +30,66 @@ void GenomeTrackArrays::set_master_obj(GenomeTrackArrays *master_obj)
 void GenomeTrackArrays::init_read(const char *filename, int chromid)
 {
 	finish_writing();
-	m_bfile.close();
+	m_base_offset = 0;
 	m_loaded = false;
 	m_is_writing = false;
 	m_intervals.clear();
 	m_vals_pos.clear();
-	if (!m_master_obj) 
-		read_type(filename);
+
+	if (!m_master_obj) {
+		// Check for indexed format FIRST
+		const std::string track_dir = GenomeTrack::get_track_dir(filename);
+		const std::string idx_path = track_dir + "/track.idx";
+
+		struct stat idx_st;
+		if (stat(idx_path.c_str(), &idx_st) == 0) {
+			// --- INDEXED PATH ---
+			const std::string dat_path  = track_dir + "/track.dat";
+
+			// Reopen file if path or mode changed
+			if (!m_dat_open || m_dat_path != dat_path || m_dat_mode != "rb") {
+				m_bfile.close();
+				if (m_bfile.open(dat_path.c_str(), "rb"))
+					TGLError<GenomeTrackArrays>("Cannot open %s: %s", dat_path.c_str(), strerror(errno));
+				m_dat_open = true;
+				m_dat_path = dat_path;
+				m_dat_mode = "rb";
+			}
+
+			auto idx   = get_track_index(track_dir);
+			if (!idx)
+				TGLError<GenomeTrackArrays>("Failed to load track index for %s", track_dir.c_str());
+
+			auto entry = idx->get_entry(chromid);
+			if (!entry)
+				TGLError<GenomeTrackArrays>("Chromosome %d not found in index for %s", chromid, track_dir.c_str());
+
+			if (entry->length == 0) {
+				// Empty contig - no data
+				m_chromid = chromid;
+				return;
+			}
+
+			if (m_bfile.seek(entry->offset, SEEK_SET))
+				TGLError<GenomeTrackArrays>("Failed to seek to offset %llu in %s",
+					(unsigned long long)entry->offset, dat_path.c_str());
+
+			// Read the format signature (similar to read_type)
+			int32_t signature = 0;
+			if (m_bfile.read(&signature, sizeof(signature)) != sizeof(signature))
+				TGLError<GenomeTrackArrays>("Failed to read arrays track header in %s", dat_path.c_str());
+			if (signature != GenomeTrack::FORMAT_SIGNATURES[ARRAYS])
+				TGLError<GenomeTrackArrays>("Invalid arrays track header in %s", dat_path.c_str());
+
+			m_base_offset = entry->offset; 
+		} else {
+			// --- PER-CHROMOSOME PATH ---
+			m_bfile.close();
+			m_dat_open = false;
+			read_type(filename);
+		}
+	}
+
 	m_chromid = chromid;
 }
 
@@ -108,6 +162,11 @@ void GenomeTrackArrays::read_intervals_map()
 			TGLError<GenomeTrackArrays>("Invalid format of %s track file %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str());
 		}
 
+		// Adjust m_intervals_pos by base_offset for indexed format
+		if (m_base_offset > 0) {
+			m_intervals_pos += m_base_offset;
+		}
+
 		// read number of intervals
 		if (m_bfile.seek(m_intervals_pos, SEEK_SET))
 			TGLError<GenomeTrackArrays>("Failed to read %s track file %s: %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str(), strerror(errno));
@@ -133,6 +192,11 @@ void GenomeTrackArrays::read_intervals_map()
 				if (m_bfile.error())
 					TGLError<GenomeTrackArrays>("Failed to read %s track file %s: %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str(), strerror(errno));
 				TGLError<GenomeTrackArrays>("Invalid format of %s track file %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str());
+			}
+
+			// Adjust m_vals_pos by base_offset for indexed format
+			if (m_base_offset > 0) {
+				m_vals_pos[i] += m_base_offset;
 			}
 
 			interval.chromid = m_chromid;

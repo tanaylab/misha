@@ -56,6 +56,9 @@ all available tracks\cr GINTERVS \tab List of all available intervals\cr
 GVTRACKS \tab List of all available virtual tracks\cr ALLGENOME \tab List of
 all chromosomes and their sizes\cr GITERATOR.INTERVALS \tab A set of
 iterator intervals for which the track expression is evaluated\cr }
+
+When option 'gmulticontig.indexed_format' is set to TRUE, the function
+loads a database with "indexed" track format.
 }
 \seealso{
 \code{\link{gdb.reload}}, \code{\link{gdb.create}},

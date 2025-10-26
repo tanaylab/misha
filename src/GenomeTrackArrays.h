@@ -68,6 +68,12 @@ protected:
 	bool                        m_is_writing;
 	long                        m_intervals_pos;
 	GIntervals::const_iterator  m_icur_interval;
+	int64_t                     m_base_offset{0};
+
+	// State for indexed "smart handle"
+	std::string m_dat_path;
+	std::string m_dat_mode;
+	bool        m_dat_open{false};
 
 	SliceFunctions              m_slice_function;
 	double                      m_slice_percentile;

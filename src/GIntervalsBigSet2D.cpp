@@ -3,16 +3,45 @@
 #include <sys/types.h>
 
 #include "GIntervalsBigSet2D.h"
+#include "IntervalsIndex2D.h"
 #include "rdbutils.h"
 
 //------------------------------------- GIntervalsBigSet2D --------------------------------------
+
+// Static members initialization
+std::map<std::string, std::shared_ptr<IntervalsIndex2D>> GIntervalsBigSet2D::s_index_cache;
+std::mutex GIntervalsBigSet2D::s_cache_mutex;
+
+std::shared_ptr<IntervalsIndex2D> GIntervalsBigSet2D::get_intervals_index(const std::string &intervset_dir) {
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	auto it = s_index_cache.find(intervset_dir);
+	if (it != s_index_cache.end()) {
+		return it->second;
+	}
+
+	// Load index
+	auto idx = std::make_shared<IntervalsIndex2D>();
+	std::string idx_path = intervset_dir + "/intervals2d.idx";
+	if (!idx->load(idx_path)) {
+		// Index doesn't exist - return nullptr
+		return nullptr;
+	}
+
+	// Cache it
+	s_index_cache[intervset_dir] = idx;
+	return idx;
+}
+
+std::string GIntervalsBigSet2D::get_intervset_dir(const std::string &intervset, SEXP envir) {
+	return interv2path(envir, intervset.c_str());
+}
 
 void GIntervalsBigSet2D::init(const char *intervset, SEXP meta, const IntervUtils &iu)
 {
 	GIntervalsBigSet::init(intervset, iu);
 	GIntervalsMeta2D::init(intervset, meta, iu.get_chromkey());
 
-	if (!is2d(meta)) 
+	if (!is2d(meta))
 		verror("Intervals set %s: expecting 1D intervals", intervset);
 
 	m_cur_chromid = m_chroms2size.size();
@@ -21,6 +50,10 @@ void GIntervalsBigSet2D::init(const char *intervset, SEXP meta, const IntervUtil
 	m_iter_chrom_index = 0;
 	m_do_sort = false;
 	m_iinterval = m_intervals.end();
+
+	// Initialize smart handle state
+	m_dat2d_fp = nullptr;
+	m_dat2d_open = false;
 }
 
 void GIntervalsBigSet2D::load_chrom(int chromid1, int chromid2)
@@ -28,12 +61,62 @@ void GIntervalsBigSet2D::load_chrom(int chromid1, int chromid2)
 	m_iter_chrom_index = 0;
 	if (get_num_intervals(chromid1, chromid2)) {
 		if (m_intervals.empty() || m_intervals.front().chromid1() != chromid1 || m_intervals.front().chromid2() != chromid2) {
-			string filename = interv2path(m_iu->get_env(), m_intervset);
-			filename += "/";
-			filename += m_iu->id2chrom(chromid1);
-			filename += "-";
-			filename += m_iu->id2chrom(chromid2);
-			SEXP rintervals = rprotect_ptr(RSaneUnserialize(filename.c_str()));
+			// Construct per-chromosome filename
+			string intervset_dir = interv2path(m_iu->get_env(), m_intervset);
+			string filename = intervset_dir + "/" + m_iu->id2chrom(chromid1) + "-" + m_iu->id2chrom(chromid2);
+
+			// SURGICAL PIVOT: Check for per-chromosome file first
+			struct stat st;
+			SEXP rintervals = R_NilValue;
+
+			if (stat(filename.c_str(), &st) == 0) {
+				// PER-CHROMOSOME PATH: Per-pair file exists
+				rintervals = rprotect_ptr(RSaneUnserialize(filename.c_str()));
+			} else {
+				// INDEXED PATH: Use intervals2d.dat with index
+				string dat_path = intervset_dir + "/intervals2d.dat";
+
+				// Smart handle: open intervals2d.dat once, reuse across pairs
+				if (!m_dat2d_open || m_dat2d_path != dat_path) {
+					// Close previous file if open
+					if (m_dat2d_open && m_dat2d_fp) {
+						fclose(m_dat2d_fp);
+						m_dat2d_fp = nullptr;
+					}
+
+					// Open new file
+					m_dat2d_fp = fopen(dat_path.c_str(), "rb");
+					if (!m_dat2d_fp) {
+						verror("Cannot open indexed 2D intervals file %s: %s",
+							   dat_path.c_str(), strerror(errno));
+					}
+					m_dat2d_open = true;
+					m_dat2d_path = dat_path;
+				}
+
+				// Get index and lookup entry
+				auto idx = get_intervals_index(intervset_dir);
+				if (!idx) {
+					verror("2D intervals index not found for %s", m_intervset.c_str());
+				}
+
+				const IntervalsPairEntry* entry = idx->get_entry(chromid1, chromid2);
+				if (!entry || entry->length == 0) {
+					// Empty chromosome pair
+					m_intervals.clear();
+					return;
+				}
+
+				// Seek to the pair's data in intervals2d.dat
+				if (fseek(m_dat2d_fp, entry->offset, SEEK_SET) != 0) {
+					verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
+				}
+
+				// Read serialized R object from current position
+				rintervals = rprotect_ptr(RSaneUnserialize(m_dat2d_fp));
+			}
+
+			// Convert R intervals to C++ intervals
 			m_iu->convert_rintervs(rintervals, NULL, &m_intervals);
 			runprotect(1);
 
@@ -42,10 +125,10 @@ void GIntervalsBigSet2D::load_chrom(int chromid1, int chromid2)
 			int idx = chroms2idx(chromid1, chromid2);
 			for (int i = 0; i < idx; ++i)
 				offset += m_orig_chroms2size[i];
-			for (GIntervals2D::iterator iinterval = m_intervals.begin(); iinterval < m_intervals.end(); ++iinterval) 
+			for (GIntervals2D::iterator iinterval = m_intervals.begin(); iinterval < m_intervals.end(); ++iinterval)
 				iinterval->udata() = (void *)(intptr_t)(iinterval - m_intervals.begin() + offset);
 
-			if (m_do_sort) 
+			if (m_do_sort)
 				m_intervals.sort(m_compare);
 		}
 	} else

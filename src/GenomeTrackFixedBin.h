@@ -39,8 +39,17 @@ protected:
 	unsigned  m_bin_size;
 	int64_t   m_num_samples;
 	int64_t   m_cur_coord;
+	int64_t   m_base_offset{0};
+
+	// State for indexed "smart handle"
+	std::string m_dat_path;
+	std::string m_dat_mode;
+	bool        m_dat_open{false};
 
 	void init_read(const char *filename, const char *mode, int chromid);
+
+	// Helper to parse header at current file position
+	void read_header_at_current_pos_(BufferedFile &bf);
 };
 
 
@@ -48,7 +57,8 @@ protected:
 
 inline void GenomeTrackFixedBin::goto_bin(uint64_t bin)
 {
-	if (m_bfile.seek((long)(bin * sizeof(float) + sizeof(m_bin_size)), SEEK_SET))
+	// Add m_base_offset to the absolute seek for indexed format support
+	if (m_bfile.seek((long)(m_base_offset + sizeof(m_bin_size) + (uint64_t)bin * sizeof(float)), SEEK_SET))
 		TGLError<GenomeTrackFixedBin>("Failed to seek a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
 	m_cur_coord = bin * m_bin_size;
 }

@@ -10,21 +10,22 @@ test_that("indexed format works with gseq.extract on all strands", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
-    gdb.init(test_db)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+        gdb.init(test_db)
 
-    # Forward strand
-    fwd <- gseq.extract(gintervals("test", 0, 8, 1))
-    expect_equal(fwd, "ACTGACTG")
+        # Forward strand
+        fwd <- gseq.extract(gintervals("test", 0, 8, 1))
+        expect_equal(fwd, "ACTGACTG")
 
-    # Reverse strand
-    rev <- gseq.extract(gintervals("test", 0, 8, -1))
-    expect_equal(rev, "CAGTCAGT")
+        # Reverse strand
+        rev <- gseq.extract(gintervals("test", 0, 8, -1))
+        expect_equal(rev, "CAGTCAGT")
 
-    # No strand specified (should default to forward)
-    nostrand <- gseq.extract(gintervals("test", 0, 8))
-    expect_equal(nostrand, "ACTGACTG")
+        # No strand specified (should default to forward)
+        nostrand <- gseq.extract(gintervals("test", 0, 8))
+        expect_equal(nostrand, "ACTGACTG")
+    })
 })
 
 test_that("indexed format works with multiple interval extraction", {
@@ -37,19 +38,20 @@ test_that("indexed format works with multiple interval extraction", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
-    gdb.init(test_db)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+        gdb.init(test_db)
 
-    # Extract from multiple chromosomes
-    intervals <- data.frame(
-        chrom = c("chr1", "chr2", "chr3"),
-        start = c(0, 0, 0),
-        end = c(4, 4, 4)
-    )
+        # Extract from multiple chromosomes
+        intervals <- data.frame(
+            chrom = c("chr1", "chr2", "chr3"),
+            start = c(0, 0, 0),
+            end = c(4, 4, 4)
+        )
 
-    seqs <- gseq.extract(intervals)
-    expect_equal(seqs, c("AAAA", "CCCC", "GGGG"))
+        seqs <- gseq.extract(intervals)
+        expect_equal(seqs, c("AAAA", "CCCC", "GGGG"))
+    })
 })
 
 test_that("indexed format works with gintervals.all()", {
@@ -62,12 +64,11 @@ test_that("indexed format works with gintervals.all()", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
+
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
-
     all_intervals <- gintervals.all()
-
     expect_equal(nrow(all_intervals), 3)
     expect_equal(as.character(all_intervals$chrom), c("a", "b", "c"))
     expect_equal(all_intervals$start, c(0, 0, 0))
@@ -85,14 +86,15 @@ test_that("indexed format works with gintervals.2d.all() for small genomes", {
     })
 
     # Set threshold high so 2D is materialized
-    options(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 100)
-    gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
-    gdb.init(test_db)
+    withr::with_options(list(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 100), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
+        gdb.init(test_db)
 
-    genome_2d <- gintervals.2d.all()
+        genome_2d <- gintervals.2d.all()
 
-    expect_false(is.null(genome_2d))
-    expect_equal(nrow(genome_2d), 4) # 2x2 combinations
+        expect_false(is.null(genome_2d))
+        expect_equal(nrow(genome_2d), 4) # 2x2 combinations
+    })
 })
 
 test_that("indexed format defers 2D for large genomes", {
@@ -106,19 +108,19 @@ test_that("indexed format defers 2D for large genomes", {
     withr::defer(unlink(test_db, recursive = TRUE))
 
     # Set threshold low to force deferral
-    options(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 5)
-    expect_message(
-        gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE),
-        "Deferring 2D genome generation"
-    )
+    withr::with_options(list(gmulticontig.indexed_format = TRUE, gmulticontig.2d.threshold = 5), {
+        expect_message(
+            gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE),
+            "Deferring 2D genome generation"
+        )
+        gdb.init(test_db)
 
-    gdb.init(test_db)
-
-    # gintervals.2d.all() should still work (generates on demand)
-    genome_2d <- gintervals.2d.all()
-    expect_false(is.null(genome_2d))
-    # With deferred generation, we get chromosome names only, not all pairs
-    expect_true(nrow(genome_2d) >= 10) # At least 10 rows
+        # gintervals.2d.all() should still work (generates on demand)
+        genome_2d <- gintervals.2d.all()
+        expect_false(is.null(genome_2d))
+        # With deferred generation, we get chromosome names only, not all pairs
+        expect_true(nrow(genome_2d) >= 10) # At least 10 rows
+    })
 })
 
 test_that("indexed format works with chromosome name lookups", {
@@ -131,7 +133,7 @@ test_that("indexed format works with chromosome name lookups", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -156,7 +158,7 @@ test_that("indexed format handles boundary conditions", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -186,7 +188,7 @@ test_that("indexed format persists across database reloads", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -213,7 +215,7 @@ test_that("indexed format is compatible with gdb.reload()", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
     gdb.init(test_db)
 
@@ -235,7 +237,7 @@ test_that("indexed format validates on init", {
         unlink(test_fasta)
     })
 
-    options(gmulticontig.indexed_format = TRUE)
+    withr::local_options(list(gmulticontig.indexed_format = TRUE))
     gdb.create(groot = test_db, fasta = test_fasta, verbose = TRUE)
 
     # Corrupt the index file

@@ -6,6 +6,7 @@
 
 #include "TGLException.h"
 #include "GenomeTrackFixedBin.h"
+#include "TrackIndex.h"
 
 void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 {
@@ -74,27 +75,94 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 	}
 }
 
+void GenomeTrackFixedBin::read_header_at_current_pos_(BufferedFile &bf)
+{
+	int32_t signature = 0;
+	if (bf.read(&signature, sizeof(signature)) != sizeof(signature) || signature <= 0)
+		TGLError<GenomeTrackFixedBin>("Invalid fixed-bin header in %s", bf.file_name().c_str());
+	if (bf.read(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size))
+		TGLError<GenomeTrackFixedBin>("Invalid fixed-bin header in %s", bf.file_name().c_str());
+}
+
 void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int chromid)
 {
+	m_base_offset = 0; // Reset for per-chromosome
 	m_cur_coord = 0;
+	uint64_t header_start = 0;
+	uint64_t total_bytes = 0;
 
-    if (m_bfile.open(filename, mode))
-        TGLError<GenomeTrackFixedBin>("%s", strerror(errno));
+	// Check for indexed format FIRST
+	const std::string track_dir = GenomeTrack::get_track_dir(filename);
+	const std::string idx_path = track_dir + "/track.idx";
 
-    if (m_bfile.read(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size)) {
-        if (m_bfile.error())
-            TGLError<GenomeTrackFixedBin>("Failed to read a dense track file %s: %s", filename, strerror(errno));
-        TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
-    }
+	struct stat idx_st;
+	if (stat(idx_path.c_str(), &idx_st) == 0) {
+		// --- INDEXED PATH ---
+		const std::string dat_path  = track_dir + "/track.dat";
 
-    // determine the number of samples in the file
-    double num_samples = (m_bfile.file_size() - m_bfile.tell()) / (double)sizeof(float);
+		// Reopen file if: not open, path changed, or mode changed
+		if (!m_dat_open || m_dat_path != dat_path || m_dat_mode != mode) {
+			m_bfile.close();
+			if (m_bfile.open(dat_path.c_str(), mode))
+				TGLError<GenomeTrackFixedBin>("Cannot open %s: %s", dat_path.c_str(), strerror(errno));
+			m_dat_open = true;
+			m_dat_path = dat_path;
+			m_dat_mode = mode;
+		}
 
-    if (m_bin_size <= 0 || num_samples != (int64_t)num_samples)
-        TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
+		auto idx   = get_track_index(track_dir);
+		if (!idx)
+			TGLError<GenomeTrackFixedBin>("Failed to load track index for %s", track_dir.c_str());
 
-    m_num_samples = (int64_t)num_samples;
-    m_chromid = chromid;
+		auto entry = idx->get_entry(chromid);
+		if (!entry)
+			TGLError<GenomeTrackFixedBin>("Chromosome %d not found in index for %s", chromid, track_dir.c_str());
+
+		if (entry->length == 0) {
+			m_num_samples = 0;
+			m_chromid = chromid;
+			return;
+		}
+
+		if (m_bfile.seek(entry->offset, SEEK_SET))
+			TGLError<GenomeTrackFixedBin>("Failed to seek to offset %llu in %s",
+				(unsigned long long)entry->offset, dat_path.c_str());
+
+		header_start = entry->offset;
+		// For indexed format, read just bin_size (no signature)
+		// The data was copied as-is from per-chromosome files which have: bin_size + values
+		if (m_bfile.read(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size))
+			TGLError<GenomeTrackFixedBin>("Invalid fixed-bin header in %s", dat_path.c_str());
+
+		m_base_offset = entry->offset; 
+		total_bytes = entry->length;
+	} else {
+		// --- PER-CHROMOSOME PATH ---
+		m_bfile.close();
+		m_dat_open = false;
+
+		if (m_bfile.open(filename, mode))
+			TGLError<GenomeTrackFixedBin>("%s", strerror(errno));
+
+		if (m_bfile.read(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size)) {
+			if (m_bfile.error())
+				TGLError<GenomeTrackFixedBin>("Failed to read a dense track file %s: %s", filename, strerror(errno));
+			TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
+		}
+
+		header_start = 0;
+		total_bytes = m_bfile.file_size();
+	}
+
+	// --- COMMON LOGIC ---
+	const uint64_t header_size = m_bfile.tell() - header_start;
+	double num_samples = (total_bytes - header_size) / (double)sizeof(float);
+
+	if (m_bin_size <= 0 || num_samples != (int64_t)num_samples)
+		TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
+
+	m_num_samples = (int64_t)num_samples;
+	m_chromid = chromid;
 }
 
 void GenomeTrackFixedBin::init_write(const char *filename, unsigned bin_size, int chromid)

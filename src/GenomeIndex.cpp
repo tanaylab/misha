@@ -55,6 +55,13 @@ void GenomeIndex::load(const string &index_path) {
             "Failed to read contig count from %s", index_path.c_str());
     }
 
+    // Sanity check: 2 million contigs should be more than enough for any genome
+    if (num_contigs > 2000000) {
+        fclose(fp);
+        TGLError<GenomeIndex>(INVALID_FORMAT,
+            "Number of contigs %u exceeds maximum (2000000) in %s", num_contigs, index_path.c_str());
+    }
+
     // Read stored checksum (will validate later)
     uint64_t stored_checksum;
     if (fread(&stored_checksum, sizeof(stored_checksum), 1, fp) != 1) {
@@ -86,6 +93,14 @@ void GenomeIndex::load(const string &index_path) {
                 "Failed to read name length at entry %u in %s", i, index_path.c_str());
         }
 
+        // Validate name length (reasonable limit for contig names)
+        if (name_length > 1024) {
+            fclose(fp);
+            TGLError<GenomeIndex>(INVALID_FORMAT,
+                "Contig name length %u exceeds maximum (1024) at entry %u in %s",
+                name_length, i, index_path.c_str());
+        }
+
         // Read name
         if (name_length > 0) {
             vector<char> name_buf(name_length + 1);
@@ -107,8 +122,24 @@ void GenomeIndex::load(const string &index_path) {
                 "Failed to read offset/length/reserved at entry %u in %s", i, index_path.c_str());
         }
 
+        // Validate offset+length for overflow
+        if (entry.offset + entry.length < entry.offset) {
+            fclose(fp);
+            TGLError<GenomeIndex>(INVALID_FORMAT,
+                "Offset+length overflow for contig '%s' (chromid %u) in %s",
+                entry.name.c_str(), entry.chromid, index_path.c_str());
+        }
+
+        // Check for duplicate chromid
+        auto insert_result = m_chromid_to_index.insert({entry.chromid, i});
+        if (!insert_result.second) {
+            fclose(fp);
+            TGLError<GenomeIndex>(INVALID_FORMAT,
+                "Duplicate chromosome ID %u (contig '%s') in index %s",
+                entry.chromid, entry.name.c_str(), index_path.c_str());
+        }
+
         m_entries.push_back(entry);
-        m_chromid_to_index[entry.chromid] = i;
     }
 
     fclose(fp);
