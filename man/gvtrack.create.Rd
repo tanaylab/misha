@@ -109,13 +109,15 @@ Optional spatial weighting allows position-dependent weights.
 \emph{func = "pwm.max", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 spat_min = NULL, spat_max = NULL)} \cr
-Returns maximum log-likelihood score of best PSSM match. bidirect=TRUE
-checks both strands. Prior adds pseudocounts, extend=TRUE allows boundary
-scoring. Neutral characters (\code{N}, \code{n}, \code{*} by default) are scored with the mean
-log-probability of each PSSM column on both strands, so the same penalty applies regardless of
-orientation. The reported value is the single best-strand score after spatial weighting—forward
-and reverse orientations are compared, not summed. Optional spatial weighting allows
-position-dependent weights.
+Returns maximum log-likelihood score of best PSSM match.
+When \code{bidirect=TRUE}, both strands are scanned and the reported value is the
+\emph{single best-strand} score after spatial weighting—the two strand scores are
+compared, not summed. (This is a \emph{per-position union}, not per-strand accumulation.)
+The \code{strand} parameter is ignored when \code{bidirect=TRUE}.
+Prior adds pseudocounts; \code{extend=TRUE} allows boundary scoring. Neutral characters
+(\code{N}, \code{n}, \code{*} by default) are scored with the mean log-probability of each
+PSSM column on both strands, so the same penalty applies regardless of orientation.
+Optional spatial weighting allows position-dependent weights.
 
 \emph{func = "pwm.max.pos", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
@@ -131,22 +133,28 @@ Optional spatial weighting allows position-dependent weights.
 
 \emph{func = "pwm.count", params = list(pssm = matrix, score.thresh = 0,
 bidirect = TRUE, prior = 0.01, extend = TRUE, strand = 1)} \cr
-Counts motif hits with score >= threshold inside each interval. Returns the
-number of positions where the log-likelihood score meets or exceeds score.thresh.
-For bidirect=TRUE, counts hits on both strands (each position and strand counted
-separately). Prior adds pseudocounts, extend=TRUE allows scoring at boundaries.
+Counts motif hits with score >= threshold inside each interval.
+For \code{bidirect=FALSE}, only the strand given by \code{strand} is checked.
+For \code{bidirect=TRUE}, \emph{both} strands are checked \emph{independently} and
+counted \emph{per strand}; each genomic position can contribute 0, 1, or 2 to the total.
+(This is a \emph{per-strand sum}, unlike \code{pwm} or \code{pwm.max}, which are per-position union.)
+Returns the total number of passing strand-hits. Prior adds pseudocounts; \code{extend=TRUE}
+allows scoring at boundaries. If spatial weights are provided, the threshold is applied
+to the spatially weighted score for each strand separately.
 
 For all PWM functions:
 \itemize{
   \item pssm: Position-specific scoring matrix (matrix or data frame with columns A,C,G,T containing frequencies; additional columns are allowed and will be ignored)
-  \item bidirect: If TRUE, scans both strands; if FALSE, forward only (default: TRUE)
+  \item bidirect: If TRUE, scans both strands; when TRUE the \code{strand} parameter is ignored
+    for PWM scoring modes. If FALSE, only the strand given by \code{strand} is scanned (default: TRUE)
   \item prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
   \item extend: If TRUE, allows scoring at interval boundaries (default: TRUE)
   \item neutral characters: By default \code{N}, \code{n}, and \code{*} are treated as unknown bases
 and contribute the average log-probability of the corresponding PSSM column on both strands.
   \item strand: If 1, scans forward strand; if -1, scans reverse strand (default: 1).
-For strand == 1, the position of the best match is at the beginning of the match.
-For strand == -1, the position is at the end of the match.
+    Ignored when \code{bidirect=TRUE}. For \code{pwm.max.pos}, when \code{strand == 1},
+    the position of the best match is at the beginning of the match; when \code{strand == -1},
+    the position is at the end of the match.
   \item score.thresh: Score threshold for pwm.count (default: 0). Only positions with
 log-likelihood >= score.thresh are counted.
   \item spat_factor: Optional numeric vector of positive spatial weights (one per bin).

@@ -466,7 +466,7 @@ test_that("PWM sliding window MAX_POS mode works with iterator=20 and shifts", {
         params = list(pssm = pssm, bidirect = TRUE)
     )
     gvtrack.iterator("pwm_pos_iter20", sshift = -150, eshift = 150)
-
+    result <- gextract("pwm_pos_iter20", gintervals(1, 1000000, 1100000), iterator = 20)
     expect_regression(result, "pwm_sliding_window_test_35")
 
     expect_true(nrow(result) > 0)
@@ -905,4 +905,220 @@ test_that("PWM regression: MAX_POS mode iterator=100 with shifts", {
 
     result <- gextract("pwm_pos_reg100", gintervals(1, 1000000, 1100000), iterator = 100)
     expect_regression(result, "pwm_sliding_window_pos_iter100_shifts")
+})
+
+test_that("pwm (TOTAL_LIKELIHOOD): plus-strand sliding equals spatial (no-sliding) baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    n <- 40
+    starts <- 2000 + 0:(n - 1)
+    ends <- starts + 60L
+    ivs <- gintervals(rep(1L, n), starts, ends)
+
+    gvtrack.create("pwm_plus_slide", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01, score.thresh = -10
+    )
+
+    gvtrack.create("pwm_plus_spatial_ref", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01, score.thresh = -10,
+        spat_factor = rep(1.0, 5), spat_bin = 20L
+    )
+
+    res <- gextract(c("pwm_plus_slide", "pwm_plus_spatial_ref"),
+        ivs,
+        iterator = ivs
+    )
+
+    expect_equal(res$pwm_plus_slide, res$pwm_plus_spatial_ref, tolerance = 1e-6)
+})
+
+test_that("pwm (TOTAL_LIKELIHOOD): minus-strand sliding equals spatial (no-sliding) baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    # Build a series of overlapping intervals shifted by 1bp to trigger sliding
+    n <- 40
+    starts <- 2000 + 0:(n - 1)
+    ends <- starts + 60L
+    ivs <- gintervals(rep(1L, n), starts, ends)
+
+    # Non-spatial -> sliding path is enabled
+    gvtrack.create("pwm_minus_slide", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01, score.thresh = -10
+    )
+
+    # Spatial with weights=1 -> no sliding path, but numerically identical
+    gvtrack.create("pwm_minus_spatial_ref", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01, score.thresh = -10,
+        spat_factor = rep(1.0, 5), spat_bin = 20L
+    )
+
+    res <- gextract(c("pwm_minus_slide", "pwm_minus_spatial_ref"),
+        ivs,
+        iterator = ivs
+    )
+    
+    expect_equal(res$pwm_minus_slide, res$pwm_minus_spatial_ref, tolerance = 1e-6)
+})
+
+test_that("pwm.max (MAX_LIKELIHOOD): plus-strand sliding equals spatial (no-sliding) baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    n <- 40
+    starts <- 2000 + 0:(n - 1)
+    ends <- starts + 60L
+    ivs <- gintervals(rep(1L, n), starts, ends)
+
+    gvtrack.create("pwmmax_plus_slide", NULL, "pwm.max",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01, score.thresh = -10
+    )
+
+    gvtrack.create("pwmmax_plus_spatial_ref", NULL, "pwm.max",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01, score.thresh = -10,
+        spat_factor = rep(1.0, 5), spat_bin = 20L
+    )
+
+    res <- gextract(c("pwmmax_plus_slide", "pwmmax_plus_spatial_ref"),
+        ivs,
+        iterator = ivs
+    )
+
+    expect_equal(res$pwmmax_plus_slide, res$pwmmax_plus_spatial_ref, tolerance = 1e-6)
+})
+
+test_that("pwm.max (MAX_LIKELIHOOD): minus-strand sliding equals spatial (no-sliding) baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    n <- 40
+    starts <- 2100 + 0:(n - 1)
+    ends <- starts + 60L
+    ivs <- gintervals(rep(1L, n), starts, ends)
+
+    # Non-spatial -> sliding path
+    gvtrack.create("pwmmax_minus_slide", NULL, "pwm.max",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01, score.thresh = -10
+    )
+
+    # Spatial weights=1 -> no sliding; should match
+    gvtrack.create("pwmmax_minus_spatial_ref", NULL, "pwm.max",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01, score.thresh = -10,
+        spat_factor = rep(1.0, 5), spat_bin = 20L
+    )
+
+    res <- gextract(c("pwmmax_minus_slide", "pwmmax_minus_spatial_ref"),
+        ivs,
+        iterator = ivs
+    )
+
+    expect_equal(res$pwmmax_minus_slide, res$pwmmax_minus_spatial_ref, tolerance = 1e-8)
+})
+
+test_that("pwm.count (MOTIF_COUNT): plus-strand sliding equals spatial (no-sliding) baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    n <- 40
+    starts <- 2000 + 0:(n - 1)
+    ends <- starts + 60L
+    ivs <- gintervals(rep(1L, n), starts, ends)
+
+    gvtrack.create("count_plus_slide", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01, score.thresh = -10
+    )
+
+    gvtrack.create("count_plus_spatial_ref", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01, score.thresh = -10,
+        spat_factor = rep(1.0, 5), spat_bin = 20L
+    )
+
+    res <- gextract(c("count_plus_slide", "count_plus_spatial_ref"),
+        ivs,
+        iterator = ivs
+    )
+
+    expect_equal(res$count_plus_slide, res$count_plus_spatial_ref, tolerance = 1e-8)
+})
+
+test_that("pwm.count (MOTIF_COUNT): minus-strand sliding equals spatial (no-sliding) baseline", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    n <- 40
+    starts <- 2200 + 0:(n - 1)
+    ends <- starts + 60L
+    ivs <- gintervals(rep(1L, n), starts, ends)
+
+    # Non-spatial -> sliding path
+    gvtrack.create("count_minus_slide", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01, score.thresh = -10
+    )
+
+    # Spatial weights=1 -> no sliding; should match
+    gvtrack.create("count_minus_spatial_ref", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01, score.thresh = -10,
+        spat_factor = rep(1.0, 5), spat_bin = 20L
+    )
+
+    res <- gextract(c("count_minus_slide", "count_minus_spatial_ref"),
+        ivs,
+        iterator = ivs
+    )
+
+    expect_equal(res$count_minus_slide, res$count_minus_spatial_ref, tolerance = 1e-8)
+})
+
+test_that("bidirect ignores strand parameter under sliding (union semantics)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    n <- 30
+    starts <- 2300 + 0:(n - 1)
+    ends <- starts + 50L
+    ivs <- gintervals(rep(1L, n), starts, ends)
+
+    # Non-spatial bidi tracks with different 'strand' values — should be identical
+    gvtrack.create("count_bidi_s1_slide", NULL, "pwm.count",
+        pssm = pssm, bidirect = TRUE, strand = 1,
+        extend = TRUE, prior = 0.01, score.thresh = -10
+    )
+    gvtrack.create("count_bidi_sneg1_slide", NULL, "pwm.count",
+        pssm = pssm, bidirect = TRUE, strand = -1,
+        extend = TRUE, prior = 0.01, score.thresh = -10
+    )
+
+    out <- gextract(c("count_bidi_s1_slide", "count_bidi_sneg1_slide"),
+        ivs,
+        iterator = ivs
+    )
+
+    expect_equal(out$count_bidi_s1_slide, out$count_bidi_sneg1_slide, tolerance = 1e-8)
 })
