@@ -309,9 +309,13 @@ static ScoreResult score_pwm_over_range(
                     best_score = this_max;
                 }
             } else if (mode == "count") {
-                double this_max = std::max(fwd_score, rev_score);
-                if (this_max >= params.score_thresh) {
-                    count++;
+                if (params.bidirect) {
+                    if (fwd_score >= params.score_thresh) count++;
+                    if (rev_score >= params.score_thresh) count++;
+                } else {
+                    // single-strand mode: use the strand selected by strand_mode
+                    double one = (params.strand_mode >= 0) ? fwd_score : rev_score;
+                    if (one >= params.score_thresh) count++;
                 }
             } else if (mode == "pos") {
                 if (fwd_score > best_score ||
@@ -429,9 +433,12 @@ static ScoreResult score_pwm_over_range(
                     best_score = this_max;
                 }
             } else if (mode == "count") {
-                double this_max = std::max(fwd_score, rev_score);
-                if (this_max >= params.score_thresh) {
-                    count++;
+                if (params.bidirect) {
+                    if (fwd_score >= params.score_thresh) count++;
+                    if (rev_score >= params.score_thresh) count++;
+                } else {
+                    double one = (params.strand_mode >= 0) ? fwd_score : rev_score;
+                    if (one >= params.score_thresh) count++;
                 }
             } else if (mode == "pos") {
                 if (fwd_score > best_score ||

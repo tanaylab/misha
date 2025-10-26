@@ -112,6 +112,64 @@ struct RunningLogSumExp {
         if (sum_scaled < 0) sum_scaled = 0; // guard tiny negatives due to FP
     }
 
+    inline void pop_back() {
+        float x = window.back();
+        window.pop_back();
+        // remove x from maxdq back if it matches
+        if (!maxdq.empty() && maxdq.back() == x) {
+            maxdq.pop_back();
+            // If maxdq is empty, we need to rebuild it from window
+            if (maxdq.empty() && !window.empty()) {
+                // Find new max and rebuild maxdq
+                M = -std::numeric_limits<double>::infinity();
+                for (float v : window) {
+                    if (v > M) M = v;
+                }
+                sum_scaled = 0.0;
+                for (float v : window) {
+                    sum_scaled += std::exp(double(v) - M);
+                    while (!maxdq.empty() && maxdq.back() < v) maxdq.pop_back();
+                    maxdq.push_back(v);
+                }
+            } else {
+                // Max is still valid, just update sum_scaled
+                if (std::isfinite(M)) sum_scaled -= std::exp(double(x) - M);
+                else sum_scaled = 0.0;
+            }
+        } else {
+            // x was not the max candidate at back, just subtract contribution
+            if (std::isfinite(M)) sum_scaled -= std::exp(double(x) - M);
+            else sum_scaled = 0.0;
+        }
+        if (sum_scaled < 0) sum_scaled = 0; // guard tiny negatives due to FP
+    }
+
+    inline void push_front(float x) {
+        // Periodic refresh for numerical stability
+        if (++steps_since_refresh >= REFRESH_INTERVAL) {
+            refresh();
+        }
+
+        // Add to front of window
+        window.push_front(x);
+
+        // Update M if needed
+        if (x > M) {
+            // Rescale once
+            if (std::isfinite(M)) sum_scaled *= std::exp(M - double(x));
+            M = x;
+        }
+        sum_scaled += std::exp(double(x) - M);
+
+        // Rebuild maxdq to maintain invariant
+        // This is O(n) but necessary since we're adding at the front
+        maxdq.clear();
+        for (float v : window) {
+            while (!maxdq.empty() && maxdq.back() < v) maxdq.pop_back();
+            maxdq.push_back(v);
+        }
+    }
+
     inline double value() const {
         if (!std::isfinite(M)) return -std::numeric_limits<double>::infinity();
         return M + std::log(sum_scaled);

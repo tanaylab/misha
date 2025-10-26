@@ -192,7 +192,7 @@ test_that("pwm.count matches manual counting for perfect matches", {
 })
 
 
-test_that("pwm.count bidirectional equals sum of strand-specific counts", {
+test_that("pwm.count bidirectional equals per-position union (LSE) of strands", {
     remove_all_vtracks()
 
     pssm <- create_test_pssm()
@@ -213,10 +213,89 @@ test_that("pwm.count bidirectional equals sum of strand-specific counts", {
         prior = 0.01, score.thresh = -10
     )
 
+    gvtrack.create("pwm_plus", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = 1
+    )
+    gvtrack.create("pwm_minus", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = -1
+    )
+    gvtrack.create("pwm_bidi", NULL, "pwm",
+        pssm = pssm, bidirect = TRUE, extend = TRUE,
+        prior = 0.01, score.thresh = -10
+    )
+
+    pwm_result <- gextract(c("pwm_plus", "pwm_minus", "pwm_bidi"), test_interval, iterator = 1)
+    n_pwm_plus <- sum(pwm_result$pwm_plus > -10)
+    n_pwm_minus <- sum(pwm_result$pwm_minus > -10)
+    # pwm_bidi is already LSE-combined per position; threshold it:
+    n_pwm_bidi <- sum(pwm_result$pwm_bidi > -10)
+
     result <- gextract(c("count_plus", "count_minus", "count_bidi"), test_interval, iterator = test_interval)
 
-    expect_equal(result$count_bidi[1], result$count_plus[1] + result$count_minus[1], tolerance = 1e-8)
+    expect_equal(result$count_plus[1],  n_pwm_plus)
+    expect_equal(result$count_minus[1], n_pwm_minus)
+    # New union semantics: bidi count equals number of positions passing LSE-combined pwm
+    expect_equal(result$count_bidi[1],  n_pwm_bidi)
 })
+
+test_that("pwm.count: bidi equals union (LSE) and matches pwm thresholding", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+    test_interval <- gintervals(1, 200, 300)
+
+    # Per-position PWM scores on each strand and bidirectional
+    gvtrack.create("pwm_plus", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = 1
+    )
+    gvtrack.create("pwm_minus", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = -1
+    )
+    gvtrack.create("pwm_bidi", NULL, "pwm",
+        pssm = pssm, bidirect = TRUE, extend = TRUE,
+        prior = 0.01, score.thresh = -10
+    )
+
+    # Iterator=1 gives per-base positions to threshold against
+    pwm_result <- gextract(c("pwm_plus", "pwm_minus", "pwm_bidi"),
+        test_interval,
+        iterator = 1
+    )
+    n_pwm_plus <- sum(pwm_result$pwm_plus > -10, na.rm = TRUE)
+    n_pwm_minus <- sum(pwm_result$pwm_minus > -10, na.rm = TRUE)
+    n_pwm_bidi <- sum(pwm_result$pwm_bidi > -10, na.rm = TRUE)
+
+    # Strand-specific and bidirectional counts
+    gvtrack.create("count_plus", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = 1
+    )
+    gvtrack.create("count_minus", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = -1
+    )
+    gvtrack.create("count_bidi", NULL, "pwm.count",
+        pssm = pssm, bidirect = TRUE, extend = TRUE,
+        prior = 0.01, score.thresh = -10
+    )
+
+    result <- gextract(c("count_plus", "count_minus", "count_bidi"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    # Strand-specific counts still match strand-specific PWM thresholding
+    expect_equal(result$count_plus[1],  n_pwm_plus,  ignore_attr = TRUE)
+    expect_equal(result$count_minus[1], n_pwm_minus, ignore_attr = TRUE)
+    # New union semantics: bidi equals LSE-combined pwm thresholding per position
+    expect_equal(result$count_bidi[1],  n_pwm_bidi,  ignore_attr = TRUE)
+})
+
 
 test_that("pwm.count spatial weighting can increase counts over non-spatial at positive threshold", {
     remove_all_vtracks()
@@ -354,4 +433,79 @@ test_that("pwm.count spatial + iterator shifts equivalence holds", {
     a_unshift <- gextract("pwmcount_spat_unshifted", base80, iterator = base80)
 
     expect_equal(a_shift$pwmcount_spat_shifted[1], a_unshift$pwmcount_spat_unshifted[1], ignore_attr = TRUE)
+})
+
+test_that("pwm.count: strand=-1 matches pwm_minus (non-spatial, sliding path)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+    test_interval <- gintervals(1, 200, 300)
+
+    # Per-position minus-strand scores (reference)
+    gvtrack.create("pwm_minus", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = -1
+    )
+    pwm <- gextract("pwm_minus", test_interval, iterator = 1)
+    n_minus <- sum(pwm$pwm_minus > -10, na.rm = TRUE)
+
+    # Minus-only count (uses sliding path when non-spatial)
+    gvtrack.create("count_minus", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = -1
+    )
+    res <- gextract("count_minus", test_interval, iterator = test_interval)
+
+    expect_equal(res$count_minus[1], n_minus, ignore_attr = TRUE)
+})
+
+test_that("pwm.count: strand=-1 matches pwm_minus (spatial, non-sliding path; weights=1)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+    test_interval <- gintervals(1, 200, 300)
+
+    # Per-position minus-strand scores (reference)
+    gvtrack.create("pwm_minus", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = -1
+    )
+    pwm <- gextract("pwm_minus", test_interval, iterator = 1)
+    n_minus <- sum(pwm$pwm_minus > -10, na.rm = TRUE)
+
+    # Spatial path forced by spat_factor; weights=1 -> no effect on threshold
+    gvtrack.create("count_minus_spat", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = -1,
+        spat_factor = rep(1.0, 5), spat_bin = 20L
+    )
+    res <- gextract("count_minus_spat", test_interval, iterator = test_interval)
+
+    expect_equal(res$count_minus_spat[1], n_minus, ignore_attr = TRUE)
+})
+
+test_that("pwm.count: bidirect ignores strand parameter (union semantics)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+    test_interval <- gintervals(1, 200, 300)
+
+    gvtrack.create("count_bidi_s1", NULL, "pwm.count",
+        pssm = pssm, bidirect = TRUE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = 1
+    )
+    gvtrack.create("count_bidi_sneg1", NULL, "pwm.count",
+        pssm = pssm, bidirect = TRUE, extend = TRUE,
+        prior = 0.01, score.thresh = -10, strand = -1
+    )
+
+    out <- gextract(c("count_bidi_s1", "count_bidi_sneg1"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    expect_equal(out$count_bidi_s1[1], out$count_bidi_sneg1[1], ignore_attr = TRUE)
 })

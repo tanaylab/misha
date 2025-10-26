@@ -3,6 +3,7 @@
 * Allow data frames as input in `pssm` parameter of `gvtrack.create` and `gseq.pwm` functions.
 * Implemented parallelism in `gseq.pwm` and added `neutral_chars_policy` parameter.
 * Implemented sliding window optimization for PWM scoring modes (`pwm`, `pwm.max` and `pwm.count`) for dense iterators when spatial weighting is disabled, providing significant performance improvements for consecutive genomic intervals.
+* **BREAKING**: `pwm.count(bidirect=TRUE)` now counts **per-position union** of strands (via log-sum-exp), aligning with `pwm`/`pwm.max`. Each position contributes at most 1 to the count. To reproduce the old per-strand-sum behavior, add the two strand-specific counts: `pwm.count(bidirect=FALSE, strand=1) + pwm.count(bidirect=FALSE, strand=-1)`.
 
 # misha 5.1.0
 
