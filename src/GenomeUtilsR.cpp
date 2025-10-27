@@ -165,7 +165,7 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
 
         // Parse filter intervals if provided
         std::vector<ValidSegment> valid_segments;
-        bool use_filter = !Rf_isNull(_filter) && Rf_isFrame(_filter) && Rf_length(VECTOR_ELT(_filter, 0)) > 0;
+        bool use_filter = !Rf_isNull(_filter) && Rf_inherits(_filter, "data.frame") && Rf_length(VECTOR_ELT(_filter, 0)) > 0;
 
         if (use_filter) {
             // Parse filter data frame

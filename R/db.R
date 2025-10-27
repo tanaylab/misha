@@ -635,6 +635,7 @@ gdb.set_readonly_attrs <- function(attrs) {
 #' @param format database format: "indexed" (default, single genome.seq + genome.idx)
 #' or "per-chromosome" (separate .seq file per contig). If NULL, uses the value from
 #' \code{getOption("gmulticontig.indexed_format", TRUE)}
+#' @param verbose if TRUE, prints verbose messages
 #' @return None.
 #' @seealso \code{\link{gdb.init}}, \code{\link{gdb.reload}},
 #' \code{\link{gintervals.import_genes}}

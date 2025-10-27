@@ -34,6 +34,7 @@ reference:
       - gtrack.var.ls
       - gtrack.var.rm
       - gtrack.var.set
+      - gtrack.convert_to_indexed
   - title: Virtual track functions
     desc:  Functions to manipulate and create virtual tracks
     contents:
@@ -82,6 +83,9 @@ reference:
       - gintervals.summary
       - gintervals.union
       - gintervals.update
+      - gintervals.to_indexed_format
+      - gintervals.2d.to_indexed_format  
+      - gintervals.convert_to_indexed    
       - giterator.cartesian_grid
       - giterator.intervals
   - title: Data manipulation functions
@@ -120,6 +124,8 @@ reference:
       - gdb.init
       - gdb.reload
       - gdb.set_readonly_attrs
+      - gdb.convert_to_indexed
+      - gdb.info
       - gdir.cd
       - gdir.create
       - gdir.cwd
