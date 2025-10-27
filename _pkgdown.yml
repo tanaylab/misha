@@ -54,6 +54,7 @@ reference:
       - gintervals.2d.band_intersect
       - gintervals.all
       - gintervals.canonic
+      - gintervals.mark_overlaps
       - gintervals.chrom_sizes
       - gintervals.covered_bp
       - gintervals.coverage_fraction

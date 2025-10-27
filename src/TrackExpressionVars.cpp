@@ -2,6 +2,7 @@
 #include <cmath>
 #include <unistd.h>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "rdbutils.h"
 
@@ -26,7 +27,7 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
 	"global.percentile", "global.percentile.min", "global.percentile.max",
 	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac"};
 
-const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage" };
+const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage", "near.count" };
 
 using namespace rdb;
 
@@ -120,7 +121,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ++ivar) {
 		ivar->siinterv = ivar->sintervs.begin();
-		if (ivar->val_func == Interv_var::DIST)
+		if (ivar->val_func == Interv_var::DIST || ivar->val_func == Interv_var::NEAR_COUNT)
 			ivar->eiinterv = ivar->eintervs.begin();
 	}
 }
@@ -754,6 +755,48 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
         var.sintervs.sort();
         var.sintervs.unify_overlaps(); // Unify overlaps since we want total coverage
 	
+	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::NEAR_COUNT])) {
+		var.val_func = Interv_var::NEAR_COUNT;
+
+		double dist_margin = 0;
+
+		if (!Rf_isNull(rparams)) {
+			if (Rf_isReal(rparams) && Rf_length(rparams) == 1)
+				dist_margin = REAL(rparams)[0];
+			else if (Rf_isInteger(rparams) && Rf_length(rparams) == 1)
+				dist_margin = INTEGER(rparams)[0];
+			else
+				verror("Virtual track %s: invalid parameters used for function %s", vtrack.c_str(), func.c_str());
+		}
+		if (dist_margin < 0)
+			verror("Virtual track %s, function %s: distance cannot be a negative number", vtrack.c_str(), func.c_str());
+
+		var.dist_margin = dist_margin;
+		var.sintervs.swap(intervs1d);
+		var.sintervs.sort();
+
+		const GenomeChromKey &chromkey = m_iu.get_chromkey();
+
+		// Create expanded intervals but do NOT unify them
+		var.eintervs.clear();
+		var.eintervs.reserve(var.sintervs.size());
+		for (const auto &interv : var.sintervs) {
+			double expanded_start = static_cast<double>(interv.start) - var.dist_margin;
+			double expanded_end = static_cast<double>(interv.end) + var.dist_margin;
+
+			int64_t new_start = expanded_start < 0.0 ? 0 : static_cast<int64_t>(std::floor(expanded_start));
+			uint64_t chrom_size = chromkey.get_chrom_size(interv.chromid);
+			double chrom_size_d = static_cast<double>(chrom_size);
+			if (expanded_end > chrom_size_d)
+				expanded_end = chrom_size_d;
+
+			int64_t new_end = static_cast<int64_t>(std::ceil(expanded_end));
+			if (new_end < new_start)
+				new_end = new_start;
+
+			var.eintervs.push_back(GInterval(interv.chromid, new_start, new_end, interv.strand));
+		}
+		var.eintervs.sort();
 	} else {
 		verror("Virtual track %s: invalid function %s used with intervals", vtrack.c_str(), func.c_str());
 	}
@@ -1633,8 +1676,66 @@ void TrackExpressionVars::set_vars(unsigned idx)
 
 				ivar->var[idx] = dist;
 			}
-		}
-		else if (ivar->val_func == Interv_var::COVERAGE)
+		} else if (ivar->val_func == Interv_var::NEAR_COUNT) {
+			const GInterval &interval = ivar->imdf1d ? ivar->imdf1d->interval : m_interval1d;
+
+			if (ivar->imdf1d && ivar->imdf1d->out_of_range) {
+				ivar->var[idx] = 0;
+				continue;
+			}
+
+			std::vector<GInterval> eval_intervals;
+			if (ivar->filter) {
+				ivar->filter->subtract(interval, eval_intervals);
+				if (eval_intervals.empty()) {
+					ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+					continue;
+				}
+			} else {
+				eval_intervals.push_back(interval);
+			}
+
+			size_t near_count = 0;
+			if (!ivar->imdf1d && !ivar->filter) {
+				GIntervals::const_iterator &eiter = ivar->eiinterv;
+				const GIntervals &expanded = ivar->eintervs;
+
+				while (eiter != expanded.end() && (eiter->chromid < interval.chromid ||
+					   (eiter->chromid == interval.chromid && eiter->end <= interval.start)))
+					++eiter;
+
+				GIntervals::const_iterator scan = eiter;
+				while (scan != expanded.end() && scan->chromid == interval.chromid && scan->start < interval.end) {
+					if (scan->end > interval.start)
+						++near_count;
+					++scan;
+				}
+			} else {
+				const GIntervals &expanded = ivar->eintervs;
+				std::unordered_set<size_t> counted;
+				counted.reserve(eval_intervals.size() * 2);
+
+				for (const auto &eval_interval : eval_intervals) {
+					auto it = lower_bound(expanded.begin(), expanded.end(), eval_interval, GIntervals::compare_by_start_coord);
+
+					if (it != expanded.begin())
+						--it;
+
+					for (; it != expanded.end() && it->chromid == eval_interval.chromid; ++it) {
+						if (it->end <= eval_interval.start)
+							continue;
+						if (it->start >= eval_interval.end)
+							break;
+
+						size_t expanded_idx = it - expanded.begin();
+						if (counted.insert(expanded_idx).second)
+							++near_count;
+					}
+				}
+			}
+
+			ivar->var[idx] = static_cast<double>(near_count);
+		} else if (ivar->val_func == Interv_var::COVERAGE)
 		{
 			const GInterval &interval = ivar->imdf1d ? ivar->imdf1d->interval : m_interval1d;
 
