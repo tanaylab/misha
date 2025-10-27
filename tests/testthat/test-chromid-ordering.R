@@ -34,7 +34,8 @@ test_that("indexed database preserves chrom_sizes.txt order for chromid mapping"
 
     # Check that chrom_sizes.txt is sorted (C++ import sorts it)
     chrom_sizes <- read.table(file.path(test_db, "chrom_sizes.txt"),
-                              header = FALSE, stringsAsFactors = FALSE)
+        header = FALSE, stringsAsFactors = FALSE
+    )
     colnames(chrom_sizes) <- c("chrom", "size")
 
     # After C++ import, chromosomes should be sorted alphabetically
@@ -64,4 +65,3 @@ test_that("indexed database preserves chrom_sizes.txt order for chromid mapping"
     expect_equal(allgenome$end[allgenome$chrom == "chr15"], 10)
     expect_equal(allgenome$end[allgenome$chrom == "chr17_random"], 10)
 })
-
