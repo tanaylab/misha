@@ -121,10 +121,10 @@ test_that("near.count handles touching intervals correctly", {
     # With params=1: touching intervals (distance=0) count due to expansion overlap
     # In half-open coordinates, distance=1 doesn't count (expanded intervals touch but don't overlap)
     query <- rbind(
-        gintervals(1, 150, 160),  # overlaps [150,200), also [100,150) expanded to [99,151) overlaps → count=2
-        gintervals(1, 200, 250),  # distance=0 from [150,200), expansion makes them overlap → count=1
-        gintervals(1, 350, 400),  # distance=0 from [300,350), expansion makes them overlap → count=1
-        gintervals(1, 351, 400)   # distance=1 from [300,350), [299,351) touches [351,400) but no overlap → count=0
+        gintervals(1, 150, 160), # overlaps [150,200), also [100,150) expanded to [99,151) overlaps → count=2
+        gintervals(1, 200, 250), # distance=0 from [150,200), expansion makes them overlap → count=1
+        gintervals(1, 350, 400), # distance=0 from [300,350), expansion makes them overlap → count=1
+        gintervals(1, 351, 400) # distance=1 from [300,350), [299,351) touches [351,400) but no overlap → count=0
     )
     res <- gextract("near_touch", query, iterator = query)
 
@@ -143,9 +143,9 @@ test_that("near.count with varying distances", {
     gvtrack.create("near_dist101", src, "near.count", 101)
 
     query <- rbind(
-        gintervals(1, 300, 400),  # distance=100 from [500,600)
-        gintervals(1, 480, 490),  # distance=10 from [500,600)
-        gintervals(1, 700, 800)   # distance=100 from [500,600)
+        gintervals(1, 300, 400), # distance=100 from [500,600)
+        gintervals(1, 480, 490), # distance=10 from [500,600)
+        gintervals(1, 700, 800) # distance=100 from [500,600)
     )
 
     res5 <- gextract("near_dist5", query, iterator = query)
@@ -190,9 +190,9 @@ test_that("near.count with nested source intervals", {
     gvtrack.create("near_nest", src, "near.count", 0)
 
     query <- rbind(
-        gintervals(1, 225, 260),  # overlaps all three
-        gintervals(1, 350, 400),  # overlaps only first
-        gintervals(1, 600, 700)   # overlaps none
+        gintervals(1, 225, 260), # overlaps all three
+        gintervals(1, 350, 400), # overlaps only first
+        gintervals(1, 600, 700) # overlaps none
     )
     res <- gextract("near_nest", query, iterator = query)
 
@@ -233,11 +233,11 @@ test_that("near.count across multiple chromosomes", {
     gvtrack.create("near_multi_chrom", src, "near.count", 51)
 
     query <- rbind(
-        gintervals(chrom1, 150, 160),  # overlaps 1 on chrom1
-        gintervals(chrom1, 400, 450),  # distance=50 from [500,600), expansion to [449,651) overlaps
-        gintervals(chrom2, 50, 90),    # distance=10 from [100,200), expansion to [49,251) overlaps
-        gintervals(chrom3, 300, 400),  # distance=100 from [100,200), expansion to [49,251) doesn't reach
-        gintervals(chrom2, 150, 160)   # overlaps 1 on chrom2
+        gintervals(chrom1, 150, 160), # overlaps 1 on chrom1
+        gintervals(chrom1, 400, 450), # distance=50 from [500,600), expansion to [449,651) overlaps
+        gintervals(chrom2, 50, 90), # distance=10 from [100,200), expansion to [49,251) overlaps
+        gintervals(chrom3, 300, 400), # distance=100 from [100,200), expansion to [49,251) doesn't reach
+        gintervals(chrom2, 150, 160) # overlaps 1 on chrom2
     )
     res <- gextract("near_multi_chrom", query, iterator = query)
 
@@ -272,11 +272,11 @@ test_that("near.count with half-open coordinate edge cases", {
     gvtrack.create("near_exact", src, "near.count", 50)
 
     query <- rbind(
-        gintervals(1, 250, 300),  # distance=50, [100,200) expanded to [50,250) touches but doesn't overlap
-        gintervals(1, 249, 300),  # distance=49, [100,200) expanded to [50,250) overlaps with [249,300)
-        gintervals(1, 251, 300),  # distance=51 > 50, doesn't count
-        gintervals(1, 0, 50),     # distance=50, touches expanded interval but doesn't overlap
-        gintervals(1, 0, 51)      # distance=49, overlaps expanded interval [50,250)
+        gintervals(1, 250, 300), # distance=50, [100,200) expanded to [50,250) touches but doesn't overlap
+        gintervals(1, 249, 300), # distance=49, [100,200) expanded to [50,250) overlaps with [249,300)
+        gintervals(1, 251, 300), # distance=51 > 50, doesn't count
+        gintervals(1, 0, 50), # distance=50, touches expanded interval but doesn't overlap
+        gintervals(1, 0, 51) # distance=49, overlaps expanded interval [50,250)
     )
     res <- gextract("near_exact", query, iterator = query)
 
@@ -295,8 +295,8 @@ test_that("near.count with many nearby sources", {
     gvtrack.create("near_many", src, "near.count", 60)
 
     query <- rbind(
-        gintervals(1, 500, 510),  # should overlap and be near several
-        gintervals(1, 50, 60),    # near first
+        gintervals(1, 500, 510), # should overlap and be near several
+        gintervals(1, 50, 60), # near first
         gintervals(1, 2000, 2100) # far from all
     )
     res <- gextract("near_many", query, iterator = query)
@@ -321,9 +321,9 @@ test_that("near.count with single base intervals", {
     gvtrack.create("near_single", src, "near.count", 10)
 
     query <- rbind(
-        gintervals(1, 90, 111),   # overlaps first
-        gintervals(1, 190, 211),  # overlaps second
-        gintervals(1, 150, 170)   # between first and second, far from both
+        gintervals(1, 90, 111), # overlaps first
+        gintervals(1, 190, 211), # overlaps second
+        gintervals(1, 150, 170) # between first and second, far from both
     )
     res <- gextract("near_single", query, iterator = query)
 
@@ -357,8 +357,8 @@ test_that("near.count distance calculation with gaps", {
     # Source with specific distances between intervals
     src <- rbind(
         gintervals(1, 100, 200),
-        gintervals(1, 250, 350),  # distance=50 from first
-        gintervals(1, 500, 600)   # distance=150 from second
+        gintervals(1, 250, 350), # distance=50 from first
+        gintervals(1, 500, 600) # distance=150 from second
     )
 
     gvtrack.create("near_gap25", src, "near.count", 25)
@@ -367,8 +367,8 @@ test_that("near.count distance calculation with gaps", {
 
     # Query in the middle gaps
     query <- rbind(
-        gintervals(1, 220, 230),  # distance=20 from both [100,200) and [250,350)
-        gintervals(1, 400, 410)   # distance=50 from [250,350), distance=90 from [500,600)
+        gintervals(1, 220, 230), # distance=20 from both [100,200) and [250,350)
+        gintervals(1, 400, 410) # distance=50 from [250,350), distance=90 from [500,600)
     )
 
     res25 <- gextract("near_gap25", query, iterator = query)
