@@ -62,9 +62,9 @@ test_that("gintervals.convert_to_indexed works with existing big set intervals",
     expect_no_error(gintervals.load(big_set))
 })
 
-test_that("gintervals.2d.to_indexed_format fails for non-existent interval set", {
+test_that("gintervals.2d.convert_to_indexed fails for non-existent interval set", {
     expect_error(
-        gintervals.2d.to_indexed_format("nonexistent_2d_set"),
+        gintervals.2d.convert_to_indexed("nonexistent_2d_set"),
         "does not exist"
     )
 })

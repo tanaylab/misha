@@ -80,5 +80,5 @@ gdb.convert_to_indexed(convert_tracks = TRUE, convert_intervals = TRUE, remove_o
 
 }
 \seealso{
-\code{\link{gdb.create}}, \code{\link{gdb.init}}, \code{\link{gtrack.convert_to_indexed}}, \code{\link{gintervals.convert_to_indexed}}, \code{\link{gintervals.2d.to_indexed_format}}
+\code{\link{gdb.create}}, \code{\link{gdb.init}}, \code{\link{gtrack.convert_to_indexed}}, \code{\link{gintervals.convert_to_indexed}}, \code{\link{gintervals.2d.convert_to_indexed}}
 }

@@ -83,7 +83,7 @@ skip_if(getOption("gmulticontig.indexed_format", FALSE), "Indexed format not ena
 # # 2D interval tests
 # # ============================================================================
 
-# test_that("gintervals.2d.to_indexed_format works for 2D intervals", {
+# test_that("gintervals.2d.convert_to_indexed works for 2D intervals", {
 #     withr::defer(gintervals.rm("test.converted_2d", force = TRUE))
 
 #     # Create test 2D interval set
@@ -102,7 +102,7 @@ skip_if(getOption("gmulticontig.indexed_format", FALSE), "Indexed format not ena
 #     expect_equal(info_before$format, "per-pair")
 
 #     # Convert
-#     gintervals.2d.to_indexed_format("test.converted_2d")
+#     gintervals.2d.convert_to_indexed("test.converted_2d")
 
 #     # Check format after
 #     info_after <- gintervals.info("test.converted_2d")
@@ -119,7 +119,7 @@ skip_if(getOption("gmulticontig.indexed_format", FALSE), "Indexed format not ena
 #     expect_equal(loaded$end2, intervs$end2)
 # })
 
-# test_that("gintervals.2d.to_indexed_format handles sparse chromosome pairs", {
+# test_that("gintervals.2d.convert_to_indexed handles sparse chromosome pairs", {
 #     withr::defer(gintervals.rm("test.sparse_pairs", force = TRUE))
 
 #     # Create 2D intervals with only some chromosome pairs
@@ -133,7 +133,7 @@ skip_if(getOption("gmulticontig.indexed_format", FALSE), "Indexed format not ena
 #     )
 #     gintervals.save("test.sparse_pairs", intervs)
 
-#     gintervals.2d.to_indexed_format("test.sparse_pairs")
+#     gintervals.2d.convert_to_indexed("test.sparse_pairs")
 
 #     loaded <- gintervals.load("test.sparse_pairs")
 #     expect_equal(nrow(loaded), nrow(intervs))
