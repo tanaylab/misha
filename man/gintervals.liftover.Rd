@@ -4,13 +4,22 @@
 \alias{gintervals.liftover}
 \title{Converts intervals from another assembly}
 \usage{
-gintervals.liftover(intervals = NULL, chain = NULL)
+gintervals.liftover(
+  intervals = NULL,
+  chain = NULL,
+  src_overlap_policy = "error",
+  tgt_overlap_policy = "error"
+)
 }
 \arguments{
 \item{intervals}{intervals from another assembly}
 
 \item{chain}{name of chain file or data frame as returned by
 'gintervals.load_chain'}
+
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
+
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.}
 }
 \value{
 A data frame representing the converted intervals.
@@ -27,6 +36,17 @@ returned by 'gintervals.load_chain' function.
 The converted intervals are returned. An additional column named
 'intervalID' is added to the resulted data frame. For each interval in the
 resulted intervals it indicates the index of the original interval.
+
+Source overlaps occur when the same source genome position maps to multiple
+target genome positions. Using 'src_overlap_policy = "keep"' allows one source
+interval to map to multiple target intervals, creating ambiguous mappings.
+Target overlaps occur when multiple source positions map to overlapping regions
+in the target genome.
+
+When passing a chain file path (as opposed to a pre-loaded chain data frame),
+the policies are used both for loading the chain and performing the liftover.
+When passing a pre-loaded chain data frame, the policies only apply to the
+liftover operation itself.
 }
 \examples{
 \dontshow{
@@ -39,7 +59,11 @@ intervs <- data.frame(
     chrom = "chr25", start = c(0, 7000),
     end = c(6000, 20000)
 )
+# Liftover with default policies
 gintervals.liftover(intervs, chainfile)
+
+# Liftover keeping source overlaps (one source interval may map to multiple targets)
+# gintervals.liftover(intervs, chainfile, src_overlap_policy = "keep")
 
 }
 \seealso{

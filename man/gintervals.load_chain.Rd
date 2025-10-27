@@ -4,10 +4,18 @@
 \alias{gintervals.load_chain}
 \title{Loads assembly conversion table from a chain file}
 \usage{
-gintervals.load_chain(file = NULL)
+gintervals.load_chain(
+  file = NULL,
+  src_overlap_policy = "error",
+  tgt_overlap_policy = "auto"
+)
 }
 \arguments{
 \item{file}{name of chain file}
+
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard"}
+
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), or "discard"}
 }
 \value{
 A data frame representing assembly conversion table.
@@ -19,9 +27,23 @@ Loads assembly conversion table from a chain file.
 This function reads a file in 'chain' format and returns assembly conversion
 table that can be used in 'gtrack.liftover' and 'gintervals.liftover'.
 
-Note: chain file might map a few different source intervals into a single
-target one. These ambiguous mappings are not presented in the data frame
-returned by 'gintervals.load_chain'.
+Source overlaps occur when the same source genome position maps to multiple
+target genome positions. Target overlaps occur when multiple source positions
+map to overlapping regions in the target genome.
+
+The 'src_overlap_policy' controls how source overlaps are handled:
+\itemize{
+  \item "error" (default): Throw an error if source overlaps are detected
+  \item "keep": Keep all mappings, allowing one source to map to multiple targets
+  \item "discard": Remove all chain intervals involved in source overlaps
+}
+
+The 'tgt_overlap_policy' controls how target overlaps are handled:
+\itemize{
+  \item "error": Throw an error if target overlaps are detected
+  \item "auto" (default): Automatically resolve overlaps by truncating/splitting intervals
+  \item "discard": Remove all chain intervals involved in target overlaps
+}
 }
 \examples{
 \dontshow{
@@ -30,7 +52,14 @@ options(gmax.processes = 2)
 
 gdb.init_examples()
 chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
+# Load chain file with default policies
 gintervals.load_chain(chainfile)
+
+# Load chain file, keeping source overlaps (ambiguous mappings)
+# gintervals.load_chain(chainfile, src_overlap_policy = "keep")
+
+# Load chain file, discarding both source and target overlaps
+# gintervals.load_chain(chainfile, src_overlap_policy = "discard", tgt_overlap_policy = "discard")
 
 }
 \seealso{

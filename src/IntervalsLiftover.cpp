@@ -9,20 +9,33 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _envir)
+SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
 
+		if (!Rf_isString(_src_overlap_policy) || Rf_length(_src_overlap_policy) != 1)
+			verror("Source overlap policy argument is not a string");
+
+		if (!Rf_isString(_tgt_overlap_policy) || Rf_length(_tgt_overlap_policy) != 1)
+			verror("Target overlap policy argument is not a string");
+
 		IntervUtils iu(_envir);
+		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
+		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
+
 		ChainIntervals chain_intervs;
 		vector<string> src_id2chrom;
 
 		iu.convert_rchain_intervs(_chain, chain_intervs, src_id2chrom);
+
+		// Handle target overlaps first
 		chain_intervs.sort_by_tgt();
-		chain_intervs.verify_no_tgt_overlaps(iu.get_chromkey(), src_id2chrom);
+		chain_intervs.handle_tgt_overlaps(tgt_overlap_policy, iu.get_chromkey(), src_id2chrom);
+
+		// Handle source overlaps
 		chain_intervs.sort_by_src();
-		chain_intervs.verify_no_src_overlaps(iu.get_chromkey(), src_id2chrom);
+		chain_intervs.handle_src_overlaps(src_overlap_policy, iu.get_chromkey(), src_id2chrom);
 
 		GenomeChromKey src_chromkey;
 		for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom)

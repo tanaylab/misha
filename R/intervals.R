@@ -1606,9 +1606,22 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' 'intervalID' is added to the resulted data frame. For each interval in the
 #' resulted intervals it indicates the index of the original interval.
 #'
+#' Source overlaps occur when the same source genome position maps to multiple
+#' target genome positions. Using 'src_overlap_policy = "keep"' allows one source
+#' interval to map to multiple target intervals, creating ambiguous mappings.
+#' Target overlaps occur when multiple source positions map to overlapping regions
+#' in the target genome.
+#'
+#' When passing a chain file path (as opposed to a pre-loaded chain data frame),
+#' the policies are used both for loading the chain and performing the liftover.
+#' When passing a pre-loaded chain data frame, the policies only apply to the
+#' liftover operation itself.
+#'
 #' @param intervals intervals from another assembly
 #' @param chain name of chain file or data frame as returned by
 #' 'gintervals.load_chain'
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
 #' @return A data frame representing the converted intervals.
 #' @seealso \code{\link{gintervals.load_chain}}, \code{\link{gtrack.liftover}},
 #' \code{\link{gintervals}}
@@ -1624,24 +1637,36 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #'     chrom = "chr25", start = c(0, 7000),
 #'     end = c(6000, 20000)
 #' )
+#' # Liftover with default policies
 #' gintervals.liftover(intervs, chainfile)
 #'
+#' # Liftover keeping source overlaps (one source interval may map to multiple targets)
+#' # gintervals.liftover(intervs, chainfile, src_overlap_policy = "keep")
+#'
 #' @export gintervals.liftover
-gintervals.liftover <- function(intervals = NULL, chain = NULL) {
+gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "error") {
     if (is.null(intervals) || is.null(chain)) {
-        stop("Usage: gintervals.liftover(intervals, chain)", call. = FALSE)
+        stop("Usage: gintervals.liftover(intervals, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"error\")", call. = FALSE)
     }
     .gcheckroot()
+
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "discard")) {
+        stop("tgt_overlap_policy must be 'error' or 'discard'", call. = FALSE)
+    }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.character(chain)) {
-        chain.intervs <- gintervals.load_chain(chain)
+        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
     } else {
         chain.intervs <- chain
     }
 
-    .gcall("gintervs_liftover", intervals, chain.intervs, .misha_env())
+    .gcall("gintervs_liftover", intervals, chain.intervs, src_overlap_policy, tgt_overlap_policy, .misha_env())
 }
 
 
@@ -1691,11 +1716,27 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' This function reads a file in 'chain' format and returns assembly conversion
 #' table that can be used in 'gtrack.liftover' and 'gintervals.liftover'.
 #'
-#' Note: chain file might map a few different source intervals into a single
-#' target one. These ambiguous mappings are not presented in the data frame
-#' returned by 'gintervals.load_chain'.
+#' Source overlaps occur when the same source genome position maps to multiple
+#' target genome positions. Target overlaps occur when multiple source positions
+#' map to overlapping regions in the target genome.
+#'
+#' The 'src_overlap_policy' controls how source overlaps are handled:
+#' \itemize{
+#'   \item "error" (default): Throw an error if source overlaps are detected
+#'   \item "keep": Keep all mappings, allowing one source to map to multiple targets
+#'   \item "discard": Remove all chain intervals involved in source overlaps
+#' }
+#'
+#' The 'tgt_overlap_policy' controls how target overlaps are handled:
+#' \itemize{
+#'   \item "error": Throw an error if target overlaps are detected
+#'   \item "auto" (default): Automatically resolve overlaps by truncating/splitting intervals
+#'   \item "discard": Remove all chain intervals involved in target overlaps
+#' }
 #'
 #' @param file name of chain file
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard"
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), or "discard"
 #' @return A data frame representing assembly conversion table.
 #' @seealso \code{\link{gintervals.liftover}}, \code{\link{gtrack.liftover}}
 #' @keywords ~intervals ~liftover ~chain
@@ -1706,14 +1747,30 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #'
 #' gdb.init_examples()
 #' chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
+#' # Load chain file with default policies
 #' gintervals.load_chain(chainfile)
 #'
+#' # Load chain file, keeping source overlaps (ambiguous mappings)
+#' # gintervals.load_chain(chainfile, src_overlap_policy = "keep")
+#'
+#' # Load chain file, discarding both source and target overlaps
+#' # gintervals.load_chain(chainfile, src_overlap_policy = "discard", tgt_overlap_policy = "discard")
+#'
 #' @export gintervals.load_chain
-gintervals.load_chain <- function(file = NULL) {
+gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto") {
     if (is.null(file)) {
-        stop("Usage: gintervals.load_chain(file)", call. = FALSE)
+        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\")", call. = FALSE)
     }
-    .gcall("gchain2interv", file, .misha_env())
+
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', or 'discard'", call. = FALSE)
+    }
+
+    .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
 }
 
 

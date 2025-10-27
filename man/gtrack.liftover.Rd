@@ -8,7 +8,9 @@ gtrack.liftover(
   track = NULL,
   description = NULL,
   src.track.dir = NULL,
-  chain = NULL
+  chain = NULL,
+  src_overlap_policy = "error",
+  tgt_overlap_policy = "error"
 )
 }
 \arguments{
@@ -20,6 +22,10 @@ gtrack.liftover(
 
 \item{chain}{name of chain file or data frame as returned by
 'gintervals.load_chain'}
+
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
+
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.}
 }
 \value{
 None.
@@ -34,6 +40,17 @@ coordinates should be done. It can be either a name of a chain file or a
 data frame in the same format as returned by 'gintervals.load_chain'
 function. The name of the newly created track is specified by 'track'
 argument and 'description' is added as a track attribute.
+
+Source overlaps occur when the same source genome position maps to multiple
+target genome positions. Using 'src_overlap_policy = "keep"' may result in
+duplicated track values when one source position maps to multiple target
+positions. Target overlaps occur when multiple source positions map to
+overlapping regions in the target genome.
+
+When passing a chain file path (as opposed to a pre-loaded chain data frame),
+the policies are used both for loading the chain and performing the liftover.
+When passing a pre-loaded chain data frame, the policies only apply to the
+liftover operation itself.
 }
 \seealso{
 \code{\link{gintervals.load_chain}},

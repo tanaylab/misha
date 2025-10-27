@@ -1298,6 +1298,124 @@ void ChainIntervals::verify_no_tgt_overlaps(const GenomeChromKey &chromkey, cons
 	}
 }
 
+void ChainIntervals::handle_src_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom)
+{
+	if (policy == "error") {
+		verify_no_src_overlaps(chromkey, src_id2chrom);
+	} else if (policy == "keep") {
+		// Do nothing - allow overlapping source intervals
+	} else if (policy == "discard") {
+		// Mark all intervals that have overlapping sources
+		vector<bool> to_discard(size(), false);
+
+		for (size_t i = 1; i < size(); ++i) {
+			if ((*this)[i-1].chromid_src == (*this)[i].chromid_src &&
+			    (*this)[i-1].start_src + (*this)[i-1].end - (*this)[i-1].start > (*this)[i].start_src) {
+				to_discard[i-1] = true;
+				to_discard[i] = true;
+			}
+		}
+
+		// Remove marked intervals
+		iterator new_end = begin();
+		for (size_t i = 0; i < size(); ++i) {
+			if (!to_discard[i]) {
+				if (new_end != begin() + i)
+					*new_end = (*this)[i];
+				++new_end;
+			}
+		}
+		erase(new_end, end());
+	} else {
+		TGLError("Invalid source overlap policy: %s. Must be 'error', 'keep', or 'discard'", policy.c_str());
+	}
+}
+
+void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom)
+{
+	if (policy == "error") {
+		verify_no_tgt_overlaps(chromkey, src_id2chrom);
+	} else if (policy == "auto") {
+		// Auto-resolve by truncating/splitting intervals
+		if (empty())
+			return;
+
+		set<ChainInterval, ChainInterval::SetCompare> sorted_intervs;
+		for (iterator iinterv = begin(); iinterv != end(); ++iinterv)
+			sorted_intervs.insert(*iinterv);
+
+		set<ChainInterval>::iterator iinterv2 = sorted_intervs.begin();
+		set<ChainInterval>::iterator iinterv1 = iinterv2++;
+
+		while (iinterv2 != sorted_intervs.end()) {
+			if (iinterv1->chromid == iinterv2->chromid && iinterv1->end > iinterv2->start) {
+				// Overlapping intervals detected - truncate/split
+				int64_t tgt_end1 = iinterv1->end;
+
+				// Truncate interv1
+				((ChainInterval &)*iinterv1).end = iinterv2->start;
+
+				// Adjust or split interv2
+				if (tgt_end1 < iinterv2->end) {
+					// The two intervals intersect - create non-overlapping interv2
+					ChainInterval interv(iinterv2->chromid, tgt_end1, iinterv2->end,
+							iinterv2->chromid_src, iinterv2->start_src + tgt_end1 - iinterv2->start, iinterv2->strand_src);
+					sorted_intervs.erase(iinterv2);
+
+					if (interv.start != interv.end)
+						sorted_intervs.insert(interv);
+				} else {
+					// interval1 contains interval2 => split interval1
+					ChainInterval interv(iinterv1->chromid, iinterv1->end + iinterv2->end - iinterv2->start, tgt_end1,
+							iinterv1->chromid_src, iinterv1->start_src + iinterv2->end - iinterv1->start, iinterv1->strand_src);
+					sorted_intervs.erase(iinterv2);
+					if (interv.start != interv.end)
+						sorted_intervs.insert(interv);
+				}
+
+				// Remove zero-length intervals
+				if (iinterv1->start == iinterv1->end) {
+					iinterv2 = iinterv1;
+					--iinterv2;
+					sorted_intervs.erase(iinterv1);
+				} else
+					iinterv2 = iinterv1;
+			}
+			iinterv1 = iinterv2;
+			++iinterv2;
+		}
+
+		// Copy back the resolved intervals
+		clear();
+		for (set<ChainInterval>::const_iterator iinterval = sorted_intervs.begin(); iinterval != sorted_intervs.end(); ++iinterval)
+			push_back(*iinterval);
+	} else if (policy == "discard") {
+		// Mark all intervals that have overlapping targets
+		vector<bool> to_discard(size(), false);
+
+		for (size_t i = 1; i < size(); ++i) {
+			if ((*this)[i-1].chromid == (*this)[i].chromid &&
+			    (*this)[i-1].end > (*this)[i].start) {
+				to_discard[i-1] = true;
+				to_discard[i] = true;
+			}
+		}
+
+		// Remove marked intervals
+		iterator new_end = begin();
+		for (size_t i = 0; i < size(); ++i) {
+			if (!to_discard[i]) {
+				if (new_end != begin() + i)
+					*new_end = (*this)[i];
+				++new_end;
+			}
+		}
+		erase(new_end, end());
+	} else {
+		TGLError("Invalid target overlap policy: %s. Must be 'error', 'auto', or 'discard'", policy.c_str());
+	}
+}
+
 ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, ChainIntervals::const_iterator hint)
 {
 	tgt_intervs.clear();
