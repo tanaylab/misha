@@ -30,7 +30,7 @@ using namespace rdb;
 
 const char *IntervalPval::COL_NAMES[IntervalPval::NUM_COLS] = { "chrom", "start", "end", "pval" };
 
-const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "chromsrc", "startsrc" };
+const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "chromsrc", "startsrc", "strandsrc" };
 
 IntervUtils::IntervUtils(SEXP envir)
 {
@@ -644,7 +644,7 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 		tmp_intervals.push_back((GInterval)*iinterval);
 
     SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
-	SEXP src_chroms, src_chroms_idx, src_starts;
+	SEXP src_chroms, src_chroms_idx, src_starts, src_strands;
     SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
     rprotect(col_names);
 	unsigned num_src_chroms = src_id2chrom.size();
@@ -652,10 +652,12 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
     rprotect(src_chroms_idx = RSaneAllocVector(INTSXP, chain_intervs.size()));
     rprotect(src_starts = RSaneAllocVector(REALSXP, chain_intervs.size()));
     rprotect(src_chroms = RSaneAllocVector(STRSXP, num_src_chroms));
+    rprotect(src_strands = RSaneAllocVector(INTSXP, chain_intervs.size()));
 
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval) {
 		INTEGER(src_chroms_idx)[iinterval - chain_intervs.begin()] = iinterval->chromid_src + 1;
 		REAL(src_starts)[iinterval - chain_intervs.begin()] = iinterval->start_src;
+		INTEGER(src_strands)[iinterval - chain_intervs.begin()] = iinterval->strand_src;
 	}
 
 	for (unsigned id = 0; id < num_src_chroms; ++id)
@@ -669,6 +671,7 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 
     SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, src_chroms_idx);
     SET_VECTOR_ELT(answer, ChainInterval::START_SRC, src_starts);
+    SET_VECTOR_ELT(answer, ChainInterval::STRAND_SRC, src_strands);
 
     runprotect(3);
     return answer;
