@@ -82,9 +82,8 @@ reference:
       - gintervals.save
       - gintervals.summary
       - gintervals.union
-      - gintervals.update
-      - gintervals.to_indexed_format
-      - gintervals.2d.to_indexed_format  
+      - gintervals.update      
+      - gintervals.2d.convert_to_indexed  
       - gintervals.convert_to_indexed    
       - giterator.cartesian_grid
       - giterator.intervals

@@ -339,7 +339,7 @@ The `intervals2d.idx` file structure:
 gintervals.convert_to_indexed("my_intervals")
 
 # Convert 2D interval set to indexed format
-gintervals.2d.to_indexed_format("my_2d_intervals")
+gintervals.2d.convert_to_indexed("my_2d_intervals")
 
 # Convert and remove old per-chromosome files
 gintervals.convert_to_indexed("my_intervals", remove.old = TRUE)

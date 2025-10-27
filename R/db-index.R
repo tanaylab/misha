@@ -55,7 +55,7 @@
 #' gdb.convert_to_indexed(convert_tracks = TRUE, convert_intervals = TRUE, remove_old_files = TRUE)
 #' }
 #'
-#' @seealso \code{\link{gdb.create}}, \code{\link{gdb.init}}, \code{\link{gtrack.convert_to_indexed}}, \code{\link{gintervals.convert_to_indexed}}, \code{\link{gintervals.2d.to_indexed_format}}
+#' @seealso \code{\link{gdb.create}}, \code{\link{gdb.init}}, \code{\link{gtrack.convert_to_indexed}}, \code{\link{gintervals.convert_to_indexed}}, \code{\link{gintervals.2d.convert_to_indexed}}
 #' @export
 gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force = FALSE, validate = TRUE, convert_tracks = FALSE, convert_intervals = FALSE, verbose = FALSE) {
     # Validate database and get setup information
@@ -598,7 +598,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
                     tryCatch(
                         {
-                            gintervals.2d.to_indexed_format(intervset, remove.old = remove_old_files)
+                            gintervals.2d.convert_to_indexed(intervset, remove.old = remove_old_files)
                             converted_2d_count <- converted_2d_count + 1
                         },
                         error = function(e) {
@@ -938,19 +938,19 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
 #' @examples
 #' \dontrun{
 #' # Convert a 2D interval set
-#' gintervals.2d.to_indexed_format("my_2d_intervals")
+#' gintervals.2d.convert_to_indexed("my_2d_intervals")
 #'
 #' # Convert and remove old files
-#' gintervals.2d.to_indexed_format("my_2d_intervals", remove.old = TRUE)
+#' gintervals.2d.convert_to_indexed("my_2d_intervals", remove.old = TRUE)
 #'
 #' # Force re-conversion
-#' gintervals.2d.to_indexed_format("my_2d_intervals", force = TRUE)
+#' gintervals.2d.convert_to_indexed("my_2d_intervals", force = TRUE)
 #' }
 #'
 #' @export
-gintervals.2d.to_indexed_format <- function(set.name = NULL, remove.old = FALSE, force = FALSE) {
+gintervals.2d.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, force = FALSE) {
     if (is.null(set.name) || !is.character(set.name) || length(set.name) != 1) {
-        stop("Usage: gintervals.2d.to_indexed_format(set.name, remove.old = FALSE, force = FALSE)", call. = FALSE)
+        stop("Usage: gintervals.2d.convert_to_indexed(set.name, remove.old = FALSE, force = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
