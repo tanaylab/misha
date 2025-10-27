@@ -1,3 +1,7 @@
+# misha 5.1.2
+
+* Added `src_overlap_policy` and `tgt_overlap_policy` parameters to `gintervals.load_chain`, `gtrack.liftover` and `gintervals.liftover` functions.
+
 # misha 5.1.1
 
 * Allow data frames as input in `pssm` parameter of `gvtrack.create` and `gseq.pwm` functions.

@@ -114,6 +114,16 @@ public:
 	// Intervals are expected to be already sorted by target.
 	void verify_no_tgt_overlaps(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const;
 
+	// Handles source overlaps according to the specified policy.
+	// Policy: "error" - throw exception, "keep" - allow overlaps, "discard" - remove all overlapping intervals.
+	// Intervals are expected to be already sorted by source.
+	void handle_src_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom);
+
+	// Handles target overlaps according to the specified policy.
+	// Policy: "error" - throw exception, "auto" - auto-resolve by truncating, "discard" - remove all overlapping intervals.
+	// Intervals are expected to be already sorted by target.
+	void handle_tgt_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom);
+
 	const_iterator map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, const_iterator hint);
 
 private:

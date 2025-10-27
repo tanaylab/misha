@@ -1,0 +1,724 @@
+test_that("gintervals.load_chain handles source overlaps with 'error' policy", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with source overlaps: same source position maps to multiple targets
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[0-20] -> chr1[0-20]
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source1[5-21] -> chr2[0-16] (overlaps with chain 1 at source1[5-20])
+    cat("chain 1000 source1 100 + 5 21 chr2 16 + 0 16 2\n", file = chain_file, append = TRUE)
+    cat("16\n\n", file = chain_file, append = TRUE)
+
+    # Default policy should error on source overlap
+    expect_error(
+        gintervals.load_chain(chain_file),
+        "overlap"
+    )
+
+    # Explicit error policy should also error
+    expect_error(
+        gintervals.load_chain(chain_file, src_overlap_policy = "error"),
+        "overlap"
+    )
+})
+
+test_that("gintervals.load_chain handles source overlaps with 'keep' policy", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with source overlaps
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[0-20] -> chr1[0-20]
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source1[5-21] -> chr2[0-16] (overlaps at source1[5-20])
+    cat("chain 1000 source1 100 + 5 21 chr2 16 + 0 16 2\n", file = chain_file, append = TRUE)
+    cat("16\n\n", file = chain_file, append = TRUE)
+
+    # Keep policy should allow overlaps
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep")
+    expect_true(nrow(chain) == 2)
+    expect_true(all(c("chr1", "chr2") %in% chain$chrom))
+
+    # Check exact chain values
+    chain_sorted <- chain[order(chain$chrom, chain$start), ]
+    # chr1 mapping block
+    chr1_row <- chain_sorted[chain_sorted$chrom == "chr1", ]
+    expect_equal(as.numeric(chr1_row$start), 0)
+    expect_equal(as.numeric(chr1_row$end), 20)
+    expect_equal(as.character(chr1_row$chromsrc), "source1")
+    expect_equal(as.numeric(chr1_row$startsrc), 0)
+    # chr2 mapping block
+    chr2_row <- chain_sorted[chain_sorted$chrom == "chr2", ]
+    expect_equal(as.numeric(chr2_row$start), 0)
+    expect_equal(as.numeric(chr2_row$end), 16)
+    expect_equal(as.character(chr2_row$chromsrc), "source1")
+    expect_equal(as.numeric(chr2_row$startsrc), 5)
+})
+
+test_that("gintervals.load_chain handles source overlaps with 'discard' policy", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAA\n>chr3\nTATATATATATA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file: source1 overlaps (maps to chr1 and chr2), source2 is clean (maps to chr3)
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[0-20] -> chr1[0-20]
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source1[5-21] -> chr2[0-16] (overlaps with chain 1)
+    cat("chain 1000 source1 100 + 5 21 chr2 16 + 0 16 2\n", file = chain_file, append = TRUE)
+    cat("16\n\n", file = chain_file, append = TRUE)
+
+    # Chain 3: source2[0-12] -> chr3[0-12] (no overlaps)
+    cat("chain 1000 source2 50 + 0 12 chr3 12 + 0 12 3\n", file = chain_file, append = TRUE)
+    cat("12\n\n", file = chain_file, append = TRUE)
+
+    # Discard policy should remove overlapping intervals but keep clean ones
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "discard")
+    expect_equal(nrow(chain), 1)
+    expect_equal(as.character(chain$chrom), "chr3")
+    expect_equal(as.character(chain$chromsrc), "source2")
+    expect_equal(as.numeric(chain$start), 0)
+    expect_equal(as.numeric(chain$end), 12)
+    expect_equal(as.numeric(chain$startsrc), 0)
+})
+
+test_that("gintervals.load_chain handles target overlaps with 'auto' policy", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with target overlaps: different sources map to overlapping chr1 regions
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[0-30] -> chr1[0-30]
+    cat("chain 1000 source1 100 + 0 30 chr1 40 + 0 30 1\n", file = chain_file)
+    cat("30\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source2[0-20] -> chr1[20-40] (overlaps at chr1[20-30])
+    cat("chain 1000 source2 100 + 0 20 chr1 40 + 20 40 2\n", file = chain_file, append = TRUE)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Auto policy should resolve overlaps by truncating
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto")
+    expect_true(nrow(chain) >= 1)
+
+    # Check that no intervals overlap in target
+    chain_sorted <- chain[order(chain$chrom, chain$start), ]
+    if (nrow(chain_sorted) > 1) {
+        for (i in 2:nrow(chain_sorted)) {
+            if (chain_sorted$chrom[i] == chain_sorted$chrom[i - 1]) {
+                expect_true(chain_sorted$start[i] >= chain_sorted$end[i - 1])
+            }
+        }
+    }
+})
+
+test_that("gintervals.load_chain exact truncation with 'auto' policy", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(
+        ">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n",
+        file = target_fasta
+    )
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: sourceA[0-30] -> chr1[0-30]
+    cat("chain 1000 sourceA 100 + 0 30 chr1 40 + 0 30 1\n", file = chain_file)
+    cat("30\n\n", file = chain_file, append = TRUE)
+    # Chain 2: sourceB[0-20] -> chr1[20-40] (overlaps 20-30)
+    cat("chain 1000 sourceB 100 + 0 20 chr1 40 + 20 40 2\n", file = chain_file, append = TRUE)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto")
+    chain_chr1 <- chain[chain$chrom == "chr1", ]
+    chain_chr1 <- chain_chr1[order(chain_chr1$start), ]
+    # After auto truncation: first becomes [0,20), second becomes [30,40)
+    expect_equal(nrow(chain_chr1), 2)
+    expect_equal(as.numeric(chain_chr1$start[1]), 0)
+    expect_equal(as.numeric(chain_chr1$end[1]), 20)
+    expect_equal(as.numeric(chain_chr1$start[2]), 30)
+    expect_equal(as.numeric(chain_chr1$end[2]), 40)
+})
+
+test_that("gintervals.load_chain handles target overlaps with 'error' policy", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with target overlaps
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[0-20] -> chr1[0-20]
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source2[0-17] -> chr1[15-32] (overlaps at chr1[15-20])
+    cat("chain 1000 source2 100 + 0 17 chr1 32 + 15 32 2\n", file = chain_file, append = TRUE)
+    cat("17\n\n", file = chain_file, append = TRUE)
+
+    # Error policy should fail on target overlap
+    expect_error(
+        gintervals.load_chain(chain_file, tgt_overlap_policy = "error"),
+        "overlap"
+    )
+})
+
+test_that("gintervals.load_chain handles target overlaps with 'discard' policy", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file: chr1 has overlaps, chr2 doesn't
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[0-20] -> chr1[0-20]
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source2[0-17] -> chr1[15-32] (overlaps with chain 1)
+    cat("chain 1000 source2 100 + 0 17 chr1 32 + 15 32 2\n", file = chain_file, append = TRUE)
+    cat("17\n\n", file = chain_file, append = TRUE)
+
+    # Chain 3: source3[0-10] -> chr2[0-10] (no overlap)
+    cat("chain 1000 source3 100 + 0 10 chr2 16 + 0 10 3\n", file = chain_file, append = TRUE)
+    cat("10\n\n", file = chain_file, append = TRUE)
+
+    # Discard policy should remove overlapping chr1 intervals but keep chr2
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "discard")
+    expect_equal(nrow(chain), 1)
+    expect_equal(as.character(chain$chrom), "chr2")
+})
+
+test_that("gintervals.liftover works with 'keep' source policy", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain with source overlaps
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[0-20] -> chr1[0-20]
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source1[10-26] -> chr2[0-16] (overlaps at source1[10-20])
+    cat("chain 1000 source1 100 + 10 26 chr2 16 + 0 16 2\n", file = chain_file, append = TRUE)
+    cat("16\n\n", file = chain_file, append = TRUE)
+
+    # Load chain with keep policy
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep")
+
+    # Create source intervals that overlap with the ambiguous region
+    src_intervals <- data.frame(
+        chrom = "source1",
+        start = 10,
+        end = 20,
+        stringsAsFactors = FALSE
+    )
+
+    # Liftover should produce multiple target intervals
+    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+
+    # Should have entries mapping to both chr1 and chr2
+    expect_true(nrow(result) >= 2)
+    expect_true("chr1" %in% result$chrom)
+    expect_true("chr2" %in% result$chrom)
+    # Verify exact coordinates: source [10,20) overlaps both chains
+    # For chr1 block source [0,20)->chr1[0,20): [10,20)->[10,20)
+    chr1_rows <- result[result$chrom == "chr1", ]
+    if (nrow(chr1_rows) > 0) {
+        expect_true(all(as.numeric(chr1_rows$start) == 10))
+        expect_true(all(as.numeric(chr1_rows$end) == 20))
+    }
+    # For chr2 block source [10,26)->chr2[0,16): [10,20)->[0,10)
+    chr2_rows <- result[result$chrom == "chr2", ]
+    if (nrow(chr2_rows) > 0) {
+        expect_true(all(as.numeric(chr2_rows$start) == 0))
+        expect_true(all(as.numeric(chr2_rows$end) == 10))
+    }
+    # intervalID should refer to the single input interval (1)
+    expect_true(all(as.integer(result$intervalID) == 1))
+})
+
+test_that("gintervals.liftover works with chain file path", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create simple chain file
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain: source1[0-20] -> chr1[0-20]
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Create source intervals
+    src_intervals <- data.frame(
+        chrom = "source1",
+        start = 5,
+        end = 15,
+        stringsAsFactors = FALSE
+    )
+
+    # Liftover using chain file path directly
+    result <- gintervals.liftover(src_intervals, chain_file)
+
+    expect_true(nrow(result) >= 1)
+    expect_equal(as.character(result$chrom[1]), "chr1")
+    expect_equal(as.numeric(result$start[1]), 5)
+    expect_equal(as.numeric(result$end[1]), 15)
+    expect_true(all(as.integer(result$intervalID) == 1))
+})
+
+test_that("gintervals.liftover basic 1D mapping with exact coordinates", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(
+        ">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n>chr2\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n",
+        file = target_fasta
+    )
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # sourceA[0-20) -> chr1[10-30)
+    cat("chain 1000 sourceA 200 + 0 20 chr1 40 + 10 30 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Create a source interval fully inside the block
+    src_intervals <- data.frame(
+        chrom = "sourceA",
+        start = 5,
+        end = 20,
+        stringsAsFactors = FALSE
+    )
+
+    result <- gintervals.liftover(src_intervals, chain_file)
+    expect_equal(nrow(result), 1)
+    expect_equal(as.character(result$chrom[1]), "chr1")
+    expect_equal(as.numeric(result$start[1]), 15)
+    expect_equal(as.numeric(result$end[1]), 30)
+    expect_equal(as.integer(result$intervalID[1]), 1)
+})
+
+test_that("gintervals.liftover simple 2D mapping cross-product", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(
+        ">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n>chr2\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n",
+        file = target_fasta
+    )
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # sourceA[0-20) -> chr1[10-30)
+    cat("chain 1000 sourceA 200 + 0 20 chr1 40 + 10 30 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+    # sourceB[10-37) -> chr2[5-32) (length 27 to match chr2 size 32)
+    cat("chain 1000 sourceB 200 + 10 37 chr2 32 + 5 32 2\n", file = chain_file, append = TRUE)
+    cat("27\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file)
+
+    # Build a 2D source interval pairing (sourceA[5,20), sourceB[15,40))
+    src2d <- data.frame(
+        chrom1 = "sourceA", start1 = 5, end1 = 20,
+        chrom2 = "sourceB", start2 = 15, end2 = 40,
+        stringsAsFactors = FALSE
+    )
+
+    res2d <- gintervals.liftover(src2d, chain)
+    expect_equal(nrow(res2d), 1)
+    expect_equal(as.character(res2d$chrom1[1]), "chr1")
+    expect_equal(as.character(res2d$chrom2[1]), "chr2")
+    expect_equal(as.numeric(res2d$start1[1]), 15)
+    expect_equal(as.numeric(res2d$end1[1]), 30)
+    expect_equal(as.numeric(res2d$start2[1]), 10)
+    expect_equal(as.numeric(res2d$end2[1]), 32)
+})
+
+test_that("gtrack.liftover works from sparse source track and preserves values", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(
+        ">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+        file = target_fasta
+    )
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Chain mapping source1[0-20) -> chr1[0-20)
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Create a source DB with 'source1'
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(
+        ">source1\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n",
+        file = source_fasta
+    )
+    source_db <- tempfile()
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.init(source_db)
+
+    # Create a sparse source track on source1
+    src_intervals <- data.frame(
+        chrom = "source1",
+        start = c(5, 10),
+        end = c(10, 15),
+        stringsAsFactors = FALSE
+    )
+    src_values <- c(1.0, 2.0)
+    src_track_name <- "src_sparse"
+    gtrack.create_sparse(src_track_name, "source sparse", src_intervals, src_values)
+
+    # Compute the source track directory path (tracks live under <GROOT>/tracks)
+    src_track_dir <- file.path(source_db, "tracks", paste0(src_track_name, ".track"))
+
+    # Switch to target DB and liftover the track
+    gdb.init(target_db)
+    lifted_track <- "lifted_sparse"
+    withr::defer({
+        if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
+    })
+    gtrack.liftover(lifted_track, "lifted from source", src_track_dir, chain_file)
+
+    # Extract all values and validate coordinates and values
+    res <- gextract(lifted_track, gintervals.all())
+    # Expect two intervals on chr1 with same coords and values as mapped 1:1
+    expect_equal(nrow(res), 2)
+    expect_equal(as.character(res$chrom), c("chr1", "chr1"))
+    expect_equal(as.numeric(res$start), c(5, 10))
+    expect_equal(as.numeric(res$end), c(10, 15))
+    # Value column name may differ; detect the non-coordinate column
+    value_cols <- setdiff(colnames(res), c("chrom", "start", "end", "strand"))
+    expect_true(length(value_cols) >= 1)
+    expect_equal(as.numeric(res[[value_cols[1]]]), c(1.0, 2.0))
+})
+
+test_that("gintervals.liftover validates policy parameters", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    cat("chain 1000 source1 100 + 0 10 chr1 16 + 0 10 1\n", file = chain_file)
+    cat("10\n\n", file = chain_file, append = TRUE)
+
+    src_intervals <- data.frame(chrom = "source1", start = 0, end = 10, stringsAsFactors = FALSE)
+
+    # Invalid src_overlap_policy
+    expect_error(
+        gintervals.liftover(src_intervals, chain_file, src_overlap_policy = "invalid"),
+        "src_overlap_policy"
+    )
+
+    # Invalid tgt_overlap_policy
+    expect_error(
+        gintervals.liftover(src_intervals, chain_file, tgt_overlap_policy = "invalid"),
+        "tgt_overlap_policy"
+    )
+
+    # gintervals.liftover shouldn't accept 'auto' for tgt_overlap_policy
+    expect_error(
+        gintervals.liftover(src_intervals, chain_file, tgt_overlap_policy = "auto"),
+        "tgt_overlap_policy"
+    )
+})
+
+test_that("gintervals.load_chain validates policy parameters", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    cat("chain 1000 source1 100 + 0 10 chr1 12 + 0 10 1\n", file = chain_file)
+    cat("10\n\n", file = chain_file, append = TRUE)
+
+    # Invalid src_overlap_policy
+    expect_error(
+        gintervals.load_chain(chain_file, src_overlap_policy = "invalid"),
+        "src_overlap_policy"
+    )
+
+    # Invalid tgt_overlap_policy
+    expect_error(
+        gintervals.load_chain(chain_file, tgt_overlap_policy = "invalid"),
+        "tgt_overlap_policy"
+    )
+})
+
+test_that("gintervals.liftover returns empty result when all intervals discarded", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain with only overlapping intervals
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[0-20] -> chr1[0-20]
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source1[10-27] -> chr1[15-32] (both source and target overlaps)
+    cat("chain 1000 source1 100 + 10 27 chr1 32 + 15 32 2\n", file = chain_file, append = TRUE)
+    cat("17\n\n", file = chain_file, append = TRUE)
+
+    # Load chain and discard all overlaps
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "discard")
+
+    # Chain should be empty or NULL
+    expect_true(is.null(chain) || nrow(chain) == 0)
+})
+
+test_that("complex chain with both source and target overlaps", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome with multiple chromosomes
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAA\n>chr3\nTATATATATATA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create complex chain file with various overlap scenarios
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Source overlap: source1[0,20] -> chr1 and chr2
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    cat("chain 1000 source1 100 + 10 26 chr2 16 + 0 16 2\n", file = chain_file, append = TRUE)
+    cat("16\n\n", file = chain_file, append = TRUE)
+
+    # Target overlap: source2 and source3 both map to overlapping chr3 regions
+    cat("chain 1000 source2 100 + 0 8 chr3 12 + 0 8 3\n", file = chain_file)
+    cat("8\n\n", file = chain_file, append = TRUE)
+
+    cat("chain 1000 source3 100 + 0 7 chr3 12 + 5 12 4\n", file = chain_file, append = TRUE)
+    cat("7\n\n", file = chain_file, append = TRUE)
+
+    # Clean mapping: source4 -> chr1 (no overlaps)
+    cat("chain 1000 source4 100 + 0 7 chr1 32 + 25 32 5\n", file = chain_file, append = TRUE)
+    cat("7\n\n", file = chain_file, append = TRUE)
+
+    # Test keep + auto: should keep source overlaps and auto-resolve target overlaps
+    chain_keep_auto <- gintervals.load_chain(
+        chain_file,
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "auto"
+    )
+    expect_true(nrow(chain_keep_auto) >= 3) # At least the clean mapping + some resolved
+
+    # Test discard + discard: should only keep the clean mapping
+    chain_discard_discard <- gintervals.load_chain(
+        chain_file,
+        src_overlap_policy = "discard",
+        tgt_overlap_policy = "discard"
+    )
+    expect_true(nrow(chain_discard_discard) <= 1)
+    if (nrow(chain_discard_discard) > 0) {
+        expect_true("chr1" %in% chain_discard_discard$chrom)
+    }
+})

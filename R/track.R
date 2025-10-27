@@ -1062,21 +1062,42 @@ gtrack.info <- function(track = NULL) {
 #' function. The name of the newly created track is specified by 'track'
 #' argument and 'description' is added as a track attribute.
 #'
+#' Source overlaps occur when the same source genome position maps to multiple
+#' target genome positions. Using 'src_overlap_policy = "keep"' may result in
+#' duplicated track values when one source position maps to multiple target
+#' positions. Target overlaps occur when multiple source positions map to
+#' overlapping regions in the target genome.
+#'
+#' When passing a chain file path (as opposed to a pre-loaded chain data frame),
+#' the policies are used both for loading the chain and performing the liftover.
+#' When passing a pre-loaded chain data frame, the policies only apply to the
+#' liftover operation itself.
+#'
 #' @param track name of a created track
 #' @param description a character string description
 #' @param src.track.dir path to the directory of the source track
 #' @param chain name of chain file or data frame as returned by
 #' 'gintervals.load_chain'
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
 #' @return None.
 #' @seealso \code{\link{gintervals.load_chain}},
 #' \code{\link{gintervals.liftover}}
 #' @keywords ~track ~liftover ~chain
 #' @export gtrack.liftover
-gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NULL, chain = NULL) {
+gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "error") {
     if (is.null(substitute(track)) || is.null(description) || is.null(src.track.dir) || is.null(chain)) {
-        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain)", call. = FALSE)
+        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"error\")", call. = FALSE)
     }
     .gcheckroot()
+
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "discard")) {
+        stop("tgt_overlap_policy must be 'error' or 'discard'", call. = FALSE)
+    }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
@@ -1088,7 +1109,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     }
 
     if (is.character(chain)) {
-        chain.intervs <- gintervals.load_chain(chain)
+        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
     } else {
         chain.intervs <- chain
     }
@@ -1097,7 +1118,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, .misha_env())
+            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, src_overlap_policy, tgt_overlap_policy, .misha_env())
             .gdb.add_track(trackstr)
             if (is.character(chain)) {
                 .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), TRUE)
