@@ -143,12 +143,15 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     # If we have canonical names from ALLGENOME, use them
     # This preserves the "chr" prefix for per-chromosome databases
     if (!is.null(canonical_names) && length(canonical_names) == nrow(chrom_sizes)) {
-        # Sort to match ALLGENOME order
+        # For per-chromosome databases (which is what we're converting from),
+        # ALLGENOME is sorted, so we sort chrom_sizes to match that order
         chrom_sizes <- chrom_sizes[order(chrom_sizes$chrom), ]
-        # Replace with canonical names (which are already sorted in ALLGENOME)
+        # Replace with canonical names (which are sorted in ALLGENOME for per-chromosome DBs)
         chrom_sizes$chrom <- canonical_names
     } else {
         # Fallback: just sort by chromosome name
+        # This is safe because C++ import will also sort, and final chrom_sizes.txt
+        # will be overwritten with the sorted order from the index
         chrom_sizes <- chrom_sizes[order(chrom_sizes$chrom), ]
     }
 
