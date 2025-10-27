@@ -258,7 +258,12 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
             stop(sprintf("Chromosome \"%s\" appears more than once in chrom_sizes.txt", chrom))
         }
     }
-    intervals <- intervals[order(intervals$chrom), ]
+
+    # For indexed databases, preserve the order from chrom_sizes.txt to match genome.idx
+    # For per-chromosome databases, sort alphabetically for consistency
+    if (!file.exists(idx_path)) {
+        intervals <- intervals[order(intervals$chrom), ]
+    }
     rownames(intervals) <- 1:nrow(intervals)
 
     # Lazy 2D generation: only materialize for small genomes
@@ -731,7 +736,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
                     stop("No contigs were imported from multi-FASTA file", call. = FALSE)
                 }
 
-                # Use the data frame directly (already sorted by name, matching ALLGENOME order)
+                # Use the data frame directly (sorted by name to match genome.idx)
                 chrom.sizes <- data.frame(chrom = contig_info$name, size = contig_info$size)
             } else {
                 # Per-chromosome import
@@ -752,10 +757,15 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
             # before calling gintervals.import_genes new ALLGENOME must be set
             intervals <- data.frame(
-                chrom = as.factor(as.character(chrom.sizes$chrom)), # Preserve original names
+                chrom = as.factor(as.character(chrom.sizes$chrom)),
                 start = 0, end = as.numeric(chrom.sizes$size)
             )
-            intervals <- intervals[order(intervals$chrom), ]
+            # For indexed databases, chrom_sizes and intervals are already sorted by the C++ import
+            # Don't sort again to maintain consistency with genome.idx chromid assignments
+            # For per-chromosome databases, sort alphabetically for consistency
+            if (!use_indexed_format) {
+                intervals <- intervals[order(intervals$chrom), ]
+            }
             rownames(intervals) <- 1:nrow(intervals)
 
             # Lazy 2D generation: only materialize for small genomes
