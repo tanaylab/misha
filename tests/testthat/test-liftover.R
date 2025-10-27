@@ -722,3 +722,300 @@ test_that("complex chain with both source and target overlaps", {
         expect_true("chr1" %in% chain_discard_discard$chrom)
     }
 })
+
+test_that("gintervals.load_chain returns 8 columns with strand information", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create simple chain file with forward strand
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file)
+
+    # Check that chain has 8 columns
+    expected_cols <- c("chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc")
+    expect_equal(colnames(chain), expected_cols)
+
+    # Check strand format: +1 for forward
+    expect_equal(as.numeric(chain$strand), 1)
+    expect_equal(as.numeric(chain$strandsrc), 1)
+
+    # Check that source intervals are complete with end coordinate
+    expect_equal(as.numeric(chain$startsrc), 0)
+    expect_equal(as.numeric(chain$endsrc), 20)
+})
+
+test_that("gintervals.load_chain handles reverse strands correctly", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with reverse strands
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Source on reverse strand, target on forward
+    cat("chain 1000 source1 100 - 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file)
+
+    # Check strand format: target forward (+1), source reverse (-1)
+    expect_equal(as.numeric(chain$strand), 1)
+    expect_equal(as.numeric(chain$strandsrc), -1)
+})
+
+test_that("gintervals.load_chain handles mixed strand chains", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with mixed strands
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: forward-forward
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: forward-reverse (source forward, target reverse)
+    cat("chain 1000 source2 100 + 0 16 chr2 16 - 0 16 2\n", file = chain_file, append = TRUE)
+    cat("16\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file)
+
+    # Check that we have 2 chains with different strand combinations
+    expect_equal(nrow(chain), 2)
+
+    chr1_chain <- chain[chain$chrom == "chr1", ]
+    expect_equal(as.numeric(chr1_chain$strand), 1)
+    expect_equal(as.numeric(chr1_chain$strandsrc), 1)
+
+    chr2_chain <- chain[chain$chrom == "chr2", ]
+    expect_equal(as.numeric(chr2_chain$strand), -1)
+    expect_equal(as.numeric(chr2_chain$strandsrc), 1)
+})
+
+test_that("gintervals.load_chain with src_groot validates source chromosomes", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create source genome database with specific chromosomes
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">source1\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n", file = source_fasta)
+
+    source_db <- tempfile()
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+
+    # Create chain file with valid source chromosome
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Switch back to target db
+    gdb.init(target_db)
+
+    # This should succeed with src_groot validation
+    chain <- gintervals.load_chain(chain_file, src_groot = source_db)
+    expect_true(!is.null(chain))
+    expect_equal(nrow(chain), 1)
+    expect_equal(as.character(chain$chromsrc), "source1")
+
+    # Verify we're back to target database
+    expect_equal(.misha$GROOT, target_db)
+})
+
+test_that("gintervals.load_chain with src_groot rejects invalid source chromosomes", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create source genome with different chromosome name
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">different_chrom\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n", file = source_fasta)
+
+    source_db <- tempfile()
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+
+    # Create chain file with invalid source chromosome
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    cat("chain 1000 invalid_source 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Switch back to target db
+    gdb.init(target_db)
+
+    # This should error because invalid_source doesn't exist in source_db
+    expect_error(
+        gintervals.load_chain(chain_file, src_groot = source_db),
+        "Chromosome.*does not exist|Source chromosome|invalid chromosomes"
+    )
+
+    # Verify we're back to target database even after error
+    expect_equal(.misha$GROOT, target_db)
+})
+
+test_that("gintervals.load_chain with src_groot validates source coordinates", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome (70bp to match chain file)
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGAC\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create source genome with small chromosome
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">source1\nTTTTTTTTTTTTTTTTTTTT\n", file = source_fasta) # Only 20 bp
+
+    source_db <- tempfile()
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+
+    # Create chain file with source coordinates exceeding chromosome size
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    cat("chain 1000 source1 100 + 0 50 chr1 70 + 0 50 1\n", file = chain_file)
+    cat("50\n\n", file = chain_file, append = TRUE)
+
+    # Switch back to target db
+    gdb.init(target_db)
+
+    # This should error because source coordinates exceed chromosome size
+    expect_error(
+        gintervals.load_chain(chain_file, src_groot = source_db)
+    )
+
+    # Verify we're back to target database even after error
+    expect_equal(.misha$GROOT, target_db)
+})
+
+test_that("gintervals.liftover works with 8-column chain format", {
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    cat("chain 1000 source1 100 + 0 20 chr1 32 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Load chain (now returns 8 columns)
+    chain <- gintervals.load_chain(chain_file)
+
+    # Create source intervals
+    src_intervals <- data.frame(
+        chrom = "source1",
+        start = 5,
+        end = 15,
+        stringsAsFactors = FALSE
+    )
+
+    # Liftover should work with the new 8-column format
+    result <- gintervals.liftover(src_intervals, chain)
+
+    expect_true(nrow(result) >= 1)
+    expect_equal(as.character(result$chrom[1]), "chr1")
+    expect_equal(as.numeric(result$start[1]), 5)
+    expect_equal(as.numeric(result$end[1]), 15)
+})

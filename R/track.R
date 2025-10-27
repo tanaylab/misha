@@ -1076,11 +1076,21 @@ gtrack.info <- function(track = NULL) {
 #' @param track name of a created track
 #' @param description a character string description
 #' @param src.track.dir path to the directory of the source track
-#' @param chain name of chain file or data frame as returned by
-#' 'gintervals.load_chain'
+#' @param chain name of chain file or data frame with 8 columns as returned by
+#' 'gintervals.load_chain' (chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc).
+#' Strand columns use +1 for forward strand and -1 for reverse strand.
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
 #' @param tgt_overlap_policy policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
 #' @return None.
+#'
+#' @note
+#' Terminology note for UCSC chain format users: In the UCSC chain format specification,
+#' the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+#' while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+#' misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+#' (chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+#' (chrom, start, end).
+#'
 #' @seealso \code{\link{gintervals.load_chain}},
 #' \code{\link{gintervals.liftover}}
 #' @keywords ~track ~liftover ~chain

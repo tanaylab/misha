@@ -181,9 +181,10 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 					chrom[TGT],
 					strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] - size : start[TGT],
 					strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] : start[TGT] + size,
+					strand[TGT],
 					chrom[SRC],
-					strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size - 1 : start[SRC],
-					strand[TGT]));
+					strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size : start[SRC],
+					strand[SRC]));
 
 				if (fields.size() == 3) {
 					int64_t dt = strtoll(fields[DT].c_str(), &endptr, 10);

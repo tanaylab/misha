@@ -48,6 +48,14 @@ the policies are used both for loading the chain and performing the liftover.
 When passing a pre-loaded chain data frame, the policies only apply to the
 liftover operation itself.
 }
+\note{
+Terminology note for UCSC chain format users: In the UCSC chain format specification,
+the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+(chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+(chrom, start, end).
+}
 \examples{
 \dontshow{
 options(gmax.processes = 2)
