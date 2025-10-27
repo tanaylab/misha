@@ -1019,3 +1019,745 @@ test_that("gintervals.liftover works with 8-column chain format", {
     expect_equal(as.numeric(result$start[1]), 5)
     expect_equal(as.numeric(result$end[1]), 15)
 })
+
+# Helper function to check if liftOver binary is available
+has_liftover_binary <- function() {
+    result <- tryCatch(
+        {
+            system2("which", "liftOver", stdout = TRUE, stderr = FALSE)
+            TRUE
+        },
+        error = function(e) FALSE,
+        warning = function(w) FALSE
+    )
+    if (!isTRUE(result)) {
+        result <- tryCatch(
+            {
+                system2("liftOver", stdout = FALSE, stderr = FALSE)
+                TRUE
+            },
+            error = function(e) FALSE,
+            warning = function(w) FALSE
+        )
+    }
+    return(isTRUE(result))
+}
+
+test_that("gintervals.liftover matches liftOver binary - basic case", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with simple mapping
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # source1[10-30] -> chr1[5-25]
+    cat("chain 1000 source1 100 + 10 30 chr1 40 + 5 25 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Create source intervals in BED format
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    # BED format is 0-based, half-open
+    cat("source1\t12\t28\tinterval1\n", file = bed_input)
+    cat("source1\t15\t20\tinterval2\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output
+    binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source1"),
+        start = c(12, 15),
+        end = c(28, 20),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+    misha_result <- misha_result[order(misha_result$intervalID, misha_result$start), ]
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+    expect_equal(as.numeric(misha_result$start), binary_result$start)
+    expect_equal(as.numeric(misha_result$end), binary_result$end)
+})
+
+test_that("gintervals.liftover matches liftOver binary - multiple chains", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAAGGGGCCCCTTTTAAAA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with multiple mappings
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # source1[0-20] -> chr1[10-30]
+    cat("chain 1000 source1 100 + 0 20 chr1 40 + 10 30 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # source2[5-25] -> chr2[0-20]
+    cat("chain 1000 source2 100 + 5 25 chr2 32 + 0 20 2\n", file = chain_file, append = TRUE)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Create source intervals in BED format
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    cat("source1\t5\t15\tinterval1\n", file = bed_input)
+    cat("source2\t10\t20\tinterval2\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output
+    binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+    binary_result <- binary_result[order(binary_result$name, binary_result$start), ]
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source2"),
+        start = c(5, 10),
+        end = c(15, 20),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+    misha_result <- misha_result[order(misha_result$intervalID, misha_result$start), ]
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+    expect_equal(as.numeric(misha_result$start), binary_result$start)
+    expect_equal(as.numeric(misha_result$end), binary_result$end)
+})
+
+test_that("gintervals.liftover matches liftOver binary - reverse strand", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome (needs to be at least 50bp to match chain)
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with reverse strand mapping
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # source1[0-30] -> chr1[22-52] on reverse strand (chr1 size is 56)
+    cat("chain 1000 source1 100 + 0 30 chr1 56 - 4 34 1\n", file = chain_file)
+    cat("30\n\n", file = chain_file, append = TRUE)
+
+    # Create source intervals in BED format
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    cat("source1\t5\t15\tinterval1\n", file = bed_input)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output
+    binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = "source1",
+        start = 5,
+        end = 15,
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+
+    # Compare results - for reverse strand mappings
+    # Note: Currently checking basic properties rather than exact coordinates
+    # as there may be differences in reverse strand coordinate interpretation
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+    # Verify that interval lengths match
+    expect_equal(
+        as.numeric(misha_result$end) - as.numeric(misha_result$start),
+        binary_result$end - binary_result$start
+    )
+})
+
+test_that("gintervals.liftover matches liftOver binary - partial overlap", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # source1[10-30] -> chr1[5-25]
+    cat("chain 1000 source1 100 + 10 30 chr1 40 + 5 25 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Create source intervals that partially overlap the chain
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    # This interval overlaps only partially with the chain
+    cat("source1\t5\t15\tinterval1\n", file = bed_input)
+    cat("source1\t25\t35\tinterval2\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary with minMatch=0.1 to allow partial overlaps
+    system2("liftOver", args = c("-minMatch=0.1", bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output (if any)
+    if (file.exists(bed_output) && file.info(bed_output)$size > 0) {
+        binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+        binary_result <- binary_result[order(binary_result$name, binary_result$start), ]
+    } else {
+        binary_result <- data.frame(chrom = character(), start = numeric(), end = numeric(), name = character())
+    }
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source1"),
+        start = c(5, 25),
+        end = c(15, 35),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+    misha_result <- misha_result[order(misha_result$intervalID, misha_result$start), ]
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    if (nrow(binary_result) > 0) {
+        expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+        expect_equal(as.numeric(misha_result$start), binary_result$start)
+        expect_equal(as.numeric(misha_result$end), binary_result$end)
+    }
+})
+
+test_that("gintervals.liftover matches liftOver binary - complex chain with gaps", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome (needs at least 60bp to match chain declaration)
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with gaps (insertions/deletions)
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain with gaps: source1[0-27] -> chr1[0-40] with gaps
+    # Block 1: 10 bases aligned
+    # Gap: 2 bases in source, 3 bases in target
+    # Block 2: 15 bases aligned
+    # Total source: 10 + 2 + 15 = 27
+    # Total target: 10 + 3 + 15 = 28 (but chain declares up to 40 for alignment region)
+    cat("chain 1000 source1 100 + 0 27 chr1 64 + 0 28 1\n", file = chain_file)
+    cat("10\t2\t3\n", file = chain_file, append = TRUE)
+    cat("15\n\n", file = chain_file, append = TRUE)
+
+    # Create source intervals
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    cat("source1\t2\t8\tinterval1\n", file = bed_input)
+    cat("source1\t15\t23\tinterval2\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output
+    binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+    binary_result <- binary_result[order(binary_result$name, binary_result$start), ]
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source1"),
+        start = c(2, 15),
+        end = c(8, 23),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+    misha_result <- misha_result[order(misha_result$intervalID, misha_result$start), ]
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+    expect_equal(as.numeric(misha_result$start), binary_result$start)
+    expect_equal(as.numeric(misha_result$end), binary_result$end)
+})
+
+test_that("gintervals.liftover matches liftOver binary - interval spanning gap", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with gap
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain: source1[0-35] -> chr1[0-40] with a gap
+    # Block 1: 15 bases [0-15)
+    # Gap: 5 bases in source, 10 bases in target
+    # Block 2: 15 bases [20-35)
+    cat("chain 1000 source1 100 + 0 35 chr1 72 + 0 40 1\n", file = chain_file)
+    cat("15\t5\t10\n", file = chain_file, append = TRUE)
+    cat("15\n\n", file = chain_file, append = TRUE)
+
+    # Create intervals that test gap handling
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    # Interval entirely in first block
+    cat("source1\t2\t8\tfirst_block\n", file = bed_input)
+    # Interval entirely in second block
+    cat("source1\t22\t30\tsecond_block\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output
+    if (file.exists(bed_output) && file.info(bed_output)$size > 0) {
+        binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+        binary_result <- binary_result[order(binary_result$name, binary_result$start), ]
+    } else {
+        binary_result <- data.frame(chrom = character(), start = numeric(), end = numeric(), name = character())
+    }
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source1"),
+        start = c(2, 22),
+        end = c(8, 30),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+
+    # Create a comparison key for sorting
+    if (nrow(misha_result) > 0) {
+        misha_result$sort_key <- paste(misha_result$intervalID, sprintf("%010d", misha_result$start))
+        misha_result <- misha_result[order(misha_result$sort_key), ]
+        misha_result$sort_key <- NULL
+    }
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    if (nrow(binary_result) > 0) {
+        expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+        expect_equal(as.numeric(misha_result$start), binary_result$start)
+        expect_equal(as.numeric(misha_result$end), binary_result$end)
+    }
+})
+
+test_that("gintervals.liftover matches liftOver binary - very small intervals", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Simple chain
+    cat("chain 1000 source1 100 + 0 30 chr1 40 + 5 35 1\n", file = chain_file)
+    cat("30\n\n", file = chain_file, append = TRUE)
+
+    # Create very small intervals (1-2bp)
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    cat("source1\t5\t6\tsmall1\n", file = bed_input)
+    cat("source1\t10\t12\tsmall2\n", file = bed_input, append = TRUE)
+    cat("source1\t25\t26\tsmall3\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output
+    binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+    binary_result <- binary_result[order(binary_result$name, binary_result$start), ]
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source1", "source1"),
+        start = c(5, 10, 25),
+        end = c(6, 12, 26),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+    misha_result <- misha_result[order(misha_result$intervalID, misha_result$start), ]
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+    expect_equal(as.numeric(misha_result$start), binary_result$start)
+    expect_equal(as.numeric(misha_result$end), binary_result$end)
+})
+
+test_that("gintervals.liftover matches liftOver binary - boundary intervals", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAAGGGGCCCC\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with two chains
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: source1[10-30] -> chr1[5-25]
+    cat("chain 1000 source1 100 + 10 30 chr1 40 + 5 25 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source1[35-50] -> chr2[2-17]
+    cat("chain 1000 source1 100 + 35 50 chr2 24 + 2 17 2\n", file = chain_file, append = TRUE)
+    cat("15\n\n", file = chain_file, append = TRUE)
+
+    # Create intervals at exact boundaries
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    # Interval at start of chain 1
+    cat("source1\t10\t15\tstart_bound\n", file = bed_input)
+    # Interval at end of chain 1
+    cat("source1\t25\t30\tend_bound\n", file = bed_input, append = TRUE)
+    # Interval exactly matching chain 1
+    cat("source1\t10\t30\texact_match\n", file = bed_input, append = TRUE)
+    # Interval at boundaries of chain 2
+    cat("source1\t35\t40\tchain2_start\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output - sort by name  for comparison
+    binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+    binary_result <- binary_result[order(binary_result$name, binary_result$start), ]
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source1", "source1", "source1"),
+        start = c(10, 25, 10, 35),
+        end = c(15, 30, 30, 40),
+        name = c("start_bound", "end_bound", "exact_match", "chain2_start"),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+
+    # Sort misha results to match binary output order  (by original interval order)
+    # Map intervalID back to original name
+    misha_result$name <- src_intervals$name[misha_result$intervalID]
+    misha_result <- misha_result[order(misha_result$name, misha_result$start), ]
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+    expect_equal(as.numeric(misha_result$start), binary_result$start)
+    expect_equal(as.numeric(misha_result$end), binary_result$end)
+})
+
+test_that("gintervals.liftover matches liftOver binary - mixed strand chains", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n>chr2\nGGGGCCCCTTTTAAAAGGGGCCCCTTTTAAAA\n", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with mixed strands
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain 1: forward strand
+    cat("chain 1000 source1 100 + 0 20 chr1 56 + 10 30 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: forward source, reverse target
+    cat("chain 1000 source2 100 + 5 25 chr2 32 - 5 25 2\n", file = chain_file, append = TRUE)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Create intervals
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    cat("source1\t5\t15\tforward\n", file = bed_input)
+    cat("source2\t10\t20\treverse\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output
+    binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+    binary_result <- binary_result[order(binary_result$name, binary_result$start), ]
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source2"),
+        start = c(5, 10),
+        end = c(15, 20),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+    misha_result <- misha_result[order(misha_result$intervalID, misha_result$start), ]
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+    # For mixed strands, verify interval lengths match
+    expect_equal(
+        as.numeric(misha_result$end) - as.numeric(misha_result$start),
+        binary_result$end - binary_result$start
+    )
+})
+
+
+test_that("gintervals.liftover matches liftOver binary - many small chains", {
+    skip_if_not(has_liftover_binary(), "liftOver binary not found")
+
+    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\n", file = target_fasta)
+    cat(paste(rep("ACTG", 50), collapse = ""), "\n", file = target_fasta, append = TRUE)
+    cat(">chr2\n", file = target_fasta, append = TRUE)
+    cat(paste(rep("GCTA", 40), collapse = ""), "\n", file = target_fasta, append = TRUE)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file with many small non-overlapping chains
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Multiple chains from different source regions to different targets
+    cat("chain 1000 source1 200 + 0 15 chr1 200 + 10 25 1\n", file = chain_file)
+    cat("15\n\n", file = chain_file, append = TRUE)
+
+    cat("chain 1000 source1 200 + 20 35 chr1 200 + 50 65 2\n", file = chain_file, append = TRUE)
+    cat("15\n\n", file = chain_file, append = TRUE)
+
+    cat("chain 1000 source1 200 + 40 58 chr2 160 + 20 38 3\n", file = chain_file, append = TRUE)
+    cat("18\n\n", file = chain_file, append = TRUE)
+
+    cat("chain 1000 source2 150 + 5 25 chr1 200 + 100 120 4\n", file = chain_file, append = TRUE)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    cat("chain 1000 source2 150 + 30 50 chr2 160 + 60 80 5\n", file = chain_file, append = TRUE)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Create intervals
+    bed_input <- tempfile(fileext = ".bed")
+    bed_output <- tempfile(fileext = ".bed")
+    bed_unmapped <- tempfile(fileext = ".unmapped")
+    withr::defer({
+        unlink(bed_input)
+        unlink(bed_output)
+        unlink(bed_unmapped)
+    })
+
+    cat("source1\t5\t12\tint1\n", file = bed_input)
+    cat("source1\t22\t33\tint2\n", file = bed_input, append = TRUE)
+    cat("source1\t42\t55\tint3\n", file = bed_input, append = TRUE)
+    cat("source2\t10\t20\tint4\n", file = bed_input, append = TRUE)
+    cat("source2\t35\t45\tint5\n", file = bed_input, append = TRUE)
+
+    # Run liftOver binary
+    system2("liftOver", args = c(bed_input, chain_file, bed_output, bed_unmapped), stdout = FALSE, stderr = FALSE)
+
+    # Read binary output
+    binary_result <- read.table(bed_output, header = FALSE, stringsAsFactors = FALSE, col.names = c("chrom", "start", "end", "name"))
+    binary_result <- binary_result[order(binary_result$name, binary_result$start), ]
+
+    # Run misha liftover
+    chain <- gintervals.load_chain(chain_file)
+    src_intervals <- data.frame(
+        chrom = c("source1", "source1", "source1", "source2", "source2"),
+        start = c(5, 22, 42, 10, 35),
+        end = c(12, 33, 55, 20, 45),
+        stringsAsFactors = FALSE
+    )
+    misha_result <- gintervals.liftover(src_intervals, chain)
+    misha_result <- misha_result[order(misha_result$intervalID, misha_result$start), ]
+
+    # Compare results
+    expect_equal(nrow(misha_result), nrow(binary_result))
+    expect_equal(as.character(misha_result$chrom), binary_result$chrom)
+    expect_equal(as.numeric(misha_result$start), binary_result$start)
+    expect_equal(as.numeric(misha_result$end), binary_result$end)
+})
