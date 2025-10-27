@@ -108,55 +108,6 @@ static inline float pos_value_with_dir(const DnaPSSM& pssm,
     return best_val;
 }
 
-// Compute best log-likelihood and its direction at position i with spatial weighting
-// For MAX_LIKELIHOOD, MAX_LIKELIHOOD_POS, and MOTIF_COUNT modes
-// Returns the best value and sets best_dir to 1 (forward) or -1 (reverse)
-// NOTE: For bidirectional PSSMs, ALWAYS checks both strands (ignoring strand_mode)
-// to match the behavior of DnaPSSM::max_like_match()
-// NOTE: When strand_mode == -1, the target is already reverse-complemented, so we need
-// to invert the direction: calc_like() scores the reverse strand, calc_like_rc() scores forward
-static inline float pos_value_with_dir(const DnaPSSM& pssm,
-                                       const std::string& target,
-                                       size_t i,
-                                       char strand_mode,
-                                       float spat_log,
-                                       int& best_dir)
-{
-    float best_val = -std::numeric_limits<float>::infinity();
-    best_dir = 1;
-
-    // For bidirectional PSSMs, always evaluate both strands (matching max_like_match behavior)
-    // For non-bidirectional PSSMs, respect strand_mode
-    bool check_forward = pssm.is_bidirect() || (strand_mode != -1);
-    bool check_reverse = pssm.is_bidirect() || (strand_mode != 1);
-
-    // Evaluate forward strand
-    if (check_forward) {
-        float f = 0.f;
-        auto it = target.begin() + i;
-        pssm.calc_like(it, f);
-        float val_f = f + spat_log;
-        if (val_f > best_val) {
-            best_val = val_f;
-            best_dir = 1;
-        }
-    }
-
-    // Evaluate reverse strand
-    if (check_reverse) {
-        float rc = 0.f;
-        auto it2 = target.begin() + i;
-        pssm.calc_like_rc(it2, rc);
-        float val_rc = rc + spat_log;
-        if (val_rc > best_val) {
-            best_val = val_rc;
-            best_dir = -1;
-        }
-    }
-
-    return best_val;
-}
-
 PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool extend,
                      ScoringMode mode, char strand,
                      const std::vector<float>& spat_factor, int spat_bin_size, float score_thresh)

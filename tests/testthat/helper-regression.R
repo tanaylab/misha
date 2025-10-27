@@ -51,35 +51,4 @@ local_db_state <- function(env = parent.frame()) {
     )
 }
 
-load_regression_file <- function(id, snapshot_dir = "/net/mraid20/export/tgdata/db/tgdb/misha_snapshot") {
-    file_path <- file.path(snapshot_dir, glue::glue("{id}.rds"))
-    if (!file.exists(file_path)) {
-        cli::cli_abort("Regression file {.file {id}} not found")
-    }
-    readr::read_rds(file_path)
-}
 
-#' Save and restore the current database state
-#'
-#' This is useful for tests that temporarily switch to a different database.
-#' Uses withr-style automatic cleanup.
-#'
-#' @param env The environment to use for defer (defaults to parent frame)
-local_db_state <- function(env = parent.frame()) {
-    # Save current state
-    original_groot <- if (exists("GROOT", envir = .misha, inherits = FALSE)) {
-        get("GROOT", envir = .misha)
-    } else {
-        NULL
-    }
-
-    # Register cleanup
-    withr::defer(
-        {
-            if (!is.null(original_groot)) {
-                suppressMessages(gdb.init(original_groot))
-            }
-        },
-        envir = env
-    )
-}
