@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.1</span>
       </span>
     </div>
 
@@ -167,17 +167,20 @@ Optional spatial weighting allows position-dependent weights.</p>
 <p><em>func = "pwm.max", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 spat_min = NULL, spat_max = NULL)</em> <br>
-Returns maximum log-likelihood score of best PSSM match. bidirect=TRUE
-checks both strands. Prior adds pseudocounts, extend=TRUE allows boundary
-scoring. Neutral characters (<code>N</code>, <code>n</code>, <code>*</code> by default) are scored with the mean
-log-probability of each PSSM column on both strands, so the same penalty applies regardless of
-orientation. The reported value is the single best-strand score after spatial weighting—forward
-and reverse orientations are compared, not summed. Optional spatial weighting allows
-position-dependent weights.</p>
+Returns maximum log-likelihood score of best PSSM match.
+When <code>bidirect=TRUE</code>, both strands are scanned and the reported value is the
+<em>single best-strand</em> score after spatial weighting—the two strand scores are
+compared, not summed. (This is a <em>per-position union</em>, not per-strand accumulation.)
+The <code>strand</code> parameter is ignored when <code>bidirect=TRUE</code>.
+Prior adds pseudocounts; <code>extend=TRUE</code> allows boundary scoring. Neutral characters
+(<code>N</code>, <code>n</code>, <code>*</code> by default) are scored with the mean log-probability of each
+PSSM column on both strands, so the same penalty applies regardless of orientation.
+Optional spatial weighting allows position-dependent weights.</p>
 <p><em>func = "pwm.max.pos", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 spat_min = NULL, spat_max = NULL)</em> <br>
 Returns 1-based position of best PSSM match.
+This position is 1-based relative to the start of the final scan window, which is determined after applying any iterator shifts (e.g., <code>sshift</code> from <code><a href="gvtrack.iterator.html">gvtrack.iterator</a></code>) or the <code>spat_min</code> parameter. In case of ties, the position of the first match (most 5' / smallest coordinate) encountered during the scan is returned. The forward strand is checked before the reverse strand at each position, so it will win in a direct tie at the same location.
 If bidirect=TRUE, the position would be positive if the best hit was at the
 forward strand, and negative if it was at the reverse strand. When strand is
 -1 the position is still according to the forward strand, but the hit is at
@@ -186,19 +189,27 @@ Prior adds pseudocounts, extend=TRUE allows boundary scoring.
 Optional spatial weighting allows position-dependent weights.</p>
 <p><em>func = "pwm.count", params = list(pssm = matrix, score.thresh = 0,
 bidirect = TRUE, prior = 0.01, extend = TRUE, strand = 1)</em> <br>
-Counts motif hits with score &gt;= threshold inside each interval. Returns the
-number of positions where the log-likelihood score meets or exceeds score.thresh.
-For bidirect=TRUE, counts hits on both strands (each position and strand counted
-separately). Prior adds pseudocounts, extend=TRUE allows scoring at boundaries.</p>
-<p>For all PWM functions:</p><ul><li><p>pssm: Position-specific scoring matrix (nx4 matrix with columns A,C,G,T containing frequencies)</p></li>
-<li><p>bidirect: If TRUE, scans both strands; if FALSE, forward only (default: TRUE)</p></li>
+Counts motif hits with score &gt;= threshold inside each interval.
+For <code>bidirect=FALSE</code>, only the strand given by <code>strand</code> is checked.
+For <code>bidirect=TRUE</code>, both strands are evaluated at each position and the
+<em>combined</em> score is tested against the threshold. The default combination is
+log-sum-exp (LSE), consistent with <code>pwm</code>. Each position contributes at most 1
+to the count (per-position union), not a per-strand sum.
+Returns the total number of passing positions. Prior adds pseudocounts; <code>extend=TRUE</code>
+allows scoring at boundaries. If spatial weights are provided, the threshold is applied
+to the spatially weighted combined score.</p>
+<p>For all PWM functions:</p><ul><li><p>pssm: Position-specific scoring matrix (matrix or data frame with columns A,C,G,T containing frequencies; additional columns are allowed and will be ignored)</p></li>
+<li><p>bidirect: If TRUE, scans both strands and combines them per position (union).
+    When TRUE, <code>strand</code> is ignored. If FALSE, only the strand given by <code>strand</code>
+    is scanned (default: TRUE).</p></li>
 <li><p>prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.</p></li>
 <li><p>extend: If TRUE, allows scoring at interval boundaries (default: TRUE)</p></li>
 <li><p>neutral characters: By default <code>N</code>, <code>n</code>, and <code>*</code> are treated as unknown bases
 and contribute the average log-probability of the corresponding PSSM column on both strands.</p></li>
 <li><p>strand: If 1, scans forward strand; if -1, scans reverse strand (default: 1).
-For strand == 1, the position of the best match is at the beginning of the match.
-For strand == -1, the position is at the end of the match.</p></li>
+    Ignored when <code>bidirect=TRUE</code>. For <code>pwm.max.pos</code>, when <code>strand == 1</code>,
+    the position of the best match is at the beginning of the match; when <code>strand == -1</code>,
+    the position is at the end of the match.</p></li>
 <li><p>score.thresh: Score threshold for pwm.count (default: 0). Only positions with
 log-likelihood &gt;= score.thresh are counted.</p></li>
 <li><p>spat_factor: Optional numeric vector of positive spatial weights (one per bin).
@@ -336,26 +347,26 @@ Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avo
 <span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">500</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end dense_track motif_score max_motif_score max_motif_pos</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0   500   0.1577778  -1.7766600       -5.326688          -146</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1   500  1000   0.0220000  -0.9113579       -4.131331           178</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  1000  1500   0.0540000  -1.3073398       -4.131331            32</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  1500  2000   0.0280000  -1.5331404       -4.131331           203</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  2000  2500   0.0420000  -1.4151770       -4.151339          -127</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  2500  3000   0.0400000  -0.9677289       -2.289690          -135</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  3000  3500   0.0320000  -1.3787558       -4.151339            22</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  3500  4000   0.0500000  -1.2041832       -4.151339             4</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  4000  4500   0.0360000  -1.0488077       -2.289690           -39</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  4500  5000   0.0500000  -0.9755256       -4.131331           -55</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1  5000  5500   0.0460000  -1.4299523       -4.131331            11</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0   500   0.1577778  -1.7766492       -5.326688          -146</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1   500  1000   0.0220000  -0.9113593       -4.131331           178</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  1000  1500   0.0540000  -1.3073429       -4.131331            32</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  1500  2000   0.0280000  -1.5331372       -4.131331           203</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  2000  2500   0.0420000  -1.4151751       -4.151339          -127</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  2500  3000   0.0400000  -0.9677328       -2.289690          -135</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  3000  3500   0.0320000  -1.3787566       -4.151339            22</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  3500  4000   0.0500000  -1.2041818       -4.151339             4</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  4000  4500   0.0360000  -1.0488112       -2.289690           -39</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  4500  5000   0.0500000  -0.9755265       -4.131331           -55</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1  5000  5500   0.0460000  -1.4299539       -4.131331            11</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1  5500  6000   0.0340000  -1.2019985       -4.131331            62</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  6000  6500   0.0800000  -1.6382432       -4.151339           152</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  6500  7000   0.0360000  -1.1377984       -4.131331            20</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 15  chr1  7000  7500   0.0220000  -1.0761298       -4.131331             8</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 16  chr1  7500  8000   0.0260000  -1.0666254       -4.131331           174</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 17  chr1  8000  8500   0.0320000  -0.9999040       -2.289690            75</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 18  chr1  8500  9000   0.0340000  -0.9541363       -2.289690           189</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 19  chr1  9000  9500   0.0580000  -0.8253076       -2.289690           450</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 20  chr1  9500 10000   0.0800000  -1.5154108       -4.151339          -248</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  6000  6500   0.0800000  -1.6382387       -4.151339           152</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  6500  7000   0.0360000  -1.1377999       -4.131331            20</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 15  chr1  7000  7500   0.0220000  -1.0761303       -4.131331             8</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 16  chr1  7500  8000   0.0260000  -1.0666244       -4.131331           174</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 17  chr1  8000  8500   0.0320000  -0.9999073       -2.289690            75</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 18  chr1  8500  9000   0.0340000  -0.9541373       -2.289690           189</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 19  chr1  9000  9500   0.0580000  -0.8253099       -2.289690           450</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 20  chr1  9500 10000   0.0800000  -1.5154095       -4.151339          -248</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    intervalID</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1           1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2           1</span>
@@ -468,56 +479,56 @@ Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avo
 <span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">200</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end  spatial_pwm regular_pwm intervalID</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0   200 -0.180401295 -0.14769743          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1   200   400 -0.313297242 -0.27115884          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1   400   600 -0.115642898 -0.13522016          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   600   800  0.140714258  0.14071436          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0   200 -0.180401430 -0.14769733          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1   200   400 -0.313297242 -0.27115873          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1   400   600 -0.115642898 -0.13521937          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   600   800  0.140714258  0.14071478          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1   800  1000  0.483688235  0.59744269          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  1000  1200 -0.338178366 -0.32684177          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  1200  1400 -0.103174366 -0.01625540          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  1400  1600  0.025533091 -0.01764358          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  1600  1800  0.125026807  0.08757097          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  1800  2000 -0.131756768 -0.01831045          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1  2000  2200  0.408822775  0.39407575          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1  2200  2400 -0.135601014 -0.14926907          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  2400  2600  0.066558383  0.08941928          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  2600  2800 -0.076511987 -0.10243686          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 15  chr1  2800  3000 -0.156360894 -0.18365008          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 16  chr1  3000  3200 -0.178761035 -0.09572198          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 17  chr1  3200  3400 -0.045558270 -0.02312588          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 18  chr1  3400  3600 -0.104294598 -0.18529214          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 19  chr1  3600  3800 -0.078706071 -0.10243695          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 20  chr1  3800  4000 -0.040662888  0.05026980          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 21  chr1  4000  4200 -0.219249636 -0.20749643          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 22  chr1  4200  4400  0.037398595  0.21399310          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 23  chr1  4400  4600  0.211920530  0.19952948          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 24  chr1  4600  4800 -0.177553743 -0.11072061          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 25  chr1  4800  5000  0.171406299  0.04122571          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 26  chr1  5000  5200 -0.102812022 -0.21086165          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 27  chr1  5200  5400 -0.168332055 -0.21505027          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 28  chr1  5400  5600 -0.224750787 -0.28187022          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 29  chr1  5600  5800 -0.261454254 -0.22261977          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 30  chr1  5800  6000  0.098980233  0.02286749          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 31  chr1  6000  6200 -0.152791351 -0.16430227          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 32  chr1  6200  6400  0.009539558 -0.05986607          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 33  chr1  6400  6600 -0.003595080 -0.01348370          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 34  chr1  6600  6800  0.154161140  0.10842018          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 35  chr1  6800  7000  0.536666572  0.53904849          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 36  chr1  7000  7200 -0.154779315 -0.17233880          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 37  chr1  7200  7400  0.234409109  0.21766275          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 38  chr1  7400  7600  0.004531109  0.02222752          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 39  chr1  7600  7800 -0.358309597 -0.28187087          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 40  chr1  7800  8000 -0.037822112 -0.06488658          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 41  chr1  8000  8200 -0.123648971 -0.06131697          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 42  chr1  8200  8400 -0.065596476 -0.05483532          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  1000  1200 -0.338178366 -0.32684132          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  1200  1400 -0.103174366 -0.01625533          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  1400  1600  0.025533091 -0.01764396          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  1600  1800  0.125026807  0.08757108          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  1800  2000 -0.131756768 -0.01831027          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1  2000  2200  0.408822775  0.39407605          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1  2200  2400 -0.135601014 -0.14926806          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  2400  2600  0.066558383  0.08941976          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  2600  2800 -0.076511987 -0.10243648          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 15  chr1  2800  3000 -0.156360894 -0.18365006          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 16  chr1  3000  3200 -0.178761035 -0.09572130          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 17  chr1  3200  3400 -0.045558270 -0.02312547          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 18  chr1  3400  3600 -0.104294598 -0.18529195          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 19  chr1  3600  3800 -0.078706071 -0.10243648          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 20  chr1  3800  4000 -0.040662888  0.05026907          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 21  chr1  4000  4200 -0.219249636 -0.20749611          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 22  chr1  4200  4400  0.037398595  0.21399346          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 23  chr1  4400  4600  0.211920530  0.19952914          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 24  chr1  4600  4800 -0.177553743 -0.11072104          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 25  chr1  4800  5000  0.171406299  0.04122563          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 26  chr1  5000  5200 -0.102812022 -0.21086201          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 27  chr1  5200  5400 -0.168332055 -0.21505040          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 28  chr1  5400  5600 -0.224750787 -0.28187045          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 29  chr1  5600  5800 -0.261454254 -0.22261991          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 30  chr1  5800  6000  0.098980233  0.02286761          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 31  chr1  6000  6200 -0.152791351 -0.16430125          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 32  chr1  6200  6400  0.009539558 -0.05986627          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 33  chr1  6400  6600 -0.003595080 -0.01348384          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 34  chr1  6600  6800  0.154161140  0.10841974          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 35  chr1  6800  7000  0.536666572  0.53904897          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 36  chr1  7000  7200 -0.154779315 -0.17233904          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 37  chr1  7200  7400  0.234409109  0.21766372          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 38  chr1  7400  7600  0.004531109  0.02222776          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 39  chr1  7600  7800 -0.358309597 -0.28187045          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 40  chr1  7800  8000 -0.037822112 -0.06488629          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 41  chr1  8000  8200 -0.123648971 -0.06131684          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 42  chr1  8200  8400 -0.065596476 -0.05483555          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 43  chr1  8400  8600  0.300766706  0.43346265          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 44  chr1  8600  8800  0.233623102  0.16052406          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 45  chr1  8800  9000  0.043814570  0.05156638          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 46  chr1  9000  9200  0.534710228  0.34400526          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 47  chr1  9200  9400 -0.122906998 -0.13060562          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 48  chr1  9400  9600  0.076439023  0.26928064          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 49  chr1  9600  9800 -0.048390523  0.02025015          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 50  chr1  9800 10000 -0.175185129 -0.17636901          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 44  chr1  8600  8800  0.233623102  0.16052382          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 45  chr1  8800  9000  0.043814570  0.05156659          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 46  chr1  9000  9200  0.534710228  0.34400457          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 47  chr1  9200  9400 -0.122906998 -0.13060568          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 48  chr1  9400  9600  0.076439023  0.26928109          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 49  chr1  9600  9800 -0.048390523  0.02025047          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 50  chr1  9800 10000 -0.175185129 -0.17636883          1</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Using spatial parameters with iterator shifts</span></span></span>
 <span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span></span></span>
@@ -642,26 +653,26 @@ Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avo
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="st">"window_pwm"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">500</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end window_pwm intervalID</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0   500  0.5735642          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0   500  0.5735636          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1   500  1000  1.0993481          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  1000  1500  0.6392633          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  1500  2000  0.8320076          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  2000  2500  0.8932194          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  2500  3000  0.6802183          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  1000  1500  0.6392645          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  1500  2000  0.8320074          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  2000  2500  0.8932184          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  2500  3000  0.6802177          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  3000  3500  0.6951929          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  3500  4000  0.7342756          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  3500  4000  0.7342752          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  4000  4500  0.8058116          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  4500  5000  0.8210365          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1  5000  5500  0.5609012          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1  5500  6000  0.6062216          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  6000  6500  0.6843141          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  6500  7000  1.0550114          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 15  chr1  7000  7500  0.7978341          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 16  chr1  7500  8000  0.7205436          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 17  chr1  8000  8500  0.7662507          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 18  chr1  8500  9000  1.0681937          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 19  chr1  9000  9500  1.0339503          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 20  chr1  9500 10000  0.7142714          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  4500  5000  0.8210369          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 11  chr1  5000  5500  0.5609006          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 12  chr1  5500  6000  0.6062215          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13  chr1  6000  6500  0.6843127          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 14  chr1  6500  7000  1.0550103          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 15  chr1  7000  7500  0.7978342          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 16  chr1  7500  8000  0.7205425          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 17  chr1  8000  8500  0.7662502          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 18  chr1  8500  9000  1.0681919          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 19  chr1  9000  9500  1.0339508          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 20  chr1  9500 10000  0.7142706          1</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Combining spatial weighting with window restriction</span></span></span>
 <span class="r-in"><span><span class="co"># Scan positions 50-450 with spatial weights favoring the center</span></span></span>
@@ -676,7 +687,7 @@ Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avo
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="st">"window_spatial_pwm"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">500</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end window_spatial_pwm intervalID</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0   500          0.6662649          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0   500          0.6662636          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1   500  1000          1.0076195          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  1000  1500          0.6896264          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  1500  2000          0.9325658          1</span>

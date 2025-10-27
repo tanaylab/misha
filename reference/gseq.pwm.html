@@ -20,7 +20,7 @@ All reported positions are on the full input sequence."><!-- mathjax --><script 
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.1</span>
       </span>
     </div>
 
@@ -90,6 +90,7 @@ All reported positions are on the full input sequence.</p>
 <span>  skip_gaps <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  gap_chars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"-"</span>, <span class="st">"."</span><span class="op">)</span>,</span>
 <span>  neutral_chars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"N"</span>, <span class="st">"n"</span>, <span class="st">"*"</span><span class="op">)</span>,</span>
+<span>  neutral_chars_policy <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"average"</span>, <span class="st">"log_quarter"</span>, <span class="st">"na"</span><span class="op">)</span>,</span>
 <span>  prior <span class="op">=</span> <span class="fl">0.01</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -103,7 +104,7 @@ All reported positions are on the full input sequence.</p>
 
 
 <dt id="arg-pssm">pssm<a class="anchor" aria-label="anchor" href="#arg-pssm"></a></dt>
-<dd><p>numeric matrix with 4 columns named A, C, G, T</p></dd>
+<dd><p>numeric matrix or data frame with columns named A, C, G, T (additional columns are allowed and will be ignored)</p></dd>
 
 
 <dt id="arg-mode">mode<a class="anchor" aria-label="anchor" href="#arg-mode"></a></dt>
@@ -167,6 +168,13 @@ scanning. Windows are w consecutive non-gap bases (default: TRUE)</p></dd>
 <dt id="arg-neutral-chars">neutral_chars<a class="anchor" aria-label="anchor" href="#arg-neutral-chars"></a></dt>
 <dd><p>character vector; bases treated as unknown and scored with the average
 log probability per position (default: c("N", "n", "*"))</p></dd>
+
+
+<dt id="arg-neutral-chars-policy">neutral_chars_policy<a class="anchor" aria-label="anchor" href="#arg-neutral-chars-policy"></a></dt>
+<dd><p>character string; how to treat neutral characters. One of
+<code>"average"</code> (default; use the column's mean log-probability), <code>"log_quarter"</code>
+(always use <code>log(1/4)</code>), or <code>"na"</code> (return NA when a neutral character is
+encountered in the scanning window).</p></dd>
 
 
 <dt id="arg-prior">prior<a class="anchor" aria-label="anchor" href="#arg-prior"></a></dt>
