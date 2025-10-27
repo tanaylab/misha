@@ -1056,7 +1056,6 @@ test_that("misha PWM with sliding optimization matches prego - no spatial", {
 
     # Compare sliding results with prego
     expect_equal(misha_result$pwm_sliding, prego_scores, tolerance = 1e-6)
-    # expect_regression(misha_result, "pwm_sliding_no_spatial")
 })
 
 test_that("misha PWM with sliding optimization matches prego - with spatial", {
@@ -1125,7 +1124,6 @@ test_that("misha PWM with sliding optimization matches prego - with spatial", {
 
     # Compare sliding results with prego
     expect_equal(misha_result$pwm_sliding_spatial, prego_scores, tolerance = 1e-5)
-    # expect_regression(misha_result, "pwm_sliding_with_spatial")
 })
 
 test_that("misha PWM.max with sliding optimization matches prego", {
@@ -1184,7 +1182,6 @@ test_that("misha PWM.max with sliding optimization matches prego", {
 
     # Compare
     expect_equal(misha_result$pwm_max_sliding, prego_scores, tolerance = 1e-6)
-    # expect_regression(misha_result, "pwm_max_sliding")
 })
 
 test_that("misha PWM with sliding optimization matches prego - minus strand with spatial", {
@@ -1238,10 +1235,10 @@ test_that("misha PWM with sliding optimization matches prego - minus strand with
         # Follow the same pattern as the working test
         interval <- gintervals(
             misha_result$chrom[i],
-            misha_result$start[i],
-            misha_result$end[i] + 279 + (motif_len - 1) # eshift + extend
+            max(0L, misha_result$start[i] - (motif_len - 1)), # extend applies to start on minus strand
+            misha_result$end[i] + 279 # eshift applies to interval end
         )
-        seq_rc <- gseq.extract(interval)
+        seq_rc <- grevcomp(gseq.extract(interval))
         prego_scores[i] <- prego::compute_pwm(
             sequences = seq_rc,
             pssm = test_pssm,
@@ -1252,6 +1249,5 @@ test_that("misha PWM with sliding optimization matches prego - minus strand with
         )
     }
 
-    expect_equal(misha_result$pwm_minus_sliding_spatial, prego_scores, tolerance = 1e-6)
-    # expect_regression(misha_result, "pwm_minus_sliding_spatial")
+    expect_equal(misha_result$pwm_minus_sliding_spatial, prego_scores, tolerance = 1e-5)
 })

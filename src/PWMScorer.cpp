@@ -860,16 +860,12 @@ void PWMScorer::compute_motif_at(const std::string& target, size_t i_in_target,
     const bool check_rc  = (m_pssm.is_bidirect() || m_strand != +1);
 
     if (check_fwd) {
-        float v = 0.f;
-        auto it = target.begin() + i_in_target;
-        m_pssm.calc_like(it, v);
-        fwd = v; has_f = 1;
+        fwd = score_forward_original(m_pssm, target, i_in_target, m_strand);
+        has_f = 1;
     }
     if (check_rc) {
-        float v = 0.f;
-        auto it = target.begin() + i_in_target;
-        m_pssm.calc_like_rc(it, v);
-        rc = v; has_r = 1;
+        rc = score_reverse_original(m_pssm, target, i_in_target, m_strand);
+        has_r = 1;
     }
 }
 
@@ -1115,6 +1111,10 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
     if (is_minus) {
         // For minus strand, check j=B-1, 2B-1, 3B-1, ... (they become j=B, 2B, 3B after head decrement)
         for (size_t j_old = (size_t)B - 1; j_old < max_mover_j && j_old < W; j_old += (size_t)B) {
+            // Skip the outgoing position (j_out = W-1) to avoid double-processing
+            if (j_old + 1 == W) {
+                break;
+            }
             boundary_j_vals.push_back(j_old);
         }
     } else {
