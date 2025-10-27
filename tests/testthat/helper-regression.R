@@ -50,5 +50,3 @@ local_db_state <- function(env = parent.frame()) {
         envir = env
     )
 }
-
-
