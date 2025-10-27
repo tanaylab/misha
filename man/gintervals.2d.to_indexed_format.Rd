@@ -54,7 +54,5 @@ gintervals.2d.to_indexed_format("my_2d_intervals", remove.old = TRUE)
 # Force re-conversion
 gintervals.2d.to_indexed_format("my_2d_intervals", force = TRUE)
 }
-}
-\seealso{
-\code{\link{gintervals.2d.save}}, \code{\link{gintervals.2d.load}}
+
 }

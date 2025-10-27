@@ -31,6 +31,8 @@ annotations are imported}
 \item{format}{database format: "indexed" (default, single genome.seq + genome.idx)
 or "per-chromosome" (separate .seq file per contig). If NULL, uses the value from
 \code{getOption("gmulticontig.indexed_format", TRUE)}}
+
+\item{verbose}{if TRUE, prints verbose messages}
 }
 \value{
 None.

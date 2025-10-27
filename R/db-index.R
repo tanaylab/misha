@@ -946,7 +946,7 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
 #' # Force re-conversion
 #' gintervals.2d.to_indexed_format("my_2d_intervals", force = TRUE)
 #' }
-#' @seealso \code{\link{gintervals.2d.save}}, \code{\link{gintervals.2d.load}}
+#'
 #' @export
 gintervals.2d.to_indexed_format <- function(set.name = NULL, remove.old = FALSE, force = FALSE) {
     if (is.null(set.name) || !is.character(set.name) || length(set.name) != 1) {
