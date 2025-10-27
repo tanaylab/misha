@@ -7,7 +7,8 @@
 gintervals.load_chain(
   file = NULL,
   src_overlap_policy = "error",
-  tgt_overlap_policy = "auto"
+  tgt_overlap_policy = "auto",
+  src_groot = NULL
 )
 }
 \arguments{
@@ -16,9 +17,21 @@ gintervals.load_chain(
 \item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard"}
 
 \item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), or "discard"}
+
+\item{src_groot}{optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.}
 }
 \value{
-A data frame representing assembly conversion table.
+A data frame with 8 columns representing assembly conversion table:
+\itemize{
+  \item chrom: target chromosome
+  \item start: target start coordinate (0-based)
+  \item end: target end coordinate (0-based, exclusive)
+  \item strand: target strand (+1 for forward, -1 for reverse)
+  \item chromsrc: source chromosome
+  \item startsrc: source start coordinate (0-based)
+  \item endsrc: source end coordinate (0-based, exclusive)
+  \item strandsrc: source strand (+1 for forward, -1 for reverse)
+}
 }
 \description{
 Loads assembly conversion table from a chain file.
@@ -45,6 +58,14 @@ The 'tgt_overlap_policy' controls how target overlaps are handled:
   \item "discard": Remove all chain intervals involved in target overlaps
 }
 }
+\note{
+Terminology note for UCSC chain format users: In the UCSC chain format specification,
+the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+(chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+(chrom, start, end).
+}
 \examples{
 \dontshow{
 options(gmax.processes = 2)
@@ -60,6 +81,9 @@ gintervals.load_chain(chainfile)
 
 # Load chain file, discarding both source and target overlaps
 # gintervals.load_chain(chainfile, src_overlap_policy = "discard", tgt_overlap_policy = "discard")
+
+# Load chain file with source genome validation
+# gintervals.load_chain(chainfile, src_groot = "/path/to/source/genome/db")
 
 }
 \seealso{

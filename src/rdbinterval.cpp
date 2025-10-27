@@ -31,7 +31,7 @@ using namespace rdb;
 
 const char *IntervalPval::COL_NAMES[IntervalPval::NUM_COLS] = { "chrom", "start", "end", "pval" };
 
-const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "chromsrc", "startsrc", "strandsrc" };
+const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc" };
 
 IntervUtils::IntervUtils(SEXP envir)
 {
@@ -623,6 +623,9 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 	SEXP src_chroms = VECTOR_ELT(rchain, ChainInterval::CHROM_SRC);
 	SEXP src_chrom_levels = Rf_getAttrib(src_chroms, R_LevelsSymbol);
 	SEXP src_starts = VECTOR_ELT(rchain, ChainInterval::START_SRC);
+	// Note: src_ends (END_SRC) is not used as it's calculated from start_src + (end - start) in constructor
+	SEXP src_strands = VECTOR_ELT(rchain, ChainInterval::STRAND_SRC);
+	SEXP tgt_strands = VECTOR_ELT(rchain, ChainInterval::STRAND);
 
 	for (unsigned i = 0; i < ChainInterval::NUM_COLS; i++) {
 		if (i != 0 && Rf_length(VECTOR_ELT(rchain, i)) != Rf_length(VECTOR_ELT(rchain, i - 1)))
@@ -651,7 +654,13 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 
 		int64_t src_start = (int64_t)(Rf_isReal(src_starts) ? REAL(src_starts)[i] : INTEGER(src_starts)[i]);
 
-		ChainInterval interval(intervs[i].chromid, intervs[i].start, intervs[i].end, src_chromid, src_start);
+		// Read strands and convert +1/-1 to 0/1 for internal storage
+		int tgt_strand_val = Rf_isReal(tgt_strands) ? (int)REAL(tgt_strands)[i] : INTEGER(tgt_strands)[i];
+		int src_strand_val = Rf_isReal(src_strands) ? (int)REAL(src_strands)[i] : INTEGER(src_strands)[i];
+		int tgt_strand = (tgt_strand_val == 1) ? 0 : 1;
+		int src_strand = (src_strand_val == 1) ? 0 : 1;
+
+		ChainInterval interval(intervs[i].chromid, intervs[i].start, intervs[i].end, tgt_strand, src_chromid, src_start, src_strand);
 
 		interval.verify(m_chrom_key, src_id2chrom);
 		chain_intervs.push_back(interval);
@@ -666,20 +675,25 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 		tmp_intervals.push_back((GInterval)*iinterval);
 
     SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
-	SEXP src_chroms, src_chroms_idx, src_starts, src_strands;
+	SEXP src_chroms, src_chroms_idx, src_starts, src_ends, src_strands, tgt_strands;
     SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
     rprotect(col_names);
 	unsigned num_src_chroms = src_id2chrom.size();
 
     rprotect(src_chroms_idx = RSaneAllocVector(INTSXP, chain_intervs.size()));
     rprotect(src_starts = RSaneAllocVector(REALSXP, chain_intervs.size()));
+    rprotect(src_ends = RSaneAllocVector(REALSXP, chain_intervs.size()));
     rprotect(src_chroms = RSaneAllocVector(STRSXP, num_src_chroms));
     rprotect(src_strands = RSaneAllocVector(INTSXP, chain_intervs.size()));
+    rprotect(tgt_strands = RSaneAllocVector(INTSXP, chain_intervs.size()));
 
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval) {
 		INTEGER(src_chroms_idx)[iinterval - chain_intervs.begin()] = iinterval->chromid_src + 1;
 		REAL(src_starts)[iinterval - chain_intervs.begin()] = iinterval->start_src;
-		INTEGER(src_strands)[iinterval - chain_intervs.begin()] = iinterval->strand_src;
+		REAL(src_ends)[iinterval - chain_intervs.begin()] = iinterval->end_src;
+		// Convert 0/1 to +1/-1 for R output
+		INTEGER(src_strands)[iinterval - chain_intervs.begin()] = (iinterval->strand_src == 0) ? 1 : -1;
+		INTEGER(tgt_strands)[iinterval - chain_intervs.begin()] = (iinterval->strand == 0) ? 1 : -1;
 	}
 
 	for (unsigned id = 0; id < num_src_chroms; ++id)
@@ -691,11 +705,13 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
     Rf_setAttrib(src_chroms_idx, R_LevelsSymbol, src_chroms);
     Rf_setAttrib(src_chroms_idx, R_ClassSymbol, Rf_mkString("factor"));
 
+    SET_VECTOR_ELT(answer, ChainInterval::STRAND, tgt_strands);
     SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, src_chroms_idx);
     SET_VECTOR_ELT(answer, ChainInterval::START_SRC, src_starts);
+    SET_VECTOR_ELT(answer, ChainInterval::END_SRC, src_ends);
     SET_VECTOR_ELT(answer, ChainInterval::STRAND_SRC, src_strands);
 
-    runprotect(3);
+    runprotect(5);
     return answer;
 }
 
@@ -1358,7 +1374,7 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 				// Adjust or split interv2
 				if (tgt_end1 < iinterv2->end) {
 					// The two intervals intersect - create non-overlapping interv2
-					ChainInterval interv(iinterv2->chromid, tgt_end1, iinterv2->end,
+					ChainInterval interv(iinterv2->chromid, tgt_end1, iinterv2->end, iinterv2->strand,
 							iinterv2->chromid_src, iinterv2->start_src + tgt_end1 - iinterv2->start, iinterv2->strand_src);
 					sorted_intervs.erase(iinterv2);
 
@@ -1366,7 +1382,7 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 						sorted_intervs.insert(interv);
 				} else {
 					// interval1 contains interval2 => split interval1
-					ChainInterval interv(iinterv1->chromid, iinterv1->end + iinterv2->end - iinterv2->start, tgt_end1,
+					ChainInterval interv(iinterv1->chromid, iinterv1->end + iinterv2->end - iinterv2->start, tgt_end1, iinterv1->strand,
 							iinterv1->chromid_src, iinterv1->start_src + iinterv2->end - iinterv1->start, iinterv1->strand_src);
 					sorted_intervs.erase(iinterv2);
 					if (interv.start != interv.end)

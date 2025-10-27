@@ -1623,6 +1623,15 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
 #' @param tgt_overlap_policy policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
 #' @return A data frame representing the converted intervals.
+#'
+#' @note
+#' Terminology note for UCSC chain format users: In the UCSC chain format specification,
+#' the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+#' while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+#' misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+#' (chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+#' (chrom, start, end).
+#'
 #' @seealso \code{\link{gintervals.load_chain}}, \code{\link{gtrack.liftover}},
 #' \code{\link{gintervals}}
 #' @keywords ~intervals ~liftover ~chain
@@ -1708,6 +1717,49 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
     .gintervals.load_ext(intervals.set, chrom, chrom1, chrom2, TRUE)
 }
 
+#' Validate source chromosomes against source genome
+#'
+#' @param chain Chain data frame with source chromosome information
+#' @param src_groot Path to source genome database
+#' @return NULL (stops with error if validation fails)
+#' @keywords internal
+#' @noRd
+.validate_source_chromosomes <- function(chain, src_groot) {
+    # Save current genome state
+    old_groot <- .misha$GROOT
+    old_allgenome <- .misha$ALLGENOME
+    old_chrom_alias <- if (exists("CHROM_ALIAS", envir = .misha)) .misha$CHROM_ALIAS else NULL
+
+    # Ensure genome is restored even if error occurs
+    on.exit(
+        {
+            .misha$GROOT <- old_groot
+            .misha$ALLGENOME <- old_allgenome
+            if (!is.null(old_chrom_alias)) {
+                .misha$CHROM_ALIAS <- old_chrom_alias
+            } else if (exists("CHROM_ALIAS", envir = .misha)) {
+                rm("CHROM_ALIAS", envir = .misha)
+            }
+        },
+        add = TRUE
+    )
+
+    # Temporarily switch to source genome for validation
+    gdb.init(src_groot)
+
+    # Create source intervals data frame
+    src_intervals <- data.frame(
+        chrom = chain$chromsrc,
+        start = chain$startsrc,
+        end = chain$endsrc,
+        stringsAsFactors = FALSE
+    )
+
+    validated <- .gintervals(chain$chromsrc, chain$startsrc, chain$endsrc, chain$strandsrc)
+
+    # Genome will be restored by on.exit
+}
+
 
 #' Loads assembly conversion table from a chain file
 #'
@@ -1737,7 +1789,28 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' @param file name of chain file
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard"
 #' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), or "discard"
-#' @return A data frame representing assembly conversion table.
+#' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
+#'
+#' @return A data frame with 8 columns representing assembly conversion table:
+#' \itemize{
+#'   \item chrom: target chromosome
+#'   \item start: target start coordinate (0-based)
+#'   \item end: target end coordinate (0-based, exclusive)
+#'   \item strand: target strand (+1 for forward, -1 for reverse)
+#'   \item chromsrc: source chromosome
+#'   \item startsrc: source start coordinate (0-based)
+#'   \item endsrc: source end coordinate (0-based, exclusive)
+#'   \item strandsrc: source strand (+1 for forward, -1 for reverse)
+#' }
+#'
+#' @note
+#' Terminology note for UCSC chain format users: In the UCSC chain format specification,
+#' the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+#' while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+#' misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+#' (chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+#' (chrom, start, end).
+#'
 #' @seealso \code{\link{gintervals.liftover}}, \code{\link{gtrack.liftover}}
 #' @keywords ~intervals ~liftover ~chain
 #' @examples
@@ -1756,10 +1829,13 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' # Load chain file, discarding both source and target overlaps
 #' # gintervals.load_chain(chainfile, src_overlap_policy = "discard", tgt_overlap_policy = "discard")
 #'
+#' # Load chain file with source genome validation
+#' # gintervals.load_chain(chainfile, src_groot = "/path/to/source/genome/db")
+#'
 #' @export gintervals.load_chain
-gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto") {
+gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", src_groot = NULL) {
     if (is.null(file)) {
-        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\")", call. = FALSE)
+        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", src_groot = NULL)", call. = FALSE)
     }
 
     if (!src_overlap_policy %in% c("error", "keep", "discard")) {
@@ -1770,7 +1846,15 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
         stop("tgt_overlap_policy must be 'error', 'auto', or 'discard'", call. = FALSE)
     }
 
-    .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
+    # Load chain (validates TARGET chromosomes against current genome)
+    chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
+
+    # Optionally validate SOURCE chromosomes against source genome
+    if (!is.null(src_groot) && !is.null(chain)) {
+        .validate_source_chromosomes(chain, src_groot)
+    }
+
+    return(chain)
 }
 
 
