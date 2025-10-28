@@ -16,7 +16,7 @@ gintervals.load_chain(
 
 \item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard"}
 
-\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), or "discard"}
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), or "discard".  In addition a "keep" policy is available, which allows overlapping target intervals, but note that liftover functions would not be able to handle this case.}
 
 \item{src_groot}{optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.}
 }

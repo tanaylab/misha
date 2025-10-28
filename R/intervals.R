@@ -1663,8 +1663,12 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "discard")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (tgt_overlap_policy == "keep") {
+        warning("When using the 'keep' target overlap policy, you will not be able to use the resulting intervals with liftover functions.", call. = FALSE)
     }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
@@ -1788,7 +1792,7 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #'
 #' @param file name of chain file
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard"
-#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), or "discard"
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), or "discard".  In addition a "keep" policy is available, which allows overlapping target intervals, but note that liftover functions would not be able to handle this case.
 #' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
 #'
 #' @return A data frame with 8 columns representing assembly conversion table:
@@ -1842,13 +1846,12 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "discard")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
     }
 
     # Load chain (validates TARGET chromosomes against current genome)
     chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
-
     # Optionally validate SOURCE chromosomes against source genome
     if (!is.null(src_groot) && !is.null(chain)) {
         .validate_source_chromosomes(chain, src_groot)
