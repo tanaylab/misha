@@ -69,6 +69,9 @@ This function finds for each interval in 'intervals1' the closest
 For 1D intervals the distance must fall in the range of ['mindist',
 'maxdist'].
 
+Distance is defined as the number of base pairs between the the last base pair of the query interval
+and the first base pair of the target interval.
+
 **Strand handling:** By default, distance directionality is determined by the
 'strand' column in 'intervals2' (if present). If 'use_intervals1_strand' is TRUE,
 distance directionality is instead determined by the 'strand' column in 'intervals1'.

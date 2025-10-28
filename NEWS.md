@@ -1,3 +1,8 @@
+# misha 5.1.2
+
+* Added `neighbor.count` virtual track.
+* Added `gintervals.mark_overlaps` function that marks overlapping intervals with a group ID.
+
 # misha 5.1.1
 
 * Allow data frames as input in `pssm` parameter of `gvtrack.create` and `gseq.pwm` functions.
