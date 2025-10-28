@@ -87,54 +87,75 @@
 .compute_chrom_aliases <- function(chroms) {
     chroms <- unique(as.character(chroms))
 
-    # Use environments for O(1) lookup instead of O(n) with named vectors
-    alias_env <- new.env(hash = TRUE, parent = emptyenv())
-    chroms_set <- new.env(hash = TRUE, parent = emptyenv())
+    # Pre-compute all string transformations (vectorized)
+    has_chr_prefix <- startsWith(chroms, "chr")
+    unprefixed <- ifelse(has_chr_prefix, substring(chroms, 4), chroms)
+    prefixed <- ifelse(has_chr_prefix, chroms, paste0("chr", chroms))
+    upper_unprefixed <- toupper(unprefixed)
+    upper_chroms <- toupper(chroms)
 
-    # Initialize: each chrom maps to itself
-    for (chrom in chroms) {
-        alias_env[[chrom]] <- chrom
-        chroms_set[[chrom]] <- TRUE
-    }
+    # Build alias mappings efficiently using environment for O(1) existence checks
+    seen <- new.env(hash = TRUE, parent = emptyenv())
 
-    maybe_add <- function(name, target) {
-        if (!nzchar(name)) {
-            return()
-        }
-        if (exists(name, envir = alias_env, inherits = FALSE)) {
-            return()
-        }
-        if (exists(name, envir = chroms_set, inherits = FALSE)) {
-            return()
-        }
-        alias_env[[name]] <- target
-    }
+    # Pre-allocate result vectors (estimate ~4 entries per chromosome)
+    max_aliases <- length(chroms) * 4
+    alias_names <- character(max_aliases)
+    alias_targets <- character(max_aliases)
+    idx <- 0
 
-    for (chrom in chroms) {
-        unprefixed <- sub("^chr", "", chrom, perl = TRUE)
-        prefixed <- paste0("chr", unprefixed)
-
-        if (!identical(unprefixed, chrom)) {
-            maybe_add(unprefixed, chrom)
-        }
-
-        if (!identical(prefixed, chrom)) {
-            maybe_add(prefixed, chrom)
-        }
-
-        upper_unprefixed <- toupper(unprefixed)
-        upper_chrom <- toupper(chrom)
-
-        if (upper_unprefixed %in% c("M", "MT") || upper_chrom %in% c("CHRM", "CHRMT")) {
-            maybe_add("M", chrom)
-            maybe_add("MT", chrom)
-            maybe_add("chrM", chrom)
+    # Inline alias addition to avoid <<- (CRAN compliance)
+    # First pass: add all chromosomes mapping to themselves
+    for (i in seq_along(chroms)) {
+        chrom <- chroms[i]
+        if (!exists(chrom, envir = seen, inherits = FALSE)) {
+            seen[[chrom]] <- TRUE
+            idx <- idx + 1
+            alias_names[idx] <- chrom
+            alias_targets[idx] <- chrom
         }
     }
 
-    # Convert environment back to named vector for compatibility
-    alias_names <- ls(alias_env, all.names = TRUE)
-    alias <- sapply(alias_names, function(name) alias_env[[name]], USE.NAMES = TRUE)
+    # Second pass: add aliases using pre-computed vectorized values
+    for (i in seq_along(chroms)) {
+        chrom <- chroms[i]
+
+        # Add unprefixed alias
+        if (unprefixed[i] != chrom) {
+            name <- unprefixed[i]
+            if (nzchar(name) && !exists(name, envir = seen, inherits = FALSE)) {
+                seen[[name]] <- TRUE
+                idx <- idx + 1
+                alias_names[idx] <- name
+                alias_targets[idx] <- chrom
+            }
+        }
+
+        # Add prefixed alias
+        if (prefixed[i] != chrom) {
+            name <- prefixed[i]
+            if (nzchar(name) && !exists(name, envir = seen, inherits = FALSE)) {
+                seen[[name]] <- TRUE
+                idx <- idx + 1
+                alias_names[idx] <- name
+                alias_targets[idx] <- chrom
+            }
+        }
+
+        # Add mitochondrial aliases
+        if (upper_unprefixed[i] %in% c("M", "MT") || upper_chroms[i] %in% c("CHRM", "CHRMT")) {
+            for (mt_alias in c("M", "MT", "chrM")) {
+                if (!exists(mt_alias, envir = seen, inherits = FALSE)) {
+                    seen[[mt_alias]] <- TRUE
+                    idx <- idx + 1
+                    alias_names[idx] <- mt_alias
+                    alias_targets[idx] <- chrom
+                }
+            }
+        }
+    }
+
+    # Build final named vector
+    alias <- stats::setNames(alias_targets[1:idx], alias_names[1:idx])
     alias
 }
 
