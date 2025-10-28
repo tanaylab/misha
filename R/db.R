@@ -86,19 +86,28 @@
 
 .compute_chrom_aliases <- function(chroms) {
     chroms <- unique(as.character(chroms))
-    alias <- stats::setNames(chroms, chroms)
+
+    # Use environments for O(1) lookup instead of O(n) with named vectors
+    alias_env <- new.env(hash = TRUE, parent = emptyenv())
+    chroms_set <- new.env(hash = TRUE, parent = emptyenv())
+
+    # Initialize: each chrom maps to itself
+    for (chrom in chroms) {
+        alias_env[[chrom]] <- chrom
+        chroms_set[[chrom]] <- TRUE
+    }
 
     maybe_add <- function(name, target) {
         if (!nzchar(name)) {
             return()
         }
-        if (name %in% names(alias)) {
+        if (exists(name, envir = alias_env, inherits = FALSE)) {
             return()
         }
-        if (name %in% chroms) {
+        if (exists(name, envir = chroms_set, inherits = FALSE)) {
             return()
         }
-        alias[[name]] <<- target
+        alias_env[[name]] <- target
     }
 
     for (chrom in chroms) {
@@ -123,6 +132,9 @@
         }
     }
 
+    # Convert environment back to named vector for compatibility
+    alias_names <- ls(alias_env, all.names = TRUE)
+    alias <- sapply(alias_names, function(name) alias_env[[name]], USE.NAMES = TRUE)
     alias
 }
 
@@ -253,10 +265,10 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         stop("chrom_sizes.txt file does not contain any chromosomes", call. = FALSE)
     }
 
-    for (chrom in intervals$chrom) {
-        if (length(grep(sprintf("^%s$", chrom), intervals$chrom)) > 1) {
-            stop(sprintf("Chromosome \"%s\" appears more than once in chrom_sizes.txt", chrom))
-        }
+    # Check for duplicate chromosomes
+    dupes <- intervals$chrom[duplicated(intervals$chrom)]
+    if (length(dupes) > 0) {
+        stop(sprintf("Chromosome \"%s\" appears more than once in chrom_sizes.txt", dupes[1]), call. = FALSE)
     }
 
     # For indexed databases, preserve the order from chrom_sizes.txt to match genome.idx
