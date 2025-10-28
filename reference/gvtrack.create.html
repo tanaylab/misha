@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.2</span>
       </span>
     </div>
 
@@ -157,6 +157,10 @@ For each iterator interval, calculates the fraction of its length that is covere
 source intervals. Returns a value between 0 and 1. For example, if an iterator interval is [100,200]
 and the source intervals cover positions 120-140 and 160-170, the coverage would be 0.3
 ((20 + 10) / 100 = 0.3). Overlapping source intervals are first unified.</p>
+<p><em>src = [1D intervals], func = "neighbor.count", params = [Max distance &gt;= 0]</em> <br>
+Returns, for each iterator interval, the number of source intervals whose edge-to-edge distance
+to the iterator interval is &lt;= params. Equivalent to counting overlaps with source intervals expanded
+by params on both sides. Overlapping sources are NOT unified (multiplicity preserved).</p>
 <p><em>func = "pwm", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 spat_min = NULL, spat_max = NULL)</em> <br>

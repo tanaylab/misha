@@ -20,7 +20,7 @@ is present, all intervals are treated as positive strand (strand = 1)."><!-- mat
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.1.2</span>
       </span>
     </div>
 
@@ -151,6 +151,8 @@ the latter intervals an 'NA' neighboring interval is stated. If
 'maxneighbors' intervals from 'intervals2'.</p>
 <p>For 1D intervals the distance must fall in the range of ['mindist',
 'maxdist'].</p>
+<p>Distance is defined as the number of base pairs between the the last base pair of the query interval
+and the first base pair of the target interval.</p>
 <p>**Strand handling:** By default, distance directionality is determined by the
 'strand' column in 'intervals2' (if present). If 'use_intervals1_strand' is TRUE,
 distance directionality is instead determined by the 'strand' column in 'intervals1'.
