@@ -1,4 +1,4 @@
-test_that("near.count counts nearby intervals correctly", {
+test_that("neighbor.count counts nearby intervals correctly", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -7,7 +7,7 @@ test_that("near.count counts nearby intervals correctly", {
         gintervals(1, 300, 320),
         gintervals(1, 305, 320)
     )
-    gvtrack.create("near10_simple", src, "near.count", 10)
+    gvtrack.create("near10_simple", src, "neighbor.count", 10)
 
     query <- rbind(
         gintervals(1, 90, 100),
@@ -19,12 +19,12 @@ test_that("near.count counts nearby intervals correctly", {
     expect_equal(res$near10_simple, c(1, 2, 0))
 })
 
-test_that("near.count defaults to zero distance", {
+test_that("neighbor.count defaults to zero distance", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     src <- gintervals(1, 100, 110)
-    gvtrack.create("near0_default", src, "near.count")
+    gvtrack.create("near0_default", src, "neighbor.count")
 
     query <- rbind(
         gintervals(1, 95, 110),
@@ -35,7 +35,7 @@ test_that("near.count defaults to zero distance", {
     expect_equal(res$near0_default, c(1, 0))
 })
 
-test_that("near.count counts overlapping sources separately", {
+test_that("neighbor.count counts overlapping sources separately", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -43,19 +43,19 @@ test_that("near.count counts overlapping sources separately", {
         gintervals(1, 100, 120),
         gintervals(1, 105, 125)
     )
-    gvtrack.create("near_multi", src, "near.count", 5)
+    gvtrack.create("near_multi", src, "neighbor.count", 5)
 
     res <- gextract("near_multi", gintervals(1, 110, 115), iterator = gintervals(1, 110, 115))
 
     expect_equal(res$near_multi, 2)
 })
 
-test_that("near.count honors iterator modifiers", {
+test_that("neighbor.count honors iterator modifiers", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     src <- gintervals(1, 100, 110)
-    gvtrack.create("near_shift", src, "near.count", 0)
+    gvtrack.create("near_shift", src, "neighbor.count", 0)
 
     query <- gintervals(1, 200, 210)
     res <- gextract("near_shift", query, iterator = query)
@@ -66,7 +66,7 @@ test_that("near.count honors iterator modifiers", {
     expect_equal(res_shifted$near_shift, 1)
 })
 
-test_that("near.count respects chromosome boundaries and separation", {
+test_that("neighbor.count respects chromosome boundaries and separation", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -83,7 +83,7 @@ test_that("near.count respects chromosome boundaries and separation", {
         gintervals(chrom_label, chrom_end - 5, chrom_end),
         gintervals(other_chrom_label, 200, 220)
     )
-    gvtrack.create("near_bounds", src, "near.count", 50)
+    gvtrack.create("near_bounds", src, "neighbor.count", 50)
 
     query <- rbind(
         gintervals(chrom_label, chrom_start, chrom_start + 10),
@@ -95,18 +95,18 @@ test_that("near.count respects chromosome boundaries and separation", {
     expect_equal(res$near_bounds, c(1, 1, 0))
 })
 
-test_that("near.count rejects invalid parameters", {
+test_that("neighbor.count rejects invalid parameters", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     src <- gintervals(1, 0, 10)
 
-    expect_error(gvtrack.create("near_bad_neg", src, "near.count", -1))
-    expect_error(gvtrack.create("near_bad_vec", src, "near.count", c(1, 2)))
-    expect_error(gvtrack.create("near_bad_type", src, "near.count", "foo"))
+    expect_error(gvtrack.create("near_bad_neg", src, "neighbor.count", -1))
+    expect_error(gvtrack.create("near_bad_vec", src, "neighbor.count", c(1, 2)))
+    expect_error(gvtrack.create("near_bad_type", src, "neighbor.count", "foo"))
 })
 
-test_that("near.count handles touching intervals correctly", {
+test_that("neighbor.count handles touching intervals correctly", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -116,7 +116,7 @@ test_that("near.count handles touching intervals correctly", {
         gintervals(1, 150, 200),
         gintervals(1, 300, 350)
     )
-    gvtrack.create("near_touch", src, "near.count", 1)
+    gvtrack.create("near_touch", src, "neighbor.count", 1)
 
     # With params=1: touching intervals (distance=0) count due to expansion overlap
     # In half-open coordinates, distance=1 doesn't count (expanded intervals touch but don't overlap)
@@ -131,16 +131,16 @@ test_that("near.count handles touching intervals correctly", {
     expect_equal(res$near_touch, c(2, 1, 1, 0))
 })
 
-test_that("near.count with varying distances", {
+test_that("neighbor.count with varying distances", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     src <- gintervals(1, 500, 600)
 
     # Test different distance thresholds (distance <= params, but half-open overlap semantics apply)
-    gvtrack.create("near_dist5", src, "near.count", 5)
-    gvtrack.create("near_dist20", src, "near.count", 20)
-    gvtrack.create("near_dist101", src, "near.count", 101)
+    gvtrack.create("near_dist5", src, "neighbor.count", 5)
+    gvtrack.create("near_dist20", src, "neighbor.count", 20)
+    gvtrack.create("near_dist101", src, "neighbor.count", 101)
 
     query <- rbind(
         gintervals(1, 300, 400), # distance=100 from [500,600)
@@ -159,7 +159,7 @@ test_that("near.count with varying distances", {
     expect_equal(res101$near_dist101, c(1, 1, 1))
 })
 
-test_that("near.count handles completely overlapping query", {
+test_that("neighbor.count handles completely overlapping query", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -168,7 +168,7 @@ test_that("near.count handles completely overlapping query", {
         gintervals(1, 150, 250),
         gintervals(1, 400, 500)
     )
-    gvtrack.create("near_overlap", src, "near.count", 5)
+    gvtrack.create("near_overlap", src, "neighbor.count", 5)
 
     # Query completely overlaps first two sources
     query <- gintervals(1, 50, 300)
@@ -177,7 +177,7 @@ test_that("near.count handles completely overlapping query", {
     expect_equal(res$near_overlap, 2)
 })
 
-test_that("near.count with nested source intervals", {
+test_that("neighbor.count with nested source intervals", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -187,7 +187,7 @@ test_that("near.count with nested source intervals", {
         gintervals(1, 200, 300),
         gintervals(1, 250, 275)
     )
-    gvtrack.create("near_nest", src, "near.count", 0)
+    gvtrack.create("near_nest", src, "neighbor.count", 0)
 
     query <- rbind(
         gintervals(1, 225, 260), # overlaps all three
@@ -199,13 +199,13 @@ test_that("near.count with nested source intervals", {
     expect_equal(res$near_nest, c(3, 1, 0))
 })
 
-test_that("near.count with empty source", {
+test_that("neighbor.count with empty source", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     # Empty source - create empty data frame
     src <- data.frame(chrom = character(0), start = numeric(0), end = numeric(0))
-    gvtrack.create("near_empty_src", src, "near.count", 10)
+    gvtrack.create("near_empty_src", src, "neighbor.count", 10)
 
     query <- gintervals(1, 100, 200)
     res <- gextract("near_empty_src", query, iterator = query)
@@ -213,7 +213,7 @@ test_that("near.count with empty source", {
     expect_equal(res$near_empty_src, 0)
 })
 
-test_that("near.count across multiple chromosomes", {
+test_that("neighbor.count across multiple chromosomes", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -230,7 +230,7 @@ test_that("near.count across multiple chromosomes", {
         gintervals(chrom2, 100, 200),
         gintervals(chrom3, 100, 200)
     )
-    gvtrack.create("near_multi_chrom", src, "near.count", 51)
+    gvtrack.create("near_multi_chrom", src, "neighbor.count", 51)
 
     query <- rbind(
         gintervals(chrom1, 150, 160), # overlaps 1 on chrom1
@@ -245,7 +245,7 @@ test_that("near.count across multiple chromosomes", {
     expect_equal(res$near_multi_chrom, c(1, 1, 1, 1, 0))
 })
 
-test_that("near.count with very large distance", {
+test_that("neighbor.count with very large distance", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -254,7 +254,7 @@ test_that("near.count with very large distance", {
         gintervals(1, 100000, 110000),
         gintervals(1, 500000, 510000)
     )
-    gvtrack.create("near_large_dist", src, "near.count", 100000)
+    gvtrack.create("near_large_dist", src, "neighbor.count", 100000)
 
     query <- gintervals(1, 50000, 60000)
     res <- gextract("near_large_dist", query, iterator = query)
@@ -264,12 +264,12 @@ test_that("near.count with very large distance", {
     expect_equal(res$near_large_dist, 2)
 })
 
-test_that("near.count with half-open coordinate edge cases", {
+test_that("neighbor.count with half-open coordinate edge cases", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     src <- gintervals(1, 100, 200)
-    gvtrack.create("near_exact", src, "near.count", 50)
+    gvtrack.create("near_exact", src, "neighbor.count", 50)
 
     query <- rbind(
         gintervals(1, 250, 300), # distance=50, [100,200) expanded to [50,250) touches but doesn't overlap
@@ -285,14 +285,14 @@ test_that("near.count with half-open coordinate edge cases", {
     expect_equal(res$near_exact, c(0, 1, 1, 0, 0))
 })
 
-test_that("near.count with many nearby sources", {
+test_that("neighbor.count with many nearby sources", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     # Create many nearby intervals
     starts <- seq(100, 1000, by = 100)
     src <- gintervals(1, starts, starts + 50)
-    gvtrack.create("near_many", src, "near.count", 60)
+    gvtrack.create("near_many", src, "neighbor.count", 60)
 
     query <- rbind(
         gintervals(1, 500, 510), # should overlap and be near several
@@ -308,7 +308,7 @@ test_that("near.count with many nearby sources", {
     expect_equal(res$near_many, c(1, 2, 0))
 })
 
-test_that("near.count with single base intervals", {
+test_that("neighbor.count with single base intervals", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -318,7 +318,7 @@ test_that("near.count with single base intervals", {
         gintervals(1, 200, 201),
         gintervals(1, 300, 301)
     )
-    gvtrack.create("near_single", src, "near.count", 10)
+    gvtrack.create("near_single", src, "neighbor.count", 10)
 
     query <- rbind(
         gintervals(1, 90, 111), # overlaps first
@@ -331,7 +331,7 @@ test_that("near.count with single base intervals", {
     expect_equal(res$near_single, c(1, 0, 1))
 })
 
-test_that("near.count with identical source and query intervals", {
+test_that("neighbor.count with identical source and query intervals", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -341,7 +341,7 @@ test_that("near.count with identical source and query intervals", {
         gintervals(1, 500, 600)
     )
 
-    gvtrack.create("near_identical", intervals, "near.count", 0)
+    gvtrack.create("near_identical", intervals, "neighbor.count", 0)
 
     # Query with same intervals
     res <- gextract("near_identical", intervals, iterator = intervals)
@@ -350,7 +350,7 @@ test_that("near.count with identical source and query intervals", {
     expect_equal(res$near_identical, c(1, 1, 1))
 })
 
-test_that("near.count distance calculation with gaps", {
+test_that("neighbor.count distance calculation with gaps", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -361,9 +361,9 @@ test_that("near.count distance calculation with gaps", {
         gintervals(1, 500, 600) # distance=150 from second
     )
 
-    gvtrack.create("near_gap25", src, "near.count", 25)
-    gvtrack.create("near_gap51", src, "near.count", 51)
-    gvtrack.create("near_gap91", src, "near.count", 91)
+    gvtrack.create("near_gap25", src, "neighbor.count", 25)
+    gvtrack.create("near_gap51", src, "neighbor.count", 51)
+    gvtrack.create("near_gap91", src, "neighbor.count", 91)
 
     # Query in the middle gaps
     query <- rbind(

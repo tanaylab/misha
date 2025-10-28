@@ -1,6 +1,6 @@
 # misha 5.1.2
 
-* Added `near-count` virtual track.
+* Added `neighbor.count` virtual track.
 * Added `gintervals.mark_overlaps` function that marks overlapping intervals with a group ID.
 
 # misha 5.1.1

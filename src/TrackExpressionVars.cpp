@@ -27,7 +27,7 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
 	"global.percentile", "global.percentile.min", "global.percentile.max",
 	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac"};
 
-const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage", "near.count" };
+const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage", "neighbor.count" };
 
 using namespace rdb;
 
@@ -121,7 +121,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ++ivar) {
 		ivar->siinterv = ivar->sintervs.begin();
-		if (ivar->val_func == Interv_var::DIST || ivar->val_func == Interv_var::NEAR_COUNT)
+		if (ivar->val_func == Interv_var::DIST || ivar->val_func == Interv_var::NEIGHBOR_COUNT)
 			ivar->eiinterv = ivar->eintervs.begin();
 	}
 }
@@ -755,8 +755,8 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
         var.sintervs.sort();
         var.sintervs.unify_overlaps(); // Unify overlaps since we want total coverage
 	
-	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::NEAR_COUNT])) {
-		var.val_func = Interv_var::NEAR_COUNT;
+	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::NEIGHBOR_COUNT])) {
+		var.val_func = Interv_var::NEIGHBOR_COUNT;
 
 		double dist_margin = 0;
 
@@ -1676,7 +1676,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 
 				ivar->var[idx] = dist;
 			}
-		} else if (ivar->val_func == Interv_var::NEAR_COUNT) {
+		} else if (ivar->val_func == Interv_var::NEIGHBOR_COUNT) {
 			const GInterval &interval = ivar->imdf1d ? ivar->imdf1d->interval : m_interval1d;
 
 			if (ivar->imdf1d && ivar->imdf1d->out_of_range) {
@@ -1695,7 +1695,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				eval_intervals.push_back(interval);
 			}
 
-			size_t near_count = 0;
+			size_t neighbor_count = 0;
 			if (!ivar->imdf1d && !ivar->filter) {
 				GIntervals::const_iterator &eiter = ivar->eiinterv;
 				const GIntervals &expanded = ivar->eintervs;
@@ -1707,7 +1707,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				GIntervals::const_iterator scan = eiter;
 				while (scan != expanded.end() && scan->chromid == interval.chromid && scan->start < interval.end) {
 					if (scan->end > interval.start)
-						++near_count;
+						++neighbor_count;
 					++scan;
 				}
 			} else {
@@ -1729,12 +1729,12 @@ void TrackExpressionVars::set_vars(unsigned idx)
 
 						size_t expanded_idx = it - expanded.begin();
 						if (counted.insert(expanded_idx).second)
-							++near_count;
+							++neighbor_count;
 					}
 				}
 			}
 
-			ivar->var[idx] = static_cast<double>(near_count);
+			ivar->var[idx] = static_cast<double>(neighbor_count);
 		} else if (ivar->val_func == Interv_var::COVERAGE)
 		{
 			const GInterval &interval = ivar->imdf1d ? ivar->imdf1d->interval : m_interval1d;
