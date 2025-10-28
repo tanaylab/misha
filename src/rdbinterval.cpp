@@ -1427,8 +1427,10 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 			}
 		}
 		erase(new_end, end());
+	} else if (policy == "keep") {
+		// Do nothing - allow overlapping target intervals
 	} else {
-		TGLError("Invalid target overlap policy: %s. Must be 'error', 'auto', or 'discard'", policy.c_str());
+		TGLError("Invalid target overlap policy: %s. Must be 'error', 'keep', 'auto', or 'discard'", policy.c_str());
 	}
 }
 
