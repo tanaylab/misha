@@ -381,3 +381,160 @@ test_that("neighbor.count distance calculation with gaps", {
     expect_equal(res51$near_gap51, c(2, 1))
     expect_equal(res91$near_gap91, c(2, 2))
 })
+
+test_that("neighbor.count with filter catches early overlapping expanded intervals", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Bug scenario: large early interval [0,1000) and later small interval [400,401)
+    # Query [900,910) should overlap the expanded [0,1000) interval
+    # But with filter, backward scan might miss [0,1000) if it only steps back once
+    src <- rbind(
+        gintervals(1, 0, 1000), # Large early interval
+        gintervals(1, 400, 401) # Small later interval
+    )
+    gvtrack.create("near_filter", src, "neighbor.count", 0)
+
+    # Create a filter that excludes a tiny region to trigger filtered code path
+    filter_mask <- gintervals(1, 905, 906)
+    gvtrack.filter("near_filter", filter = filter_mask)
+
+    # Query that should overlap the large early interval [0,1000)
+    # The filter excludes [905,906), so eval_intervals will have multiple pieces
+    query <- gintervals(1, 900, 910)
+    res <- gextract("near_filter", query, iterator = query)
+
+    # Should count the [0,1000) interval
+    expect_equal(res$near_filter, 1)
+})
+
+test_that("neighbor.count with iterator modifier catches early overlapping expanded intervals", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Similar bug scenario with iterator modifier
+    src <- rbind(
+        gintervals(1, 0, 1000), # Large early interval
+        gintervals(1, 400, 401), # Small later interval
+        gintervals(1, 900, 902) # Interval near the query
+    )
+    gvtrack.create("near_iter_mod", src, "neighbor.count", 0)
+    gvtrack.iterator("near_iter_mod", sshift = 10, eshift = 10)
+
+    # Query [900,910) with shift becomes [910,920)
+    # Should still find the large [0,1000) interval after expansion
+    query <- gintervals(1, 900, 910)
+    res <- gextract("near_iter_mod", query, iterator = query)
+
+    # Should count [0,1000) which overlaps [910,920)
+    # [900,902) and [400,401) do not overlap with [910,920)
+    expect_equal(res$near_iter_mod, 1)
+})
+
+test_that("neighbor.count matches gintervals.neighbors for basic overlap", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Test case that triggered the bug
+    src <- rbind(
+        gintervals(1, 0, 1000),
+        gintervals(1, 400, 401)
+    )
+    query <- gintervals(1, 900, 910)
+
+    # Using virtual track
+    gvtrack.create("near_ref", src, "neighbor.count", 0)
+    vtrack_res <- gextract("near_ref", query, iterator = query)
+
+    # Manual verification: [900,910) overlaps [0,1000) but not [400,401)
+    expect_equal(vtrack_res$near_ref, 1)
+})
+
+test_that("neighbor.count matches gintervals.neighbors with distance threshold", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    src <- rbind(
+        gintervals(1, 100, 200),
+        gintervals(1, 250, 350),
+        gintervals(1, 500, 600)
+    )
+    query <- rbind(
+        gintervals(1, 220, 230), # between first two
+        gintervals(1, 400, 410) # between last two
+    )
+
+    # Test with distance threshold of 51
+    gvtrack.create("near_dist51", src, "neighbor.count", 51)
+    vtrack_res <- gextract("near_dist51", query, iterator = query)
+
+    # For each query, find neighbors within expanded distance
+    # With distance=51, intervals expand by 51 on each side
+    # So we look for overlaps with expanded intervals
+    expected_counts <- numeric(nrow(query))
+    for (i in seq_len(nrow(query))) {
+        q <- query[i, ]
+        # Find all source intervals where expanded interval overlaps query
+        neighbors <- gintervals.neighbors(q, src, maxneighbors = 1000, mindist = -1000, maxdist = 51)
+        expected_counts[i] <- if (is.null(neighbors)) 0 else nrow(neighbors)
+    }
+
+    expect_equal(vtrack_res$near_dist51, expected_counts)
+})
+
+test_that("neighbor.count matches gintervals.neighbors with filter", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Bug scenario with filter
+    src <- rbind(
+        gintervals(1, 0, 1000),
+        gintervals(1, 400, 401)
+    )
+    gvtrack.create("near_filter_ref", src, "neighbor.count", 0)
+
+    # Create a filter that excludes a small region
+    filter_mask <- gintervals(1, 905, 906)
+    gvtrack.filter("near_filter_ref", filter = filter_mask)
+
+    query <- gintervals(1, 900, 910)
+    vtrack_res <- gextract("near_filter_ref", query, iterator = query)
+
+    # With the filter, the query [900,910) minus [905,906) gives [900,905) and [906,910)
+    # Both pieces should find the large [0,1000) interval
+    # Manual verification: only [0,1000) overlaps
+    expect_equal(vtrack_res$near_filter_ref, 1)
+})
+
+test_that("neighbor.count matches gintervals.neighbors for multiple queries with distance", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    src <- rbind(
+        gintervals(1, 100, 200),
+        gintervals(1, 250, 350),
+        gintervals(1, 500, 600)
+    )
+
+    query <- rbind(
+        gintervals(1, 50, 120), # overlaps first
+        gintervals(1, 400, 420), # between second and third
+        gintervals(1, 800, 900) # far from all
+    )
+
+    # Use distance=100 to test expanded intervals
+    gvtrack.create("near_multi", src, "neighbor.count", 100)
+    vtrack_res <- gextract("near_multi", query, iterator = query)
+
+    # Get reference counts using gintervals.neighbors
+    # For distance=100, intervals expand by 100 on each side
+    # gintervals.neighbors should agree when using maxdist=100
+    expected_counts <- numeric(nrow(query))
+    for (i in seq_len(nrow(query))) {
+        q <- query[i, ]
+        neighbors <- gintervals.neighbors(q, src, maxneighbors = 1000, mindist = -1000, maxdist = 100)
+        expected_counts[i] <- if (is.null(neighbors)) 0 else nrow(neighbors)
+    }
+
+    expect_equal(vtrack_res$near_multi, expected_counts)
+})

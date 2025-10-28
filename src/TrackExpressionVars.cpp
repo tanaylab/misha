@@ -1718,9 +1718,17 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				for (const auto &eval_interval : eval_intervals) {
 					auto it = lower_bound(expanded.begin(), expanded.end(), eval_interval, GIntervals::compare_by_start_coord);
 
-					if (it != expanded.begin())
+					// Walk backward to the first interval on this chromosome
+					// Since intervals are only sorted by start (not end), we can't make assumptions
+					// about whether earlier intervals might have large spans that overlap the query
+					while (it != expanded.begin()) {
+						auto prev = it - 1;
+						if (prev->chromid != eval_interval.chromid)
+							break;
 						--it;
+					}
 
+					// Scan forward checking all intervals on this chromosome for overlaps
 					for (; it != expanded.end() && it->chromid == eval_interval.chromid; ++it) {
 						if (it->end <= eval_interval.start)
 							continue;
