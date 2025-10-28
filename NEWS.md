@@ -2,6 +2,8 @@
 
 * **BREAKING**: `gintervals.load_chain` now returns a data frame with 8 columns instead of 7. Columns are: `chrom`, `start`, `end`, `strand`, `chromsrc`, `startsrc`, `endsrc`, `strandsrc`.
 * Added `src_overlap_policy` and `tgt_overlap_policy` parameters to `gintervals.load_chain`, `gtrack.liftover` and `gintervals.liftover` functions.
+* Added `neighbor.count` virtual track.
+* Added `gintervals.mark_overlaps` function that marks overlapping intervals with a group ID.
 
 # misha 5.1.1
 
