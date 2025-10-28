@@ -290,10 +290,6 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     } else {
         # Large genome: defer 2D generation
         intervals2d <- .create_deferred_2d(nrow(intervals))
-        message(sprintf(
-            "Deferring 2D genome generation (%d contigs > threshold %d). Use gintervals.2d() for specific pairs.",
-            nrow(intervals), contig_threshold
-        ))
     }
 
     assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
