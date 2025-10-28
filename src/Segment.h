@@ -27,7 +27,11 @@ struct Segment {
 
 	// returns distance from this segment to s. If touch_is_at_dist_one is true the distance between touching segments is 1 otherwise 0.
 	int64_t dist2segment(const Segment &s, bool touch_is_at_dist_one = false) const {
-		return max(start, s.start) < min(end, s.end) ? 0 : min(llabs(s.start - end + touch_is_at_dist_one), llabs(s.end - start + touch_is_at_dist_one));
+		if (max(start, s.start) < min(end, s.end)) {
+			return 0; // overlapping
+		}
+		int64_t raw_dist = min(llabs(s.start - end), llabs(s.end - start));
+		return raw_dist + touch_is_at_dist_one;
 	}
 
 	// returns distance from point coordinate to the center of segment; returns NaN if the coordinate is outside of segment

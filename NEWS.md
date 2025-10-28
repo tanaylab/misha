@@ -1,3 +1,7 @@
+# misha 5.1.3
+
+* Fixed a bug in `gintervals.neighbors` when using `mindist=0, maxdist=0`: the function would miss zero-distance (touching) intervals when using `mindist=0, maxdist=0`.
+
 # misha 5.1.2
 
 * **BREAKING**: `gintervals.load_chain` now returns a data frame with 8 columns instead of 7. Columns are: `chrom`, `start`, `end`, `strand`, `chromsrc`, `startsrc`, `endsrc`, `strandsrc`.
