@@ -167,6 +167,11 @@
 #' and the source intervals cover positions 120-140 and 160-170, the coverage would be 0.3
 #' ((20 + 10) / 100 = 0.3). Overlapping source intervals are first unified.
 #'
+#' \emph{src = [1D intervals], func = "neighbor.count", params = [Max distance >= 0]} \cr
+#' Returns, for each iterator interval, the number of source intervals whose edge-to-edge distance
+#' to the iterator interval is <= params. Equivalent to counting overlaps with source intervals expanded
+#' by params on both sides. Overlapping sources are NOT unified (multiplicity preserved).
+#'
 #' \emph{func = "pwm", params = list(pssm = matrix, bidirect = TRUE,
 #' prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 #' spat_min = NULL, spat_max = NULL)} \cr
@@ -575,6 +580,20 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
         }
 
         params <- kmer_params
+    } else if (!is.null(func) && func == "neighbor.count") {
+        if (is.null(params)) {
+            params <- 0
+        }
+
+        if (!is.numeric(params) || length(params) != 1 || is.na(params)) {
+            stop("neighbor.count requires 'params' to be a single numeric value")
+        }
+
+        params <- as.numeric(params)
+
+        if (params < 0) {
+            stop("neighbor.count requires 'params' to be non-negative")
+        }
     }
 
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())

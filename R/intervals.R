@@ -1013,6 +1013,42 @@ gintervals.canonic <- function(intervals = NULL, unify_touching_intervals = TRUE
     res
 }
 
+#' Mark overlapping intervals with a group ID
+#'
+#' @param intervals intervals set
+#' @param group_col name of the column to store the overlap group IDs (default: "overlap_group")
+#' @return The intervals set with an additional column containing group IDs
+#' from gintervals.canonic mapping. All overlapping intervals will have the same group ID.
+#'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' # Create sample overlapping intervals
+#' intervs <- data.frame(
+#'     chrom = "chr1",
+#'     start = c(11000, 100, 10000, 10500),
+#'     end = c(12000, 200, 13000, 10600),
+#'     data = c(10, 20, 30, 40)
+#' )
+#'
+#' # Mark overlapping intervals
+#' intervs_marked <- gintervals.mark_overlaps(intervs)
+#'
+#' # Use custom column name
+#' intervs_marked <- gintervals.mark_overlaps(intervs, group_col = "my_groups")
+#' @inheritParams gintervals.canonic
+#' @export
+gintervals.mark_overlaps <- function(intervals, group_col = "overlap_group", unify_touching_intervals = TRUE) {
+    canon <- gintervals.canonic(intervals, unify_touching_intervals = unify_touching_intervals)
+    mapping <- attr(canon, "mapping")
+    intervals[, group_col] <- mapping
+
+    return(intervals)
+}
+
 
 #' Calculates difference of two intervals sets
 #'
