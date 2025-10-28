@@ -1621,7 +1621,7 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' @param chain name of chain file or data frame as returned by
 #' 'gintervals.load_chain'
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
-#' @param tgt_overlap_policy policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
 #' @return A data frame representing the converted intervals.
 #'
 #' @note
@@ -1653,7 +1653,7 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' # gintervals.liftover(intervs, chainfile, src_overlap_policy = "keep")
 #'
 #' @export gintervals.liftover
-gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "error") {
+gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto") {
     if (is.null(intervals) || is.null(chain)) {
         stop("Usage: gintervals.liftover(intervals, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"error\")", call. = FALSE)
     }
@@ -1663,8 +1663,8 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "discard")) {
-        stop("tgt_overlap_policy must be 'error' or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', or 'discard'", call. = FALSE)
     }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
