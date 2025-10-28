@@ -8,7 +8,7 @@ gintervals.liftover(
   intervals = NULL,
   chain = NULL,
   src_overlap_policy = "error",
-  tgt_overlap_policy = "error"
+  tgt_overlap_policy = "auto"
 )
 }
 \arguments{
@@ -19,7 +19,7 @@ gintervals.liftover(
 
 \item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
 
-\item{tgt_overlap_policy}{policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.}
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.}
 }
 \value{
 A data frame representing the converted intervals.

@@ -1080,7 +1080,7 @@ gtrack.info <- function(track = NULL) {
 #' 'gintervals.load_chain' (chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc).
 #' Strand columns use +1 for forward strand and -1 for reverse strand.
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
-#' @param tgt_overlap_policy policy for handling target overlaps: "error" (default), "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
 #' @return None.
 #'
 #' @note
@@ -1095,9 +1095,9 @@ gtrack.info <- function(track = NULL) {
 #' \code{\link{gintervals.liftover}}
 #' @keywords ~track ~liftover ~chain
 #' @export gtrack.liftover
-gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "error") {
+gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto") {
     if (is.null(substitute(track)) || is.null(description) || is.null(src.track.dir) || is.null(chain)) {
-        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"error\")", call. = FALSE)
+        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\")", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1105,8 +1105,8 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "discard")) {
-        stop("tgt_overlap_policy must be 'error' or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', or 'discard'", call. = FALSE)
     }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
