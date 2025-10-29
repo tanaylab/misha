@@ -326,8 +326,21 @@ pid_t RdbInitializer::launch_process()
 		s_is_kid = true;
 
 		sigaction(SIGINT, &s_old_sigint_act, NULL);
-		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);		
-		
+		sigaction(SIGCHLD, &s_old_sigchld_act, NULL);
+
+		// Reset error option to NULL in child process to prevent issues with
+		// error handlers like recover/dump.frames that don't work with redirected stdio
+		{
+			ParseStatus status;
+			SEXP expr = PROTECT(Rf_mkString("options(error = NULL)"));
+			SEXP parsed = PROTECT(R_ParseVector(expr, 1, &status, R_NilValue));
+			if (status == PARSE_OK && Rf_length(parsed) > 0) {
+				int err;
+				R_tryEval(VECTOR_ELT(parsed, 0), R_GlobalEnv, &err);
+			}
+			UNPROTECT(2);
+		}
+
         SEXP r_multitasking_stdout = Rf_GetOption1(Rf_install("gmultitasking_stdout"));
 
 		int devnull;
@@ -375,7 +388,23 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
                 s_running_pids.pop_back();
 
                 if (!ignore_errors && !WIFEXITED(status) && WIFSIGNALED(status) && WTERMSIG(status) != MISHA_EXIT_SIG){
-                    verror("Child process %d ended unexpectedly", (int)ipid->pid);
+                    // Check if the child wrote an error message to shared memory
+                    char error_msg_copy[1000];
+                    bool has_error_msg = false;
+                    {
+                        SemLocker sl(s_shm_sem);
+                        if (s_shm->error_msg[0]) {
+                            strncpy(error_msg_copy, s_shm->error_msg, sizeof(error_msg_copy) - 1);
+                            error_msg_copy[sizeof(error_msg_copy) - 1] = '\0';
+                            has_error_msg = true;
+                        }
+                    }
+                    // Call verror AFTER releasing the semaphore to avoid deadlock
+                    if (has_error_msg) {
+                        verror("%s", error_msg_copy);
+                    } else {
+                        verror("Child process %d ended unexpectedly", (int)ipid->pid);
+                    }
 				}
 
                 // choose a new untouchable kid: the one with maximal memory consumption
@@ -864,7 +893,15 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 
 		if (!check_error && TYPEOF(err_msg) == STRSXP && LENGTH(err_msg) > 0)
 		{
-			verror(CHAR(STRING_ELT(err_msg, 0)));
+			const char *error_msg = CHAR(STRING_ELT(err_msg, 0));
+			// Strip "Error: " or "Error : " prefix from geterrmessage() to avoid double "Error:" in output
+			if (strncmp(error_msg, "Error : ", 8) == 0)
+				error_msg += 8;
+			else if (strncmp(error_msg, "Error: ", 7) == 0)
+				error_msg += 7;
+			else if (strncmp(error_msg, "Error ", 6) == 0)
+				error_msg += 6;
+			verror(error_msg);
 		}
 		else
 		{
