@@ -460,7 +460,16 @@
             intervals.set
         } else {
             if (.gintervals.is_bigset(intervals.set)) {
-                .gintervals.big.meta(intervals.set)$zeroline
+                # For big intervals sets, check if we're loading a specific chromosome
+                # and use the C++ function that handles both per-chromosome and indexed formats
+                if (!is.null(chrom)) {
+                    return(.gcall("gbigintervs_load_chrom", intervals.set, chrom, .misha_env()))
+                } else if (!is.null(chrom1) && !is.null(chrom2)) {
+                    # TODO: implement 2D indexed intervals support
+                    .gintervals.big.meta(intervals.set)$zeroline
+                } else {
+                    .gintervals.big.meta(intervals.set)$zeroline
+                }
             } else {
                 stop(sprintf("File %s does not exist", intervfname), call. = FALSE)
             }

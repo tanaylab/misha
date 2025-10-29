@@ -1,3 +1,4 @@
+load_test_db()
 test_that("pwm with spatial parameters works", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())

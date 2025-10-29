@@ -1,3 +1,4 @@
+load_test_db()
 skip_if(getOption("gmulticontig.indexed_format", FALSE), "Indexed format not enabled, set gmulticontig.indexed_format = TRUE to run this test")
 # Tests for gtrack.convert_to_indexed() and indexed track format
 
@@ -305,7 +306,10 @@ test_that("numeric iterator works with converted track", {
 })
 
 test_that("sparse track iterator works with converted track", {
-    withr::defer(gtrack.rm("test.converted_sparse_iter", force = TRUE))
+    withr::defer({
+        gtrack.rm("test.converted_sparse_iter", force = TRUE)
+        gdb.reload()
+    })
 
     gtrack.create("test.converted_sparse_iter", "", "test.fixedbin")
     gtrack.convert_to_indexed("test.converted_sparse_iter")

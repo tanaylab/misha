@@ -52,7 +52,7 @@ extern "C" {
     extern SEXP gscreen_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsegment(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqimport(SEXP, SEXP, SEXP);
-    extern SEXP gseq_multifasta_import(SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gseq_multifasta_import(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqread(SEXP, SEXP);
     extern SEXP gset_tracks_attrs(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gsmooth(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -75,6 +75,7 @@ extern "C" {
     extern SEXP gtrackimportwig(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackinfo(SEXP, SEXP);
     extern SEXP gtrack_intervals_load(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gbigintervs_load_chrom(SEXP, SEXP, SEXP);
     extern SEXP gtrack_liftover(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_modify(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtracksummary(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -133,7 +134,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gscreen_multitask", (DL_FUNC)&gscreen_multitask, 6},
     {"C_gsegment", (DL_FUNC)&C_gsegment, 8},
     {"gseqimport", (DL_FUNC)&gseqimport, 3},
-    {"gseq_multifasta_import", (DL_FUNC)&gseq_multifasta_import, 4},
+    {"gseq_multifasta_import", (DL_FUNC)&gseq_multifasta_import, 5},
     {"gseqread", (DL_FUNC)&gseqread, 2},
     {"gset_tracks_attrs", (DL_FUNC)&gset_tracks_attrs, 4},
     {"gsmooth", (DL_FUNC)&gsmooth, 8},
@@ -156,6 +157,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrackimportwig", (DL_FUNC)&gtrackimportwig, 5},
     {"gtrackinfo", (DL_FUNC)&gtrackinfo, 2},
     {"gtrack_intervals_load", (DL_FUNC)&gtrack_intervals_load, 5},
+    {"gbigintervs_load_chrom", (DL_FUNC)&gbigintervs_load_chrom, 3},
     {"gtrack_liftover", (DL_FUNC)&gtrack_liftover, 4},
     {"gtrack_modify", (DL_FUNC)&gtrack_modify, 5},
     {"gtracksummary", (DL_FUNC)&gtracksummary, 5},

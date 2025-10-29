@@ -197,7 +197,34 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
 
         for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); chromid++) {
             string chrom_name = chromkey.id2chrom(chromid);
-            string chr_file = track_dir + "/" + chrom_name;
+
+            // Try to find the chromosome file, handling chr prefix mismatch
+            string chr_file;
+            bool found = false;
+
+            // Try 1: chromosome name as-is
+            string candidate = track_dir + "/" + chrom_name;
+            struct stat st;
+            if (stat(candidate.c_str(), &st) == 0) {
+                chr_file = candidate;
+                found = true;
+            } else {
+                // Try 2: with "chr" prefix if not already present
+                if (chrom_name.substr(0, 3) != "chr") {
+                    candidate = track_dir + "/chr" + chrom_name;
+                    if (stat(candidate.c_str(), &st) == 0) {
+                        chr_file = candidate;
+                        found = true;
+                    }
+                } else {
+                    // Try 3: without "chr" prefix if present
+                    candidate = track_dir + "/" + chrom_name.substr(3);
+                    if (stat(candidate.c_str(), &st) == 0) {
+                        chr_file = candidate;
+                        found = true;
+                    }
+                }
+            }
 
             TrackContigEntry entry;
             entry.chrom_id = chromid;
@@ -206,7 +233,7 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
             entry.reserved = 0;
 
             uint64_t bytes_written = 0;
-            if (copy_file_contents(chr_file, dat_fp, bytes_written)) {
+            if (found && copy_file_contents(chr_file, dat_fp, bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
                 chr_files_to_remove.push_back(chr_file);
@@ -268,6 +295,18 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
         if (rename(idx_path_tmp.c_str(), idx_path.c_str()) != 0) {
             TGLError<GenomeTrack>("Failed to rename %s to %s: %s",
                 idx_path_tmp.c_str(), idx_path.c_str(), strerror(errno));
+        }
+
+        // Validate conversion before removing old files
+        // Check that track.dat has the expected size
+        struct stat dat_stat;
+        if (stat(dat_path.c_str(), &dat_stat) != 0) {
+            TGLError<GenomeTrack>("Failed to stat %s after conversion", dat_path.c_str());
+        }
+
+        if ((uint64_t)dat_stat.st_size != current_offset) {
+            TGLError<GenomeTrack>("track.dat size mismatch: expected %llu bytes, got %llu bytes",
+                (unsigned long long)current_offset, (unsigned long long)dat_stat.st_size);
         }
 
         // Remove old per-chromosome files if requested

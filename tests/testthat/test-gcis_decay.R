@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gcis_decay works", {
     domain <- rbind(
         gintervals(1, 800000 * (0:5), 800000 * (0:5) + 400000),

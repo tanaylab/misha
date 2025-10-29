@@ -214,9 +214,11 @@ extern "C" {
 //   _fasta: path to multi-FASTA file
 //   _seq: path to output genome.seq file
 //   _index: path to output genome.idx file
+//   _sort: logical, whether to sort chromosomes alphabetically (default TRUE for backward compatibility)
+//   _envir: environment
 // Returns:
 //   Data frame with columns: name (character), size (numeric)
-SEXP gseq_multifasta_import(SEXP _fasta, SEXP _seq, SEXP _index, SEXP _envir)
+SEXP gseq_multifasta_import(SEXP _fasta, SEXP _seq, SEXP _index, SEXP _sort, SEXP _envir)
 {
     try {
         RdbInitializer rdb_init;
@@ -230,6 +232,14 @@ SEXP gseq_multifasta_import(SEXP _fasta, SEXP _seq, SEXP _index, SEXP _envir)
 
         if (!Rf_isString(_index) || Rf_length(_index) != 1)
             verror("index argument is not a string");
+
+        // Parse sort argument (default to TRUE for backward compatibility)
+        bool sort_chromosomes = true;
+        if (!Rf_isNull(_sort)) {
+            if (!Rf_isLogical(_sort) || Rf_length(_sort) != 1)
+                verror("sort argument must be a logical value");
+            sort_chromosomes = Rf_asLogical(_sort);
+        }
 
         const char *fasta_fname = CHAR(STRING_ELT(_fasta, 0));
         const char *seq_fname = CHAR(STRING_ELT(_seq, 0));
@@ -420,22 +430,27 @@ SEXP gseq_multifasta_import(SEXP _fasta, SEXP _seq, SEXP _index, SEXP _envir)
             }
         }
 
-        // Sort entries by name (to match R's sorted order in ALLGENOME)
-        // and reassign chromids to match sorted order
-        std::sort(entries.begin(), entries.end(),
-                  [](const ContigIndexEntry &a, const ContigIndexEntry &b) {
-                      return a.name < b.name;
-                  });
+        // Optionally sort entries alphabetically by name
+        // This maintains backward compatibility (default: sort=TRUE)
+        // For database conversion, we want to preserve FASTA order (sort=FALSE)
+        if (sort_chromosomes) {
+            // Sort entries by name and reassign chromids to match sorted order
+            std::sort(entries.begin(), entries.end(),
+                      [](const ContigIndexEntry &a, const ContigIndexEntry &b) {
+                          return a.name < b.name;
+                      });
 
-        // Reassign chromids to match sorted order (0, 1, 2, ...)
-        for (size_t i = 0; i < entries.size(); i++) {
-            entries[i].chromid = i;
+            // Reassign chromids to match sorted order (0, 1, 2, ...)
+            for (size_t i = 0; i < entries.size(); i++) {
+                entries[i].chromid = i;
+            }
         }
+        // If not sorting, chromids are already assigned in FASTA order (0, 1, 2, ...)
 
-        // Write index file with sorted entries and corrected chromids
+        // Write index file
         write_index_file(index_fname, entries);
 
-        // Return data frame with contig names and sizes (sorted alphabetically)
+        // Return data frame with contig names and sizes
         SEXP name_col = PROTECT(Rf_allocVector(STRSXP, entries.size()));
         SEXP size_col = PROTECT(Rf_allocVector(REALSXP, entries.size()));
 

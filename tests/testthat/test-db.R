@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gdir.cd works", {
     gdir.cd("test")
     r <- gtrack.ls()

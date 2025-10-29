@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gvtrack.filter basic operations work", {
     # Test 1: Attach and clear a simple filter
     gvtrack.create("test_vtrack", "test.fixedbin", func = "avg")

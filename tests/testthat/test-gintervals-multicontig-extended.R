@@ -1,3 +1,4 @@
+load_test_db()
 skip_if(getOption("gmulticontig.indexed_format", FALSE), "Indexed format not enabled, set gmulticontig.indexed_format = TRUE to run this test")
 # # Extended tests for multi-contig intervals implementation
 # # These tests cover edge cases, error conditions, and stress scenarios

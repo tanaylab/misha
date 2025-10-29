@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals creation works", {
     expect_regression(gintervals(c(1, 2), c(0, 50, 2000, 50, 10000, 1500), c(100, 1300, 3000, 300, 11000, 2300)), "gintervals.creation.1")
     expect_error(gintervals(c(1, 2), c(0, 50, 2000, 50, 10000, 1500), c(100, 1300, 3000, 300, 11000, 2300), "a"))

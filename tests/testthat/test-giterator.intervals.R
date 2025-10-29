@@ -1,3 +1,4 @@
+load_test_db()
 test_that("giterator.intervals works", {
     expect_regression(giterator.intervals("test.fixedbin", gintervals(c(1, 2), 0, 1000000)), "giterator.intervals.1")
     expect_regression(giterator.intervals("test.fixedbin", gintervals(c(2, 3))), "giterator.intervals.2")

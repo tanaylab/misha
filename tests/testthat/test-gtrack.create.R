@@ -1,3 +1,4 @@
+load_test_db()
 test_that("test for aaaaaaaaaaaaa.bbbbbbbbbbb", {
     withr::defer(gtrack.rm("aaaaaaaaaaaaa.bbbbbbbbbbb", force = TRUE))
     expect_error(gtrack.create("aaaaaaaaaaaaa.bbbbbbbbbbb", "", "test.fixedbin"))

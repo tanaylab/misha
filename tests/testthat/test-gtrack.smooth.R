@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gtrack.smooth with test.fixedbin using LINEAR_RAMP", {
     gtrack.rm("test.tmptrack", force = TRUE)
     withr::defer(gtrack.rm("test.tmptrack", force = TRUE))

@@ -166,6 +166,9 @@
 
 # Helper function for lazy 2D genome generation
 .generate_2d_on_demand <- function(intervals, mode = "full") {
+    # Preserve the factor levels from the input intervals (includes aliases)
+    chrom_levels <- levels(intervals$chrom)
+
     if (mode == "diagonal") {
         # Only intra-chromosomal pairs (chrom1 == chrom2)
         intervals2d <- cbind(intervals, intervals)
@@ -178,6 +181,10 @@
     } else {
         stop("Unknown 2D generation mode: ", mode, ". Must be 'diagonal' or 'full'")
     }
+
+    # Ensure chrom1 and chrom2 have the same factor levels as intervals$chrom (including aliases)
+    intervals2d$chrom1 <- factor(intervals2d$chrom1, levels = chrom_levels)
+    intervals2d$chrom2 <- factor(intervals2d$chrom2, levels = chrom_levels)
 
     rownames(intervals2d) <- 1:nrow(intervals2d)
     intervals2d
@@ -269,18 +276,25 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     # and ensures aliases remain available after database conversion
     alias_map <- .compute_chrom_aliases(canonical_names)
 
-    intervals <- data.frame(
-        chrom = canonical_names,
-        start = 0,
-        end = as.numeric(chromsizes$size)
-    )
-    intervals$chrom <- as.factor(intervals$chrom)
+    # Include both canonical names and aliases in factor levels
+    # This allows gintervals.all() to work with both forms
+    all_chrom_names <- unique(c(canonical_names, names(alias_map)))
 
     # Validate genome.idx if it exists (indexed format)
     idx_path <- file.path(groot, "seq", "genome.idx")
     if (file.exists(idx_path)) {
         .gcall("gseq_validate_index", file.path(groot, "seq"), .misha_env())
     }
+
+    intervals <- data.frame(
+        chrom = canonical_names,
+        start = 0,
+        end = as.numeric(chromsizes$size)
+    )
+
+    # Preserve the order from chrom_sizes.txt for both database formats
+    # This ensures consistency when converting between formats and matches genome.idx chromid assignments
+    intervals$chrom <- factor(intervals$chrom, levels = canonical_names)
 
     if (nrow(intervals) == 0) {
         stop("chrom_sizes.txt file does not contain any chromosomes", call. = FALSE)
@@ -292,11 +306,6 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         stop(sprintf("Chromosome \"%s\" appears more than once in chrom_sizes.txt", dupes[1]), call. = FALSE)
     }
 
-    # For indexed databases, preserve the order from chrom_sizes.txt to match genome.idx
-    # For per-chromosome databases, sort alphabetically for consistency
-    if (!file.exists(idx_path)) {
-        intervals <- intervals[order(intervals$chrom), ]
-    }
     rownames(intervals) <- 1:nrow(intervals)
 
     # Lazy 2D generation: only materialize for small genomes
@@ -307,6 +316,9 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
         intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
         names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
+        # Ensure chrom1 and chrom2 have the same factor levels as intervals$chrom (including aliases)
+        intervals2d$chrom1 <- factor(intervals2d$chrom1, levels = all_chrom_names)
+        intervals2d$chrom2 <- factor(intervals2d$chrom2, levels = all_chrom_names)
         rownames(intervals2d) <- 1:nrow(intervals2d)
     } else {
         # Large genome: defer 2D generation
@@ -784,11 +796,17 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
             utils::write.table(chrom.sizes, paste(groot, "chrom_sizes.txt", sep = "/"), quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE)
 
+            # Compute chromosome aliases early so we can add them to factor levels
+            canonical_names <- as.character(chrom.sizes$chrom)
+            alias_map <- .compute_chrom_aliases(canonical_names)
+            all_chrom_names <- unique(c(canonical_names, names(alias_map)))
+
             # before calling gintervals.import_genes new ALLGENOME must be set
             intervals <- data.frame(
-                chrom = as.factor(as.character(chrom.sizes$chrom)),
+                chrom = canonical_names,
                 start = 0, end = as.numeric(chrom.sizes$size)
             )
+            intervals$chrom <- factor(intervals$chrom, levels = all_chrom_names)
             # For indexed databases, chrom_sizes and intervals are already sorted by the C++ import
             # Don't sort again to maintain consistency with genome.idx chromid assignments
             # For per-chromosome databases, sort alphabetically for consistency
@@ -805,6 +823,9 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
                 cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
                 intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
                 names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
+                # Ensure chrom1 and chrom2 have the same factor levels as intervals$chrom (including aliases)
+                intervals2d$chrom1 <- factor(intervals2d$chrom1, levels = all_chrom_names)
+                intervals2d$chrom2 <- factor(intervals2d$chrom2, levels = all_chrom_names)
                 rownames(intervals2d) <- 1:nrow(intervals2d)
             } else {
                 # Large genome: defer 2D generation

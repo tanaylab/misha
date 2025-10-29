@@ -1,3 +1,4 @@
+load_test_db()
 test_that("import and extract from s_7_export.txt", {
     intervs <- gscreen("test.fixedbin > 0.1", gintervals(c(1, 2)))
     withr::defer(gtrack.rm("test.tmptrack", force = TRUE))

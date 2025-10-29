@@ -11,7 +11,8 @@ gdb.convert_to_indexed(
   validate = TRUE,
   convert_tracks = FALSE,
   convert_intervals = FALSE,
-  verbose = FALSE
+  verbose = FALSE,
+  chunk_size = 104857600
 )
 }
 \arguments{
@@ -28,6 +29,9 @@ gdb.convert_to_indexed(
 \item{convert_intervals}{Logical. If TRUE, also converts all eligible interval sets to indexed format. Default: FALSE.}
 
 \item{verbose}{Logical. If TRUE, prints verbose messages. Default: FALSE.}
+
+\item{chunk_size}{Integer. The size of the chunk to read from the sequence files. Default: 104857600 (100MB). Reduce if
+you are running into memory issues.}
 }
 \value{
 Invisible NULL

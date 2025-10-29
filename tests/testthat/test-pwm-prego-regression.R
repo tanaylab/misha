@@ -1,3 +1,4 @@
+load_test_db()
 test_that("misha PWM matches prego results - basic case without spatial, extend=FALSE", {
     skip_if_not_installed("prego")
 

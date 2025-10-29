@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals.neighbors works", {
     intervs <- gscreen("test.fixedbin > 0.3")
     set.seed(60427)

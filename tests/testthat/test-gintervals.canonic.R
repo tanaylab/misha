@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals.canonic works (1)", {
     i1 <- gscreen("test.fixedbin>0.16 & test.fixedbin<0.19", gintervals(c(1, 2)))
     i2 <- gscreen("test.fixedbin>0.13 & test.fixedbin<0.17", gintervals(c(1, 2)))

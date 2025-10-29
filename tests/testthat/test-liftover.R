@@ -1,5 +1,6 @@
+load_test_db()
 test_that("gintervals.load_chain handles source overlaps with 'error' policy", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -40,7 +41,7 @@ test_that("gintervals.load_chain handles source overlaps with 'error' policy", {
 })
 
 test_that("gintervals.load_chain handles source overlaps with 'keep' policy", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -89,7 +90,7 @@ test_that("gintervals.load_chain handles source overlaps with 'keep' policy", {
 })
 
 test_that("gintervals.load_chain handles source overlaps with 'discard' policy", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -131,7 +132,7 @@ test_that("gintervals.load_chain handles source overlaps with 'discard' policy",
 })
 
 test_that("gintervals.load_chain handles target overlaps with 'auto' policy", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -174,7 +175,7 @@ test_that("gintervals.load_chain handles target overlaps with 'auto' policy", {
 })
 
 test_that("gintervals.load_chain exact truncation with 'auto' policy", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     target_fasta <- tempfile(fileext = ".fasta")
     cat(
@@ -213,7 +214,7 @@ test_that("gintervals.load_chain exact truncation with 'auto' policy", {
 })
 
 test_that("gintervals.load_chain handles target overlaps with 'error' policy", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -248,7 +249,7 @@ test_that("gintervals.load_chain handles target overlaps with 'error' policy", {
 })
 
 test_that("gintervals.load_chain handles target overlaps with 'discard' policy", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -286,7 +287,7 @@ test_that("gintervals.load_chain handles target overlaps with 'discard' policy",
 })
 
 test_that("gintervals.liftover works with 'keep' source policy", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -349,7 +350,7 @@ test_that("gintervals.liftover works with 'keep' source policy", {
 })
 
 test_that("gintervals.liftover works with chain file path", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -391,7 +392,7 @@ test_that("gintervals.liftover works with chain file path", {
 })
 
 test_that("gintervals.liftover basic 1D mapping with exact coordinates", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     target_fasta <- tempfile(fileext = ".fasta")
     cat(
@@ -432,7 +433,7 @@ test_that("gintervals.liftover basic 1D mapping with exact coordinates", {
 })
 
 test_that("gintervals.liftover simple 2D mapping cross-product", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     target_fasta <- tempfile(fileext = ".fasta")
     cat(
@@ -479,7 +480,7 @@ test_that("gintervals.liftover simple 2D mapping cross-product", {
 })
 
 test_that("gtrack.liftover works from sparse source track and preserves values", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -553,7 +554,7 @@ test_that("gtrack.liftover works from sparse source track and preserves values",
 })
 
 test_that("gintervals.liftover validates policy parameters", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -590,7 +591,7 @@ test_that("gintervals.liftover validates policy parameters", {
 })
 
 test_that("gintervals.load_chain validates policy parameters", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -625,7 +626,7 @@ test_that("gintervals.load_chain validates policy parameters", {
 })
 
 test_that("gintervals.liftover returns empty result when all intervals discarded", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -660,7 +661,7 @@ test_that("gintervals.liftover returns empty result when all intervals discarded
 })
 
 test_that("complex chain with both source and target overlaps", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome with multiple chromosomes
     target_fasta <- tempfile(fileext = ".fasta")
@@ -718,7 +719,7 @@ test_that("complex chain with both source and target overlaps", {
 })
 
 test_that("gintervals.load_chain returns 8 columns with strand information", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -756,7 +757,7 @@ test_that("gintervals.load_chain returns 8 columns with strand information", {
 })
 
 test_that("gintervals.load_chain handles reverse strands correctly", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -787,7 +788,7 @@ test_that("gintervals.load_chain handles reverse strands correctly", {
 })
 
 test_that("gintervals.load_chain handles mixed strand chains", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -829,7 +830,7 @@ test_that("gintervals.load_chain handles mixed strand chains", {
 })
 
 test_that("gintervals.load_chain with src_groot validates source chromosomes", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -877,7 +878,7 @@ test_that("gintervals.load_chain with src_groot validates source chromosomes", {
 })
 
 test_that("gintervals.load_chain with src_groot rejects invalid source chromosomes", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -925,7 +926,7 @@ test_that("gintervals.load_chain with src_groot rejects invalid source chromosom
 })
 
 test_that("gintervals.load_chain with src_groot validates source coordinates", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome (70bp to match chain file)
     target_fasta <- tempfile(fileext = ".fasta")
@@ -972,7 +973,7 @@ test_that("gintervals.load_chain with src_groot validates source coordinates", {
 })
 
 test_that("gintervals.liftover works with 8-column chain format", {
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1040,7 +1041,7 @@ has_liftover_binary <- function() {
 test_that("gintervals.liftover matches liftOver binary - basic case", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1104,7 +1105,7 @@ test_that("gintervals.liftover matches liftOver binary - basic case", {
 test_that("gintervals.liftover matches liftOver binary - multiple chains", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1172,7 +1173,7 @@ test_that("gintervals.liftover matches liftOver binary - multiple chains", {
 test_that("gintervals.liftover matches liftOver binary - reverse strand", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome (needs to be at least 50bp to match chain)
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1238,7 +1239,7 @@ test_that("gintervals.liftover matches liftOver binary - reverse strand", {
 test_that("gintervals.liftover matches liftOver binary - partial overlap", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1309,7 +1310,7 @@ test_that("gintervals.liftover matches liftOver binary - partial overlap", {
 test_that("gintervals.liftover matches liftOver binary - complex chain with gaps", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome (needs at least 60bp to match chain declaration)
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1379,7 +1380,7 @@ test_that("gintervals.liftover matches liftOver binary - complex chain with gaps
 test_that("gintervals.liftover matches liftOver binary - interval spanning gap", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1461,7 +1462,7 @@ test_that("gintervals.liftover matches liftOver binary - interval spanning gap",
 test_that("gintervals.liftover matches liftOver binary - very small intervals", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1526,7 +1527,7 @@ test_that("gintervals.liftover matches liftOver binary - very small intervals", 
 test_that("gintervals.liftover matches liftOver binary - boundary intervals", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1605,7 +1606,7 @@ test_that("gintervals.liftover matches liftOver binary - boundary intervals", {
 test_that("gintervals.liftover matches liftOver binary - mixed strand chains", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
@@ -1677,7 +1678,7 @@ test_that("gintervals.liftover matches liftOver binary - mixed strand chains", {
 test_that("gintervals.liftover matches liftOver binary - many small chains", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create target genome
     target_fasta <- tempfile(fileext = ".fasta")
