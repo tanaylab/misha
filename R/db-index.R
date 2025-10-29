@@ -407,7 +407,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                             warning(sprintf("Validation failed for chromosome %s", chrom_name))
                             validation_failed <- TRUE
                         } else if (verbose && i <= 3) {
-                            message(sprintf("  ✓ %s validated successfully", chrom_name))
+                            message(sprintf("  [OK] %s validated successfully", chrom_name))
                         }
                     }
                 }, finally = {
@@ -997,7 +997,7 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
 #' with an intervals2d.idx index file. This dramatically reduces file descriptor
 #' usage, especially for genomes with many chromosomes (N*(N-1)/2 files to just 2).
 #'
-#' Only non-empty pairs are stored in the index, avoiding O(N²) space overhead.
+#' Only non-empty pairs are stored in the index, avoiding O(N^2) space overhead.
 #'
 #' The conversion process:
 #' \enumerate{
