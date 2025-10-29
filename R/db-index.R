@@ -1,3 +1,22 @@
+# Internal helper function to check if the current database is in indexed format
+# @return Logical. TRUE if the database is indexed, FALSE otherwise
+.gdb.is_indexed <- function() {
+    groot <- get("GROOT", envir = .misha)
+    if (is.null(groot) || groot == "") {
+        return(FALSE)
+    }
+
+    seq_dir <- file.path(groot, "seq")
+    if (!dir.exists(seq_dir)) {
+        return(FALSE)
+    }
+
+    index_path <- file.path(seq_dir, "genome.idx")
+    genome_seq_path <- file.path(seq_dir, "genome.seq")
+
+    return(file.exists(index_path) && file.exists(genome_seq_path))
+}
+
 #' Change Database to Indexed Genome Format
 #'
 #' Converts a per-chromosome database to indexed genome format
