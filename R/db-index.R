@@ -30,6 +30,8 @@
 #' @param convert_tracks Logical. If TRUE, also converts all eligible tracks to indexed format. Default: FALSE.
 #' @param convert_intervals Logical. If TRUE, also converts all eligible interval sets to indexed format. Default: FALSE.
 #' @param verbose Logical. If TRUE, prints verbose messages. Default: FALSE.
+#' @param chunk_size Integer. The size of the chunk to read from the sequence files. Default: 104857600 (100MB). Reduce if
+#' you are running into memory issues.
 #'
 #' @return Invisible NULL
 #'
@@ -76,7 +78,7 @@
 #'
 #' @seealso \code{\link{gdb.create}}, \code{\link{gdb.init}}, \code{\link{gtrack.convert_to_indexed}}, \code{\link{gintervals.convert_to_indexed}}, \code{\link{gintervals.2d.convert_to_indexed}}
 #' @export
-gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force = FALSE, validate = TRUE, convert_tracks = FALSE, convert_intervals = FALSE, verbose = FALSE) {
+gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force = FALSE, validate = TRUE, convert_tracks = FALSE, convert_intervals = FALSE, verbose = FALSE, chunk_size = 104857600) {
     # Validate database and get setup information
     setup_info <- .gdb.convert_to_indexed.validate_and_setup(groot, verbose)
 
@@ -91,7 +93,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     }
 
     # Convert genome sequences
-    .gdb.convert_to_indexed.genome(setup_info, validate, remove_old_files, verbose)
+    .gdb.convert_to_indexed.genome(setup_info, validate, remove_old_files, verbose = verbose, chunk_size = chunk_size)
 
     # Convert tracks if requested
     if (convert_tracks) {
@@ -159,31 +161,64 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     chrom_sizes <- read.table(chrom_sizes_path, header = FALSE, stringsAsFactors = FALSE, sep = "\t")
     colnames(chrom_sizes) <- c("chrom", "size")
 
+    # Store original order index to preserve order even when modifying chromosome names
+    original_order_index <- seq_len(nrow(chrom_sizes))
+
     # If we have canonical names from ALLGENOME, use them
     # This preserves the "chr" prefix for per-chromosome databases
+    # BUT we preserve the original order from chrom_sizes.txt
     if (!is.null(canonical_names) && length(canonical_names) == nrow(chrom_sizes)) {
-        # For per-chromosome databases (which is what we're converting from),
-        # ALLGENOME is sorted, so we sort chrom_sizes to match that order
-        chrom_sizes <- chrom_sizes[order(chrom_sizes$chrom), ]
-        # Replace with canonical names (which are sorted in ALLGENOME for per-chromosome DBs)
-        chrom_sizes$chrom <- canonical_names
-    } else {
-        # Fallback: just sort by chromosome name
-        # This is safe because C++ import will also sort, and final chrom_sizes.txt
-        # will be overwritten with the sorted order from the index
-        chrom_sizes <- chrom_sizes[order(chrom_sizes$chrom), ]
+        # Match canonical names to original chrom_sizes by comparing chromosome names
+        # ALLGENOME is sorted, so we need to match by name, not position
+        original_chrom_names <- chrom_sizes$chrom
+
+        # Create a mapping: for each original chrom name, find matching canonical name
+        # Handle both cases: with and without chr prefix
+        canonical_map <- character(length(original_chrom_names))
+        for (i in seq_along(original_chrom_names)) {
+            orig_chrom <- original_chrom_names[i]
+            # Try exact match first
+            match_idx <- which(canonical_names == orig_chrom)
+            if (length(match_idx) > 0) {
+                canonical_map[i] <- canonical_names[match_idx[1]]
+            } else {
+                # Try with/without chr prefix
+                if (startsWith(orig_chrom, "chr")) {
+                    no_chr <- sub("^chr", "", orig_chrom)
+                    match_idx <- which(canonical_names == no_chr)
+                } else {
+                    chr_version <- paste0("chr", orig_chrom)
+                    match_idx <- which(canonical_names == chr_version)
+                }
+                if (length(match_idx) > 0) {
+                    canonical_map[i] <- canonical_names[match_idx[1]]
+                } else {
+                    # Fallback: use original name
+                    canonical_map[i] <- orig_chrom
+                }
+            }
+        }
+
+        # Preserve original order: replace names but keep order
+        chrom_sizes$chrom <- canonical_map
     }
+    # Note: We do NOT sort here - preserve original order from chrom_sizes.txt
 
     # Check that per-chromosome .seq files exist
     # Handle chr prefix mismatch between chrom_sizes.txt and .seq files
+    # Also preserve the actual chromosome names from the seq files
     seq_files <- character(nrow(chrom_sizes))
+    actual_chrom_names <- character(nrow(chrom_sizes))
+
     for (i in seq_len(nrow(chrom_sizes))) {
         chrom <- chrom_sizes$chrom[i]
+        found_chrom <- chrom # Track the actual chromosome name found
 
         # Try the chromosome name as-is first
         seq_file <- file.path(seq_dir, paste0(chrom, ".seq"))
         if (file.exists(seq_file)) {
             seq_files[i] <- seq_file
+            actual_chrom_names[i] <- chrom
             next
         }
 
@@ -192,27 +227,35 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             chr_seq_file <- file.path(seq_dir, paste0("chr", chrom, ".seq"))
             if (file.exists(chr_seq_file)) {
                 seq_files[i] <- chr_seq_file
+                actual_chrom_names[i] <- paste0("chr", chrom)
                 next
             }
         }
 
         # If not found, try without chr prefix
         if (startsWith(chrom, "chr")) {
-            no_chr_seq_file <- file.path(seq_dir, paste0(sub("^chr", "", chrom), ".seq"))
+            no_chr_chrom <- sub("^chr", "", chrom)
+            no_chr_seq_file <- file.path(seq_dir, paste0(no_chr_chrom, ".seq"))
             if (file.exists(no_chr_seq_file)) {
                 seq_files[i] <- no_chr_seq_file
+                actual_chrom_names[i] <- no_chr_chrom
                 next
             }
         }
 
         # If still not found, this is a missing file
         seq_files[i] <- seq_file # Use original name for error reporting
+        actual_chrom_names[i] <- chrom
     }
 
     missing_files <- seq_files[!file.exists(seq_files)]
     if (length(missing_files) > 0) {
         stop(sprintf("Missing sequence files: %s", paste(basename(missing_files), collapse = ", ")), call. = FALSE)
     }
+
+    # Update chrom_sizes with actual chromosome names found in files
+    # This preserves the chr prefix if files are named with chr prefix
+    chrom_sizes$chrom <- actual_chrom_names
 
     return(list(
         already_indexed = FALSE,
@@ -222,7 +265,8 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
         seq_files = seq_files,
         index_path = index_path,
         genome_seq_path = genome_seq_path,
-        chrom_sizes_path = chrom_sizes_path
+        chrom_sizes_path = chrom_sizes_path,
+        original_order_index = original_order_index
     ))
 }
 
@@ -245,7 +289,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 }
 
 # Helper function to convert genome sequences to indexed format
-.gdb.convert_to_indexed.genome <- function(setup_info, validate = TRUE, remove_old_files = FALSE, verbose = FALSE) {
+.gdb.convert_to_indexed.genome <- function(setup_info, validate = TRUE, remove_old_files = FALSE, verbose = FALSE, chunk_size = 104857600) {
     groot <- setup_info$groot
     chrom_sizes <- setup_info$chrom_sizes
     seq_files <- setup_info$seq_files
@@ -263,34 +307,30 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
         {
             # Write multi-FASTA file
             if (verbose) message("Creating temporary multi-FASTA file...")
-            fasta_con <- file(temp_fasta, "w")
+            fasta_con <- file(temp_fasta, "wb") # Use binary mode for faster writes
 
             for (i in seq_len(nrow(chrom_sizes))) {
                 chrom <- chrom_sizes$chrom[i]
                 seq_file <- seq_files[i]
 
                 # Write header
-                cat(sprintf(">%s\n", chrom), file = fasta_con)
+                writeBin(charToRaw(sprintf(">%s\n", chrom)), fasta_con)
 
-                # Read and write sequence (chunk by chunk to handle large chromosomes)
+                # Copy sequence file directly - no line breaking needed
+                # The C++ parser handles long lines just fine
                 seq_con <- file(seq_file, "rb")
-                chunk_size <- 1048576 # 1 MB chunks
+
 
                 repeat {
                     chunk <- readBin(seq_con, "raw", n = chunk_size)
                     if (length(chunk) == 0) break
-
-                    # Convert to character and write
-                    seq_str <- rawToChar(chunk)
-                    # Write in lines of 80 characters (standard FASTA format)
-                    seq_chars <- strsplit(seq_str, "")[[1]]
-                    for (j in seq(1, length(seq_chars), 80)) {
-                        end_idx <- min(j + 79, length(seq_chars))
-                        cat(paste(seq_chars[j:end_idx], collapse = ""), "\n", file = fasta_con)
-                    }
+                    writeBin(chunk, fasta_con)
                 }
 
                 close(seq_con)
+
+                # Write newline after sequence
+                writeBin(charToRaw("\n"), fasta_con)
 
                 if ((i %% 10) == 0 || i == nrow(chrom_sizes)) {
                     if (verbose) message(sprintf("  Processed %d/%d chromosomes", i, nrow(chrom_sizes)))
@@ -300,12 +340,14 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             close(fasta_con)
 
             # Call C++ import function
+            # Use sort=FALSE to preserve the chromosome order from chrom_sizes.txt
             if (verbose) message("Creating indexed format...")
             contig_info <- .gcall(
                 "gseq_multifasta_import",
                 temp_fasta,
                 genome_seq_path,
                 index_path,
+                FALSE, # sort=FALSE to preserve chrom_sizes.txt order
                 .misha_env()
             )
 
@@ -313,11 +355,15 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
             # Update chrom_sizes.txt with the canonical chromosome names from the index
             # This ensures consistency between chrom_sizes.txt and genome.idx
+            # contig_info is now in FASTA order (same as our input order) since C++ no longer sorts
             if (verbose) message("Updating chrom_sizes.txt with canonical chromosome names...")
+
             updated_chrom_sizes <- data.frame(
                 chrom = contig_info$name,
-                size = contig_info$size
+                size = contig_info$size,
+                stringsAsFactors = FALSE
             )
+
             write.table(updated_chrom_sizes, chrom_sizes_path,
                 quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
             )
@@ -326,42 +372,50 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
             if (validate) {
                 if (verbose) message("Validating conversion...")
 
+                # Save current state before validation
+                old_groot <- NULL
+                if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+                    old_groot <- get("GROOT", envir = .misha)
+                }
+
                 # Sample validation: check first 100 bases of each chromosome
                 validation_failed <- FALSE
-                for (i in seq_len(min(10, nrow(chrom_sizes)))) { # Check first 10 chroms
-                    chrom <- chrom_sizes$chrom[i]
-                    seq_file <- seq_files[i]
 
-                    # Read from old file
-                    old_con <- file(seq_file, "rb")
-                    old_seq <- rawToChar(readBin(old_con, "raw", n = 100))
-                    close(old_con)
+                tryCatch({
+                    # Init the converted database once for all validations
+                    suppressMessages(gdb.init(groot))
 
-                    # Read from indexed format (need to reload database first)
-                    # Save current state
-                    old_groot <- NULL
-                    if (exists("GROOT", envir = .misha, inherits = FALSE)) {
-                        old_groot <- get("GROOT", envir = .misha)
-                    }
+                    for (i in seq_len(min(10, nrow(chrom_sizes)))) { # Check first 10 chroms
+                        chrom_name <- updated_chrom_sizes$chrom[i]
+                        seq_file <- seq_files[i]
 
-                    tryCatch({
-                        # Temporarily init the converted database
-                        suppressMessages(gdb.init(groot))
+                        # Read from old file
+                        old_con <- file(seq_file, "rb")
+                        old_seq <- toupper(rawToChar(readBin(old_con, "raw", n = 100)))
+                        close(old_con)
 
                         # Extract from indexed format
-                        new_seq <- gseq.extract(gintervals(chrom, 0, min(100, chrom_sizes$size[i])))
+                        new_seq <- toupper(gseq.extract(gintervals(chrom_name, 0, min(100, updated_chrom_sizes$size[i]))))
 
                         if (old_seq != new_seq) {
-                            warning(sprintf("Validation failed for chromosome %s", chrom))
+                            if (verbose) {
+                                message(sprintf("\nValidation mismatch for %s:", chrom_name))
+                                message(sprintf("  Old (first 60): %s", substr(old_seq, 1, 60)))
+                                message(sprintf("  New (first 60): %s", substr(new_seq, 1, 60)))
+                                message(sprintf("  Seq file: %s", seq_file))
+                            }
+                            warning(sprintf("Validation failed for chromosome %s", chrom_name))
                             validation_failed <- TRUE
+                        } else if (verbose && i <= 3) {
+                            message(sprintf("  ✓ %s validated successfully", chrom_name))
                         }
-                    }, finally = {
-                        # Restore old state
-                        if (!is.null(old_groot) && old_groot != "") {
-                            suppressMessages(gdb.init(old_groot))
-                        }
-                    })
-                }
+                    }
+                }, finally = {
+                    # Restore old state once after all validations
+                    if (!is.null(old_groot) && old_groot != "") {
+                        suppressMessages(gdb.init(old_groot))
+                    }
+                })
 
                 if (validation_failed) {
                     stop("Validation failed! Conversion may be corrupted. Old files have NOT been removed.", call. = FALSE)

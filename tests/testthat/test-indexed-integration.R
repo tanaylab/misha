@@ -1,3 +1,4 @@
+load_test_db()
 # Integration tests for indexed genome format
 
 test_that("indexed format works with gseq.extract on all strands", {

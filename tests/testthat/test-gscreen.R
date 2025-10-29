@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gscreen with test.fixedbin", {
     expect_error(gscreen("test.fixedbin"))
 })

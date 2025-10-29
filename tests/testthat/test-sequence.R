@@ -1,3 +1,4 @@
+load_test_db()
 test_that("grevcomp handles basic DNA sequences correctly", {
     # Test single sequence
     expect_equal(grevcomp("ACTG"), "CAGT")

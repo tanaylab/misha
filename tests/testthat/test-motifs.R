@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gtrack.create_pwm_energy works", {
     allgenome <- .misha$ALLGENOME
     .misha$ALLGENOME[[1]]$end <- 1000000

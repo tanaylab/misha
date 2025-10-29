@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gterator.cartesian_grid works (1)", {
     intervs1 <- gscreen("test.sparse>1.5 & test.sparse<1.6", gintervals(c(1, 2, 3)))
     intervs2 <- gscreen("test.sparse>1.55", gintervals(c(1, 2, 3)))

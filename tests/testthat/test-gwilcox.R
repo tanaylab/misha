@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gwilcox on test.fixedbin", {
     r <- gwilcox("test.fixedbin", 100000, 1000, maxpval = 0.000001, intervals = gintervals(c(1, 2), 0, -1))
     expect_regression(r, "gwilcox.fixedbin")

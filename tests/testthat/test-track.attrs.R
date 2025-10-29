@@ -1,3 +1,4 @@
+load_test_db()
 test_that("get readonly attributes of gdb", {
     gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
     r <- gdb.get_readonly_attrs()

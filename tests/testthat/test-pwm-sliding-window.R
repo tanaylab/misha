@@ -1,3 +1,4 @@
+load_test_db()
 # Test sliding window optimization for PWM virtual tracks
 # These tests verify that the fast path produces identical results to the legacy path
 

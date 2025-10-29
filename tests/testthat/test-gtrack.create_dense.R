@@ -1,3 +1,4 @@
+load_test_db()
 test_that("test for dense track from intervals and values", {
     gtrack.rm("test.tmptrack", force = TRUE)
     withr::defer(gtrack.rm("test.tmptrack", force = TRUE))

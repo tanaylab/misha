@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals.summary with test.fixedbin", {
     result <- gintervals.summary("test.fixedbin", gintervals(c(1, 2), 0, -1))
     expect_regression(result, "gintervals.summary_test.fixedbin")

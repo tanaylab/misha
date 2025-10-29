@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals.quantiles works", {
     expect_regression(gintervals.quantiles("test.fixedbin+0.2", percentile = c(0.5, 0.3, 0.2, 0.9), .misha$ALLGENOME), "gintervals.quantiles.1")
 

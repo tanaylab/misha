@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gpartition with test.fixedbin and sampling", {
     intervs <- gscreen("test.fixedbin > 0.14", gintervals(c(1, 2), 0, -1))
     set.seed(60427)

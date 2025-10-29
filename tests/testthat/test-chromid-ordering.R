@@ -1,3 +1,4 @@
+load_test_db()
 test_that("indexed database preserves chrom_sizes.txt order for chromid mapping", {
     # Regression test for bug where chromosome identifiers resolved to wrong
     # chromosomes due to sorting mismatch between chrom_sizes.txt and ALLGENOME
@@ -5,7 +6,7 @@ test_that("indexed database preserves chrom_sizes.txt order for chromid mapping"
     # BUG SCENARIO: When chrom_sizes.txt is unsorted but genome.idx is sorted,
     # chromosome lookups would use the wrong chromid
 
-    withr::defer(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+    local_db_state()
 
     # Create a FASTA file with chromosomes in NON-alphabetical order
     test_fasta <- tempfile(fileext = ".fasta")

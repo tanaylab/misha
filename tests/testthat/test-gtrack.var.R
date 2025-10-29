@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gtrack.var works", {
     expect_regression(gtrack.var.get("test.fixedbin", "pv.percentiles"), "test.fixedbin.pv.percentiles")
     expect_error(gtrack.var.get("test.fixedbin", "blablablabla"))

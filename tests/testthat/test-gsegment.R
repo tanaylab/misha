@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gsegment with test.fixedbin", {
     expect_regression(gsegment("test.fixedbin", 10000, maxpval = 0.000001), "gsegment_fixedbin")
 })

@@ -1240,15 +1240,16 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
             index_path <- file.path(groot, "seq", "genome.idx")
 
             # Call C++ import function
-            # It will: parse FASTA, sanitize headers, sort by name,
+            # It will: parse FASTA, sanitize headers, sort by name (if sort=TRUE),
             # assign chromids 0..N-1 in sorted order, write genome.seq and genome.idx,
-            # and return a data frame with contig names and sizes (sorted alphabetically)
+            # and return a data frame with contig names and sizes
             if (verbose) message("Importing multi-FASTA file...")
             contig_info <- .gcall(
                 "gseq_multifasta_import",
                 fasta,
                 seq_path,
                 index_path,
+                TRUE, # sort=TRUE (default): sort chromosomes alphabetically
                 .misha_env()
             )
 

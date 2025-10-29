@@ -14,6 +14,7 @@
 #include <string>
 #include <algorithm>
 #include <dirent.h>
+#include <tuple>
 
 #include "IntervalsIndex1D.h"
 #include "IntervalsIndex2D.h"
@@ -215,7 +216,34 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
 
         for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); chromid++) {
             string chrom_name = chromkey.id2chrom(chromid);
-            string chr_file = intervset_dir + "/" + chrom_name;
+
+            // Try to find the chromosome file, handling chr prefix mismatch
+            string chr_file;
+            bool found = false;
+
+            // Try 1: chromosome name as-is
+            string candidate = intervset_dir + "/" + chrom_name;
+            struct stat st;
+            if (stat(candidate.c_str(), &st) == 0) {
+                chr_file = candidate;
+                found = true;
+            } else {
+                // Try 2: with "chr" prefix if not already present
+                if (chrom_name.substr(0, 3) != "chr") {
+                    candidate = intervset_dir + "/chr" + chrom_name;
+                    if (stat(candidate.c_str(), &st) == 0) {
+                        chr_file = candidate;
+                        found = true;
+                    }
+                } else {
+                    // Try 3: without "chr" prefix if present
+                    candidate = intervset_dir + "/" + chrom_name.substr(3);
+                    if (stat(candidate.c_str(), &st) == 0) {
+                        chr_file = candidate;
+                        found = true;
+                    }
+                }
+            }
 
             IntervalsContigEntry entry;
             entry.chrom_id = chromid;
@@ -224,7 +252,7 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
             entry.reserved = 0;
 
             uint64_t bytes_written = 0;
-            if (copy_file_contents(chr_file, dat_fp, bytes_written)) {
+            if (found && copy_file_contents(chr_file, dat_fp, bytes_written)) {
                 entry.length = bytes_written;
                 current_offset += bytes_written;
                 chr_files_to_remove.push_back(chr_file);
@@ -288,6 +316,18 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
                 idx_path_tmp.c_str(), idx_path.c_str(), strerror(errno));
         }
 
+        // Validate conversion before removing old files
+        // Check that intervals.dat has the expected size
+        struct stat dat_stat;
+        if (stat(dat_path.c_str(), &dat_stat) != 0) {
+            TGLError("Failed to stat %s after conversion", dat_path.c_str());
+        }
+
+        if ((uint64_t)dat_stat.st_size != current_offset) {
+            TGLError("intervals.dat size mismatch: expected %llu bytes, got %llu bytes",
+                (unsigned long long)current_offset, (unsigned long long)dat_stat.st_size);
+        }
+
         // Remove old per-chromosome files if requested
         if (remove_old) {
             for (const string &chr_file : chr_files_to_remove) {
@@ -342,7 +382,8 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
                    intervset_dir.c_str(), strerror(errno));
         }
 
-        vector<pair<int, int>> pairs; // (chromid1, chromid2)
+        // Store both chromids and original filenames
+        vector<tuple<int, int, string>> pair_files; // (chromid1, chromid2, filename)
         struct dirent *entry;
         while ((entry = readdir(dir)) != nullptr) {
             string filename = entry->d_name;
@@ -356,19 +397,39 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
                 string chrom1_name = filename.substr(0, dash_pos);
                 string chrom2_name = filename.substr(dash_pos + 1);
 
-                // Try to map to chromids
+                // Try to map to chromids (handle chr prefix mismatch)
                 int chromid1 = chromkey.chrom2id(chrom1_name.c_str());
                 int chromid2 = chromkey.chrom2id(chrom2_name.c_str());
 
+                // If not found, try with/without chr prefix
+                if (chromid1 < 0) {
+                    if (chrom1_name.substr(0, 3) == "chr") {
+                        chromid1 = chromkey.chrom2id(chrom1_name.substr(3).c_str());
+                    } else {
+                        chromid1 = chromkey.chrom2id(("chr" + chrom1_name).c_str());
+                    }
+                }
+                if (chromid2 < 0) {
+                    if (chrom2_name.substr(0, 3) == "chr") {
+                        chromid2 = chromkey.chrom2id(chrom2_name.substr(3).c_str());
+                    } else {
+                        chromid2 = chromkey.chrom2id(("chr" + chrom2_name).c_str());
+                    }
+                }
+
                 if (chromid1 >= 0 && chromid2 >= 0) {
-                    pairs.push_back(make_pair(chromid1, chromid2));
+                    pair_files.push_back(make_tuple(chromid1, chromid2, filename));
                 }
             }
         }
         closedir(dir);
 
         // Sort pairs by (chromid1, chromid2) for stable ordering
-        sort(pairs.begin(), pairs.end());
+        sort(pair_files.begin(), pair_files.end(),
+             [](const tuple<int, int, string> &a, const tuple<int, int, string> &b) {
+                 if (get<0>(a) != get<0>(b)) return get<0>(a) < get<0>(b);
+                 return get<1>(a) < get<1>(b);
+             });
 
         // Prepare paths
         dat_path_tmp = intervset_dir + "/intervals2d.dat.tmp";
@@ -389,19 +450,18 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         }
 
         // Write index header (checksum=0 for now)
-        write_2d_index_header(idx_fp, pairs.size(), 0);
+        write_2d_index_header(idx_fp, pair_files.size(), 0);
 
         // Collect entries and concatenate files
         vector<IntervalsPairEntry> entries;
         vector<string> pair_files_to_remove;
         uint64_t current_offset = 0;
 
-        for (const auto &pair : pairs) {
-            int chromid1 = pair.first;
-            int chromid2 = pair.second;
-            string chrom1_name = chromkey.id2chrom(chromid1);
-            string chrom2_name = chromkey.id2chrom(chromid2);
-            string pair_file = intervset_dir + "/" + chrom1_name + "-" + chrom2_name;
+        for (const auto &pair_tuple : pair_files) {
+            int chromid1 = get<0>(pair_tuple);
+            int chromid2 = get<1>(pair_tuple);
+            string filename = get<2>(pair_tuple);
+            string pair_file = intervset_dir + "/" + filename;
 
             IntervalsPairEntry entry;
             entry.chrom1_id = chromid1;
@@ -425,8 +485,7 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
                 fwrite(&entry.reserved, sizeof(entry.reserved), 1, idx_fp) != 1) {
                 fclose(dat_fp);
                 fclose(idx_fp);
-                TGLError("Failed to write index entry for pair %s-%s",
-                         chrom1_name.c_str(), chrom2_name.c_str());
+                TGLError("Failed to write index entry for pair %s", filename.c_str());
             }
 
             entries.push_back(entry);
@@ -477,6 +536,18 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
         if (rename(idx_path_tmp.c_str(), idx_path.c_str()) != 0) {
             TGLError("Failed to rename %s to %s: %s",
                 idx_path_tmp.c_str(), idx_path.c_str(), strerror(errno));
+        }
+
+        // Validate conversion before removing old files
+        // Check that intervals2d.dat has the expected size
+        struct stat dat_stat;
+        if (stat(dat_path.c_str(), &dat_stat) != 0) {
+            TGLError("Failed to stat %s after conversion", dat_path.c_str());
+        }
+
+        if ((uint64_t)dat_stat.st_size != current_offset) {
+            TGLError("intervals2d.dat size mismatch: expected %llu bytes, got %llu bytes",
+                (unsigned long long)current_offset, (unsigned long long)dat_stat.st_size);
         }
 
         // Remove old per-pair files if requested

@@ -1,3 +1,4 @@
+load_test_db()
 test_that("lookup and extract with default binning", {
     m1 <- matrix(1:15, nrow = 5, ncol = 3)
     gtrack.rm("test.tmptrack", force = TRUE)

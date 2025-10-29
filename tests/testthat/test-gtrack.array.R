@@ -1,3 +1,4 @@
+load_test_db()
 test_that("Basic gtrack.array.extract functions", {
     expect_error(gtrack.array.extract("test.fixedbin", NULL, .misha$ALLGENOME))
     expect_regression(gtrack.array.extract("test.array", NULL, gintervals(c(1, 2))), "gtrack_array_extract_array_intervals")

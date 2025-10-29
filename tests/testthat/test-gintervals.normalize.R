@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals.normalize works with basic intervals", {
     # Test basic normalization with even size
     intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))

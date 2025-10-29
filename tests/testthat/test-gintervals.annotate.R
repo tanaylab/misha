@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals.annotate basic annotation with distance", {
     intervs <- gintervals(1, c(1000, 5000), c(1100, 5050))
     ann <- gintervals(1, c(900, 5400), c(950, 5500))

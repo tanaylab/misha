@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals.mapply works", {
     expect_equal(
         gintervals.mapply(function(x) {
