@@ -29,7 +29,7 @@ The indexed format stores all chromosome pairs in a single intervals2d.dat file
 with an intervals2d.idx index file. This dramatically reduces file descriptor
 usage, especially for genomes with many chromosomes (N*(N-1)/2 files to just 2).
 
-Only non-empty pairs are stored in the index, avoiding O(N²) space overhead.
+Only non-empty pairs are stored in the index, avoiding O(N^2) space overhead.
 
 The conversion process:
 \enumerate{
