@@ -33,10 +33,10 @@ test_that("gintervals.mark_overlaps works", {
         data = c(10, 20, 30, 40)
     )
     expect_equal(gintervals.mark_overlaps(intervs), data.frame(
-        chrom = "chr1",
-        start = c(100, 10000, 10500),
-        end = c(13000, 10600, 12000),
-        data = c(20, 30, 40),
-        overlap_group = c(1, 2, 2)
+        chrom = c("chr1", "chr1", "chr1", "chr1"),
+        start = c(11000, 100, 10000, 10500),
+        end = c(12000, 200, 13000, 10600),
+        data = c(10, 20, 30, 40),
+        overlap_group = c(2, 1, 2, 2)
     ))
 })
