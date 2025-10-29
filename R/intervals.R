@@ -135,6 +135,15 @@
                 if (!is.null(intervals.set.out) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
+
+                # If database is indexed and output is bigset, convert to indexed format
+                if (!is.null(intervals.set.out) && .gdb.is_indexed() && .gintervals.is_bigset(intervals.set.out)) {
+                    if (.gintervals.is1d(intervals.set.out)) {
+                        gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    } else {
+                        gintervals.2d.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    }
+                }
             },
             finally = {
                 if (!success && !is.null(intervals.set.out)) {
@@ -153,6 +162,15 @@
             }
             if (.gintervals.needs_bigset(res)) {
                 .gintervals.small2big(intervals.set.out, res)
+
+                # If database is indexed, convert to indexed format
+                if (.gdb.is_indexed()) {
+                    if (.gintervals.is1d(res)) {
+                        gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    } else {
+                        gintervals.2d.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    }
+                }
             } else {
                 .gintervals.save_file(fullpath, res)
             }

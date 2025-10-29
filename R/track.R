@@ -168,6 +168,11 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
                 warning(msg, call. = FALSE)
             }
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(tgt.trackstr)
+            }
         },
         finally = {
             if (!success) {
@@ -256,6 +261,11 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -339,6 +349,11 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -411,6 +426,11 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -735,6 +755,11 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                     .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
                 }
 
+                # If database is indexed, automatically convert the track to indexed format
+                if (.gdb.is_indexed()) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
+
                 success <- TRUE
             } else if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
                 # looks like all bigWig files start with "fc26" in their first two bytes
@@ -767,6 +792,11 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env())
                 .gdb.add_track(trackstr)
                 .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
+
+                # If database is indexed, automatically convert the track to indexed format
+                if (.gdb.is_indexed()) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
 
                 success <- TRUE
             }
@@ -1139,6 +1169,11 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -1267,6 +1302,11 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -1597,6 +1637,11 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -1699,6 +1744,11 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
             .gtrack.attr.set(trackstr, "binsize", binsize, TRUE)
 
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(trackstr)
+            }
         },
         finally = {
             if (!success && !direxisted) {

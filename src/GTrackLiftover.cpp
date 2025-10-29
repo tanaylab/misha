@@ -2,6 +2,9 @@
 #include "port.h"
 
 #include <cmath>
+#include <map>
+#include <list>
+#include <set>
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -176,6 +179,100 @@ private:
 	float        m_last_val;
 };
 
+//----------------------------------------- BufferedIntervalsCache ---------------------------------------------
+
+// Cache manager for BufferedIntervals to avoid having too many open files
+class BufferedIntervalsCache {
+public:
+	BufferedIntervalsCache(const string &dir, const GenomeChromKey &chromkey, size_t max_open = 256)
+		: m_dir(dir), m_chromkey(chromkey), m_max_open(max_open) {}
+
+	~BufferedIntervalsCache() {
+		// Close all open files
+		for (map<int, BufferedIntervals*>::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
+			if (it->second) {
+				it->second->close();
+				delete it->second;
+			}
+		}
+	}
+
+	BufferedIntervals* get(int chromid) {
+		// Check if already in cache
+		map<int, BufferedIntervals*>::iterator it = m_cache.find(chromid);
+		if (it != m_cache.end()) {
+			// Move to end of LRU list
+			m_lru.remove(chromid);
+			m_lru.push_back(chromid);
+			return it->second;
+		}
+
+		// Need to open new file
+		// First check if cache is full
+		if (m_cache.size() >= m_max_open) {
+			// Remove least recently used
+			int lru_chromid = m_lru.front();
+			m_lru.pop_front();
+
+			BufferedIntervals *lru = m_cache[lru_chromid];
+			lru->close();
+			delete lru;
+			m_cache.erase(lru_chromid);
+		}
+
+		// Open new file
+		// Check if this chromid was opened before (use "a+" for append, "w+" for new)
+		bool previously_opened = (m_opened_chroms.find(chromid) != m_opened_chroms.end());
+		const char *mode = previously_opened ? "a+" : "w+";
+
+		BufferedIntervals *bi = new BufferedIntervals();
+		char filename[FILENAME_MAX];
+		snprintf(filename, sizeof(filename), "%s/_%s", m_dir.c_str(), m_chromkey.id2chrom(chromid).c_str());
+		bi->open(filename, mode, chromid);
+
+		m_cache[chromid] = bi;
+		m_lru.push_back(chromid);
+		m_opened_chroms.insert(chromid);
+		return bi;
+	}
+
+	void flush_all() {
+		for (map<int, BufferedIntervals*>::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
+			if (it->second) {
+				it->second->flush();
+			}
+		}
+	}
+
+	void close_all() {
+		for (map<int, BufferedIntervals*>::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
+			if (it->second) {
+				it->second->close();
+				delete it->second;
+			}
+		}
+		m_cache.clear();
+		m_lru.clear();
+	}
+
+	// Get a BufferedIntervals for reading (not from cache)
+	BufferedIntervals* get_for_reading(int chromid) {
+		BufferedIntervals *bi = new BufferedIntervals();
+		char filename[FILENAME_MAX];
+		snprintf(filename, sizeof(filename), "%s/_%s", m_dir.c_str(), m_chromkey.id2chrom(chromid).c_str());
+		bi->open(filename, "r", chromid);
+		return bi;
+	}
+
+private:
+	string m_dir;
+	const GenomeChromKey &m_chromkey;
+	size_t m_max_open;
+	map<int, BufferedIntervals*> m_cache;
+	list<int> m_lru;  // Least recently used list
+	set<int> m_opened_chroms;  // Track which chroms have been opened before
+};
+
 struct GIntervalVal {
 	GInterval interval;
 	float     val;
@@ -233,20 +330,14 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 		if (GenomeTrack::is_1d(src_track_type)) {
 			GIntervals all_genome_intervs;
 			iu.get_all_genome_intervs(all_genome_intervs);
-			vector<BufferedIntervals> buffered_intervs(iu.get_chromkey().get_num_chroms());
+			// Collect intervals in memory instead of writing to temp files immediately
+			map<int, vector<GIntervalVal> > chrom_intervals;
 			char filename[FILENAME_MAX];
 			GIntervals tgt_intervals;
 			unsigned binsize = 0;
 
 			Progress_reporter progress;
 			progress.init(src_id2chrom.size() + iu.get_chromkey().get_num_chroms(), 1);
-
-			// create temporary files that contain unsorted target intervals and corresponding values
-			for (vector<BufferedIntervals>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
-				int chromid = ibuffered_interv - buffered_intervs.begin();
-				snprintf(filename, sizeof(filename), "%s/_%s", dirname.c_str(), iu.get_chromkey().id2chrom(chromid).c_str());
-				ibuffered_interv->open(filename, "w+", chromid);
-			}
 
 			// write the target intervals + values to the temporary files
 			if (src_track_type == GenomeTrack::FIXED_BIN) {
@@ -278,7 +369,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 
 						hint = chain_intervs.map_interval(src_interval, tgt_intervals, hint);
 						for (GIntervals::const_iterator iinterv = tgt_intervals.begin(); iinterv != tgt_intervals.end(); ++iinterv)
-							buffered_intervs[iinterv->chromid].write_interval(*iinterv, val);
+							chrom_intervals[iinterv->chromid].push_back(GIntervalVal(*iinterv, val));
 
 						src_interval.start += src_track.get_bin_size();
 						src_interval.end += src_track.get_bin_size();
@@ -307,7 +398,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 					for (uint64_t i = 0; i < src_intervals.size(); ++i) {
 						hint = chain_intervs.map_interval(src_intervals[i], tgt_intervals, hint);
 						for (GIntervals::const_iterator iinterv = tgt_intervals.begin(); iinterv != tgt_intervals.end(); ++iinterv)
-							buffered_intervs[iinterv->chromid].write_interval(*iinterv, vals[i]);
+							chrom_intervals[iinterv->chromid].push_back(GIntervalVal(*iinterv, vals[i]));
 						check_interrupt();
 					}
 
@@ -316,16 +407,15 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 			} else
 				TGLError("Source track type %s is currently not supported in liftover", GenomeTrack::TYPE_NAMES[src_track_type]);
 
-			// read the temporary files one by one into memory, sort the data and save it in corresponding track
-			for (vector<BufferedIntervals>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
-				int chromid = ibuffered_interv - buffered_intervs.begin();
-				vector<GIntervalVal> interv_vals;
+			// Process collected intervals for each chromosome, sort and save to track files
+			for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
+				// Skip if this chromosome has no data
+				if (chrom_intervals.find(chromid) == chrom_intervals.end()) {
+					progress.report(1);
+					continue;
+				}
 
-				ibuffered_interv->flush();
-				ibuffered_interv->seek(0, SEEK_SET);
-
-				while (ibuffered_interv->read_interval())
-					interv_vals.push_back(GIntervalVal(ibuffered_interv->last_interval(), ibuffered_interv->last_val()));
+				vector<GIntervalVal> &interv_vals = chrom_intervals[chromid];
 
 				sort(interv_vals.begin(), interv_vals.end());
 
@@ -378,13 +468,6 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 				}
 
 				progress.report(1);
-			}
-
-			// remove the buffered intervals files
-			for (vector<BufferedIntervals>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
-				string filename = ibuffered_interv->file_name();
-				ibuffered_interv->close();
-				unlink(filename.c_str());
 			}
 
 			progress.report_last();

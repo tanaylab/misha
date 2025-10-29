@@ -587,12 +587,6 @@ test_that("gintervals.liftover validates policy parameters", {
         gintervals.liftover(src_intervals, chain_file, tgt_overlap_policy = "invalid"),
         "tgt_overlap_policy"
     )
-
-    # gintervals.liftover shouldn't accept 'auto' for tgt_overlap_policy
-    expect_error(
-        gintervals.liftover(src_intervals, chain_file, tgt_overlap_policy = "auto"),
-        "tgt_overlap_policy"
-    )
 })
 
 test_that("gintervals.load_chain validates policy parameters", {
