@@ -1,6 +1,7 @@
 # misha 5.1.3
 
 * Fixed a bug in `gintervals.neighbors` when using `mindist=0, maxdist=0`: the function would miss zero-distance (touching) intervals when using `mindist=0, maxdist=0`.
+* Fixed error reporting in multitasking mode: when a child process ends unexpectedly, the error message is now correctly reported to the parent process.
 
 # misha 5.1.2
 
