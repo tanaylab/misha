@@ -325,6 +325,36 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 
 		string dirname = create_track_dir(_envir, track);
 
+		// Build a chromkey from the source genome to get correct chromids for indexed tracks
+		// Read chrom_sizes.txt from the source genome root
+		GenomeChromKey src_genome_chromkey;
+		string track_dir_str(src_track_dir);
+		size_t tracks_pos = track_dir_str.rfind("/tracks/");
+		if (tracks_pos != string::npos) {
+			string genome_root = track_dir_str.substr(0, tracks_pos);
+			string chrom_sizes_path = genome_root + "/chrom_sizes.txt";
+			FILE *fp = fopen(chrom_sizes_path.c_str(), "r");
+			if (fp) {
+				char line[10000];
+				while (fgets(line, sizeof(line), fp)) {
+					char *chrom_name = strtok(line, "\t");
+					char *size_str = strtok(NULL, "\t\n");
+					if (chrom_name && size_str) {
+						uint64_t chrom_size = strtoull(size_str, NULL, 10);
+						try {
+							src_genome_chromkey.add_chrom(chrom_name, chrom_size);
+						} catch (...) {
+							// Ignore errors adding chromosomes
+						}
+					}
+				}
+				fclose(fp);
+			}
+		}
+		// If we didn't successfully load chromkey from chrom_sizes.txt, use src_chromkey as fallback
+		if (src_genome_chromkey.get_num_chroms() == 0)
+			src_genome_chromkey = src_chromkey;
+
 		GenomeTrack::Type src_track_type = GenomeTrack::get_type(src_track_dir, src_chromkey);
 
 		if (GenomeTrack::is_1d(src_track_type)) {
@@ -343,12 +373,20 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 			if (src_track_type == GenomeTrack::FIXED_BIN) {
 				for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
 					GenomeTrackFixedBin src_track;
-					int chromid = ichrom - src_id2chrom.begin();
+					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
+					int src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);  // chromid in the source genome
 					float val;
+
+					if (src_chromid_in_genome < 0) {
+						// Chromosome not found in source genome, skip
+						progress.report(1);
+						continue;
+					}
 
 					try {
 						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
-						src_track.init_read(filename, chromid);
+						// Use src_chromid_in_genome for indexed tracks to read correct data
+						src_track.init_read(filename, src_chromid_in_genome);
 						if (binsize > 0 && binsize != src_track.get_bin_size()) {
 							char filename2[FILENAME_MAX];
 							snprintf(filename2, sizeof(filename2), "%s/%s", src_track_dir, (ichrom - 1)->c_str());
@@ -361,7 +399,7 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 						continue;
 					}
 
-					GInterval src_interval(chromid, 0, src_track.get_bin_size(), 0);
+					GInterval src_interval(src_chromid_in_chain, 0, src_track.get_bin_size(), 0);
 					ChainIntervals::const_iterator hint = chain_intervs.begin();
 
 					for (int64_t i = 0; i < src_track.get_num_samples(); ++i) {
@@ -381,11 +419,19 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 			} else if (src_track_type == GenomeTrack::SPARSE) {
 				for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
 					GenomeTrackSparse src_track;
-					int chromid = ichrom - src_id2chrom.begin();
+					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
+					int src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);  // chromid in the source genome
+
+					if (src_chromid_in_genome < 0) {
+						// Chromosome not found in source genome, skip
+						progress.report(1);
+						continue;
+					}
 
 					try {
 						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
-						src_track.init_read(filename, chromid);
+						// Use src_chromid_in_genome for indexed tracks to read correct data
+						src_track.init_read(filename, src_chromid_in_genome);
 					} catch (TGLException &) {  // some of source chroms might be missing, this is normal
 						progress.report(1);
 						continue;
@@ -395,8 +441,12 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 					const vector<float> &vals = src_track.get_vals();
 					ChainIntervals::const_iterator hint = chain_intervs.begin();
 
+					// The intervals from the track have chromid=src_chromid_in_genome,
+					// but the chain expects chromid=src_chromid_in_chain
 					for (uint64_t i = 0; i < src_intervals.size(); ++i) {
-						hint = chain_intervs.map_interval(src_intervals[i], tgt_intervals, hint);
+						GInterval remapped_interval = src_intervals[i];
+						remapped_interval.chromid = src_chromid_in_chain;
+						hint = chain_intervs.map_interval(remapped_interval, tgt_intervals, hint);
 						for (GIntervals::const_iterator iinterv = tgt_intervals.begin(); iinterv != tgt_intervals.end(); ++iinterv)
 							chrom_intervals[iinterv->chromid].push_back(GIntervalVal(*iinterv, vals[i]));
 						check_interrupt();
