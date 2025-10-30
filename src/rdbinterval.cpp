@@ -1438,9 +1438,6 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 {
 	tgt_intervs.clear();
 
-//for (auto i = begin(); i < end(); ++i)
-//REprintf("chrom %d, coord %ld\n", i->chromid_src, i->start_src);
-
 	if (empty())
 		return end();
 
@@ -1473,7 +1470,26 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 			iend_interval = imid_interval;
 	}
 
-	return begin();
+	// After binary search, we need to find the first overlapping chain
+	// Start from istart_interval and scan backwards to find the first overlap
+	const_iterator first_overlap = istart_interval;
+	while (first_overlap > begin() && (first_overlap - 1)->do_overlap_src(src_interval))
+		--first_overlap;
+
+	// If we found an overlap, process all overlapping chains from first_overlap onwards
+	if (first_overlap->do_overlap_src(src_interval))
+		return add2tgt(first_overlap, src_interval, tgt_intervs);
+
+	// Check iend_interval if it exists
+	if (iend_interval != end() && iend_interval->do_overlap_src(src_interval)) {
+		// Scan backwards from iend_interval to find the first overlap
+		first_overlap = iend_interval;
+		while (first_overlap > begin() && (first_overlap - 1)->do_overlap_src(src_interval))
+			--first_overlap;
+		return add2tgt(first_overlap, src_interval, tgt_intervs);
+	}
+
+	return istart_interval;
 }
 
 ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, const GInterval &src_interval, GIntervals &tgt_intervs)
