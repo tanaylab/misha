@@ -115,10 +115,8 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 			TGLError<GenomeTrackFixedBin>("Failed to load track index for %s", track_dir.c_str());
 
 		auto entry = idx->get_entry(chromid);
-		if (!entry)
-			TGLError<GenomeTrackFixedBin>("Chromosome %d not found in index for %s", chromid, track_dir.c_str());
-
-		if (entry->length == 0) {
+		if (!entry || entry->length == 0) {
+			// Chromosome not in index or empty contig - treat as empty
 			m_num_samples = 0;
 			m_chromid = chromid;
 			return;

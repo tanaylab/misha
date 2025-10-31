@@ -53,13 +53,11 @@ void GenomeTrackSparse::init_read(const char *filename, int chromid)
 			TGLError<GenomeTrackSparse>("Failed to load track index for %s", track_dir.c_str());
 
 		auto entry = idx->get_entry(chromid);
-		if (!entry)
-			TGLError<GenomeTrackSparse>("Chromosome %d not found in index for %s", chromid, track_dir.c_str());
-
-		if (entry->length == 0) {
+		if (!entry || entry->length == 0) {
+			// Chromosome not in index or empty contig - treat as empty
 			m_num_records = 0;
 			m_chromid = chromid;
-			return; // Empty contig
+			return;
 		}
 
 		if (m_bfile.seek(entry->offset, SEEK_SET))
