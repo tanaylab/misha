@@ -322,7 +322,7 @@ test_that("gtrack.liftover preserves values with one chain included in another",
 
     # Check values that appear only through inner chain (chr1[0-100))
     region1 <- result[result$chrom == "chr1" & result$start >= 0 & result$start < 100, ]
-    
+
     # Check for value 2 at [0,20) - only in inner chain
     val2_region1 <- region1[region1$start == 0 & region1$end == 20, ]
     expect_equal(nrow(val2_region1), 1)
@@ -335,7 +335,7 @@ test_that("gtrack.liftover preserves values with one chain included in another",
 
     # Check values that appear only through outer chain (chr1[100-200))
     region2 <- result[result$chrom == "chr1" & result$start >= 100 & result$start < 200, ]
-    
+
     # Check for value 3 at [110,150) - part that crosses into outer chain
     val3_region2 <- region2[region2$start == 110 & region2$end == 150, ]
     expect_equal(nrow(val3_region2), 1)
