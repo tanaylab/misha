@@ -1171,8 +1171,16 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
+            # For empty tracks (no chromosome files), create an empty indexed track
             if (.gdb.is_indexed()) {
-                gtrack.convert_to_indexed(trackstr)
+                track_has_files <- length(list.files(trackdir, pattern = "^[^.]")) > 0
+                if (track_has_files) {
+                    gtrack.convert_to_indexed(trackstr)
+                } else {
+                    # Create empty indexed track for empty tracks
+                    # This ensures gtrack.info and gextract work correctly
+                    .gcall("gtrack_create_empty_indexed", trackstr, .misha_env())
+                }
             }
         },
         finally = {

@@ -166,6 +166,12 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 		}
 	}
 
+	// If no valid track files found, treat as empty sparse track
+	// This allows for empty tracks created by liftover or other operations
+	if (filenames.empty()) {
+		return SPARSE;
+	}
+
 	TGLError<GenomeTrack>(BAD_FORMAT, "Invalid format of track at %s", track_dir);
 	return NUM_TYPES;
 }

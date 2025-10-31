@@ -66,6 +66,7 @@ extern "C" {
     extern SEXP gtrack_create_track2d(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackcreate(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_convert_to_indexed_format(SEXP, SEXP, SEXP);
+    extern SEXP gtrack_create_empty_indexed(SEXP, SEXP);
     extern SEXP ginterv_convert(SEXP, SEXP, SEXP);
     extern SEXP ginterv2d_convert(SEXP, SEXP, SEXP);
     extern SEXP gtrackdist(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -148,6 +149,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrack_create_track2d", (DL_FUNC)&gtrack_create_track2d, 4},
     {"gtrackcreate", (DL_FUNC)&gtrackcreate, 5},
     {"gtrack_convert_to_indexed_format", (DL_FUNC)&gtrack_convert_to_indexed_format, 3},
+    {"gtrack_create_empty_indexed", (DL_FUNC)&gtrack_create_empty_indexed, 2},
     {"ginterv_convert", (DL_FUNC)&ginterv_convert, 3},
     {"ginterv2d_convert", (DL_FUNC)&ginterv2d_convert, 3},
     {"gtrackdist", (DL_FUNC)&gtrackdist, 7},

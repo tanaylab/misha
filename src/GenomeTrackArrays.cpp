@@ -61,11 +61,8 @@ void GenomeTrackArrays::init_read(const char *filename, int chromid)
 				TGLError<GenomeTrackArrays>("Failed to load track index for %s", track_dir.c_str());
 
 			auto entry = idx->get_entry(chromid);
-			if (!entry)
-				TGLError<GenomeTrackArrays>("Chromosome %d not found in index for %s", chromid, track_dir.c_str());
-
-			if (entry->length == 0) {
-				// Empty contig - no data
+			if (!entry || entry->length == 0) {
+				// Chromosome not in index or empty contig - treat as empty
 				m_chromid = chromid;
 				return;
 			}

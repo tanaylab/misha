@@ -333,4 +333,52 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
     return R_NilValue;
 }
 
+/**
+ * Creates an empty indexed track (track.idx + track.dat with no data)
+ * This is used for empty tracks created by liftover or other operations
+ */
+SEXP gtrack_create_empty_indexed(SEXP _track, SEXP _envir) {
+    try {
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(_track) || Rf_length(_track) != 1)
+            verror("Track argument is not a string");
+
+        const char *trackstr = CHAR(STRING_ELT(_track, 0));
+        IntervUtils iu(_envir);
+
+        string trackpath(track2path(_envir, trackstr));
+        string idx_path = trackpath + "/track.idx";
+        string dat_path = trackpath + "/track.dat";
+
+        // Create empty track.dat file
+        FILE *dat_fp = fopen(dat_path.c_str(), "wb");
+        if (!dat_fp) {
+            TGLError<GenomeTrack>("Failed to create %s: %s", dat_path.c_str(), strerror(errno));
+        }
+        fclose(dat_fp);
+
+        // Create track.idx with empty contig list
+        FILE *idx_fp = fopen(idx_path.c_str(), "wb");
+        if (!idx_fp) {
+            unlink(dat_path.c_str());
+            TGLError<GenomeTrack>("Failed to create %s: %s", idx_path.c_str(), strerror(errno));
+        }
+
+        // Write index header with track type SPARSE and 0 contigs
+        uint64_t checksum = 0;  // No data, so checksum is 0
+        write_index_header(idx_fp, MishaTrackType::SPARSE, 0, checksum);
+
+        fclose(idx_fp);
+
+        return R_NilValue;
+    } catch (TGLException &e) {
+        verror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        verror("Out of memory");
+    }
+
+    return R_NilValue;
+}
+
 } // extern "C"
