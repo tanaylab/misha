@@ -1756,3 +1756,58 @@ test_that("gintervals.liftover matches liftOver binary - many small chains", {
     expect_equal(as.numeric(misha_result$start), binary_result$start)
     expect_equal(as.numeric(misha_result$end), binary_result$end)
 })
+
+test_that("gintervals.liftover finds all overlapping chains when they are non-consecutive", {
+    local_db_state()
+
+    # This test verifies the fix for a bug where gintervals.liftover would miss
+    # overlapping chain intervals that were not consecutive in the sorted chain array.
+    # The bug occurred when source intervals had overlapping regions mapping to
+    # different targets, creating a pattern where overlapping chains are separated
+    # by non-overlapping ones in the sorted (by start_src) chain array.
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", file = target_fasta)
+    cat(">chr2\nGGGGCCCCTTTTAAAAGGGGCCCCTTTTAAAAGGGGCCCCTTTTAAAA\n", file = target_fasta, append = TRUE)
+    cat(">chr3\nCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCG\n", file = target_fasta, append = TRUE)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain file replicating the user's bug scenario
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chains with the same start position (will be consecutive when sorted)
+    cat("chain 1000 source1 100 + 10 30 chr1 44 + 0 20 1\n", file = chain_file)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    cat("chain 1000 source1 100 + 10 30 chr2 48 + 0 20 2\n", file = chain_file, append = TRUE)
+    cat("20\n\n", file = chain_file, append = TRUE)
+
+    # Chain with different range that creates a gap
+    cat("chain 1000 source1 100 + 30 32 chr3 42 + 0 2 3\n", file = chain_file, append = TRUE)
+    cat("2\n\n", file = chain_file, append = TRUE)
+
+    # Load chain with keep policy
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Query interval that overlaps first two chains but not the third
+    src_intervals <- data.frame(chrom = "source1", start = 20, end = 21, stringsAsFactors = FALSE)
+
+    # Perform liftover
+    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Should return exactly 2 results (both chains with [10,30) overlap [20,21))
+    expect_equal(nrow(result), 2)
+    expect_true("chr1" %in% result$chrom)
+    expect_true("chr2" %in% result$chrom)
+    expect_false("chr3" %in% result$chrom)
+})
