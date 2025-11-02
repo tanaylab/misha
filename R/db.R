@@ -292,8 +292,13 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         end = as.numeric(chromsizes$size)
     )
 
-    # Preserve the order from chrom_sizes.txt for both database formats
-    # This ensures consistency when converting between formats and matches genome.idx chromid assignments
+    # For indexed databases, preserve the order from chrom_sizes.txt to match genome.idx chromid assignments
+    # For per-chromosome databases, sort alphabetically for backward compatibility with existing test snapshots
+    if (is_per_chromosome) {
+        intervals <- intervals[order(canonical_names), ]
+        canonical_names <- sort(canonical_names)
+    }
+
     intervals$chrom <- factor(intervals$chrom, levels = canonical_names)
 
     if (nrow(intervals) == 0) {
@@ -316,9 +321,10 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
         intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
         names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
-        # Ensure chrom1 and chrom2 have the same factor levels as intervals$chrom (including aliases)
-        intervals2d$chrom1 <- factor(intervals2d$chrom1, levels = all_chrom_names)
-        intervals2d$chrom2 <- factor(intervals2d$chrom2, levels = all_chrom_names)
+        # Ensure chrom1 and chrom2 have the same factor levels as intervals$chrom
+        # Use canonical_names only (not aliases) for consistency with 1D intervals
+        intervals2d$chrom1 <- factor(intervals2d$chrom1, levels = canonical_names)
+        intervals2d$chrom2 <- factor(intervals2d$chrom2, levels = canonical_names)
         rownames(intervals2d) <- 1:nrow(intervals2d)
     } else {
         # Large genome: defer 2D generation

@@ -263,8 +263,12 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
-                gtrack.convert_to_indexed(trackstr)
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
             }
         },
         finally = {
@@ -351,8 +355,12 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
-                gtrack.convert_to_indexed(trackstr)
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
             }
         },
         finally = {
@@ -428,8 +436,12 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
-                gtrack.convert_to_indexed(trackstr)
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
             }
         },
         finally = {
@@ -1312,8 +1324,12 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
-                gtrack.convert_to_indexed(trackstr)
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
             }
         },
         finally = {
@@ -1647,8 +1663,12 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
-                gtrack.convert_to_indexed(trackstr)
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
             }
         },
         finally = {
@@ -1754,8 +1774,12 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
-                gtrack.convert_to_indexed(trackstr)
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
             }
         },
         finally = {
