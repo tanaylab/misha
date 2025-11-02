@@ -1857,8 +1857,11 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard"
 #' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), or "discard".  In addition a "keep" policy is available, which allows overlapping target intervals, but note that liftover functions would not be able to handle this case.
 #' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
+#' @param debug logical value indicating whether to include debug columns (chain_id, chain_score, chain_id_file, line_number, chain_header) in the output. Default is FALSE.
 #'
-#' @return A data frame with 8 columns representing assembly conversion table:
+#' @return A data frame representing assembly conversion table.
+#'
+#' When debug = FALSE (default), returns 8 columns:
 #' \itemize{
 #'   \item chrom: target chromosome
 #'   \item start: target start coordinate (0-based)
@@ -1868,6 +1871,15 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #'   \item startsrc: source start coordinate (0-based)
 #'   \item endsrc: source end coordinate (0-based, exclusive)
 #'   \item strandsrc: source strand (+1 for forward, -1 for reverse)
+#' }
+#'
+#' When debug = TRUE, returns 13 columns (the above 8 plus):
+#' \itemize{
+#'   \item chain_id: sequential chain identifier (1, 2, 3, ...)
+#'   \item chain_score: alignment score from chain header
+#'   \item chain_id_file: chain ID from the chain file (last column of chain header)
+#'   \item line_number: line number in the chain file where this interval was created
+#'   \item chain_header: complete original chain header line
 #' }
 #'
 #' @note
@@ -1900,9 +1912,9 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' # gintervals.load_chain(chainfile, src_groot = "/path/to/source/genome/db")
 #'
 #' @export gintervals.load_chain
-gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", src_groot = NULL) {
+gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", src_groot = NULL, debug = FALSE) {
     if (is.null(file)) {
-        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", src_groot = NULL)", call. = FALSE)
+        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", src_groot = NULL, debug = FALSE)", call. = FALSE)
     }
 
     if (!src_overlap_policy %in% c("error", "keep", "discard")) {
@@ -1913,8 +1925,12 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
         stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
     }
 
+    if (!is.logical(debug) || length(debug) != 1) {
+        stop("debug must be a logical value (TRUE or FALSE)", call. = FALSE)
+    }
+
     # Load chain (validates TARGET chromosomes against current genome)
-    chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
+    chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, debug, .misha_env())
     # Optionally validate SOURCE chromosomes against source genome
     if (!is.null(src_groot) && !is.null(chain)) {
         .validate_source_chromosomes(chain, src_groot)

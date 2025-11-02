@@ -54,7 +54,7 @@ struct IntervalPval : public GInterval {
 
 struct ChainInterval : public GInterval {
 	enum Errors { BAD_INTERVAL };
-	enum { STRAND = GInterval::NUM_COLS, CHROM_SRC, START_SRC, END_SRC, STRAND_SRC, NUM_COLS };
+	enum { STRAND = GInterval::NUM_COLS, CHROM_SRC, START_SRC, END_SRC, STRAND_SRC, CHAIN_ID, CHAIN_SCORE, CHAIN_ID_FILE, LINE_NUMBER, CHAIN_HEADER, NUM_COLS, NUM_COLS_NO_DEBUG = STRAND_SRC + 1 };
 
 	struct SrcCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
@@ -75,15 +75,46 @@ struct ChainInterval : public GInterval {
 	int64_t end_src;
 	int64_t strand_src;
 
-	ChainInterval() : GInterval(), chromid_src(-1), start_src(-1), end_src(-1), strand_src(-1) {}
+	// Debug fields (optional, -1 or empty if not set)
+	int64_t chain_id;
+	int64_t chain_score;
+	char chain_id_file[256];  // Fixed size for compatibility
+	int64_t line_number;
+	char chain_header[1024];  // Fixed size for compatibility
+
+	ChainInterval() : GInterval(), chromid_src(-1), start_src(-1), end_src(-1), strand_src(-1),
+		chain_id(-1), chain_score(-1), line_number(-1) {
+		chain_id_file[0] = '\0';
+		chain_header[0] = '\0';
+	}
 
 	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _chromid_src, int64_t _start_src) :
 		GInterval(_chromid, _start, _end, 0), chromid_src(_chromid_src), start_src(_start_src),
-		end_src(_start_src + (_end - _start)), strand_src(0) {}
+		end_src(_start_src + (_end - _start)), strand_src(0),
+		chain_id(-1), chain_score(-1), line_number(-1) {
+		chain_id_file[0] = '\0';
+		chain_header[0] = '\0';
+	}
 
 	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _strand_tgt, int _chromid_src, int64_t _start_src, int64_t _strand_src) :
 		GInterval(_chromid, _start, _end, _strand_tgt), chromid_src(_chromid_src), start_src(_start_src),
-		end_src(_start_src + (_end - _start)), strand_src(_strand_src) {}
+		end_src(_start_src + (_end - _start)), strand_src(_strand_src),
+		chain_id(-1), chain_score(-1), line_number(-1) {
+		chain_id_file[0] = '\0';
+		chain_header[0] = '\0';
+	}
+
+	// Constructor with debug information
+	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _strand_tgt, int _chromid_src, int64_t _start_src, int64_t _strand_src,
+				  int64_t _chain_id, int64_t _chain_score, const string &_chain_id_file, int64_t _line_number, const string &_chain_header) :
+		GInterval(_chromid, _start, _end, _strand_tgt), chromid_src(_chromid_src), start_src(_start_src),
+		end_src(_start_src + (_end - _start)), strand_src(_strand_src),
+		chain_id(_chain_id), chain_score(_chain_score), line_number(_line_number) {
+		strncpy(chain_id_file, _chain_id_file.c_str(), sizeof(chain_id_file) - 1);
+		chain_id_file[sizeof(chain_id_file) - 1] = '\0';
+		strncpy(chain_header, _chain_header.c_str(), sizeof(chain_header) - 1);
+		chain_header[sizeof(chain_header) - 1] = '\0';
+	}
 
 	string tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const;
 
@@ -181,7 +212,7 @@ public:
 	void convert_rchain_intervs(SEXP chain, ChainIntervals &chain_intervs, vector<string> &src_id2chrom);
 
 	// Converts a vector of ChainIntervals to R
-	SEXP convert_chain_intervs(const ChainIntervals &chain_intervs, vector<string> &src_id2chrom);
+	SEXP convert_chain_intervs(const ChainIntervals &chain_intervs, vector<string> &src_id2chrom, bool debug = false);
 
 	DiagonalBand convert_band(SEXP rband);
 
