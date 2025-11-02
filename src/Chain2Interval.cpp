@@ -15,7 +15,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _envir)
+SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _debug, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -28,6 +28,11 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 
 		if (!Rf_isString(_tgt_overlap_policy) || Rf_length(_tgt_overlap_policy) != 1)
 			verror("Target overlap policy argument is not a string");
+
+		if (!Rf_isLogical(_debug) || Rf_length(_debug) != 1)
+			verror("Debug argument is not a logical value");
+
+		bool debug = LOGICAL(_debug)[0];
 
 		IntervUtils iu(_envir);
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
@@ -55,6 +60,12 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 		char *endptr;
 		int64_t num;
 
+		// Debug tracking variables
+		int64_t current_chain_id = 0;
+		int64_t current_chain_score = -1;
+		string current_chain_id_file = "";
+		string current_chain_header = "";
+
 		while (1) {
 			lineno += split_line_by_space_chars(chainfile, fields, NUM_FIELDS);
 
@@ -74,6 +85,24 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 				// CHAIN
 				if (strcmp(fields[CHAIN].c_str(), "chain"))
 					TGLError("Chain file %s, line %ld: invalid file format", chainfname, lineno);
+
+				// Track debug information if enabled
+				if (debug) {
+					current_chain_id++;
+
+					// Parse chain score
+					current_chain_score = strtoll(fields[SCORE].c_str(), &endptr, 10);
+					if (*endptr)
+						current_chain_score = -1;  // Invalid score
+
+					// Parse chain ID from file
+					current_chain_id_file = fields[ID];
+
+					// Reconstruct chain header line
+					current_chain_header = "chain";
+					for (unsigned i = 1; i < NUM_FIELDS; i++)
+						current_chain_header += " " + fields[i];
+				}
 
 				// CHROM1
 				unordered_map<string, int>::const_iterator ichrom2id = chrom2id.find(fields[CHROM1]);
@@ -177,14 +206,30 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 				if (start[TGT] + size > end[TGT])
 					TGLError("Chain file %s, line %ld: block exceeds chain size of the query genome", chainfname, lineno);
 
-				chain_intervs.push_back(ChainInterval(
-					chrom[TGT],
-					strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] - size : start[TGT],
-					strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] : start[TGT] + size,
-					strand[TGT],
-					chrom[SRC],
-					strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size : start[SRC],
-					strand[SRC]));
+				if (debug) {
+					chain_intervs.push_back(ChainInterval(
+						chrom[TGT],
+						strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] - size : start[TGT],
+						strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] : start[TGT] + size,
+						strand[TGT],
+						chrom[SRC],
+						strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size : start[SRC],
+						strand[SRC],
+						current_chain_id,
+						current_chain_score,
+						current_chain_id_file,
+						lineno,
+						current_chain_header));
+				} else {
+					chain_intervs.push_back(ChainInterval(
+						chrom[TGT],
+						strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] - size : start[TGT],
+						strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] : start[TGT] + size,
+						strand[TGT],
+						chrom[SRC],
+						strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size : start[SRC],
+						strand[SRC]));
+				}
 
 				if (fields.size() == 3) {
 					int64_t dt = strtoll(fields[DT].c_str(), &endptr, 10);
@@ -233,7 +278,7 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 		if (chain_intervs.empty())
 			return R_NilValue;
 
-		return iu.convert_chain_intervs(chain_intervs, id2chrom);
+		return iu.convert_chain_intervs(chain_intervs, id2chrom, debug);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {

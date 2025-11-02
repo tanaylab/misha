@@ -31,7 +31,7 @@ using namespace rdb;
 
 const char *IntervalPval::COL_NAMES[IntervalPval::NUM_COLS] = { "chrom", "start", "end", "pval" };
 
-const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc" };
+const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc", "chain_id", "chain_score", "chain_id_file", "line_number", "chain_header" };
 
 IntervUtils::IntervUtils(SEXP envir)
 {
@@ -602,17 +602,28 @@ SEXP IntervUtils::convert_intervs(GIntervalsFetcher2D *intervals, unsigned num_c
 
 void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_intervs, vector<string> &src_id2chrom)
 {
-	if (!Rf_isVector(rchain) || Rf_length(rchain) != ChainInterval::NUM_COLS)
+	// Accept both 8 columns (no debug) and 13 columns (with debug)
+	int num_cols = Rf_length(rchain);
+	if (!Rf_isVector(rchain) || (num_cols != ChainInterval::NUM_COLS_NO_DEBUG && num_cols != ChainInterval::NUM_COLS))
 		TGLError("Invalid format of chain argument");
 
 	SEXP colnames = Rf_getAttrib(rchain, R_NamesSymbol);
 
-	if (!Rf_isString(colnames) || Rf_length(colnames) != ChainInterval::NUM_COLS)
+	if (!Rf_isString(colnames) || Rf_length(colnames) != num_cols)
 		verror("Invalid format of chain argument");
 
-	for (unsigned i = 0; i < ChainInterval::NUM_COLS; i++) {
+	// Validate at least the required columns (first NUM_COLS_NO_DEBUG columns)
+	for (unsigned i = 0; i < ChainInterval::NUM_COLS_NO_DEBUG; i++) {
 		if (strcmp(CHAR(STRING_ELT(colnames, i)), ChainInterval::COL_NAMES[i]))
 			verror("Invalid format of chain argument");
+	}
+
+	// If debug columns are present, validate them too
+	if (num_cols == ChainInterval::NUM_COLS) {
+		for (unsigned i = ChainInterval::NUM_COLS_NO_DEBUG; i < ChainInterval::NUM_COLS; i++) {
+			if (strcmp(CHAR(STRING_ELT(colnames, i)), ChainInterval::COL_NAMES[i]))
+				verror("Invalid format of chain argument");
+		}
 	}
 
 	// convert the first 3 columns of the data frame
@@ -627,7 +638,7 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 	SEXP src_strands = VECTOR_ELT(rchain, ChainInterval::STRAND_SRC);
 	SEXP tgt_strands = VECTOR_ELT(rchain, ChainInterval::STRAND);
 
-	for (unsigned i = 0; i < ChainInterval::NUM_COLS; i++) {
+	for (int i = 0; i < num_cols; i++) {
 		if (i != 0 && Rf_length(VECTOR_ELT(rchain, i)) != Rf_length(VECTOR_ELT(rchain, i - 1)))
 			verror("Number of rows in column %s differs than the number of rows in column %s", ChainInterval::COL_NAMES[i - 1], ChainInterval::COL_NAMES[i]);
 	}
@@ -667,15 +678,16 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 	}
 }
 
-SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vector<string> &src_id2chrom)
+SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vector<string> &src_id2chrom, bool debug)
 {
 	GIntervals tmp_intervals;
 	tmp_intervals.reserve(chain_intervs.size());
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval)
 		tmp_intervals.push_back((GInterval)*iinterval);
 
-    SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
+    SEXP answer = convert_intervs(&tmp_intervals, debug ? ChainInterval::NUM_COLS : ChainInterval::NUM_COLS_NO_DEBUG);
 	SEXP src_chroms, src_chroms_idx, src_starts, src_ends, src_strands, tgt_strands;
+	SEXP chain_ids, chain_scores, chain_ids_file, line_numbers, chain_headers;
     SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
     rprotect(col_names);
 	unsigned num_src_chroms = src_id2chrom.size();
@@ -687,19 +699,39 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
     rprotect(src_strands = RSaneAllocVector(INTSXP, chain_intervs.size()));
     rprotect(tgt_strands = RSaneAllocVector(INTSXP, chain_intervs.size()));
 
+	// Allocate debug columns if requested
+	if (debug) {
+		rprotect(chain_ids = RSaneAllocVector(REALSXP, chain_intervs.size()));
+		rprotect(chain_scores = RSaneAllocVector(REALSXP, chain_intervs.size()));
+		rprotect(chain_ids_file = RSaneAllocVector(STRSXP, chain_intervs.size()));
+		rprotect(line_numbers = RSaneAllocVector(REALSXP, chain_intervs.size()));
+		rprotect(chain_headers = RSaneAllocVector(STRSXP, chain_intervs.size()));
+	}
+
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval) {
-		INTEGER(src_chroms_idx)[iinterval - chain_intervs.begin()] = iinterval->chromid_src + 1;
-		REAL(src_starts)[iinterval - chain_intervs.begin()] = iinterval->start_src;
-		REAL(src_ends)[iinterval - chain_intervs.begin()] = iinterval->end_src;
+		int idx = iinterval - chain_intervs.begin();
+		INTEGER(src_chroms_idx)[idx] = iinterval->chromid_src + 1;
+		REAL(src_starts)[idx] = iinterval->start_src;
+		REAL(src_ends)[idx] = iinterval->end_src;
 		// Convert 0/1 to +1/-1 for R output
-		INTEGER(src_strands)[iinterval - chain_intervs.begin()] = (iinterval->strand_src == 0) ? 1 : -1;
-		INTEGER(tgt_strands)[iinterval - chain_intervs.begin()] = (iinterval->strand == 0) ? 1 : -1;
+		INTEGER(src_strands)[idx] = (iinterval->strand_src == 0) ? 1 : -1;
+		INTEGER(tgt_strands)[idx] = (iinterval->strand == 0) ? 1 : -1;
+
+		// Populate debug columns if requested
+		if (debug) {
+			REAL(chain_ids)[idx] = iinterval->chain_id;
+			REAL(chain_scores)[idx] = iinterval->chain_score;
+			SET_STRING_ELT(chain_ids_file, idx, Rf_mkChar(iinterval->chain_id_file));
+			REAL(line_numbers)[idx] = iinterval->line_number;
+			SET_STRING_ELT(chain_headers, idx, Rf_mkChar(iinterval->chain_header));
+		}
 	}
 
 	for (unsigned id = 0; id < num_src_chroms; ++id)
 		SET_STRING_ELT(src_chroms, id, Rf_mkChar(src_id2chrom[id].c_str()));
 
-    for (int i = 0; i < ChainInterval::NUM_COLS; i++)
+    int num_cols = debug ? ChainInterval::NUM_COLS : ChainInterval::NUM_COLS_NO_DEBUG;
+    for (int i = 0; i < num_cols; i++)
 		SET_STRING_ELT(col_names, i, Rf_mkChar(ChainInterval::COL_NAMES[i]));
 
     Rf_setAttrib(src_chroms_idx, R_LevelsSymbol, src_chroms);
@@ -711,7 +743,18 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
     SET_VECTOR_ELT(answer, ChainInterval::END_SRC, src_ends);
     SET_VECTOR_ELT(answer, ChainInterval::STRAND_SRC, src_strands);
 
-    runprotect(5);
+	// Add debug columns if requested
+	if (debug) {
+		SET_VECTOR_ELT(answer, ChainInterval::CHAIN_ID, chain_ids);
+		SET_VECTOR_ELT(answer, ChainInterval::CHAIN_SCORE, chain_scores);
+		SET_VECTOR_ELT(answer, ChainInterval::CHAIN_ID_FILE, chain_ids_file);
+		SET_VECTOR_ELT(answer, ChainInterval::LINE_NUMBER, line_numbers);
+		SET_VECTOR_ELT(answer, ChainInterval::CHAIN_HEADER, chain_headers);
+		runprotect(10);
+	} else {
+		runprotect(5);
+	}
+
     return answer;
 }
 
