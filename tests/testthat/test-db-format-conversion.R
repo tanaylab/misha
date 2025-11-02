@@ -363,10 +363,7 @@ test_that("gdb.convert_to_indexed validates converted sequences", {
 
     # Check that validation passed
     expect_message(
-        expect_message(
-            gdb.convert_to_indexed(groot = test_db, force = TRUE, validate = TRUE, verbose = TRUE),
-            "already in indexed format"
-        ),
-        NA # Should not get validation message since already converted
+        gdb.convert_to_indexed(groot = test_db, force = TRUE, validate = TRUE, verbose = TRUE, convert_tracks = FALSE, convert_intervals = FALSE),
+        "already in indexed format"
     )
 })

@@ -27,11 +27,11 @@ test_that("gwilcox on test.fixedbin with screening", {
 })
 
 test_that("gwilcox with interval setting and maximum data size", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     withr::with_options(c(gmax.data.size = 8700), {
-        gwilcox("test.fixedbin", 100000, 1000, maxpval = 0.000001, intervals = gintervals(c(1, 2), 0, -1), intervals.set.out = "test.testintervs")
+        gwilcox("test.fixedbin", 100000, 1000, maxpval = 0.000001, intervals = gintervals(c(1, 2), 0, -1), intervals.set.out = "temp.testintervs")
     })
-    r <- gintervals.load("test.testintervs")
+    r <- gintervals.load("temp.testintervs")
     expect_regression(r, "gwilcox.fixedbin_interval_setting")
 })

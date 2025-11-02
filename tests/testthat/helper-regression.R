@@ -72,6 +72,14 @@ load_test_db <- function() {
         }
         gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/")
     }
+    # remove temp directory if it exists
+    db_dir <- .misha$GROOT
+    temp_dir <- file.path(db_dir, "tracks", "temp")
+    if (dir.exists(temp_dir)) {
+        unlink(temp_dir, recursive = TRUE)
+    }
+    gdb.reload()
+    gdir.create("temp", showWarnings = FALSE)
 }
 
 #' Save and restore the current database state
