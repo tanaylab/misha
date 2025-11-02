@@ -77,6 +77,7 @@ extern "C" {
     extern SEXP gtrackinfo(SEXP, SEXP);
     extern SEXP gtrack_intervals_load(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gbigintervs_load_chrom(SEXP, SEXP, SEXP);
+    extern SEXP gbigintervs_load_chrom2d(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_liftover(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_modify(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtracksummary(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -160,6 +161,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrackinfo", (DL_FUNC)&gtrackinfo, 2},
     {"gtrack_intervals_load", (DL_FUNC)&gtrack_intervals_load, 5},
     {"gbigintervs_load_chrom", (DL_FUNC)&gbigintervs_load_chrom, 3},
+    {"gbigintervs_load_chrom2d", (DL_FUNC)&gbigintervs_load_chrom2d, 4},
     {"gtrack_liftover", (DL_FUNC)&gtrack_liftover, 4},
     {"gtrack_modify", (DL_FUNC)&gtrack_modify, 5},
     {"gtracksummary", (DL_FUNC)&gtracksummary, 5},

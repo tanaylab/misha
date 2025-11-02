@@ -10,7 +10,6 @@ skip_if(!getOption("gmulticontig.indexed_format", FALSE))
 
 test_that("gtrack.info detects corrupted index file", {
     withr::defer(gtrack.rm("test.corrupt_idx", force = TRUE))
-    browser()
     gtrack.create("test.corrupt_idx", "", "test.fixedbin")
     gtrack.convert_to_indexed("test.corrupt_idx")
 
