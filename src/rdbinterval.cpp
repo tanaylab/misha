@@ -1499,7 +1499,18 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 			int64_t common_start = max(hint->start_src, src_interval.start);
 			int64_t common_end = min(hint->start_src + hint->end - hint->start, src_interval.end);
 
-			tgt_intervs.push_back(GInterval(hint->chromid, hint->start + common_start - hint->start_src, hint->start + common_end - hint->start_src, 0));
+			int64_t tgt_start, tgt_end;
+			if (hint->strand == 0) {
+				// Target is on + strand: offset goes in positive direction
+				tgt_start = hint->start + common_start - hint->start_src;
+				tgt_end = hint->start + common_end - hint->start_src;
+			} else {
+				// Target is on - strand: offset goes in negative direction
+				tgt_start = hint->end - (common_end - hint->start_src);
+				tgt_end = hint->end - (common_start - hint->start_src);
+			}
+
+			tgt_intervs.push_back(GInterval(hint->chromid, tgt_start, tgt_end, 0));
 			++hint;
 		} else
 			break;
