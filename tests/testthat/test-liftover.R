@@ -1803,7 +1803,9 @@ test_that("gintervals.liftover finds all overlapping chains when they are non-co
     src_intervals <- data.frame(chrom = "source1", start = 20, end = 21, stringsAsFactors = FALSE)
 
     # Perform liftover
-    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+    expect_warning(
+        result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+    )
 
     # Should return exactly 2 results (both chains with [10,30) overlap [20,21))
     expect_equal(nrow(result), 2)

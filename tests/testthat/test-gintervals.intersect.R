@@ -33,12 +33,12 @@ test_that("cannot intersect 1d with 2d", {
 })
 
 test_that("gintervals intersect with intervals.set.out", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     intervs1 <- gscreen("test.fixedbin > 0.2", gintervals(c(1, 2, 4, 8, 9), 0, -1))
     intervs2 <- gscreen("test.fixedbin > 0.4", gintervals(c(1, 2, 4, 7, 9), 0, -1))
-    gintervals.intersect(intervs1, intervs2, intervals.set.out = "test.testintervs")
-    expect_equal(gintervals.load("test.testintervs"), gintervals.intersect(intervs1, intervs2))
+    gintervals.intersect(intervs1, intervs2, intervals.set.out = "temp.testintervs")
+    expect_equal(gintervals.load("temp.testintervs"), gintervals.intersect(intervs1, intervs2))
 })
 
 test_that("cannot diff 2d", {

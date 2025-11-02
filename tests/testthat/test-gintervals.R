@@ -25,13 +25,13 @@ test_that("gintervals.2d.band_intersect works", {
 
 
 test_that("gintervals.2d.band_intersect (2)", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     intervs <- giterator.intervals("test.rects_big_rects", gintervals.2d(c(2, 3)), iterator = c(123450, 97891))
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
-    withr::with_options(list(gmax.data.size = 16000), gintervals.2d.band_intersect(intervs, band = c(-198743, 23456), intervals.set.out = "test.testintervs"))
-    r <- gintervals.load("test.testintervs")
+    withr::with_options(list(gmax.data.size = 16000), gintervals.2d.band_intersect(intervs, band = c(-198743, 23456), intervals.set.out = "temp.testintervs"))
+    r <- gintervals.load("temp.testintervs")
     expect_regression(r, "gintervals.2d.band_intersect.2")
 })
 
@@ -59,13 +59,13 @@ test_that("gintervals.diff works (2)", {
 })
 
 test_that("gintervals.diff works (3)", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     intervs1 <- gscreen("test.fixedbin > 0.2", gintervals(c(1, 2, 4, 8, 9), 0, -1))
     intervs2 <- gscreen("test.fixedbin > 0.4", gintervals(c(1, 2, 4, 7, 9), 0, -1))
     max.data.size <- getOption("gmax.data.size")
-    withr::with_options(list(gmax.data.size = 1300000), gintervals.diff(intervs1, intervs2, intervals.set.out = "test.testintervs"))
-    expect_regression(gintervals.load("test.testintervs"), "gintervals.diff.3")
+    withr::with_options(list(gmax.data.size = 1300000), gintervals.diff(intervs1, intervs2, intervals.set.out = "temp.testintervs"))
+    expect_regression(gintervals.load("temp.testintervs"), "gintervals.diff.3")
 })
 
 test_that("gintervals.load works", {
@@ -89,7 +89,9 @@ test_that("gmax.data.size works", {
 })
 
 test_that("gintervals.ls works", {
-    expect_equal(gintervals.ls(), c(
+    ls_res <- gintervals.ls()
+    ls_res <- ls_res[!grepl("^temp\\.", ls_res)]
+    expect_equal(ls_res, c(
         "allgenome_big", "allgenome_big_2d", "bigintervs1d", "bigintervs2d",
         "bigset1d", "global.exon", "global.foodgene", "global.i2d_1",
         "global.test", "global.tss", "global.z1", "intervs.foodgene",
@@ -99,7 +101,9 @@ test_that("gintervals.ls works", {
         "test.testintervs20", "test.tss", "testintervs", "testintervs1",
         "testintervs17", "testintervs2", "testintervs3"
     ))
-    expect_equal(gintervals.ls("test"), c(
+    ls_res <- gintervals.ls("test")
+    ls_res <- ls_res[!grepl("^temp\\.", ls_res)]
+    expect_equal(ls_res, c(
         "global.test", "test.bigintervs_1d_1", "test.bigintervs_1d_2",
         "test.bigintervs_2d_1", "test.bigintervs_2d_2", "test.bigintervs_2d_5",
         "test.bigintervs_2d_6", "test.foodgene", "test.testintervs2",
@@ -109,47 +113,47 @@ test_that("gintervals.ls works", {
 })
 
 test_that("gintervals.load works (2)", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
-    withr::with_options(list(data.size = 6000000), gextract("test.fixedbin", gintervals(c(1, 2)), intervals.set.out = "test.testintervs"))
-    expect_regression(gintervals.load("test.testintervs"), "gintervals.1")
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    withr::with_options(list(data.size = 6000000), gextract("test.fixedbin", gintervals(c(1, 2)), intervals.set.out = "temp.testintervs"))
+    expect_regression(gintervals.load("temp.testintervs"), "gintervals.1")
 })
 
 test_that("gextract with gmax.data.size set to 300000 works", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
-    withr::with_options(list(gmax.data.size = 300000), gextract("test.rects", gintervals.2d(c(1, 2)), intervals.set.out = "test.testintervs"))
-    expect_regression(gintervals.load("test.testintervs"), "gintervals.2")
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    withr::with_options(list(gmax.data.size = 300000), gextract("test.rects", gintervals.2d(c(1, 2)), intervals.set.out = "temp.testintervs"))
+    expect_regression(gintervals.load("temp.testintervs"), "gintervals.2")
 })
 
 test_that("glookup with gmax.data.size set to 6000000 works", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     m1 <- matrix(1:15, nrow = 5, ncol = 3)
-    withr::with_options(list(gmax.data.size = 6000000), glookup(m1, "test.fixedbin", seq(0.1, 0.2, length.out = 6), "test.sparse", seq(0.25, 0.48, length.out = 4), gintervals(c(1, 2)), iterator = "test.fixedbin", intervals.set.out = "test.testintervs"))
-    expect_regression(gintervals.load("test.testintervs"), "gintervals.3")
+    withr::with_options(list(gmax.data.size = 6000000), glookup(m1, "test.fixedbin", seq(0.1, 0.2, length.out = 6), "test.sparse", seq(0.25, 0.48, length.out = 4), gintervals(c(1, 2)), iterator = "test.fixedbin", intervals.set.out = "temp.testintervs"))
+    expect_regression(gintervals.load("temp.testintervs"), "gintervals.3")
 })
 
 test_that("glookup with gmax.data.size set to 100000 works", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     m1 <- matrix(1:15, nrow = 5, ncol = 3)
-    withr::with_options(list(gmax.data.size = 100000), glookup(m1, "test.computed2d", seq(5000000, 10000000, length.out = 6), "test.computed2d / 2", seq(0, 4000000, length.out = 4), gintervals.2d(chroms1 = c(6, 5), chroms2 = c(8, 9)), force.binning = FALSE, intervals.set.out = "test.testintervs"))
-    expect_regression(gintervals.load("test.testintervs"), "gintervals.4")
+    withr::with_options(list(gmax.data.size = 100000), glookup(m1, "test.computed2d", seq(5000000, 10000000, length.out = 6), "test.computed2d / 2", seq(0, 4000000, length.out = 4), gintervals.2d(chroms1 = c(6, 5), chroms2 = c(8, 9)), force.binning = FALSE, intervals.set.out = "temp.testintervs"))
+    expect_regression(gintervals.load("temp.testintervs"), "gintervals.4")
 })
 
 test_that("gscreen with gmax.data.size set to 1000000 works", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
-    withr::with_options(list(gmax.data.size = 1000000), gscreen("2 * test.sparse+0.2 > 0.4", intervals.set.out = "test.testintervs"))
-    expect_regression(gintervals.load("test.testintervs"), "gintervals.5")
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    withr::with_options(list(gmax.data.size = 1000000), gscreen("2 * test.sparse+0.2 > 0.4", intervals.set.out = "temp.testintervs"))
+    expect_regression(gintervals.load("temp.testintervs"), "gintervals.5")
 })
 
 test_that("gscreen with gmax.data.size set to 130000 works", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
-    withr::with_options(list(gmax.data.size = 130000), gscreen("test.rects > 40", intervals.set.out = "test.testintervs"))
-    expect_regression(gintervals.load("test.testintervs"), "gintervals.6")
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    withr::with_options(list(gmax.data.size = 130000), gscreen("test.rects > 40", intervals.set.out = "temp.testintervs"))
+    expect_regression(gintervals.load("temp.testintervs"), "gintervals.6")
 })
 
 test_that("gintervals.diff works", {
@@ -220,31 +224,33 @@ test_that("gintervals.is.bigset checks test.tss", {
 })
 
 test_that("gintervals.rbind with saved data works", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     intervs1 <- gextract("test.fixedbin", gintervals(c(1, 2), 1000, 4000))
     intervs2 <- gextract("test.fixedbin", gintervals(c(2, "X"), 2000, 5000))
-    gintervals.save("test.testintervs", intervs2)
-    r <- gintervals.rbind(intervs1, "test.testintervs")
+    gintervals.save("temp.testintervs", intervs2)
+    r <- gintervals.rbind(intervs1, "temp.testintervs")
     expect_true(!is.null(r))
     expect_regression(r, "gintervals.rbind.1")
 })
 
 test_that("gintervals.ls updates after save and remove operations", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
-    gintervals.save("test.testintervs", gintervals(c(1, 2)))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    gintervals.save("temp.testintervs", gintervals(c(1, 2)))
     r1 <- gintervals.ls()
+    expect_true("temp.testintervs" %in% r1)
+    gintervals.rm("temp.testintervs", force = TRUE)
     r2 <- gintervals.ls()
-    expect_regression(list(r1, r2), "gintervals.rbind.2")
+    expect_false("temp.testintervs" %in% r2)
 })
 
 test_that("gextract with removed interval gives an error", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
-    gintervals.save("test.testintervs", gintervals(c(1, 2), 1000, 2000))
-    gintervals.rm("test.testintervs", force = TRUE)
-    expect_error(gextract("test.fixedbin", "test.testintervs"))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    gintervals.save("temp.testintervs", gintervals(c(1, 2), 1000, 2000))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    expect_error(gextract("test.fixedbin", "temp.testintervs"))
 })
 
 test_that("gintervals.rm handles non-existent data without error when using force", {
@@ -253,151 +259,152 @@ test_that("gintervals.rm handles non-existent data without error when using forc
 })
 
 test_that("gintervals.ls reflects changes after save", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     r1 <- gintervals.ls()
-    gintervals.save("test.testintervs", gintervals(c(1, 2), 1000, 2000))
+    expect_false("temp.testintervs" %in% r1)
+    gintervals.save("temp.testintervs", gintervals(c(1, 2), 1000, 2000))
     r2 <- gintervals.ls()
-    expect_regression(list(r1, r2), "gintervals.ls.1")
+    expect_true("temp.testintervs" %in% r2)
 })
 
 test_that("gextract works with saved intervals", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
-    gintervals.save("test.testintervs", gintervals(c(1, 2), 1000, 2000))
-    r <- gextract("test.fixedbin", "test.testintervs")
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    gintervals.save("temp.testintervs", gintervals(c(1, 2), 1000, 2000))
+    r <- gextract("test.fixedbin", "temp.testintervs")
     expect_true(!is.null(r))
     expect_regression(r, "gintervals.save.1")
 })
 
 test_that("gscreen and gintervals.union works correctly", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     intervs1 <- gscreen("test.fixedbin > 0.1 & test.fixedbin < 0.3", gintervals(c(1, 2, 4, 8, 9), 0, -1))
     intervs2 <- gscreen("test.fixedbin < 0.2", gintervals(c(1, 2, 4, 7, 9), 0, -1))
 
     withr::with_options(list(gmax.data.size = 1000000), {
-        gintervals.union(intervs1, intervs2, intervals.set.out = "test.testintervs")
+        gintervals.union(intervs1, intervs2, intervals.set.out = "temp.testintervs")
     })
 
-    r <- gintervals.load("test.testintervs")
+    r <- gintervals.load("temp.testintervs")
     expect_true(!is.null(r))
     expect_regression(r, "gscreen_and_gintervals.union.1")
 })
 
 test_that("gintervals.update with saved data using chrom 1", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     chrom_size_limit <- sum(gintervals.chrom_sizes("bigintervs1d")$size) + 100
 
     withr::with_options(list(gmax.data.size = chrom_size_limit), {
-        gintervals.save("test.testintervs", "bigintervs1d")
+        gintervals.save("temp.testintervs", "bigintervs1d")
     })
 
-    expect_error(gintervals.update("test.testintervs", gintervals(1), chrom = 1))
+    expect_error(gintervals.update("temp.testintervs", gintervals(1), chrom = 1))
 })
 
 test_that("gintervals.update with loaded data using chrom 1", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     chrom_size_limit <- sum(gintervals.chrom_sizes("bigintervs1d")$size) + 100
 
     withr::with_options(list(gmax.data.size = chrom_size_limit), {
-        gintervals.save("test.testintervs", "bigintervs1d")
+        gintervals.save("temp.testintervs", "bigintervs1d")
     })
 
-    r <- gintervals.load("test.testintervs", chrom = 2)
-    expect_error(gintervals.update("test.testintervs", r[c(2, 3), ], chrom1 = 1))
+    r <- gintervals.load("temp.testintervs", chrom = 2)
+    expect_error(gintervals.update("temp.testintervs", r[c(2, 3), ], chrom1 = 1))
 })
 
 test_that("gintervals.update with loaded data using chrom 2", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     chrom_size_limit <- sum(gintervals.chrom_sizes("bigintervs1d")$size) + 100
 
     withr::with_options(list(gmax.data.size = chrom_size_limit), {
-        gintervals.save("test.testintervs", "bigintervs1d")
+        gintervals.save("temp.testintervs", "bigintervs1d")
     })
 
-    r <- gintervals.load("test.testintervs", chrom = 2)
-    gintervals.update("test.testintervs", r[c(2, 3), ], chrom = 2)
-    result <- list(gintervals.load("test.testintervs", chrom = 2), gintervals.chrom_sizes("test.testintervs"))
+    r <- gintervals.load("temp.testintervs", chrom = 2)
+    gintervals.update("temp.testintervs", r[c(2, 3), ], chrom = 2)
+    result <- list(gintervals.load("temp.testintervs", chrom = 2), gintervals.chrom_sizes("temp.testintervs"))
     expect_regression(result, "gintervals.update.3")
 })
 
 test_that("gintervals.update removes chrom 2 from saved data", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     chrom_size_limit <- sum(gintervals.chrom_sizes("bigintervs1d")$size) + 100
 
     withr::with_options(list(gmax.data.size = chrom_size_limit), {
-        gintervals.save("test.testintervs", "bigintervs1d")
+        gintervals.save("temp.testintervs", "bigintervs1d")
     })
 
-    gintervals.update("test.testintervs", NULL, chrom = 2)
-    result <- list(gintervals.load("test.testintervs", chrom = 2), gintervals.chrom_sizes("test.testintervs"))
+    gintervals.update("temp.testintervs", NULL, chrom = 2)
+    result <- list(gintervals.load("temp.testintervs", chrom = 2), gintervals.chrom_sizes("temp.testintervs"))
     expect_regression(result, "gintervals.update.4")
 })
 
 test_that("gintervals.update with saved 2d data using chrom1 1", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     chrom_size_limit <- sum(gintervals.chrom_sizes("bigintervs2d")$size) + 100
 
     withr::with_options(list(gmax.data.size = chrom_size_limit), {
-        gintervals.save("test.testintervs", "bigintervs2d")
+        gintervals.save("temp.testintervs", "bigintervs2d")
     })
 
-    expect_error(gintervals.update("test.testintervs", gintervals.2d(1), chrom1 = 1))
+    expect_error(gintervals.update("temp.testintervs", gintervals.2d(1), chrom1 = 1))
 })
 
 test_that("gintervals.update with loaded 2d data using chrom 1", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     chrom_size_limit <- sum(gintervals.chrom_sizes("bigintervs2d")$size) + 100
 
     withr::with_options(list(gmax.data.size = chrom_size_limit), {
-        gintervals.save("test.testintervs", "bigintervs2d")
+        gintervals.save("temp.testintervs", "bigintervs2d")
     })
 
-    r <- gintervals.load("test.testintervs", chrom1 = 2, chrom2 = 2)
-    expect_error(gintervals.update("test.testintervs", r[c(2, 3), ], chrom = 1))
+    r <- gintervals.load("temp.testintervs", chrom1 = 2, chrom2 = 2)
+    expect_error(gintervals.update("temp.testintervs", r[c(2, 3), ], chrom = 1))
 })
 
 test_that("gintervals.update with loaded 2d data using chrom1 2 and chrom2 2", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     chrom_size_limit <- sum(gintervals.chrom_sizes("bigintervs2d")$size) + 100
 
     withr::with_options(list(gmax.data.size = chrom_size_limit), {
-        gintervals.save("test.testintervs", "bigintervs2d")
+        gintervals.save("temp.testintervs", "bigintervs2d")
     })
 
-    r <- gintervals.load("test.testintervs", chrom1 = 2, chrom2 = 2)
-    gintervals.update("test.testintervs", r[c(2, 3), ], chrom1 = 2, chrom2 = 2)
-    result <- list(gintervals.load("test.testintervs", chrom1 = 2, chrom2 = 2), gintervals.chrom_sizes("test.testintervs"))
+    r <- gintervals.load("temp.testintervs", chrom1 = 2, chrom2 = 2)
+    gintervals.update("temp.testintervs", r[c(2, 3), ], chrom1 = 2, chrom2 = 2)
+    result <- list(gintervals.load("temp.testintervs", chrom1 = 2, chrom2 = 2), gintervals.chrom_sizes("temp.testintervs"))
     expect_regression(result, "gintervals.update.2d.3")
 })
 
 test_that("gintervals.update removes chrom1 2 and chrom2 2 from saved 2d data", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     chrom_size_limit <- sum(gintervals.chrom_sizes("bigintervs2d")$size) + 100
 
     withr::with_options(list(gmax.data.size = chrom_size_limit), {
-        gintervals.save("test.testintervs", "bigintervs2d")
+        gintervals.save("temp.testintervs", "bigintervs2d")
     })
 
-    gintervals.update("test.testintervs", NULL, chrom1 = 2, chrom2 = 2)
-    result <- list(gintervals.load("test.testintervs", chrom1 = 2, chrom2 = 2), gintervals.chrom_sizes("test.testintervs"))
+    gintervals.update("temp.testintervs", NULL, chrom1 = 2, chrom2 = 2)
+    result <- list(gintervals.load("temp.testintervs", chrom1 = 2, chrom2 = 2), gintervals.chrom_sizes("temp.testintervs"))
     expect_regression(result, "gintervals.update.2d.4")
 })

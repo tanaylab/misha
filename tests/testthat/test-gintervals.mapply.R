@@ -38,15 +38,15 @@ test_that("gintervals.mapply works with INTERVID", {
 })
 
 test_that("gintervals.mapply works with intervals.set.out", {
-    gintervals.rm("test.testintervs_mapply", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs_mapply", force = TRUE))
+    gintervals.rm("temp.testintervs_mapply", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs_mapply", force = TRUE))
     intervs <- gscreen("test.fixedbin > 0.2", gintervals(c(1, 2), 0, -1))
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
     gintervals.mapply(function(x) {
         max(x + 2, na.rm = TRUE)
-    }, "test.fixedbin", intervs, intervals.set.out = "test.testintervs_mapply")
-    expect_equal(gintervals.load("test.testintervs_mapply") %>% arrange(chrom, start, end), gintervals.mapply(function(x) {
+    }, "test.fixedbin", intervs, intervals.set.out = "temp.testintervs_mapply")
+    expect_equal(gintervals.load("temp.testintervs_mapply") %>% arrange(chrom, start, end), gintervals.mapply(function(x) {
         max(x + 2, na.rm = TRUE)
     }, "test.fixedbin", intervs) %>% arrange(chrom, start, end))
 })
@@ -70,16 +70,16 @@ test_that("gintervals.mapply works with custom colnames", {
 })
 
 test_that("gintervals.mapply works with intervals.set.out 2d", {
-    gintervals.rm("test.testintervs_mapply", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs_mapply", force = TRUE))
+    gintervals.rm("temp.testintervs_mapply", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs_mapply", force = TRUE))
     intervs <- gscreen("test.rects > 80", gintervals.2d(1:4))
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
     gintervals.mapply(function(x) {
         max(x + 2, na.rm = TRUE)
-    }, "test.rects", intervs, iterator = c(10000, 10000), intervals.set.out = "test.testintervs_mapply")
+    }, "test.rects", intervs, iterator = c(10000, 10000), intervals.set.out = "temp.testintervs_mapply")
     expect_equal(
-        gintervals.load("test.testintervs_mapply") %>%
+        gintervals.load("temp.testintervs_mapply") %>%
             arrange(chrom1, start1, end1, chrom2, start1, end2), gintervals.mapply(function(x) {
             max(x + 2, na.rm = TRUE)
         }, "test.rects", intervs, iterator = c(10000, 10000)) %>% arrange(chrom1, start1, end1, chrom2, start1, end2)

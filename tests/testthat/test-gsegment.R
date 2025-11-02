@@ -25,16 +25,16 @@ test_that("gsegment with modified test.fixedbin", {
 })
 
 test_that("gsegment with data size option and sampling for test.sparse", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
 
     intervs <- gscreen("test.fixedbin > 0.14", gintervals(c(1, 2), 0, -1))
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
 
     withr::with_options(c(gmax.data.size = 3200), {
-        gsegment("test.sparse", 10000, maxpval = 0.0001, iterator = 50, intervals.set.out = "test.testintervs")
+        gsegment("test.sparse", 10000, maxpval = 0.0001, iterator = 50, intervals.set.out = "temp.testintervs")
     })
-    r <- gintervals.load("test.testintervs")
+    r <- gintervals.load("temp.testintervs")
     expect_regression(r, "gsegment_sparse_data_size")
 })

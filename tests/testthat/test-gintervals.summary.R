@@ -106,27 +106,27 @@ test_that("Summary of test.generated_2d_5 with various intervals and iterators",
 })
 
 test_that("Testing gintervals for test.fixedbin", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     intervs1 <- gscreen("test.fixedbin > 0.2 & test.fixedbin < 0.3", gintervals(c(1, 2, 3), 0, -1))
     intervs2 <- gscreen("test.fixedbin > 0.25 & test.fixedbin < 0.35", gintervals(c(1, 2), 0, -1))
     set.seed(60427)
     intervs2 <- intervs2[sample(nrow(intervs2)), ]
 
-    withr::with_options(list(gmax.data.size = nrow(intervs2) - 100), gintervals.summary("test.fixedbin", intervals = intervs2, iterator = intervs1, intervals.set.out = "test.testintervs"))
-    result <- gintervals.load("test.testintervs")
+    withr::with_options(list(gmax.data.size = nrow(intervs2) - 100), gintervals.summary("test.fixedbin", intervals = intervs2, iterator = intervs1, intervals.set.out = "temp.testintervs"))
+    result <- gintervals.load("temp.testintervs")
     expect_regression(result, "gintervals_fixedbin_result")
 })
 
 test_that("Testing gintervals for test.rects", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     intervs <- gscreen("test.rects > 40", gintervals.2d(c(1, 2, 5, 8), 0, -1))
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
 
-    withr::with_options(list(gmax.data.size = nrow(intervs) - 100), gintervals.summary("test.rects", intervs, iterator = c(1, 1), intervals.set.out = "test.testintervs"))
+    withr::with_options(list(gmax.data.size = nrow(intervs) - 100), gintervals.summary("test.rects", intervs, iterator = c(1, 1), intervals.set.out = "temp.testintervs"))
 
-    result <- gintervals.load("test.testintervs")
+    result <- gintervals.load("temp.testintervs")
     expect_regression(result, "gintervals_rects_result")
 })

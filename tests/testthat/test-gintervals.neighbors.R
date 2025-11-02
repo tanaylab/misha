@@ -23,14 +23,14 @@ test_that("gintervals.neighbors works in 2D", {
 })
 
 test_that("gintervals.neighbors works with intervals.set.out", {
-    gintervals.rm("test.testintervs_nei", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs_nei", force = TRUE))
+    gintervals.rm("temp.testintervs_nei", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs_nei", force = TRUE))
     intervs <- gscreen("test.fixedbin > 0.3")
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
-    gintervals.neighbors("test.tss", intervs, 100, -10000, 10000, intervals.set.out = "test.testintervs_nei")
+    gintervals.neighbors("test.tss", intervs, 100, -10000, 10000, intervals.set.out = "temp.testintervs_nei")
     expect_equal(
-        gintervals.load("test.testintervs_nei") %>%
+        gintervals.load("temp.testintervs_nei") %>%
             tibble::repair_names() %>%
             arrange(chrom, start, end),
         gintervals.neighbors("test.tss", intervs, 100, -10000, 10000) %>%
@@ -79,14 +79,14 @@ test_that("columns are maintained (2d)", {
 })
 
 test_that("gintervals.neighbors works with intervals.set.out without min and max dist", {
-    gintervals.rm("test.testintervs_nei", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs_nei", force = TRUE))
+    gintervals.rm("temp.testintervs_nei", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs_nei", force = TRUE))
     intervs <- gscreen("test.fixedbin > 0.2", gintervals(c(1, 2, 4), 0, -1))
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
-    gintervals.neighbors(intervs, "test.tss", 1, intervals.set.out = "test.testintervs_nei")
+    gintervals.neighbors(intervs, "test.tss", 1, intervals.set.out = "temp.testintervs_nei")
     expect_equal(
-        gintervals.load("test.testintervs_nei") %>%
+        gintervals.load("temp.testintervs_nei") %>%
             tibble::repair_names() %>%
             arrange(chrom, start, end),
         gintervals.neighbors(intervs, "test.tss", 1) %>%
@@ -96,17 +96,17 @@ test_that("gintervals.neighbors works with intervals.set.out without min and max
 })
 
 test_that("gintervals.neighbors works with intervals.set.out with extra columns", {
-    gintervals.rm("test.testintervs_nei", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs_nei", force = TRUE))
+    gintervals.rm("temp.testintervs_nei", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs_nei", force = TRUE))
     intervs1 <- gscreen("test.fixedbin > 0.2 & test.fixedbin < 0.3", gintervals(c(1, 2), 0, -1))
     set.seed(60427)
     intervs1 <- intervs1[sample(nrow(intervs1)), ]
     intervs2 <- gscreen("test.fixedbin > 0.25 & test.fixedbin < 0.35", gintervals(c(1, 2), 0, -1))
     intervs2$usercol1 <- "aaa"
     intervs2$usercol2 <- 10 + (1:dim(intervs2)[1])
-    gintervals.neighbors(intervs1, intervs2, 1, intervals.set.out = "test.testintervs_nei")
+    gintervals.neighbors(intervs1, intervs2, 1, intervals.set.out = "temp.testintervs_nei")
     expect_equal(
-        gintervals.load("test.testintervs_nei") %>%
+        gintervals.load("temp.testintervs_nei") %>%
             tibble::repair_names() %>%
             arrange(chrom, start, end),
         gintervals.neighbors(intervs1, intervs2, 1) %>%
@@ -116,16 +116,16 @@ test_that("gintervals.neighbors works with intervals.set.out with extra columns"
 })
 
 test_that("gintervals.neighbors works with intervals.set.out (2d)", {
-    gintervals.rm("test.testintervs_nei", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs_nei", force = TRUE))
+    gintervals.rm("temp.testintervs_nei", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs_nei", force = TRUE))
     intervs1 <- gscreen("test.rects > 95")
     intervs2 <- gscreen("test.rects < 97 & test.rects > 94")
     set.seed(60427)
     intervs1 <- intervs1[sample(nrow(intervs1)), ]
     intervs2$blabla <- 1:nrow(intervs2)
-    gintervals.neighbors(intervs1, intervs2, 1, intervals.set.out = "test.testintervs_nei")
+    gintervals.neighbors(intervs1, intervs2, 1, intervals.set.out = "temp.testintervs_nei")
     expect_equal(
-        gintervals.load("test.testintervs_nei") %>%
+        gintervals.load("temp.testintervs_nei") %>%
             tibble::repair_names() %>%
             arrange(chrom1, start1, end1, chrom2, start2, end2),
         gintervals.neighbors(intervs1, intervs2, 1) %>%

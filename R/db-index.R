@@ -109,17 +109,19 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
     setup_info <- .gdb.convert_to_indexed.validate_and_setup(groot, verbose)
 
     # Return early if already indexed
-    if (setup_info$already_indexed) {
+    if (setup_info$already_indexed && !force && !convert_tracks && !convert_intervals) {
         return(invisible(NULL))
     }
 
-    # Get user confirmation
-    if (!.gdb.convert_to_indexed.get_confirmation(setup_info$groot, setup_info$chrom_sizes, remove_old_files, force)) {
-        return(invisible(NULL))
+    if (!setup_info$already_indexed) {
+        # Get user confirmation
+        if (!.gdb.convert_to_indexed.get_confirmation(setup_info$groot, setup_info$chrom_sizes, remove_old_files, force)) {
+            return(invisible(NULL))
+        }
+        # Convert genome sequences
+        .gdb.convert_to_indexed.genome(setup_info, validate, remove_old_files, verbose = verbose, chunk_size = chunk_size)
     }
 
-    # Convert genome sequences
-    .gdb.convert_to_indexed.genome(setup_info, validate, remove_old_files, verbose = verbose, chunk_size = chunk_size)
 
     # Convert tracks if requested
     if (convert_tracks) {
