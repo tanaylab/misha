@@ -1672,3 +1672,163 @@ test_that("gtrack.liftover handles target overlap with truncation", {
     # Both values should appear somewhere
     expect_true(any(result$lifted_tgt_overlap == 111) || any(result$lifted_tgt_overlap == 222))
 })
+
+# Test for reverse strand liftover bug
+test_that("gintervals.liftover works correctly with reverse strand targets", {
+    local_db_state()
+
+    # This test validates the fix for the reverse strand liftover bug
+    # Bug: when target is on negative strand, offsets were applied in wrong direction
+
+    # Create target genome with the chromosomes we need
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">tgt\n", paste(rep("T", 2000), collapse = ""), "\n",
+        ">src\n", paste(rep("A", 1000), collapse = ""), "\n",
+        sep = "", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create a minimal chain with reverse strand target
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    # Chain format: source on + strand, target on - strand
+    # Source: chrom "src", size 1000, + strand, coords 100-600
+    # Target: chrom "tgt", size 2000, - strand, coords 500-1000
+    # Single block of size 500
+    cat("chain 1000 src 1000 + 100 600 tgt 2000 - 500 1000 1\n",
+        "500\n",
+        file = chain_file)
+
+    # Create source intervals to test
+    # Test interval at src:300-301 (offset 200 from block start at 100)
+    src_interv <- data.frame(
+        chrom = "src",
+        start = 300,
+        end = 301,
+        stringsAsFactors = FALSE
+    )
+
+    # Perform liftover (pass chain file directly)
+    result <- gintervals.liftover(src_interv, chain_file, src_overlap_policy = "error")
+
+    # Calculate expected result:
+    # Source position: 300
+    # Offset from block start (100): 200
+    # Block in positive coords: tgt[500, 1000)
+    # For reverse strand:
+    #   tgt_size = 2000
+    #   block_start_positive = 500
+    #   block_end_positive = 1000
+    #   block_start_reverse = 2000 - 1000 = 1000
+    #   block_end_reverse = 2000 - 500 = 1500
+    #
+    # Correct mapping for reverse strand:
+    #   offset 200 means we go backwards from the END of the reverse block
+    #   result = block_end_reverse - offset - 1 = 1500 - 200 - 1 = 1299
+    #   So interval [300,301) maps to [1299,1300)
+
+    expected_start <- 1299
+    expected_end <- 1300
+
+    expect_equal(as.character(result$chrom[1]), "tgt")
+    expect_equal(result$start[1], expected_start,
+                 info = paste("Expected start:", expected_start, "Got:", result$start[1]))
+    expect_equal(result$end[1], expected_end,
+                 info = paste("Expected end:", expected_end, "Got:", result$end[1]))
+
+    # Test another position to be thorough
+    # Test interval at src:150-151 (offset 50 from block start)
+    src_interv2 <- data.frame(
+        chrom = "src",
+        start = 150,
+        end = 151,
+        stringsAsFactors = FALSE
+    )
+
+    result2 <- gintervals.liftover(src_interv2, chain_file, src_overlap_policy = "error")
+
+    # Expected: offset 50
+    # result = 1500 - 50 - 1 = 1449
+    # So interval [150,151) maps to [1449,1450)
+    expected_start2 <- 1449
+    expected_end2 <- 1450
+
+    expect_equal(result2$start[1], expected_start2,
+                 info = paste("Expected start:", expected_start2, "Got:", result2$start[1]))
+    expect_equal(result2$end[1], expected_end2,
+                 info = paste("Expected end:", expected_end2, "Got:", result2$end[1]))
+})
+
+# Test for reverse strand with gtrack.liftover
+test_that("gtrack.liftover works correctly with reverse strand targets", {
+    local_db_state()
+
+    # Create source genome
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">src\n", paste(rep("A", 1000), collapse = ""), "\n", sep = "", file = source_fasta)
+
+    source_db <- tempfile()
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.init(source_db)
+
+    # Create sparse track in source at position 300-310
+    src_intervals <- data.frame(
+        chrom = "src",
+        start = 300,
+        end = 310,
+        stringsAsFactors = FALSE
+    )
+    gtrack.create_sparse("test_track", "Test track", src_intervals, 42)
+    src_track_dir <- file.path(source_db, "tracks", "test_track.track")
+
+    # Create target genome
+    target_fasta <- tempfile(fileext = ".fasta")
+    cat(">tgt\n", paste(rep("T", 2000), collapse = ""), "\n", sep = "", file = target_fasta)
+
+    target_db <- tempfile()
+    withr::defer({
+        unlink(target_db, recursive = TRUE)
+        unlink(target_fasta)
+    })
+
+    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
+    gdb.init(target_db)
+
+    # Create chain with reverse strand target
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+
+    cat("chain 1000 src 1000 + 100 600 tgt 2000 - 500 1000 1\n",
+        "500\n",
+        file = chain_file)
+
+    # Perform liftover
+    gtrack.liftover("lifted_track", "Lifted track", src_track_dir, chain_file,
+                    src_overlap_policy = "error", tgt_overlap_policy = "error")
+
+    # Extract result
+    result <- gextract("lifted_track", gintervals.all())
+
+    # Should have one interval
+    expect_equal(nrow(result), 1)
+    expect_equal(as.character(result$chrom[1]), "tgt")
+
+    # Expected coordinates for [300,310) with offset 200 from block start:
+    # Reverse coords: [1500 - 210, 1500 - 200) = [1290, 1300)
+    expect_equal(result$start[1], 1290)
+    expect_equal(result$end[1], 1300)
+    expect_equal(result$lifted_track[1], 42)
+})
