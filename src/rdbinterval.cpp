@@ -1460,8 +1460,13 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 	while (iend_interval - istart_interval > 1) {
 		const_iterator imid_interval = istart_interval + (iend_interval - istart_interval) / 2;
 
-		if (check_first_overlap_src(imid_interval, src_interval))
-			return add2tgt(imid_interval, src_interval, tgt_intervs);
+		// If mid overlaps, scan backwards to find the first overlapping chain
+		if (imid_interval->do_overlap_src(src_interval)) {
+			const_iterator first_overlap = imid_interval;
+			while (first_overlap > begin() && (first_overlap - 1)->do_overlap_src(src_interval))
+				--first_overlap;
+			return add2tgt(first_overlap, src_interval, tgt_intervs);
+		}
 
 		// is mid_interval < interval?
 		if (imid_interval->chromid_src < src_interval.chromid || (imid_interval->chromid_src == src_interval.chromid && imid_interval->start_src < src_interval.start))
@@ -1494,7 +1499,11 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 
 ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, const GInterval &src_interval, GIntervals &tgt_intervs)
 {
-	while (hint != end()) {
+	const_iterator last_checked = hint;
+
+	// Continue until we reach a chain whose start_src >= src_interval.end or different chromid
+	// This handles the case where overlapping source regions cause non-consecutive overlapping chains
+	while (hint != end() && hint->chromid_src == src_interval.chromid && hint->start_src < src_interval.end) {
 		if (hint->do_overlap_src(src_interval)) {
 			int64_t common_start = max(hint->start_src, src_interval.start);
 			int64_t common_end = min(hint->start_src + hint->end - hint->start, src_interval.end);
@@ -1511,9 +1520,10 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 			}
 
 			tgt_intervs.push_back(GInterval(hint->chromid, tgt_start, tgt_end, 0));
-			++hint;
-		} else
-			break;
+		}
+
+		last_checked = hint;
+		++hint;
 	}
-	return hint - 1;
+	return last_checked;
 }
