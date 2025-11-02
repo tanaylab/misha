@@ -1684,7 +1684,8 @@ test_that("gintervals.liftover works correctly with reverse strand targets", {
     target_fasta <- tempfile(fileext = ".fasta")
     cat(">tgt\n", paste(rep("T", 2000), collapse = ""), "\n",
         ">src\n", paste(rep("A", 1000), collapse = ""), "\n",
-        sep = "", file = target_fasta)
+        sep = "", file = target_fasta
+    )
 
     target_db <- tempfile()
     withr::defer({
@@ -1705,7 +1706,8 @@ test_that("gintervals.liftover works correctly with reverse strand targets", {
     # Single block of size 500
     cat("chain 1000 src 1000 + 100 600 tgt 2000 - 500 1000 1\n",
         "500\n",
-        file = chain_file)
+        file = chain_file
+    )
 
     # Create source intervals to test
     # Test interval at src:300-301 (offset 200 from block start at 100)
@@ -1740,9 +1742,11 @@ test_that("gintervals.liftover works correctly with reverse strand targets", {
 
     expect_equal(as.character(result$chrom[1]), "tgt")
     expect_equal(result$start[1], expected_start,
-                 info = paste("Expected start:", expected_start, "Got:", result$start[1]))
+        info = paste("Expected start:", expected_start, "Got:", result$start[1])
+    )
     expect_equal(result$end[1], expected_end,
-                 info = paste("Expected end:", expected_end, "Got:", result$end[1]))
+        info = paste("Expected end:", expected_end, "Got:", result$end[1])
+    )
 
     # Test another position to be thorough
     # Test interval at src:150-151 (offset 50 from block start)
@@ -1762,9 +1766,11 @@ test_that("gintervals.liftover works correctly with reverse strand targets", {
     expected_end2 <- 1450
 
     expect_equal(result2$start[1], expected_start2,
-                 info = paste("Expected start:", expected_start2, "Got:", result2$start[1]))
+        info = paste("Expected start:", expected_start2, "Got:", result2$start[1])
+    )
     expect_equal(result2$end[1], expected_end2,
-                 info = paste("Expected end:", expected_end2, "Got:", result2$end[1]))
+        info = paste("Expected end:", expected_end2, "Got:", result2$end[1])
+    )
 })
 
 # Test for reverse strand with gtrack.liftover
@@ -1813,11 +1819,13 @@ test_that("gtrack.liftover works correctly with reverse strand targets", {
 
     cat("chain 1000 src 1000 + 100 600 tgt 2000 - 500 1000 1\n",
         "500\n",
-        file = chain_file)
+        file = chain_file
+    )
 
     # Perform liftover
     gtrack.liftover("lifted_track", "Lifted track", src_track_dir, chain_file,
-                    src_overlap_policy = "error", tgt_overlap_policy = "error")
+        src_overlap_policy = "error", tgt_overlap_policy = "error"
+    )
 
     # Extract result
     result <- gextract("lifted_track", gintervals.all())
