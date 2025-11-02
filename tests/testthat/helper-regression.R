@@ -49,61 +49,6 @@ expect_regression <- function(obj, id, snapshot_dir = "/net/mraid20/export/tgdat
         return(invisible())
     }
 
-    # Check if chromosome factor levels differ (indicating format mismatch)
-    chrom_levels_differ <- FALSE
-    if (is.data.frame(obj) && is.data.frame(old)) {
-        if ("chrom" %in% colnames(obj) && "chrom" %in% colnames(old)) {
-            if (is.factor(obj$chrom) && is.factor(old$chrom)) {
-                chrom_levels_differ <- !identical(levels(obj$chrom), levels(old$chrom))
-            }
-        }
-        if ("chrom1" %in% colnames(obj) && "chrom1" %in% colnames(old)) {
-            if (is.factor(obj$chrom1) && is.factor(old$chrom1)) {
-                chrom_levels_differ <- chrom_levels_differ || !identical(levels(obj$chrom1), levels(old$chrom1))
-            }
-        }
-    }
-
-    # If chromosome factor levels differ, normalize both for comparison
-    # This handles comparison between old (alphabetical) and new (natural order) databases
-    if (chrom_levels_differ) {
-        old_norm <- normalize_for_comparison(old)
-        obj_norm <- normalize_for_comparison(obj)
-
-        # Also remove intervalID if using indexed format with arrange_df
-        if (getOption("gmulticontig.indexed_format", FALSE) && arrange_df && "intervalID" %in% colnames(obj_norm) && "intervalID" %in% colnames(old_norm)) {
-            old_norm <- old_norm %>% dplyr::select(-intervalID)
-            obj_norm <- obj_norm %>% dplyr::select(-intervalID)
-        }
-
-        expect_equal(old_norm, obj_norm, tolerance = tolerance)
-        return(invisible())
-    }
-
-    # Legacy arrange_df logic for backward compatibility
-    if (getOption("gmulticontig.indexed_format", FALSE) && arrange_df && is.data.frame(obj) && is.data.frame(old) && "intervalID" %in% colnames(obj) && "intervalID" %in% colnames(old)) {
-        if (all(c("chrom", "start", "end") %in% colnames(obj)) && all(c("chrom", "start", "end") %in% colnames(old))) {
-            old <- old %>%
-                dplyr::mutate(chrom = as.character(chrom)) %>%
-                dplyr::arrange(chrom, start, end) %>%
-                dplyr::select(-intervalID)
-            obj <- obj %>%
-                dplyr::mutate(chrom = as.character(chrom)) %>%
-                dplyr::arrange(chrom, start, end) %>%
-                dplyr::select(-intervalID)
-        }
-        if (all(c("chrom1", "start1", "end1", "chrom2", "start2", "end2") %in% colnames(obj)) && all(c("chrom1", "start1", "end1", "chrom2", "start2", "end2") %in% colnames(old))) {
-            old <- old %>%
-                dplyr::mutate(chrom1 = as.character(chrom1), chrom2 = as.character(chrom2)) %>%
-                dplyr::arrange(chrom1, start1, end1, chrom2, start2, end2) %>%
-                dplyr::select(-intervalID)
-            obj <- obj %>%
-                dplyr::mutate(chrom1 = as.character(chrom1), chrom2 = as.character(chrom2)) %>%
-                dplyr::arrange(chrom1, start1, end1, chrom2, start2, end2) %>%
-                dplyr::select(-intervalID)
-        }
-    }
-
     expect_equal(old, obj, tolerance = tolerance)
 }
 

@@ -276,14 +276,14 @@
         zeroline <- meta$zeroline
         t <- Sys.time()
         progress.percentage <- -1
-
         if (.gintervals.big.is1d(intervals.set)) {
             if (!is.null(chrom1) || !is.null(chrom2)) {
                 stop(sprintf("%s is a 1D big intervals set.\nchrom1 or chrom2 parameters can be applied only to 2D intervals.", intervals.set), call. = FALSE)
             }
 
             if (!is.null(chrom)) {
-                meta$stats <- meta$stats[meta$stats$chrom == chrom, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom) == as.character(chrom), ]
             }
 
             if (!.gintervals.loadable(intervals.set, chrom = chrom)) {
@@ -299,7 +299,6 @@
                     ), call. = FALSE)
                 }
             }
-
             if (nrow(meta$stats) > 1) {
                 res <- list(zeroline)
                 lapply(
@@ -335,10 +334,12 @@
             }
 
             if (!is.null(chrom1)) {
-                meta$stats <- meta$stats[meta$stats$chrom1 == chrom1, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom1) == as.character(chrom1), ]
             }
             if (!is.null(chrom2)) {
-                meta$stats <- meta$stats[meta$stats$chrom2 == chrom2, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom2) == as.character(chrom2), ]
             }
 
             if (!.gintervals.loadable(intervals.set, chrom1 = chrom1, chrom2 = chrom2)) {
@@ -465,8 +466,7 @@
                 if (!is.null(chrom)) {
                     return(.gcall("gbigintervs_load_chrom", intervals.set, chrom, .misha_env()))
                 } else if (!is.null(chrom1) && !is.null(chrom2)) {
-                    # TODO: implement 2D indexed intervals support
-                    .gintervals.big.meta(intervals.set)$zeroline
+                    return(.gcall("gbigintervs_load_chrom2d", intervals.set, chrom1, chrom2, .misha_env()))
                 } else {
                     .gintervals.big.meta(intervals.set)$zeroline
                 }

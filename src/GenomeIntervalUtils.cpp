@@ -18,6 +18,7 @@
 #include "GIntervalsBigSet1D.h"
 #include "GIntervalsBigSet2D.h"
 #include "IntervalsIndex1D.h"
+#include "IntervalsIndex2D.h"
 #include "rdbinterval.h"
 #include "rdbutils.h"
 #include "StatQuadTree.h"
@@ -910,6 +911,113 @@ SEXP gbigintervs_load_chrom(SEXP _intervset, SEXP _chrom, SEXP _envir)
 			FILE *fp = fopen(dat_path.c_str(), "rb");
 			if (!fp) {
 				verror("Cannot open indexed intervals file %s: %s",
+					   dat_path.c_str(), strerror(errno));
+			}
+
+			if (fseek(fp, entry->offset, SEEK_SET) != 0) {
+				fclose(fp);
+				verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
+			}
+
+			// Read serialized R object from current position
+			rintervals = rprotect_ptr(RSaneUnserialize(fp));
+			fclose(fp);
+			runprotect(1);
+
+			return rintervals;
+		}
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
+	return R_NilValue;
+}
+
+SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_intervset) || Rf_length(_intervset) != 1)
+			verror("Intervals set argument is not a string");
+
+		if ((!Rf_isString(_chrom1) && !Rf_isFactor(_chrom1)) || Rf_length(_chrom1) != 1)
+			verror("Chromosome1 argument is not a string");
+
+		if ((!Rf_isString(_chrom2) && !Rf_isFactor(_chrom2)) || Rf_length(_chrom2) != 1)
+			verror("Chromosome2 argument is not a string");
+
+		const char *intervset_str = CHAR(STRING_ELT(_intervset, 0));
+		IntervUtils iu(_envir);
+		string intervset_path = interv2path(_envir, intervset_str);
+
+		SEXP chrom1_levels = Rf_getAttrib(_chrom1, R_LevelsSymbol);
+		SEXP chrom2_levels = Rf_getAttrib(_chrom2, R_LevelsSymbol);
+		const char *chrom1 = Rf_isString(_chrom1) ? CHAR(STRING_ELT(_chrom1, 0)) : CHAR(STRING_ELT(chrom1_levels, INTEGER(_chrom1)[0] - 1));
+		const char *chrom2 = Rf_isString(_chrom2) ? CHAR(STRING_ELT(_chrom2, 0)) : CHAR(STRING_ELT(chrom2_levels, INTEGER(_chrom2)[0] - 1));
+		int chromid1 = iu.chrom2id(chrom1);
+		int chromid2 = iu.chrom2id(chrom2);
+
+		// Try per-pair file first
+		string pair_filename = intervset_path + "/" + chrom1 + "-" + chrom2;
+		struct stat st;
+
+		SEXP rintervals = R_NilValue;
+
+		if (stat(pair_filename.c_str(), &st) == 0) {
+			// PER-PAIR PATH: Per-pair file exists
+			rintervals = rprotect_ptr(RSaneUnserialize(pair_filename.c_str()));
+			runprotect(1);
+			return rintervals;
+		} else {
+			// INDEXED PATH: Use intervals2d.dat with index
+			string dat_path = intervset_path + "/intervals2d.dat";
+			string idx_path = intervset_path + "/intervals2d.idx";
+
+			// Check if indexed files exist
+			if (stat(idx_path.c_str(), &st) != 0) {
+				verror("Neither per-pair file %s nor indexed format (%s) found",
+					   pair_filename.c_str(), idx_path.c_str());
+			}
+
+			// Load index
+			auto idx = std::make_shared<IntervalsIndex2D>();
+			if (!idx->load(idx_path)) {
+				verror("Failed to load intervals2d index from %s", idx_path.c_str());
+			}
+
+			// Get entry for this chromosome pair
+			const IntervalsPairEntry* entry = idx->get_entry(chromid1, chromid2);
+			if (!entry || entry->length == 0) {
+				// Empty chromosome pair - return empty data frame with proper structure
+				SEXP colnames = Rf_allocVector(STRSXP, 6);
+				SET_STRING_ELT(colnames, 0, Rf_mkChar("chrom1"));
+				SET_STRING_ELT(colnames, 1, Rf_mkChar("start1"));
+				SET_STRING_ELT(colnames, 2, Rf_mkChar("end1"));
+				SET_STRING_ELT(colnames, 3, Rf_mkChar("chrom2"));
+				SET_STRING_ELT(colnames, 4, Rf_mkChar("start2"));
+				SET_STRING_ELT(colnames, 5, Rf_mkChar("end2"));
+
+				SEXP df = Rf_allocVector(VECSXP, 6);
+				SET_VECTOR_ELT(df, 0, Rf_allocVector(INTSXP, 0));  // chrom1 (factor)
+				SET_VECTOR_ELT(df, 1, Rf_allocVector(INTSXP, 0));  // start1
+				SET_VECTOR_ELT(df, 2, Rf_allocVector(INTSXP, 0));  // end1
+				SET_VECTOR_ELT(df, 3, Rf_allocVector(INTSXP, 0));  // chrom2 (factor)
+				SET_VECTOR_ELT(df, 4, Rf_allocVector(INTSXP, 0));  // start2
+				SET_VECTOR_ELT(df, 5, Rf_allocVector(INTSXP, 0));  // end2
+
+				Rf_setAttrib(df, R_NamesSymbol, colnames);
+				Rf_setAttrib(df, R_ClassSymbol, Rf_mkString("data.frame"));
+				Rf_setAttrib(df, R_RowNamesSymbol, Rf_allocVector(INTSXP, 0));
+
+				return df;
+			}
+
+			// Open dat file and seek to position
+			FILE *fp = fopen(dat_path.c_str(), "rb");
+			if (!fp) {
+				verror("Cannot open indexed intervals2d file %s: %s",
 					   dat_path.c_str(), strerror(errno));
 			}
 
