@@ -46,10 +46,22 @@ This function converts a per-chromosome database (with separate .seq files per c
 indexed format (single genome.seq + genome.idx). The indexed format
 provides better performance and scalability, especially for genomes with many contigs.
 
+\strong{Important: Preserving Chromosome Order}
+
+For exact conversion that produces bit-for-bit identical results before and after conversion,
+you should load the source database first using \code{gsetroot()} or \code{gdb.init()}:
+\itemize{
+  \item If database is loaded: Uses chromosome order from ALLGENOME (exact preservation)
+  \item If database is not loaded: Uses order from chrom_sizes.txt (may differ from ALLGENOME)
+}
+
+This ensures that the converted database has the exact same chromosome ordering, which affects
+iteration order, interval IDs, and other operations that depend on chromosome order.
+
 The conversion process:
 \enumerate{
   \item Checks if database is already in indexed format
-  \item Reads existing chromosome information from chrom_sizes.txt
+  \item Gets chromosome order from ALLGENOME (if loaded) or chrom_sizes.txt
   \item Consolidates all per-chromosome .seq files into genome.seq
   \item Creates genome.idx with CRC64 checksum
   \item Optionally validates the conversion
@@ -66,20 +78,34 @@ Tracks and intervals that cannot be converted (and are skipped):
 }
 \examples{
 \dontrun{
+# Recommended: Load database first for exact conversion
+gsetroot("/path/to/database")
+gdb.convert_to_indexed(
+    convert_tracks = TRUE,
+    convert_intervals = TRUE,
+    remove_old_files = TRUE,
+    verbose = TRUE
+)
+
 # Convert current database to indexed format (genome only)
 gdb.convert_to_indexed()
 
-# Convert specific database to indexed format
+# Convert specific database without loading it first
+# Note: chromosome order may differ from ALLGENOME
 gdb.convert_to_indexed(groot = "/path/to/database")
 
 # Convert genome and all tracks to indexed format
 gdb.convert_to_indexed(convert_tracks = TRUE)
 
-# Convert genome, tracks, and intervals to indexed format
-gdb.convert_to_indexed(convert_tracks = TRUE, convert_intervals = TRUE)
-
-# Full conversion with cleanup
-gdb.convert_to_indexed(convert_tracks = TRUE, convert_intervals = TRUE, remove_old_files = TRUE)
+# Full conversion with validation and cleanup
+gsetroot("/path/to/database") # Load first for exact order preservation
+gdb.convert_to_indexed(
+    convert_tracks = TRUE,
+    convert_intervals = TRUE,
+    remove_old_files = TRUE,
+    validate = TRUE,
+    verbose = TRUE
+)
 }
 
 }

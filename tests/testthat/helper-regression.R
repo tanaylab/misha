@@ -69,6 +69,13 @@ expect_regression <- function(obj, id, snapshot_dir = "/net/mraid20/export/tgdat
     if (chrom_levels_differ) {
         old_norm <- normalize_for_comparison(old)
         obj_norm <- normalize_for_comparison(obj)
+
+        # Also remove intervalID if using indexed format with arrange_df
+        if (getOption("gmulticontig.indexed_format", FALSE) && arrange_df && "intervalID" %in% colnames(obj_norm) && "intervalID" %in% colnames(old_norm)) {
+            old_norm <- old_norm %>% dplyr::select(-intervalID)
+            obj_norm <- obj_norm %>% dplyr::select(-intervalID)
+        }
+
         expect_equal(old_norm, obj_norm, tolerance = tolerance)
         return(invisible())
     }
