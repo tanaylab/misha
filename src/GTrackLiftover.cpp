@@ -319,6 +319,9 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 		chain_intervs.sort_by_src();
 		chain_intervs.handle_src_overlaps(src_overlap_policy, iu.get_chromkey(), src_id2chrom);
 
+		// Build auxiliary structures for efficient source interval mapping
+		chain_intervs.buildSrcAux();
+
 		GenomeChromKey src_chromkey;
 		for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom)
 			src_chromkey.add_chrom(*ichrom, numeric_limits<int64_t>::max());
@@ -439,13 +442,14 @@ SEXP gtrack_liftover(SEXP _track, SEXP _src_track_dir, SEXP _chain, SEXP _src_ov
 
 					const GIntervals &src_intervals = src_track.get_intervals();
 					const vector<float> &vals = src_track.get_vals();
-					ChainIntervals::const_iterator hint = chain_intervs.begin();
 
 					// The intervals from the track have chromid=src_chromid_in_genome,
 					// but the chain expects chromid=src_chromid_in_chain
 					for (uint64_t i = 0; i < src_intervals.size(); ++i) {
 						GInterval remapped_interval = src_intervals[i];
 						remapped_interval.chromid = src_chromid_in_chain;
+						// Reset hint for each interval to avoid missing overlaps with non-consecutive chains
+						ChainIntervals::const_iterator hint = chain_intervs.begin();
 						hint = chain_intervs.map_interval(remapped_interval, tgt_intervals, hint);
 						for (GIntervals::const_iterator iinterv = tgt_intervals.begin(); iinterv != tgt_intervals.end(); ++iinterv)
 							chrom_intervals[iinterv->chromid].push_back(GIntervalVal(*iinterv, vals[i]));
