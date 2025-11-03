@@ -37,6 +37,9 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		chain_intervs.sort_by_src();
 		chain_intervs.handle_src_overlaps(src_overlap_policy, iu.get_chromkey(), src_id2chrom);
 
+		// Build auxiliary structures for efficient source interval mapping
+		chain_intervs.buildSrcAux();
+
 		GenomeChromKey src_chromkey;
 		for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom)
 			src_chromkey.add_chrom(*ichrom, numeric_limits<int64_t>::max());

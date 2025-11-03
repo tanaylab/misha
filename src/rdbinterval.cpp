@@ -661,6 +661,12 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 		int src_strand = (src_strand_val == 1) ? 0 : 1;
 
 		ChainInterval interval(intervs[i].chromid, intervs[i].start, intervs[i].end, tgt_strand, src_chromid, src_start, src_strand);
+		interval.chain_id = i;  // Assign monotonically increasing ID for stable sorting
+
+		// Validate that chain intervals are non-zero length (strict validation)
+		if (interval.start >= interval.end)
+			verror("Chain file contains zero-length or invalid interval at row %d (start=%lld, end=%lld)",
+			       i + 1, (long long)interval.start, (long long)interval.end);
 
 		interval.verify(m_chrom_key, src_id2chrom);
 		chain_intervs.push_back(interval);
@@ -1376,6 +1382,7 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 					// The two intervals intersect - create non-overlapping interv2
 					ChainInterval interv(iinterv2->chromid, tgt_end1, iinterv2->end, iinterv2->strand,
 							iinterv2->chromid_src, iinterv2->start_src + tgt_end1 - iinterv2->start, iinterv2->strand_src);
+					interv.chain_id = iinterv2->chain_id;  // Preserve chain_id for deterministic sorting
 					sorted_intervs.erase(iinterv2);
 
 					if (interv.start != interv.end)
@@ -1384,6 +1391,7 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 					// interval1 contains interval2 => split interval1
 					ChainInterval interv(iinterv1->chromid, iinterv1->end + iinterv2->end - iinterv2->start, tgt_end1, iinterv1->strand,
 							iinterv1->chromid_src, iinterv1->start_src + iinterv2->end - iinterv1->start, iinterv1->strand_src);
+					interv.chain_id = iinterv1->chain_id;  // Preserve chain_id for deterministic sorting
 					sorted_intervs.erase(iinterv2);
 					if (interv.start != interv.end)
 						sorted_intervs.insert(interv);
@@ -1434,6 +1442,45 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 	}
 }
 
+void ChainIntervals::buildSrcAux()
+{
+	const size_t n = size();
+	m_pmax_end_src.assign(n, 0);
+
+	if (n == 0)
+		return;
+
+	// Build chrom slices: first/last indices per chromid_src
+	// chromid_src is a small dense int assigned by convert_rchain_intervs()
+	// Track max id to size vectors
+	m_max_src_chromid = -1;
+	for (const auto &ci : *this)
+		m_max_src_chromid = std::max(m_max_src_chromid, ci.chromid_src);
+
+	// Initialize with sentinel values
+	m_chrom_first.assign((size_t)m_max_src_chromid + 1, (size_t)-1);
+	m_chrom_last_excl.assign((size_t)m_max_src_chromid + 1, (size_t)-1);
+
+	// Fill first/last indices and compute prefix-max per chromosome
+	size_t i = 0;
+	while (i < n) {
+		const int chrom = (*this)[i].chromid_src;
+		size_t first = i;
+		if (m_chrom_first[chrom] == (size_t)-1)
+			m_chrom_first[chrom] = first;
+
+		// Walk this chromosome slice and build prefix-max
+		int64_t pmax = std::numeric_limits<int64_t>::min();
+		for (; i < n && (*this)[i].chromid_src == chrom; ++i) {
+			const auto &ci = (*this)[i];
+			const int64_t end_src = ci.start_src + (ci.end - ci.start);
+			pmax = std::max(pmax, end_src);
+			m_pmax_end_src[i] = pmax;
+		}
+		m_chrom_last_excl[chrom] = i; // exclusive end
+	}
+}
+
 ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, ChainIntervals::const_iterator hint)
 {
 	tgt_intervs.clear();
@@ -1450,8 +1497,8 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 	if (check_first_overlap_src(hint, src_interval))
 		return add2tgt(hint, src_interval, tgt_intervs);
 
-	if (hint + 1 < end() && check_first_overlap_src(hint + 1, src_interval))
-		return add2tgt(hint + 1, src_interval, tgt_intervs);
+	// Note: hint+1 fast path removed to handle non-consecutive overlapping chains correctly
+	// With overlapping sources, hint+1 might overlap but not be the *first* overlap
 
 	// run the binary search
 	const_iterator istart_interval = begin();
@@ -1460,12 +1507,32 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 	while (iend_interval - istart_interval > 1) {
 		const_iterator imid_interval = istart_interval + (iend_interval - istart_interval) / 2;
 
-		// If mid overlaps, scan backwards to find the first overlapping chain
+		// If mid overlaps, use prefix-max to find the first overlapping chain
 		if (imid_interval->do_overlap_src(src_interval)) {
-			const_iterator first_overlap = imid_interval;
-			while (first_overlap > begin() && (first_overlap - 1)->do_overlap_src(src_interval))
-				--first_overlap;
-			return add2tgt(first_overlap, src_interval, tgt_intervs);
+			// Use prefix-max to find the true first overlap, not just consecutive first
+			const int qchrom = src_interval.chromid;
+			if (qchrom < 0 || qchrom > m_max_src_chromid || m_chrom_first[qchrom] == (size_t)-1) {
+				// Shouldn't happen due to guards above, but fallback to consecutive scan
+				const_iterator first_overlap = imid_interval;
+				while (first_overlap > begin() && (first_overlap - 1)->do_overlap_src(src_interval))
+					--first_overlap;
+				return add2tgt(first_overlap, src_interval, tgt_intervs);
+			}
+
+			size_t first = m_chrom_first[qchrom];
+			size_t mid_idx = imid_interval - begin();
+
+			// Binary search leftmost L in [first..mid_idx] with pmax_end[L] > query.start
+			// We know mid overlaps, so pmax_end[mid_idx] > query.start
+			size_t lo = first, hi = mid_idx;
+			while (lo < hi) {
+				size_t mid = lo + (hi - lo) / 2;
+				if (m_pmax_end_src[mid] > src_interval.start)
+					hi = mid;
+				else
+					lo = mid + 1;
+			}
+			return add2tgt(begin() + lo, src_interval, tgt_intervs);
 		}
 
 		// is mid_interval < interval?
@@ -1475,25 +1542,59 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 			iend_interval = imid_interval;
 	}
 
-	// After binary search, we need to find the first overlapping chain
-	// Start from istart_interval and scan backwards to find the first overlap
-	const_iterator first_overlap = istart_interval;
-	while (first_overlap > begin() && (first_overlap - 1)->do_overlap_src(src_interval))
-		--first_overlap;
+	// After binary search, use prefix-max to find the first overlapping chain efficiently
+	// Get chromosome slice bounds for this source chromosome
+	const int qchrom = src_interval.chromid;
 
-	// If we found an overlap, process all overlapping chains from first_overlap onwards
-	if (first_overlap->do_overlap_src(src_interval))
-		return add2tgt(first_overlap, src_interval, tgt_intervs);
-
-	// Check iend_interval if it exists
-	if (iend_interval != end() && iend_interval->do_overlap_src(src_interval)) {
-		// Scan backwards from iend_interval to find the first overlap
-		first_overlap = iend_interval;
-		while (first_overlap > begin() && (first_overlap - 1)->do_overlap_src(src_interval))
-			--first_overlap;
-		return add2tgt(first_overlap, src_interval, tgt_intervs);
+	// Guard: if chromosome doesn't exist in our slices (shouldn't happen due to fast guards above)
+	if (qchrom < 0 || qchrom > m_max_src_chromid || m_chrom_first[qchrom] == (size_t)-1) {
+		// Fallback to checking iend_interval
+		if (iend_interval != end() && iend_interval->do_overlap_src(src_interval))
+			return add2tgt(iend_interval, src_interval, tgt_intervs);
+		return istart_interval;
 	}
 
+	size_t first = m_chrom_first[qchrom];
+	size_t lastEx = m_chrom_last_excl[qchrom];
+
+	// Recompute pos: last index with start_src < query.start within [first, lastEx)
+	const_iterator slice_begin = begin() + first;
+	const_iterator slice_end = begin() + lastEx;
+	auto lb = std::lower_bound(slice_begin, slice_end, src_interval.start,
+		[](const ChainInterval &ci, int64_t qstart) {
+			return ci.start_src < qstart;
+		});
+
+	// lower_bound returns first with start_src >= qstart; we want last < qstart
+	ptrdiff_t pos_abs = (lb == slice_begin) ? -1 : (lb - begin() - 1);
+
+	if (pos_abs >= 0) {
+		size_t pos = (size_t)pos_abs;
+		// Check if there exists an earlier overlap from the left: pmax_end[pos] > query.start
+		if (m_pmax_end_src[pos] > src_interval.start) {
+			// Binary search leftmost L in [first..pos] with pmax_end[L] > query.start
+			size_t lo = first, hi = pos;
+			while (lo < hi) {
+				size_t mid = lo + (hi - lo) / 2;
+				if (m_pmax_end_src[mid] > src_interval.start)
+					hi = mid;
+				else
+					lo = mid + 1;
+			}
+			// Start enumeration from lo
+			const_iterator last_checked = add2tgt(begin() + lo, src_interval, tgt_intervs);
+			// Optimize hint for next query: return pos if it's ahead and in same chrom
+			if (pos >= (size_t)(last_checked - begin()) && pos < lastEx)
+				return begin() + pos;
+			return last_checked;
+		}
+	}
+
+	// No left overlap exists; check the right neighbor (iend_interval)
+	if (iend_interval != end() && iend_interval->do_overlap_src(src_interval))
+		return add2tgt(iend_interval, src_interval, tgt_intervs);
+
+	// Nothing overlaps
 	return istart_interval;
 }
 
@@ -1504,9 +1605,16 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 	// Continue until we reach a chain whose start_src >= src_interval.end or different chromid
 	// This handles the case where overlapping source regions cause non-consecutive overlapping chains
 	while (hint != end() && hint->chromid_src == src_interval.chromid && hint->start_src < src_interval.end) {
+		// Quick early exit: if chain ends before query starts, no overlap possible
+		if (hint->end_src <= src_interval.start) {
+			last_checked = hint;
+			++hint;
+			continue;
+		}
+
 		if (hint->do_overlap_src(src_interval)) {
 			int64_t common_start = max(hint->start_src, src_interval.start);
-			int64_t common_end = min(hint->start_src + hint->end - hint->start, src_interval.end);
+			int64_t common_end = min(hint->end_src, src_interval.end);
 
 			int64_t tgt_start, tgt_end;
 			if (hint->strand == 0) {
@@ -1518,6 +1626,10 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 				tgt_start = hint->end - (common_end - hint->start_src);
 				tgt_end = hint->end - (common_start - hint->start_src);
 			}
+
+			// Debug assertions to catch coordinate corruption
+			assert(tgt_start < tgt_end && "Target interval has zero or negative length");
+			assert(tgt_start >= hint->start && tgt_end <= hint->end && "Target coordinates out of chain bounds");
 
 			tgt_intervs.push_back(GInterval(hint->chromid, tgt_start, tgt_end, 0));
 		}
