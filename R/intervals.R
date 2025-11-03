@@ -1730,10 +1730,6 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
         stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (tgt_overlap_policy == "keep") {
-        warning("When using the 'keep' target overlap policy, you will not be able to use the resulting intervals with liftover functions.", call. = FALSE)
-    }
-
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.character(chain)) {
