@@ -146,6 +146,9 @@ const char *get_gwd(SEXP envir);
 
 const char *get_glib_dir(SEXP envir);
 
+// Helper function to check if database is in indexed format
+bool is_db_indexed(SEXP envir);
+
 inline bool is_R_var_char(char c) { return isalnum(c) || c == '_' || c == '.'; }
 
 // accepts track name, returns the path

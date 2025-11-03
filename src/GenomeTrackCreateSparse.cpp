@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <sys/stat.h>
 
 #include <set>
 #include <string>
@@ -65,11 +66,16 @@ SEXP gtrack_create_sparse(SEXP _track, SEXP _intervs, SEXP _values, SEXP _envir)
 			check_interrupt();
 		}
 
-		// some of the chromosome could be previously skipped; we still must create them even if they are empty
-		for (GIntervals::const_iterator iinterv = all_genome_intervs.begin(); iinterv != all_genome_intervs.end(); ++iinterv) {
-			if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
-				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
-				gtrack.init_write(filename, iinterv->chromid);
+		// For indexed databases, empty chromosome files are not needed since the track
+		// will be converted to indexed format (track.idx + track.dat) automatically.
+		// This avoids creating thousands of empty files on network filesystems.
+		// For non-indexed databases, we still create empty chromosome files for backward compatibility.
+		if (!is_db_indexed(_envir)) {
+			for (GIntervals::const_iterator iinterv = all_genome_intervs.begin(); iinterv != all_genome_intervs.end(); ++iinterv) {
+				if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
+					gtrack.init_write(filename, iinterv->chromid);
+				}
 			}
 		}
 
