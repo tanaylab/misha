@@ -1122,7 +1122,56 @@ gtrack.info <- function(track = NULL) {
 #' 'gintervals.load_chain' (chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc).
 #' Strand columns use +1 for forward strand and -1 for reverse strand.
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
-#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "keep", or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "keep" preserves overlapping target intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
+#' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus.
+#' When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy),
+#' their values must be combined into a single value. The following aggregation policies are supported:
+#'
+#' \emph{"mean"} \cr Average of all contributor values.
+#'
+#' \emph{"median"} \cr Median of all contributor values.
+#'
+#' \emph{"sum"} \cr Sum of all contributor values.
+#'
+#' \emph{"min"} \cr Minimum of all contributor values.
+#'
+#' \emph{"max"} \cr Maximum of all contributor values.
+#'
+#' \emph{"count"} \cr Number of contributors (ignoring NA values if na.rm=TRUE).
+#'
+#' \emph{"first"} \cr Value from the contributor with the smallest start coordinate in the \emph{target} genome.
+#' In case of ties (same start coordinate), the contributor with the smaller end coordinate is chosen.
+#' If still tied, the larger value is chosen.
+#'
+#' \emph{"last"} \cr Value from the contributor with the largest start coordinate in the \emph{target} genome.
+#' In case of ties, the contributor with the larger end coordinate is chosen. If still tied, the larger value is chosen.
+#'
+#' \emph{"nth"} \cr Value from the nth contributor when ordered by target genome position (smallest start, then smallest end, with ties broken by largest value).
+#' Requires \code{params} to specify which contributor to select (1-based index).
+#' For example, params=1 selects the first contributor, params=2 selects the second. Returns NA if there are fewer than n contributors.
+#'
+#' \emph{"max.coverage_len"} \cr Value from the contributor with the longest overlap with the target locus (in base pairs).
+#' In case of ties, the contributor with the larger value is chosen.
+#'
+#' \emph{"min.coverage_len"} \cr Value from the contributor with the shortest overlap with the target locus (in base pairs).
+#' In case of ties, the contributor with the larger value is chosen.
+#'
+#' \emph{"max.coverage_frac"} \cr Value from the contributor with the highest coverage fraction
+#' (overlap length / source interval length). In case of ties, the contributor with the larger value is chosen.
+#'
+#' \emph{"min.coverage_frac"} \cr Value from the contributor with the lowest coverage fraction
+#' (overlap length / source interval length). In case of ties, the contributor with the larger value is chosen.
+#'
+#' @param params optional list or scalar with aggregator-specific parameters.
+#' Currently only the "nth" aggregator uses this parameter. It expects either a scalar (e.g., params=2)
+#' or a list with an 'n' element (e.g., params=list(n=2)) specifying the 1-based index of the contributor to select.
+#' @param na.rm logical flag controlling NA removal prior to aggregation. If TRUE (default), NA values are ignored
+#' during aggregation. If FALSE, the presence of any NA value causes the aggregated result to be NA.
+#' This applies to all aggregators except "count", which always ignores NAs when counting.
+#' @param min_n optional minimum number of non-NA contributors required to produce a non-NA result.
+#' If specified and the number of non-NA contributors is less than min_n, the result will be NA.
+#' If NULL (default), no minimum is enforced. This parameter works in conjunction with na.rm:
+#' if na.rm=FALSE, a single NA contributor will cause the result to be NA regardless of min_n.
 #' @return None.
 #'
 #' @note
@@ -1137,9 +1186,23 @@ gtrack.info <- function(track = NULL) {
 #' \code{\link{gintervals.liftover}}
 #' @keywords ~track ~liftover ~chain
 #' @export gtrack.liftover
-gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto") {
+gtrack.liftover <- function(track = NULL,
+                            description = NULL,
+                            src.track.dir = NULL,
+                            chain = NULL,
+                            src_overlap_policy = "error",
+                            tgt_overlap_policy = "auto",
+                            multi_target_agg = c(
+                                "mean", "median", "sum", "min", "max", "count",
+                                "first", "last", "nth",
+                                "max.coverage_len", "min.coverage_len",
+                                "max.coverage_frac", "min.coverage_frac"
+                            ),
+                            params = NULL,
+                            na.rm = TRUE,
+                            min_n = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(src.track.dir) || is.null(chain)) {
-        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\")", call. = FALSE)
+        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", ...)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1147,8 +1210,56 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "discard")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    multi_target_agg <- match.arg(multi_target_agg)
+
+    if (!is.logical(na.rm) || length(na.rm) != 1 || is.na(na.rm)) {
+        stop("na.rm must be a single non-NA logical value", call. = FALSE)
+    }
+
+    if (!is.null(min_n)) {
+        if (!is.numeric(min_n) || length(min_n) != 1 ||
+            is.na(min_n) || min_n < 0 || min_n != as.integer(min_n)) {
+            stop("min_n must be NULL or a non-negative integer", call. = FALSE)
+        }
+        min_n <- as.integer(min_n)
+    }
+
+    nth_param <- NA_integer_
+    if (identical(multi_target_agg, "nth")) {
+        if (is.null(params)) {
+            stop("params must be supplied for 'nth' aggregation (e.g. params = 2 or params = list(n = 2))", call. = FALSE)
+        }
+
+        extract_n <- function(obj) {
+            if (is.list(obj)) {
+                if (length(obj) == 0L) {
+                    stop("params list must contain an element 'n' for 'nth'", call. = FALSE)
+                }
+                if (!is.null(names(obj)) && "n" %in% names(obj)) {
+                    return(obj[["n"]])
+                }
+                if (length(obj) == 1L) {
+                    return(obj[[1]])
+                }
+                stop("params must contain a single numeric value (or named 'n') for 'nth'", call. = FALSE)
+            }
+            obj
+        }
+
+        n_value <- extract_n(params)
+        if (length(n_value) != 1L || is.na(n_value) || !is.numeric(n_value)) {
+            stop("params for 'nth' must be a single positive integer", call. = FALSE)
+        }
+        nth_param <- as.integer(n_value)
+        if (nth_param <= 0L) {
+            stop("params for 'nth' must be a positive integer", call. = FALSE)
+        }
+    } else if (!is.null(params)) {
+        stop(sprintf("params is only supported for 'nth' aggregation, not '%s'", multi_target_agg), call. = FALSE)
     }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
@@ -1170,7 +1281,19 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, src_overlap_policy, tgt_overlap_policy, .misha_env())
+            .gcall(
+                "gtrack_liftover",
+                trackstr,
+                src.track.dir,
+                chain.intervs,
+                src_overlap_policy,
+                tgt_overlap_policy,
+                multi_target_agg,
+                nth_param,
+                na.rm,
+                if (is.null(min_n)) NA_integer_ else min_n,
+                .misha_env()
+            )
             .gdb.add_track(trackstr)
             if (is.character(chain)) {
                 .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), TRUE)
