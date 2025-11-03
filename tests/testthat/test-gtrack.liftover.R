@@ -29,30 +29,17 @@ test_that("gtrack.liftover preserves values in one-to-many mapping", {
     src_track_dir <- file.path(source_db, "tracks", "src_track.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 400), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 400), collapse = ""), "\n")))
 
     # Create chain: source1[100-200) -> chr1[0-100) AND chr1[200-300)
     # This means each source interval maps to TWO target locations
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
     # First mapping: source1[100-200) -> chr1[0-100)
-    cat("chain 1000 source1 300 + 100 200 chr1 400 + 0 100 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 300, "+", 100, 200, "chr1", 400, "+", 0, 100, 1)
 
     # Second mapping: source1[100-200) -> chr1[200-300) (source overlap)
-    cat("chain 1000 source1 300 + 100 200 chr1 400 + 200 300 2\n", file = chain_file, append = TRUE)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 300, "+", 100, 200, "chr1", 400, "+", 200, 300, 2)
 
     # Liftover with keep policy to allow source overlaps
     lifted_track <- "lifted_track"
@@ -142,30 +129,17 @@ test_that("gtrack.liftover preserves values in overlapping source regions mappin
     src_track_dir <- file.path(source_db, "tracks", "src_track.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 400), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 400), collapse = ""), "\n")))
 
     # Create chain: source1[100-200) -> chr1[0-100) AND source1[150-250) -> chr1[200-300)
     # The source regions overlap in [150-200), creating a many-to-many mapping
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
     # First mapping: source1[100-200) -> chr1[0-100)
-    cat("chain 1000 source1 300 + 100 200 chr1 400 + 0 100 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 300, "+", 100, 200, "chr1", 400, "+", 0, 100, 1)
 
     # Second mapping: source1[150-250) -> chr1[200-300) (overlaps with first in [150-200))
-    cat("chain 1000 source1 300 + 150 250 chr1 400 + 200 300 2\n", file = chain_file, append = TRUE)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 300, "+", 150, 250, "chr1", 400, "+", 200, 300, 2)
 
     # Liftover with keep policy to allow source overlaps
     lifted_track <- "lifted_track"
@@ -261,33 +235,20 @@ test_that("gtrack.liftover preserves values with one chain included in another",
     src_track_dir <- file.path(source_db, "tracks", "src_track.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 600), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 600), collapse = ""), "\n")))
 
     # Create chain: inner chain source1[60-160) -> chr1[0-100)
     #               outer chain source1[80-180) -> chr1[100-200)
     # Inner chain is included (but not equal to) outer chain
     # Overlap region is source1[80-160) -> both chains
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
     # Inner mapping: source1[60-160) -> chr1[0-100)
-    cat("chain 1000 source1 400 + 60 160 chr1 600 + 0 100 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 400, "+", 60, 160, "chr1", 600, "+", 0, 100, 1)
 
     # Outer mapping: source1[80-180) -> chr1[100-200) (includes inner chain and extends)
     # Source: 180-80=100, Target: 200-100=100
-    cat("chain 1000 source1 400 + 80 180 chr1 600 + 100 200 2\n", file = chain_file, append = TRUE)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 400, "+", 80, 180, "chr1", 600, "+", 100, 200, 2)
 
     # Liftover with keep policy
     lifted_track <- "lifted_track"
@@ -377,24 +338,12 @@ test_that("gtrack.liftover handles dense track with bin averaging", {
     src_track_dir <- file.path(source_db, "tracks", "src_dense.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
 
     # Create chain: source1[0-100) -> chr1[50-150)
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 200 + 0 100 chr1 200 + 50 150 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 100, "chr1", 200, "+", 50, 150, 1)
 
     # Liftover
     lifted_track <- "lifted_dense"
@@ -456,29 +405,16 @@ test_that("gtrack.liftover with target overlap auto policy truncates correctly",
     src_track_dir <- file.path(source_db, "tracks", "src_track.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 100), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 100), collapse = ""), "\n")))
 
     # Create chain with target overlaps:
     # source1[0-60) -> chr1[0-60)
     # source2[0-60) -> chr1[40-100) (overlaps chr1[40-60))
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 100 + 0 60 chr1 100 + 0 60 1\n", file = chain_file)
-    cat("60\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 100, "+", 0, 60, "chr1", 100, "+", 0, 60, 1)
 
-    cat("chain 1000 source2 100 + 0 60 chr1 100 + 40 100 2\n", file = chain_file, append = TRUE)
-    cat("60\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source2", 100, "+", 0, 60, "chr1", 100, "+", 40, 100, 2)
 
     # Liftover with auto policy - should truncate overlaps
     lifted_track <- "lifted_auto"
@@ -635,24 +571,12 @@ test_that("gtrack.liftover preserves sparse track gaps correctly", {
     src_track_dir <- file.path(source_db, "tracks", "src_sparse.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
 
     # Simple 1:1 mapping with offset: source1[0-100) -> chr1[100-200)
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 200 + 0 100 chr1 200 + 100 200 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 100, "chr1", 200, "+", 100, 200, 1)
 
     # Liftover
     lifted_track <- "lifted_sparse"
@@ -715,25 +639,13 @@ test_that("gtrack.liftover handles reverse strand mapping correctly", {
     src_track_dir <- file.path(source_db, "tracks", "src_reverse.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
 
     # Create chain with reverse strand (-)
     # source1[0-150) + -> chr1[0-150) -
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 200 + 0 150 chr1 200 - 50 200 1\n", file = chain_file)
-    cat("150\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 150, "chr1", 200, "-", 50, 200, 1)
 
     # Liftover
     lifted_track <- "lifted_reverse"
@@ -782,27 +694,14 @@ test_that("gtrack.liftover handles chain gaps (unmapped regions)", {
     src_track_dir <- file.path(source_db, "tracks", "src_gaps.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 300), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 300), collapse = ""), "\n")))
 
     # Create chain with gaps: maps [0-50) and [150-250), but NOT [50-150)
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 300 + 0 50 chr1 300 + 0 50 1\n", file = chain_file)
-    cat("50\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 300, "+", 0, 50, "chr1", 300, "+", 0, 50, 1)
 
-    cat("chain 1000 source1 300 + 150 250 chr1 300 + 100 200 2\n", file = chain_file, append = TRUE)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 300, "+", 150, 250, "chr1", 300, "+", 100, 200, 2)
 
     # Liftover
     lifted_track <- "lifted_gaps"
@@ -854,24 +753,12 @@ test_that("gtrack.liftover handles special values (NaN, zero, large)", {
     src_track_dir <- file.path(source_db, "tracks", "src_special.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
 
     # Simple 1:1 mapping
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 200 + 0 100 chr1 200 + 0 100 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 100, "chr1", 200, "+", 0, 100, 1)
 
     # Liftover
     lifted_track <- "lifted_special"
@@ -926,24 +813,12 @@ test_that("gtrack.liftover handles empty source track", {
     src_track_dir <- file.path(source_db, "tracks", "src_empty.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
 
     # Create chain
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 200 + 0 100 chr1 200 + 0 100 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 100, "chr1", 200, "+", 0, 100, 1)
 
     # Liftover
     lifted_track <- "lifted_empty"
@@ -989,24 +864,12 @@ test_that("gtrack.liftover handles single base pair intervals", {
     src_track_dir <- file.path(source_db, "tracks", "src_single_bp.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
 
     # Simple 1:1 mapping
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 200 + 0 150 chr1 200 + 0 150 1\n", file = chain_file)
-    cat("150\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 150, "chr1", 200, "+", 0, 150, 1)
 
     # Liftover
     lifted_track <- "lifted_single_bp"
@@ -1056,30 +919,16 @@ test_that("gtrack.liftover handles multiple source chromosomes to single target"
     src_track_dir <- file.path(source_db, "tracks", "src_multi.track")
 
     # Create target genome with single chromosome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 400), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 400), collapse = ""), "\n")))
 
     # Create chain mapping all three sources to different regions of chr1
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 100 + 0 50 chr1 400 + 0 50 1\n", file = chain_file)
-    cat("50\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 100, "+", 0, 50, "chr1", 400, "+", 0, 50, 1)
 
-    cat("chain 1000 source2 100 + 0 50 chr1 400 + 100 150 2\n", file = chain_file, append = TRUE)
-    cat("50\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source2", 100, "+", 0, 50, "chr1", 400, "+", 100, 150, 2)
 
-    cat("chain 1000 source3 100 + 0 50 chr1 400 + 200 250 3\n", file = chain_file, append = TRUE)
-    cat("50\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source3", 100, "+", 0, 50, "chr1", 400, "+", 200, 250, 3)
 
     # Liftover
     lifted_track <- "lifted_multi"
@@ -1133,25 +982,13 @@ test_that("gtrack.liftover handles intervals at chromosome boundaries", {
 
     src_track_dir <- file.path(source_db, "tracks", "src_boundary.track")
 
-    # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 150), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    # Create target genome with single chromosome
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 150), collapse = ""), "\n")))
 
     # Map entire source chromosome to target
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 100 + 0 100 chr1 150 + 0 100 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 100, "+", 0, 100, "chr1", 150, "+", 0, 100, 1)
 
     # Liftover
     lifted_track <- "lifted_boundary"
@@ -1205,25 +1042,13 @@ test_that("gtrack.liftover handles coordinate reversals (inversions)", {
     src_track_dir <- file.path(source_db, "tracks", "src_inversion.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 300), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 300), collapse = ""), "\n")))
 
     # Create chain with inversion (reverse strand)
     # Maps source1[0-150) to chr1[150-0) (reversed)
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 200 + 0 150 chr1 300 - 150 300 1\n", file = chain_file)
-    cat("150\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 150, "chr1", 300, "-", 150, 300, 1)
 
     # Liftover
     lifted_track <- "lifted_inversion"
@@ -1274,25 +1099,13 @@ test_that("gtrack.liftover handles dense track with partial bin coverage", {
     src_track_dir <- file.path(source_db, "tracks", "src_dense_partial.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 1500), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 1500), collapse = ""), "\n")))
 
     # Create chain that maps only part of source
     # Maps source1[200-400) to chr1[0-200)
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 1000 + 200 400 chr1 1500 + 0 200 1\n", file = chain_file)
-    cat("200\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 1000, "+", 200, 400, "chr1", 1500, "+", 0, 200, 1)
 
     # Liftover
     lifted_track <- "lifted_dense_partial"
@@ -1343,24 +1156,12 @@ test_that("gtrack.liftover handles sparse track with very small intervals", {
     src_track_dir <- file.path(source_db, "tracks", "src_small.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 1000), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 1000), collapse = ""), "\n")))
 
     # Simple 1:1 mapping
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 1000 + 0 700 chr1 1000 + 0 700 1\n", file = chain_file)
-    cat("700\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 1000, "+", 0, 700, "chr1", 1000, "+", 0, 700, 1)
 
     # Liftover
     lifted_track <- "lifted_small"
@@ -1411,28 +1212,15 @@ test_that("gtrack.liftover handles one-to-many with different bin sizes in targe
     src_track_dir <- file.path(source_db, "tracks", "src_onemany_dense.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 1000), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 1000), collapse = ""), "\n")))
 
     # Create chain with one-to-many mapping
     # source1[100-200) maps to both chr1[0-100) and chr1[500-600)
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 500 + 100 200 chr1 1000 + 0 100 1\n", file = chain_file)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 500, "+", 100, 200, "chr1", 1000, "+", 0, 100, 1)
 
-    cat("chain 1000 source1 500 + 100 200 chr1 1000 + 500 600 2\n", file = chain_file, append = TRUE)
-    cat("100\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 500, "+", 100, 200, "chr1", 1000, "+", 500, 600, 2)
 
     # Liftover with keep policy
     lifted_track <- "lifted_onemany_dense"
@@ -1487,25 +1275,13 @@ test_that("gtrack.liftover handles source track with consecutive intervals", {
 
     src_track_dir <- file.path(source_db, "tracks", "src_consecutive.track")
 
-    # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 300), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    # Create target genome with single chromosome
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 300), collapse = ""), "\n")))
 
     # Simple 1:1 mapping with offset
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 300 + 100 150 chr1 300 + 50 100 1\n", file = chain_file)
-    cat("50\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 300, "+", 100, 150, "chr1", 300, "+", 50, 100, 1)
 
     # Liftover
     lifted_track <- "lifted_consecutive"
@@ -1558,24 +1334,12 @@ test_that("gtrack.liftover handles mixed positive and negative values", {
     src_track_dir <- file.path(source_db, "tracks", "src_mixed.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
 
     # Simple 1:1 mapping
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 200 + 0 120 chr1 200 + 0 120 1\n", file = chain_file)
-    cat("120\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 120, "chr1", 200, "+", 0, 120, 1)
 
     # Liftover
     lifted_track <- "lifted_mixed"
@@ -1629,29 +1393,16 @@ test_that("gtrack.liftover handles target overlap with truncation", {
     src_track_dir <- file.path(source_db, "tracks", "src_tgt_overlap.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">chr1\n", paste(rep("T", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("T", 200), collapse = ""), "\n")))
 
     # Create chain with target overlap
     # source1[0-70) -> chr1[0-70)
     # source2[0-70) -> chr1[30-100) (overlaps at chr1[30-70))
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 source1 100 + 0 70 chr1 200 + 0 70 1\n", file = chain_file)
-    cat("70\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source1", 100, "+", 0, 70, "chr1", 200, "+", 0, 70, 1)
 
-    cat("chain 1000 source2 100 + 0 70 chr1 200 + 30 100 2\n", file = chain_file, append = TRUE)
-    cat("70\n\n", file = chain_file, append = TRUE)
+    write_chain_entry(chain_file, "source2", 100, "+", 0, 70, "chr1", 200, "+", 30, 100, 2)
 
     # Liftover with auto truncation
     lifted_track <- "lifted_tgt_overlap"
@@ -1697,17 +1448,13 @@ test_that("gintervals.liftover works correctly with reverse strand targets", {
     gdb.init(target_db)
 
     # Create a minimal chain with reverse strand target
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
     # Chain format: source on + strand, target on - strand
     # Source: chrom "src", size 1000, + strand, coords 100-600
     # Target: chrom "tgt", size 2000, - strand, coords 500-1000
     # Single block of size 500
-    cat("chain 1000 src 1000 + 100 600 tgt 2000 - 500 1000 1\n",
-        "500\n",
-        file = chain_file
-    )
+    write_chain_entry(chain_file, "src", 1000, "+", 100, 600, "tgt", 2000, "-", 500, 1000, 1)
 
     # Create source intervals to test
     # Test interval at src:300-301 (offset 200 from block start at 100)
@@ -1801,26 +1548,12 @@ test_that("gtrack.liftover works correctly with reverse strand targets", {
     src_track_dir <- file.path(source_db, "tracks", "test_track.track")
 
     # Create target genome
-    target_fasta <- tempfile(fileext = ".fasta")
-    cat(">tgt\n", paste(rep("T", 2000), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta, verbose = FALSE)
-    gdb.init(target_db)
+    setup_db(list(paste0(">tgt\n", paste(rep("T", 2000), collapse = ""), "\n")))
 
     # Create chain with reverse strand target
-    chain_file <- tempfile(fileext = ".chain")
-    withr::defer(unlink(chain_file))
+    chain_file <- new_chain_file()
 
-    cat("chain 1000 src 1000 + 100 600 tgt 2000 - 500 1000 1\n",
-        "500\n",
-        file = chain_file
-    )
+    write_chain_entry(chain_file, "src", 1000, "+", 100, 600, "tgt", 2000, "-", 500, 1000, 1)
 
     # Perform liftover
     gtrack.liftover("lifted_track", "Lifted track", src_track_dir, chain_file,
@@ -1839,4 +1572,344 @@ test_that("gtrack.liftover works correctly with reverse strand targets", {
     expect_equal(result$start[1], 1290)
     expect_equal(result$end[1], 1300)
     expect_equal(result$lifted_track[1], 42)
+})
+
+test_that("gtrack.liftover finds all overlapping chains when they are non-consecutive", {
+    local_db_state()
+
+    # This test verifies the fix for a bug where gtrack.liftover would miss
+    # overlapping chain intervals that were not consecutive in the sorted chain array.
+    # The bug occurred when source intervals had overlapping regions mapping to
+    # different targets, creating a pattern where overlapping chains are separated
+    # by non-overlapping ones in the sorted (by start_src) chain array.
+
+    # Create source genome first
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">source1\n", paste0(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
+
+    source_db <- tempfile()
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.init(source_db)
+
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    # Create source track with an interval overlapping first two chains
+    gtrack.create_sparse(
+        "source_track",
+        intervals = data.frame(chrom = "source1", start = 20, end = 21, stringsAsFactors = FALSE),
+        values = 42,
+        description = "test track"
+    )
+
+    # Create target genome
+    setup_db(list(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n", ">chr2\nGGGGCCCCTTTTAAAAGGGGCCCCTTTTAAAAGGGGCCCCTTTTAAAA\n", ">chr3\nCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCG\n"))
+
+    # Create chain file replicating the user's bug scenario
+    chain_file <- new_chain_file()
+
+    # Chains with the same start position (will be consecutive when sorted)
+    write_chain_entry(chain_file, "source1", 100, "+", 10, 30, "chr1", 44, "+", 0, 20, 1)
+    write_chain_entry(chain_file, "source1", 100, "+", 10, 30, "chr2", 48, "+", 0, 20, 2)
+
+    # Chain with different range that creates a gap
+    write_chain_entry(chain_file, "source1", 100, "+", 30, 32, "chr3", 42, "+", 0, 2, 3)
+
+    # Load chain with keep policy
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Perform liftover
+    gtrack.liftover(
+        track = "lifted_track",
+        description = "",
+        src.track.dir = file.path(source_db, "tracks", "source_track.track"),
+        chain = chain,
+        src_overlap_policy = "keep"
+    )
+
+    # Extract result
+    result <- gextract("lifted_track", gintervals.all())
+
+    # Should return exactly 2 results (both chains with [10,30) overlap [20,21))
+    expect_equal(nrow(result), 2)
+    expect_true("chr1" %in% result$chrom)
+    expect_true("chr2" %in% result$chrom)
+    expect_false("chr3" %in% result$chrom)
+
+    # Both should have the same value from the source
+    expect_equal(result$lifted_track[result$chrom == "chr1"], 42)
+    expect_equal(result$lifted_track[result$chrom == "chr2"], 42)
+})
+
+test_that("gtrack.liftover does not miss earlier long overlap when hint is to the right (policy=keep)", {
+    local_db_state()
+
+    # Create source genome first
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">source1\n", paste0(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
+
+    source_db <- tempfile()
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.init(source_db)
+
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    # Create source track with two intervals
+    gtrack.create_sparse(
+        "source_track",
+        intervals = data.frame(
+            chrom = "source1",
+            start = c(70, 90), # Q1 then Q2
+            end = c(71, 91),
+            stringsAsFactors = FALSE
+        ),
+        values = c(100, 200),
+        description = "test track"
+    )
+
+    # Create target genome
+    setup_db(list(
+        paste0(">chr1\n", paste(rep("A", 200), collapse = ""), "\n"),
+        paste0(">chr2\n", paste(rep("C", 200), collapse = ""), "\n"),
+        paste0(">chr3\n", paste(rep("G", 200), collapse = ""), "\n")
+    ))
+
+    chain_file <- new_chain_file()
+
+    # A: [0,100) -> chr1 (overlaps Q1 and Q2)
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 100, "chr1", 200, "+", 0, 100, 1)
+
+    # B: [15,16) -> chr2 (does not overlap Q1 or Q2)
+    write_chain_entry(chain_file, "source1", 200, "+", 15, 16, "chr2", 200, "+", 0, 1, 2)
+
+    # C: [80,110) -> chr3 (overlaps Q2 only)
+    write_chain_entry(chain_file, "source1", 200, "+", 80, 110, "chr3", 200, "+", 0, 30, 3)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Perform liftover
+    gtrack.liftover(
+        track = "lifted_track",
+        description = "",
+        src.track.dir = file.path(source_db, "tracks", "source_track.track"),
+        chain = chain,
+        src_overlap_policy = "keep"
+    )
+
+    result <- gextract("lifted_track", gintervals.all())
+
+    # Expect: Q1 -> chr1; Q2 -> chr1 and chr3  (total 3 rows)
+    # Previous bug would yield only 2 rows (Q1->chr1, Q2->chr3), missing chr1 for Q2.
+    expect_equal(sum(result$lifted_track == 100), 1) # Q1 has exactly 1 hit (chr1)
+    expect_equal(sum(result$lifted_track == 200), 2) # Q2 should have 2 hits (chr1 & chr3)
+    expect_true("chr1" %in% result$chrom[result$lifted_track == 200])
+    expect_true("chr3" %in% result$chrom[result$lifted_track == 200])
+})
+
+test_that("gtrack.liftover has deterministic ordering for chains with identical start_src", {
+    local_db_state()
+
+    # Create source genome first
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">source1\n", paste0(rep("A", 500), collapse = ""), "\n", sep = "", file = source_fasta)
+
+    source_db <- tempfile()
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.init(source_db)
+
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    # Create source track with an interval
+    gtrack.create_sparse(
+        "source_track",
+        intervals = data.frame(chrom = "source1", start = 105, end = 106, stringsAsFactors = FALSE),
+        values = 99,
+        description = "test track"
+    )
+
+    # Create target genome with multiple chromosomes
+    setup_db(list(
+        ">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n",
+        ">chr2\nGGGGCCCCTTTTAAAAGGGGCCCCTTTTAAAA\n",
+        ">chr3\nTTTTAAAACCCCGGGGTTTTAAAACCCCGGGG\n"
+    ))
+
+    chain_file <- new_chain_file()
+
+    # Create chains with identical start_src but different end_src
+    # All start at source1[100], but have different lengths
+    write_chain_entry(chain_file, "source1", 500, "+", 100, 120, "chr1", 48, "+", 0, 20, 1) # len=20
+    write_chain_entry(chain_file, "source1", 500, "+", 100, 110, "chr2", 32, "+", 0, 10, 2) # len=10
+    write_chain_entry(chain_file, "source1", 500, "+", 100, 130, "chr3", 32, "+", 0, 30, 3) # len=30
+    write_chain_entry(chain_file, "source1", 500, "+", 100, 115, "chr1", 48, "+", 20, 35, 4) # len=15
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Run liftover twice with the same query
+    gtrack.liftover(
+        track = "lifted_track1",
+        description = "",
+        src.track.dir = file.path(source_db, "tracks", "source_track.track"),
+        chain = chain,
+        src_overlap_policy = "keep"
+    )
+
+    gtrack.liftover(
+        track = "lifted_track2",
+        description = "",
+        src.track.dir = file.path(source_db, "tracks", "source_track.track"),
+        chain = chain,
+        src_overlap_policy = "keep"
+    )
+
+    result1 <- gextract("lifted_track1", gintervals.all(), colnames = "value")
+    result2 <- gextract("lifted_track2", gintervals.all(), colnames = "value")
+
+    # Results should be identical (deterministic) - compare coordinates and intervalID
+    expect_equal(result1, result2)
+
+    # Verify all 4 chains are returned
+    expect_equal(nrow(result1), 4)
+
+    # Verify all expected chroms are present (order may vary deterministically)
+    expect_true(all(c("chr1", "chr2", "chr3") %in% result1$chrom))
+
+    # All should have the same value
+    expect_true(all(result1$lifted_track1 == 99))
+})
+
+test_that("gtrack.liftover handles minus strand mapping at edges correctly", {
+    local_db_state()
+
+    # Create source genome first
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">source1\n", paste0(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
+
+    source_db <- tempfile()
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.init(source_db)
+
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    # Create source track with three intervals (left edge, middle, right edge)
+    gtrack.create_sparse(
+        "source_track",
+        intervals = data.frame(
+            chrom = "source1",
+            start = c(0, 15, 29), # left edge, middle, right edge
+            end = c(1, 16, 30),
+            stringsAsFactors = FALSE
+        ),
+        values = c(10, 20, 30),
+        description = "test track"
+    )
+
+    # Create target genome with chr1 that has at least 50 bases
+    setup_db(list(">chr1\n", paste0(rep("A", 60), collapse = ""), "\n"))
+
+    chain_file <- new_chain_file()
+
+    # Minus strand chain: source1[0-30] -> chr1[20-50] (minus strand)
+    write_chain_entry(chain_file, "source1", 100, "+", 0, 30, "chr1", 60, "-", 20, 50, 1)
+
+    chain <- gintervals.load_chain(chain_file)
+
+    gtrack.liftover(
+        track = "lifted_track",
+        description = "",
+        src.track.dir = file.path(source_db, "tracks", "source_track.track"),
+        chain = chain
+    )
+
+    result <- gextract("lifted_track", gintervals.all())
+
+    # All results should have start < end (primary correctness check)
+    expect_true(all(result$start < result$end))
+
+    # Verify we got results for all 3 queries
+    expect_equal(nrow(result), 3)
+
+    # Verify all coordinates are non-negative and reasonable
+    expect_true(all(result$start >= 0))
+    expect_true(all(result$end >= 0))
+
+    # Verify values are preserved
+    expect_true(all(result$lifted_track %in% c(10, 20, 30)))
+})
+
+test_that("gtrack.liftover handles dense cluster of chains with same start_src correctly", {
+    local_db_state()
+
+    # Create source genome first
+    source_fasta <- tempfile(fileext = ".fasta")
+    cat(">source1\n", paste0(rep("A", 10000), collapse = ""), "\n", sep = "", file = source_fasta)
+
+    source_db <- tempfile()
+    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.init(source_db)
+
+    withr::defer({
+        unlink(source_db, recursive = TRUE)
+        unlink(source_fasta)
+    })
+
+    # Create source track with one interval that overlaps all chains
+    gtrack.create_sparse(
+        "source_track",
+        intervals = data.frame(chrom = "source1", start = 60, end = 61, stringsAsFactors = FALSE),
+        values = 777,
+        description = "test track"
+    )
+
+    # Create target genome
+    setup_db(list(
+        ">chr1\n", paste0(rep("A", 10000), collapse = ""), "\n",
+        ">chr2\n", paste0(rep("C", 10000), collapse = ""), "\n"
+    ))
+
+    chain_file <- new_chain_file()
+
+    # Create 100 chains all starting at source1[50] with varying lengths
+    for (i in 1:100) {
+        len <- i # lengths 1 to 100
+        target_chrom <- if (i %% 2 == 0) "chr1" else "chr2"
+        write_chain_entry(
+            chain_file, "source1", 10000, "+", 50, 50 + len,
+            target_chrom, 10000, "+", i * 10, i * 10 + len, i
+        )
+    }
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    gtrack.liftover(
+        track = "lifted_track",
+        description = "",
+        src.track.dir = file.path(source_db, "tracks", "source_track.track"),
+        chain = chain,
+        src_overlap_policy = "keep"
+    )
+
+    result <- gextract("lifted_track", gintervals.all())
+
+    # Should find many overlapping chains (query at 60 overlaps chains where 50+length > 60)
+    # Exact number depends on overlap resolution, but should be substantial
+    expect_true(nrow(result) > 50) # At least half should overlap
+    expect_true(nrow(result) <= 100) # At most all chains
+
+    # All results should be valid intervals
+    expect_true(all(result$start < result$end))
+
+    # All should have the same value
+    expect_true(all(result$lifted_track == 777))
 })
