@@ -5,6 +5,7 @@
  */
 
 #include <cstdint>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -13,6 +14,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <unordered_set>
 
 #include "GenomeTrack.h"
 #include "TrackIndex.h"
@@ -195,6 +197,21 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
         vector<string> chr_files_to_remove;
         uint64_t current_offset = 0;
 
+        // Instead of doing 3 stat() calls per chromosome (which can be 50K+ system calls
+        // for large genomes), read the directory once to get all existing chromosome files.
+        // This reduces O(N*3) stat calls to O(1) readdir + O(N) map lookups.
+        unordered_set<string> existing_files;
+        DIR *dir = opendir(track_dir.c_str());
+        if (dir) {
+            struct dirent *entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (entry->d_name[0] != '.') {  // Skip . and ..
+                    existing_files.insert(entry->d_name);
+                }
+            }
+            closedir(dir);
+        }
+
         for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); chromid++) {
             string chrom_name = chromkey.id2chrom(chromid);
 
@@ -203,27 +220,17 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
             bool found = false;
 
             // Try 1: chromosome name as-is
-            string candidate = track_dir + "/" + chrom_name;
-            struct stat st;
-            if (stat(candidate.c_str(), &st) == 0) {
-                chr_file = candidate;
+            if (existing_files.count(chrom_name)) {
+                chr_file = track_dir + "/" + chrom_name;
                 found = true;
-            } else {
+            } else if (chrom_name.substr(0, 3) != "chr" && existing_files.count("chr" + chrom_name)) {
                 // Try 2: with "chr" prefix if not already present
-                if (chrom_name.substr(0, 3) != "chr") {
-                    candidate = track_dir + "/chr" + chrom_name;
-                    if (stat(candidate.c_str(), &st) == 0) {
-                        chr_file = candidate;
-                        found = true;
-                    }
-                } else {
-                    // Try 3: without "chr" prefix if present
-                    candidate = track_dir + "/" + chrom_name.substr(3);
-                    if (stat(candidate.c_str(), &st) == 0) {
-                        chr_file = candidate;
-                        found = true;
-                    }
-                }
+                chr_file = track_dir + "/chr" + chrom_name;
+                found = true;
+            } else if (chrom_name.substr(0, 3) == "chr" && existing_files.count(chrom_name.substr(3))) {
+                // Try 3: without "chr" prefix if present
+                chr_file = track_dir + "/" + chrom_name.substr(3);
+                found = true;
             }
 
             TrackContigEntry entry;

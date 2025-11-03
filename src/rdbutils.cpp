@@ -1053,3 +1053,19 @@ SEXP rdb::get_rvector_col(SEXP v, const char *colname, const char *varname, bool
 		verror("Invalid format of %s: missing %s column", varname, colname);
 	return R_NilValue;
 }
+
+
+// Helper function to check if database is in indexed format
+bool rdb::is_db_indexed(SEXP _envir) {
+	const char *groot = get_groot(_envir);
+	if (!groot || !*groot) {
+		return false;
+	}
+
+	string seq_dir = string(groot) + "/seq";
+	string idx_path = seq_dir + "/genome.idx";
+	string seq_path = seq_dir + "/genome.seq";
+
+	struct stat st;
+	return (stat(idx_path.c_str(), &st) == 0 && stat(seq_path.c_str(), &st) == 0);
+}
