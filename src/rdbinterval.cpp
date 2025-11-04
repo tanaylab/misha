@@ -378,9 +378,31 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 	}
 
 	SEXP _rintervals = rintervals;
+
+	// Handle empty intervals - determine type based on what the caller expects
+	// For empty intervals, the caller's GIntervals/GIntervals2D objects are already
+	// default-constructed as empty, so we just need to return the appropriate type mask
+	if (Rf_isVector(rintervals) && Rf_length(rintervals) == 0) {
+		unsigned empty_intervs_type_mask;
+		if (intervals && !intervals2d) {
+			empty_intervs_type_mask = INTERVS1D;
+		} else if (intervals2d && !intervals) {
+			empty_intervs_type_mask = INTERVS2D;
+		} else {
+			// Both or neither provided - default to 1D
+			empty_intervs_type_mask = INTERVS1D;
+		}
+
+		if (pintervs_type_mask)
+			*pintervs_type_mask = empty_intervs_type_mask;
+
+		// Return early - the caller's intervals objects are already empty by default
+		return _rintervals;
+	}
+
 	unsigned intervs_type_mask = get_rintervs_type_mask(rintervals, error_msg_prefix);
 
-	if (pintervs_type_mask) 
+	if (pintervs_type_mask)
 		*pintervs_type_mask = intervs_type_mask;
 
 	if (intervs_type_mask == (INTERVS1D | INTERVS2D))
