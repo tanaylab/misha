@@ -22,10 +22,10 @@ test_that("gtrack.info detects corrupted index file", {
     seek(con, 0)
     writeBin(raw(10), con) # Write garbage
     close(con)
-    # Should detect corruption
+    # Should detect corruption when validate=TRUE
     expect_error(
-        gtrack.info("temp.corrupt_idx"),
-        "checksum|corrupt|invalid"
+        gtrack.info("temp.corrupt_idx", validate = TRUE),
+        "checksum|corrupt|invalid|could not be loaded"
     )
 })
 

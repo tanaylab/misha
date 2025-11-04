@@ -19,7 +19,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gtrackinfo(SEXP _track, SEXP _envir)
+SEXP gtrackinfo(SEXP _track, SEXP _validate, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -27,6 +27,8 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 		// check the arguments
 		if (!Rf_isString(_track) || Rf_length(_track) != 1)
 			verror("Track argument is not a string");
+
+		bool validate = Rf_asLogical(_validate);
 
 		const char *full_track_str = CHAR(STRING_ELT(_track, 0));
 
@@ -42,6 +44,15 @@ SEXP gtrackinfo(SEXP _track, SEXP _envir)
 		string idx_path = trackpath + "/track.idx";
 		struct stat idx_stat;
 		bool is_indexed = (stat(idx_path.c_str(), &idx_stat) == 0);
+
+		// If validation requested and track is indexed, validate the index file
+		if (validate && is_indexed) {
+			TrackIndex track_index;
+			if (!track_index.load(idx_path)) {
+				// Index exists but failed to load - this indicates corruption
+				verror("Track index file exists but could not be loaded: %s", idx_path.c_str());
+			}
+		}
 
 		if (type == GenomeTrack::FIXED_BIN) {
 			enum { BINSIZE = NUM_COLS, NUM_FIXED_BIN_COLS };

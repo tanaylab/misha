@@ -4,10 +4,12 @@
 \alias{gtrack.info}
 \title{Returns information about a track}
 \usage{
-gtrack.info(track = NULL)
+gtrack.info(track = NULL, validate = FALSE)
 }
 \arguments{
 \item{track}{track name}
+
+\item{validate}{if TRUE, validates the track index file integrity (for indexed tracks). Default: FALSE}
 }
 \value{
 A list that contains track properties

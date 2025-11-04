@@ -1069,6 +1069,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' The fields in the returned value vary depending on the type of the track.
 #'
 #' @param track track name
+#' @param validate if TRUE, validates the track index file integrity (for indexed tracks). Default: FALSE
 #' @return A list that contains track properties
 #' @seealso \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}}
 #' @keywords ~track ~info ~property
@@ -1082,14 +1083,14 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' gtrack.info("rects_track")
 #'
 #' @export gtrack.info
-gtrack.info <- function(track = NULL) {
+gtrack.info <- function(track = NULL, validate = FALSE) {
     if (is.null(substitute(track))) {
         stop("Usage: gtrack.info(track)", call. = FALSE)
     }
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gcall("gtrackinfo", trackstr, .misha_env())
+    .gcall("gtrackinfo", trackstr, validate, .misha_env())
 }
 
 
