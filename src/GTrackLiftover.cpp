@@ -178,30 +178,45 @@ static double aggregate_values(const AggregationConfig &cfg, const AggregationSt
 			result = std::max(result, valid[i]->value);
 		return result;
 	}
-	case AggregationType::FIRST:
-	case AggregationType::LAST:
-	case AggregationType::NTH: {
-		std::sort(valid.begin(), valid.end(),
-		          [](const Contribution *a, const Contribution *b) {
-					  if (a->start != b->start)
-						  return a->start < b->start;
-					  if (a->end != b->end)
-						  return a->end < b->end;
-					  return a->value > b->value;
-		          });
-		if (cfg.type == AggregationType::FIRST)
-			return valid.front()->value;
-		if (cfg.type == AggregationType::LAST)
-			return valid.back()->value;
-
-		// nth
-		if (cfg.nth_index <= 0)
-			return numeric_limits<double>::quiet_NaN();
-		size_t idx = static_cast<size_t>(cfg.nth_index - 1);
-		if (idx >= valid.size())
-			return numeric_limits<double>::quiet_NaN();
-		return valid[idx]->value;
-	}
+	case AggregationType::FIRST: {		
+		const Contribution *first = *std::min_element(valid.begin(), valid.end(),
+			                                               [](const Contribution *a, const Contribution *b) {
+				if (a->start != b->start)
+					return a->start < b->start;
+				if (a->end != b->end)
+					return a->end < b->end;
+				return a->value > b->value;
+		});
+	return first->value;
+}
+case AggregationType::LAST: {
+	const Contribution *last = *std::max_element(valid.begin(), valid.end(),
+		                                              [](const Contribution *a, const Contribution *b) {
+				if (a->start != b->start)
+					return a->start < b->start;
+				if (a->end != b->end)
+					return a->end < b->end;
+				return a->value > b->value;
+	});
+	return last->value;
+}
+case AggregationType::NTH: {
+	std::sort(valid.begin(), valid.end(),
+	          [](const Contribution *a, const Contribution *b) {
+				  if (a->start != b->start)
+					  return a->start < b->start;
+				  if (a->end != b->end)
+					  return a->end < b->end;
+				  return a->value > b->value;
+	          });
+	// nth
+	if (cfg.nth_index <= 0)
+		return numeric_limits<double>::quiet_NaN();
+	size_t idx = static_cast<size_t>(cfg.nth_index - 1);
+	if (idx >= valid.size())
+		return numeric_limits<double>::quiet_NaN();
+	return valid[idx]->value;
+}
 	case AggregationType::MAX_COV_LEN:
 	case AggregationType::MIN_COV_LEN:
 	case AggregationType::MAX_COV_FRAC:
