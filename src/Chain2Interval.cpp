@@ -190,9 +190,8 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 					int64_t dt = strtoll(fields[DT].c_str(), &endptr, 10);
 					int64_t dq = strtoll(fields[DQ].c_str(), &endptr, 10);
 
-					if (dt < 0 || dq < 0){
+					if (dt < 0 || dq < 0 || (!dt && !dq))
 						TGLError("Chain file %s, line %ld: invalid block gaps", chainfname, lineno);
-					}
 
 					start[SRC] += size + dt;
 					start[TGT] += size + dq;
