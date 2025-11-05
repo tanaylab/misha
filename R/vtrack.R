@@ -176,8 +176,15 @@
 #' prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 #' spat_min = NULL, spat_max = NULL)} \cr
 #' Calculates total log-likelihood score of DNA sequence against PSSM.
-#' Uses log-sum-exp over all positions. For bidirect=TRUE, scans both
-#' strands. Prior adds pseudocounts, extend=TRUE allows scoring at boundaries.
+#' Uses log-sum-exp over all positions. For bidirect=TRUE, scans both strands and
+#' combines them per genomic start position (a per-position union).
+#' Prior adds pseudocounts. The extend=TRUE parameter (default) pads the fetched
+#' sequence on the relevant sides (forward strand extends the end, reverse strand
+#' extends both start and end) so that motifs anchored inside the iterator can be
+#' evaluated even when they spill across the iterator boundary. Regardless of
+#' extend, only motif anchors whose 0-based start lies inside the iterator contribute;
+#' the extra sequence is used solely to provide context for those anchors. With
+#' extend=FALSE, only motifs fully contained within the interval are scored.
 #' Optional spatial weighting allows position-dependent weights.
 #'
 #' \emph{func = "pwm.max", params = list(pssm = matrix, bidirect = TRUE,
@@ -188,9 +195,11 @@
 #' \emph{single best-strand} score after spatial weighting—the two strand scores are
 #' compared, not summed. (This is a \emph{per-position union}, not per-strand accumulation.)
 #' The \code{strand} parameter is ignored when \code{bidirect=TRUE}.
-#' Prior adds pseudocounts; \code{extend=TRUE} allows boundary scoring. Neutral characters
-#' (\code{N}, \code{n}, \code{*} by default) are scored with the mean log-probability of each
-#' PSSM column on both strands, so the same penalty applies regardless of orientation.
+#' Prior adds pseudocounts. The \code{extend=TRUE} parameter (default) allows scoring
+#' motifs whose start position falls within the interval, even if the motif extends
+#' beyond the interval boundary. Neutral characters (\code{N}, \code{n}, \code{*} by default)
+#' are scored with the mean log-probability of each PSSM column on both strands, so the
+#' same penalty applies regardless of orientation.
 #' Optional spatial weighting allows position-dependent weights.
 #'
 #' \emph{func = "pwm.max.pos", params = list(pssm = matrix, bidirect = TRUE,
@@ -213,9 +222,12 @@
 #' \emph{combined} score is tested against the threshold. The default combination is
 #' log-sum-exp (LSE), consistent with \code{pwm}. Each position contributes at most 1
 #' to the count (per-position union), not a per-strand sum.
-#' Returns the total number of passing positions. Prior adds pseudocounts; \code{extend=TRUE}
-#' allows scoring at boundaries. If spatial weights are provided, the threshold is applied
-#' to the spatially weighted combined score.
+#' Returns the total number of passing positions and only counts anchors whose genomic
+#' start lies inside the iterator (same 0-based half-open interval semantics as misha tracks).
+#' Prior adds pseudocounts; \code{extend=TRUE} pads the fetched sequence exactly as in \code{pwm},
+#' allowing boundary-spanning motifs on any strand to be evaluated without inflating the iterator
+#' length. If spatial weights are provided, the threshold is applied to the spatially weighted
+#' combined score.
 #'
 #' For all PWM functions:
 #' \itemize{
@@ -224,7 +236,11 @@
 #'     When TRUE, \code{strand} is ignored. If FALSE, only the strand given by \code{strand}
 #'     is scanned (default: TRUE).
 #'   \item prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
-#'   \item extend: If TRUE, allows scoring at interval boundaries (default: TRUE)
+#'   \item extend: If TRUE, extends the fetched sequence so boundary-anchored motifs still
+#'     have enough context (default: TRUE). Plus-strand scans add up to motif_length-1 bases
+#'     to the end; minus/bidirect scans add the padding on both start and end. Only anchors
+#'     whose genomic start lies inside the iterator are scored/count, regardless of the extra
+#'     sequence fetched.
 #'   \item neutral characters: By default \code{N}, \code{n}, and \code{*} are treated as unknown bases
 #' and contribute the average log-probability of the corresponding PSSM column on both strands.
 #'   \item strand: If 1, scans forward strand; if -1, scans reverse strand (default: 1).
@@ -257,19 +273,25 @@
 #'
 #' \emph{func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
 #' Counts occurrences of the specified kmer in each interval. The extend=TRUE
-#' parameter (default) allows counting kmers that span interval boundaries.
+#' parameter (default) allows counting kmers whose start position falls within
+#' the interval, even if the kmer extends beyond the interval boundary. With
+#' extend=FALSE, only kmers fully contained within the interval are counted.
 #' The strand parameter can be 1 (forward strand), -1 (reverse strand), or 0 (both strands).
 #'
 #' \emph{func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE, strand = 0)} \cr
 #' Calculates the fraction of possible positions in each interval that contain
 #' the specified kmer. The extend=TRUE parameter (default) allows counting kmers
-#' that span interval boundaries. The strand parameter can be 1 (forward strand), -1
+#' whose start position falls within the interval, even if the kmer extends beyond
+#' the interval boundary. With extend=FALSE, only kmers fully contained within the
+#' interval are counted. The strand parameter can be 1 (forward strand), -1
 #' (reverse strand), or 0 (both strands).
 #'
 #' For kmer functions:
 #' \itemize{
 #'   \item kmer: The DNA sequence to count (case-insensitive)
-#'   \item extend: If TRUE, counts kmers that span interval boundaries
+#'   \item extend: If TRUE (default), counts kmers whose start position is within
+#'         the interval, even if they extend beyond. If FALSE, only counts kmers
+#'         fully contained within the interval.
 #'   \item strand: If 1, counts kmers on forward strand; if -1, counts kmers on reverse strand. If
 #'  0, counts kmers on both strands. Default is 0.
 #' }
