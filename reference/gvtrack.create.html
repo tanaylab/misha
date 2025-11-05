@@ -165,8 +165,15 @@ by params on both sides. Overlapping sources are NOT unified (multiplicity prese
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
 spat_min = NULL, spat_max = NULL)</em> <br>
 Calculates total log-likelihood score of DNA sequence against PSSM.
-Uses log-sum-exp over all positions. For bidirect=TRUE, scans both
-strands. Prior adds pseudocounts, extend=TRUE allows scoring at boundaries.
+Uses log-sum-exp over all positions. For bidirect=TRUE, scans both strands and
+combines them per genomic start position (a per-position union).
+Prior adds pseudocounts. The extend=TRUE parameter (default) pads the fetched
+sequence on the relevant sides (forward strand extends the end, reverse strand
+extends both start and end) so that motifs anchored inside the iterator can be
+evaluated even when they spill across the iterator boundary. Regardless of
+extend, only motif anchors whose 0-based start lies inside the iterator contribute;
+the extra sequence is used solely to provide context for those anchors. With
+extend=FALSE, only motifs fully contained within the interval are scored.
 Optional spatial weighting allows position-dependent weights.</p>
 <p><em>func = "pwm.max", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
@@ -176,9 +183,11 @@ When <code>bidirect=TRUE</code>, both strands are scanned and the reported value
 <em>single best-strand</em> score after spatial weighting—the two strand scores are
 compared, not summed. (This is a <em>per-position union</em>, not per-strand accumulation.)
 The <code>strand</code> parameter is ignored when <code>bidirect=TRUE</code>.
-Prior adds pseudocounts; <code>extend=TRUE</code> allows boundary scoring. Neutral characters
-(<code>N</code>, <code>n</code>, <code>*</code> by default) are scored with the mean log-probability of each
-PSSM column on both strands, so the same penalty applies regardless of orientation.
+Prior adds pseudocounts. The <code>extend=TRUE</code> parameter (default) allows scoring
+motifs whose start position falls within the interval, even if the motif extends
+beyond the interval boundary. Neutral characters (<code>N</code>, <code>n</code>, <code>*</code> by default)
+are scored with the mean log-probability of each PSSM column on both strands, so the
+same penalty applies regardless of orientation.
 Optional spatial weighting allows position-dependent weights.</p>
 <p><em>func = "pwm.max.pos", params = list(pssm = matrix, bidirect = TRUE,
 prior = 0.01, extend = TRUE, spat_factor = NULL, spat_bin = NULL,
@@ -199,15 +208,22 @@ For <code>bidirect=TRUE</code>, both strands are evaluated at each position and 
 <em>combined</em> score is tested against the threshold. The default combination is
 log-sum-exp (LSE), consistent with <code>pwm</code>. Each position contributes at most 1
 to the count (per-position union), not a per-strand sum.
-Returns the total number of passing positions. Prior adds pseudocounts; <code>extend=TRUE</code>
-allows scoring at boundaries. If spatial weights are provided, the threshold is applied
-to the spatially weighted combined score.</p>
+Returns the total number of passing positions and only counts anchors whose genomic
+start lies inside the iterator (same 0-based half-open interval semantics as misha tracks).
+Prior adds pseudocounts; <code>extend=TRUE</code> pads the fetched sequence exactly as in <code>pwm</code>,
+allowing boundary-spanning motifs on any strand to be evaluated without inflating the iterator
+length. If spatial weights are provided, the threshold is applied to the spatially weighted
+combined score.</p>
 <p>For all PWM functions:</p><ul><li><p>pssm: Position-specific scoring matrix (matrix or data frame with columns A,C,G,T containing frequencies; additional columns are allowed and will be ignored)</p></li>
 <li><p>bidirect: If TRUE, scans both strands and combines them per position (union).
     When TRUE, <code>strand</code> is ignored. If FALSE, only the strand given by <code>strand</code>
     is scanned (default: TRUE).</p></li>
 <li><p>prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.</p></li>
-<li><p>extend: If TRUE, allows scoring at interval boundaries (default: TRUE)</p></li>
+<li><p>extend: If TRUE, extends the fetched sequence so boundary-anchored motifs still
+    have enough context (default: TRUE). Plus-strand scans add up to motif_length-1 bases
+    to the end; minus/bidirect scans add the padding on both start and end. Only anchors
+    whose genomic start lies inside the iterator are scored/count, regardless of the extra
+    sequence fetched.</p></li>
 <li><p>neutral characters: By default <code>N</code>, <code>n</code>, and <code>*</code> are treated as unknown bases
 and contribute the average log-probability of the corresponding PSSM column on both strands.</p></li>
 <li><p>strand: If 1, scans forward strand; if -1, scans reverse strand (default: 1).
@@ -236,15 +252,21 @@ range divisible by spat_bin if needed.</p>
 <p>PWM parameters are accepted as list or individual parameters (see examples).</p>
 <p><em>func = "kmer.count", params = list(kmer = "ACGT", extend = TRUE, strand = 0)</em> <br>
 Counts occurrences of the specified kmer in each interval. The extend=TRUE
-parameter (default) allows counting kmers that span interval boundaries.
+parameter (default) allows counting kmers whose start position falls within
+the interval, even if the kmer extends beyond the interval boundary. With
+extend=FALSE, only kmers fully contained within the interval are counted.
 The strand parameter can be 1 (forward strand), -1 (reverse strand), or 0 (both strands).</p>
 <p><em>func = "kmer.frac", params = list(kmer = "ACGT", extend = TRUE, strand = 0)</em> <br>
 Calculates the fraction of possible positions in each interval that contain
 the specified kmer. The extend=TRUE parameter (default) allows counting kmers
-that span interval boundaries. The strand parameter can be 1 (forward strand), -1
+whose start position falls within the interval, even if the kmer extends beyond
+the interval boundary. With extend=FALSE, only kmers fully contained within the
+interval are counted. The strand parameter can be 1 (forward strand), -1
 (reverse strand), or 0 (both strands).</p>
 <p>For kmer functions:</p><ul><li><p>kmer: The DNA sequence to count (case-insensitive)</p></li>
-<li><p>extend: If TRUE, counts kmers that span interval boundaries</p></li>
+<li><p>extend: If TRUE (default), counts kmers whose start position is within
+        the interval, even if they extend beyond. If FALSE, only counts kmers
+        fully contained within the interval.</p></li>
 <li><p>strand: If 1, counts kmers on forward strand; if -1, counts kmers on reverse strand. If
  0, counts kmers on both strands. Default is 0.</p></li>
 </ul><p>Kmer parameters are accepted as list or individual parameters (see examples).
