@@ -765,6 +765,41 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
             size_t i_min = std::max(0, m_pssm.get_min_range());
             size_t i_max = std::min<size_t>(m_pssm.get_max_range(), tlen - motif_len);
 
+            // Clamp the scanning window to anchors whose starts fall inside the iterator
+            const int64_t interval_len = interval.end - interval.start;
+            if (interval_len > 0) {
+                const int64_t extra_left = std::max<int64_t>(0, interval.start - expanded_interval.start);
+                const int64_t extra_right = std::max<int64_t>(0, expanded_interval.end - interval.end);
+                const int64_t max_valid = static_cast<int64_t>(tlen - motif_len);
+
+                auto clamp_index = [&](int64_t idx) -> size_t {
+                    if (idx < 0) {
+                        return 0;
+                    }
+                    if (idx > max_valid) {
+                        return static_cast<size_t>(std::max<int64_t>(0, max_valid));
+                    }
+                    return static_cast<size_t>(idx);
+                };
+
+                int64_t desired_min = extra_left;
+                if (m_strand == -1) {
+                    desired_min = extra_right;
+                }
+                int64_t desired_max = desired_min + interval_len - 1;
+
+                size_t clamped_min = clamp_index(desired_min);
+                size_t clamped_max = clamp_index(desired_max);
+
+                if (clamped_min <= clamped_max) {
+                    i_min = std::max(i_min, clamped_min);
+                    i_max = std::min(i_max, clamped_max);
+                } else {
+                    i_min = clamped_min;
+                    i_max = clamped_min;
+                }
+            }
+
             // Ensure valid range
             if (i_min > i_max) {
                 i_min = 0;
