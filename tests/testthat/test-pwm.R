@@ -159,15 +159,15 @@ test_that("pwm scoring works correctly for forward and reverse strands", {
     seq_fwd <- toupper(gseq.extract(test_intervals_ext))
 
     # Get reverse sequence with extension and reversed strand
-    # Note: With the corrected strand=-1 expansion behavior, reverse strand now
-    # expands in BOTH directions (like strand=0), not just the start.
-    # This ensures patterns at the end of the interval have room to fit.
+    # Note: With extend=TRUE, ALL strand modes extend END only (never START).
+    # At genomic position i, we always need sequence [i, i+motif_len) regardless of strand.
+    # Reverse strand computes RC of the same genomic positions, not different ones.
     test_intervals_rev <- test_intervals_ext
     test_intervals_rev$strand <- -1
     seq_rev <- toupper(gseq.extract(test_intervals_rev)) # This will give reverse complement
 
     test_intervals_rev_ext <- test_intervals
-    test_intervals_rev_ext$start <- test_intervals_rev_ext$start - motif_length + 1
+    # Only extend END for reverse strand (fixed behavior)
     test_intervals_rev_ext$end <- test_intervals_rev_ext$end + motif_length - 1
     test_intervals_rev_ext$strand <- -1
     seq_rev_ext <- toupper(gseq.extract(test_intervals_rev_ext))
@@ -197,12 +197,12 @@ test_that("pwm scoring works correctly for forward and reverse strands", {
     rev_scores <- manual_pwm_scores_single_strand(seq_rev, pssm, prior = 0.01)
     rev_scores_ext <- manual_pwm_scores_single_strand(seq_rev_ext, pssm, prior = 0.01)
 
-    # Select the L positions that correspond to the original interval when scanning the
-    # reverse strand on the extended window (skip the leading motif_len-1 padding).
+    # Select the L positions that correspond to anchors whose starts lie inside the iterator.
+    # With END-only extension there are exactly span_len anchor positions, and the first score
+    # corresponds to the anchor at the iterator END (reverse strand iterates backwards).
+    # Order does not matter because we use log-sum-exp, so simply take the first span_len scores.
     span_len <- test_intervals$end - test_intervals$start
-    ext_start <- motif_length
-    ext_end <- ext_start + span_len - 1
-    rev_scores_window <- rev_scores_ext[ext_start:ext_end]
+    rev_scores_window <- rev_scores_ext[seq_len(span_len)]
 
     # Calculate total log-likelihoods
     manual_fwd_total <- log_sum_exp(fwd_scores)

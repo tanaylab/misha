@@ -376,22 +376,22 @@ float PWMScorer::try_slide_window(const std::string& target,
     char strand_mode = m_strand;
 
     if (m_mode == TOTAL_LIKELIHOOD) {
-        // Strand-specific push/pop order:
-        // Plus strand: target is normal, advancing = higher indices
-        //   Old positions at front (low indices), new at back (high indices)
-        //   Pop from front, push to back
-        // Minus strand: target is RC'd, advancing = lower indices
-        //   Old positions at back (high indices), new at front (low indices)
-        //   Pop from back, push to front
+        // With END-only extension policy (correct behavior):
+        // Plus strand: new anchors appear at high target indices (close to i_max).
+        // Minus strand: target is reverse-complemented, so new anchors appear at low indices (close to i_min).
+        //
+        // Difference is in deque management due to RC reversal:
+        // Plus strand: target forward, old at front, new at back → pop front, push back
+        // Minus strand: target RC'd, old at back, new at front → pop back, push front
 
         if (m_strand == -1) {
-            // Minus strand: pop from back, push incoming to front
+            // Minus strand: pop from back (lowest genomic starts), push new anchors to front.
             for (size_t k = 0; k < stride; ++k) {
                 m_slide.rlse.pop_back();
             }
 
-            // Push incoming values from the left side (lower indices)
-            // Process in reverse order to maintain deque ordering
+            // New anchors on minus strand reside at the lowest target indices (i_min, i_min+1, ...),
+            // so push them in reverse order to keep the deque in ascending target-index order.
             for (size_t k = stride; k > 0; --k) {
                 size_t incoming_i = i_min + (k - 1);
                 if (incoming_i + motif_len > tlen) {
@@ -509,13 +509,13 @@ float PWMScorer::try_slide_window(const std::string& target,
                 m_slide.hits.pop_back();
             }
 
-            // Push incoming union hits at front
-            for (size_t k = 0; k < stride; ++k) {
-                size_t incoming_i = i_min + k;
+            // Push incoming union hits at front (new minus-strand anchors are near i_min)
+            for (size_t k = stride; k > 0; --k) {
+                size_t incoming_i = i_min + (k - 1);
                 if (incoming_i + motif_len > tlen) {
                     return std::numeric_limits<float>::quiet_NaN();
                 }
-                float spat_log = get_spatial_log_factor(first_incoming_pos + k);
+                float spat_log = get_spatial_log_factor(first_incoming_pos + (stride - k));
 
                 float comb = -std::numeric_limits<float>::infinity();
                 bool have = false;
@@ -769,7 +769,6 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
             const int64_t interval_len = interval.end - interval.start;
             if (interval_len > 0) {
                 const int64_t extra_left = std::max<int64_t>(0, interval.start - expanded_interval.start);
-                const int64_t extra_right = std::max<int64_t>(0, expanded_interval.end - interval.end);
                 const int64_t max_valid = static_cast<int64_t>(tlen - motif_len);
 
                 auto clamp_index = [&](int64_t idx) -> size_t {
@@ -782,10 +781,9 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                     return static_cast<size_t>(idx);
                 };
 
+                // For all strand modes, motif anchors start at extra_left in the fetched sequence
+                // (since we extend END only, extra_left is always 0 when extend=true)
                 int64_t desired_min = extra_left;
-                if (m_strand == -1) {
-                    desired_min = extra_right;
-                }
                 int64_t desired_max = desired_min + interval_len - 1;
 
                 size_t clamped_min = clamp_index(desired_min);

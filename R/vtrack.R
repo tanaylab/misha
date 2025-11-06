@@ -179,12 +179,12 @@
 #' Uses log-sum-exp over all positions. For bidirect=TRUE, scans both strands and
 #' combines them per genomic start position (a per-position union).
 #' Prior adds pseudocounts. The extend=TRUE parameter (default) pads the fetched
-#' sequence on the relevant sides (forward strand extends the end, reverse strand
-#' extends both start and end) so that motifs anchored inside the iterator can be
-#' evaluated even when they spill across the iterator boundary. Regardless of
-#' extend, only motif anchors whose 0-based start lies inside the iterator contribute;
-#' the extra sequence is used solely to provide context for those anchors. With
-#' extend=FALSE, only motifs fully contained within the interval are scored.
+#' sequence by extending the END coordinate by (motif_length-1) bases for all strand modes.
+#' This allows motifs anchored inside the iterator to be evaluated even when they extend
+#' beyond the iterator boundary. At genomic position i, we always need sequence [i, i+motif_len),
+#' regardless of strand (reverse strand computes RC of the same genomic positions). Only motif
+#' anchors whose 0-based start lies inside the iterator contribute; the extra sequence provides
+#' context only. With extend=FALSE, only motifs fully contained within the interval are scored.
 #' Optional spatial weighting allows position-dependent weights.
 #'
 #' \emph{func = "pwm.max", params = list(pssm = matrix, bidirect = TRUE,
@@ -237,10 +237,10 @@
 #'     is scanned (default: TRUE).
 #'   \item prior: Pseudocount added to frequencies (default: 0.01). Set to 0 for no pseudocounts.
 #'   \item extend: If TRUE, extends the fetched sequence so boundary-anchored motifs still
-#'     have enough context (default: TRUE). Plus-strand scans add up to motif_length-1 bases
-#'     to the end; minus/bidirect scans add the padding on both start and end. Only anchors
-#'     whose genomic start lies inside the iterator are scored/count, regardless of the extra
-#'     sequence fetched.
+#'     have enough context (default: TRUE). All strand modes extend the END coordinate by
+#'     (motif_length-1) bases. This is because at genomic position i, we always need sequence
+#'     [i, i+motif_len) regardless of strand. Only anchors whose genomic start lies inside the
+#'     iterator are scored/counted, regardless of the extra sequence fetched.
 #'   \item neutral characters: By default \code{N}, \code{n}, and \code{*} are treated as unknown bases
 #' and contribute the average log-probability of the corresponding PSSM column on both strands.
 #'   \item strand: If 1, scans forward strand; if -1, scans reverse strand (default: 1).
