@@ -1231,15 +1231,22 @@ test_that("misha PWM with sliding optimization matches prego - minus strand with
 
     # For prego comparison - need reverse complement
     prego_scores <- numeric(nrow(misha_result))
+    sshift <- 0L
+    eshift <- 279L
     for (i in seq_len(nrow(misha_result))) {
-        # Get the extended interval (with motif extension)
-        # Follow the same pattern as the working test
+        # Get iterator-expanded interval and add motif extension (END only).
+        # gextract returns the original iterator (length 1 here), so we must manually apply
+        # the gvtrack.iterator shifts to match the window scored inside C++.
+        start_i <- max(0L, misha_result$start[i] + sshift)
+        end_i <- misha_result$end[i] + eshift
         interval <- gintervals(
             misha_result$chrom[i],
-            max(0L, misha_result$start[i] - (motif_len - 1)), # extend applies to start on minus strand
-            misha_result$end[i] + 279 # eshift applies to interval end
+            start_i,
+            end_i + (motif_len - 1)
         )
         seq_rc <- grevcomp(gseq.extract(interval))
+        # For prego, we pass the entire shifted+extended sequence
+        # prego will score all positions within it
         prego_scores[i] <- prego::compute_pwm(
             sequences = seq_rc,
             pssm = test_pssm,
