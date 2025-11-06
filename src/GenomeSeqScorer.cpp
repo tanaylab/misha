@@ -18,35 +18,18 @@ GInterval GenomeSeqScorer::calculate_expanded_interval(const GInterval &interval
     GInterval expanded_interval = interval;
 
     // If extend is true, extend the interval to allow for patterns that span the boundary
+    // For all strand modes, we extend END only because:
+    // - At genomic position i, we always need sequence [i, i+motif_len)
+    // - For reverse strand, we compute RC of [i, i+motif_len) at the same genomic positions
+    // - Therefore, a motif at position (end-1) needs sequence up to (end-1)+motif_len
     if (m_extend && pattern_length > 1)
     {
         int64_t pattern_length_minus_one = static_cast<int64_t>(pattern_length - 1);
+        int64_t end_pos = static_cast<int64_t>(expanded_interval.end);
+        int64_t chrom_size = static_cast<int64_t>(chromkey.get_chrom_size(interval.chromid));
 
-        if (m_strand == 1)
-        {
-            // For forward strand, we need to expand the end
-            int64_t end_pos = static_cast<int64_t>(expanded_interval.end);
-            int64_t chrom_size = static_cast<int64_t>(chromkey.get_chrom_size(interval.chromid));
-
-            expanded_interval.end = static_cast<decltype(expanded_interval.end)>(
-                std::min(end_pos + pattern_length_minus_one, chrom_size));
-        }
-        else
-        {
-            // For reverse strand and both strands, expand both directions
-            // This ensures that patterns starting near the end of the interval
-            // have enough space to fit completely in the fetched sequence
-            int64_t start_pos = static_cast<int64_t>(expanded_interval.start);
-            int64_t end_pos = static_cast<int64_t>(expanded_interval.end);
-            int64_t zero = 0;
-            int64_t chrom_size = static_cast<int64_t>(chromkey.get_chrom_size(interval.chromid));
-
-            expanded_interval.start = static_cast<decltype(expanded_interval.start)>(
-                std::max(start_pos - pattern_length_minus_one, zero));
-
-            expanded_interval.end = static_cast<decltype(expanded_interval.end)>(
-                std::min(end_pos + pattern_length_minus_one, chrom_size));
-        }
+        expanded_interval.end = static_cast<decltype(expanded_interval.end)>(
+            std::min(end_pos + pattern_length_minus_one, chrom_size));
     }
 
     return expanded_interval;

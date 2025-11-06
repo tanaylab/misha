@@ -999,10 +999,16 @@ test_that("pwm (TOTAL_LIKELIHOOD): minus-strand non-spatial sliding matches manu
 
     manual_totals <- vapply(seq_len(nrow(ivs)), function(idx) {
         ext_iv <- ivs[idx, , drop = FALSE]
-        ext_iv$start <- pmax(0L, ext_iv$start - motif_len + 1L)
+        # Only extend END for reverse strand (correct behavior: all strands extend END only)
+        ext_iv$end <- ext_iv$end + motif_len - 1L
         ext_iv$strand <- -1L
         seq_rev_ext <- toupper(gseq.extract(ext_iv))
-        log_sum_exp(manual_pwm_scores_single_strand(seq_rev_ext, pssm, prior = 0.01))
+        # RC reverses coordinates: first position in RC string = anchor at iterator END.
+        # With END-only extension there are exactly span_len anchors per interval, so take the first
+        # span_len manual scores (they already include the extended context for terminal anchors).
+        span_len <- ivs$end[idx] - ivs$start[idx]
+        scores <- manual_pwm_scores_single_strand(seq_rev_ext, pssm, prior = 0.01)
+        log_sum_exp(scores[seq_len(span_len)])
     }, numeric(1))
 
     expect_equal(slide_res$pwm_minus_slide_manual, manual_totals, tolerance = 1e-6)
