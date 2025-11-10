@@ -23,11 +23,14 @@ test_that("track cache stays updated across database switches without rescan", {
 
     gsetroot(db1, rescan = TRUE)
     gtrack.create("tmp_track_db1", "tmp", "dense_track")
-    withr::defer({
-        if (gtrack.exists("tmp_track_db1")) {
-            gtrack.rm("tmp_track_db1", force = TRUE)
-        }
-    }, envir = parent.frame())
+    withr::defer(
+        {
+            if (gtrack.exists("tmp_track_db1")) {
+                gtrack.rm("tmp_track_db1", force = TRUE)
+            }
+        },
+        envir = parent.frame()
+    )
     expect_true(gtrack.exists("tmp_track_db1"))
 
     gsetroot(db2, rescan = TRUE)
@@ -56,11 +59,14 @@ test_that("interval cache stays updated across database switches without rescan"
 
     gsetroot(db1, rescan = TRUE)
     gintervals.save("tmp_interv_db1", gintervals(1, 0, 100))
-    withr::defer({
-        if ("tmp_interv_db1" %in% gintervals.ls()) {
-            gintervals.rm("tmp_interv_db1", force = TRUE)
-        }
-    }, envir = parent.frame())
+    withr::defer(
+        {
+            if ("tmp_interv_db1" %in% gintervals.ls()) {
+                gintervals.rm("tmp_interv_db1", force = TRUE)
+            }
+        },
+        envir = parent.frame()
+    )
     expect_true("tmp_interv_db1" %in% gintervals.ls())
 
     gsetroot(db2, rescan = TRUE)
