@@ -5,7 +5,7 @@
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -86,7 +86,7 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
     valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -166,7 +166,7 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -280,7 +280,7 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 

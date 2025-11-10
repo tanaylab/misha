@@ -336,6 +336,10 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GWD", groot, envir = .misha)
     assign("CHROM_ALIAS", alias_map, envir = .misha)
 
+    if (.gdb.cache_is_dirty(groot)) {
+        rescan <- TRUE
+    }
+
     success <- FALSE
     tryCatch(
         {
@@ -1095,11 +1099,13 @@ gdb.reload <- function(rescan = TRUE) {
                         f <- file(db.filename, "wb")
                         serialize(res, f)
                         close(f)
+                        .gdb.cache_clear_dirty(get("GROOT", envir = .misha))
                     },
                     silent = TRUE
                 )
             } else {
                 unlink(db.filename, recursive = TRUE)
+                .gdb.cache_clear_dirty(get("GROOT", envir = .misha))
             }
         }
     })
@@ -1191,10 +1197,166 @@ gdb.reload <- function(rescan = TRUE) {
     }
 }
 
+.track_dir <- function(trackname) {
+    sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
+}
+
+.gdb.cache_path <- function(groot = NULL) {
+    if (is.null(groot)) {
+        if (!exists("GROOT", envir = .misha, inherits = FALSE)) {
+            return(NULL)
+        }
+        groot <- get("GROOT", envir = .misha)
+    }
+    if (is.null(groot) || groot == "") {
+        return(NULL)
+    }
+    file.path(groot, ".db.cache")
+}
+
+.gdb.cache_dirty_path <- function(groot = NULL) {
+    cache_path <- .gdb.cache_path(groot)
+    if (is.null(cache_path)) {
+        return(NULL)
+    }
+    paste0(cache_path, ".dirty")
+}
+
+.gdb.cache_is_dirty <- function(groot = NULL) {
+    dirty_path <- .gdb.cache_dirty_path(groot)
+    !is.null(dirty_path) && file.exists(dirty_path)
+}
+
+.gdb.cache_mark_dirty <- function(groot = NULL) {
+    dirty_path <- .gdb.cache_dirty_path(groot)
+    if (is.null(dirty_path)) {
+        return(invisible(FALSE))
+    }
+    dir.create(dirname(dirty_path), recursive = TRUE, showWarnings = FALSE)
+
+    # Write timestamp to dirty file for debugging and to reduce race conditions
+    success <- tryCatch(
+        {
+            writeLines(as.character(Sys.time()), dirty_path)
+            TRUE
+        },
+        warning = function(w) {
+            warning(sprintf("Failed to mark cache dirty: %s", w$message), call. = FALSE)
+            FALSE
+        },
+        error = function(e) {
+            warning(sprintf("Failed to mark cache dirty: %s", e$message), call. = FALSE)
+            FALSE
+        }
+    )
+    invisible(success)
+}
+
+.gdb.cache_clear_dirty <- function(groot = NULL) {
+    dirty_path <- .gdb.cache_dirty_path(groot)
+    if (is.null(dirty_path)) {
+        return(invisible(FALSE))
+    }
+    if (file.exists(dirty_path)) {
+        result <- try(unlink(dirty_path), silent = TRUE)
+        if (inherits(result, "try-error") || (is.integer(result) && result != 0)) {
+            warning(sprintf("Failed to clear cache dirty flag at %s", dirty_path), call. = FALSE)
+            return(invisible(FALSE))
+        }
+    }
+    invisible(TRUE)
+}
+
+# Cache write uses atomic file rename to minimize corruption risk.
+# Concurrency note: Multiple processes writing to the same database may race,
+# but the dirty flag and atomic rename provide basic safety. In concurrent
+# scenarios, the last writer wins, which is acceptable since both should scan
+# the same filesystem state. For true multi-process safety, external locking
+# would be needed.
+.gdb.cache_write_lists <- function(tracks, intervals, groot = NULL) {
+    cache_path <- .gdb.cache_path(groot)
+    if (is.null(cache_path)) {
+        return(invisible(FALSE))
+    }
+
+    dir.create(dirname(cache_path), recursive = TRUE, showWarnings = FALSE)
+
+    tmp_path <- paste0(cache_path, ".tmp")
+    .gdb.cache_mark_dirty(groot)
+
+    success <- FALSE
+    error_msg <- NULL
+    tryCatch(
+        {
+            con <- file(tmp_path, "wb")
+            on.exit(close(con), add = TRUE)
+            serialize(list(tracks, intervals), con)
+            close(con)
+            on.exit(NULL, add = FALSE)
+
+            if (!file.rename(tmp_path, cache_path)) {
+                unlink(cache_path)
+                if (!file.rename(tmp_path, cache_path)) {
+                    stop("Failed to replace .db.cache file")
+                }
+            }
+            success <- TRUE
+        },
+        error = function(e) {
+            error_msg <<- e$message
+            success <<- FALSE
+        },
+        finally = {
+            if (file.exists(tmp_path)) {
+                try(unlink(tmp_path), silent = TRUE)
+            }
+        }
+    )
+
+    if (!success) {
+        warning(sprintf("Failed to write database cache: %s", error_msg), call. = FALSE)
+    } else {
+        .gdb.cache_clear_dirty(groot)
+    }
+    invisible(success)
+}
+
+.gdb.cache_update_lists <- function() {
+    if (!exists("GROOT", envir = .misha, inherits = FALSE) ||
+        !exists("GTRACKS", envir = .misha, inherits = FALSE) ||
+        !exists("GINTERVS", envir = .misha, inherits = FALSE)) {
+        return(invisible(FALSE))
+    }
+
+    groot <- get("GROOT", envir = .misha)
+    if (is.null(groot) || groot == "") {
+        return(invisible(FALSE))
+    }
+
+    tracks <- get("GTRACKS", envir = .misha)
+    intervals <- get("GINTERVS", envir = .misha)
+    .gdb.cache_write_lists(tracks, intervals, groot)
+}
+
+#' Mark cached track list as dirty
+#'
+#' When tracks or interval sets are modified outside of misha (e.g. files copied
+#' manually), the cached inventory may become out of date. Calling this helper
+#' marks the cache as dirty so the next \code{gsetroot()} forces a rescan.
+#'
+#' @return Invisible \code{TRUE} if the dirty flag was written, \code{FALSE} otherwise.
+#' @seealso \code{\link{gdb.reload}}, \code{\link{gsetroot}}
+#' @export gdb.mark_cache_dirty
+gdb.mark_cache_dirty <- function() {
+    .gcheckroot()
+    invisible(.gdb.cache_mark_dirty())
+}
+
+
 .gdb.add_track <- function(track) {
     .gcheckroot()
 
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", track), sep = "/"))
+    trackdir <- .track_dir(track)
     if (file.exists(trackdir)) {
         tracks <- sort(c(get("GTRACKS", envir = .misha), track))
         intervals <- sort(get("GINTERVS", envir = .misha))
@@ -1217,13 +1379,24 @@ gdb.reload <- function(rescan = TRUE) {
         }
 
         assign("GTRACKS", tracks, envir = .misha)
+        .gdb.cache_update_lists()
     }
+}
+
+.rm_track_dir <- function(trackname) {
+    dirname <- .track_dir(trackname)
+    unlink(dirname, recursive = TRUE)
+    if (dir.exists(dirname)) {
+        message(sprintf("Failed to remove track directory %s", dirname))
+        invisible(FALSE)
+    }
+    invisible(TRUE)
 }
 
 .gdb.rm_track <- function(track) {
     .gcheckroot()
 
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", track), sep = "/"))
+    trackdir <- .track_dir(track)
     if (!file.exists(trackdir)) {
         if (.ggetOption(".gautocompletion", FALSE)) {
             if (exists(track, envir = .misha)) {
@@ -1234,6 +1407,7 @@ gdb.reload <- function(rescan = TRUE) {
         tracks <- get("GTRACKS", envir = .misha)
         tracks <- tracks[tracks != track]
         assign("GTRACKS", tracks, envir = .misha)
+        .gdb.cache_update_lists()
     }
 }
 
@@ -1259,6 +1433,7 @@ gdb.reload <- function(rescan = TRUE) {
         }
 
         assign("GINTERVS", intervals, envir = .misha)
+        .gdb.cache_update_lists()
     }
 }
 
@@ -1276,5 +1451,6 @@ gdb.reload <- function(rescan = TRUE) {
         intervals <- get("GINTERVS", envir = .misha)
         intervals <- intervals[intervals != intervals.set]
         assign("GINTERVS", intervals, envir = .misha)
+        .gdb.cache_update_lists()
     }
 }

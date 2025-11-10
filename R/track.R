@@ -235,7 +235,7 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -324,7 +324,7 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
@@ -415,7 +415,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -710,7 +710,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -883,7 +883,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -1264,7 +1264,7 @@ gtrack.liftover <- function(track = NULL,
     }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -1413,7 +1413,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
 
     exprs <- c()
@@ -1658,10 +1658,12 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
     .gcheckroot()
 
     trackname <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
+    dirname <- .track_dir(trackname)
 
     # check whether track appears among GTRACKS
-    if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
+    if (!(trackname %in% get("GTRACKS", envir = .misha))) {
         if (force) {
+            .rm_track_dir(trackname)
             return(invisible())
         }
         stop(sprintf("Track %s does not exist", trackname), call. = FALSE)
@@ -1677,12 +1679,10 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        dirname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
-
         # remove the track
-        unlink(dirname, recursive = TRUE)
+        .rm_track_dir(trackname)
 
-        if (file.exists(dirname)) {
+        if (dir.exists(dirname)) {
             message(sprintf("Failed to delete track %s", trackname))
         } else {
             # refresh the list of GTRACKS, etc.
@@ -1763,7 +1763,7 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
@@ -1849,7 +1849,7 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
