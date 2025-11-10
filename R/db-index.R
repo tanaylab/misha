@@ -909,7 +909,7 @@ gtrack.convert_to_indexed <- function(track = NULL) {
         stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
     }
 
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
     idx_path <- file.path(trackdir, "track.idx")
     dat_path <- file.path(trackdir, "track.dat")
 
