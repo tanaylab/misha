@@ -439,5 +439,18 @@ rescue_ALLGENOME <- function(intervals, intervals_name) {
             # Return deferred structure as-is - users should use gintervals.2d.all()
         }
     }
+
+    # Handle deferred 2D structures when ALLGENOME is passed as a whole.
+    if (is.list(intervals) && length(intervals) >= 2 && .is_2d_deferred(intervals[[2]])) {
+        # When users pass ALLGENOME directly (the default in many APIs), the 2D
+        # component might be a deferred placeholder. Expand it here so C++
+        # interval conversions always see a proper data frame.
+        intervals[[2]] <- if (identical(intervals, get("ALLGENOME", envir = .misha))) {
+            gintervals.2d.all()
+        } else {
+            mode <- getOption("gmulticontig.2d.mode", "diagonal")
+            .generate_2d_on_demand(intervals[[1]], mode)
+        }
+    }
     return(intervals)
 }
