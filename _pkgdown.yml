@@ -126,6 +126,7 @@ reference:
       - gdb.set_readonly_attrs
       - gdb.convert_to_indexed
       - gdb.info
+      - gdb.mark_cache_dirty
       - gdir.cd
       - gdir.create
       - gdir.cwd
