@@ -909,6 +909,26 @@ inline bool PWMScorer::is_hit(float m, size_t b) const {
     return (m + Lb) >= m_score_thresh;
 }
 
+inline float PWMScorer::combined_motif_score(size_t ridx) const {
+    const SpatSlideCache& S = m_spat_slide;
+    bool have = false;
+    float combined = -std::numeric_limits<float>::infinity();
+
+    if (S.has_fwd[ridx]) {
+        combined = S.motif_fwd[ridx];
+        have = true;
+    }
+    if (S.has_rc[ridx]) {
+        if (have) {
+            log_sum_log(combined, S.motif_rc[ridx]);
+        } else {
+            combined = S.motif_rc[ridx];
+            have = true;
+        }
+    }
+    return have ? combined : -std::numeric_limits<float>::infinity();
+}
+
 // TOTAL per-bin LSE maintenance
 void PWMScorer::bin_total_recompute(size_t b) {
     SpatSlideCache& S = m_spat_slide;
@@ -1055,8 +1075,7 @@ void PWMScorer::spat_seed(const std::string& target, const GInterval& expd,
     S.bin_dirty.assign(S.bins, 0);
 
     S.bin_max.assign(S.bins, SpatSlideCache::BinMax{});
-    S.bin_hits_fwd.assign(S.bins, 0);
-    S.bin_hits_rc.assign(S.bins, 0);
+    S.bin_hits_pos.assign(S.bins, 0);
 
     // Fill motifs at j=0..W-1
     for (size_t j = 0; j < S.W; ++j) {
@@ -1078,17 +1097,18 @@ void PWMScorer::spat_seed(const std::string& target, const GInterval& expd,
         bin_total_recompute(b);      // sets anchor/sums from the current j-range in bin b
         bin_max_maybe_recompute(b);  // sets max/idx/dir for bin b
 
-        // COUNT: compute initial counts
-        int cf = 0, cr = 0;
+        // COUNT: compute initial counts using combined (per-position) scores
+        int cpos = 0;
         const size_t j_start = b * (size_t)S.B;
         const size_t j_end   = std::min(S.W, (b+1)*(size_t)S.B);
-        const float Lb = m_spat_log_factors[std::min(b, S.bins-1)];
         for (size_t j = j_start; j < j_end; ++j) {
-            if (S.has_fwd[j] && (S.motif_fwd[j] + Lb) >= m_score_thresh) ++cf;
-            if (S.has_rc[j]  && (S.motif_rc[j]  + Lb) >= m_score_thresh) ++cr;
+            const size_t ridx = ring_idx_from_j(j);
+            const float combined = combined_motif_score(ridx);
+            if (is_hit(combined, b)) {
+                ++cpos;
+            }
         }
-        S.bin_hits_fwd[b] = cf;
-        S.bin_hits_rc[b] = cr;
+        S.bin_hits_pos[b] = cpos;
     }
 
     S.strand_mode = m_strand;
@@ -1123,13 +1143,10 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
             bin_max_maybe_recompute(b_out);
         }
 
-        // COUNT decrement hits if any (use L_b)
-        const float Lb = m_spat_log_factors[b_out];
-        if (S.has_fwd[ridx_out] && (S.motif_fwd[ridx_out] + Lb) >= m_score_thresh) {
-            S.bin_hits_fwd[b_out]--;
-        }
-        if (S.has_rc[ridx_out] && (S.motif_rc[ridx_out] + Lb) >= m_score_thresh) {
-            S.bin_hits_rc[b_out]--;
+        // COUNT decrement hits if this position contributed under bin b_out
+        const float combined_out = combined_motif_score(ridx_out);
+        if (is_hit(combined_out, b_out)) {
+            S.bin_hits_pos[b_out]--;
         }
     }
 
@@ -1192,22 +1209,15 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
             if (S.has_rc[ridx])  bin_max_consider(b_new, S.motif_rc[ridx],  (int)ridx, -1);
         }
 
-        // COUNT: re-evaluate hit against new bin threshold
-        const float L_old = m_spat_log_factors[b_old];
-        const float L_new = m_spat_log_factors[b_new];
-        if (S.has_fwd[ridx]) {
-            const bool was = (S.motif_fwd[ridx] + L_old) >= m_score_thresh;
-            const bool now = (S.motif_fwd[ridx] + L_new) >= m_score_thresh;
-            if (was && !now) S.bin_hits_fwd[b_old]--;
-            else if (!was && now) S.bin_hits_fwd[b_new]++;
-            else if (was && now) { S.bin_hits_fwd[b_old]--; S.bin_hits_fwd[b_new]++; }
+        // COUNT: re-evaluate hit against new bin threshold (position-level)
+        const float combined = combined_motif_score(ridx);
+        const bool was_hit = is_hit(combined, b_old);
+        const bool now_hit = is_hit(combined, b_new);
+        if (was_hit) {
+            S.bin_hits_pos[b_old]--;
         }
-        if (S.has_rc[ridx]) {
-            const bool was = (S.motif_rc[ridx] + L_old) >= m_score_thresh;
-            const bool now = (S.motif_rc[ridx] + L_new) >= m_score_thresh;
-            if (was && !now) S.bin_hits_rc[b_old]--;
-            else if (!was && now) S.bin_hits_rc[b_new]++;
-            else if (was && now) { S.bin_hits_rc[b_old]--; S.bin_hits_rc[b_new]++; }
+        if (now_hit) {
+            S.bin_hits_pos[b_new]++;
         }
     }
 
@@ -1258,10 +1268,11 @@ void PWMScorer::spat_slide_once(const std::string& target, const GInterval& expd
             if (hr) bin_max_consider(b_in, rc,  (int)ridx_in, -1);
         }
 
-        // COUNT add
-        const float Lb = m_spat_log_factors[b_in];
-        if (hf && (fwd + Lb) >= m_score_thresh) S.bin_hits_fwd[b_in]++;
-        if (hr && (rc  + Lb) >= m_score_thresh) S.bin_hits_rc[b_in]++;
+        // COUNT add (position-level)
+        const float combined_in = combined_motif_score(ridx_in);
+        if (is_hit(combined_in, b_in)) {
+            S.bin_hits_pos[b_in]++;
+        }
     }
 }
 
@@ -1333,7 +1344,7 @@ float PWMScorer::spat_answer_COUNT() const {
     const SpatSlideCache& S = m_spat_slide;
     int total = 0;
     for (size_t b = 0; b < S.bins; ++b) {
-        total += (S.bin_hits_fwd[b] + S.bin_hits_rc[b]);
+        total += S.bin_hits_pos[b];
     }
     return (float)total;
 }
