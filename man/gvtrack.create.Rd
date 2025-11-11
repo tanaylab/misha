@@ -170,7 +170,7 @@ For all PWM functions:
   \item extend: If TRUE, extends the fetched sequence so boundary-anchored motifs still
     have enough context (default: TRUE). All strand modes extend the END coordinate by
     (motif_length-1) bases. This is because at genomic position i, we always need sequence
-    [i, i+motif_len) regardless of strand. Only anchors whose genomic start lies inside the
+    [i, i+motif_length) regardless of strand. Only anchors whose genomic start lies inside the
     iterator are scored/counted, regardless of the extra sequence fetched.
   \item neutral characters: By default \code{N}, \code{n}, and \code{*} are treated as unknown bases
 and contribute the average log-probability of the corresponding PSSM column on both strands.
