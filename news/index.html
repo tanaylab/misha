@@ -64,6 +64,7 @@
 <h2 class="page-header" data-toc-text="5.1.3" id="misha-513">misha 5.1.3<a class="anchor" aria-label="anchor" href="#misha-513"></a></h2>
 <ul><li>Fixed a bug in <code>gintervals.neighbors</code> when using <code>mindist=0, maxdist=0</code>: the function would miss zero-distance (touching) intervals when using <code>mindist=0, maxdist=0</code>.</li>
 <li>Fixed error reporting in multitasking mode: when a child process ends unexpectedly, the error message is now correctly reported to the parent process.</li>
+<li>Fixed <code>pwm.count</code> with spatial sliding windows double-counting bidirectional hits (forward + reverse) at the same genomic position; the sliding path now matches the baseline per-position union semantics.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.1.2" id="misha-512">misha 5.1.2<a class="anchor" aria-label="anchor" href="#misha-512"></a></h2>
