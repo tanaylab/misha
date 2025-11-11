@@ -188,7 +188,7 @@ gseq.comp <- function(seq) {
 #' corresponding PSSM column, yielding identical penalties on forward and reverse strands without
 #' hard-coded background scores. In \code{mode = "max"} the reported value is the single best
 #' strand score after applying any spatial weights; forward and reverse contributions are not
-#' aggregated. This matches the default behaviour of the PWM virtual tracks (\code{pwm.max},
+#' aggregated. This matches the default behavior of the PWM virtual tracks (\code{pwm.max},
 #' \code{pwm.max.pos}, etc.).
 #'
 #' @seealso \code{\link{gvtrack.create}} for detailed PWM parameter documentation
