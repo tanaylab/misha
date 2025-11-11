@@ -222,7 +222,7 @@ combined score.</p>
 <li><p>extend: If TRUE, extends the fetched sequence so boundary-anchored motifs still
     have enough context (default: TRUE). All strand modes extend the END coordinate by
     (motif_length-1) bases. This is because at genomic position i, we always need sequence
-    [i, i+motif_len) regardless of strand. Only anchors whose genomic start lies inside the
+    [i, i+motif_length) regardless of strand. Only anchors whose genomic start lies inside the
     iterator are scored/counted, regardless of the extra sequence fetched.</p></li>
 <li><p>neutral characters: By default <code>N</code>, <code>n</code>, and <code>*</code> are treated as unknown bases
 and contribute the average log-probability of the corresponding PSSM column on both strands.</p></li>
@@ -747,7 +747,7 @@ Note that for palindromic kmers, setting strand to 1 or -1 is recommended to avo
 </div>
 
 <div class="pkgdown">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
 </div>
 
       </footer></div>
