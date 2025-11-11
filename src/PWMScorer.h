@@ -99,9 +99,8 @@ private:
         };
         std::vector<BinMax> bin_max;
 
-        // COUNT per-bin hit counts
-        std::vector<int> bin_hits_fwd;
-        std::vector<int> bin_hits_rc;
+        // COUNT per-bin hit counts (position-level)
+        std::vector<int> bin_hits_pos;
     };
 
     // Sliding window methods
@@ -151,6 +150,7 @@ private:
 
     // COUNT helper
     inline bool is_hit(float m, size_t b) const;
+    inline float combined_motif_score(size_t ridx) const;
     
     // Scoring methods
     float score_without_spatial(const std::string& target, int64_t motif_length);
