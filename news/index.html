@@ -62,7 +62,22 @@
 
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.1.4" id="misha-514">misha 5.1.4<a class="anchor" aria-label="anchor" href="#misha-514"></a></h2>
-<ul><li>Added <code>max.pos.abs</code> and <code>max.pos.relative</code>, <code>min.pos.abs</code> and <code>min.pos.relative</code> virtual track functions.</li>
+<ul><li>Added new virtual track functions:
+<ul><li>
+<code>max.pos.abs</code>, <code>max.pos.relative</code>, <code>min.pos.abs</code>, <code>min.pos.relative</code>: Returns the position of the maximum/minimum value in the iterator interval</li>
+<li>
+<code>exists</code>: Returns 1 if any value exists (or specific vals if provided), 0 otherwise</li>
+<li>
+<code>size</code>: Returns the number of non-NaN values in the iterator interval</li>
+<li>
+<code>sample</code>: Returns a uniformly sampled source value from the iterator interval</li>
+<li>
+<code>sample.pos.abs</code> and <code>sample.pos.relative</code>: Returns the position of a uniformly sampled value</li>
+<li>
+<code>first</code> and <code>last</code>: Returns the first/last value in the iterator interval</li>
+<li>
+<code>first.pos.abs</code>, <code>first.pos.relative</code>, <code>last.pos.abs</code>, <code>last.pos.relative</code>: Returns the position of the first/last value</li>
+</ul></li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.1.3" id="misha-513">misha 5.1.3<a class="anchor" aria-label="anchor" href="#misha-513"></a></h2>
