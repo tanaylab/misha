@@ -1,3 +1,7 @@
+# misha 5.1.4
+
+* Added `max.pos.abs` and `max.pos.relative`, `min.pos.abs` and `min.pos.relative` virtual track functions.
+
 # misha 5.1.3
 
 * Fixed a bug in `gintervals.neighbors` when using `mindist=0, maxdist=0`: the function would miss zero-distance (touching) intervals when using `mindist=0, maxdist=0`.
