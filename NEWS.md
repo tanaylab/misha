@@ -1,6 +1,13 @@
 # misha 5.1.4
 
-* Added `max.pos.abs` and `max.pos.relative`, `min.pos.abs` and `min.pos.relative` virtual track functions.
+* Added new virtual track functions:
+  - `max.pos.abs`, `max.pos.relative`, `min.pos.abs`, `min.pos.relative`: Returns the position of the maximum/minimum value in the iterator interval
+  - `exists`: Returns 1 if any value exists (or specific vals if provided), 0 otherwise
+  - `size`: Returns the number of non-NaN values in the iterator interval
+  - `sample`: Returns a uniformly sampled source value from the iterator interval
+  - `sample.pos.abs` and `sample.pos.relative`: Returns the position of a uniformly sampled value
+  - `first` and `last`: Returns the first/last value in the iterator interval
+  - `first.pos.abs`, `first.pos.relative`, `last.pos.abs`, `last.pos.relative`: Returns the position of the first/last value
 
 # misha 5.1.3
 
