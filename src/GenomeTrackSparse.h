@@ -62,6 +62,14 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 	double mean_square_sum = 0;
 	float v;
 
+	// For sampling, collect all values/positions
+	vector<float> all_values;
+	vector<double> all_positions;
+	if (m_functions[SAMPLE] || m_functions[SAMPLE_POS])
+		all_values.reserve(100);
+	if (m_functions[SAMPLE_POS])
+		all_positions.reserve(100);
+
 	m_last_sum = 0;
 	m_last_min = numeric_limits<float>::max();
 	m_last_max = -numeric_limits<float>::max();
@@ -97,8 +105,44 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 			if (m_use_quantile)
 				m_sp.add(v, s_rnd_func);
 
+			// New virtual track computations
+			if (m_functions[EXISTS])
+				m_last_exists = 1;
+
+			if (m_functions[FIRST] && std::isnan(m_last_first))
+				m_last_first = v;
+
+			if (m_functions[FIRST_POS] && std::isnan(m_last_first_pos))
+				m_last_first_pos = iinterv->start;
+
+			if (m_functions[LAST])
+				m_last_last = v;
+
+			if (m_functions[LAST_POS])
+				m_last_last_pos = iinterv->start;
+
+			if (m_functions[SAMPLE])
+				all_values.push_back(v);
+			if (m_functions[SAMPLE_POS])
+				all_positions.push_back(iinterv->start);
+
 			++num_vs;
 		}
+	}
+
+	// Finalize size
+	if (m_functions[SIZE])
+		m_last_size = num_vs;
+
+	// Sample from collected values
+	if (m_functions[SAMPLE] && !all_values.empty()) {
+		int idx = (int)(s_rnd_func() * all_values.size());
+		m_last_sample = all_values[idx];
+	}
+
+	if (m_functions[SAMPLE_POS] && !all_positions.empty()) {
+		int idx = (int)(s_rnd_func() * all_positions.size());
+		m_last_sample_pos = all_positions[idx];
 	}
 
 	if (num_vs > 0)

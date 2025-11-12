@@ -32,13 +32,14 @@ source, function and parameters. 'src' can be either a track or intervals
 \tabular{llll}{
   Source \tab func \tab params \tab Description \cr
   Track \tab avg \tab NULL \tab Average track value in the iterator interval. \cr
+  Track (1D) \tab exists \tab vals (optional) \tab Returns 1 if any value exists (or specific vals if provided), 0 otherwise. \cr
+  Track (1D) \tab first \tab NULL \tab First value in the iterator interval. \cr
+  Track (1D) \tab last \tab NULL \tab Last value in the iterator interval. \cr
   Track \tab max \tab NULL \tab Maximum track value in the iterator interval. \cr
-  Track (1D) \tab max.pos.abs \tab NULL \tab Absolute genomic coordinate of the maximum value inside the iterator interval. \cr
-  Track (1D) \tab max.pos.relative \tab NULL \tab Zero-based position (relative to interval start) of the maximum value. \cr
   Track \tab min \tab NULL \tab Minimum track value in the iterator interval. \cr
-  Track (1D) \tab min.pos.abs \tab NULL \tab Absolute genomic coordinate of the minimum value inside the iterator interval. \cr
-  Track (1D) \tab min.pos.relative \tab NULL \tab Zero-based position (relative to interval start) of the minimum value. \cr
-  Dense / Sparse / Array track \tab nearest \tab NULL \tab Mean value inside the iterator; when the interval contains no samples (Sparse only) the nearest value is returned. \cr
+  Dense / Sparse / Array track \tab nearest \tab NULL \tab Average value inside the iterator; for sparse tracks with no samples in the interval, falls back to the closest sample outside the interval (by genomic distance). \cr
+  Track (1D) \tab sample \tab NULL \tab Uniformly sampled source value from the iterator interval. \cr
+  Track (1D) \tab size \tab NULL \tab Number of non-NaN values in the iterator interval. \cr
   Dense / Sparse / Array track \tab stddev \tab NULL \tab Unbiased standard deviation of values in the iterator interval. \cr
   Dense / Sparse / Array track \tab sum \tab NULL \tab Sum of values in the iterator interval. \cr
   Dense / Sparse / Array track \tab quantile \tab Percentile in [0, 1] \tab Quantile of values in the iterator interval. \cr
@@ -47,7 +48,23 @@ source, function and parameters. 'src' can be either a track or intervals
   Dense track \tab global.percentile.min \tab NULL \tab Percentile of the interval minimum relative to the full-track distribution. \cr
 }
 
-For \code{max.pos.relative}, \code{min.pos.relative}, iterator modifiers (including \code{sshift} /
+\strong{Track position summarizers}
+\tabular{llll}{
+  Source \tab func \tab params \tab Description \cr
+  Track (1D) \tab first.pos.abs \tab NULL \tab Absolute genomic coordinate of the first value. \cr
+  Track (1D) \tab first.pos.relative \tab NULL \tab Zero-based position (relative to interval start) of the first value. \cr
+  Track (1D) \tab last.pos.abs \tab NULL \tab Absolute genomic coordinate of the last value. \cr
+  Track (1D) \tab last.pos.relative \tab NULL \tab Zero-based position (relative to interval start) of the last value. \cr
+  Track (1D) \tab max.pos.abs \tab NULL \tab Absolute genomic coordinate of the maximum value inside the iterator interval. \cr
+  Track (1D) \tab max.pos.relative \tab NULL \tab Zero-based position (relative to interval start) of the maximum value. \cr
+  Track (1D) \tab min.pos.abs \tab NULL \tab Absolute genomic coordinate of the minimum value inside the iterator interval. \cr
+  Track (1D) \tab min.pos.relative \tab NULL \tab Zero-based position (relative to interval start) of the minimum value. \cr
+  Track (1D) \tab sample.pos.abs \tab NULL \tab Absolute genomic coordinate of a uniformly sampled value. \cr
+  Track (1D) \tab sample.pos.relative \tab NULL \tab Zero-based position (relative to interval start) of a uniformly sampled value. \cr
+}
+
+For \code{max.pos.relative}, \code{min.pos.relative}, \code{first.pos.relative}, \code{last.pos.relative}, \code{sample.pos.relative},
+iterator modifiers (including \code{sshift} /
 \code{eshift} and 1D projections generated via \code{gvtrack.iterator}) are
 applied before the position is reported. In other words, the returned
 coordinate is always 0-based and measured from the start of the iterator

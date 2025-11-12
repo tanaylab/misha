@@ -115,6 +115,17 @@ public:
             MAX_POS_REL,
             MIN_POS_ABS,
             MIN_POS_REL,
+            EXISTS,
+            SIZE,
+            SAMPLE,
+            SAMPLE_POS_ABS,
+            SAMPLE_POS_REL,
+            FIRST,
+            FIRST_POS_ABS,
+            FIRST_POS_REL,
+            LAST,
+            LAST_POS_ABS,
+            LAST_POS_REL,
             NUM_FUNCS
         };
 
@@ -237,6 +248,11 @@ private:
 	bool find_best_min_pos_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double &best_pos);
 	double aggregate_stddev_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
 	double aggregate_quantile_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double percentile);
+	double aggregate_exists_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
+	double aggregate_size_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
+	double aggregate_sample_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
+	double aggregate_sample_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
+	double aggregate_sample_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start);
 
 	// Batch processing for sequence-based vtracks
 	void batch_process_sequence_vtracks(vector<Track_var*> &kmer_vtracks,
