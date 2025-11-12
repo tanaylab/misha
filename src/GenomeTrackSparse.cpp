@@ -137,6 +137,22 @@ void GenomeTrackSparse::read_interval(const GInterval &interval)
 		m_last_max_pos = numeric_limits<double>::quiet_NaN();
 	if (m_functions[MIN_POS])
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[EXISTS])
+		m_last_exists = 0;
+	if (m_functions[SIZE])
+		m_last_size = 0;
+	if (m_functions[SAMPLE])
+		m_last_sample = numeric_limits<float>::quiet_NaN();
+	if (m_functions[SAMPLE_POS])
+		m_last_sample_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[FIRST])
+		m_last_first = numeric_limits<float>::quiet_NaN();
+	if (m_functions[FIRST_POS])
+		m_last_first_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[LAST])
+		m_last_last = numeric_limits<float>::quiet_NaN();
+	if (m_functions[LAST_POS])
+		m_last_last_pos = numeric_limits<double>::quiet_NaN();
 
 	if (m_use_quantile)
 		m_sp.reset();

@@ -16,6 +16,22 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 	if (m_functions[MIN_POS])
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[EXISTS])
+		m_last_exists = 0;
+	if (m_functions[SIZE])
+		m_last_size = 0;
+	if (m_functions[SAMPLE])
+		m_last_sample = numeric_limits<float>::quiet_NaN();
+	if (m_functions[SAMPLE_POS])
+		m_last_sample_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[FIRST])
+		m_last_first = numeric_limits<float>::quiet_NaN();
+	if (m_functions[FIRST_POS])
+		m_last_first_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[LAST])
+		m_last_last = numeric_limits<float>::quiet_NaN();
+	if (m_functions[LAST_POS])
+		m_last_last_pos = numeric_limits<double>::quiet_NaN();
 
 	// optimization of the most common case when the expression iterator starts at 0 and steps by bin_size
 	if (interval.start == m_cur_coord && interval.end == m_cur_coord + m_bin_size) {
@@ -26,6 +42,22 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				m_last_max_pos = interval.start;
 			if (m_functions[MIN_POS])
 				m_last_min_pos = interval.start;
+			if (m_functions[EXISTS])
+				m_last_exists = 1;
+			if (m_functions[SIZE])
+				m_last_size = 1;
+			if (m_functions[SAMPLE])
+				m_last_sample = m_last_avg;
+			if (m_functions[SAMPLE_POS])
+				m_last_sample_pos = interval.start;
+			if (m_functions[FIRST])
+				m_last_first = m_last_avg;
+			if (m_functions[FIRST_POS])
+				m_last_first_pos = interval.start;
+			if (m_functions[LAST])
+				m_last_last = m_last_avg;
+			if (m_functions[LAST_POS])
+				m_last_last_pos = interval.start;
 			if (m_use_quantile && !std::isnan(m_last_avg))
 				m_sp.add(m_last_avg, s_rnd_func);
 		} else {
@@ -51,6 +83,22 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				m_last_max_pos = overlap_start;
 			if (m_functions[MIN_POS])
 				m_last_min_pos = overlap_start;
+			if (m_functions[EXISTS])
+				m_last_exists = 1;
+			if (m_functions[SIZE])
+				m_last_size = 1;
+			if (m_functions[SAMPLE])
+				m_last_sample = m_last_avg;
+			if (m_functions[SAMPLE_POS])
+				m_last_sample_pos = overlap_start;
+			if (m_functions[FIRST])
+				m_last_first = m_last_avg;
+			if (m_functions[FIRST_POS])
+				m_last_first_pos = overlap_start;
+			if (m_functions[LAST])
+				m_last_last = m_last_avg;
+			if (m_functions[LAST_POS])
+				m_last_last_pos = overlap_start;
 			if (m_use_quantile && !std::isnan(m_last_avg))
 				m_sp.add(m_last_avg, s_rnd_func);
 		} else {
@@ -64,6 +112,14 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		float num_vs = 0;
 		double mean_square_sum = 0;
 		float v;
+
+		// For sampling, collect all values/positions
+		vector<float> all_values;
+		vector<double> all_positions;
+		if (m_functions[SAMPLE] || m_functions[SAMPLE_POS])
+			all_values.reserve(100);
+		if (m_functions[SAMPLE_POS])
+			all_positions.reserve(100);
 
 		m_last_sum = 0;
 		m_last_min = numeric_limits<float>::max();
@@ -100,8 +156,44 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				if (m_use_quantile && !std::isnan(v))
 					m_sp.add(v, s_rnd_func);
 
+				// New virtual track computations
+				if (m_functions[EXISTS])
+					m_last_exists = 1;
+
+				if (m_functions[FIRST] && std::isnan(m_last_first))
+					m_last_first = v;
+
+				if (m_functions[FIRST_POS] && std::isnan(m_last_first_pos))
+					m_last_first_pos = overlap_start;
+
+				if (m_functions[LAST])
+					m_last_last = v;
+
+				if (m_functions[LAST_POS])
+					m_last_last_pos = overlap_start;
+
+				if (m_functions[SAMPLE])
+					all_values.push_back(v);
+				if (m_functions[SAMPLE_POS])
+					all_positions.push_back(overlap_start);
+
 				++num_vs;
 			}
+		}
+
+		// Finalize size
+		if (m_functions[SIZE])
+			m_last_size = num_vs;
+
+		// Sample from collected values
+		if (m_functions[SAMPLE] && !all_values.empty()) {
+			int idx = (int)(s_rnd_func() * all_values.size());
+			m_last_sample = all_values[idx];
+		}
+
+		if (m_functions[SAMPLE_POS] && !all_positions.empty()) {
+			int idx = (int)(s_rnd_func() * all_positions.size());
+			m_last_sample_pos = all_positions[idx];
 		}
 
 		if (num_vs > 0)
