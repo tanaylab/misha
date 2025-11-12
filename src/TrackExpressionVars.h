@@ -111,6 +111,10 @@ public:
             PWM_COUNT,
             KMER_COUNT,
             KMER_FRAC,
+            MAX_POS_ABS,
+            MAX_POS_REL,
+            MIN_POS_ABS,
+            MIN_POS_REL,
             NUM_FUNCS
         };
 
@@ -225,6 +229,12 @@ private:
 	double aggregate_sum_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
 	double aggregate_min_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
 	double aggregate_max_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
+	double aggregate_max_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
+	double aggregate_max_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start);
+	double aggregate_min_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
+	double aggregate_min_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start);
+	bool find_best_max_pos_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double &best_pos);
+	bool find_best_min_pos_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double &best_pos);
 	double aggregate_stddev_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
 	double aggregate_quantile_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double percentile);
 

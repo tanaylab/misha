@@ -25,7 +25,8 @@
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
 	"avg", "min", "max", "nearest", "stddev", "sum", "quantile",
 	"global.percentile", "global.percentile.min", "global.percentile.max",
-	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac"};
+	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac",
+    "max.pos.abs", "max.pos.relative", "min.pos.abs", "min.pos.relative"};
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage", "neighbor.count" };
 
@@ -839,6 +840,18 @@ void TrackExpressionVars::register_track_functions()
 			else
 				track2d->register_function(GenomeTrack2D::MAX);
 			break;
+		case Track_var::MAX_POS_ABS:
+		case Track_var::MAX_POS_REL:
+			if (!track1d)
+				verror("vtrack functions 'max.pos.abs' and 'max.pos.relative' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::MAX_POS);
+			break;
+		case Track_var::MIN_POS_ABS:
+		case Track_var::MIN_POS_REL:
+			if (!track1d)
+				verror("vtrack functions 'min.pos.abs' and 'min.pos.relative' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::MIN_POS);
+			break;
 		case Track_var::REG_NEAREST:
 			track1d->register_function(GenomeTrack1D::NEAREST);
 			break;
@@ -1379,6 +1392,9 @@ void TrackExpressionVars::set_vars(unsigned idx)
 
 		if (GenomeTrack::is_1d(ivar->track_n_imdf->type)) {
 			GenomeTrack1D &track = *(GenomeTrack1D *)ivar->track_n_imdf->track;
+			const GInterval &base_interval = ivar->track_n_imdf->imdf1d ?
+				ivar->track_n_imdf->imdf1d->interval : m_interval1d;
+			const int64_t base_start = base_interval.start;
 
 			if (ivar->track_n_imdf->imdf1d && ivar->track_n_imdf->imdf1d->out_of_range)
 				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
@@ -1426,6 +1442,18 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					case Track_var::PV_MAX:
 						result = aggregate_max_with_filter(track, unmasked_parts);
 						break;
+					case Track_var::MAX_POS_ABS:
+						result = aggregate_max_pos_abs_with_filter(track, unmasked_parts);
+						break;
+					case Track_var::MAX_POS_REL:
+						result = aggregate_max_pos_rel_with_filter(track, unmasked_parts, base_start);
+						break;
+					case Track_var::MIN_POS_ABS:
+						result = aggregate_min_pos_abs_with_filter(track, unmasked_parts);
+						break;
+					case Track_var::MIN_POS_REL:
+						result = aggregate_min_pos_rel_with_filter(track, unmasked_parts, base_start);
+						break;
 					case Track_var::REG_NEAREST:
 						// For nearest, use the first unmasked part (closest to start)
 						track.read_interval(unmasked_parts[0]);
@@ -1446,9 +1474,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					// Restore track state after filter processing
 					// The aggregate functions call track.read_interval() which modifies the shared track state.
 					// Other vtracks sharing this Track_n_imdf need the original interval restored.
-					const GInterval &orig_interval = ivar->track_n_imdf->imdf1d ?
-						ivar->track_n_imdf->imdf1d->interval : m_interval1d;
-					track.read_interval(orig_interval);
+					track.read_interval(base_interval);
 				} else if (has_filter && unmasked_parts.size() == 1) {
 					// Single unmasked part - read just that part
 					track.read_interval(unmasked_parts[0]);
@@ -1465,6 +1491,18 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					case Track_var::REG_MAX:
 					case Track_var::PV_MAX:
 						ivar->var[idx] = track.last_max();
+						break;
+					case Track_var::MAX_POS_ABS:
+						ivar->var[idx] = track.last_max_pos();
+						break;
+					case Track_var::MAX_POS_REL:
+						ivar->var[idx] = track.last_max_pos() - base_start;
+						break;
+					case Track_var::MIN_POS_ABS:
+						ivar->var[idx] = track.last_min_pos();
+						break;
+					case Track_var::MIN_POS_REL:
+						ivar->var[idx] = track.last_min_pos() - base_start;
 						break;
 					case Track_var::REG_NEAREST:
 						ivar->var[idx] = track.last_nearest();
@@ -1486,9 +1524,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					}
 
 					// Restore track state after processing single filtered part
-					const GInterval &orig_interval = ivar->track_n_imdf->imdf1d ?
-						ivar->track_n_imdf->imdf1d->interval : m_interval1d;
-					track.read_interval(orig_interval);
+					track.read_interval(base_interval);
 				} else {
 					// No filter or single unmasked part - use normal path
 					switch (ivar->val_func) {
@@ -1503,6 +1539,18 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				case Track_var::REG_MAX:
 				case Track_var::PV_MAX:
 					ivar->var[idx] = track.last_max();
+					break;
+				case Track_var::MAX_POS_ABS:
+					ivar->var[idx] = track.last_max_pos();
+					break;
+				case Track_var::MAX_POS_REL:
+					ivar->var[idx] = track.last_max_pos() - base_start;
+					break;
+				case Track_var::MIN_POS_ABS:
+					ivar->var[idx] = track.last_min_pos();
+					break;
+				case Track_var::MIN_POS_REL:
+					ivar->var[idx] = track.last_min_pos() - base_start;
 					break;
 				case Track_var::REG_NEAREST:
 					ivar->var[idx] = track.last_nearest();
@@ -2011,6 +2059,88 @@ double TrackExpressionVars::aggregate_max_with_filter(GenomeTrack1D &track, cons
 	}
 
 	return (max_val != -numeric_limits<double>::infinity()) ? max_val : numeric_limits<double>::quiet_NaN();
+}
+
+bool TrackExpressionVars::find_best_max_pos_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double &best_pos)
+{
+	double best_val = -numeric_limits<double>::infinity();
+	bool has_value = false;
+
+	for (const auto &part : parts) {
+		track.read_interval(part);
+		double part_max = track.last_max();
+		double part_pos = track.last_max_pos();
+
+		if (std::isnan(part_max) || std::isnan(part_pos))
+			continue;
+
+		if (!has_value || part_max > best_val || (part_max == best_val && part_pos < best_pos)) {
+			best_val = part_max;
+			best_pos = part_pos;
+			has_value = true;
+		}
+	}
+
+	return has_value;
+}
+
+double TrackExpressionVars::aggregate_max_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	double best_pos = numeric_limits<double>::quiet_NaN();
+	if (!find_best_max_pos_with_filter(track, parts, best_pos))
+		return numeric_limits<double>::quiet_NaN();
+
+	return best_pos;
+}
+
+double TrackExpressionVars::aggregate_max_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start)
+{
+	double best_pos = numeric_limits<double>::quiet_NaN();
+	if (!find_best_max_pos_with_filter(track, parts, best_pos))
+		return numeric_limits<double>::quiet_NaN();
+
+	return best_pos - base_start;
+}
+
+bool TrackExpressionVars::find_best_min_pos_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double &best_pos)
+{
+	double best_val = numeric_limits<double>::infinity();
+	bool has_value = false;
+
+	for (const auto &part : parts) {
+		track.read_interval(part);
+		double part_min = track.last_min();
+		double part_pos = track.last_min_pos();
+
+		if (std::isnan(part_min) || std::isnan(part_pos))
+			continue;
+
+		if (!has_value || part_min < best_val || (part_min == best_val && part_pos < best_pos)) {
+			best_val = part_min;
+			best_pos = part_pos;
+			has_value = true;
+		}
+	}
+
+	return has_value;
+}
+
+double TrackExpressionVars::aggregate_min_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	double best_pos = numeric_limits<double>::quiet_NaN();
+	if (!find_best_min_pos_with_filter(track, parts, best_pos))
+		return numeric_limits<double>::quiet_NaN();
+
+	return best_pos;
+}
+
+double TrackExpressionVars::aggregate_min_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start)
+{
+	double best_pos = numeric_limits<double>::quiet_NaN();
+	if (!find_best_min_pos_with_filter(track, parts, best_pos))
+		return numeric_limits<double>::quiet_NaN();
+
+	return best_pos - base_start;
 }
 
 double TrackExpressionVars::aggregate_stddev_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
