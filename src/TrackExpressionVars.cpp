@@ -26,7 +26,9 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
 	"avg", "min", "max", "nearest", "stddev", "sum", "quantile",
 	"global.percentile", "global.percentile.min", "global.percentile.max",
 	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac",
-    "max.pos.abs", "max.pos.relative", "min.pos.abs", "min.pos.relative"};
+    "max.pos.abs", "max.pos.relative", "min.pos.abs", "min.pos.relative",
+    "exists", "size", "sample", "sample.pos.abs", "sample.pos.relative",
+    "first", "first.pos.abs", "first.pos.relative", "last", "last.pos.abs", "last.pos.relative"};
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage", "neighbor.count" };
 
@@ -870,6 +872,49 @@ void TrackExpressionVars::register_track_functions()
 		case Track_var::OCCUPIED_AREA:
 			track2d->register_function(GenomeTrack2D::OCCUPIED_AREA);
 			break;
+		case Track_var::EXISTS:
+			if (!track1d)
+				verror("vtrack function 'exists' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::EXISTS);
+			break;
+		case Track_var::SIZE:
+			if (!track1d)
+				verror("vtrack function 'size' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::SIZE);
+			break;
+		case Track_var::SAMPLE:
+			if (!track1d)
+				verror("vtrack function 'sample' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::SAMPLE);
+			break;
+		case Track_var::SAMPLE_POS_ABS:
+		case Track_var::SAMPLE_POS_REL:
+			if (!track1d)
+				verror("vtrack functions 'sample.pos.abs' and 'sample.pos.relative' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::SAMPLE_POS);
+			break;
+		case Track_var::FIRST:
+			if (!track1d)
+				verror("vtrack function 'first' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::FIRST);
+			break;
+		case Track_var::FIRST_POS_ABS:
+		case Track_var::FIRST_POS_REL:
+			if (!track1d)
+				verror("vtrack functions 'first.pos.abs' and 'first.pos.relative' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::FIRST_POS);
+			break;
+		case Track_var::LAST:
+			if (!track1d)
+				verror("vtrack function 'last' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::LAST);
+			break;
+		case Track_var::LAST_POS_ABS:
+		case Track_var::LAST_POS_REL:
+			if (!track1d)
+				verror("vtrack functions 'last.pos.abs' and 'last.pos.relative' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::LAST_POS);
+			break;
 		// Sequence-based functions work directly on sequences, no need to register track functions
 		default:
 			if (!TrackExpressionVars::is_sequence_based_function((Track_var::Val_func)ivar->val_func))
@@ -1462,6 +1507,51 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					case Track_var::QUANTILE:
 						result = aggregate_quantile_with_filter(track, unmasked_parts, ivar->percentile);
 						break;
+					case Track_var::EXISTS:
+						result = aggregate_exists_with_filter(track, unmasked_parts);
+						break;
+					case Track_var::SIZE:
+						result = aggregate_size_with_filter(track, unmasked_parts);
+						break;
+					case Track_var::SAMPLE:
+						result = aggregate_sample_with_filter(track, unmasked_parts);
+						break;
+					case Track_var::SAMPLE_POS_ABS:
+						result = aggregate_sample_pos_abs_with_filter(track, unmasked_parts);
+						break;
+					case Track_var::SAMPLE_POS_REL:
+						result = aggregate_sample_pos_rel_with_filter(track, unmasked_parts, base_start);
+						break;
+					case Track_var::FIRST:
+						// For first, use the first unmasked part
+						track.read_interval(unmasked_parts[0]);
+						result = track.last_first();
+						break;
+					case Track_var::FIRST_POS_ABS:
+						// For first position, use the first unmasked part
+						track.read_interval(unmasked_parts[0]);
+						result = track.last_first_pos();
+						break;
+					case Track_var::FIRST_POS_REL:
+						// For first position relative, use the first unmasked part
+						track.read_interval(unmasked_parts[0]);
+						result = track.last_first_pos() - base_start;
+						break;
+					case Track_var::LAST:
+						// For last, use the last unmasked part
+						track.read_interval(unmasked_parts.back());
+						result = track.last_last();
+						break;
+					case Track_var::LAST_POS_ABS:
+						// For last position, use the last unmasked part
+						track.read_interval(unmasked_parts.back());
+						result = track.last_last_pos();
+						break;
+					case Track_var::LAST_POS_REL:
+						// For last position relative, use the last unmasked part
+						track.read_interval(unmasked_parts.back());
+						result = track.last_last_pos() - base_start;
+						break;
 					// Sequence-based functions are already handled above
 					default:
 						if (!TrackExpressionVars::is_sequence_based_function(ivar->val_func))
@@ -1516,6 +1606,39 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					case Track_var::QUANTILE:
 						ivar->var[idx] = track.last_quantile(ivar->percentile);
 						break;
+					case Track_var::EXISTS:
+						ivar->var[idx] = track.last_exists();
+						break;
+					case Track_var::SIZE:
+						ivar->var[idx] = track.last_size();
+						break;
+					case Track_var::SAMPLE:
+						ivar->var[idx] = track.last_sample();
+						break;
+					case Track_var::SAMPLE_POS_ABS:
+						ivar->var[idx] = track.last_sample_pos();
+						break;
+					case Track_var::SAMPLE_POS_REL:
+						ivar->var[idx] = track.last_sample_pos() - base_start;
+						break;
+					case Track_var::FIRST:
+						ivar->var[idx] = track.last_first();
+						break;
+					case Track_var::FIRST_POS_ABS:
+						ivar->var[idx] = track.last_first_pos();
+						break;
+					case Track_var::FIRST_POS_REL:
+						ivar->var[idx] = track.last_first_pos() - base_start;
+						break;
+					case Track_var::LAST:
+						ivar->var[idx] = track.last_last();
+						break;
+					case Track_var::LAST_POS_ABS:
+						ivar->var[idx] = track.last_last_pos();
+						break;
+					case Track_var::LAST_POS_REL:
+						ivar->var[idx] = track.last_last_pos() - base_start;
+						break;
 					// Sequence-based functions are already handled above
 					default:
 						if (!TrackExpressionVars::is_sequence_based_function(ivar->val_func))
@@ -1563,6 +1686,39 @@ void TrackExpressionVars::set_vars(unsigned idx)
 					break;
 				case Track_var::QUANTILE:
 					ivar->var[idx] = track.last_quantile(ivar->percentile);
+					break;
+				case Track_var::EXISTS:
+					ivar->var[idx] = track.last_exists();
+					break;
+				case Track_var::SIZE:
+					ivar->var[idx] = track.last_size();
+					break;
+				case Track_var::SAMPLE:
+					ivar->var[idx] = track.last_sample();
+					break;
+				case Track_var::SAMPLE_POS_ABS:
+					ivar->var[idx] = track.last_sample_pos();
+					break;
+				case Track_var::SAMPLE_POS_REL:
+					ivar->var[idx] = track.last_sample_pos() - base_start;
+					break;
+				case Track_var::FIRST:
+					ivar->var[idx] = track.last_first();
+					break;
+				case Track_var::FIRST_POS_ABS:
+					ivar->var[idx] = track.last_first_pos();
+					break;
+				case Track_var::FIRST_POS_REL:
+					ivar->var[idx] = track.last_first_pos() - base_start;
+					break;
+				case Track_var::LAST:
+					ivar->var[idx] = track.last_last();
+					break;
+				case Track_var::LAST_POS_ABS:
+					ivar->var[idx] = track.last_last_pos();
+					break;
+				case Track_var::LAST_POS_REL:
+					ivar->var[idx] = track.last_last_pos() - base_start;
 					break;
 				// Sequence-based functions are already handled above
 				default:
@@ -2207,4 +2363,85 @@ double TrackExpressionVars::aggregate_quantile_with_filter(GenomeTrack1D &track,
 	}
 
 	return numeric_limits<double>::quiet_NaN();
+}
+
+double TrackExpressionVars::aggregate_exists_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	// Check if any value exists in any part
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		float exists = track.last_exists();
+		if (exists == 1.0f) {
+			return 1.0;
+		}
+	}
+	return 0.0;
+}
+
+double TrackExpressionVars::aggregate_size_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	// Sum the sizes across all parts
+	double total_size = 0.0;
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		total_size += track.last_size();
+	}
+	return total_size;
+}
+
+double TrackExpressionVars::aggregate_sample_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	// Collect all non-NaN values from all parts and sample one
+	vector<float> all_values;
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		float val = track.last_sample();
+		if (!std::isnan(val)) {
+			all_values.push_back(val);
+		}
+	}
+
+	if (all_values.empty()) {
+		return numeric_limits<double>::quiet_NaN();
+	}
+
+	// Use R's random number generator for reproducibility
+	GetRNGstate();
+	int idx = (int)(unif_rand() * all_values.size());
+	PutRNGstate();
+
+	return all_values[idx];
+}
+
+double TrackExpressionVars::aggregate_sample_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	// Collect all non-NaN positions from all parts and sample one
+	vector<double> all_positions;
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		double pos = track.last_sample_pos();
+		if (!std::isnan(pos)) {
+			all_positions.push_back(pos);
+		}
+	}
+
+	if (all_positions.empty()) {
+		return numeric_limits<double>::quiet_NaN();
+	}
+
+	// Use R's random number generator for reproducibility
+	GetRNGstate();
+	int idx = (int)(unif_rand() * all_positions.size());
+	PutRNGstate();
+
+	return all_positions[idx];
+}
+
+double TrackExpressionVars::aggregate_sample_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start)
+{
+	double abs_pos = aggregate_sample_pos_abs_with_filter(track, parts);
+	if (std::isnan(abs_pos)) {
+		return abs_pos;
+	}
+	return abs_pos - base_start;
 }
