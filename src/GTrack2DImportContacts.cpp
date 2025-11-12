@@ -234,10 +234,6 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 	char *endptr;
 	int64_t fendid;
 	int64_t coord;
-	char chromname[1000];
-	const char *CHROM_PREFIX = "chr";
-	const int CHROM_PREFIX_LEN = strlen(CHROM_PREFIX);
-	strcpy(chromname, "chr");
 
 	progress.init(fends_file.file_size(), 10000000);
 	lineno = 1;
@@ -265,11 +261,8 @@ static void process_contacts_as_fends(IntervUtils &iu, SEXP _contacts, SEXP _fen
 		defined.resize(fendid + 1);
 		defined[fendid] = true;
 
-		if (strncmp(chr_str, CHROM_PREFIX, CHROM_PREFIX_LEN)) {
-			strcpy(chromname + CHROM_PREFIX_LEN, chr_str);
-			chromids[fendid] = iu.get_chromkey().chrom2id(chromname);
-		} else
-			chromids[fendid] = iu.get_chromkey().chrom2id(chr_str);
+		// Use chromosome name as-is (no forced chr prefix)
+		chromids[fendid] = iu.get_chromkey().chrom2id(chr_str);
 
 		coord = strtoll(coord_str, &endptr, 10);
 		if (*endptr)

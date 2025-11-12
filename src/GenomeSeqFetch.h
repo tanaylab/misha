@@ -16,16 +16,20 @@
 #include "GenomeUtils.h"
 #include "GInterval.h"
 
+// Forward declaration
+class GenomeIndex;
+
 // -------------------- GenomeSeqFetch  -----------------------
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
 class GenomeSeqFetch {
 public:
-	enum Errors { FILE_READ_FAILED };
+	enum Errors { FILE_READ_FAILED, INVALID_INTERVAL };
 
-	GenomeSeqFetch() : m_cur_chromid(-1), m_cache_valid(false) {}
+	GenomeSeqFetch();
+	~GenomeSeqFetch();
 
-	void set_seqdir(const std::string &dir) { m_seqdir = dir; }
+	void set_seqdir(const std::string &dir);
 	void read_interval(const GInterval &interval, const GenomeChromKey &chromkey, std::vector<char> &result);
 
 private:
@@ -37,6 +41,10 @@ private:
 	bool               m_cache_valid;
 	GInterval          m_cached_interval;
 	std::vector<char>  m_cached_seq;
+
+	// Indexed genome support
+	bool               m_indexed_mode;
+	GenomeIndex*       m_index;
 };
 
 #endif /* GENOMESEQFETCH_H_ */

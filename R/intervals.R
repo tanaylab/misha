@@ -135,6 +135,15 @@
                 if (!is.null(intervals.set.out) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
+
+                # If database is indexed and output is bigset, convert to indexed format
+                if (!is.null(intervals.set.out) && .gdb.is_indexed() && .gintervals.is_bigset(intervals.set.out)) {
+                    if (.gintervals.is1d(intervals.set.out)) {
+                        gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    } else {
+                        gintervals.2d.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    }
+                }
             },
             finally = {
                 if (!success && !is.null(intervals.set.out)) {
@@ -153,6 +162,15 @@
             }
             if (.gintervals.needs_bigset(res)) {
                 .gintervals.small2big(intervals.set.out, res)
+
+                # If database is indexed, convert to indexed format
+                if (.gdb.is_indexed()) {
+                    if (.gintervals.is1d(res)) {
+                        gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    } else {
+                        gintervals.2d.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    }
+                }
             } else {
                 .gintervals.save_file(fullpath, res)
             }
@@ -258,14 +276,14 @@
         zeroline <- meta$zeroline
         t <- Sys.time()
         progress.percentage <- -1
-
         if (.gintervals.big.is1d(intervals.set)) {
             if (!is.null(chrom1) || !is.null(chrom2)) {
                 stop(sprintf("%s is a 1D big intervals set.\nchrom1 or chrom2 parameters can be applied only to 2D intervals.", intervals.set), call. = FALSE)
             }
 
             if (!is.null(chrom)) {
-                meta$stats <- meta$stats[meta$stats$chrom == chrom, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom) == as.character(chrom), ]
             }
 
             if (!.gintervals.loadable(intervals.set, chrom = chrom)) {
@@ -281,7 +299,6 @@
                     ), call. = FALSE)
                 }
             }
-
             if (nrow(meta$stats) > 1) {
                 res <- list(zeroline)
                 lapply(
@@ -317,10 +334,12 @@
             }
 
             if (!is.null(chrom1)) {
-                meta$stats <- meta$stats[meta$stats$chrom1 == chrom1, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom1) == as.character(chrom1), ]
             }
             if (!is.null(chrom2)) {
-                meta$stats <- meta$stats[meta$stats$chrom2 == chrom2, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom2) == as.character(chrom2), ]
             }
 
             if (!.gintervals.loadable(intervals.set, chrom1 = chrom1, chrom2 = chrom2)) {
@@ -442,7 +461,15 @@
             intervals.set
         } else {
             if (.gintervals.is_bigset(intervals.set)) {
-                .gintervals.big.meta(intervals.set)$zeroline
+                # For big intervals sets, check if we're loading a specific chromosome
+                # and use the C++ function that handles both per-chromosome and indexed formats
+                if (!is.null(chrom)) {
+                    return(.gcall("gbigintervs_load_chrom", intervals.set, chrom, .misha_env()))
+                } else if (!is.null(chrom1) && !is.null(chrom2)) {
+                    return(.gcall("gbigintervs_load_chrom2d", intervals.set, chrom1, chrom2, .misha_env()))
+                } else {
+                    .gintervals.big.meta(intervals.set)$zeroline
+                }
             } else {
                 stop(sprintf("File %s does not exist", intervfname), call. = FALSE)
             }
@@ -829,7 +856,32 @@ gintervals.2d <- function(chroms1 = NULL, starts1 = 0, ends1 = -1, chroms2 = NUL
 #' @export gintervals.2d.all
 gintervals.2d.all <- function() {
     .gcheckroot()
-    get("ALLGENOME", envir = .misha)[[2]]
+    intervals2d <- get("ALLGENOME", envir = .misha)[[2]]
+
+    # Check if 2D is deferred and generate on demand
+    if (.is_2d_deferred(intervals2d)) {
+        mode <- getOption("gmulticontig.2d.mode", "diagonal")
+        n_contigs <- attr(intervals2d, "n_contigs")
+
+        if (mode == "full") {
+            warning(sprintf(
+                "Generating full 2D genome with %d contigs (%d pairs). This may take time and use significant memory.",
+                n_contigs, n_contigs * n_contigs
+            ))
+        }
+
+        intervals <- get("ALLGENOME", envir = .misha)[[1]]
+        intervals2d <- .generate_2d_on_demand(intervals, mode)
+
+        # Cache if requested
+        if (getOption("gmulticontig.2d.cache", FALSE)) {
+            allgenome <- get("ALLGENOME", envir = .misha)
+            allgenome[[2]] <- intervals2d
+            assign("ALLGENOME", allgenome, envir = .misha)
+        }
+    }
+
+    intervals2d
 }
 
 
@@ -1617,10 +1669,32 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' 'intervalID' is added to the resulted data frame. For each interval in the
 #' resulted intervals it indicates the index of the original interval.
 #'
+#' Source overlaps occur when the same source genome position maps to multiple
+#' target genome positions. Using 'src_overlap_policy = "keep"' allows one source
+#' interval to map to multiple target intervals, creating ambiguous mappings.
+#' Target overlaps occur when multiple source positions map to overlapping regions
+#' in the target genome.
+#'
+#' When passing a chain file path (as opposed to a pre-loaded chain data frame),
+#' the policies are used both for loading the chain and performing the liftover.
+#' When passing a pre-loaded chain data frame, the policies only apply to the
+#' liftover operation itself.
+#'
 #' @param intervals intervals from another assembly
 #' @param chain name of chain file or data frame as returned by
 #' 'gintervals.load_chain'
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
 #' @return A data frame representing the converted intervals.
+#'
+#' @note
+#' Terminology note for UCSC chain format users: In the UCSC chain format specification,
+#' the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+#' while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+#' misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+#' (chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+#' (chrom, start, end).
+#'
 #' @seealso \code{\link{gintervals.load_chain}}, \code{\link{gtrack.liftover}},
 #' \code{\link{gintervals}}
 #' @keywords ~intervals ~liftover ~chain
@@ -1635,24 +1709,36 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #'     chrom = "chr25", start = c(0, 7000),
 #'     end = c(6000, 20000)
 #' )
+#' # Liftover with default policies
 #' gintervals.liftover(intervs, chainfile)
 #'
+#' # Liftover keeping source overlaps (one source interval may map to multiple targets)
+#' # gintervals.liftover(intervs, chainfile, src_overlap_policy = "keep")
+#'
 #' @export gintervals.liftover
-gintervals.liftover <- function(intervals = NULL, chain = NULL) {
+gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto") {
     if (is.null(intervals) || is.null(chain)) {
-        stop("Usage: gintervals.liftover(intervals, chain)", call. = FALSE)
+        stop("Usage: gintervals.liftover(intervals, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"error\")", call. = FALSE)
     }
     .gcheckroot()
+
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
+    }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.character(chain)) {
-        chain.intervs <- gintervals.load_chain(chain)
+        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
     } else {
         chain.intervs <- chain
     }
 
-    .gcall("gintervs_liftover", intervals, chain.intervs, .misha_env())
+    .gcall("gintervs_liftover", intervals, chain.intervs, src_overlap_policy, tgt_overlap_policy, .misha_env())
 }
 
 
@@ -1694,6 +1780,49 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
     .gintervals.load_ext(intervals.set, chrom, chrom1, chrom2, TRUE)
 }
 
+#' Validate source chromosomes against source genome
+#'
+#' @param chain Chain data frame with source chromosome information
+#' @param src_groot Path to source genome database
+#' @return NULL (stops with error if validation fails)
+#' @keywords internal
+#' @noRd
+.validate_source_chromosomes <- function(chain, src_groot) {
+    # Save current genome state
+    old_groot <- .misha$GROOT
+    old_allgenome <- .misha$ALLGENOME
+    old_chrom_alias <- if (exists("CHROM_ALIAS", envir = .misha)) .misha$CHROM_ALIAS else NULL
+
+    # Ensure genome is restored even if error occurs
+    on.exit(
+        {
+            .misha$GROOT <- old_groot
+            .misha$ALLGENOME <- old_allgenome
+            if (!is.null(old_chrom_alias)) {
+                .misha$CHROM_ALIAS <- old_chrom_alias
+            } else if (exists("CHROM_ALIAS", envir = .misha)) {
+                rm("CHROM_ALIAS", envir = .misha)
+            }
+        },
+        add = TRUE
+    )
+
+    # Temporarily switch to source genome for validation
+    gdb.init(src_groot)
+
+    # Create source intervals data frame
+    src_intervals <- data.frame(
+        chrom = chain$chromsrc,
+        start = chain$startsrc,
+        end = chain$endsrc,
+        stringsAsFactors = FALSE
+    )
+
+    validated <- .gintervals(chain$chromsrc, chain$startsrc, chain$endsrc, chain$strandsrc)
+
+    # Genome will be restored by on.exit
+}
+
 
 #' Loads assembly conversion table from a chain file
 #'
@@ -1702,12 +1831,49 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' This function reads a file in 'chain' format and returns assembly conversion
 #' table that can be used in 'gtrack.liftover' and 'gintervals.liftover'.
 #'
-#' Note: chain file might map a few different source intervals into a single
-#' target one. These ambiguous mappings are not presented in the data frame
-#' returned by 'gintervals.load_chain'.
+#' Source overlaps occur when the same source genome position maps to multiple
+#' target genome positions. Target overlaps occur when multiple source positions
+#' map to overlapping regions in the target genome.
+#'
+#' The 'src_overlap_policy' controls how source overlaps are handled:
+#' \itemize{
+#'   \item "error" (default): Throw an error if source overlaps are detected
+#'   \item "keep": Keep all mappings, allowing one source to map to multiple targets
+#'   \item "discard": Remove all chain intervals involved in source overlaps
+#' }
+#'
+#' The 'tgt_overlap_policy' controls how target overlaps are handled:
+#' \itemize{
+#'   \item "error": Throw an error if target overlaps are detected
+#'   \item "auto" (default): Automatically resolve overlaps by truncating/splitting intervals
+#'   \item "discard": Remove all chain intervals involved in target overlaps
+#' }
 #'
 #' @param file name of chain file
-#' @return A data frame representing assembly conversion table.
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard"
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), or "discard".  In addition a "keep" policy is available, which allows overlapping target intervals, but note that liftover functions would not be able to handle this case.
+#' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
+#'
+#' @return A data frame with 8 columns representing assembly conversion table:
+#' \itemize{
+#'   \item chrom: target chromosome
+#'   \item start: target start coordinate (0-based)
+#'   \item end: target end coordinate (0-based, exclusive)
+#'   \item strand: target strand (+1 for forward, -1 for reverse)
+#'   \item chromsrc: source chromosome
+#'   \item startsrc: source start coordinate (0-based)
+#'   \item endsrc: source end coordinate (0-based, exclusive)
+#'   \item strandsrc: source strand (+1 for forward, -1 for reverse)
+#' }
+#'
+#' @note
+#' Terminology note for UCSC chain format users: In the UCSC chain format specification,
+#' the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+#' while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+#' misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+#' (chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+#' (chrom, start, end).
+#'
 #' @seealso \code{\link{gintervals.liftover}}, \code{\link{gtrack.liftover}}
 #' @keywords ~intervals ~liftover ~chain
 #' @examples
@@ -1717,14 +1883,40 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #'
 #' gdb.init_examples()
 #' chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
+#' # Load chain file with default policies
 #' gintervals.load_chain(chainfile)
 #'
+#' # Load chain file, keeping source overlaps (ambiguous mappings)
+#' # gintervals.load_chain(chainfile, src_overlap_policy = "keep")
+#'
+#' # Load chain file, discarding both source and target overlaps
+#' # gintervals.load_chain(chainfile, src_overlap_policy = "discard", tgt_overlap_policy = "discard")
+#'
+#' # Load chain file with source genome validation
+#' # gintervals.load_chain(chainfile, src_groot = "/path/to/source/genome/db")
+#'
 #' @export gintervals.load_chain
-gintervals.load_chain <- function(file = NULL) {
+gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", src_groot = NULL) {
     if (is.null(file)) {
-        stop("Usage: gintervals.load_chain(file)", call. = FALSE)
+        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", src_groot = NULL)", call. = FALSE)
     }
-    .gcall("gchain2interv", file, .misha_env())
+
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    # Load chain (validates TARGET chromosomes against current genome)
+    chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
+    # Optionally validate SOURCE chromosomes against source genome
+    if (!is.null(src_groot) && !is.null(chain)) {
+        .validate_source_chromosomes(chain, src_groot)
+    }
+
+    return(chain)
 }
 
 

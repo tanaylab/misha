@@ -4,13 +4,34 @@
 \alias{gintervals.load_chain}
 \title{Loads assembly conversion table from a chain file}
 \usage{
-gintervals.load_chain(file = NULL)
+gintervals.load_chain(
+  file = NULL,
+  src_overlap_policy = "error",
+  tgt_overlap_policy = "auto",
+  src_groot = NULL
+)
 }
 \arguments{
 \item{file}{name of chain file}
+
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard"}
+
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), or "discard".  In addition a "keep" policy is available, which allows overlapping target intervals, but note that liftover functions would not be able to handle this case.}
+
+\item{src_groot}{optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.}
 }
 \value{
-A data frame representing assembly conversion table.
+A data frame with 8 columns representing assembly conversion table:
+\itemize{
+  \item chrom: target chromosome
+  \item start: target start coordinate (0-based)
+  \item end: target end coordinate (0-based, exclusive)
+  \item strand: target strand (+1 for forward, -1 for reverse)
+  \item chromsrc: source chromosome
+  \item startsrc: source start coordinate (0-based)
+  \item endsrc: source end coordinate (0-based, exclusive)
+  \item strandsrc: source strand (+1 for forward, -1 for reverse)
+}
 }
 \description{
 Loads assembly conversion table from a chain file.
@@ -19,9 +40,31 @@ Loads assembly conversion table from a chain file.
 This function reads a file in 'chain' format and returns assembly conversion
 table that can be used in 'gtrack.liftover' and 'gintervals.liftover'.
 
-Note: chain file might map a few different source intervals into a single
-target one. These ambiguous mappings are not presented in the data frame
-returned by 'gintervals.load_chain'.
+Source overlaps occur when the same source genome position maps to multiple
+target genome positions. Target overlaps occur when multiple source positions
+map to overlapping regions in the target genome.
+
+The 'src_overlap_policy' controls how source overlaps are handled:
+\itemize{
+  \item "error" (default): Throw an error if source overlaps are detected
+  \item "keep": Keep all mappings, allowing one source to map to multiple targets
+  \item "discard": Remove all chain intervals involved in source overlaps
+}
+
+The 'tgt_overlap_policy' controls how target overlaps are handled:
+\itemize{
+  \item "error": Throw an error if target overlaps are detected
+  \item "auto" (default): Automatically resolve overlaps by truncating/splitting intervals
+  \item "discard": Remove all chain intervals involved in target overlaps
+}
+}
+\note{
+Terminology note for UCSC chain format users: In the UCSC chain format specification,
+the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+(chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+(chrom, start, end).
 }
 \examples{
 \dontshow{
@@ -30,7 +73,17 @@ options(gmax.processes = 2)
 
 gdb.init_examples()
 chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
+# Load chain file with default policies
 gintervals.load_chain(chainfile)
+
+# Load chain file, keeping source overlaps (ambiguous mappings)
+# gintervals.load_chain(chainfile, src_overlap_policy = "keep")
+
+# Load chain file, discarding both source and target overlaps
+# gintervals.load_chain(chainfile, src_overlap_policy = "discard", tgt_overlap_policy = "discard")
+
+# Load chain file with source genome validation
+# gintervals.load_chain(chainfile, src_groot = "/path/to/source/genome/db")
 
 }
 \seealso{

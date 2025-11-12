@@ -144,7 +144,7 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
 
     tryCatch(
         {
-            .gcall("gtrackconvert", src.trackstr, tgt.trackstr, .misha_env(), silent = TRUE)
+            .gcall("gtrackconvert", src.trackstr, tgt.trackstr, .misha_env())
 
             # copy all supplimentary data of a track (vars, etc.)
             if (!system(sprintf("cp -r -u %s/. %s", src.dirname, tgt.dirname))) {
@@ -168,6 +168,11 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
                 warning(msg, call. = FALSE)
             }
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.convert_to_indexed(tgt.trackstr)
+            }
         },
         finally = {
             if (!success) {
@@ -230,7 +235,7 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -243,9 +248,9 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     tryCatch(
         {
             if (.ggetOption("gmultitasking")) {
-                .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env(), silent = TRUE)
+                .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env())
             } else {
-                .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env(), silent = TRUE)
+                .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env())
             }
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
@@ -256,6 +261,15 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+            if (.gdb.is_indexed()) {
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -310,7 +324,7 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
@@ -323,9 +337,9 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     tryCatch(
         {
             if (.ggetOption("gmultitasking")) {
-                .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, .misha_env(), silent = TRUE)
+                .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
             } else {
-                .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, .misha_env(), silent = TRUE)
+                .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
             }
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
@@ -339,6 +353,15 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+            if (.gdb.is_indexed()) {
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -392,7 +415,7 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -404,13 +427,22 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env(), silent = TRUE)
+            .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, intervals, values)", trackstr), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+            if (.gdb.is_indexed()) {
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -678,7 +710,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -726,13 +758,18 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                         end = bed_parsed$intervals$end,
                         value = as.numeric(bed_parsed$values)
                     )
-                    .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env(), silent = TRUE)
+                    .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
                     .gdb.add_track(trackstr)
                     .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
                 } else {
-                    .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env(), silent = TRUE)
+                    .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
                     .gdb.add_track(trackstr)
                     .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
+                }
+
+                # If database is indexed, automatically convert the track to indexed format
+                if (.gdb.is_indexed()) {
+                    gtrack.convert_to_indexed(trackstr)
                 }
 
                 success <- TRUE
@@ -764,9 +801,14 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                     message("Converting to track...\n")
                 }
 
-                .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env(), silent = TRUE)
+                .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env())
                 .gdb.add_track(trackstr)
                 .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
+
+                # If database is indexed, automatically convert the track to indexed format
+                if (.gdb.is_indexed()) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
 
                 success <- TRUE
             }
@@ -841,7 +883,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -854,7 +896,7 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     success <- FALSE
     tryCatch(
         {
-            retv <- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env(), silent = TRUE)
+            retv <- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -1027,6 +1069,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' The fields in the returned value vary depending on the type of the track.
 #'
 #' @param track track name
+#' @param validate if TRUE, validates the track index file integrity (for indexed tracks). Default: FALSE
 #' @return A list that contains track properties
 #' @seealso \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}}
 #' @keywords ~track ~info ~property
@@ -1040,14 +1083,14 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
 #' gtrack.info("rects_track")
 #'
 #' @export gtrack.info
-gtrack.info <- function(track = NULL) {
+gtrack.info <- function(track = NULL, validate = FALSE) {
     if (is.null(substitute(track))) {
         stop("Usage: gtrack.info(track)", call. = FALSE)
     }
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gcall("gtrackinfo", trackstr, .misha_env())
+    .gcall("gtrackinfo", trackstr, validate, .misha_env())
 }
 
 
@@ -1062,24 +1105,166 @@ gtrack.info <- function(track = NULL) {
 #' function. The name of the newly created track is specified by 'track'
 #' argument and 'description' is added as a track attribute.
 #'
+#' Source overlaps occur when the same source genome position maps to multiple
+#' target genome positions. Using 'src_overlap_policy = "keep"' may result in
+#' duplicated track values when one source position maps to multiple target
+#' positions. Target overlaps occur when multiple source positions map to
+#' overlapping regions in the target genome.
+#'
+#' When passing a chain file path (as opposed to a pre-loaded chain data frame),
+#' the policies are used both for loading the chain and performing the liftover.
+#' When passing a pre-loaded chain data frame, the policies only apply to the
+#' liftover operation itself.
+#'
 #' @param track name of a created track
 #' @param description a character string description
 #' @param src.track.dir path to the directory of the source track
-#' @param chain name of chain file or data frame as returned by
-#' 'gintervals.load_chain'
+#' @param chain name of chain file or data frame with 8 columns as returned by
+#' 'gintervals.load_chain' (chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc).
+#' Strand columns use +1 for forward strand and -1 for reverse strand.
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "keep", or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "keep" preserves overlapping target intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
+#' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus.
+#' When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy),
+#' their values must be combined into a single value. The following aggregation policies are supported:
+#'
+#' \emph{"mean"} \cr Average of all contributor values.
+#'
+#' \emph{"median"} \cr Median of all contributor values.
+#'
+#' \emph{"sum"} \cr Sum of all contributor values.
+#'
+#' \emph{"min"} \cr Minimum of all contributor values.
+#'
+#' \emph{"max"} \cr Maximum of all contributor values.
+#'
+#' \emph{"count"} \cr Number of contributors (ignoring NA values if na.rm=TRUE).
+#'
+#' \emph{"first"} \cr Value from the contributor with the smallest start coordinate in the \emph{target} genome.
+#' In case of ties (same start coordinate), the contributor with the smaller end coordinate is chosen.
+#' If still tied, the larger value is chosen.
+#'
+#' \emph{"last"} \cr Value from the contributor with the largest start coordinate in the \emph{target} genome.
+#' In case of ties, the contributor with the larger end coordinate is chosen. If still tied, the larger value is chosen.
+#'
+#' \emph{"nth"} \cr Value from the nth contributor when ordered by target genome position (smallest start, then smallest end, with ties broken by largest value).
+#' Requires \code{params} to specify which contributor to select (1-based index).
+#' For example, params=1 selects the first contributor, params=2 selects the second. Returns NA if there are fewer than n contributors.
+#'
+#' \emph{"max.coverage_len"} \cr Value from the contributor with the longest overlap with the target locus (in base pairs).
+#' In case of ties, the contributor with the larger value is chosen.
+#'
+#' \emph{"min.coverage_len"} \cr Value from the contributor with the shortest overlap with the target locus (in base pairs).
+#' In case of ties, the contributor with the larger value is chosen.
+#'
+#' \emph{"max.coverage_frac"} \cr Value from the contributor with the highest coverage fraction
+#' (overlap length / source interval length). In case of ties, the contributor with the larger value is chosen.
+#'
+#' \emph{"min.coverage_frac"} \cr Value from the contributor with the lowest coverage fraction
+#' (overlap length / source interval length). In case of ties, the contributor with the larger value is chosen.
+#'
+#' @param params optional list or scalar with aggregator-specific parameters.
+#' Currently only the "nth" aggregator uses this parameter. It expects either a scalar (e.g., params=2)
+#' or a list with an 'n' element (e.g., params=list(n=2)) specifying the 1-based index of the contributor to select.
+#' @param na.rm logical flag controlling NA removal prior to aggregation. If TRUE (default), NA values are ignored
+#' during aggregation. If FALSE, the presence of any NA value causes the aggregated result to be NA.
+#' This applies to all aggregators except "count", which always ignores NAs when counting.
+#' @param min_n optional minimum number of non-NA contributors required to produce a non-NA result.
+#' If specified and the number of non-NA contributors is less than min_n, the result will be NA.
+#' If NULL (default), no minimum is enforced. This parameter works in conjunction with na.rm:
+#' if na.rm=FALSE, a single NA contributor will cause the result to be NA regardless of min_n.
 #' @return None.
+#'
+#' @note
+#' Terminology note for UCSC chain format users: In the UCSC chain format specification,
+#' the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+#' while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+#' misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+#' (chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+#' (chrom, start, end).
+#'
 #' @seealso \code{\link{gintervals.load_chain}},
 #' \code{\link{gintervals.liftover}}
 #' @keywords ~track ~liftover ~chain
 #' @export gtrack.liftover
-gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NULL, chain = NULL) {
+gtrack.liftover <- function(track = NULL,
+                            description = NULL,
+                            src.track.dir = NULL,
+                            chain = NULL,
+                            src_overlap_policy = "error",
+                            tgt_overlap_policy = "auto",
+                            multi_target_agg = c(
+                                "mean", "median", "sum", "min", "max", "count",
+                                "first", "last", "nth",
+                                "max.coverage_len", "min.coverage_len",
+                                "max.coverage_frac", "min.coverage_frac"
+                            ),
+                            params = NULL,
+                            na.rm = TRUE,
+                            min_n = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(src.track.dir) || is.null(chain)) {
-        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain)", call. = FALSE)
+        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", ...)", call. = FALSE)
     }
     .gcheckroot()
 
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    multi_target_agg <- match.arg(multi_target_agg)
+
+    if (!is.logical(na.rm) || length(na.rm) != 1 || is.na(na.rm)) {
+        stop("na.rm must be a single non-NA logical value", call. = FALSE)
+    }
+
+    if (!is.null(min_n)) {
+        if (!is.numeric(min_n) || length(min_n) != 1 ||
+            is.na(min_n) || min_n < 0 || min_n != as.integer(min_n)) {
+            stop("min_n must be NULL or a non-negative integer", call. = FALSE)
+        }
+        min_n <- as.integer(min_n)
+    }
+
+    nth_param <- NA_integer_
+    if (identical(multi_target_agg, "nth")) {
+        if (is.null(params)) {
+            stop("params must be supplied for 'nth' aggregation (e.g. params = 2 or params = list(n = 2))", call. = FALSE)
+        }
+
+        extract_n <- function(obj) {
+            if (is.list(obj)) {
+                if (length(obj) == 0L) {
+                    stop("params list must contain an element 'n' for 'nth'", call. = FALSE)
+                }
+                if (!is.null(names(obj)) && "n" %in% names(obj)) {
+                    return(obj[["n"]])
+                }
+                if (length(obj) == 1L) {
+                    return(obj[[1]])
+                }
+                stop("params must contain a single numeric value (or named 'n') for 'nth'", call. = FALSE)
+            }
+            obj
+        }
+
+        n_value <- extract_n(params)
+        if (length(n_value) != 1L || is.na(n_value) || !is.numeric(n_value)) {
+            stop("params for 'nth' must be a single positive integer", call. = FALSE)
+        }
+        nth_param <- as.integer(n_value)
+        if (nth_param <= 0L) {
+            stop("params for 'nth' must be a positive integer", call. = FALSE)
+        }
+    } else if (!is.null(params)) {
+        stop(sprintf("params is only supported for 'nth' aggregation, not '%s'", multi_target_agg), call. = FALSE)
+    }
+
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -1088,7 +1273,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     }
 
     if (is.character(chain)) {
-        chain.intervs <- gintervals.load_chain(chain)
+        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
     } else {
         chain.intervs <- chain
     }
@@ -1097,7 +1282,19 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, .misha_env(), silent = TRUE)
+            .gcall(
+                "gtrack_liftover",
+                trackstr,
+                src.track.dir,
+                chain.intervs,
+                src_overlap_policy,
+                tgt_overlap_policy,
+                multi_target_agg,
+                nth_param,
+                na.rm,
+                if (is.null(min_n)) NA_integer_ else min_n,
+                .misha_env()
+            )
             .gdb.add_track(trackstr)
             if (is.character(chain)) {
                 .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), TRUE)
@@ -1108,6 +1305,19 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            # For empty tracks (no chromosome files), create an empty indexed track
+            if (.gdb.is_indexed()) {
+                track_has_files <- length(list.files(trackdir, pattern = "^[^.]")) > 0
+                if (track_has_files) {
+                    gtrack.convert_to_indexed(trackstr)
+                } else {
+                    # Create empty indexed track for empty tracks
+                    # This ensures gtrack.info and gextract work correctly
+                    .gcall("gtrack_create_empty_indexed", trackstr, .misha_env())
+                }
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -1203,7 +1413,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
 
     exprs <- c()
@@ -1224,7 +1434,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_bintransform", trackstr, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, .misha_env(), silent = TRUE)
+            .gcall("gtrack_bintransform", trackstr, exprs, breaks, include.lowest, force.binning, lookup_table, .iterator, band, .misha_env())
             .gdb.add_track(trackstr)
             created.by <- sprintf("gtrack.lookup(%s, description, lookup_table", trackstr)
             for (i in (1:length(exprs))) {
@@ -1236,6 +1446,15 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+            if (.gdb.is_indexed()) {
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -1439,10 +1658,12 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
     .gcheckroot()
 
     trackname <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
+    dirname <- .track_dir(trackname)
 
     # check whether track appears among GTRACKS
-    if (is.na(match(trackname, get("GTRACKS", envir = .misha)))) {
+    if (!(trackname %in% get("GTRACKS", envir = .misha))) {
         if (force) {
+            .rm_track_dir(trackname)
             return(invisible())
         }
         stop(sprintf("Track %s does not exist", trackname), call. = FALSE)
@@ -1458,12 +1679,10 @@ gtrack.rm <- function(track = NULL, force = FALSE) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        dirname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
-
         # remove the track
-        unlink(dirname, recursive = TRUE)
+        .rm_track_dir(trackname)
 
-        if (file.exists(dirname)) {
+        if (dir.exists(dirname)) {
             message(sprintf("Failed to delete track %s", trackname))
         } else {
             # refresh the list of GTRACKS, etc.
@@ -1544,7 +1763,7 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
@@ -1556,7 +1775,7 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
     success <- FALSE
     tryCatch(
         {
-            .gcall("gsmooth", trackstr, exprstr, winsize, weight_thr, smooth_nans, alg, .iterator, .misha_env(), silent = TRUE)
+            .gcall("gsmooth", trackstr, exprstr, winsize, weight_thr, smooth_nans, alg, .iterator, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -1566,6 +1785,15 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+            if (.gdb.is_indexed()) {
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -1621,7 +1849,7 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
+    trackdir <- .track_dir(trackstr)
 
     direxisted <- file.exists(trackdir)
 
@@ -1647,7 +1875,7 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
     tryCatch(
         {
             # Call the C++ function with the data frame
-            .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env(), silent = TRUE)
+            .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
 
             # Add the track to the database
             .gdb.add_track(trackstr)
@@ -1668,6 +1896,15 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
             .gtrack.attr.set(trackstr, "binsize", binsize, TRUE)
 
             success <- TRUE
+
+            # If database is indexed, automatically convert the track to indexed format
+            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+            if (.gdb.is_indexed()) {
+                track_info <- gtrack.info(trackstr)
+                if (track_info$type %in% c("dense", "sparse", "array")) {
+                    gtrack.convert_to_indexed(trackstr)
+                }
+            }
         },
         finally = {
             if (!success && !direxisted) {

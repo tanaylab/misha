@@ -611,6 +611,14 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 
 			// read the list of chrom files
 			get_chrom_files(trackpath.c_str(), filenames);
+
+			// If filenames is empty, this is an indexed track - populate with all chromosome names
+			if (filenames.empty() && GenomeTrack::is_1d(track_type)) {
+				for (unsigned i = 0; i < m_iu.get_chromkey().get_num_chroms(); ++i) {
+					filenames.push_back(m_iu.get_chromkey().id2chrom(i));
+				}
+			}
+
 			sort(filenames.begin(), filenames.end());
 
 			if (GenomeTrack::is_1d(track_type)) {

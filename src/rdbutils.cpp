@@ -762,6 +762,17 @@ void rdb::runprotect_all()
 
 void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 {
+	// Check for indexed format first
+	string idx_path = string(dirname) + "/track.idx";
+	struct stat idx_st;
+
+	if (stat(idx_path.c_str(), &idx_st) == 0) {
+		// Indexed format exists - return empty list
+		// The scanner will need to handle this case differently
+		return;
+	}
+
+	// Per-chromosome format - scan directory for per-chromosome files
 	DIR *dir = opendir(dirname);
 
 	if (!dir)
@@ -770,18 +781,27 @@ void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
 	struct dirent *dirp;
 
 	while ((dirp = readdir(dir))) {
-		if (!strncmp(dirp->d_name, CHROM_FILE_PREFIX, CHROM_FILE_PREFIX_LEN)) {
-            if (dirp->d_type == DT_REG)
-                chrom_files.push_back(dirp->d_name);
-            else if (dirp->d_type == DT_UNKNOWN) {
-                struct stat sbuf;
-                char filename[PATH_MAX];
+		if (!strcmp(dirp->d_name, ".") || !strcmp(dirp->d_name, ".."))
+			continue;
+		if (dirp->d_name[0] == '.')
+			continue;
 
-                snprintf(filename, sizeof(filename), "%s/%s", dirname, dirp->d_name);
-                if (!stat(filename, &sbuf) && S_ISREG(sbuf.st_mode))
-                    chrom_files.push_back(dirp->d_name);
-            }
-        }
+		// Skip indexed format files (shouldn't exist if we got here, but just in case)
+		if (!strcmp(dirp->d_name, "track.dat") || !strcmp(dirp->d_name, "track.idx"))
+			continue;
+		if (!strcmp(dirp->d_name, "track.dat.tmp") || !strcmp(dirp->d_name, "track.idx.tmp"))
+			continue;
+
+		if (dirp->d_type == DT_REG)
+			chrom_files.push_back(dirp->d_name);
+		else if (dirp->d_type == DT_UNKNOWN) {
+			struct stat sbuf;
+			char filename[PATH_MAX];
+
+			snprintf(filename, sizeof(filename), "%s/%s", dirname, dirp->d_name);
+			if (!stat(filename, &sbuf) && S_ISREG(sbuf.st_mode))
+				chrom_files.push_back(dirp->d_name);
+		}
 	}
 
 	closedir(dir);
@@ -1034,3 +1054,18 @@ SEXP rdb::get_rvector_col(SEXP v, const char *colname, const char *varname, bool
 	return R_NilValue;
 }
 
+
+// Helper function to check if database is in indexed format
+bool rdb::is_db_indexed(SEXP _envir) {
+	const char *groot = get_groot(_envir);
+	if (!groot || !*groot) {
+		return false;
+	}
+
+	string seq_dir = string(groot) + "/seq";
+	string idx_path = seq_dir + "/genome.idx";
+	string seq_path = seq_dir + "/genome.seq";
+
+	struct stat st;
+	return (stat(idx_path.c_str(), &st) == 0 && stat(seq_path.c_str(), &st) == 0);
+}
