@@ -182,12 +182,15 @@ test_that("cache write failures produce warnings", {
     # Create a file where a directory should be to force failure
     writeLines("block", parent_as_file)
 
-    # Attempt to write cache to a path where parent is a file should produce a warning
+    # Attempt to write cache to a path where parent is a file should produce warnings
     # This simulates a filesystem error
-    expect_warning(
-        result <- misha:::.gdb.cache_write_lists(c("track1"), c(), file.path(parent_as_file, "subdir")),
-        "Failed to write database cache|Failed to mark cache dirty"
+    # Note: Both base R file() and our custom warning will be issued
+    warnings <- capture_warnings(
+        result <- misha:::.gdb.cache_write_lists(c("track1"), c(), file.path(parent_as_file, "subdir"))
     )
+
+    # Check that we got our custom warning
+    expect_true(any(grepl("Failed to write database cache|Failed to mark cache dirty", warnings)))
     expect_false(result)
 })
 
