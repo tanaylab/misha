@@ -136,10 +136,10 @@ test_that("gintervals.load_chain exact truncation with 'auto' policy", {
     chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto")
     chain_chr1 <- chain[chain$chrom == "chr1", ]
     chain_chr1 <- chain_chr1[order(chain_chr1$start), ]
-    # After auto truncation: first becomes [0,20), second becomes [30,40)
+    # After auto truncation: first keeps its coverage [0,30), second is trimmed to [30,40)
     expect_equal(nrow(chain_chr1), 2)
     expect_equal(as.numeric(chain_chr1$start[1]), 0)
-    expect_equal(as.numeric(chain_chr1$end[1]), 20)
+    expect_equal(as.numeric(chain_chr1$end[1]), 30)
     expect_equal(as.numeric(chain_chr1$start[2]), 30)
     expect_equal(as.numeric(chain_chr1$end[2]), 40)
 })
@@ -308,7 +308,7 @@ test_that("gintervals.liftover simple 2D mapping cross-product", {
     # sourceB[10-37) -> chr2[5-32) (length 27 to match chr2 size 32)
     write_chain_entry(chain_file, "sourceB", 200, "+", 10, 37, "chr2", 32, "+", 5, 32, 2)
 
-    chain <- gintervals.load_chain(chain_file)
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep")
 
     # Build a 2D source interval pairing (sourceA[5,20), sourceB[15,40))
     src2d <- data.frame(
@@ -1541,6 +1541,81 @@ test_that("Dense cluster of chains with same start_src performs correctly", {
 
     # All results should be valid intervals
     expect_true(all(result$start < result$end))
+})
+
+test_that("Target overlap auto keeps primary mapping when later chain is contained", {
+    local_db_state()
+
+    setup_db(list(
+        ">chrT\n", paste0(rep("A", 500), collapse = ""), "\n"
+    ))
+
+    chain_file <- new_chain_file()
+
+    # Chain A covers chrT[0, 200)
+    write_chain_entry(
+        chain_file, "sourceA", 500, "+", 0, 200,
+        "chrT", 500, "+", 0, 200, 1
+    )
+
+    # Chain B is contained within Chain A on the target
+    write_chain_entry(
+        chain_file, "sourceB", 500, "+", 0, 120,
+        "chrT", 500, "+", 50, 170, 2
+    )
+
+    chain <- gintervals.load_chain(chain_file)
+
+    srcA <- data.frame(chrom = "sourceA", start = 60, end = 80, stringsAsFactors = FALSE)
+    resA <- gintervals.liftover(srcA, chain)
+    expect_equal(nrow(resA), 1)
+    expect_equal(as.character(resA$chrom), "chrT")
+    expect_equal(as.numeric(resA$start), 60)
+    expect_equal(as.numeric(resA$end), 80)
+
+    srcB <- data.frame(chrom = "sourceB", start = 60, end = 80, stringsAsFactors = FALSE)
+    expect_error(gintervals.liftover(srcB, chain), "does not exist")
+
+    chain_keep <- gintervals.load_chain(chain_file, tgt_overlap_policy = "keep")
+    resB_keep <- gintervals.liftover(srcB, chain_keep, tgt_overlap_policy = "keep")
+    expect_equal(nrow(resB_keep), 1)
+    expect_equal(as.character(resB_keep$chrom), "chrT")
+})
+
+test_that("Regression: UCSC-style liftover returns single hit under target auto policy", {
+    local_db_state()
+
+    setup_db(list(
+        ">AncRef\n", paste0(rep("A", 50000), collapse = ""), "\n"
+    ))
+
+    chain_file <- new_chain_file()
+
+    # Primary long chain covering wide region
+    write_chain_entry(
+        chain_file, "chrX", 5000000, "+", 4550000, 4551000,
+        "AncRef", 50000, "+", 15000, 16000, 1
+    )
+
+    # Several short chains overlapping the same target stretch; should be trimmed/dropped
+    offsets <- seq(14790, 19090, by = 400)
+    for (idx in seq_along(offsets)) {
+        src_start <- 4560000 + idx * 10
+        write_chain_entry(
+            chain_file, "chrX", 5000000, "+", src_start, src_start + 5,
+            "AncRef", 50000, "+", offsets[idx], offsets[idx] + 5, 100 + idx
+        )
+    }
+
+    chain <- gintervals.load_chain(chain_file)
+
+    src_interval <- data.frame(chrom = "chrX", start = 4550156, end = 4550157, stringsAsFactors = FALSE)
+    result <- gintervals.liftover(src_interval, chain)
+
+    expect_equal(nrow(result), 1)
+    expect_equal(as.character(result$chrom), "AncRef")
+    expect_equal(as.numeric(result$start), 15000 + (4550156 - 4550000))
+    expect_equal(as.numeric(result$end), 15000 + (4550157 - 4550000))
 })
 
 test_that("Large coordinates near overflow boundaries work correctly", {

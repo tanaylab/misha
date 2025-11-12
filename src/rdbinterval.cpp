@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <utility>
 
 #include "rdbinterval.h"
 #include "rdbutils.h"
@@ -1388,47 +1389,72 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 		for (iterator iinterv = begin(); iinterv != end(); ++iinterv)
 			sorted_intervs.insert(*iinterv);
 
-		set<ChainInterval>::iterator iinterv2 = sorted_intervs.begin();
-		set<ChainInterval>::iterator iinterv1 = iinterv2++;
-
-		while (iinterv2 != sorted_intervs.end()) {
-			if (iinterv1->chromid == iinterv2->chromid && iinterv1->end > iinterv2->start) {
-				// Overlapping intervals detected - truncate/split
-				int64_t tgt_end1 = iinterv1->end;
-
-				// Truncate interv1
-				((ChainInterval &)*iinterv1).end = iinterv2->start;
-
-				// Adjust or split interv2
-				if (tgt_end1 < iinterv2->end) {
-					// The two intervals intersect - create non-overlapping interv2
-					ChainInterval interv(iinterv2->chromid, tgt_end1, iinterv2->end, iinterv2->strand,
-							iinterv2->chromid_src, iinterv2->start_src + tgt_end1 - iinterv2->start, iinterv2->strand_src);
-					interv.chain_id = iinterv2->chain_id;  // Preserve chain_id for deterministic sorting
-					sorted_intervs.erase(iinterv2);
-
-					if (interv.start != interv.end)
-						sorted_intervs.insert(interv);
-				} else {
-					// interval1 contains interval2 => split interval1
-					ChainInterval interv(iinterv1->chromid, iinterv1->end + iinterv2->end - iinterv2->start, tgt_end1, iinterv1->strand,
-							iinterv1->chromid_src, iinterv1->start_src + iinterv2->end - iinterv1->start, iinterv1->strand_src);
-					interv.chain_id = iinterv1->chain_id;  // Preserve chain_id for deterministic sorting
-					sorted_intervs.erase(iinterv2);
-					if (interv.start != interv.end)
-						sorted_intervs.insert(interv);
-				}
-
-				// Remove zero-length intervals
-				if (iinterv1->start == iinterv1->end) {
-					iinterv2 = iinterv1;
-					--iinterv2;
-					sorted_intervs.erase(iinterv1);
-				} else
-					iinterv2 = iinterv1;
-			}
-			iinterv1 = iinterv2;
+		if (!sorted_intervs.empty()) {
+			set<ChainInterval>::iterator iinterv1 = sorted_intervs.begin();
+			set<ChainInterval>::iterator iinterv2 = iinterv1;
 			++iinterv2;
+
+			while (iinterv2 != sorted_intervs.end()) {
+				if (iinterv1->chromid == iinterv2->chromid && iinterv1->end > iinterv2->start) {
+					if (iinterv1->end >= iinterv2->end) {
+						// Later interval fully contained – drop it
+						set<ChainInterval>::iterator toerase = iinterv2++;
+						sorted_intervs.erase(toerase);
+						continue;
+					} else {
+						const int64_t len1 = iinterv1->end - iinterv1->start;
+						const int64_t len2 = iinterv2->end - iinterv2->start;
+
+						if (len1 >= len2) {
+							// Partial overlap: trim beginning of later interval
+							ChainInterval trimmed(*iinterv2);
+							int64_t trim = iinterv1->end - trimmed.start;
+							trimmed.start = iinterv1->end;
+							trimmed.start_src += trim;
+							trimmed.end_src = trimmed.start_src + (trimmed.end - trimmed.start);
+							set<ChainInterval>::iterator toerase = iinterv2++;
+							sorted_intervs.erase(toerase);
+							pair<set<ChainInterval>::iterator, bool> inserted = sorted_intervs.insert(trimmed);
+							iinterv2 = inserted.first;
+						} else {
+							// Later interval preferred – trim end of earlier interval
+							ChainInterval trimmed(*iinterv1);
+							trimmed.end = iinterv2->start;
+							trimmed.end_src = trimmed.start_src + (trimmed.end - trimmed.start);
+							set<ChainInterval>::iterator toerase = iinterv1;
+							if (trimmed.start == trimmed.end) {
+								// Entire interval removed
+								if (iinterv1 == sorted_intervs.begin()) {
+									sorted_intervs.erase(toerase);
+									iinterv1 = sorted_intervs.begin();
+								} else {
+									set<ChainInterval>::iterator prev = iinterv1;
+									--prev;
+									sorted_intervs.erase(toerase);
+									iinterv1 = prev;
+								}
+								if (iinterv1 == sorted_intervs.end()) {
+									iinterv2 = iinterv1;
+								} else {
+									iinterv2 = iinterv1;
+									++iinterv2;
+								}
+								continue;
+							} else {
+								sorted_intervs.erase(toerase);
+								pair<set<ChainInterval>::iterator, bool> inserted = sorted_intervs.insert(trimmed);
+								iinterv1 = inserted.first;
+								iinterv2 = iinterv1;
+								++iinterv2;
+								continue;
+							}
+						}
+					}
+				} else {
+					iinterv1 = iinterv2;
+					++iinterv2;
+				}
+			}
 		}
 
 		// Copy back the resolved intervals

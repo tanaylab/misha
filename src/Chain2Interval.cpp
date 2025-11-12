@@ -32,6 +32,9 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 		IntervUtils iu(_envir);
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
+		std::string effective_tgt_policy = tgt_overlap_policy;
+		if (!strcmp(src_overlap_policy, "keep") && !strcmp(tgt_overlap_policy, "auto"))
+			effective_tgt_policy = "keep";
 		const char *chainfname = CHAR(STRING_ELT(_chainfile, 0));
 		BufferedFile chainfile;
 
@@ -228,7 +231,7 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 
 		// Handle target overlaps
 		chain_intervs.sort_by_tgt();
-		chain_intervs.handle_tgt_overlaps(tgt_overlap_policy, iu.get_chromkey(), id2chrom);
+		chain_intervs.handle_tgt_overlaps(effective_tgt_policy, iu.get_chromkey(), id2chrom);
 
 		if (chain_intervs.empty())
 			return R_NilValue;
