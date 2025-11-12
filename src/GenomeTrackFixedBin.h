@@ -19,7 +19,7 @@
 
 class GenomeTrackFixedBin : public GenomeTrack1D {
 public:
-	GenomeTrackFixedBin() : GenomeTrack1D(FIXED_BIN), m_bin_size(0), m_num_samples(0), m_cur_coord(0) {}
+	GenomeTrackFixedBin() : GenomeTrack1D(FIXED_BIN), m_bin_size(0), m_num_samples(0), m_cur_coord(0), m_last_min_pos(numeric_limits<double>::quiet_NaN()) {}
 
 	void read_interval(const GInterval &interval) override;
 	double last_max_pos() const override;
@@ -43,6 +43,7 @@ protected:
 	unsigned  m_bin_size;
 	int64_t   m_num_samples;
 	int64_t   m_cur_coord;
+	double    m_last_min_pos;
 	int64_t   m_base_offset{0};
 
 	// State for indexed "smart handle"
