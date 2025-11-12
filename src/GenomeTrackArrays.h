@@ -42,130 +42,147 @@ public:
 
 	void set_slice(const vector<unsigned> &slice);
 	void set_slice_function(SliceFunctions func, const vector<unsigned> &slice);
-	void set_slice_quantile(double percentile, uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size,
-							uint64_t highest_vals_buf_size, const vector<unsigned> &slice);
-
-	virtual void read_interval(const GInterval &interval);
-
-	void init_read(const char *filename, int chromid);
-	void init_write(const char *filename, int chromid);
-
-	void write_next_interval(const GInterval &interval, const ArrayVals::const_iterator &iarray_vals_begin, const ArrayVals::const_iterator &iarray_vals_end);
-
-	const GIntervals &get_intervals();
-	void get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals, unsigned numcols);
+		void set_slice_quantile(double percentile, uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size,
+													  uint64_t highest_vals_buf_size, const vector<unsigned> &slice);
 	
-protected:
-	static const int RECORD_SIZE;
-
-	GenomeTrackArrays          *m_master_obj;
-	vector<GenomeTrackArrays *> m_dependent_objs;
-	uint64_t                      m_last_array_vals_idx;
-
-	GIntervals                  m_intervals;
-	vector<long>                m_vals_pos;
-	bool                        m_loaded;
-	bool                        m_is_writing;
-	long                        m_intervals_pos;
-	GIntervals::const_iterator  m_icur_interval;
-
-	SliceFunctions              m_slice_function;
-	double                      m_slice_percentile;
-	vector<unsigned>            m_slice;
-	vector<unsigned>            m_array_hints;
-	StreamPercentiler<float>    m_slice_sp;
-	ArrayVals                   m_array_vals;
-
-	float                       m_num_vs;
-	double                      m_mean_square_sum;
-
-	void read_intervals_map();
-	void finish_writing();
-	void read_array_vals(uint64_t idx);
-	float get_array_val(uint64_t islice);
-	float get_sliced_val(uint64_t idx);
-	void calc_vals(const GInterval &interval);
-	bool check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2);
-};
-
-
-//------------------------------------ IMPLEMENTATION --------------------------------
-
-inline bool GenomeTrackArrays::check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2)
-{
-	return iinterval1->do_overlap(interval2) && (iinterval1 == m_intervals.begin() || !(iinterval1 - 1)->do_overlap(interval2));
-}
-
-inline void GenomeTrackArrays::set_slice(const vector<unsigned> &slice)
-{
-	m_slice = slice;
-	m_array_hints.resize(m_slice.size(), 0);
-}
-
-inline void GenomeTrackArrays::set_slice_function(SliceFunctions func, const vector<unsigned> &slice)
-{
-	m_slice_function = func;
-	set_slice(slice);
-}
-
-inline void GenomeTrackArrays::set_slice_quantile(double percentile, uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size,
-												  uint64_t highest_vals_buf_size, const vector<unsigned> &slice)
-{
-	m_slice_function = S_QUANTILE;
-	m_slice_percentile = percentile;
-	m_slice_sp.init(rnd_sampling_buf_size, lowest_vals_buf_size, highest_vals_buf_size);
-	set_slice(slice);
-}
-
-inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
-{
-	float v;
-
-	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
-		(*itrack)->m_num_vs = 0;
-		(*itrack)->m_mean_square_sum = 0;
-		(*itrack)->m_last_sum = 0;
-		(*itrack)->m_last_min = numeric_limits<float>::max();
-		(*itrack)->m_last_max = -numeric_limits<float>::max();
+		virtual void read_interval(const GInterval &interval);
+		virtual double last_max_pos() const;
+		virtual double last_min_pos() const;
+	
+		void init_read(const char *filename, int chromid);
+		void init_write(const char *filename, int chromid);
+	
+		void write_next_interval(const GInterval &interval, const ArrayVals::const_iterator &iarray_vals_begin, const ArrayVals::const_iterator &iarray_vals_end);
+	
+		const GIntervals &get_intervals();
+		void get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals, unsigned numcols);
+		
+	protected:
+		static const int RECORD_SIZE;
+	
+		GenomeTrackArrays          *m_master_obj;
+		vector<GenomeTrackArrays *> m_dependent_objs;
+		uint64_t                      m_last_array_vals_idx;
+	
+		GIntervals                  m_intervals;
+		vector<long>                m_vals_pos;
+		bool                        m_loaded;
+		bool                        m_is_writing;
+		long                        m_intervals_pos;
+		GIntervals::const_iterator  m_icur_interval;
+	
+		SliceFunctions              m_slice_function;
+		double                      m_slice_percentile;
+		vector<unsigned>            m_slice;
+		vector<unsigned>            m_array_hints;
+		StreamPercentiler<float>    m_slice_sp;
+		ArrayVals                   m_array_vals;
+	
+		float                       m_num_vs;
+		double                      m_mean_square_sum;
+	
+		void read_intervals_map();
+		void finish_writing();
+		void read_array_vals(uint64_t idx);
+		float get_array_val(uint64_t islice);
+		float get_sliced_val(uint64_t idx);
+		void calc_vals(const GInterval &interval);
+		bool check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2);
+	};
+	
+	
+	//------------------------------------ IMPLEMENTATION --------------------------------
+	
+	inline bool GenomeTrackArrays::check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2)
+	{
+		return iinterval1->do_overlap(interval2) && (iinterval1 == m_intervals.begin() || !(iinterval1 - 1)->do_overlap(interval2));
 	}
-
-	for (GIntervals::const_iterator iinterv = m_icur_interval; iinterv != m_intervals.end(); ++iinterv) {
-		if (!iinterv->do_overlap(interval))
-			break;
-
+	
+	inline void GenomeTrackArrays::set_slice(const vector<unsigned> &slice)
+	{
+		m_slice = slice;
+		m_array_hints.resize(m_slice.size(), 0);
+	}
+	
+	inline void GenomeTrackArrays::set_slice_function(SliceFunctions func, const vector<unsigned> &slice)
+	{
+		m_slice_function = func;
+		set_slice(slice);
+	}
+	
+	inline void GenomeTrackArrays::set_slice_quantile(double percentile, uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size,
+													  uint64_t highest_vals_buf_size, const vector<unsigned> &slice)
+	{
+		m_slice_function = S_QUANTILE;
+		m_slice_percentile = percentile;
+		m_slice_sp.init(rnd_sampling_buf_size, lowest_vals_buf_size, highest_vals_buf_size);
+		set_slice(slice);
+	}
+	
+	inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
+	{
+		float v;
+	
 		for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
-			v = (*itrack)->get_sliced_val(iinterv - m_intervals.begin());
-			if (!std::isnan(v)) {
-				(*itrack)->m_last_sum += v;
-				(*itrack)->m_last_min = min((*itrack)->m_last_min, v);
-				(*itrack)->m_last_max = max((*itrack)->m_last_max, v);
-
-				if ((*itrack)->m_functions[STDDEV])
-					(*itrack)->m_mean_square_sum += v * v;
-
-				if ((*itrack)->m_use_quantile)
-					(*itrack)->m_sp.add(v, s_rnd_func);
-
-				++(*itrack)->m_num_vs;
+			(*itrack)->m_num_vs = 0;
+			(*itrack)->m_mean_square_sum = 0;
+			(*itrack)->m_last_sum = 0;
+			(*itrack)->m_last_min = numeric_limits<float>::max();
+			(*itrack)->m_last_max = -numeric_limits<float>::max();
+			if ((*itrack)->m_functions[MAX_POS])
+				(*itrack)->m_last_max_pos = numeric_limits<double>::quiet_NaN();
+			if ((*itrack)->m_functions[MIN_POS])
+				(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
+		}
+	
+		for (GIntervals::const_iterator iinterv = m_icur_interval; iinterv != m_intervals.end(); ++iinterv) {
+			if (!iinterv->do_overlap(interval))
+				break;
+	
+			for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
+				v = (*itrack)->get_sliced_val(iinterv - m_intervals.begin());
+				if (!std::isnan(v)) {
+					(*itrack)->m_last_sum += v;
+					(*itrack)->m_last_min = min((*itrack)->m_last_min, v);
+					if (v > (*itrack)->m_last_max) {
+						(*itrack)->m_last_max = v;
+						if ((*itrack)->m_functions[MAX_POS])
+							(*itrack)->m_last_max_pos = iinterv->start;
+					}
+					if (v < (*itrack)->m_last_min) {
+						(*itrack)->m_last_min = v;
+						if ((*itrack)->m_functions[MIN_POS])
+							(*itrack)->m_last_min_pos = iinterv->start;
+					}
+	
+					if ((*itrack)->m_functions[STDDEV])
+						(*itrack)->m_mean_square_sum += v * v;
+	
+					if ((*itrack)->m_use_quantile)
+						(*itrack)->m_sp.add(v, s_rnd_func);
+	
+					++(*itrack)->m_num_vs;
+				}
 			}
 		}
+	
+		for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
+			if ((*itrack)->m_num_vs > 0)
+				(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_sum / (*itrack)->m_num_vs;
+			else {
+				(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_min = (*itrack)->m_last_max = (*itrack)->m_last_sum = numeric_limits<float>::quiet_NaN();
+				if ((*itrack)->m_functions[MIN_POS])
+					(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
+			}
+	
+			// we are calaculating unbiased standard deviation:
+			// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
+			if ((*itrack)->m_functions[STDDEV])
+				(*itrack)->m_last_stddev = (*itrack)->m_num_vs > 1 ?
+					sqrt((*itrack)->m_mean_square_sum / ((*itrack)->m_num_vs - 1) - ((*itrack)->m_last_avg * (double)(*itrack)->m_last_avg) * ((*itrack)->m_num_vs / ((*itrack)->m_num_vs - 1))) :
+					numeric_limits<float>::quiet_NaN();
+		}
 	}
-
-	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
-		if ((*itrack)->m_num_vs > 0)
-			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_sum / (*itrack)->m_num_vs;
-		else
-			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_min = (*itrack)->m_last_max = (*itrack)->m_last_sum = numeric_limits<float>::quiet_NaN();
-
-		// we are calaculating unbiased standard deviation:
-		// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
-		if ((*itrack)->m_functions[STDDEV])
-			(*itrack)->m_last_stddev = (*itrack)->m_num_vs > 1 ?
-				sqrt((*itrack)->m_mean_square_sum / ((*itrack)->m_num_vs - 1) - ((*itrack)->m_last_avg * (double)(*itrack)->m_last_avg) * ((*itrack)->m_num_vs / ((*itrack)->m_num_vs - 1))) :
-				numeric_limits<float>::quiet_NaN();
-	}
-}
-
 inline float GenomeTrackArrays::get_array_val(uint64_t islice)
 {
 	unsigned &hint = m_array_hints[islice];
