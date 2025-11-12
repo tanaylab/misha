@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <math.h>
+#include <limits>
+#include <string>
 
 #include "GenomeTrack1D.h"
 
@@ -19,7 +21,9 @@ class GenomeTrackFixedBin : public GenomeTrack1D {
 public:
 	GenomeTrackFixedBin() : GenomeTrack1D(FIXED_BIN), m_bin_size(0), m_num_samples(0), m_cur_coord(0) {}
 
-	virtual void read_interval(const GInterval &interval);
+	void read_interval(const GInterval &interval) override;
+	double last_max_pos() const override;
+	double last_min_pos() const override;
 
 	void init_read(const char *filename, int chromid) { init_read(filename, "rb", chromid); }
 	void init_write(const char *filename, unsigned bin_size, int chromid);
