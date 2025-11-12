@@ -11,6 +11,7 @@
 #include <cmath>
 #include <limits>
 #include <vector>
+#include <string>
 
 #include "GenomeTrack1D.h"
 #include "GIntervals.h"
