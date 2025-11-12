@@ -9,6 +9,7 @@
 #define GENOMETRACKSPARSE_H_
 
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "GenomeTrack1D.h"
@@ -21,6 +22,8 @@ public:
 	GenomeTrackSparse();
 
 	virtual void read_interval(const GInterval &interval);
+	virtual double last_max_pos() const;
+	virtual double last_min_pos() const;
 
 	void init_read(const char *filename, int chromid);
 	void init_write(const char *filename, int chromid);
@@ -38,6 +41,7 @@ protected:
 	bool          m_loaded;
 	int64_t       m_num_records;
 	GIntervals::const_iterator m_icur_interval;
+	double        m_last_min_pos;
 
 	void read_file_into_mem();
 	void calc_vals(const GInterval &interval);
@@ -61,6 +65,10 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 	m_last_sum = 0;
 	m_last_min = numeric_limits<float>::max();
 	m_last_max = -numeric_limits<float>::max();
+	if (m_functions[MAX_POS])
+		m_last_max_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[MIN_POS])
+		m_last_min_pos = numeric_limits<double>::quiet_NaN();
 
 	for (GIntervals::const_iterator iinterv = m_icur_interval; iinterv != m_intervals.end(); ++iinterv) {
 		if (!iinterv->do_overlap(interval))
@@ -69,8 +77,19 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 		v = m_vals[iinterv - m_intervals.begin()];
 		if (!std::isnan(v)) {
 			m_last_sum += v;
-			m_last_min = min(m_last_min, v);
-			m_last_max = max(m_last_max, v);
+			if (v < m_last_min) {
+				m_last_min = v;
+				if (m_functions[MIN_POS])
+					m_last_min_pos = iinterv->start;
+			} else if (m_functions[MIN_POS] && v == m_last_min) {
+				if (std::isnan(m_last_min_pos) || iinterv->start < m_last_min_pos)
+					m_last_min_pos = iinterv->start;
+			}
+			if (v > m_last_max) {
+				m_last_max = v;
+				if (m_functions[MAX_POS])
+					m_last_max_pos = iinterv->start;
+			}
 
 			if (m_functions[STDDEV])
 				mean_square_sum += v * v;
@@ -84,8 +103,11 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 
 	if (num_vs > 0)
 		m_last_avg = m_last_nearest = m_last_sum / num_vs;
-	else
+	else {
 		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
+		if (m_functions[MIN_POS])
+			m_last_min_pos = numeric_limits<double>::quiet_NaN();
+	}
 
 	// we are calaculating unbiased standard deviation:
 	// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))

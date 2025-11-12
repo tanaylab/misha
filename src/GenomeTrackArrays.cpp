@@ -154,6 +154,10 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 
 	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 		(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_min = (*itrack)->m_last_max = (*itrack)->m_last_stddev = (*itrack)->m_last_sum = numeric_limits<float>::quiet_NaN();
+		if ((*itrack)->m_functions[MAX_POS])
+			(*itrack)->m_last_max_pos = numeric_limits<double>::quiet_NaN();
+		if ((*itrack)->m_functions[MIN_POS])
+			(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
 
 		if ((*itrack)->m_use_quantile)
 			(*itrack)->m_sp.reset();
@@ -220,6 +224,16 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 			}
 		}
 	}
+}
+
+double GenomeTrackArrays::last_max_pos() const
+{
+	return m_last_max_pos;
+}
+
+double GenomeTrackArrays::last_min_pos() const
+{
+	return m_last_min_pos;
 }
 
 void GenomeTrackArrays::write_next_interval(const GInterval &interval, const ArrayVals::const_iterator &iarray_vals_begin, const ArrayVals::const_iterator &iarray_vals_end)

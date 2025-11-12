@@ -9,7 +9,8 @@ const int GenomeTrackSparse::RECORD_SIZE = 2 * sizeof(int64_t) + sizeof(float);
 GenomeTrackSparse::GenomeTrackSparse() :
 	GenomeTrack1D(SPARSE),
 	m_loaded(false),
-	m_num_records(0)
+	m_num_records(0),
+	m_last_min_pos(numeric_limits<double>::quiet_NaN())
 {}
 
 void GenomeTrackSparse::init_read(const char *filename, int chromid)
@@ -74,6 +75,10 @@ void GenomeTrackSparse::read_file_into_mem()
 void GenomeTrackSparse::read_interval(const GInterval &interval)
 {
 	m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
+	if (m_functions[MAX_POS])
+		m_last_max_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[MIN_POS])
+		m_last_min_pos = numeric_limits<double>::quiet_NaN();
 
 	if (m_use_quantile)
 		m_sp.reset();
@@ -128,6 +133,16 @@ void GenomeTrackSparse::read_interval(const GInterval &interval)
 			m_last_nearest = iend_interval == m_intervals.end() || interval.dist2interv(*istart_interval) <= interval.dist2interv(*iend_interval) ?
 					m_vals[istart_interval - m_intervals.begin()] : m_vals[iend_interval - m_intervals.begin()];
 	}
+}
+
+double GenomeTrackSparse::last_max_pos() const
+{
+	return m_last_max_pos;
+}
+
+double GenomeTrackSparse::last_min_pos() const
+{
+	return m_last_min_pos;
 }
 
 void GenomeTrackSparse::write_next_interval(const GInterval &interval, float val)
