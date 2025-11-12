@@ -23,6 +23,9 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		IntervUtils iu(_envir);
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
+		std::string effective_tgt_policy = tgt_overlap_policy;
+		if (!strcmp(src_overlap_policy, "keep") && !strcmp(tgt_overlap_policy, "auto"))
+			effective_tgt_policy = "keep";
 
 		ChainIntervals chain_intervs;
 		vector<string> src_id2chrom;
@@ -31,7 +34,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 
 		// Handle target overlaps first
 		chain_intervs.sort_by_tgt();
-		chain_intervs.handle_tgt_overlaps(tgt_overlap_policy, iu.get_chromkey(), src_id2chrom);
+		chain_intervs.handle_tgt_overlaps(effective_tgt_policy, iu.get_chromkey(), src_id2chrom);
 
 		// Handle source overlaps
 		chain_intervs.sort_by_src();

@@ -12,7 +12,7 @@ extern "C" {
     extern SEXP gbins_quantiles(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gbins_summary(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gbintransform(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP gchain2interv(SEXP, SEXP);
+    extern SEXP gchain2interv(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gcheck_iterator(SEXP, SEXP);
     extern SEXP gcheck_vtrack(SEXP, SEXP);
     extern SEXP C_gcis_decay(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -96,7 +96,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gbins_quantiles", (DL_FUNC)&gbins_quantiles, 8},
     {"gbins_summary", (DL_FUNC)&gbins_summary, 7},
     {"gbintransform", (DL_FUNC)&gbintransform, 10},
-    {"gchain2interv", (DL_FUNC)&gchain2interv, 2},
+    {"gchain2interv", (DL_FUNC)&gchain2interv, 4},
     {"gcheck_iterator", (DL_FUNC)&gcheck_iterator, 2},
     {"gcheck_vtrack", (DL_FUNC)&gcheck_vtrack, 2},
     {"C_gcis_decay", (DL_FUNC)&C_gcis_decay, 9},
