@@ -188,8 +188,9 @@ public:
 
 	// Converts R intervals (data frame with 4 columns or a string marking the filename) to a vector of Intervals.
 	// Returns R intervals in the form of data frame.
+	// If skip_missing_chroms is true and chromkey is provided, intervals with chromosomes not in chromkey are silently skipped.
 	SEXP convert_rintervs(SEXP rintervals, GIntervals *intervals, GIntervals2D *intervals2d, bool null_if_interv_nonexist = false,
-						  const GenomeChromKey *chromkey = NULL, const char *error_msg_prefix = "", unsigned *pintervs_type_mask = NULL, bool verify = true) const;
+						  const GenomeChromKey *chromkey = NULL, const char *error_msg_prefix = "", unsigned *pintervs_type_mask = NULL, bool verify = true, bool skip_missing_chroms = false) const;
 
 	// Returns intervals type mask
 	unsigned convert_rintervs(SEXP rintervals, GIntervalsFetcher1D **intervals, GIntervalsFetcher2D **intervals2d, bool null_if_interv_nonexist = false,
