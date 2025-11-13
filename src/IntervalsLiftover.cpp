@@ -49,7 +49,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 
 		GIntervals src_intervs1d;
 		GIntervals2D src_intervs2d;
-		iu.convert_rintervs(_src_intervs, &src_intervs1d, &src_intervs2d, false, &src_chromkey);
+		iu.convert_rintervs(_src_intervs, &src_intervs1d, &src_intervs2d, false, &src_chromkey, "", NULL, true, true);
 		src_intervs1d.sort();
 		src_intervs2d.sort();
 

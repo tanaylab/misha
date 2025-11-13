@@ -37,7 +37,7 @@ extern "C" {
     extern SEXP gintervdiff(SEXP, SEXP, SEXP);
     extern SEXP ginterv_intersectband(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gintervintersect(SEXP, SEXP, SEXP);
-    extern SEXP gintervs_liftover(SEXP, SEXP, SEXP);
+    extern SEXP gintervs_liftover(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gintervsort(SEXP, SEXP);
     extern SEXP gintervunion(SEXP, SEXP, SEXP);
     extern SEXP giterator_intervals(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -121,7 +121,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gintervdiff", (DL_FUNC)&gintervdiff, 3},
     {"ginterv_intersectband", (DL_FUNC)&ginterv_intersectband, 4},
     {"gintervintersect", (DL_FUNC)&gintervintersect, 3},
-    {"gintervs_liftover", (DL_FUNC)&gintervs_liftover, 3},
+    {"gintervs_liftover", (DL_FUNC)&gintervs_liftover, 5},
     {"gintervsort", (DL_FUNC)&gintervsort, 2},
     {"gintervunion", (DL_FUNC)&gintervunion, 3},
     {"giterator_intervals", (DL_FUNC)&giterator_intervals, 6},

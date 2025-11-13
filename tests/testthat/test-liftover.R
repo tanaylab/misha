@@ -1574,7 +1574,9 @@ test_that("Target overlap auto keeps primary mapping when later chain is contain
     expect_equal(as.numeric(resA$end), 80)
 
     srcB <- data.frame(chrom = "sourceB", start = 60, end = 80, stringsAsFactors = FALSE)
-    expect_error(gintervals.liftover(srcB, chain), "does not exist")
+    # sourceB was discarded during chain loading, so liftover returns NULL (no mapping exists)
+    resB <- gintervals.liftover(srcB, chain)
+    expect_true(is.null(resB))
 
     chain_keep <- gintervals.load_chain(chain_file, tgt_overlap_policy = "keep")
     resB_keep <- gintervals.liftover(srcB, chain_keep, tgt_overlap_policy = "keep")
