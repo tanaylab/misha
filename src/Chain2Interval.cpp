@@ -15,7 +15,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
+SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -23,7 +23,18 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
 		if (!Rf_isString(_chainfile) || Rf_length(_chainfile) != 1)
 			verror("Chain file argument is not a string");
 
+		if (!Rf_isString(_src_overlap_policy) || Rf_length(_src_overlap_policy) != 1)
+			verror("Source overlap policy argument is not a string");
+
+		if (!Rf_isString(_tgt_overlap_policy) || Rf_length(_tgt_overlap_policy) != 1)
+			verror("Target overlap policy argument is not a string");
+
 		IntervUtils iu(_envir);
+		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
+		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
+		std::string effective_tgt_policy = tgt_overlap_policy;
+		if (!strcmp(src_overlap_policy, "keep") && !strcmp(tgt_overlap_policy, "auto"))
+			effective_tgt_policy = "keep";
 		const char *chainfname = CHAR(STRING_ELT(_chainfile, 0));
 		BufferedFile chainfile;
 
@@ -173,14 +184,17 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
 					chrom[TGT],
 					strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] - size : start[TGT],
 					strand[TGT] ? iu.get_chromkey().get_chrom_size(chrom[TGT]) - start[TGT] : start[TGT] + size,
+					strand[TGT],
 					chrom[SRC],
-					strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size - 1 : start[SRC]));
+					strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size : start[SRC],
+					strand[SRC]));
 
 				if (fields.size() == 3) {
 					int64_t dt = strtoll(fields[DT].c_str(), &endptr, 10);
 					int64_t dq = strtoll(fields[DQ].c_str(), &endptr, 10);
 
-					if (dt < 0 || dq < 0 || (!dt && !dq))
+					// Allow dt=dq=0 which represents contiguous blocks with no gap in either genome.
+					if (dt < 0 || dq < 0)
 						TGLError("Chain file %s, line %ld: invalid block gaps", chainfname, lineno);
 
 					start[SRC] += size + dt;
@@ -211,62 +225,16 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _envir)
 		if (chain_intervs.empty())
 			return R_NilValue;
 
-		// check for overlaps in source
+		// Handle source overlaps
 		chain_intervs.sort_by_src();
-		chain_intervs.verify_no_src_overlaps(iu.get_chromkey(), id2chrom);
+		chain_intervs.handle_src_overlaps(src_overlap_policy, iu.get_chromkey(), id2chrom);
 
-		// check for overlaps in target: overlaps might exist, remove them
-		set<ChainInterval, ChainInterval::SetCompare> sorted_intervs;    // we need a set as we're going to insert on the fly new objects
-		for (ChainIntervals::iterator iinterv = chain_intervs.begin() + 1; iinterv != chain_intervs.end(); ++iinterv)
-			sorted_intervs.insert(*iinterv);
+		// Handle target overlaps
+		chain_intervs.sort_by_tgt();
+		chain_intervs.handle_tgt_overlaps(effective_tgt_policy, iu.get_chromkey(), id2chrom);
 
-		set<ChainInterval>::iterator iinterv2 = sorted_intervs.begin();
-		set<ChainInterval>::iterator iinterv1 = iinterv2++;
-
-		while (iinterv2 != sorted_intervs.end()) {
-			// the intervals overlap
-
-			if (iinterv1->chromid == iinterv2->chromid && iinterv1->end > iinterv2->start) {
-				// wipe the overlapping part 
-				int64_t tgt_end1 = iinterv1->end;
-
-				// concatenate interv1
-				((ChainInterval &)*iinterv1).end = iinterv2->start; // that's an ugly hack: iinterv1 points to a const object, but changing the "end" is harmless
-
-				// create interv2 that does not contain the overlapping part
-				if (tgt_end1 < iinterv2->end) { // the two intervals intersect
-					ChainInterval interv(iinterv2->chromid, tgt_end1, iinterv2->end,
-							iinterv2->chromid_src, iinterv2->start_src + tgt_end1 - iinterv2->start);
-					sorted_intervs.erase(iinterv2);
-
-					if (interv.start != interv.end)
-						sorted_intervs.insert(interv);
-				} else { // interval1 contains interval2 => split interval1
-					ChainInterval interv(iinterv1->chromid, iinterv1->end + iinterv2->end - iinterv2->start, tgt_end1,
-							iinterv1->chromid_src, iinterv1->start_src + iinterv2->end - iinterv1->start);
-					sorted_intervs.erase(iinterv2);
-					if (interv.start != interv.end)
-						sorted_intervs.insert(interv);
-				}
-
-				if (iinterv1->start == iinterv1->end) {
-					iinterv2 = iinterv1;
-					--iinterv2;
-					sorted_intervs.erase(iinterv1);
-				} else
-					iinterv2 = iinterv1;
-			}
-			iinterv1 = iinterv2;
-			++iinterv2;
-		}
-
-		// pack the answer
-		if (sorted_intervs.empty())
+		if (chain_intervs.empty())
 			return R_NilValue;
-
-		chain_intervs.clear();
-		for (set<ChainInterval>::const_iterator iinterval = sorted_intervs.begin(); iinterval != sorted_intervs.end(); ++iinterval)
-			chain_intervs.push_back(*iinterval);
 
 		return iu.convert_chain_intervs(chain_intervs, id2chrom);
 	} catch (TGLException &e) {

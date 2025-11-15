@@ -61,7 +61,13 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("ALLGENOME", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)
 
-    chromsizes <- read.csv(paste(groot, "chrom_sizes.txt", sep = "/"), sep = "\t", header = FALSE)
+    chromsizes <- read.csv(
+        paste(groot, "chrom_sizes.txt", sep = "/"),
+        sep = "\t",
+        header = FALSE,
+        colClasses = c("character", "numeric"),
+        strip.white = TRUE
+    )
     colnames(chromsizes) <- c("chrom", "size")
     intervals <- data.frame(
         chrom = as.factor(paste("chr", as.character(chromsizes$chrom), sep = "")),

@@ -25,3 +25,50 @@ load_regression_file <- function(id, snapshot_dir = "/net/mraid20/export/tgdata/
     }
     readr::read_rds(file_path)
 }
+
+load_test_db <- function() {
+    if (getOption("gmulticontig.indexed_format", FALSE)) {
+        if (getOption("misha.test.verbose", FALSE)) {
+            message("Loading indexed test database")
+        }
+        gsetroot("/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/misha_test_db_indexed/")
+    } else {
+        if (getOption("misha.test.verbose", FALSE)) {
+            message("Loading per-chromosome test database")
+        }
+        gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/")
+    }
+    # remove temp directory if it exists
+    db_dir <- .misha$GROOT
+    temp_dir <- file.path(db_dir, "tracks", "temp")
+    if (dir.exists(temp_dir)) {
+        unlink(temp_dir, recursive = TRUE)
+    }
+    gdb.reload()
+    gdir.create("temp", showWarnings = FALSE)
+}
+
+#' Save and restore the current database state
+#'
+#' This is useful for tests that temporarily switch to a different database.
+#' Uses withr-style automatic cleanup.
+#'
+#' @param env The environment to use for defer (defaults to parent frame)
+local_db_state <- function(env = parent.frame()) {
+    # Save current state
+    original_groot <- if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+        get("GROOT", envir = .misha)
+    } else {
+        NULL
+    }
+
+    # Register cleanup
+    withr::defer(
+        {
+            if (!is.null(original_groot)) {
+                suppressMessages(gdb.init(original_groot))
+            }
+        },
+        envir = env
+    )
+}

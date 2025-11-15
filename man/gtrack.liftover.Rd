@@ -8,7 +8,15 @@ gtrack.liftover(
   track = NULL,
   description = NULL,
   src.track.dir = NULL,
-  chain = NULL
+  chain = NULL,
+  src_overlap_policy = "error",
+  tgt_overlap_policy = "auto",
+  multi_target_agg = c("mean", "median", "sum", "min", "max", "count", "first", "last",
+    "nth", "max.coverage_len", "min.coverage_len", "max.coverage_frac",
+    "min.coverage_frac"),
+  params = NULL,
+  na.rm = TRUE,
+  min_n = NULL
 )
 }
 \arguments{
@@ -20,6 +28,18 @@ gtrack.liftover(
 
 \item{chain}{name of chain file or data frame as returned by
 'gintervals.load_chain'}
+
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
+
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "keep", or "discard". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer overlapping chain, "keep" preserves overlaps, "discard" removes overlapping targets, and "error" throws an error if overlaps are detected.}
+
+\item{multi_target_agg}{aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.}
+
+\item{params}{additional parameters for aggregation (e.g., for "nth" aggregation)}
+
+\item{na.rm}{logical indicating whether NA values should be removed before aggregation (default: TRUE)}
+
+\item{min_n}{minimum number of non-NA values required for aggregation. If fewer values are available, the result will be NA.}
 }
 \value{
 None.

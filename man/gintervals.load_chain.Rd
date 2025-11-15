@@ -4,10 +4,21 @@
 \alias{gintervals.load_chain}
 \title{Loads assembly conversion table from a chain file}
 \usage{
-gintervals.load_chain(file = NULL)
+gintervals.load_chain(
+  file = NULL,
+  src_overlap_policy = "error",
+  tgt_overlap_policy = "auto",
+  src_groot = NULL
+)
 }
 \arguments{
 \item{file}{name of chain file}
+
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard"}
+
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer chain, "discard" removes overlapping targets, and "keep" preserves them (but liftover operations must tolerate overlaps).}
+
+\item{src_groot}{optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.}
 }
 \value{
 A data frame representing assembly conversion table.
