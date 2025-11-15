@@ -83,7 +83,7 @@ void GenomeTrackSparse::init_read(const char *filename, int chromid)
 	const double n = (total_bytes - header_size) / (double)kSparseRecBytes;
 
 	if (n != (int64_t)n)
-		TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s", filename);
+		TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s (n=%f, (int64_t)n=%lld)", filename, n, (long long)(int64_t)n);
 
 	m_num_records = (int64_t)n;
 	m_chromid = chromid;
@@ -108,22 +108,25 @@ void GenomeTrackSparse::read_file_into_mem()
 	for (int64_t i = 0; i < m_num_records; ++i) {
 		GInterval &interval = m_intervals[i];
 
-		if (m_bfile.read(&interval.start, sizeof(int64_t)) != sizeof(int64_t) ||
-				m_bfile.read(&interval.end, sizeof(int64_t)) != sizeof(int64_t) ||
-				m_bfile.read(&m_vals[i], sizeof(float)) != sizeof(float))
-		{
+		uint64_t r1 = m_bfile.read(&interval.start, sizeof(int64_t));
+		uint64_t r2 = m_bfile.read(&interval.end, sizeof(int64_t));
+		uint64_t r3 = m_bfile.read(&m_vals[i], sizeof(float));
+
+		if (r1 != sizeof(int64_t) || r2 != sizeof(int64_t) || r3 != sizeof(float)) {
 			if (m_bfile.error())
 				TGLError<GenomeTrackSparse>("Failed to read a sparse track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
 			TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s", m_bfile.file_name().c_str());
 		}
 
-		if (isinf(m_vals[i]))
+		if (isinf(m_vals[i])) {
 			m_vals[i] = numeric_limits<float>::quiet_NaN();
+		}
 
 		interval.chromid = m_chromid;
 
-		if (interval.start < 0 || interval.start >= interval.end || (i && interval.start < m_intervals[i - 1].end))
+		if (interval.start < 0 || interval.start >= interval.end || (i && interval.start < m_intervals[i - 1].end)) {
 			TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s", m_bfile.file_name().c_str());
+		}
 	}
 
 	m_icur_interval = m_intervals.begin();

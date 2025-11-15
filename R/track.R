@@ -1123,7 +1123,7 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 #' 'gintervals.load_chain' (chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc).
 #' Strand columns use +1 for forward strand and -1 for reverse strand.
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
-#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "keep", or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "keep" preserves overlapping target intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "keep", or "discard". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer overlapping chain, "keep" preserves overlaps, "discard" removes overlapping targets, and "error" throws an error if overlaps are detected.
 #' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus.
 #' When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy),
 #' their values must be combined into a single value. The following aggregation policies are supported:
@@ -1211,8 +1211,8 @@ gtrack.liftover <- function(track = NULL,
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
     }
 
     multi_target_agg <- match.arg(multi_target_agg)
@@ -1272,10 +1272,38 @@ gtrack.liftover <- function(track = NULL,
         stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
     }
 
+    normalize_policy <- function(policy) {
+        if (is.null(policy)) {
+            return(NULL)
+        }
+        if (policy %in% c("auto", "auto_first")) {
+            return("auto")
+        }
+        policy
+    }
+
     if (is.character(chain)) {
         chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
     } else {
         chain.intervs <- chain
+
+        existing_src <- attr(chain.intervs, "src_overlap_policy")
+        if (!is.null(existing_src) &&
+            normalize_policy(existing_src) != normalize_policy(src_overlap_policy)) {
+            warning(sprintf(
+                "gtrack.liftover: chain was loaded with src_overlap_policy='%s' but '%s' was requested. Consider reloading the chain or passing the file path instead.",
+                existing_src, src_overlap_policy
+            ), call. = FALSE)
+        }
+
+        existing_tgt <- attr(chain.intervs, "tgt_overlap_policy")
+        if (!is.null(existing_tgt) &&
+            normalize_policy(existing_tgt) != normalize_policy(tgt_overlap_policy)) {
+            warning(sprintf(
+                "gtrack.liftover: chain was loaded with tgt_overlap_policy='%s' but '%s' was requested. Consider reloading the chain or passing the file path instead.",
+                existing_tgt, tgt_overlap_policy
+            ), call. = FALSE)
+        }
     }
 
     .gconfirmtrackcreate(trackstr)

@@ -639,7 +639,19 @@ SEXP gtrack_liftover(SEXP _track,
 					if (chrom_name && size_str) {
 						uint64_t chrom_size = strtoull(size_str, NULL, 10);
 						try {
-							src_genome_chromkey.add_chrom(chrom_name, chrom_size);
+							int chromid = src_genome_chromkey.add_chrom(chrom_name, chrom_size);
+							// Add aliases for chromosome names with/without "chr" prefix
+							// to handle naming inconsistencies between chain files and genome databases
+							string chrom_str(chrom_name);
+							if (chrom_str.substr(0, 3) == "chr") {
+								// Has "chr" prefix - add alias without it
+								string alias = chrom_str.substr(3);
+								src_genome_chromkey.add_chrom_alias(alias, chromid);
+							} else {
+								// No "chr" prefix - add alias with it
+								string alias = "chr" + chrom_str;
+								src_genome_chromkey.add_chrom_alias(alias, chromid);
+							}
 						} catch (...) {
 							// Ignore errors adding chromosomes
 						}
@@ -671,11 +683,14 @@ SEXP gtrack_liftover(SEXP _track,
 				for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
 					GenomeTrackFixedBin src_track;
 					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
-					int src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);  // chromid in the source genome
+					int src_chromid_in_genome = -1;
 					float val;
 
-					if (src_chromid_in_genome < 0) {
-						// Chromosome not found in source genome, skip
+					// Try to get chromid in source genome - may not exist for alt/random chromosomes
+					try {
+						src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);
+					} catch (...) {
+						// Chromosome not found in source genome (e.g., random/alt chromosomes), skip
 						progress.report(1);
 						continue;
 					}
@@ -717,10 +732,13 @@ SEXP gtrack_liftover(SEXP _track,
 				for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
 					GenomeTrackSparse src_track;
 					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
-					int src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);  // chromid in the source genome
+					int src_chromid_in_genome = -1;
 
-					if (src_chromid_in_genome < 0) {
-						// Chromosome not found in source genome, skip
+					// Try to get chromid in source genome - may not exist for alt/random chromosomes
+					try {
+						src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);
+					} catch (...) {
+						// Chromosome not found in source genome (e.g., random/alt chromosomes), skip
 						progress.report(1);
 						continue;
 					}
@@ -757,8 +775,25 @@ SEXP gtrack_liftover(SEXP _track,
 
 			// Process collected intervals for each chromosome, sort and save to track files
 			for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
-				// Skip if this chromosome has no data
+				// Create empty file if this chromosome has no data
 				if (chrom_intervals.find(chromid) == chrom_intervals.end()) {
+					// For indexed databases, empty chromosome files are not needed since the track
+					// will be converted to indexed format (track.idx + track.dat) automatically.
+					// This avoids creating thousands of empty files on network filesystems.
+					// For non-indexed databases, we still create empty chromosome files for backward compatibility.
+					if (!is_db_indexed(_envir)) {
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+						if (src_track_type == GenomeTrack::FIXED_BIN) {
+							// Only create empty fixed bin tracks if we know the binsize (i.e., at least one chromosome was processed)
+							if (binsize > 0) {
+								GenomeTrackFixedBin gtrack;
+								gtrack.init_write(filename, binsize, chromid);
+							}
+						} else if (src_track_type == GenomeTrack::SPARSE) {
+							GenomeTrackSparse gtrack;
+							gtrack.init_write(filename, chromid);
+						}
+					}
 					progress.report(1);
 					continue;
 				}
