@@ -30,7 +30,7 @@ using namespace rdb;
 
 const char *IntervalPval::COL_NAMES[IntervalPval::NUM_COLS] = { "chrom", "start", "end", "pval" };
 
-const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "chromsrc", "startsrc" };
+const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc" };
 
 IntervUtils::IntervUtils(SEXP envir)
 {
@@ -601,6 +601,9 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 	SEXP src_chroms = VECTOR_ELT(rchain, ChainInterval::CHROM_SRC);
 	SEXP src_chrom_levels = Rf_getAttrib(src_chroms, R_LevelsSymbol);
 	SEXP src_starts = VECTOR_ELT(rchain, ChainInterval::START_SRC);
+	// Note: src_ends (END_SRC) is not used as it's calculated from start_src + (end - start) in constructor
+	SEXP src_strands = VECTOR_ELT(rchain, ChainInterval::STRAND_SRC);
+	SEXP tgt_strands = VECTOR_ELT(rchain, ChainInterval::STRAND);
 
 	for (unsigned i = 0; i < ChainInterval::NUM_COLS; i++) {
 		if (i != 0 && Rf_length(VECTOR_ELT(rchain, i)) != Rf_length(VECTOR_ELT(rchain, i - 1)))
@@ -629,7 +632,19 @@ void IntervUtils::convert_rchain_intervs(SEXP rchain, ChainIntervals &chain_inte
 
 		int64_t src_start = (int64_t)(Rf_isReal(src_starts) ? REAL(src_starts)[i] : INTEGER(src_starts)[i]);
 
-		ChainInterval interval(intervs[i].chromid, intervs[i].start, intervs[i].end, src_chromid, src_start);
+		// Read strands and convert +1/-1 to 0/1 for internal storage
+		int tgt_strand_val = Rf_isReal(tgt_strands) ? (int)REAL(tgt_strands)[i] : INTEGER(tgt_strands)[i];
+		int src_strand_val = Rf_isReal(src_strands) ? (int)REAL(src_strands)[i] : INTEGER(src_strands)[i];
+		int tgt_strand = (tgt_strand_val == 1) ? 0 : 1;
+		int src_strand = (src_strand_val == 1) ? 0 : 1;
+
+		ChainInterval interval(intervs[i].chromid, intervs[i].start, intervs[i].end, tgt_strand, src_chromid, src_start, src_strand);
+		interval.chain_id = i;  // Assign monotonically increasing ID for stable sorting
+
+		// Validate that chain intervals are non-zero length (strict validation)
+		if (interval.start >= interval.end)
+			verror("Chain file contains zero-length or invalid interval at row %d (start=%lld, end=%lld)",
+			       i + 1, (long long)interval.start, (long long)interval.end);
 
 		interval.verify(m_chrom_key, src_id2chrom);
 		chain_intervs.push_back(interval);
@@ -644,18 +659,25 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
 		tmp_intervals.push_back((GInterval)*iinterval);
 
     SEXP answer = convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
-	SEXP src_chroms, src_chroms_idx, src_starts;
+	SEXP src_chroms, src_chroms_idx, src_starts, src_ends, src_strands, tgt_strands;
     SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
     rprotect(col_names);
 	unsigned num_src_chroms = src_id2chrom.size();
 
     rprotect(src_chroms_idx = RSaneAllocVector(INTSXP, chain_intervs.size()));
     rprotect(src_starts = RSaneAllocVector(REALSXP, chain_intervs.size()));
+    rprotect(src_ends = RSaneAllocVector(REALSXP, chain_intervs.size()));
     rprotect(src_chroms = RSaneAllocVector(STRSXP, num_src_chroms));
+    rprotect(src_strands = RSaneAllocVector(INTSXP, chain_intervs.size()));
+    rprotect(tgt_strands = RSaneAllocVector(INTSXP, chain_intervs.size()));
 
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval) {
 		INTEGER(src_chroms_idx)[iinterval - chain_intervs.begin()] = iinterval->chromid_src + 1;
 		REAL(src_starts)[iinterval - chain_intervs.begin()] = iinterval->start_src;
+		REAL(src_ends)[iinterval - chain_intervs.begin()] = iinterval->end_src;
+		// Convert 0/1 to +1/-1 for R output
+		INTEGER(src_strands)[iinterval - chain_intervs.begin()] = (iinterval->strand_src == 0) ? 1 : -1;
+		INTEGER(tgt_strands)[iinterval - chain_intervs.begin()] = (iinterval->strand == 0) ? 1 : -1;
 	}
 
 	for (unsigned id = 0; id < num_src_chroms; ++id)
@@ -667,10 +689,13 @@ SEXP IntervUtils::convert_chain_intervs(const ChainIntervals &chain_intervs, vec
     Rf_setAttrib(src_chroms_idx, R_LevelsSymbol, src_chroms);
     Rf_setAttrib(src_chroms_idx, R_ClassSymbol, Rf_mkString("factor"));
 
+    SET_VECTOR_ELT(answer, ChainInterval::STRAND, tgt_strands);
     SET_VECTOR_ELT(answer, ChainInterval::CHROM_SRC, src_chroms_idx);
     SET_VECTOR_ELT(answer, ChainInterval::START_SRC, src_starts);
+    SET_VECTOR_ELT(answer, ChainInterval::END_SRC, src_ends);
+    SET_VECTOR_ELT(answer, ChainInterval::STRAND_SRC, src_strands);
 
-    runprotect(3);
+    runprotect(5);
     return answer;
 }
 
@@ -1255,7 +1280,7 @@ void ChainIntervals::verify_no_src_overlaps(const GenomeChromKey &chromkey, cons
 		if (ChainInterval::SrcCompare()(*iinterv, *(iinterv - 1)))
 			TGLError<ChainIntervals>(UNSORTED_INTERVALS, "To verify overlaps chain intervals must be sorted by source");
 
-		if (iinterv->chromid_src == (iinterv - 1)->chromid_src && (iinterv - 1)->start_src + (iinterv - 1)->end - (iinterv - 1)->start > iinterv->start_src)
+		if (iinterv->chromid_src == (iinterv - 1)->chromid_src && (iinterv - 1)->end_src > iinterv->start_src)
 			TGLError<ChainIntervals>(OVERLAPPING_INTERVAL, "Source of chain intervals %s and %s overlap",
 					(iinterv - 1)->tostring(chromkey, src_id2chrom).c_str(), iinterv->tostring(chromkey, src_id2chrom).c_str());
 	}
@@ -1273,12 +1298,255 @@ void ChainIntervals::verify_no_tgt_overlaps(const GenomeChromKey &chromkey, cons
 	}
 }
 
+void ChainIntervals::handle_src_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom)
+{
+	if (policy == "error") {
+		verify_no_src_overlaps(chromkey, src_id2chrom);
+	} else if (policy == "keep") {
+		// Do nothing - allow overlapping source intervals
+	} else if (policy == "discard") {
+		// Mark all intervals that have overlapping sources
+		vector<bool> to_discard(size(), false);
+
+		for (size_t i = 1; i < size(); ++i) {
+			if ((*this)[i-1].chromid_src == (*this)[i].chromid_src &&
+			    (*this)[i-1].end_src > (*this)[i].start_src) {
+				to_discard[i-1] = true;
+				to_discard[i] = true;
+			}
+		}
+
+		// Remove marked intervals
+		iterator new_end = begin();
+		for (size_t i = 0; i < size(); ++i) {
+			if (!to_discard[i]) {
+				if (new_end != begin() + i)
+					*new_end = (*this)[i];
+				++new_end;
+			}
+		}
+		erase(new_end, end());
+	} else {
+		TGLError("Invalid source overlap policy: %s. Must be 'error', 'keep', or 'discard'", policy.c_str());
+	}
+}
+
+void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom)
+{
+	if (policy == "error") {
+		verify_no_tgt_overlaps(chromkey, src_id2chrom);
+	} else if (policy == "auto" || policy == "auto_first" || policy == "auto_longer") {
+		// Auto-resolve by truncating/splitting intervals
+		if (empty())
+			return;
+
+		if (policy == "auto_longer") {
+			// Single-pass O(n) algorithm for resolving overlaps
+			vector<ChainInterval> sorted_vec(begin(), end());
+			sort(sorted_vec.begin(), sorted_vec.end(), ChainInterval::SetCompare());
+
+			vector<ChainInterval> result;
+			result.reserve(sorted_vec.size());
+
+			for (size_t i = 0; i < sorted_vec.size(); ++i) {
+				ChainInterval curr = sorted_vec[i];
+
+				// Check for overlaps with the last interval in result
+				while (!result.empty() && result.back().chromid == curr.chromid && result.back().end > curr.start) {
+					ChainInterval &prev = result.back();
+					const int64_t len_prev = prev.end - prev.start;
+					const int64_t len_curr = curr.end - curr.start;
+
+					if (len_prev >= len_curr) {
+						// Previous interval is longer or equal - trim or drop current
+						if (prev.end >= curr.end) {
+							// Current fully contained - skip it
+							curr.start = curr.end; // Mark as invalid
+							break;
+						} else {
+							// Partial overlap - trim start of current
+							const int64_t trim = prev.end - curr.start;
+							curr.start = prev.end;
+							curr.start_src += trim;
+							curr.end_src = curr.start_src + (curr.end - curr.start);
+							break; // No more overlaps possible after trimming start
+						}
+					} else {
+						// Current interval is longer - trim or drop previous
+						if (curr.end >= prev.end) {
+							// Previous fully or partially contained - trim or remove previous
+							prev.end = curr.start;
+							prev.end_src = prev.start_src + (prev.end - prev.start);
+							if (prev.start >= prev.end) {
+								result.pop_back(); // Remove invalid previous
+							}
+							break; // Continue with current, check again if needed
+						} else {
+							// Current contained within previous (rare: equal starts, curr shorter)
+							curr.start = curr.end; // Mark current as invalid
+							break;
+						}
+					}
+				}
+
+				// Add current if valid
+				if (curr.start < curr.end) {
+					result.push_back(curr);
+				}
+			}
+
+			clear();
+			insert(end(), result.begin(), result.end());
+			return;
+		}
+
+		set<ChainInterval, ChainInterval::SetCompare> sorted_intervs;
+		for (iterator iinterv = begin(); iinterv != end(); ++iinterv)
+			sorted_intervs.insert(*iinterv);
+
+		if (!sorted_intervs.empty()) {
+			set<ChainInterval>::iterator iinterv1 = sorted_intervs.begin();
+			set<ChainInterval>::iterator iinterv2 = iinterv1;
+			++iinterv2;
+
+			while (iinterv2 != sorted_intervs.end()) {
+				if (iinterv1->chromid == iinterv2->chromid && iinterv1->end > iinterv2->start) {
+					if (iinterv1->end >= iinterv2->end) {
+						// Later interval fully contained – drop it
+						set<ChainInterval>::iterator toerase = iinterv2++;
+						sorted_intervs.erase(toerase);
+						continue;
+					} else {
+						const int64_t len1 = iinterv1->end - iinterv1->start;
+						const int64_t len2 = iinterv2->end - iinterv2->start;
+
+						if (len1 >= len2) {
+							// Partial overlap: trim beginning of later interval
+							ChainInterval trimmed(*iinterv2);
+							int64_t trim = iinterv1->end - trimmed.start;
+							trimmed.start = iinterv1->end;
+							trimmed.start_src += trim;
+							trimmed.end_src = trimmed.start_src + (trimmed.end - trimmed.start);
+							set<ChainInterval>::iterator toerase = iinterv2++;
+							sorted_intervs.erase(toerase);
+							pair<set<ChainInterval>::iterator, bool> inserted = sorted_intervs.insert(trimmed);
+							iinterv2 = inserted.first;
+						} else {
+							// Later interval preferred – trim end of earlier interval
+							ChainInterval trimmed(*iinterv1);
+							trimmed.end = iinterv2->start;
+							trimmed.end_src = trimmed.start_src + (trimmed.end - trimmed.start);
+							set<ChainInterval>::iterator toerase = iinterv1;
+							if (trimmed.start == trimmed.end) {
+								// Entire interval removed
+								if (iinterv1 == sorted_intervs.begin()) {
+									sorted_intervs.erase(toerase);
+									iinterv1 = sorted_intervs.begin();
+								} else {
+									set<ChainInterval>::iterator prev = iinterv1;
+									--prev;
+									sorted_intervs.erase(toerase);
+									iinterv1 = prev;
+								}
+								if (iinterv1 == sorted_intervs.end()) {
+									iinterv2 = iinterv1;
+								} else {
+									iinterv2 = iinterv1;
+									++iinterv2;
+								}
+								continue;
+							} else {
+								sorted_intervs.erase(toerase);
+								pair<set<ChainInterval>::iterator, bool> inserted = sorted_intervs.insert(trimmed);
+								iinterv1 = inserted.first;
+								iinterv2 = iinterv1;
+								++iinterv2;
+								continue;
+							}
+						}
+					}
+				} else {
+					iinterv1 = iinterv2;
+					++iinterv2;
+				}
+			}
+		}
+
+		// Copy back the resolved intervals
+		clear();
+		for (set<ChainInterval>::const_iterator iinterval = sorted_intervs.begin(); iinterval != sorted_intervs.end(); ++iinterval)
+			push_back(*iinterval);
+	} else if (policy == "discard") {
+		// Mark all intervals that have overlapping targets
+		vector<bool> to_discard(size(), false);
+
+		for (size_t i = 1; i < size(); ++i) {
+			if ((*this)[i-1].chromid == (*this)[i].chromid &&
+			    (*this)[i-1].end > (*this)[i].start) {
+				to_discard[i-1] = true;
+				to_discard[i] = true;
+			}
+		}
+
+		// Remove marked intervals
+		iterator new_end = begin();
+		for (size_t i = 0; i < size(); ++i) {
+			if (!to_discard[i]) {
+				if (new_end != begin() + i)
+					*new_end = (*this)[i];
+				++new_end;
+			}
+		}
+		erase(new_end, end());
+	} else if (policy == "keep") {
+		// Do nothing - allow overlapping target intervals
+	} else {
+		TGLError("Invalid target overlap policy: %s. Must be 'error', 'keep', 'auto', 'auto_first', 'auto_longer', or 'discard'", policy.c_str());
+	}
+}
+
+void ChainIntervals::buildSrcAux()
+{
+	const size_t n = size();
+	m_pmax_end_src.assign(n, 0);
+
+	if (n == 0)
+		return;
+
+	// Build chrom slices: first/last indices per chromid_src
+	// chromid_src is a small dense int assigned by convert_rchain_intervs()
+	// Track max id to size vectors
+	m_max_src_chromid = -1;
+	for (const auto &ci : *this)
+		m_max_src_chromid = std::max(m_max_src_chromid, ci.chromid_src);
+
+	// Initialize with sentinel values
+	m_chrom_first.assign((size_t)m_max_src_chromid + 1, (size_t)-1);
+	m_chrom_last_excl.assign((size_t)m_max_src_chromid + 1, (size_t)-1);
+
+	// Fill first/last indices and compute prefix-max per chromosome
+	size_t i = 0;
+	while (i < n) {
+		const int chrom = (*this)[i].chromid_src;
+		size_t first = i;
+		if (m_chrom_first[chrom] == (size_t)-1)
+			m_chrom_first[chrom] = first;
+
+		// Walk this chromosome slice and build prefix-max
+		int64_t pmax = std::numeric_limits<int64_t>::min();
+		for (; i < n && (*this)[i].chromid_src == chrom; ++i) {
+			const auto &ci = (*this)[i];
+			const int64_t end_src = ci.end_src;
+			pmax = std::max(pmax, end_src);
+			m_pmax_end_src[i] = pmax;
+		}
+		m_chrom_last_excl[chrom] = i; // exclusive end
+	}
+}
+
 ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, ChainIntervals::const_iterator hint)
 {
 	tgt_intervs.clear();
-
-//for (auto i = begin(); i < end(); ++i)
-//REprintf("chrom %d, coord %ld\n", i->chromid_src, i->start_src);
 
 	if (empty())
 		return end();
@@ -1292,8 +1560,8 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 	if (check_first_overlap_src(hint, src_interval))
 		return add2tgt(hint, src_interval, tgt_intervs);
 
-	if (hint + 1 < end() && check_first_overlap_src(hint + 1, src_interval))
-		return add2tgt(hint + 1, src_interval, tgt_intervs);
+	// Note: hint+1 fast path removed to handle non-consecutive overlapping chains correctly
+	// With overlapping sources, hint+1 might overlap but not be the *first* overlap
 
 	// run the binary search
 	const_iterator istart_interval = begin();
@@ -1302,8 +1570,33 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 	while (iend_interval - istart_interval > 1) {
 		const_iterator imid_interval = istart_interval + (iend_interval - istart_interval) / 2;
 
-		if (check_first_overlap_src(imid_interval, src_interval))
-			return add2tgt(imid_interval, src_interval, tgt_intervs);
+		// If mid overlaps, use prefix-max to find the first overlapping chain
+		if (imid_interval->do_overlap_src(src_interval)) {
+			// Use prefix-max to find the true first overlap, not just consecutive first
+			const int qchrom = src_interval.chromid;
+			if (qchrom < 0 || qchrom > m_max_src_chromid || m_chrom_first[qchrom] == (size_t)-1) {
+				// Shouldn't happen due to guards above, but fallback to consecutive scan
+				const_iterator first_overlap = imid_interval;
+				while (first_overlap > begin() && (first_overlap - 1)->do_overlap_src(src_interval))
+					--first_overlap;
+				return add2tgt(first_overlap, src_interval, tgt_intervs);
+			}
+
+			size_t first = m_chrom_first[qchrom];
+			size_t mid_idx = imid_interval - begin();
+
+			// Binary search leftmost L in [first..mid_idx] with pmax_end[L] > query.start
+			// We know mid overlaps, so pmax_end[mid_idx] > query.start
+			size_t lo = first, hi = mid_idx;
+			while (lo < hi) {
+				size_t mid = lo + (hi - lo) / 2;
+				if (m_pmax_end_src[mid] > src_interval.start)
+					hi = mid;
+				else
+					lo = mid + 1;
+			}
+			return add2tgt(begin() + lo, src_interval, tgt_intervs);
+		}
 
 		// is mid_interval < interval?
 		if (imid_interval->chromid_src < src_interval.chromid || (imid_interval->chromid_src == src_interval.chromid && imid_interval->start_src < src_interval.start))
@@ -1312,21 +1605,100 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 			iend_interval = imid_interval;
 	}
 
-	return begin();
+	// After binary search, use prefix-max to find the first overlapping chain efficiently
+	// Get chromosome slice bounds for this source chromosome
+	const int qchrom = src_interval.chromid;
+
+	// Guard: if chromosome doesn't exist in our slices (shouldn't happen due to fast guards above)
+	if (qchrom < 0 || qchrom > m_max_src_chromid || m_chrom_first[qchrom] == (size_t)-1) {
+		// Fallback to checking iend_interval
+		if (iend_interval != end() && iend_interval->do_overlap_src(src_interval))
+			return add2tgt(iend_interval, src_interval, tgt_intervs);
+		return istart_interval;
+	}
+
+	size_t first = m_chrom_first[qchrom];
+	size_t lastEx = m_chrom_last_excl[qchrom];
+
+	// Recompute pos: last index with start_src < query.start within [first, lastEx)
+	const_iterator slice_begin = begin() + first;
+	const_iterator slice_end = begin() + lastEx;
+	auto lb = std::lower_bound(slice_begin, slice_end, src_interval.start,
+		[](const ChainInterval &ci, int64_t qstart) {
+			return ci.start_src < qstart;
+		});
+
+	// lower_bound returns first with start_src >= qstart; we want last < qstart
+	ptrdiff_t pos_abs = (lb == slice_begin) ? -1 : (lb - begin() - 1);
+
+	if (pos_abs >= 0) {
+		size_t pos = (size_t)pos_abs;
+		// Check if there exists an earlier overlap from the left: pmax_end[pos] > query.start
+		if (m_pmax_end_src[pos] > src_interval.start) {
+			// Binary search leftmost L in [first..pos] with pmax_end[L] > query.start
+			size_t lo = first, hi = pos;
+			while (lo < hi) {
+				size_t mid = lo + (hi - lo) / 2;
+				if (m_pmax_end_src[mid] > src_interval.start)
+					hi = mid;
+				else
+					lo = mid + 1;
+			}
+			// Start enumeration from lo
+			const_iterator last_checked = add2tgt(begin() + lo, src_interval, tgt_intervs);
+			// Optimize hint for next query: return pos if it's ahead and in same chrom
+			if (pos >= (size_t)(last_checked - begin()) && pos < lastEx)
+				return begin() + pos;
+			return last_checked;
+		}
+	}
+
+	// No left overlap exists; check the right neighbor (iend_interval)
+	if (iend_interval != end() && iend_interval->do_overlap_src(src_interval))
+		return add2tgt(iend_interval, src_interval, tgt_intervs);
+
+	// Nothing overlaps
+	return istart_interval;
 }
 
 ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, const GInterval &src_interval, GIntervals &tgt_intervs)
 {
-	while (hint != end()) {
+	const_iterator last_checked = hint;
+
+	// Continue until we reach a chain whose start_src >= src_interval.end or different chromid
+	// This handles the case where overlapping source regions cause non-consecutive overlapping chains
+	while (hint != end() && hint->chromid_src == src_interval.chromid && hint->start_src < src_interval.end) {
+		// Quick early exit: if chain ends before query starts, no overlap possible
+		if (hint->end_src <= src_interval.start) {
+			last_checked = hint;
+			++hint;
+			continue;
+		}
+
 		if (hint->do_overlap_src(src_interval)) {
 			int64_t common_start = max(hint->start_src, src_interval.start);
-			int64_t common_end = min(hint->start_src + hint->end - hint->start, src_interval.end);
+			int64_t common_end = min(hint->end_src, src_interval.end);
 
-			tgt_intervs.push_back(GInterval(hint->chromid, hint->start + common_start - hint->start_src, hint->start + common_end - hint->start_src, 0));
+			int64_t tgt_start, tgt_end;
+			if (hint->strand == 0) {
+				// Target is on + strand: offset goes in positive direction
+				tgt_start = hint->start + common_start - hint->start_src;
+				tgt_end = hint->start + common_end - hint->start_src;
+			} else {
+				// Target is on - strand: offset goes in negative direction
+				tgt_start = hint->end - (common_end - hint->start_src);
+				tgt_end = hint->end - (common_start - hint->start_src);
+			}
+
+			tgt_intervs.push_back(GInterval(hint->chromid, tgt_start, tgt_end, hint->strand));
+			last_checked = hint;
 			++hint;
-		} else
-			break;
+		} else {
+			// No overlap, but continue scanning in case there are non-consecutive overlaps
+			last_checked = hint;
+			++hint;
+		}
 	}
-	return hint - 1;
+	return (last_checked != end()) ? last_checked : (hint != begin()) ? hint - 1 : begin();
 }
 

@@ -1067,16 +1067,92 @@ gtrack.info <- function(track = NULL) {
 #' @param src.track.dir path to the directory of the source track
 #' @param chain name of chain file or data frame as returned by
 #' 'gintervals.load_chain'
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "keep", or "discard". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer overlapping chain, "keep" preserves overlaps, "discard" removes overlapping targets, and "error" throws an error if overlaps are detected.
+#' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.
+#' @param params additional parameters for aggregation (e.g., for "nth" aggregation)
+#' @param na.rm logical indicating whether NA values should be removed before aggregation (default: TRUE)
+#' @param min_n minimum number of non-NA values required for aggregation. If fewer values are available, the result will be NA.
 #' @return None.
 #' @seealso \code{\link{gintervals.load_chain}},
 #' \code{\link{gintervals.liftover}}
 #' @keywords ~track ~liftover ~chain
 #' @export gtrack.liftover
-gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NULL, chain = NULL) {
+gtrack.liftover <- function(track = NULL,
+                            description = NULL,
+                            src.track.dir = NULL,
+                            chain = NULL,
+                            src_overlap_policy = "error",
+                            tgt_overlap_policy = "auto",
+                            multi_target_agg = c(
+                                "mean", "median", "sum", "min", "max", "count",
+                                "first", "last", "nth",
+                                "max.coverage_len", "min.coverage_len",
+                                "max.coverage_frac", "min.coverage_frac"
+                            ),
+                            params = NULL,
+                            na.rm = TRUE,
+                            min_n = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(src.track.dir) || is.null(chain)) {
-        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain)", call. = FALSE)
+        stop("Usage: gtrack.liftover(track, description, src.track.dir, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", ...)", call. = FALSE)
     }
     .gcheckroot()
+
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    multi_target_agg <- match.arg(multi_target_agg)
+
+    if (!is.logical(na.rm) || length(na.rm) != 1 || is.na(na.rm)) {
+        stop("na.rm must be a single non-NA logical value", call. = FALSE)
+    }
+
+    if (!is.null(min_n)) {
+        if (!is.numeric(min_n) || length(min_n) != 1 ||
+            is.na(min_n) || min_n < 0 || min_n != as.integer(min_n)) {
+            stop("min_n must be NULL or a non-negative integer", call. = FALSE)
+        }
+        min_n <- as.integer(min_n)
+    }
+
+    nth_param <- NA_integer_
+    if (identical(multi_target_agg, "nth")) {
+        if (is.null(params)) {
+            stop("params must be supplied for 'nth' aggregation (e.g. params = 2 or params = list(n = 2))", call. = FALSE)
+        }
+
+        extract_n <- function(obj) {
+            if (is.list(obj)) {
+                if (length(obj) == 0L) {
+                    stop("params list must contain an element 'n' for 'nth'", call. = FALSE)
+                }
+                if (!is.null(names(obj)) && "n" %in% names(obj)) {
+                    return(obj[["n"]])
+                }
+                if (length(obj) == 1L) {
+                    return(obj[[1]])
+                }
+                stop("params must contain a single numeric value (or named 'n') for 'nth'", call. = FALSE)
+            }
+            obj
+        }
+
+        n_value <- extract_n(params)
+        if (length(n_value) != 1L || is.na(n_value) || !is.numeric(n_value)) {
+            stop("params for 'nth' must be a single positive integer", call. = FALSE)
+        }
+        nth_param <- as.integer(n_value)
+        if (nth_param <= 0L) {
+            stop("params for 'nth' must be a positive integer", call. = FALSE)
+        }
+    } else if (!is.null(params)) {
+        stop(sprintf("params is only supported for 'nth' aggregation, not '%s'", multi_target_agg), call. = FALSE)
+    }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     trackdir <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackstr), sep = "/"))
@@ -1088,7 +1164,7 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     }
 
     if (is.character(chain)) {
-        chain.intervs <- gintervals.load_chain(chain)
+        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
     } else {
         chain.intervs <- chain
     }
@@ -1097,7 +1173,20 @@ gtrack.liftover <- function(track = NULL, description = NULL, src.track.dir = NU
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_liftover", trackstr, src.track.dir, chain.intervs, .misha_env(), silent = TRUE)
+            .gcall(
+                "gtrack_liftover",
+                trackstr,
+                src.track.dir,
+                chain.intervs,
+                src_overlap_policy,
+                tgt_overlap_policy,
+                multi_target_agg,
+                nth_param,
+                na.rm,
+                if (is.null(min_n)) NA_integer_ else min_n,
+                .misha_env(),
+                silent = TRUE
+            )
             .gdb.add_track(trackstr)
             if (is.character(chain)) {
                 .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), TRUE)

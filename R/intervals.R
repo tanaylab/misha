@@ -1620,6 +1620,8 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' @param intervals intervals from another assembly
 #' @param chain name of chain file or data frame as returned by
 #' 'gintervals.load_chain'
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps while keeping source/target lengths in sync, "auto_longer" keeps the longer overlapping chain, "discard" removes overlapping target intervals, and "keep" preserves them (liftover must be able to handle overlaps).
 #' @return A data frame representing the converted intervals.
 #' @seealso \code{\link{gintervals.load_chain}}, \code{\link{gtrack.liftover}},
 #' \code{\link{gintervals}}
@@ -1638,21 +1640,29 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' gintervals.liftover(intervs, chainfile)
 #'
 #' @export gintervals.liftover
-gintervals.liftover <- function(intervals = NULL, chain = NULL) {
+gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto") {
     if (is.null(intervals) || is.null(chain)) {
-        stop("Usage: gintervals.liftover(intervals, chain)", call. = FALSE)
+        stop("Usage: gintervals.liftover(intervals, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\")", call. = FALSE)
     }
     .gcheckroot()
+
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
+    }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (is.character(chain)) {
-        chain.intervs <- gintervals.load_chain(chain)
+        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
     } else {
         chain.intervs <- chain
     }
 
-    .gcall("gintervs_liftover", intervals, chain.intervs, .misha_env())
+    .gcall("gintervs_liftover", intervals, chain.intervs, src_overlap_policy, tgt_overlap_policy, .misha_env())
 }
 
 
@@ -1707,6 +1717,9 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' returned by 'gintervals.load_chain'.
 #'
 #' @param file name of chain file
+#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard"
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer chain, "discard" removes overlapping targets, and "keep" preserves them (but liftover operations must tolerate overlaps).
+#' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
 #' @return A data frame representing assembly conversion table.
 #' @seealso \code{\link{gintervals.liftover}}, \code{\link{gtrack.liftover}}
 #' @keywords ~intervals ~liftover ~chain
@@ -1720,11 +1733,63 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' gintervals.load_chain(chainfile)
 #'
 #' @export gintervals.load_chain
-gintervals.load_chain <- function(file = NULL) {
+gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", src_groot = NULL) {
     if (is.null(file)) {
-        stop("Usage: gintervals.load_chain(file)", call. = FALSE)
+        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", src_groot = NULL)", call. = FALSE)
     }
-    .gcall("gchain2interv", file, .misha_env())
+    .gcheckroot()
+
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
+
+    if (!is.null(src_groot)) {
+        .validate_source_chromosomes(chain, src_groot)
+    }
+
+    chain
+}
+
+.validate_source_chromosomes <- function(chain, src_groot) {
+    # Save current genome state
+    old_groot <- .misha$GROOT
+    old_allgenome <- .misha$ALLGENOME
+    old_chrom_alias <- if (exists("CHROM_ALIAS", envir = .misha)) .misha$CHROM_ALIAS else NULL
+
+    # Ensure genome is restored even if error occurs
+    on.exit(
+        {
+            .misha$GROOT <- old_groot
+            .misha$ALLGENOME <- old_allgenome
+            if (!is.null(old_chrom_alias)) {
+                .misha$CHROM_ALIAS <- old_chrom_alias
+            } else if (exists("CHROM_ALIAS", envir = .misha)) {
+                rm("CHROM_ALIAS", envir = .misha)
+            }
+        },
+        add = TRUE
+    )
+
+    # Temporarily switch to source genome for validation
+    gdb.init(src_groot)
+
+    # Create source intervals data frame
+    src_intervals <- data.frame(
+        chrom = chain$chromsrc,
+        start = chain$startsrc,
+        end = chain$endsrc,
+        stringsAsFactors = FALSE
+    )
+
+    validated <- .gintervals(chain$chromsrc, chain$startsrc, chain$endsrc, chain$strandsrc)
+
+    # Genome will be restored by on.exit
 }
 
 
