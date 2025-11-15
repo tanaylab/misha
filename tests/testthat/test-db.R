@@ -87,12 +87,12 @@ test_that("gtrack modify for rects", {
 })
 
 test_that("gtrack creation and removal for sparse", {
-    gtrack.rm("test.tmptrack", force = TRUE)
-    withr::defer(gtrack.rm("test.tmptrack", force = TRUE))
-    gtrack.create_sparse("test.tmptrack", "", gintervals(c(1, 2), 100, 2000), c(100, 200))
+    gtrack.rm("temp.tmptrack", force = TRUE)
+    withr::defer(gtrack.rm("temp.tmptrack", force = TRUE))
+    gtrack.create_sparse("temp.tmptrack", "", gintervals(c(1, 2), 100, 2000), c(100, 200))
     r1 <- gtrack.ls()
-    gtrack.rm("test.tmptrack", force = TRUE)
+    gtrack.rm("temp.tmptrack", force = TRUE)
     r2 <- gtrack.ls()
-    expect_true("test.tmptrack" %in% r1)
-    expect_false("test.tmptrack" %in% r2)
+    expect_true("temp.tmptrack" %in% r1)
+    expect_false("temp.tmptrack" %in% r2)
 })

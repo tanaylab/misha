@@ -4,13 +4,22 @@
 \alias{gintervals.liftover}
 \title{Converts intervals from another assembly}
 \usage{
-gintervals.liftover(intervals = NULL, chain = NULL)
+gintervals.liftover(
+  intervals = NULL,
+  chain = NULL,
+  src_overlap_policy = "error",
+  tgt_overlap_policy = "auto"
+)
 }
 \arguments{
 \item{intervals}{intervals from another assembly}
 
 \item{chain}{name of chain file or data frame as returned by
 'gintervals.load_chain'}
+
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
+
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps while keeping source/target lengths in sync, "auto_longer" keeps the longer overlapping chain, "discard" removes overlapping target intervals, and "keep" preserves them (liftover must be able to handle overlaps).}
 }
 \value{
 A data frame representing the converted intervals.

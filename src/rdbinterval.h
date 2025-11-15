@@ -8,6 +8,7 @@
 #ifndef RDBINTERVAL_H_
 #define RDBINTERVAL_H_
 
+#include <cassert>
 #include <cstdint>
 #include <inttypes.h>
 #include <sys/types.h>
@@ -54,11 +55,11 @@ struct IntervalPval : public GInterval {
 
 struct ChainInterval : public GInterval {
 	enum Errors { BAD_INTERVAL };
-	enum { CHROM_SRC = GInterval::NUM_COLS, START_SRC, NUM_COLS };
+	enum { STRAND = GInterval::NUM_COLS, CHROM_SRC, START_SRC, END_SRC, STRAND_SRC, NUM_COLS };
 
 	struct SrcCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
-	};	
+	};
 
 	struct SetCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
@@ -70,21 +71,38 @@ struct ChainInterval : public GInterval {
 
 	static const char *COL_NAMES[NUM_COLS];
 
-	int64_t start_src;
 	int     chromid_src;
+	int64_t start_src;
+	int64_t end_src;
+	int64_t strand_src;
+	int64_t chain_id;     // Monotonically increasing ID for stable sorting
 
-	ChainInterval() : GInterval(), start_src(-1), chromid_src(-1) {}
+	ChainInterval() : GInterval(), chromid_src(-1), start_src(-1), end_src(-1), strand_src(-1), chain_id(-1) {}
 
 	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _chromid_src, int64_t _start_src) :
-		GInterval(_chromid, _start, _end, 0), start_src(_start_src), chromid_src(_chromid_src) {}
+		GInterval(_chromid, _start, _end, 0), chromid_src(_chromid_src), start_src(_start_src),
+		end_src(_start_src + (_end - _start)), strand_src(0), chain_id(-1) {}
+
+	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _strand_tgt, int _chromid_src, int64_t _start_src, int64_t _strand_src) :
+		GInterval(_chromid, _start, _end, _strand_tgt), chromid_src(_chromid_src), start_src(_start_src),
+		end_src(_start_src + (_end - _start)), strand_src(_strand_src), chain_id(-1) {}
 
 	string tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const;
 
 	void verify(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom, bool check_chrom_boundary = true) const;
 
+	// Helper function to compute end_src with overflow safety checks (debug builds)
+	static inline int64_t end_src_of(const ChainInterval& c) {
+		const int64_t len = c.end - c.start;
+		assert(len >= 0 && "Chain interval has negative length");
+		// Check for overflow: if adding len would overflow, result would be less than start_src
+		assert(c.start_src + len >= c.start_src && "Overflow in end_src calculation");
+		return c.start_src + len;
+	}
+
 	// returns true if source interval overlaps the given interval
 	bool do_overlap_src(const GInterval &interv) const {
-		return chromid_src == interv.chromid && max(start_src, interv.start) < min(start_src + end - start, interv.end);
+		return chromid_src == interv.chromid && max(start_src, interv.start) < min(end_src, interv.end);
 	}
 };
 
@@ -110,9 +128,32 @@ public:
 	// Intervals are expected to be already sorted by target.
 	void verify_no_tgt_overlaps(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const;
 
+	// Handles source overlaps according to the specified policy.
+	// Policy: "error" - throw exception, "keep" - allow overlaps, "discard" - remove all overlapping intervals.
+	// Intervals are expected to be already sorted by source.
+	void handle_src_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom);
+
+	// Handles target overlaps according to the specified policy.
+	// Policy: "error" - throw exception, "auto" - auto-resolve by truncating, "discard" - remove all overlapping intervals.
+	// Intervals are expected to be already sorted by target.
+	void handle_tgt_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom);
+
 	const_iterator map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, const_iterator hint);
 
+	// Build auxiliary structures for efficient source interval mapping
+	void buildSrcAux();
+
+	// Get first/last indices for a given source chromosome
+	inline size_t chromFirst(int chromid_src) const { return m_chrom_first[chromid_src]; }
+	inline size_t chromLastExcl(int chromid_src) const { return m_chrom_last_excl[chromid_src]; }
+
 private:
+	// Auxiliary structures for efficient source interval mapping
+	std::vector<int64_t> m_pmax_end_src;        // prefix-max of end_src per chromosome
+	std::vector<size_t>  m_chrom_first;         // first index per chromid_src
+	std::vector<size_t>  m_chrom_last_excl;     // exclusive last index per chromid_src
+	int                  m_max_src_chromid = -1; // max source chromosome id
+
 	bool check_first_overlap_src(const const_iterator &iinterval1, const GInterval &interval2) {
 		return iinterval1->do_overlap_src(interval2) && (iinterval1 == begin() || !(iinterval1 - 1)->do_overlap_src(interval2));
 	}
@@ -298,7 +339,7 @@ inline bool rdb::ChainInterval::SetCompare::operator()(const ChainInterval &obj1
 inline string rdb::ChainInterval::tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const
 {
     char buf[1000];
-    snprintf(buf, sizeof(buf), "(%s, %" PRId64 ", %" PRId64 ") <- (%s, %" PRId64 ")", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src);
+    snprintf(buf, sizeof(buf), "(%s, %" PRId64 ", %" PRId64 ") <- (%s, %" PRId64 ", %" PRId64 ")", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src, end_src);
     return string(buf);
 }
 
