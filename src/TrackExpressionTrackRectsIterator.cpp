@@ -15,7 +15,7 @@ TrackExpressionTrackRectsIterator::TrackExpressionTrackRectsIterator(IntervUtils
 bool TrackExpressionTrackRectsIterator::begin(const string &track_dir, GenomeTrack::Type track_type, GIntervalsFetcher2D &scope, const DiagonalBand &band, uint64_t max_data_size)
 {
 	m_track = NULL;
-	m_track_dir = track_dir + "/";
+	m_track_dir = track_dir;
 	m_track_type = track_type;
 
 	TrackExpression2DIterator::begin(scope, band);

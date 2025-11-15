@@ -16,7 +16,7 @@ gintervals.load_chain(
 
 \item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard"}
 
-\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), or "discard".  In addition a "keep" policy is available, which allows overlapping target intervals, but note that liftover functions would not be able to handle this case.}
+\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer chain, "discard" removes overlapping targets, and "keep" preserves them (but liftover operations must tolerate overlaps).}
 
 \item{src_groot}{optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.}
 }
@@ -54,8 +54,10 @@ The 'src_overlap_policy' controls how source overlaps are handled:
 The 'tgt_overlap_policy' controls how target overlaps are handled:
 \itemize{
   \item "error": Throw an error if target overlaps are detected
-  \item "auto" (default): Automatically resolve overlaps by truncating/splitting intervals
+  \item "auto" (default) / "auto_first": Keep the first overlapping chain (original file order) by trimming or discarding later overlaps while keeping source/target lengths consistent
+  \item "auto_longer": Keep the longer overlapping chain and trim/drop the shorter ones
   \item "discard": Remove all chain intervals involved in target overlaps
+  \item "keep": Allow target overlaps to remain untouched (liftover must be able to handle them)
 }
 }
 \note{

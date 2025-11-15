@@ -43,7 +43,7 @@ test_that("gintervals.load_chain handles source overlaps with 'keep' policy", {
     write_chain_entry(chain_file, "source1", 100, "+", 5, 21, "chr2", 16, "+", 0, 16, 2)
 
     # Keep policy should allow overlaps
-    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep")
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
     expect_true(nrow(chain) == 2)
     expect_true(all(c("chr1", "chr2") %in% chain$chrom))
 
@@ -136,7 +136,7 @@ test_that("gintervals.load_chain exact truncation with 'auto' policy", {
     chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto")
     chain_chr1 <- chain[chain$chrom == "chr1", ]
     chain_chr1 <- chain_chr1[order(chain_chr1$start), ]
-    # After auto truncation: first keeps its coverage [0,30), second is trimmed to [30,40)
+    # After auto truncation: first (longer, 30) keeps its coverage [0,30), second is trimmed to [30,40)
     expect_equal(nrow(chain_chr1), 2)
     expect_equal(as.numeric(chain_chr1$start[1]), 0)
     expect_equal(as.numeric(chain_chr1$end[1]), 30)
@@ -206,7 +206,7 @@ test_that("gintervals.liftover works with 'keep' source policy", {
     write_chain_entry(chain_file, "source1", 100, "+", 10, 26, "chr2", 16, "+", 0, 16, 2)
 
     # Load chain with keep policy
-    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep")
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
 
     # Create source intervals that overlap with the ambiguous region
     src_intervals <- data.frame(
@@ -217,7 +217,7 @@ test_that("gintervals.liftover works with 'keep' source policy", {
     )
 
     # Liftover should produce multiple target intervals
-    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
 
     # Should have entries mapping to both chr1 and chr2
     expect_true(nrow(result) >= 2)
@@ -317,7 +317,7 @@ test_that("gintervals.liftover simple 2D mapping cross-product", {
         stringsAsFactors = FALSE
     )
 
-    res2d <- gintervals.liftover(src2d, chain)
+    res2d <- gintervals.liftover(src2d, chain, src_overlap_policy = "keep")
     expect_equal(nrow(res2d), 1)
     expect_equal(as.character(res2d$chrom1[1]), "chr1")
     expect_equal(as.character(res2d$chrom2[1]), "chr2")
@@ -1399,7 +1399,7 @@ test_that("Do not miss earlier long overlap when hint is to the right (policy=ke
         stringsAsFactors = FALSE
     )
 
-    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
 
     # Expect: Q1 -> chr1; Q2 -> chr1 and chr3  (total 3 rows)
     # Previous bug would yield only 2 rows (Q1->chr1, Q2->chr3), missing chr1 for Q2.
@@ -1438,8 +1438,8 @@ test_that("Deterministic ordering for chains with identical start_src", {
         stringsAsFactors = FALSE
     )
 
-    result1 <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
-    result2 <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+    result1 <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+    result2 <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
 
     # Results should be identical (deterministic)
     expect_equal(result1, result2)
@@ -1532,7 +1532,7 @@ test_that("Dense cluster of chains with same start_src performs correctly", {
         stringsAsFactors = FALSE
     )
 
-    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
 
     # Should find many overlapping chains (query at 60 overlaps chains where 50+length > 60)
     # Exact number depends on overlap resolution, but should be substantial
@@ -1541,6 +1541,38 @@ test_that("Dense cluster of chains with same start_src performs correctly", {
 
     # All results should be valid intervals
     expect_true(all(result$start < result$end))
+})
+
+test_that("Target overlap policies distinguish auto-first and auto-longer", {
+    local_db_state()
+
+    setup_db(list(
+        ">chrT\n", paste0(rep("A", 500), collapse = ""), "\n"
+    ))
+
+    chain_file <- new_chain_file()
+
+    # Chain 1: target [0, 100)
+    write_chain_entry(
+        chain_file, "srcA", 200, "+", 0, 100,
+        "chrT", 500, "+", 0, 100, 1
+    )
+
+    # Chain 2: overlaps target [50, 150)
+    write_chain_entry(
+        chain_file, "srcB", 200, "+", 0, 100,
+        "chrT", 500, "+", 50, 150, 2
+    )
+
+    chain_auto <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto")
+    chain_longer <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto_longer")
+
+    # Both policies use length-based preference, so equal-length chains favor first
+    expect_equal(chain_auto$start, c(0, 100))
+    expect_equal(chain_auto$end, c(100, 150))
+
+    expect_equal(chain_longer$start, c(0, 100))
+    expect_equal(chain_longer$end, c(100, 150))
 })
 
 test_that("Target overlap auto keeps primary mapping when later chain is contained", {
@@ -1564,19 +1596,29 @@ test_that("Target overlap auto keeps primary mapping when later chain is contain
         "chrT", 500, "+", 50, 170, 2
     )
 
-    chain <- gintervals.load_chain(chain_file)
+    chain_auto <- gintervals.load_chain(chain_file)
 
     srcA <- data.frame(chrom = "sourceA", start = 60, end = 80, stringsAsFactors = FALSE)
-    resA <- gintervals.liftover(srcA, chain)
-    expect_equal(nrow(resA), 1)
-    expect_equal(as.character(resA$chrom), "chrT")
-    expect_equal(as.numeric(resA$start), 60)
-    expect_equal(as.numeric(resA$end), 80)
+    resA_auto <- gintervals.liftover(srcA, chain_auto)
+    # Chain A is longer (200 vs 120), so it's kept fully
+    expect_equal(nrow(resA_auto), 1)
+    expect_equal(as.character(resA_auto$chrom), "chrT")
+    expect_equal(as.numeric(resA_auto$start), 60)
+    expect_equal(as.numeric(resA_auto$end), 80)
 
     srcB <- data.frame(chrom = "sourceB", start = 60, end = 80, stringsAsFactors = FALSE)
-    # sourceB was discarded during chain loading, so liftover returns NULL (no mapping exists)
-    resB <- gintervals.liftover(srcB, chain)
-    expect_true(is.null(resB))
+    resB_auto <- gintervals.liftover(srcB, chain_auto)
+    # Chain B is shorter and gets dropped/trimmed
+    expect_true(is.null(resB_auto) || nrow(resB_auto) == 0)
+
+    chain_longer <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto_longer")
+    resA_longer <- gintervals.liftover(srcA, chain_longer, tgt_overlap_policy = "auto_longer")
+    expect_equal(nrow(resA_longer), 1)
+    expect_equal(as.character(resA_longer$chrom), "chrT")
+    expect_equal(as.numeric(resA_longer$start), 60)
+    expect_equal(as.numeric(resA_longer$end), 80)
+
+    expect_true(is.null(gintervals.liftover(srcB, chain_longer, tgt_overlap_policy = "auto_longer")))
 
     chain_keep <- gintervals.load_chain(chain_file, tgt_overlap_policy = "keep")
     resB_keep <- gintervals.liftover(srcB, chain_keep, tgt_overlap_policy = "keep")
@@ -1609,10 +1651,10 @@ test_that("Regression: UCSC-style liftover returns single hit under target auto 
         )
     }
 
-    chain <- gintervals.load_chain(chain_file)
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto_longer")
 
     src_interval <- data.frame(chrom = "chrX", start = 4550156, end = 4550157, stringsAsFactors = FALSE)
-    result <- gintervals.liftover(src_interval, chain)
+    result <- gintervals.liftover(src_interval, chain, tgt_overlap_policy = "auto_longer")
 
     expect_equal(nrow(result), 1)
     expect_equal(as.character(result$chrom), "AncRef")

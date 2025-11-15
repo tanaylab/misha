@@ -24,7 +24,10 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
 		std::string effective_tgt_policy = tgt_overlap_policy;
-		if (!strcmp(src_overlap_policy, "keep") && !strcmp(tgt_overlap_policy, "auto"))
+		if (!strcmp(src_overlap_policy, "keep") &&
+		    (!strcmp(tgt_overlap_policy, "auto") ||
+		     !strcmp(tgt_overlap_policy, "auto_first") ||
+		     !strcmp(tgt_overlap_policy, "auto_longer")))
 			effective_tgt_policy = "keep";
 
 		ChainIntervals chain_intervs;

@@ -1396,10 +1396,70 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 {
 	if (policy == "error") {
 		verify_no_tgt_overlaps(chromkey, src_id2chrom);
-	} else if (policy == "auto") {
+	} else if (policy == "auto" || policy == "auto_first" || policy == "auto_longer") {
 		// Auto-resolve by truncating/splitting intervals
 		if (empty())
 			return;
+
+		if (policy == "auto_longer") {
+			// Single-pass O(n) algorithm for resolving overlaps
+			vector<ChainInterval> sorted_vec(begin(), end());
+			sort(sorted_vec.begin(), sorted_vec.end(), ChainInterval::SetCompare());
+
+			vector<ChainInterval> result;
+			result.reserve(sorted_vec.size());
+
+			for (size_t i = 0; i < sorted_vec.size(); ++i) {
+				ChainInterval curr = sorted_vec[i];
+
+				// Check for overlaps with the last interval in result
+				while (!result.empty() && result.back().chromid == curr.chromid && result.back().end > curr.start) {
+					ChainInterval &prev = result.back();
+					const int64_t len_prev = prev.end - prev.start;
+					const int64_t len_curr = curr.end - curr.start;
+
+					if (len_prev >= len_curr) {
+						// Previous interval is longer or equal - trim or drop current
+						if (prev.end >= curr.end) {
+							// Current fully contained - skip it
+							curr.start = curr.end; // Mark as invalid
+							break;
+						} else {
+							// Partial overlap - trim start of current
+							const int64_t trim = prev.end - curr.start;
+							curr.start = prev.end;
+							curr.start_src += trim;
+							curr.end_src = curr.start_src + (curr.end - curr.start);
+							break; // No more overlaps possible after trimming start
+						}
+					} else {
+						// Current interval is longer - trim or drop previous
+						if (curr.end >= prev.end) {
+							// Previous fully or partially contained - trim or remove previous
+							prev.end = curr.start;
+							prev.end_src = prev.start_src + (prev.end - prev.start);
+							if (prev.start >= prev.end) {
+								result.pop_back(); // Remove invalid previous
+							}
+							break; // Continue with current, check again if needed
+						} else {
+							// Current contained within previous (rare: equal starts, curr shorter)
+							curr.start = curr.end; // Mark current as invalid
+							break;
+						}
+					}
+				}
+
+				// Add current if valid
+				if (curr.start < curr.end) {
+					result.push_back(curr);
+				}
+			}
+
+			clear();
+			insert(end(), result.begin(), result.end());
+			return;
+		}
 
 		set<ChainInterval, ChainInterval::SetCompare> sorted_intervs;
 		for (iterator iinterv = begin(); iinterv != end(); ++iinterv)

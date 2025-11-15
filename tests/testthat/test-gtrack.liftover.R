@@ -1626,7 +1626,8 @@ test_that("gtrack.liftover finds all overlapping chains when they are non-consec
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
         chain = chain,
-        src_overlap_policy = "keep"
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "keep"
     )
 
     # Extract result
@@ -1698,7 +1699,8 @@ test_that("gtrack.liftover does not miss earlier long overlap when hint is to th
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
         chain = chain,
-        src_overlap_policy = "keep"
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "keep"
     )
 
     result <- gextract("lifted_track", gintervals.all())
@@ -1759,7 +1761,8 @@ test_that("gtrack.liftover has deterministic ordering for chains with identical 
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
         chain = chain,
-        src_overlap_policy = "keep"
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "keep"
     )
 
     gtrack.liftover(
@@ -1767,7 +1770,8 @@ test_that("gtrack.liftover has deterministic ordering for chains with identical 
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
         chain = chain,
-        src_overlap_policy = "keep"
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "keep"
     )
 
     result1 <- gextract("lifted_track1", gintervals.all(), colnames = "value")
@@ -1897,7 +1901,8 @@ test_that("gtrack.liftover handles dense cluster of chains with same start_src c
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
         chain = chain,
-        src_overlap_policy = "keep"
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "keep"
     )
 
     result <- gextract("lifted_track", gintervals.all())

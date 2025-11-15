@@ -1684,7 +1684,7 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' @param chain name of chain file or data frame as returned by
 #' 'gintervals.load_chain'
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
-#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default) or "discard". "auto" automatically resolves overlaps by truncating/splitting intervals, "discard" discards all target intervals that have overlaps and "error" throws an error if target overlaps are detected.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps while keeping source/target lengths in sync, "auto_longer" keeps the longer overlapping chain, "discard" removes overlapping target intervals, and "keep" preserves them (liftover must be able to handle overlaps).
 #' @return A data frame representing the converted intervals.
 #'
 #' @note
@@ -1726,16 +1726,45 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
     }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
+    normalize_policy <- function(policy) {
+        if (is.null(policy)) {
+            return(NULL)
+        }
+        if (policy %in% c("auto", "auto_first")) {
+            return("auto")
+        }
+        policy
+    }
 
     if (is.character(chain)) {
         chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
     } else {
         chain.intervs <- chain
+
+        # Warn if the provided chain was loaded with different policies
+        existing_src <- attr(chain.intervs, "src_overlap_policy")
+        if (!is.null(existing_src) &&
+            normalize_policy(existing_src) != normalize_policy(src_overlap_policy)) {
+            warning(sprintf(
+                "gintervals.liftover: chain was loaded with src_overlap_policy='%s' but '%s' was requested. Consider reloading the chain or passing the file path instead.",
+                existing_src, src_overlap_policy
+            ), call. = FALSE)
+        }
+
+        existing_tgt <- attr(chain.intervs, "tgt_overlap_policy")
+        if (!is.null(existing_tgt) &&
+            normalize_policy(existing_tgt) != normalize_policy(tgt_overlap_policy)) {
+            warning(sprintf(
+                "gintervals.liftover: chain was loaded with tgt_overlap_policy='%s' but '%s' was requested. Consider reloading the chain or passing the file path instead.",
+                existing_tgt, tgt_overlap_policy
+            ), call. = FALSE)
+        }
     }
 
     .gcall("gintervs_liftover", intervals, chain.intervs, src_overlap_policy, tgt_overlap_policy, .misha_env())
@@ -1845,13 +1874,15 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' The 'tgt_overlap_policy' controls how target overlaps are handled:
 #' \itemize{
 #'   \item "error": Throw an error if target overlaps are detected
-#'   \item "auto" (default): Automatically resolve overlaps by truncating/splitting intervals
+#'   \item "auto" (default) / "auto_first": Keep the first overlapping chain (original file order) by trimming or discarding later overlaps while keeping source/target lengths consistent
+#'   \item "auto_longer": Keep the longer overlapping chain and trim/drop the shorter ones
 #'   \item "discard": Remove all chain intervals involved in target overlaps
+#'   \item "keep": Allow target overlaps to remain untouched (liftover must be able to handle them)
 #' }
 #'
 #' @param file name of chain file
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard"
-#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), or "discard".  In addition a "keep" policy is available, which allows overlapping target intervals, but note that liftover functions would not be able to handle this case.
+#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer chain, "discard" removes overlapping targets, and "keep" preserves them (but liftover operations must tolerate overlaps).
 #' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
 #'
 #' @return A data frame with 8 columns representing assembly conversion table:
@@ -1905,14 +1936,21 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "discard", "keep")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', 'keep', or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
     }
 
     # Load chain (validates TARGET chromosomes against current genome)
     chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
+    if (is.null(chain)) {
+        return(chain)
+    }
+
+    attr(chain, "src_overlap_policy") <- src_overlap_policy
+    attr(chain, "tgt_overlap_policy") <- tgt_overlap_policy
+
     # Optionally validate SOURCE chromosomes against source genome
-    if (!is.null(src_groot) && !is.null(chain)) {
+    if (!is.null(src_groot)) {
         .validate_source_chromosomes(chain, src_groot)
     }
 
