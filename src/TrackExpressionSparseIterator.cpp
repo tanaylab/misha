@@ -5,7 +5,7 @@ bool TrackExpressionSparseIterator::begin(const string &track_dir, GIntervalsFet
 {
 	TrackExpression1DIterator::begin(scope);
 
-	m_track_dir = track_dir + "/";
+	m_track_dir = track_dir;
 	m_intervals = NULL;
 	m_chromid = 0;
 	m_scope_by_chrom = true;

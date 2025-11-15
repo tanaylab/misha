@@ -1,3 +1,9 @@
+# misha 5.2.0
+
+* Added `src_overlap_policy` and `tgt_overlap_policy` parameters to `gintervals.liftover`, `gintervals.load_chain`, and `gtrack.liftover` functions.
+* Added target aggregation in gtrack.liftover `multi_target_agg` parameter.
+* `gintervals.load_chain` now returns valid misha intervals instead of a chain object.
+
 # misha 5.1.4
 
 * Added new virtual track functions:
