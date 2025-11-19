@@ -16,7 +16,8 @@ gtrack.liftover(
     "min.coverage_frac"),
   params = NULL,
   na.rm = TRUE,
-  min_n = NULL
+  min_n = NULL,
+  min_score = NULL
 )
 }
 \arguments{
@@ -26,65 +27,33 @@ gtrack.liftover(
 
 \item{src.track.dir}{path to the directory of the source track}
 
-\item{chain}{name of chain file or data frame with 8 columns as returned by
-'gintervals.load_chain' (chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc).
-Strand columns use +1 for forward strand and -1 for reverse strand.}
+\item{chain}{name of chain file or data frame as returned by
+'gintervals.load_chain'}
 
 \item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
 
-\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "keep", or "discard". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer overlapping chain, "keep" preserves overlaps, "discard" removes overlapping targets, and "error" throws an error if overlaps are detected.}
+\item{tgt_overlap_policy}{policy for handling target overlaps. One of:
+\tabular{ll}{
+  Policy \tab Description \cr
+  error \tab Throws an error if any target overlaps are detected. \cr
+  auto \tab Default. Alias for "auto_score". \cr
+  auto_score \tab Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id. \cr
+  auto_longer \tab Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id. \cr
+  auto_first \tab Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment. \cr
+  keep \tab Preserves all overlapping intervals. \cr
+  discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
+  agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+}}
 
-\item{multi_target_agg}{aggregation/selection policy for contributors that land on the same target locus.
-When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy),
-their values must be combined into a single value. The following aggregation policies are supported:
+\item{multi_target_agg}{aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.}
 
-\emph{"mean"} \cr Average of all contributor values.
+\item{params}{additional parameters for aggregation (e.g., for "nth" aggregation)}
 
-\emph{"median"} \cr Median of all contributor values.
+\item{na.rm}{logical indicating whether NA values should be removed before aggregation (default: TRUE)}
 
-\emph{"sum"} \cr Sum of all contributor values.
+\item{min_n}{minimum number of non-NA values required for aggregation. If fewer values are available, the result will be NA.}
 
-\emph{"min"} \cr Minimum of all contributor values.
-
-\emph{"max"} \cr Maximum of all contributor values.
-
-\emph{"count"} \cr Number of contributors (ignoring NA values if na.rm=TRUE).
-
-\emph{"first"} \cr Value from the contributor with the smallest start coordinate in the \emph{target} genome.
-In case of ties (same start coordinate), the contributor with the smaller end coordinate is chosen.
-If still tied, the larger value is chosen.
-
-\emph{"last"} \cr Value from the contributor with the largest start coordinate in the \emph{target} genome.
-In case of ties, the contributor with the larger end coordinate is chosen. If still tied, the larger value is chosen.
-
-\emph{"nth"} \cr Value from the nth contributor when ordered by target genome position (smallest start, then smallest end, with ties broken by largest value).
-Requires \code{params} to specify which contributor to select (1-based index).
-For example, params=1 selects the first contributor, params=2 selects the second. Returns NA if there are fewer than n contributors.
-
-\emph{"max.coverage_len"} \cr Value from the contributor with the longest overlap with the target locus (in base pairs).
-In case of ties, the contributor with the larger value is chosen.
-
-\emph{"min.coverage_len"} \cr Value from the contributor with the shortest overlap with the target locus (in base pairs).
-In case of ties, the contributor with the larger value is chosen.
-
-\emph{"max.coverage_frac"} \cr Value from the contributor with the highest coverage fraction
-(overlap length / source interval length). In case of ties, the contributor with the larger value is chosen.
-
-\emph{"min.coverage_frac"} \cr Value from the contributor with the lowest coverage fraction
-(overlap length / source interval length). In case of ties, the contributor with the larger value is chosen.}
-
-\item{params}{optional list or scalar with aggregator-specific parameters.
-Currently only the "nth" aggregator uses this parameter. It expects either a scalar (e.g., params=2)
-or a list with an 'n' element (e.g., params=list(n=2)) specifying the 1-based index of the contributor to select.}
-
-\item{na.rm}{logical flag controlling NA removal prior to aggregation. If TRUE (default), NA values are ignored
-during aggregation. If FALSE, the presence of any NA value causes the aggregated result to be NA.
-This applies to all aggregators except "count", which always ignores NAs when counting.}
-
-\item{min_n}{optional minimum number of non-NA contributors required to produce a non-NA result.
-If specified and the number of non-NA contributors is less than min_n, the result will be NA.
-If NULL (default), no minimum is enforced. This parameter works in conjunction with na.rm:
-if na.rm=FALSE, a single NA contributor will cause the result to be NA regardless of min_n.}
+\item{min_score}{optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.}
 }
 \value{
 None.
@@ -100,16 +69,11 @@ data frame in the same format as returned by 'gintervals.load_chain'
 function. The name of the newly created track is specified by 'track'
 argument and 'description' is added as a track attribute.
 
-Source overlaps occur when the same source genome position maps to multiple
-target genome positions. Using 'src_overlap_policy = "keep"' may result in
-duplicated track values when one source position maps to multiple target
-positions. Target overlaps occur when multiple source positions map to
-overlapping regions in the target genome.
-
-When passing a chain file path (as opposed to a pre-loaded chain data frame),
-the policies are used both for loading the chain and performing the liftover.
-When passing a pre-loaded chain data frame, the policies only apply to the
-liftover operation itself.
+Note: When passing a pre-loaded chain (data frame), overlap policies cannot
+be specified - they are taken from the chain's attributes that were set
+during loading. When passing a chain file path, policies can be specified
+and will be used for loading. Aggregation parameters (multi_target_agg,
+params, na.rm, min_n) can always be specified regardless of chain type.
 }
 \note{
 Terminology note for UCSC chain format users: In the UCSC chain format specification,

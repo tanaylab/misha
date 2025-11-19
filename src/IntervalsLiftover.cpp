@@ -9,7 +9,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _envir)
+SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _canonic, SEXP _include_metadata, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -20,15 +20,15 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		if (!Rf_isString(_tgt_overlap_policy) || Rf_length(_tgt_overlap_policy) != 1)
 			verror("Target overlap policy argument is not a string");
 
+		bool canonic = Rf_asLogical(_canonic);
+		bool include_metadata = Rf_asLogical(_include_metadata);
+
 		IntervUtils iu(_envir);
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
 		std::string effective_tgt_policy = tgt_overlap_policy;
-		if (!strcmp(src_overlap_policy, "keep") &&
-		    (!strcmp(tgt_overlap_policy, "auto") ||
-		     !strcmp(tgt_overlap_policy, "auto_first") ||
-		     !strcmp(tgt_overlap_policy, "auto_longer")))
-			effective_tgt_policy = "keep";
+		if (!strcmp(tgt_overlap_policy, "auto"))
+			effective_tgt_policy = "auto_score";
 
 		ChainIntervals chain_intervs;
 		vector<string> src_id2chrom;
@@ -38,6 +38,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		// Handle target overlaps first
 		chain_intervs.sort_by_tgt();
 		chain_intervs.handle_tgt_overlaps(effective_tgt_policy, iu.get_chromkey(), src_id2chrom);
+		chain_intervs.set_tgt_overlap_policy(effective_tgt_policy);
 
 		// Handle source overlaps
 		chain_intervs.sort_by_src();
@@ -50,26 +51,45 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom)
 			src_chromkey.add_chrom(*ichrom, numeric_limits<int64_t>::max());
 
+		// Capture original number of source intervals (for error reporting when none map to chain source chromosomes)
+		int64_t orig_src_rows = -1;
+		if (Rf_isVector(_src_intervs) && !Rf_isString(_src_intervs) && Rf_length(_src_intervs) >= GInterval::NUM_COLS) {
+			SEXP starts = VECTOR_ELT(_src_intervs, GInterval::START);
+			if (Rf_isReal(starts) || Rf_isInteger(starts))
+				orig_src_rows = Rf_length(starts);
+		}
+
 		GIntervals src_intervs1d;
 		GIntervals2D src_intervs2d;
 		iu.convert_rintervs(_src_intervs, &src_intervs1d, &src_intervs2d, false, &src_chromkey, "", NULL, true, true);
+		// If we had source intervals but none survived chromosome filtering, report an error
+		if (orig_src_rows > 0 && src_intervs1d.empty() && src_intervs2d.empty())
+			verror("Source chromosome does not exist in the chain source genome");
 		src_intervs1d.sort();
 		src_intervs2d.sort();
 
 		vector<int> src_indices;
+		vector<int64_t> chain_ids;
+		vector<double> scores;
 		GIntervals tgt_intervs1d;
 		GIntervals2D tgt_intervs2d;
 
 		// 1D intervals
 		if (!src_intervs1d.empty()) {
 			GIntervals tmp_tgt_intervs;
+			vector<ChainMappingMetadata> tmp_metadata;
 			ChainIntervals::const_iterator hint = chain_intervs.begin();
 
 			for (GIntervals::const_iterator isrc_interv = src_intervs1d.begin(); isrc_interv != src_intervs1d.end(); ++isrc_interv) {
-				hint = chain_intervs.map_interval(*isrc_interv, tmp_tgt_intervs, hint);
+				tmp_metadata.clear();
+				hint = chain_intervs.map_interval(*isrc_interv, tmp_tgt_intervs, hint, &tmp_metadata);
 				if (!tmp_tgt_intervs.empty()) {
 					tgt_intervs1d.insert(tgt_intervs1d.end(), tmp_tgt_intervs.begin(), tmp_tgt_intervs.end());
 					src_indices.insert(src_indices.end(), tmp_tgt_intervs.size(), iu.get_orig_interv_idx(*isrc_interv) + 1);
+					for (size_t i = 0; i < tmp_metadata.size(); ++i) {
+						chain_ids.push_back(tmp_metadata[i].chain_id);
+						scores.push_back(tmp_metadata[i].score);
+					}
 					iu.verify_max_data_size(tgt_intervs1d.size(), "Result");
 				}
 			}
@@ -101,12 +121,67 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			}
 		}
 
+		// Canonicalization: merge adjacent intervals within the same intervalID and chain_id
+		if (canonic && !tgt_intervs1d.empty()) {
+			// Create index pairs for sorting: (index, intervalID, chain_id, chromid, start)
+			vector<size_t> order(tgt_intervs1d.size());
+			for (size_t i = 0; i < order.size(); ++i)
+				order[i] = i;
+
+			// Sort by intervalID, then chain_id, then chromid, then start
+			sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+				if (src_indices[a] != src_indices[b])
+					return src_indices[a] < src_indices[b];
+				if (chain_ids[a] != chain_ids[b])
+					return chain_ids[a] < chain_ids[b];
+				if (tgt_intervs1d[a].chromid != tgt_intervs1d[b].chromid)
+					return tgt_intervs1d[a].chromid < tgt_intervs1d[b].chromid;
+				return tgt_intervs1d[a].start < tgt_intervs1d[b].start;
+			});
+
+			// Merge adjacent intervals within same intervalID and chain_id
+			GIntervals merged_intervs;
+			vector<int> merged_indices;
+			vector<int64_t> merged_chain_ids;
+			vector<double> merged_scores;
+
+			for (size_t i = 0; i < order.size(); ++i) {
+				size_t idx = order[i];
+				const GInterval &interval = tgt_intervs1d[idx];
+				int intervalID = src_indices[idx];
+				int64_t chainID = chain_ids[idx];
+				double score = scores[idx];
+
+				if (merged_intervs.empty() ||
+				    merged_indices.back() != intervalID ||
+				    merged_chain_ids.back() != chainID ||
+				    merged_intervs.back().chromid != interval.chromid ||
+				    merged_intervs.back().end != interval.start) {
+					// Start new interval
+					merged_intervs.push_back(interval);
+					merged_indices.push_back(intervalID);
+					merged_chain_ids.push_back(chainID);
+					merged_scores.push_back(score);
+				} else {
+					// Merge with previous (extend end)
+					merged_intervs.back().end = interval.end;
+				}
+			}
+
+			tgt_intervs1d = merged_intervs;
+			src_indices = merged_indices;
+			chain_ids = merged_chain_ids;
+			scores = merged_scores;
+		}
+
 		// assemble the answer
 		SEXP answer;
 		unsigned num_interv_cols;
 
 		if (!tgt_intervs1d.empty()) {
-			answer = iu.convert_intervs(&tgt_intervs1d, GInterval::NUM_COLS + 1);
+			// Add extra columns for intervalID, chain_id, and optionally score
+			int extra_cols = include_metadata ? 3 : 2;
+			answer = iu.convert_intervs(&tgt_intervs1d, GInterval::NUM_COLS + extra_cols);
 			num_interv_cols = GInterval::NUM_COLS;
 		} else if (!tgt_intervs2d.empty()) {
 			answer = iu.convert_intervs(&tgt_intervs2d, GInterval2D::NUM_COLS + 1);
@@ -114,6 +189,42 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		} else
 			return R_NilValue;
 
+		// Add intervalID, chain_id, and optionally score columns for 1D intervals
+		if (!tgt_intervs1d.empty()) {
+			SEXP rsrc_indices;
+			SEXP rchain_ids;
+			SEXP rscores = R_NilValue;
+			SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
+			rprotect(col_names);
+
+			rprotect(rsrc_indices = RSaneAllocVector(INTSXP, src_indices.size()));
+			rprotect(rchain_ids = RSaneAllocVector(REALSXP, chain_ids.size()));
+
+			for (size_t i = 0; i < src_indices.size(); ++i)
+				INTEGER(rsrc_indices)[i] = src_indices[i];
+
+			for (size_t i = 0; i < chain_ids.size(); ++i)
+				REAL(rchain_ids)[i] = (double)chain_ids[i];
+
+			SET_STRING_ELT(col_names, num_interv_cols, Rf_mkChar("intervalID"));
+			SET_VECTOR_ELT(answer, num_interv_cols, rsrc_indices);
+			SET_STRING_ELT(col_names, num_interv_cols + 1, Rf_mkChar("chain_id"));
+			SET_VECTOR_ELT(answer, num_interv_cols + 1, rchain_ids);
+
+			if (include_metadata) {
+				rprotect(rscores = RSaneAllocVector(REALSXP, scores.size()));
+				for (size_t i = 0; i < scores.size(); ++i)
+					REAL(rscores)[i] = scores[i];
+				SET_STRING_ELT(col_names, num_interv_cols + 2, Rf_mkChar("score"));
+				SET_VECTOR_ELT(answer, num_interv_cols + 2, rscores);
+				runprotect(3); // rsrc_indices, rchain_ids, rscores
+			} else {
+				runprotect(2); // rsrc_indices, rchain_ids
+			}
+			return answer;
+		}
+
+		// Add intervalID column for 2D intervals
         SEXP rsrc_indices;
         SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
         rprotect(col_names);

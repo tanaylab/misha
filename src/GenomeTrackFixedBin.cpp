@@ -220,6 +220,7 @@ double GenomeTrackFixedBin::last_min_pos() const
 {
 	return m_last_min_pos;
 }
+
 void GenomeTrackFixedBin::read_header_at_current_pos_(BufferedFile &bf)
 {
 	int32_t signature = 0;

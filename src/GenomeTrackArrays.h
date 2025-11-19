@@ -44,6 +44,7 @@ public:
 
 	void set_slice(const vector<unsigned> &slice);
 	void set_slice_function(SliceFunctions func, const vector<unsigned> &slice);
+
 	void set_slice_quantile(double percentile, uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size,
 							uint64_t highest_vals_buf_size, const vector<unsigned> &slice);
 

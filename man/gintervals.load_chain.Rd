@@ -8,30 +8,34 @@ gintervals.load_chain(
   file = NULL,
   src_overlap_policy = "error",
   tgt_overlap_policy = "auto",
-  src_groot = NULL
+  src_groot = NULL,
+  min_score = NULL
 )
 }
 \arguments{
 \item{file}{name of chain file}
 
-\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard"}
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
 
-\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer chain, "discard" removes overlapping targets, and "keep" preserves them (but liftover operations must tolerate overlaps).}
+\item{tgt_overlap_policy}{policy for handling target overlaps. One of:
+\tabular{ll}{
+  Policy \tab Description \cr
+  error \tab Throws an error if any target overlaps are detected. \cr
+  auto \tab Default. Alias for "auto_score". \cr
+  auto_score \tab Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id. \cr
+  auto_longer \tab Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id. \cr
+  auto_first \tab Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment. \cr
+  keep \tab Preserves all overlapping intervals. \cr
+  discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
+  agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+}}
 
 \item{src_groot}{optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.}
+
+\item{min_score}{optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.}
 }
 \value{
-A data frame with 8 columns representing assembly conversion table:
-\itemize{
-  \item chrom: target chromosome
-  \item start: target start coordinate (0-based)
-  \item end: target end coordinate (0-based, exclusive)
-  \item strand: target strand (+1 for forward, -1 for reverse)
-  \item chromsrc: source chromosome
-  \item startsrc: source start coordinate (0-based)
-  \item endsrc: source end coordinate (0-based, exclusive)
-  \item strandsrc: source strand (+1 for forward, -1 for reverse)
-}
+A data frame representing assembly conversion table with columns: chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc, chain_id, score.
 }
 \description{
 Loads assembly conversion table from a chain file.
@@ -60,14 +64,6 @@ The 'tgt_overlap_policy' controls how target overlaps are handled:
   \item "keep": Allow target overlaps to remain untouched (liftover must be able to handle them)
 }
 }
-\note{
-Terminology note for UCSC chain format users: In the UCSC chain format specification,
-the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
-while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
-misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
-(chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
-(chrom, start, end).
-}
 \examples{
 \dontshow{
 options(gmax.processes = 2)
@@ -77,15 +73,6 @@ gdb.init_examples()
 chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
 # Load chain file with default policies
 gintervals.load_chain(chainfile)
-
-# Load chain file, keeping source overlaps (ambiguous mappings)
-# gintervals.load_chain(chainfile, src_overlap_policy = "keep")
-
-# Load chain file, discarding both source and target overlaps
-# gintervals.load_chain(chainfile, src_overlap_policy = "discard", tgt_overlap_policy = "discard")
-
-# Load chain file with source genome validation
-# gintervals.load_chain(chainfile, src_groot = "/path/to/source/genome/db")
 
 }
 \seealso{
