@@ -28,11 +28,24 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
 		std::string effective_tgt_policy = tgt_overlap_policy;
-		bool use_best_source_cluster = false;
 
-		if (!strcmp(tgt_overlap_policy, "best_source_cluster")) {
+		// Strategy enum for clustering policies
+		enum ClusterStrategy { STRAT_UNION, STRAT_SUM, STRAT_MAX };
+		bool use_clustering = false;
+		ClusterStrategy strat = STRAT_UNION;
+
+		if (!strcmp(tgt_overlap_policy, "best_cluster_union") || !strcmp(tgt_overlap_policy, "best_source_cluster")) {
 			effective_tgt_policy = "keep"; // Load ALL chains to resolve later
-			use_best_source_cluster = true;
+			use_clustering = true;
+			strat = STRAT_UNION;
+		} else if (!strcmp(tgt_overlap_policy, "best_cluster_sum")) {
+			effective_tgt_policy = "keep";
+			use_clustering = true;
+			strat = STRAT_SUM;
+		} else if (!strcmp(tgt_overlap_policy, "best_cluster_max")) {
+			effective_tgt_policy = "keep";
+			use_clustering = true;
+			strat = STRAT_MAX;
 		} else if (!strcmp(tgt_overlap_policy, "auto")) {
 			effective_tgt_policy = "auto_score";
 		}
@@ -92,77 +105,135 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				tmp_metadata.clear();
 				hint = chain_intervs.map_interval(*isrc_interv, tmp_tgt_intervs, hint, &tmp_metadata);
 
-				// Best Source Cluster Strategy: cluster by source overlap, keep heaviest cluster
-				if (use_best_source_cluster && tmp_tgt_intervs.size() > 1) {
+				// Clustering Strategy: cluster by source overlap (and same chain_id), keep heaviest cluster
+				if (use_clustering && tmp_tgt_intervs.size() > 1) {
 					// A. Zip intervals and metadata into candidates
 					struct Candidate {
 						GInterval interv;
 						ChainMappingMetadata meta;
 					};
-					vector<Candidate> candidates(tmp_tgt_intervs.size());
-					for (size_t i = 0; i < tmp_tgt_intervs.size(); ++i) {
+					size_t n = tmp_tgt_intervs.size();
+					vector<Candidate> candidates(n);
+					for (size_t i = 0; i < n; ++i) {
 						candidates[i].interv = tmp_tgt_intervs[i];
 						if (i < tmp_metadata.size()) candidates[i].meta = tmp_metadata[i];
 					}
 
-					// B. Sort by source start to enable single-pass clustering
-					sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
-						return a.meta.start_src < b.meta.start_src;
+					// B. Union-Find data structure for clustering
+					vector<size_t> parent(n), rank_uf(n, 0);
+					for (size_t i = 0; i < n; ++i) parent[i] = i;
+
+					// Find with path compression
+					std::function<size_t(size_t)> find_root = [&](size_t x) -> size_t {
+						if (parent[x] != x) parent[x] = find_root(parent[x]);
+						return parent[x];
+					};
+
+					// Union by rank
+					auto unite = [&](size_t x, size_t y) {
+						size_t rx = find_root(x), ry = find_root(y);
+						if (rx == ry) return;
+						if (rank_uf[rx] < rank_uf[ry]) std::swap(rx, ry);
+						parent[ry] = rx;
+						if (rank_uf[rx] == rank_uf[ry]) rank_uf[rx]++;
+					};
+
+					// C. Connect candidates with same chain_id
+					unordered_map<int64_t, vector<size_t>> chain_id_groups;
+					for (size_t i = 0; i < n; ++i) {
+						chain_id_groups[candidates[i].meta.chain_id].push_back(i);
+					}
+					for (auto& kv : chain_id_groups) {
+						vector<size_t>& group = kv.second;
+						for (size_t i = 1; i < group.size(); ++i) {
+							unite(group[0], group[i]);
+						}
+					}
+
+					// D. Connect candidates that overlap in source space (sweep line)
+					// Sort indices by source start
+					vector<size_t> sorted_idx(n);
+					for (size_t i = 0; i < n; ++i) sorted_idx[i] = i;
+					sort(sorted_idx.begin(), sorted_idx.end(), [&](size_t a, size_t b) {
+						return candidates[a].meta.start_src < candidates[b].meta.start_src;
 					});
 
-					// C. Cluster by source overlap and find the heaviest cluster
-					vector<Candidate> best_cluster;
+					// Sweep line to find overlaps
+					int64_t max_end = -1;
+					size_t max_end_idx = 0;
+					for (size_t i = 0; i < n; ++i) {
+						size_t idx = sorted_idx[i];
+						if (candidates[idx].meta.start_src < max_end) {
+							// Overlap with previous - connect to the one that set max_end
+							unite(idx, max_end_idx);
+						}
+						if (candidates[idx].meta.end_src > max_end) {
+							max_end = candidates[idx].meta.end_src;
+							max_end_idx = idx;
+						}
+					}
+
+					// E. Group candidates by their root (connected component)
+					unordered_map<size_t, vector<size_t>> components;
+					for (size_t i = 0; i < n; ++i) {
+						components[find_root(i)].push_back(i);
+					}
+
+					// F. Calculate mass for each component and find the best
+					vector<size_t> best_component_indices;
 					int64_t best_mass = -1;
+					int64_t best_min_start = INT64_MAX;  // For tie-breaking
 
-					vector<Candidate> current_cluster;
-					int64_t current_mass = 0;
-					int64_t current_cluster_src_end = -1;
+					for (auto& kv : components) {
+						vector<size_t>& comp = kv.second;
 
-					for (const auto& cand : candidates) {
-						int64_t len = cand.interv.end - cand.interv.start;
+						// Sort component members by source start for mass calculation
+						sort(comp.begin(), comp.end(), [&](size_t a, size_t b) {
+							return candidates[a].meta.start_src < candidates[b].meta.start_src;
+						});
 
-						// Check connectivity in source space
-						// Overlap condition: candidate start_src < cluster max end_src
-						bool connected = !current_cluster.empty() &&
-						                 (cand.meta.start_src < current_cluster_src_end);
+						int64_t mass = 0;
+						int64_t min_start = candidates[comp[0]].meta.start_src;  // First element after sort
 
-						if (connected) {
-							// Add to current cluster (Duplication)
-							current_cluster.push_back(cand);
-							current_mass += len;
-							current_cluster_src_end = std::max(current_cluster_src_end, cand.meta.end_src);
-						} else {
-							// Finalize previous cluster
-							if (!current_cluster.empty()) {
-								if (current_mass > best_mass) {
-									best_mass = current_mass;
-									best_cluster = current_cluster;
+						if (strat == STRAT_UNION) {
+							// Union: count unique source bp
+							int64_t union_end = -1;
+							for (size_t idx : comp) {
+								int64_t s = candidates[idx].meta.start_src;
+								int64_t e = candidates[idx].meta.end_src;
+								if (e > union_end) {
+									mass += e - std::max(s, union_end);
+									union_end = e;
 								}
 							}
+						} else if (strat == STRAT_SUM) {
+							// Sum: total of all segment lengths
+							for (size_t idx : comp) {
+								mass += candidates[idx].meta.end_src - candidates[idx].meta.start_src;
+							}
+						} else if (strat == STRAT_MAX) {
+							// Max: largest single segment
+							for (size_t idx : comp) {
+								int64_t len = candidates[idx].meta.end_src - candidates[idx].meta.start_src;
+								mass = std::max(mass, len);
+							}
+						}
 
-							// Start new cluster (Disjoint/Split)
-							current_cluster.clear();
-							current_cluster.push_back(cand);
-							current_mass = len;
-							current_cluster_src_end = cand.meta.end_src;
+						// Prefer higher mass, or earlier start position for ties
+						if (mass > best_mass || (mass == best_mass && min_start < best_min_start)) {
+							best_mass = mass;
+							best_min_start = min_start;
+							best_component_indices = comp;
 						}
 					}
 
-					// Finalize the last cluster
-					if (!current_cluster.empty()) {
-						if (current_mass > best_mass) {
-							best_mass = current_mass;
-							best_cluster = current_cluster;
-						}
-					}
-
-					// D. Apply result: keep only the best cluster
+					// G. Apply result: keep only the best component
 					tmp_tgt_intervs.clear();
 					tmp_metadata.clear();
 
-					for (const auto& winner : best_cluster) {
-						tmp_tgt_intervs.push_back(winner.interv);
-						tmp_metadata.push_back(winner.meta);
+					for (size_t idx : best_component_indices) {
+						tmp_tgt_intervs.push_back(candidates[idx].interv);
+						tmp_metadata.push_back(candidates[idx].meta);
 					}
 				}
 
