@@ -15,7 +15,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _envir)
+SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _min_score, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -29,12 +29,20 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 		if (!Rf_isString(_tgt_overlap_policy) || Rf_length(_tgt_overlap_policy) != 1)
 			verror("Target overlap policy argument is not a string");
 
+		// Parse min_score (optional)
+		double min_score = -1.0;  // negative means no filtering
+		if (!Rf_isNull(_min_score)) {
+			if (!Rf_isReal(_min_score) || Rf_length(_min_score) != 1)
+				verror("min_score must be a single numeric value");
+			min_score = REAL(_min_score)[0];
+		}
+
 		IntervUtils iu(_envir);
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
 		std::string effective_tgt_policy = tgt_overlap_policy;
-		if (!strcmp(src_overlap_policy, "keep") && !strcmp(tgt_overlap_policy, "auto"))
-			effective_tgt_policy = "keep";
+		if (!strcmp(tgt_overlap_policy, "auto"))
+			effective_tgt_policy = "auto_score";
 		const char *chainfname = CHAR(STRING_ELT(_chainfile, 0));
 		BufferedFile chainfile;
 
@@ -54,9 +62,12 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 		int64_t start[2] = { -1, -1 };
 		int64_t end[2] = { -1, -1 };
 		int strand[2] = { -1, -1 };
+	double chain_score = 0.0;
+	int64_t current_chain_id = 0;
 		int64_t lineno = 0;
 		char *endptr;
 		int64_t num;
+		bool skip_current_chain = false;  // for min_score filtering
 
 		while (1) {
 			lineno += split_line_by_space_chars(chainfile, fields, NUM_FIELDS);
@@ -75,8 +86,16 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 				}
 
 				// CHAIN
-				if (strcmp(fields[CHAIN].c_str(), "chain"))
-					TGLError("Chain file %s, line %ld: invalid file format", chainfname, lineno);
+			if (strcmp(fields[CHAIN].c_str(), "chain"))
+				TGLError("Chain file %s, line %ld: invalid file format", chainfname, lineno);
+
+			// SCORE
+				chain_score = strtod(fields[SCORE].c_str(), &endptr);
+				if (*endptr || chain_score < 0)
+					TGLError("Chain file %s, line %ld: invalid chain score", chainfname, lineno);
+
+				// Check min_score filter
+				skip_current_chain = (min_score >= 0 && chain_score < min_score);
 
 				// CHROM1
 				unordered_map<string, int>::const_iterator ichrom2id = chrom2id.find(fields[CHROM1]);
@@ -165,12 +184,31 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 				if (num > (int64_t)iu.get_chromkey().get_chrom_size(chrom[TGT]))
 					TGLError("Chain file %s, line %ld: reference end coordinate exceeds chromosome size", chainfname, lineno);
 				end[TGT] = num;
+
+				// ID (chain identifier)
+				current_chain_id = strtoll(fields[ID].c_str(), &endptr, 10);
+				if (*endptr)
+					TGLError("Chain file %s, line %ld: invalid chain ID", chainfname, lineno);
 			} else if (fields.size() == 3 || fields.size() == 1) {
 				if (chrom[SRC] < 0)
 					TGLError("Chain file %s, line %ld: invalid file format", chainfname, lineno);
 
-				if (chrom[TGT] < 0)
+				// Skip chains that don't meet min_score or have invalid target chromosome
+				if (chrom[TGT] < 0 || skip_current_chain) {
+					// Still need to advance positions to validate chain format
+					if (fields.size() == 3) {
+						int64_t size = strtoll(fields[SIZE].c_str(), &endptr, 10);
+						int64_t dt = strtoll(fields[DT].c_str(), &endptr, 10);
+						int64_t dq = strtoll(fields[DQ].c_str(), &endptr, 10);
+						start[SRC] += size + dt;
+						start[TGT] += size + dq;
+					} else {
+						int64_t size = strtoll(fields[SIZE].c_str(), &endptr, 10);
+						start[SRC] += size;
+						start[TGT] += size;
+					}
 					continue;
+				}
 
 				int64_t size = strtoll(fields[SIZE].c_str(), &endptr, 10);
 				if (*endptr || size <= 0)
@@ -188,6 +226,8 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 					chrom[SRC],
 					strand[SRC] ? chrom_sizes[chrom[SRC]] - start[SRC] - size : start[SRC],
 					strand[SRC]));
+				chain_intervs.back().score = chain_score;
+				chain_intervs.back().chain_id = current_chain_id;
 
 				if (fields.size() == 3) {
 					int64_t dt = strtoll(fields[DT].c_str(), &endptr, 10);
@@ -232,6 +272,7 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 		// Handle target overlaps
 		chain_intervs.sort_by_tgt();
 		chain_intervs.handle_tgt_overlaps(effective_tgt_policy, iu.get_chromkey(), id2chrom);
+		chain_intervs.set_tgt_overlap_policy(effective_tgt_policy);
 
 		if (chain_intervs.empty())
 			return R_NilValue;

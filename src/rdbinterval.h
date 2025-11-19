@@ -55,7 +55,7 @@ struct IntervalPval : public GInterval {
 
 struct ChainInterval : public GInterval {
 	enum Errors { BAD_INTERVAL };
-	enum { STRAND = GInterval::NUM_COLS, CHROM_SRC, START_SRC, END_SRC, STRAND_SRC, NUM_COLS };
+	enum { STRAND = GInterval::NUM_COLS, CHROM_SRC, START_SRC, END_SRC, STRAND_SRC, CHAIN_ID, SCORE, NUM_COLS };
 
 	struct SrcCompare {
 		bool operator()(const ChainInterval &obj1, const ChainInterval &obj2) const;
@@ -76,16 +76,17 @@ struct ChainInterval : public GInterval {
 	int64_t end_src;
 	int64_t strand_src;
 	int64_t chain_id;     // Monotonically increasing ID for stable sorting
+	double  score;        // Chain alignment score from header
 
-	ChainInterval() : GInterval(), chromid_src(-1), start_src(-1), end_src(-1), strand_src(-1), chain_id(-1) {}
+	ChainInterval() : GInterval(), chromid_src(-1), start_src(-1), end_src(-1), strand_src(-1), chain_id(-1), score(0.0) {}
 
 	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _chromid_src, int64_t _start_src) :
 		GInterval(_chromid, _start, _end, 0), chromid_src(_chromid_src), start_src(_start_src),
-		end_src(_start_src + (_end - _start)), strand_src(0), chain_id(-1) {}
+		end_src(_start_src + (_end - _start)), strand_src(0), chain_id(-1), score(0.0) {}
 
 	ChainInterval(int _chromid, int64_t _start, int64_t _end, int _strand_tgt, int _chromid_src, int64_t _start_src, int64_t _strand_src) :
 		GInterval(_chromid, _start, _end, _strand_tgt), chromid_src(_chromid_src), start_src(_start_src),
-		end_src(_start_src + (_end - _start)), strand_src(_strand_src), chain_id(-1) {}
+		end_src(_start_src + (_end - _start)), strand_src(_strand_src), chain_id(-1), score(0.0) {}
 
 	string tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const;
 
@@ -106,6 +107,14 @@ struct ChainInterval : public GInterval {
 	}
 };
 
+struct ChainMappingMetadata {
+	double  score;
+	int64_t chain_id;
+
+	ChainMappingMetadata() : score(0.0), chain_id(0) {}
+	ChainMappingMetadata(double _score, int64_t _chain_id) : score(_score), chain_id(_chain_id) {}
+};
+
 
 //------------------------------------- ChainIntervals --------------------------------------------
 
@@ -113,12 +122,15 @@ class ChainIntervals : public std::vector<ChainInterval> {
 public:
 	enum Errors { OVERLAPPING_INTERVAL, UNSORTED_INTERVALS };
 
-	ChainIntervals() : std::vector<ChainInterval>() {}
-	ChainIntervals(size_type n) : std::vector<ChainInterval>(n) {}
-	ChainIntervals(const std::vector<ChainInterval> &v) : std::vector<ChainInterval>(v) {}
+	ChainIntervals() : std::vector<ChainInterval>(), m_tgt_overlap_policy("keep") {}
+	ChainIntervals(size_type n) : std::vector<ChainInterval>(n), m_tgt_overlap_policy("keep") {}
+	ChainIntervals(const std::vector<ChainInterval> &v) : std::vector<ChainInterval>(v), m_tgt_overlap_policy("keep") {}
 
 	void sort_by_src() { sort(begin(), end(), ChainInterval::SrcCompare()); }
 	void sort_by_tgt() { sort(begin(), end()); }
+
+	void set_tgt_overlap_policy(const string &policy) { m_tgt_overlap_policy = policy; }
+	const string& get_tgt_overlap_policy() const { return m_tgt_overlap_policy; }
 
 	// Verifies that there are no overlaps between the source intervals; if intervals overlap an exception is thrown.
 	// Intervals are expected to be already sorted by source.
@@ -134,11 +146,18 @@ public:
 	void handle_src_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom);
 
 	// Handles target overlaps according to the specified policy.
-	// Policy: "error" - throw exception, "auto" - auto-resolve by truncating, "discard" - remove all overlapping intervals.
+	// Policies:
+	//   "keep"        - keep overlaps unchanged (no trimming)
+	//   "error"       - throw on the first target overlap
+	//   "discard"     - drop any interval that participates in a target overlap
+	//   "auto_first"  - segment the union and keep the smallest chain_id in each overlapped segment
+	//   "auto_longer" - segment the union and keep the longest span in each overlapped segment (ties: score, then chain_id)
+	//   "auto_score"  - segment the union and keep the highest score in each overlapped segment (ties: span, then chain_id)
+	//   "agg"         - segment the union and keep all chains for overlapped segments (parallel slices)
 	// Intervals are expected to be already sorted by target.
 	void handle_tgt_overlaps(const string &policy, const GenomeChromKey &chromkey, const vector<string> &src_id2chrom);
 
-	const_iterator map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, const_iterator hint);
+	const_iterator map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, const_iterator hint, std::vector<ChainMappingMetadata> *metadata = NULL);
 
 	// Build auxiliary structures for efficient source interval mapping
 	void buildSrcAux();
@@ -153,12 +172,13 @@ private:
 	std::vector<size_t>  m_chrom_first;         // first index per chromid_src
 	std::vector<size_t>  m_chrom_last_excl;     // exclusive last index per chromid_src
 	int                  m_max_src_chromid = -1; // max source chromosome id
+	string               m_tgt_overlap_policy;   // target overlap policy for score-based selection
 
 	bool check_first_overlap_src(const const_iterator &iinterval1, const GInterval &interval2) {
 		return iinterval1->do_overlap_src(interval2) && (iinterval1 == begin() || !(iinterval1 - 1)->do_overlap_src(interval2));
 	}
 
-	const_iterator add2tgt(const_iterator hint, const GInterval &src_interval, GIntervals &tgt_intervs);
+	const_iterator add2tgt(const_iterator hint, const GInterval &src_interval, GIntervals &tgt_intervs, std::vector<ChainMappingMetadata> *metadata);
 };
 
 
@@ -339,7 +359,8 @@ inline bool rdb::ChainInterval::SetCompare::operator()(const ChainInterval &obj1
 inline string rdb::ChainInterval::tostring(const GenomeChromKey &chromkey, const vector<string> &src_id2chrom) const
 {
     char buf[1000];
-    snprintf(buf, sizeof(buf), "(%s, %" PRId64 ", %" PRId64 ") <- (%s, %" PRId64 ", %" PRId64 ")", chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src, end_src);
+    snprintf(buf, sizeof(buf), "(%s, %" PRId64 ", %" PRId64 ") <- (%s, %" PRId64 ", %" PRId64 ") [chain_id=%" PRId64 ", score=%.0f]",
+             chromkey.id2chrom(chromid).c_str(), start, end, src_id2chrom[chromid_src].c_str(), start_src, end_src, chain_id, score);
     return string(buf);
 }
 

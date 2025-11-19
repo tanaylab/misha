@@ -8,20 +8,34 @@ gintervals.load_chain(
   file = NULL,
   src_overlap_policy = "error",
   tgt_overlap_policy = "auto",
-  src_groot = NULL
+  src_groot = NULL,
+  min_score = NULL
 )
 }
 \arguments{
 \item{file}{name of chain file}
 
-\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard"}
+\item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
 
-\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer chain, "discard" removes overlapping targets, and "keep" preserves them (but liftover operations must tolerate overlaps).}
+\item{tgt_overlap_policy}{policy for handling target overlaps. One of:
+\tabular{ll}{
+  Policy \tab Description \cr
+  error \tab Throws an error if any target overlaps are detected. \cr
+  auto \tab Default. Alias for "auto_score". \cr
+  auto_score \tab Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id. \cr
+  auto_longer \tab Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id. \cr
+  auto_first \tab Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment. \cr
+  keep \tab Preserves all overlapping intervals. \cr
+  discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
+  agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+}}
 
 \item{src_groot}{optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.}
+
+\item{min_score}{optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.}
 }
 \value{
-A data frame representing assembly conversion table.
+A data frame representing assembly conversion table with columns: chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc, chain_id, score.
 }
 \description{
 Loads assembly conversion table from a chain file.

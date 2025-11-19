@@ -1,8 +1,14 @@
 # misha 5.2.0
 
 * Added `src_overlap_policy` and `tgt_overlap_policy` parameters to `gintervals.liftover`, `gintervals.load_chain`, and `gtrack.liftover` functions.
-* Added target aggregation in gtrack.liftover `multi_target_agg` parameter.
+* Added target aggregation in `gtrack.liftover` via `multi_target_agg` parameter.
 * `gintervals.load_chain` now returns valid misha intervals instead of a chain object.
+* Added score-based liftover functionality matching UCSC liftOver behavior:
+  - `gintervals.load_chain` now includes `score` and `chain_id` columns for all loaded chains
+  - New `min_score` parameter in `gintervals.load_chain`, `gintervals.liftover`, and `gtrack.liftover` filters out low-quality chains
+  - New `tgt_overlap_policy = "auto_score"` (or `"auto"`) selects the best chain mapping based on alignment score (highest score → longest span → lowest chain_id)
+  - New `include_metadata` parameter in `gintervals.liftover` optionally returns score and chain_id for each mapping
+* Added `canonic` parameter to `gintervals.liftover` (default `FALSE`) to merge adjacent target intervals resulting from the same source interval and chain.
 
 # misha 5.1.4
 
