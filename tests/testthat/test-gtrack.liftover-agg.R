@@ -1,8 +1,11 @@
+load_test_db()
+
 test_that("gtrack.liftover multi-target aggregation policies", {
     local_db_state()
 
     # Source genome with a single chromosome
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 400), collapse = ""), "\n", sep = "", file = source_fasta)
 
     source_db <- tempfile()
@@ -11,12 +14,13 @@ test_that("gtrack.liftover multi-target aggregation policies", {
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Dense track with three bins (values 1, 2, 3; binsize 10)
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = rep("source1", 3),
+        chrom = rep("chrsource1", 3),
         start = c(0, 10, 20),
         end = c(10, 20, 30),
         stringsAsFactors = FALSE
@@ -35,9 +39,10 @@ test_that("gtrack.liftover multi-target aggregation policies", {
 
     # Chain mappings: all three bins map (partially) into chrA[0,10)
     chain_file <- new_chain_file()
-    write_chain_entry(chain_file, "source1", 400, "+", 0, 10, "chrA", 400, "+", 0, 10, 1) # coverage len 10, value 1
-    write_chain_entry(chain_file, "source1", 400, "+", 10, 20, "chrA", 400, "+", 3, 13, 2) # coverage len 7, value 2
-    write_chain_entry(chain_file, "source1", 400, "+", 20, 30, "chrA", 400, "+", 7, 17, 3) # coverage len 3, value 3
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 400, "+", 0, 10, "chrA", 400, "+", 0, 10, 1) # coverage len 10, value 1
+    write_chain_entry(chain_file, "chrsource1", 400, "+", 10, 20, "chrA", 400, "+", 3, 13, 2) # coverage len 7, value 2
+    write_chain_entry(chain_file, "chrsource1", 400, "+", 20, 30, "chrA", 400, "+", 7, 17, 3) # coverage len 3, value 3
 
     lifted_track <- "agg_dense_lifted"
     withr::defer({
@@ -50,7 +55,7 @@ test_that("gtrack.liftover multi-target aggregation policies", {
     }
 
     liftover_with <- function(..., track_dir = src_track_dir, agg = "mean", params = NULL,
-                              na.rm = TRUE, min_n = NULL, tgt_policy = "keep", desc = "lifted") {
+                              na.rm = TRUE, min_n = NULL, tgt_policy = "agg", desc = "lifted") {
         if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
         gtrack.liftover(
             lifted_track, desc, track_dir, chain_file,
@@ -92,7 +97,8 @@ test_that("gtrack.liftover multi-target aggregation policies", {
 test_that("gtrack.liftover aggregation edge cases: all NAs", {
     local_db_state()
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -100,12 +106,13 @@ test_that("gtrack.liftover aggregation edge cases: all NAs", {
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # All NA values
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = rep("source1", 3),
+        chrom = rep("chrsource1", 3),
         start = c(0, 10, 20),
         end = c(10, 20, 30),
         stringsAsFactors = FALSE
@@ -117,9 +124,10 @@ test_that("gtrack.liftover aggregation edge cases: all NAs", {
     setup_db(list(paste0(">chrA\n", paste(rep("T", 100), collapse = ""), "\n")))
 
     chain_file <- new_chain_file()
-    write_chain_entry(chain_file, "source1", 100, "+", 0, 10, "chrA", 100, "+", 0, 10, 1)
-    write_chain_entry(chain_file, "source1", 100, "+", 10, 20, "chrA", 100, "+", 3, 13, 2)
-    write_chain_entry(chain_file, "source1", 100, "+", 20, 30, "chrA", 100, "+", 7, 17, 3)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 100, "+", 0, 10, "chrA", 100, "+", 0, 10, 1)
+    write_chain_entry(chain_file, "chrsource1", 100, "+", 10, 20, "chrA", 100, "+", 3, 13, 2)
+    write_chain_entry(chain_file, "chrsource1", 100, "+", 20, 30, "chrA", 100, "+", 7, 17, 3)
 
     lifted_track <- "all_na_lifted"
     withr::defer({
@@ -130,7 +138,7 @@ test_that("gtrack.liftover aggregation edge cases: all NAs", {
     for (agg in c("mean", "sum", "min", "max", "median", "first", "last", "max.coverage_len")) {
         gtrack.liftover(
             lifted_track, "test", src_track_dir, chain_file,
-            tgt_overlap_policy = "keep",
+            tgt_overlap_policy = "agg",
             multi_target_agg = agg,
             na.rm = TRUE
         )
@@ -142,7 +150,7 @@ test_that("gtrack.liftover aggregation edge cases: all NAs", {
     # count should return 0 for all NAs
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "count",
         na.rm = TRUE
     )
@@ -153,7 +161,8 @@ test_that("gtrack.liftover aggregation edge cases: all NAs", {
 test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense tracks", {
     local_db_state()
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -161,12 +170,13 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Create dense track with values 5, 3, 5, 2 (testing ties)
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = rep("source1", 4),
+        chrom = rep("chrsource1", 4),
         start = c(0, 10, 20, 30),
         end = c(10, 20, 30, 40),
         stringsAsFactors = FALSE
@@ -179,10 +189,11 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
 
     chain_file <- new_chain_file()
     # Map all to overlapping target locus [50,60)
-    write_chain_entry(chain_file, "source1", 200, "+", 0, 10, "chrB", 200, "+", 50, 60, 1)
-    write_chain_entry(chain_file, "source1", 200, "+", 10, 20, "chrB", 200, "+", 50, 60, 2)
-    write_chain_entry(chain_file, "source1", 200, "+", 20, 30, "chrB", 200, "+", 50, 60, 3)
-    write_chain_entry(chain_file, "source1", 200, "+", 30, 40, "chrB", 200, "+", 50, 60, 4)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 0, 10, "chrB", 200, "+", 50, 60, 1)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 10, 20, "chrB", 200, "+", 50, 60, 2)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 20, 30, "chrB", 200, "+", 50, 60, 3)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 30, 40, "chrB", 200, "+", 50, 60, 4)
 
     lifted_track <- "tie_lifted"
     withr::defer({
@@ -192,7 +203,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # first: all start at 50, end at 60, sorted by value descending: 5,5,3,2 -> pick first (5)
     gtrack.liftover(
         lifted_track, "first", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "first"
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
@@ -202,7 +213,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # last: pick last in sorted order (2)
     gtrack.liftover(
         lifted_track, "last", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "last"
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
@@ -212,7 +223,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # nth with n=2: sorted by value desc is 5,5,3,2, second is 5
     gtrack.liftover(
         lifted_track, "nth", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "nth",
         params = 2
     )
@@ -223,7 +234,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # min: should be 2
     gtrack.liftover(
         lifted_track, "min", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "min"
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
@@ -233,7 +244,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # max: should be 5
     gtrack.liftover(
         lifted_track, "max", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "max"
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
@@ -243,7 +254,8 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
 test_that("gtrack.liftover median with even/odd numbers of contributors", {
     local_db_state()
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -251,12 +263,13 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Create track with 4 values for even-count median test
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = rep("source1", 4),
+        chrom = rep("chrsource1", 4),
         start = c(0, 10, 20, 30),
         end = c(10, 20, 30, 40),
         stringsAsFactors = FALSE
@@ -267,7 +280,7 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
 
     # Create track with 3 values for odd-count median test
     src_intervals_odd <- data.frame(
-        chrom = rep("source1", 3),
+        chrom = rep("chrsource1", 3),
         start = c(50, 60, 70),
         end = c(60, 70, 80),
         stringsAsFactors = FALSE
@@ -280,10 +293,11 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
 
     # Even count test
     chain_file_even <- new_chain_file()
-    write_chain_entry(chain_file_even, "source1", 200, "+", 0, 10, "chrD", 200, "+", 10, 20, 1)
-    write_chain_entry(chain_file_even, "source1", 200, "+", 10, 20, "chrD", 200, "+", 10, 20, 2)
-    write_chain_entry(chain_file_even, "source1", 200, "+", 20, 30, "chrD", 200, "+", 10, 20, 3)
-    write_chain_entry(chain_file_even, "source1", 200, "+", 30, 40, "chrD", 200, "+", 10, 20, 4)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file_even, "chrsource1", 200, "+", 0, 10, "chrD", 200, "+", 10, 20, 1)
+    write_chain_entry(chain_file_even, "chrsource1", 200, "+", 10, 20, "chrD", 200, "+", 10, 20, 2)
+    write_chain_entry(chain_file_even, "chrsource1", 200, "+", 20, 30, "chrD", 200, "+", 10, 20, 3)
+    write_chain_entry(chain_file_even, "chrsource1", 200, "+", 30, 40, "chrD", 200, "+", 10, 20, 4)
 
     lifted_track <- "median_lifted"
     withr::defer({
@@ -293,7 +307,7 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
     # Median of 1,2,3,4 should be (2+3)/2 = 2.5
     gtrack.liftover(
         lifted_track, "median even", src_track_dir_even, chain_file_even,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "median"
     )
     res <- gextract(lifted_track, gintervals("chrD", 10, 20))
@@ -302,14 +316,15 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
 
     # Odd count test
     chain_file_odd <- new_chain_file()
-    write_chain_entry(chain_file_odd, "source1", 200, "+", 50, 60, "chrD", 200, "+", 30, 40, 1)
-    write_chain_entry(chain_file_odd, "source1", 200, "+", 60, 70, "chrD", 200, "+", 30, 40, 2)
-    write_chain_entry(chain_file_odd, "source1", 200, "+", 70, 80, "chrD", 200, "+", 30, 40, 3)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file_odd, "chrsource1", 200, "+", 50, 60, "chrD", 200, "+", 30, 40, 1)
+    write_chain_entry(chain_file_odd, "chrsource1", 200, "+", 60, 70, "chrD", 200, "+", 30, 40, 2)
+    write_chain_entry(chain_file_odd, "chrsource1", 200, "+", 70, 80, "chrD", 200, "+", 30, 40, 3)
 
     # Median of 5,7,9 should be 7
     gtrack.liftover(
         lifted_track, "median odd", src_track_dir_odd, chain_file_odd,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "median"
     )
     res <- gextract(lifted_track, gintervals("chrD", 30, 40))
@@ -319,7 +334,8 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
 test_that("gtrack.liftover aggregation for sparse tracks", {
     local_db_state()
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -327,11 +343,12 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = rep("source1", 3),
+        chrom = rep("chrsource1", 3),
         start = c(0, 10, 20),
         end = c(10, 20, 30),
         stringsAsFactors = FALSE
@@ -344,9 +361,10 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
 
     chain_file <- new_chain_file()
     # Map each interval onto the same target locus
-    write_chain_entry(chain_file, "source1", 200, "+", 0, 10, "chrB", 200, "+", 100, 110, 1)
-    write_chain_entry(chain_file, "source1", 200, "+", 10, 20, "chrB", 200, "+", 100, 110, 2)
-    write_chain_entry(chain_file, "source1", 200, "+", 20, 30, "chrB", 200, "+", 100, 110, 3)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 0, 10, "chrB", 200, "+", 100, 110, 1)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 10, 20, "chrB", 200, "+", 100, 110, 2)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 20, 30, "chrB", 200, "+", 100, 110, 3)
 
     lifted_track <- "agg_sparse_lifted"
     withr::defer({
@@ -355,7 +373,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
 
     gtrack.liftover(
         lifted_track, "sum sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "sum"
     )
     vals <- gextract(lifted_track, gintervals("chrB", 100, 110))[[lifted_track]]
@@ -364,7 +382,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
         lifted_track, "count sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "count"
     )
     vals <- gextract(lifted_track, gintervals("chrB", 100, 110))[[lifted_track]]
@@ -373,7 +391,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
         lifted_track, "first sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "first"
     )
     vals <- gextract(lifted_track, gintervals("chrB", 100, 110))[[lifted_track]]
@@ -382,7 +400,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
         lifted_track, "nth sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "nth",
         params = 2
     )
@@ -392,7 +410,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
         lifted_track, "min_n sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "sum",
         min_n = 4
     )
@@ -403,7 +421,8 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
 test_that("gtrack.liftover nth aggregator validates params", {
     local_db_state()
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
 
     source_db <- tempfile()
@@ -412,11 +431,12 @@ test_that("gtrack.liftover nth aggregator validates params", {
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = rep("source1", 1),
+        chrom = rep("chrsource1", 1),
         start = 0,
         end = 10,
         stringsAsFactors = FALSE
@@ -428,13 +448,14 @@ test_that("gtrack.liftover nth aggregator validates params", {
     setup_db(list(paste0(">chrC\n", paste(rep("C", 100), collapse = ""), "\n")))
 
     chain_file <- new_chain_file()
-    write_chain_entry(chain_file, "source1", 100, "+", 0, 10, "chrC", 100, "+", 0, 10, 1)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 100, "+", 0, 10, "chrC", 100, "+", 0, 10, 1)
 
     expect_error(
         gtrack.liftover(
             "nth_bad", "desc", src_track_dir, chain_file,
             multi_target_agg = "nth",
-            tgt_overlap_policy = "keep"
+            tgt_overlap_policy = "agg"
         ),
         "params must be supplied for 'nth' aggregation"
     )
@@ -444,7 +465,7 @@ test_that("gtrack.liftover nth aggregator validates params", {
             "nth_bad2", "desc", src_track_dir, chain_file,
             multi_target_agg = "nth",
             params = list(),
-            tgt_overlap_policy = "keep"
+            tgt_overlap_policy = "agg"
         ),
         "params list must contain an element 'n' for 'nth'",
         fixed = TRUE
@@ -457,7 +478,8 @@ test_that("gtrack.liftover aggregation with non-consecutive overlapping chains",
     # Test aggregation when overlapping chains are separated by non-overlapping ones
     # This tests that the aggregation finds ALL overlapping chains, not just consecutive ones
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -465,12 +487,13 @@ test_that("gtrack.liftover aggregation with non-consecutive overlapping chains",
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Create track with interval that overlaps first two chains (but not the third)
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = "source1",
+        chrom = "chrsource1",
         start = 20,
         end = 30,
         stringsAsFactors = FALSE
@@ -486,10 +509,11 @@ test_that("gtrack.liftover aggregation with non-consecutive overlapping chains",
 
     chain_file <- new_chain_file()
     # Chains with same start (will be consecutive in sorted array)
-    write_chain_entry(chain_file, "source1", 200, "+", 10, 40, "chr1", 100, "+", 0, 30, 1)
-    write_chain_entry(chain_file, "source1", 200, "+", 10, 40, "chr2", 100, "+", 0, 30, 2)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 10, 40, "chr1", 100, "+", 0, 30, 1)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 10, 40, "chr2", 100, "+", 0, 30, 2)
     # Non-overlapping chain that separates the above in iteration order
-    write_chain_entry(chain_file, "source1", 200, "+", 50, 60, "chr3", 100, "+", 0, 10, 3)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 50, 60, "chr3", 100, "+", 0, 10, 3)
 
     lifted_track <- "nc_overlap_lifted"
     withr::defer({
@@ -500,7 +524,7 @@ test_that("gtrack.liftover aggregation with non-consecutive overlapping chains",
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
         src_overlap_policy = "keep",
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "count"
     )
 
@@ -518,7 +542,8 @@ test_that("gtrack.liftover aggregation with chains of varying lengths starting a
     # Multiple chains starting at same source position but with different lengths
     # Tests deterministic ordering and correct aggregation
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -526,12 +551,13 @@ test_that("gtrack.liftover aggregation with chains of varying lengths starting a
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Interval that overlaps all chains
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = "source1",
+        chrom = "chrsource1",
         start = 105,
         end = 115,
         stringsAsFactors = FALSE
@@ -547,9 +573,10 @@ test_that("gtrack.liftover aggregation with chains of varying lengths starting a
 
     chain_file <- new_chain_file()
     # All start at 100 but have different lengths
-    write_chain_entry(chain_file, "source1", 300, "+", 100, 120, "chr1", 200, "+", 0, 20, 1) # len=20
-    write_chain_entry(chain_file, "source1", 300, "+", 100, 103, "chr2", 200, "+", 0, 3, 2) # len=3 (won't overlap interval at 105)
-    write_chain_entry(chain_file, "source1", 300, "+", 100, 130, "chr3", 200, "+", 0, 30, 3) # len=30
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 300, "+", 100, 120, "chr1", 200, "+", 0, 20, 1) # len=20
+    write_chain_entry(chain_file, "chrsource1", 300, "+", 100, 103, "chr2", 200, "+", 0, 3, 2) # len=3 (won't overlap interval at 105)
+    write_chain_entry(chain_file, "chrsource1", 300, "+", 100, 130, "chr3", 200, "+", 0, 30, 3) # len=30
 
     lifted_track <- "varylen_lifted"
     withr::defer({
@@ -560,7 +587,7 @@ test_that("gtrack.liftover aggregation with chains of varying lengths starting a
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
         src_overlap_policy = "keep",
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "count"
     )
 
@@ -578,7 +605,8 @@ test_that("gtrack.liftover aggregation with reverse strand preserves correct val
 
     # Test that aggregation works correctly with reverse strand mappings
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -586,12 +614,13 @@ test_that("gtrack.liftover aggregation with reverse strand preserves correct val
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Create track with three distinct values
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = rep("source1", 3),
+        chrom = rep("chrsource1", 3),
         start = c(10, 50, 100),
         end = c(20, 60, 110),
         stringsAsFactors = FALSE
@@ -604,7 +633,8 @@ test_that("gtrack.liftover aggregation with reverse strand preserves correct val
 
     chain_file <- new_chain_file()
     # Map with reverse strand
-    write_chain_entry(chain_file, "source1", 200, "+", 0, 150, "chr1", 300, "-", 150, 300, 1)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 0, 150, "chr1", 300, "-", 150, 300, 1)
 
     lifted_track <- "rev_strand_lifted"
     withr::defer({
@@ -614,7 +644,7 @@ test_that("gtrack.liftover aggregation with reverse strand preserves correct val
     # Test sum aggregation
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "sum"
     )
 
@@ -632,7 +662,8 @@ test_that("gtrack.liftover aggregation finds earlier long overlap when hint is t
     # Tests the prefix-max fallback logic for finding earlier overlapping chains
     # when the hint points past them
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -640,12 +671,13 @@ test_that("gtrack.liftover aggregation finds earlier long overlap when hint is t
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Two intervals: Q1 and Q2
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = "source1",
+        chrom = "chrsource1",
         start = c(70, 90),
         end = c(71, 91),
         stringsAsFactors = FALSE
@@ -662,11 +694,12 @@ test_that("gtrack.liftover aggregation finds earlier long overlap when hint is t
 
     chain_file <- new_chain_file()
     # A: [0,100) -> chr1 (overlaps both Q1 and Q2)
-    write_chain_entry(chain_file, "source1", 200, "+", 0, 100, "chr1", 200, "+", 0, 100, 1)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 0, 100, "chr1", 200, "+", 0, 100, 1)
     # B: [15,16) -> chr2 (does not overlap Q1 or Q2)
-    write_chain_entry(chain_file, "source1", 200, "+", 15, 16, "chr2", 200, "+", 0, 1, 2)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 15, 16, "chr2", 200, "+", 0, 1, 2)
     # C: [80,110) -> chr3 (overlaps Q2 only)
-    write_chain_entry(chain_file, "source1", 200, "+", 80, 110, "chr3", 200, "+", 0, 30, 3)
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 80, 110, "chr3", 200, "+", 0, 30, 3)
 
     lifted_track <- "long_overlap_lifted"
     withr::defer({
@@ -676,7 +709,7 @@ test_that("gtrack.liftover aggregation finds earlier long overlap when hint is t
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
         src_overlap_policy = "keep",
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "sum"
     )
 
@@ -698,7 +731,8 @@ test_that("gtrack.liftover aggregation with dense cluster of same-start chains",
     # Many chains starting at same position with varying lengths
     # Tests that aggregation handles large numbers of contributors correctly
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 1000), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -706,12 +740,13 @@ test_that("gtrack.liftover aggregation with dense cluster of same-start chains",
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Interval that overlaps many chains
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = "source1",
+        chrom = "chrsource1",
         start = 60,
         end = 61,
         stringsAsFactors = FALSE
@@ -729,8 +764,9 @@ test_that("gtrack.liftover aggregation with dense cluster of same-start chains",
     for (i in 1:50) {
         len <- i + 10 # lengths 11 to 60
         target_chrom <- if (i %% 2 == 0) "chr1" else "chr2"
+        # Chain file uses "chrsource1" to match database chromosome name
         write_chain_entry(
-            chain_file, "source1", 1000, "+", 50, 50 + len,
+            chain_file, "chrsource1", 1000, "+", 50, 50 + len,
             target_chrom, 5000, "+", i * 20, i * 20 + len, i
         )
     }
@@ -745,7 +781,7 @@ test_that("gtrack.liftover aggregation with dense cluster of same-start chains",
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
         src_overlap_policy = "keep",
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "mean"
     )
 
@@ -765,7 +801,8 @@ test_that("gtrack.liftover aggregation with partial overlaps and varying coverag
     # Test coverage-based aggregators with varying overlap lengths
     # Create source intervals that will have different coverage lengths when lifted
 
-    source_fasta <- tempfile(fileext = ".fasta")
+    # Filename must start with "chr" for .gseq.import() to process it
+    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
     cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
     source_db <- tempfile()
     withr::defer({
@@ -773,12 +810,13 @@ test_that("gtrack.liftover aggregation with partial overlaps and varying coverag
         unlink(source_fasta)
     })
 
-    gdb.create(groot = source_db, fasta = source_fasta, verbose = FALSE)
+    gdb.create(groot = source_db, fasta = source_fasta)
     gdb.init(source_db)
 
     # Create track with intervals that will map with different coverage
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
-        chrom = rep("source1", 3),
+        chrom = rep("chrsource1", 3),
         start = c(10, 40, 70),
         end = c(40, 70, 100), # all 30bp long
         stringsAsFactors = FALSE
@@ -792,11 +830,12 @@ test_that("gtrack.liftover aggregation with partial overlaps and varying coverag
     chain_file <- new_chain_file()
     # Create overlapping chains that will create different coverage lengths
     # Chain 1: source1[0,50) -> chr1[0,50) - will cover all of interval 1 (30bp) and part of interval 2
-    write_chain_entry(chain_file, "source1", 200, "+", 0, 50, "chr1", 300, "+", 0, 50, 1)
-    # Chain 2: source1[30,80) -> chr1[30,80) - overlaps all three source intervals partially
-    write_chain_entry(chain_file, "source1", 200, "+", 30, 80, "chr1", 300, "+", 30, 80, 2)
-    # Chain 3: source1[60,120) -> chr1[60,120) - will cover all of interval 3 (30bp) and part of interval 2
-    write_chain_entry(chain_file, "source1", 200, "+", 60, 120, "chr1", 300, "+", 60, 120, 3)
+    # Chain file uses "chrsource1" to match database chromosome name
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 0, 50, "chr1", 300, "+", 0, 50, 1)
+    # Chain 2: chrsource1[30,80) -> chr1[30,80) - overlaps all three source intervals partially
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 30, 80, "chr1", 300, "+", 30, 80, 2)
+    # Chain 3: chrsource1[60,120) -> chr1[60,120) - will cover all of interval 3 (30bp) and part of interval 2
+    write_chain_entry(chain_file, "chrsource1", 200, "+", 60, 120, "chr1", 300, "+", 60, 120, 3)
 
     lifted_track <- "partial_overlap_lifted"
     withr::defer({

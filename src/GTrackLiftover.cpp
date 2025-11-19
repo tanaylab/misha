@@ -2,11 +2,13 @@
 #include "port.h"
 
 #include <cmath>
+#include <limits>
 #include <map>
 #include <list>
 #include <set>
 #include <vector>
 #include <algorithm>
+#include <sys/stat.h>
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -42,6 +44,7 @@ struct Contribution {
 	int64_t start;
 	int64_t end;
 	bool is_na;
+	int64_t chain_id;
 };
 
 struct AggregationConfig {
@@ -99,7 +102,8 @@ static inline void aggregation_state_add(AggregationState &state,
                                          double overlap_len,
                                          double locus_len,
                                          int64_t overlap_start,
-                                         int64_t overlap_end)
+                                         int64_t overlap_end,
+                                         int64_t chain_id)
 {
 	Contribution contrib;
 	contrib.value = value;
@@ -110,6 +114,7 @@ static inline void aggregation_state_add(AggregationState &state,
 	contrib.start = overlap_start;
 	contrib.end = overlap_end;
 	contrib.is_na = std::isnan(value);
+	contrib.chain_id = chain_id;
 
 	if (contrib.is_na)
 		state.has_na = true;
@@ -118,10 +123,32 @@ static inline void aggregation_state_add(AggregationState &state,
 }
 
 static double aggregate_values(const AggregationConfig &cfg, const AggregationState &state) {
-	vector<const Contribution *> valid;
-	valid.reserve(state.contributions.size());
+	vector<Contribution> merged;
+	merged.reserve(state.contributions.size());
 
 	for (const auto &contrib : state.contributions) {
+		bool found = false;
+		for (auto &existing : merged) {
+			if (existing.chain_id == contrib.chain_id) {
+				existing.overlap_len += contrib.overlap_len;
+				existing.coverage_frac += contrib.coverage_frac;
+				existing.start = std::min(existing.start, contrib.start);
+				existing.end = std::max(existing.end, contrib.end);
+				existing.is_na = existing.is_na || contrib.is_na;
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+			merged.push_back(contrib);
+	}
+
+	const vector<Contribution> &contribs = merged.empty() ? state.contributions : merged;
+
+	vector<const Contribution *> valid;
+	valid.reserve(contribs.size());
+
+	for (const auto &contrib : contribs) {
 		if (contrib.is_na) {
 			if (!cfg.na_rm)
 				return numeric_limits<double>::quiet_NaN();
@@ -524,9 +551,19 @@ private:
 struct GIntervalVal {
 	GInterval interval;
 	float     val;
+	int64_t   chain_id;
 
-	GIntervalVal(const GInterval &_interval, float _val) : interval(_interval), val(_val) {}
-	bool operator<(const GIntervalVal &obj) const { return interval.start < obj.interval.start; }
+	GIntervalVal(const GInterval &_interval, float _val, int64_t _chain_id) :
+		interval(_interval), val(_val), chain_id(_chain_id) {}
+	bool operator<(const GIntervalVal &obj) const {
+		if (interval.start != obj.interval.start)
+			return interval.start < obj.interval.start;
+		if (interval.end != obj.interval.end)
+			return interval.end < obj.interval.end;
+		if (chain_id != obj.chain_id)
+			return chain_id < obj.chain_id;
+		return val < obj.val;
+	}
 };
 
 extern "C" {
@@ -540,6 +577,7 @@ SEXP gtrack_liftover(SEXP _track,
                      SEXP _multi_target_params,
                      SEXP _na_rm,
                      SEXP _min_n,
+                     SEXP _min_score,
                      SEXP _envir)
 {
 	try {
@@ -557,6 +595,12 @@ SEXP gtrack_liftover(SEXP _track,
 		if (!Rf_isString(_tgt_overlap_policy) || Rf_length(_tgt_overlap_policy) != 1)
 			verror("Target overlap policy argument is not a string");
 
+		// Validate min_score (optional, currently unused)
+		if (!Rf_isNull(_min_score)) {
+			if (!Rf_isReal(_min_score) || Rf_length(_min_score) != 1)
+				verror("min_score must be a single numeric value");
+		}
+
 		if (!Rf_isString(_multi_target_agg) || Rf_length(_multi_target_agg) != 1)
 			verror("multi_target_agg argument is not a string");
 
@@ -573,6 +617,10 @@ SEXP gtrack_liftover(SEXP _track,
 		const char *src_track_dir = CHAR(STRING_ELT(_src_track_dir, 0));
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
+		// Convert "auto" to "auto_score" alias
+		std::string effective_tgt_policy = tgt_overlap_policy;
+		if (!strcmp(tgt_overlap_policy, "auto"))
+			effective_tgt_policy = "auto_score";
 		const char *multi_target_agg_str = CHAR(STRING_ELT(_multi_target_agg, 0));
 
 		int na_rm_int = Rf_asLogical(_na_rm);
@@ -607,7 +655,7 @@ SEXP gtrack_liftover(SEXP _track,
 
 		// Handle target overlaps first
 		chain_intervs.sort_by_tgt();
-		chain_intervs.handle_tgt_overlaps(tgt_overlap_policy, iu.get_chromkey(), src_id2chrom);
+		chain_intervs.handle_tgt_overlaps(effective_tgt_policy, iu.get_chromkey(), src_id2chrom);
 
 		// Handle source overlaps
 		chain_intervs.sort_by_src();
@@ -615,6 +663,9 @@ SEXP gtrack_liftover(SEXP _track,
 
 		// Build auxiliary structures for efficient source interval mapping
 		chain_intervs.buildSrcAux();
+
+		// Set the target overlap policy for score-based selection during liftover
+		chain_intervs.set_tgt_overlap_policy(effective_tgt_policy);
 
 		GenomeChromKey src_chromkey;
 		for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom)
@@ -625,6 +676,8 @@ SEXP gtrack_liftover(SEXP _track,
 		// Build a chromkey from the source genome to get correct chromids for indexed tracks
 		// Read chrom_sizes.txt from the source genome root
 		GenomeChromKey src_genome_chromkey;
+		vector<int>    src_chainid2genomeid(src_id2chrom.size(), -1);
+
 		string track_dir_str(src_track_dir);
 		size_t tracks_pos = track_dir_str.rfind("/tracks/");
 		if (tracks_pos != string::npos) {
@@ -639,19 +692,7 @@ SEXP gtrack_liftover(SEXP _track,
 					if (chrom_name && size_str) {
 						uint64_t chrom_size = strtoull(size_str, NULL, 10);
 						try {
-							int chromid = src_genome_chromkey.add_chrom(chrom_name, chrom_size);
-							// Add aliases for chromosome names with/without "chr" prefix
-							// to handle naming inconsistencies between chain files and genome databases
-							string chrom_str(chrom_name);
-							if (chrom_str.substr(0, 3) == "chr") {
-								// Has "chr" prefix - add alias without it
-								string alias = chrom_str.substr(3);
-								src_genome_chromkey.add_chrom_alias(alias, chromid);
-							} else {
-								// No "chr" prefix - add alias with it
-								string alias = "chr" + chrom_str;
-								src_genome_chromkey.add_chrom_alias(alias, chromid);
-							}
+							src_genome_chromkey.add_chrom(chrom_name, chrom_size);
 						} catch (...) {
 							// Ignore errors adding chromosomes
 						}
@@ -660,9 +701,50 @@ SEXP gtrack_liftover(SEXP _track,
 				fclose(fp);
 			}
 		}
-		// If we didn't successfully load chromkey from chrom_sizes.txt, use src_chromkey as fallback
-		if (src_genome_chromkey.get_num_chroms() == 0)
+
+		if (src_genome_chromkey.get_num_chroms() == 0) {
+			// Fallback: no chrom_sizes.txt, use chain chroms directly
 			src_genome_chromkey = src_chromkey;
+			for (size_t i = 0; i < src_id2chrom.size(); ++i)
+				src_chainid2genomeid[i] = (int)i;
+		} else {
+			// Map each chain source chrom to a genome chromid, with simple alias handling
+			for (size_t i = 0; i < src_id2chrom.size(); ++i) {
+				const string &name = src_id2chrom[i];
+				int mapped_id = -1;
+
+				// 1) Exact match
+				try {
+					mapped_id = src_genome_chromkey.chrom2id(name);
+				} catch (...) {
+					// 2) Strip leading "chr" if present (e.g. chr1 -> 1)
+					if (name.size() > 3 && !name.compare(0, 3, "chr")) {
+						string no_chr = name.substr(3);
+						try {
+							mapped_id = src_genome_chromkey.chrom2id(no_chr);
+						} catch (...) {
+							// 3) Try adding the original name as a fallback chromosome
+							try {
+								src_genome_chromkey.add_chrom(name, numeric_limits<int64_t>::max());
+								mapped_id = src_genome_chromkey.chrom2id(name);
+							} catch (...) {
+								mapped_id = -1;
+							}
+						}
+					} else {
+						// 3) Try adding the original name as a fallback chromosome
+						try {
+							src_genome_chromkey.add_chrom(name, numeric_limits<int64_t>::max());
+							mapped_id = src_genome_chromkey.chrom2id(name);
+						} catch (...) {
+							mapped_id = -1;
+						}
+					}
+				}
+
+				src_chainid2genomeid[i] = mapped_id;
+			}
+		}
 
 		GenomeTrack::Type src_track_type = GenomeTrack::get_type(src_track_dir, src_chromkey);
 
@@ -673,6 +755,7 @@ SEXP gtrack_liftover(SEXP _track,
 			map<int, vector<GIntervalVal> > chrom_intervals;
 			char filename[FILENAME_MAX];
 			GIntervals tgt_intervals;
+			vector<ChainMappingMetadata> mapping_meta;
 			unsigned binsize = 0;
 
 			Progress_reporter progress;
@@ -684,21 +767,32 @@ SEXP gtrack_liftover(SEXP _track,
 					GenomeTrackFixedBin src_track;
 					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
 					int src_chromid_in_genome = -1;
+					int chromid_to_use = src_chromid_in_chain;  // Default to chain chromid
 					float val;
 
-					// Try to get chromid in source genome - may not exist for alt/random chromosomes
-					try {
-						src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);
-					} catch (...) {
-						// Chromosome not found in source genome (e.g., random/alt chromosomes), skip
-						progress.report(1);
-						continue;
+					// Check if source track is indexed (uses track.idx in src_track_dir)
+					string idx_path_check = string(src_track_dir) + "/track.idx";
+					struct stat idx_st_check;
+					bool is_indexed = (stat(idx_path_check.c_str(), &idx_st_check) == 0);
+
+					// For indexed tracks, use the mapped genome chromid (if available)
+					if (is_indexed) {
+						if (src_chromid_in_chain >= 0 &&
+						    (size_t)src_chromid_in_chain < src_chainid2genomeid.size() &&
+						    src_chainid2genomeid[src_chromid_in_chain] >= 0)
+						{
+							chromid_to_use = src_chainid2genomeid[src_chromid_in_chain];
+						} else {
+							// Chromosome not found in source genome index, skip
+							progress.report(1);
+							continue;
+						}
 					}
 
 					try {
 						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
-						// Use src_chromid_in_genome for indexed tracks to read correct data
-						src_track.init_read(filename, src_chromid_in_genome);
+						// Use chromid_to_use: src_chromid_in_genome for indexed tracks, src_chromid_in_chain for non-indexed
+						src_track.init_read(filename, chromid_to_use);
 						if (binsize > 0 && binsize != src_track.get_bin_size()) {
 							char filename2[FILENAME_MAX];
 							snprintf(filename2, sizeof(filename2), "%s/%s", src_track_dir, (ichrom - 1)->c_str());
@@ -717,9 +811,12 @@ SEXP gtrack_liftover(SEXP _track,
 					for (int64_t i = 0; i < src_track.get_num_samples(); ++i) {
 						src_track.read_next_bin(val);
 
-						hint = chain_intervs.map_interval(src_interval, tgt_intervals, hint);
-						for (GIntervals::const_iterator iinterv = tgt_intervals.begin(); iinterv != tgt_intervals.end(); ++iinterv)
-							chrom_intervals[iinterv->chromid].push_back(GIntervalVal(*iinterv, val));
+						mapping_meta.clear();
+						hint = chain_intervs.map_interval(src_interval, tgt_intervals, hint, &mapping_meta);
+						if (!tgt_intervals.empty() && mapping_meta.size() != tgt_intervals.size())
+							TGLError("Metadata size mismatch: %zu vs %zu", mapping_meta.size(), tgt_intervals.size());
+						for (size_t idx = 0; idx < tgt_intervals.size(); ++idx)
+							chrom_intervals[tgt_intervals[idx].chromid].push_back(GIntervalVal(tgt_intervals[idx], val, mapping_meta[idx].chain_id));
 
 						src_interval.start += src_track.get_bin_size();
 						src_interval.end += src_track.get_bin_size();
@@ -733,20 +830,31 @@ SEXP gtrack_liftover(SEXP _track,
 					GenomeTrackSparse src_track;
 					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
 					int src_chromid_in_genome = -1;
+					int chromid_to_use = src_chromid_in_chain;  // Default to chain chromid
 
-					// Try to get chromid in source genome - may not exist for alt/random chromosomes
-					try {
-						src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);
-					} catch (...) {
-						// Chromosome not found in source genome (e.g., random/alt chromosomes), skip
-						progress.report(1);
-						continue;
+					// Check if source track is indexed (uses track.idx in src_track_dir)
+					string idx_path_check = string(src_track_dir) + "/track.idx";
+					struct stat idx_st_check;
+					bool is_indexed = (stat(idx_path_check.c_str(), &idx_st_check) == 0);
+
+					// For indexed tracks, use the mapped genome chromid (if available)
+					if (is_indexed) {
+						if (src_chromid_in_chain >= 0 &&
+						    (size_t)src_chromid_in_chain < src_chainid2genomeid.size() &&
+						    src_chainid2genomeid[src_chromid_in_chain] >= 0)
+						{
+							chromid_to_use = src_chainid2genomeid[src_chromid_in_chain];
+						} else {
+							// Chromosome not found in source genome index, skip
+							progress.report(1);
+							continue;
+						}
 					}
 
 					try {
 						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
-						// Use src_chromid_in_genome for indexed tracks to read correct data
-						src_track.init_read(filename, src_chromid_in_genome);
+						// Use chromid_to_use: src_chromid_in_genome for indexed tracks, src_chromid_in_chain for non-indexed
+						src_track.init_read(filename, chromid_to_use);
 					} catch (TGLException &) {  // some of source chroms might be missing, this is normal
 						progress.report(1);
 						continue;
@@ -762,9 +870,10 @@ SEXP gtrack_liftover(SEXP _track,
 						remapped_interval.chromid = src_chromid_in_chain;
 						// Reset hint for each interval to avoid missing overlaps with non-consecutive chains
 						ChainIntervals::const_iterator hint = chain_intervs.begin();
-						hint = chain_intervs.map_interval(remapped_interval, tgt_intervals, hint);
-						for (GIntervals::const_iterator iinterv = tgt_intervals.begin(); iinterv != tgt_intervals.end(); ++iinterv)
-							chrom_intervals[iinterv->chromid].push_back(GIntervalVal(*iinterv, vals[i]));
+						mapping_meta.clear();
+						hint = chain_intervs.map_interval(remapped_interval, tgt_intervals, hint, &mapping_meta);
+						for (size_t idx = 0; idx < tgt_intervals.size(); ++idx)
+							chrom_intervals[tgt_intervals[idx].chromid].push_back(GIntervalVal(tgt_intervals[idx], vals[i], mapping_meta[idx].chain_id));
 						check_interrupt();
 					}
 
@@ -798,11 +907,11 @@ SEXP gtrack_liftover(SEXP _track,
 					continue;
 				}
 
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+
 				vector<GIntervalVal> &interv_vals = chrom_intervals[chromid];
 
 				sort(interv_vals.begin(), interv_vals.end());
-
-				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 
 				if (src_track_type == GenomeTrack::FIXED_BIN) {
 					GenomeTrackFixedBin gtrack;
@@ -836,7 +945,8 @@ SEXP gtrack_liftover(SEXP _track,
 									overlap_len,
 									locus_len,
 									overlap_start,
-									overlap_end
+									overlap_end,
+									iter->chain_id
 								);
 							} else if (iter->interval.end > coord1) {
 								if (intersect && iter->interval.start > coord2)
@@ -883,7 +993,8 @@ SEXP gtrack_liftover(SEXP _track,
 								locus_len,
 								locus_len,
 								interval.start,
-								interval.end
+								interval.end,
+								interv_vals[idx].chain_id
 							);
 							++idx;
 							check_interrupt();

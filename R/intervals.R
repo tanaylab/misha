@@ -1669,32 +1669,31 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' 'intervalID' is added to the resulted data frame. For each interval in the
 #' resulted intervals it indicates the index of the original interval.
 #'
-#' Source overlaps occur when the same source genome position maps to multiple
-#' target genome positions. Using 'src_overlap_policy = "keep"' allows one source
-#' interval to map to multiple target intervals, creating ambiguous mappings.
-#' Target overlaps occur when multiple source positions map to overlapping regions
-#' in the target genome.
-#'
-#' When passing a chain file path (as opposed to a pre-loaded chain data frame),
-#' the policies are used both for loading the chain and performing the liftover.
-#' When passing a pre-loaded chain data frame, the policies only apply to the
-#' liftover operation itself.
+#' Note: When passing a pre-loaded chain (data frame), overlap policies cannot
+#' be specified - they are taken from the chain's attributes that were set
+#' during loading. When passing a chain file path, policies can be specified
+#' and will be used for loading.
 #'
 #' @param intervals intervals from another assembly
 #' @param chain name of chain file or data frame as returned by
 #' 'gintervals.load_chain'
 #' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
-#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps while keeping source/target lengths in sync, "auto_longer" keeps the longer overlapping chain, "discard" removes overlapping target intervals, and "keep" preserves them (liftover must be able to handle overlaps).
-#' @return A data frame representing the converted intervals.
-#'
-#' @note
-#' Terminology note for UCSC chain format users: In the UCSC chain format specification,
-#' the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
-#' while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
-#' misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
-#' (chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
-#' (chrom, start, end).
-#'
+#' @param tgt_overlap_policy policy for handling target overlaps. One of:
+#' \tabular{ll}{
+#'   Policy \tab Description \cr
+#'   error \tab Throws an error if any target overlaps are detected. \cr
+#'   auto \tab Default. Alias for "auto_score". \cr
+#'   auto_score \tab Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id. \cr
+#'   auto_longer \tab Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id. \cr
+#'   auto_first \tab Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment. \cr
+#'   keep \tab Preserves all overlapping intervals. \cr
+#'   discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
+#'   agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+#' }
+#' @param min_score optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.
+#' @param include_metadata logical; if TRUE, adds 'score' column to the output indicating the alignment score of the chain used for each mapping. Only applicable with "auto_score" or "auto" policy.
+#' @param canonic logical; if TRUE, merges adjacent target intervals that originated from the same source interval (same intervalID) and same chain (same chain_id). This is useful when a source interval maps to multiple adjacent target blocks due to chain gaps.
+#' @return A data frame representing the converted intervals. For 1D intervals, always includes 'intervalID' (index of original interval) and 'chain_id' (identifier of the chain that produced the mapping) columns. The chain_id column is essential for distinguishing results when a source interval maps to multiple target regions via different chains (duplications). When include_metadata=TRUE, also includes 'score' column.
 #' @seealso \code{\link{gintervals.load_chain}}, \code{\link{gtrack.liftover}},
 #' \code{\link{gintervals}}
 #' @keywords ~intervals ~liftover ~chain
@@ -1716,58 +1715,76 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' # gintervals.liftover(intervs, chainfile, src_overlap_policy = "keep")
 #'
 #' @export gintervals.liftover
-gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto") {
+gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", min_score = NULL, include_metadata = FALSE, canonic = FALSE) {
     if (is.null(intervals) || is.null(chain)) {
-        stop("Usage: gintervals.liftover(intervals, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"error\")", call. = FALSE)
+        stop("Usage: gintervals.liftover(intervals, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", min_score = NULL, include_metadata = FALSE, canonic = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
-    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
-        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
-    }
-
-    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
+    if (!is.logical(include_metadata) || length(include_metadata) != 1) {
+        stop("include_metadata must be a single logical value", call. = FALSE)
     }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
-    normalize_policy <- function(policy) {
-        if (is.null(policy)) {
-            return(NULL)
-        }
-        if (policy %in% c("auto", "auto_first")) {
-            return("auto")
-        }
-        policy
-    }
-
     if (is.character(chain)) {
-        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
+        # Chain file path provided - validate and use the policies
+        if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+            stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+        }
+
+        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
+            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+        }
+
+        if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
+            stop("min_score must be a single numeric value", call. = FALSE)
+        }
+
+        # Convert "auto" to "auto_score" alias
+        if (tgt_overlap_policy == "auto") {
+            tgt_overlap_policy <- "auto_score"
+        }
+
+        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy, min_score = min_score)
     } else {
+        # Pre-loaded chain provided
         chain.intervs <- chain
 
-        # Warn if the provided chain was loaded with different policies
-        existing_src <- attr(chain.intervs, "src_overlap_policy")
-        if (!is.null(existing_src) &&
-            normalize_policy(existing_src) != normalize_policy(src_overlap_policy)) {
-            warning(sprintf(
-                "gintervals.liftover: chain was loaded with src_overlap_policy='%s' but '%s' was requested. Consider reloading the chain or passing the file path instead.",
-                existing_src, src_overlap_policy
-            ), call. = FALSE)
-        }
+        # Check if chain has policy attributes
+        chain_src_policy <- attr(chain.intervs, "src_overlap_policy")
+        chain_tgt_policy <- attr(chain.intervs, "tgt_overlap_policy")
 
-        existing_tgt <- attr(chain.intervs, "tgt_overlap_policy")
-        if (!is.null(existing_tgt) &&
-            normalize_policy(existing_tgt) != normalize_policy(tgt_overlap_policy)) {
-            warning(sprintf(
-                "gintervals.liftover: chain was loaded with tgt_overlap_policy='%s' but '%s' was requested. Consider reloading the chain or passing the file path instead.",
-                existing_tgt, tgt_overlap_policy
-            ), call. = FALSE)
+        if (!is.null(chain_src_policy) && !is.null(chain_tgt_policy)) {
+            # Chain has attributes - use them, error if user tries to override
+            policies_set <- !missing(src_overlap_policy) || !missing(tgt_overlap_policy) || !missing(min_score)
+            if (policies_set) {
+                stop("When using a pre-loaded chain, overlap policies cannot be specified. Set policies when loading the chain with gintervals.load_chain().", call. = FALSE)
+            }
+            src_overlap_policy <- chain_src_policy
+            tgt_overlap_policy <- chain_tgt_policy
+        } else {
+            # Chain doesn't have attributes (e.g., manually created) - validate and use user-specified policies
+            if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+                stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+            }
+
+            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
+                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+            }
+
+            # Convert "auto" to "auto_score" alias
+            if (tgt_overlap_policy == "auto") {
+                tgt_overlap_policy <- "auto_score"
+            }
         }
     }
 
-    .gcall("gintervs_liftover", intervals, chain.intervs, src_overlap_policy, tgt_overlap_policy, .misha_env())
+    if (!is.logical(canonic) || length(canonic) != 1) {
+        stop("canonic must be a single logical value", call. = FALSE)
+    }
+
+    .gcall("gintervs_liftover", intervals, chain.intervs, src_overlap_policy, tgt_overlap_policy, canonic, include_metadata, .misha_env())
 }
 
 
@@ -1881,30 +1898,8 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' }
 #'
 #' @param file name of chain file
-#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard"
-#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer chain, "discard" removes overlapping targets, and "keep" preserves them (but liftover operations must tolerate overlaps).
 #' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
-#'
-#' @return A data frame with 8 columns representing assembly conversion table:
-#' \itemize{
-#'   \item chrom: target chromosome
-#'   \item start: target start coordinate (0-based)
-#'   \item end: target end coordinate (0-based, exclusive)
-#'   \item strand: target strand (+1 for forward, -1 for reverse)
-#'   \item chromsrc: source chromosome
-#'   \item startsrc: source start coordinate (0-based)
-#'   \item endsrc: source end coordinate (0-based, exclusive)
-#'   \item strandsrc: source strand (+1 for forward, -1 for reverse)
-#' }
-#'
-#' @note
-#' Terminology note for UCSC chain format users: In the UCSC chain format specification,
-#' the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
-#' while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
-#' misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
-#' (chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
-#' (chrom, start, end).
-#'
+#' @return A data frame representing assembly conversion table with columns: chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc, chain_id, score.
 #' @seealso \code{\link{gintervals.liftover}}, \code{\link{gtrack.liftover}}
 #' @keywords ~intervals ~liftover ~chain
 #' @examples
@@ -1917,44 +1912,98 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' # Load chain file with default policies
 #' gintervals.load_chain(chainfile)
 #'
-#' # Load chain file, keeping source overlaps (ambiguous mappings)
-#' # gintervals.load_chain(chainfile, src_overlap_policy = "keep")
-#'
-#' # Load chain file, discarding both source and target overlaps
-#' # gintervals.load_chain(chainfile, src_overlap_policy = "discard", tgt_overlap_policy = "discard")
-#'
-#' # Load chain file with source genome validation
-#' # gintervals.load_chain(chainfile, src_groot = "/path/to/source/genome/db")
-#'
+#' @inheritParams gintervals.liftover
 #' @export gintervals.load_chain
-gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", src_groot = NULL) {
+gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", src_groot = NULL, min_score = NULL) {
     if (is.null(file)) {
-        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", src_groot = NULL)", call. = FALSE)
+        stop("Usage: gintervals.load_chain(file, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", src_groot = NULL, min_score = NULL)", call. = FALSE)
     }
+    .gcheckroot()
 
     if (!src_overlap_policy %in% c("error", "keep", "discard")) {
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
     }
 
-    # Load chain (validates TARGET chromosomes against current genome)
-    chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, .misha_env())
-    if (is.null(chain)) {
-        return(chain)
+    if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
+        stop("min_score must be a single numeric value", call. = FALSE)
     }
 
-    attr(chain, "src_overlap_policy") <- src_overlap_policy
-    attr(chain, "tgt_overlap_policy") <- tgt_overlap_policy
+    # Convert "auto" to "auto_score" alias
+    if (tgt_overlap_policy == "auto") {
+        tgt_overlap_policy <- "auto_score"
+    }
 
-    # Optionally validate SOURCE chromosomes against source genome
+    chain <- .gcall("gchain2interv", file, src_overlap_policy, tgt_overlap_policy, min_score, .misha_env())
+
+    # Handle case where all chains were discarded
+    if (is.null(chain) || nrow(chain) == 0) {
+        chain <- data.frame(
+            chrom = character(0),
+            start = numeric(0),
+            end = numeric(0),
+            strand = numeric(0),
+            chromsrc = character(0),
+            startsrc = numeric(0),
+            endsrc = numeric(0),
+            strandsrc = numeric(0),
+            chain_id = integer(0),
+            score = numeric(0),
+            stringsAsFactors = FALSE
+        )
+    }
+
     if (!is.null(src_groot)) {
         .validate_source_chromosomes(chain, src_groot)
     }
 
-    return(chain)
+    # Store policies as attributes so they can be used during liftover
+    attr(chain, "src_overlap_policy") <- src_overlap_policy
+    attr(chain, "tgt_overlap_policy") <- tgt_overlap_policy
+    if (!is.null(min_score)) {
+        attr(chain, "min_score") <- min_score
+    }
+
+    chain
+}
+
+.validate_source_chromosomes <- function(chain, src_groot) {
+    # Save current genome state
+    old_groot <- .misha$GROOT
+    old_allgenome <- .misha$ALLGENOME
+    old_chrom_alias <- if (exists("CHROM_ALIAS", envir = .misha)) .misha$CHROM_ALIAS else NULL
+
+    # Ensure genome is restored even if error occurs
+    on.exit(
+        {
+            .misha$GROOT <- old_groot
+            .misha$ALLGENOME <- old_allgenome
+            if (!is.null(old_chrom_alias)) {
+                .misha$CHROM_ALIAS <- old_chrom_alias
+            } else if (exists("CHROM_ALIAS", envir = .misha)) {
+                rm("CHROM_ALIAS", envir = .misha)
+            }
+        },
+        add = TRUE
+    )
+
+    # Temporarily switch to source genome for validation
+    gdb.init(src_groot)
+
+    # Create source intervals data frame
+    src_intervals <- data.frame(
+        chrom = chain$chromsrc,
+        start = chain$startsrc,
+        end = chain$endsrc,
+        stringsAsFactors = FALSE
+    )
+
+    validated <- .gintervals(chain$chromsrc, chain$startsrc, chain$endsrc, chain$strandsrc)
+
+    # Genome will be restored by on.exit
 }
 
 

@@ -61,17 +61,26 @@ load_regression_file <- function(id, snapshot_dir = "/net/mraid20/export/tgdata/
 }
 
 load_test_db <- function() {
-    if (getOption("gmulticontig.indexed_format", FALSE)) {
-        if (getOption("misha.test.verbose", FALSE)) {
-            message("Loading indexed test database")
-        }
-        gsetroot("/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/misha_test_db_indexed/")
+    db_path <- if (getOption("gmulticontig.indexed_format", FALSE)) {
+        "/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/misha_test_db_indexed/"
     } else {
-        if (getOption("misha.test.verbose", FALSE)) {
+        "/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"
+    }
+
+    # Skip if database doesn't exist
+    if (!dir.exists(db_path)) {
+        return(invisible(NULL))
+    }
+
+    if (getOption("misha.test.verbose", FALSE)) {
+        if (getOption("gmulticontig.indexed_format", FALSE)) {
+            message("Loading indexed test database")
+        } else {
             message("Loading per-chromosome test database")
         }
-        gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/")
     }
+    gsetroot(db_path)
+
     # remove temp directory if it exists
     db_dir <- .misha$GROOT
     temp_dir <- file.path(db_dir, "tracks", "temp")
