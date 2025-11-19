@@ -143,7 +143,7 @@ has_liftover_binary <- function() {
 }
 
 run_kent_liftover <- function(src_bed, chain_file, multiple = TRUE, minMatch = 1e-7, ret_cmd = FALSE) {
-    withr::local_options(list(scipen = 999999))
+    withr::local_options(list(scipen = 9999))
     # Returns a list with 'mapped' (data.frame) and 'unmapped' (data.frame) results
 
     kent_result <- tempfile(fileext = ".bed")
