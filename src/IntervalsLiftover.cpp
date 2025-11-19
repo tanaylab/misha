@@ -1,5 +1,6 @@
 #include "port.h"
 
+#include <algorithm>
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
@@ -27,8 +28,14 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
 		std::string effective_tgt_policy = tgt_overlap_policy;
-		if (!strcmp(tgt_overlap_policy, "auto"))
+		bool use_best_source_cluster = false;
+
+		if (!strcmp(tgt_overlap_policy, "best_source_cluster")) {
+			effective_tgt_policy = "keep"; // Load ALL chains to resolve later
+			use_best_source_cluster = true;
+		} else if (!strcmp(tgt_overlap_policy, "auto")) {
 			effective_tgt_policy = "auto_score";
+		}
 
 		ChainIntervals chain_intervs;
 		vector<string> src_id2chrom;
@@ -81,8 +88,84 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			ChainIntervals::const_iterator hint = chain_intervs.begin();
 
 			for (GIntervals::const_iterator isrc_interv = src_intervs1d.begin(); isrc_interv != src_intervs1d.end(); ++isrc_interv) {
+				tmp_tgt_intervs.clear();
 				tmp_metadata.clear();
 				hint = chain_intervs.map_interval(*isrc_interv, tmp_tgt_intervs, hint, &tmp_metadata);
+
+				// Best Source Cluster Strategy: cluster by source overlap, keep heaviest cluster
+				if (use_best_source_cluster && tmp_tgt_intervs.size() > 1) {
+					// A. Zip intervals and metadata into candidates
+					struct Candidate {
+						GInterval interv;
+						ChainMappingMetadata meta;
+					};
+					vector<Candidate> candidates(tmp_tgt_intervs.size());
+					for (size_t i = 0; i < tmp_tgt_intervs.size(); ++i) {
+						candidates[i].interv = tmp_tgt_intervs[i];
+						if (i < tmp_metadata.size()) candidates[i].meta = tmp_metadata[i];
+					}
+
+					// B. Sort by source start to enable single-pass clustering
+					sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+						return a.meta.start_src < b.meta.start_src;
+					});
+
+					// C. Cluster by source overlap and find the heaviest cluster
+					vector<Candidate> best_cluster;
+					int64_t best_mass = -1;
+
+					vector<Candidate> current_cluster;
+					int64_t current_mass = 0;
+					int64_t current_cluster_src_end = -1;
+
+					for (const auto& cand : candidates) {
+						int64_t len = cand.interv.end - cand.interv.start;
+
+						// Check connectivity in source space
+						// Overlap condition: candidate start_src < cluster max end_src
+						bool connected = !current_cluster.empty() &&
+						                 (cand.meta.start_src < current_cluster_src_end);
+
+						if (connected) {
+							// Add to current cluster (Duplication)
+							current_cluster.push_back(cand);
+							current_mass += len;
+							current_cluster_src_end = std::max(current_cluster_src_end, cand.meta.end_src);
+						} else {
+							// Finalize previous cluster
+							if (!current_cluster.empty()) {
+								if (current_mass > best_mass) {
+									best_mass = current_mass;
+									best_cluster = current_cluster;
+								}
+							}
+
+							// Start new cluster (Disjoint/Split)
+							current_cluster.clear();
+							current_cluster.push_back(cand);
+							current_mass = len;
+							current_cluster_src_end = cand.meta.end_src;
+						}
+					}
+
+					// Finalize the last cluster
+					if (!current_cluster.empty()) {
+						if (current_mass > best_mass) {
+							best_mass = current_mass;
+							best_cluster = current_cluster;
+						}
+					}
+
+					// D. Apply result: keep only the best cluster
+					tmp_tgt_intervs.clear();
+					tmp_metadata.clear();
+
+					for (const auto& winner : best_cluster) {
+						tmp_tgt_intervs.push_back(winner.interv);
+						tmp_metadata.push_back(winner.meta);
+					}
+				}
+
 				if (!tmp_tgt_intervs.empty()) {
 					tgt_intervs1d.insert(tgt_intervs1d.end(), tmp_tgt_intervs.begin(), tmp_tgt_intervs.end());
 					src_indices.insert(src_indices.end(), tmp_tgt_intervs.size(), iu.get_orig_interv_idx(*isrc_interv) + 1);

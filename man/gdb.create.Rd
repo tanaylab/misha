@@ -67,28 +67,28 @@ genome sources.
 }
 \examples{
 \donttest{
-ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
-mm10_dir <- file.path(tempdir(), "mm10")
-# only a single chromosome is loaded in this example
-# see "Genomes" vignette how to download all of them and how
-# to download other genomes
-gdb.create(
-    mm10_dir,
-    paste(ftp, "chromosomes", paste0(
-        "chr", c("X"),
-        ".fa.gz"
-    ), sep = "/"),
-    paste(ftp, "database/knownGene.txt.gz", sep = "/"),
-    paste(ftp, "database/kgXref.txt.gz", sep = "/"),
-    c(
-        "kgID", "mRNA", "spID", "spDisplayID", "geneSymbol",
-        "refseq", "protAcc", "description", "rfamAcc",
-        "tRnaName"
-    )
-)
-gdb.init(mm10_dir)
-gintervals.ls()
-gintervals.all()
+# ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
+# mm10_dir <- file.path(tempdir(), "mm10")
+# # only a single chromosome is loaded in this example
+# # see "Genomes" vignette how to download all of them and how
+# # to download other genomes
+# gdb.create(
+#     mm10_dir,
+#     paste(ftp, "chromosomes", paste0(
+#         "chr", c("X"),
+#         ".fa.gz"
+#     ), sep = "/"),
+#     paste(ftp, "database/knownGene.txt.gz", sep = "/"),
+#     paste(ftp, "database/kgXref.txt.gz", sep = "/"),
+#     c(
+#         "kgID", "mRNA", "spID", "spDisplayID", "geneSymbol",
+#         "refseq", "protAcc", "description", "rfamAcc",
+#         "tRnaName"
+#     )
+# )
+# gdb.init(mm10_dir)
+# gintervals.ls()
+# gintervals.all()
 }
 
 }

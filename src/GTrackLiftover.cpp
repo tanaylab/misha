@@ -766,7 +766,6 @@ SEXP gtrack_liftover(SEXP _track,
 				for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
 					GenomeTrackFixedBin src_track;
 					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
-					int src_chromid_in_genome = -1;
 					int chromid_to_use = src_chromid_in_chain;  // Default to chain chromid
 					float val;
 
@@ -829,7 +828,6 @@ SEXP gtrack_liftover(SEXP _track,
 				for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
 					GenomeTrackSparse src_track;
 					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
-					int src_chromid_in_genome = -1;
 					int chromid_to_use = src_chromid_in_chain;  // Default to chain chromid
 
 					// Check if source track is indexed (uses track.idx in src_track_dir)
