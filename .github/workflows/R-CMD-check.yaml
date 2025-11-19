@@ -26,6 +26,8 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
+      R_PKGTYPE: source
+      PKGCACHE_HTTP_VERSION: "2"
       NOT_CRAN: false
 
     steps:
@@ -38,6 +40,10 @@ jobs:
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
+
+      # Avoid stale lock on macOS
+      - if: runner.os == 'macOS'
+        run: rm -f .github/pkg.lock
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
