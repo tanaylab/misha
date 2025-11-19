@@ -1633,6 +1633,8 @@ void ChainIntervals::buildSrcAux()
 ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, ChainIntervals::const_iterator hint, std::vector<ChainMappingMetadata> *metadata)
 {
 	tgt_intervs.clear();
+	if (metadata)
+		metadata->clear();
 
 	if (empty())
 		return end();
@@ -1855,6 +1857,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 						ChainMappingMetadata meta;
 						meta.score = all_mapped[i].score;
 						meta.chain_id = all_mapped[i].chain_id;
+						meta.chromid_src = all_mapped[i].chain_iter->chromid_src;
+						meta.start_src = all_mapped[i].chain_iter->start_src;
+						meta.end_src = all_mapped[i].chain_iter->end_src;
 						metadata->push_back(meta);
 					}
 				}
@@ -1868,6 +1873,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 				ChainMappingMetadata meta;
 				meta.score = mapped.score;
 				meta.chain_id = mapped.chain_id;
+				meta.chromid_src = mapped.chain_iter->chromid_src;
+				meta.start_src = mapped.chain_iter->start_src;
+				meta.end_src = mapped.chain_iter->end_src;
 				metadata->push_back(meta);
 			}
 		}
