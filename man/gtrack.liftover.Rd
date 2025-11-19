@@ -16,7 +16,8 @@ gtrack.liftover(
     "min.coverage_frac"),
   params = NULL,
   na.rm = TRUE,
-  min_n = NULL
+  min_n = NULL,
+  min_score = NULL
 )
 }
 \arguments{
@@ -31,7 +32,18 @@ gtrack.liftover(
 
 \item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
 
-\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "keep", or "discard". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer overlapping chain, "keep" preserves overlaps, "discard" removes overlapping targets, and "error" throws an error if overlaps are detected.}
+\item{tgt_overlap_policy}{policy for handling target overlaps. One of:
+\tabular{ll}{
+  Policy \tab Description \cr
+  error \tab Throws an error if any target overlaps are detected. \cr
+  auto \tab Default. Alias for "auto_score". \cr
+  auto_score \tab Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id. \cr
+  auto_longer \tab Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id. \cr
+  auto_first \tab Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment. \cr
+  keep \tab Preserves all overlapping intervals. \cr
+  discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
+  agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+}}
 
 \item{multi_target_agg}{aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.}
 
@@ -40,6 +52,8 @@ gtrack.liftover(
 \item{na.rm}{logical indicating whether NA values should be removed before aggregation (default: TRUE)}
 
 \item{min_n}{minimum number of non-NA values required for aggregation. If fewer values are available, the result will be NA.}
+
+\item{min_score}{optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.}
 }
 \value{
 None.
@@ -54,6 +68,12 @@ coordinates should be done. It can be either a name of a chain file or a
 data frame in the same format as returned by 'gintervals.load_chain'
 function. The name of the newly created track is specified by 'track'
 argument and 'description' is added as a track attribute.
+
+Note: When passing a pre-loaded chain (data frame), overlap policies cannot
+be specified - they are taken from the chain's attributes that were set
+during loading. When passing a chain file path, policies can be specified
+and will be used for loading. Aggregation parameters (multi_target_agg,
+params, na.rm, min_n) can always be specified regardless of chain type.
 }
 \seealso{
 \code{\link{gintervals.load_chain}},

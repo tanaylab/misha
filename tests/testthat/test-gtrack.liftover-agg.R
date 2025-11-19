@@ -1,3 +1,5 @@
+load_test_db()
+
 test_that("gtrack.liftover multi-target aggregation policies", {
     local_db_state()
 
@@ -53,7 +55,7 @@ test_that("gtrack.liftover multi-target aggregation policies", {
     }
 
     liftover_with <- function(..., track_dir = src_track_dir, agg = "mean", params = NULL,
-                              na.rm = TRUE, min_n = NULL, tgt_policy = "keep", desc = "lifted") {
+                              na.rm = TRUE, min_n = NULL, tgt_policy = "agg", desc = "lifted") {
         if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
         gtrack.liftover(
             lifted_track, desc, track_dir, chain_file,
@@ -136,7 +138,7 @@ test_that("gtrack.liftover aggregation edge cases: all NAs", {
     for (agg in c("mean", "sum", "min", "max", "median", "first", "last", "max.coverage_len")) {
         gtrack.liftover(
             lifted_track, "test", src_track_dir, chain_file,
-            tgt_overlap_policy = "keep",
+            tgt_overlap_policy = "agg",
             multi_target_agg = agg,
             na.rm = TRUE
         )
@@ -148,7 +150,7 @@ test_that("gtrack.liftover aggregation edge cases: all NAs", {
     # count should return 0 for all NAs
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "count",
         na.rm = TRUE
     )
@@ -201,7 +203,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # first: all start at 50, end at 60, sorted by value descending: 5,5,3,2 -> pick first (5)
     gtrack.liftover(
         lifted_track, "first", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "first"
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
@@ -211,7 +213,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # last: pick last in sorted order (2)
     gtrack.liftover(
         lifted_track, "last", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "last"
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
@@ -221,7 +223,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # nth with n=2: sorted by value desc is 5,5,3,2, second is 5
     gtrack.liftover(
         lifted_track, "nth", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "nth",
         params = 2
     )
@@ -232,7 +234,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # min: should be 2
     gtrack.liftover(
         lifted_track, "min", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "min"
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
@@ -242,7 +244,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
     # max: should be 5
     gtrack.liftover(
         lifted_track, "max", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "max"
     )
     res <- gextract(lifted_track, gintervals("chrB", 50, 60))
@@ -305,7 +307,7 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
     # Median of 1,2,3,4 should be (2+3)/2 = 2.5
     gtrack.liftover(
         lifted_track, "median even", src_track_dir_even, chain_file_even,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "median"
     )
     res <- gextract(lifted_track, gintervals("chrD", 10, 20))
@@ -322,7 +324,7 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
     # Median of 5,7,9 should be 7
     gtrack.liftover(
         lifted_track, "median odd", src_track_dir_odd, chain_file_odd,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "median"
     )
     res <- gextract(lifted_track, gintervals("chrD", 30, 40))
@@ -371,7 +373,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
 
     gtrack.liftover(
         lifted_track, "sum sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "sum"
     )
     vals <- gextract(lifted_track, gintervals("chrB", 100, 110))[[lifted_track]]
@@ -380,7 +382,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
         lifted_track, "count sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "count"
     )
     vals <- gextract(lifted_track, gintervals("chrB", 100, 110))[[lifted_track]]
@@ -389,7 +391,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
         lifted_track, "first sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "first"
     )
     vals <- gextract(lifted_track, gintervals("chrB", 100, 110))[[lifted_track]]
@@ -398,7 +400,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
         lifted_track, "nth sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "nth",
         params = 2
     )
@@ -408,7 +410,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
     gtrack.rm(lifted_track, force = TRUE)
     gtrack.liftover(
         lifted_track, "min_n sparse", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "sum",
         min_n = 4
     )
@@ -453,7 +455,7 @@ test_that("gtrack.liftover nth aggregator validates params", {
         gtrack.liftover(
             "nth_bad", "desc", src_track_dir, chain_file,
             multi_target_agg = "nth",
-            tgt_overlap_policy = "keep"
+            tgt_overlap_policy = "agg"
         ),
         "params must be supplied for 'nth' aggregation"
     )
@@ -463,7 +465,7 @@ test_that("gtrack.liftover nth aggregator validates params", {
             "nth_bad2", "desc", src_track_dir, chain_file,
             multi_target_agg = "nth",
             params = list(),
-            tgt_overlap_policy = "keep"
+            tgt_overlap_policy = "agg"
         ),
         "params list must contain an element 'n' for 'nth'",
         fixed = TRUE
@@ -522,7 +524,7 @@ test_that("gtrack.liftover aggregation with non-consecutive overlapping chains",
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
         src_overlap_policy = "keep",
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "count"
     )
 
@@ -585,7 +587,7 @@ test_that("gtrack.liftover aggregation with chains of varying lengths starting a
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
         src_overlap_policy = "keep",
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "count"
     )
 
@@ -642,7 +644,7 @@ test_that("gtrack.liftover aggregation with reverse strand preserves correct val
     # Test sum aggregation
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "sum"
     )
 
@@ -707,7 +709,7 @@ test_that("gtrack.liftover aggregation finds earlier long overlap when hint is t
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
         src_overlap_policy = "keep",
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "sum"
     )
 
@@ -779,7 +781,7 @@ test_that("gtrack.liftover aggregation with dense cluster of same-start chains",
     gtrack.liftover(
         lifted_track, "test", src_track_dir, chain_file,
         src_overlap_policy = "keep",
-        tgt_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
         multi_target_agg = "mean"
     )
 

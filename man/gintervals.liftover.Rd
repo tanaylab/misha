@@ -8,7 +8,10 @@ gintervals.liftover(
   intervals = NULL,
   chain = NULL,
   src_overlap_policy = "error",
-  tgt_overlap_policy = "auto"
+  tgt_overlap_policy = "auto",
+  min_score = NULL,
+  include_metadata = FALSE,
+  canonic = FALSE
 )
 }
 \arguments{
@@ -19,10 +22,27 @@ gintervals.liftover(
 
 \item{src_overlap_policy}{policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.}
 
-\item{tgt_overlap_policy}{policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "discard", or "keep". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps while keeping source/target lengths in sync, "auto_longer" keeps the longer overlapping chain, "discard" removes overlapping target intervals, and "keep" preserves them (liftover must be able to handle overlaps).}
+\item{tgt_overlap_policy}{policy for handling target overlaps. One of:
+\tabular{ll}{
+  Policy \tab Description \cr
+  error \tab Throws an error if any target overlaps are detected. \cr
+  auto \tab Default. Alias for "auto_score". \cr
+  auto_score \tab Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id. \cr
+  auto_longer \tab Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id. \cr
+  auto_first \tab Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment. \cr
+  keep \tab Preserves all overlapping intervals. \cr
+  discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
+  agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+}}
+
+\item{min_score}{optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.}
+
+\item{include_metadata}{logical; if TRUE, adds 'score' column to the output indicating the alignment score of the chain used for each mapping. Only applicable with "auto_score" or "auto" policy.}
+
+\item{canonic}{logical; if TRUE, merges adjacent target intervals that originated from the same source interval (same intervalID) and same chain (same chain_id). This is useful when a source interval maps to multiple adjacent target blocks due to chain gaps.}
 }
 \value{
-A data frame representing the converted intervals.
+A data frame representing the converted intervals. For 1D intervals, always includes 'intervalID' (index of original interval) and 'chain_id' (identifier of the chain that produced the mapping) columns. The chain_id column is essential for distinguishing results when a source interval maps to multiple target regions via different chains (duplications). When include_metadata=TRUE, also includes 'score' column.
 }
 \description{
 Converts intervals from another assembly to the current one.
@@ -36,6 +56,11 @@ returned by 'gintervals.load_chain' function.
 The converted intervals are returned. An additional column named
 'intervalID' is added to the resulted data frame. For each interval in the
 resulted intervals it indicates the index of the original interval.
+
+Note: When passing a pre-loaded chain (data frame), overlap policies cannot
+be specified - they are taken from the chain's attributes that were set
+during loading. When passing a chain file path, policies can be specified
+and will be used for loading.
 }
 \examples{
 \dontshow{

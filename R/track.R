@@ -1062,13 +1062,15 @@ gtrack.info <- function(track = NULL) {
 #' function. The name of the newly created track is specified by 'track'
 #' argument and 'description' is added as a track attribute.
 #'
+#' Note: When passing a pre-loaded chain (data frame), overlap policies cannot
+#' be specified - they are taken from the chain's attributes that were set
+#' during loading. When passing a chain file path, policies can be specified
+#' and will be used for loading. Aggregation parameters (multi_target_agg,
+#' params, na.rm, min_n) can always be specified regardless of chain type.
+#'
 #' @param track name of a created track
 #' @param description a character string description
 #' @param src.track.dir path to the directory of the source track
-#' @param chain name of chain file or data frame as returned by
-#' 'gintervals.load_chain'
-#' @param src_overlap_policy policy for handling source overlaps: "error" (default), "keep", or "discard". "keep" allows one source interval to map to multiple target intervals, "discard" discards all source intervals that have overlaps and "error" throws an error if source overlaps are detected.
-#' @param tgt_overlap_policy policy for handling target overlaps: "error", "auto" (default), "auto_first", "auto_longer", "keep", or "discard". "auto"/"auto_first" keep the first overlapping chain (original file order) by trimming later overlaps, "auto_longer" keeps the longer overlapping chain, "keep" preserves overlaps, "discard" removes overlapping targets, and "error" throws an error if overlaps are detected.
 #' @param multi_target_agg aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.
 #' @param params additional parameters for aggregation (e.g., for "nth" aggregation)
 #' @param na.rm logical indicating whether NA values should be removed before aggregation (default: TRUE)
@@ -1077,6 +1079,7 @@ gtrack.info <- function(track = NULL) {
 #' @seealso \code{\link{gintervals.load_chain}},
 #' \code{\link{gintervals.liftover}}
 #' @keywords ~track ~liftover ~chain
+#' @inheritParams gintervals.liftover
 #' @export gtrack.liftover
 gtrack.liftover <- function(track = NULL,
                             description = NULL,
@@ -1092,20 +1095,14 @@ gtrack.liftover <- function(track = NULL,
                             ),
                             params = NULL,
                             na.rm = TRUE,
-                            min_n = NULL) {
+                            min_n = NULL,
+                            min_score = NULL) {
     if (is.null(substitute(track)) || is.null(description) || is.null(src.track.dir) || is.null(chain)) {
         stop("Usage: gtrack.liftover(track, description, src.track.dir, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", ...)", call. = FALSE)
     }
     .gcheckroot()
 
-    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
-        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
-    }
-
-    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "discard", "keep")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'keep', or 'discard'", call. = FALSE)
-    }
-
+    # Validate aggregation parameters (these can always be set)
     multi_target_agg <- match.arg(multi_target_agg)
 
     if (!is.logical(na.rm) || length(na.rm) != 1 || is.na(na.rm)) {
@@ -1164,9 +1161,56 @@ gtrack.liftover <- function(track = NULL,
     }
 
     if (is.character(chain)) {
-        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy)
+        # Chain file path provided - validate and use the policies
+        if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+            stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+        }
+
+        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
+            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+        }
+
+        if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
+            stop("min_score must be a single numeric value", call. = FALSE)
+        }
+
+        # Convert "auto" to "auto_score" alias
+        if (tgt_overlap_policy == "auto") {
+            tgt_overlap_policy <- "auto_score"
+        }
+
+        chain.intervs <- gintervals.load_chain(chain, src_overlap_policy, tgt_overlap_policy, min_score = min_score)
     } else {
+        # Pre-loaded chain provided
         chain.intervs <- chain
+
+        # Check if chain has policy attributes
+        chain_src_policy <- attr(chain.intervs, "src_overlap_policy")
+        chain_tgt_policy <- attr(chain.intervs, "tgt_overlap_policy")
+
+        if (!is.null(chain_src_policy) && !is.null(chain_tgt_policy)) {
+            # Chain has attributes - use them, error if user tries to override
+            policies_set <- !missing(src_overlap_policy) || !missing(tgt_overlap_policy) || !missing(min_score)
+            if (policies_set) {
+                stop("When using a pre-loaded chain, overlap policies cannot be specified. Set policies when loading the chain with gintervals.load_chain().", call. = FALSE)
+            }
+            src_overlap_policy <- chain_src_policy
+            tgt_overlap_policy <- chain_tgt_policy
+        } else {
+            # Chain doesn't have attributes (e.g., manually created) - validate and use user-specified policies
+            if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+                stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+            }
+
+            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
+                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+            }
+
+            # Convert "auto" to "auto_score" alias
+            if (tgt_overlap_policy == "auto") {
+                tgt_overlap_policy <- "auto_score"
+            }
+        }
     }
 
     .gconfirmtrackcreate(trackstr)
@@ -1184,6 +1228,7 @@ gtrack.liftover <- function(track = NULL,
                 nth_param,
                 na.rm,
                 if (is.null(min_n)) NA_integer_ else min_n,
+                min_score,
                 .misha_env(),
                 silent = TRUE
             )
