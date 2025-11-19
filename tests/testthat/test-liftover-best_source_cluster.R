@@ -122,9 +122,9 @@ test_that("best_source_cluster policy handles adjacent but non-overlapping sourc
 
     # Two chains with adjacent (touching) source regions - NOT overlapping
     # Chain A: src[0-100] -> chr1[0-100]
-    write_chain_entry(chain_file, "src", 1000, "+", 0, 100, "chr1", 1000, "+", 0, 100, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 0, 100, "chr1", 1000, "+", 0, 100, 1)
     # Chain B: src[100-200] -> chr1[200-300] (starts exactly where A ends)
-    write_chain_entry(chain_file, "src", 1000, "+", 100, 200, "chr1", 1000, "+", 200, 300, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 100, 200, "chr1", 1000, "+", 200, 300, 2)
 
     chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_source_cluster")
 
@@ -194,9 +194,9 @@ test_that("best_source_cluster policy works with intervals that don't span full 
 
     # Two disjoint chains
     # Chain A: src[0-100] -> chr1[0-100]
-    write_chain_entry(chain_file, "src", 1000, "+", 0, 100, "chr1", 1000, "+", 0, 100, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 0, 100, "chr1", 1000, "+", 0, 100, 1)
     # Chain B: src[200-400] -> chr1[300-500]
-    write_chain_entry(chain_file, "src", 1000, "+", 200, 400, "chr1", 1000, "+", 300, 500, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 200, 400, "chr1", 1000, "+", 300, 500, 2)
 
     chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_source_cluster")
 
@@ -223,9 +223,9 @@ test_that("best_source_cluster scenario 1: duplication with same source to diffe
 
     # Scenario 1: Same source interval maps to different chromosomes (duplication)
     # 100-200 -> chr1 100-200
-    write_chain_entry(chain_file, "src", 1000, "+", 100, 200, "chr1", 1000, "+", 100, 200, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 100, 200, "chr1", 1000, "+", 100, 200, 1)
     # 100-200 -> chr2 100-200
-    write_chain_entry(chain_file, "src", 1000, "+", 100, 200, "chr2", 1000, "+", 100, 200, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 100, 200, "chr2", 1000, "+", 100, 200, 2)
 
     chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_source_cluster")
 
@@ -253,9 +253,9 @@ test_that("best_source_cluster scenario 2: adjacent disjoint chains choose highe
 
     # Scenario 2: Adjacent but disjoint source chains
     # 100-130 -> chr1 100-130 (mass = 30)
-    write_chain_entry(chain_file, "src", 1000, "+", 100, 130, "chr1", 1000, "+", 100, 130, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 100, 130, "chr1", 1000, "+", 100, 130, 1)
     # 130-200 -> chr2 130-200 (mass = 70, higher)
-    write_chain_entry(chain_file, "src", 1000, "+", 130, 200, "chr2", 1000, "+", 130, 200, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 130, 200, "chr2", 1000, "+", 130, 200, 2)
 
     chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_source_cluster")
 
@@ -280,9 +280,9 @@ test_that("best_source_cluster scenario 3: overlapping source chains retain both
 
     # Scenario 3: Overlapping source chains
     # 100-200 -> chr1 100-200
-    write_chain_entry(chain_file, "src", 1000, "+", 100, 200, "chr1", 1000, "+", 100, 200, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 100, 200, "chr1", 1000, "+", 100, 200, 1)
     # 120-220 -> chr2 100-200 (source overlaps with first chain in 120-200)
-    write_chain_entry(chain_file, "src", 1000, "+", 120, 220, "chr2", 1000, "+", 100, 200, 100)
+    write_chain_entry(chain_file, "src", 1000, "+", 120, 220, "chr2", 1000, "+", 100, 200, 2)
 
     chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_source_cluster")
 
@@ -292,9 +292,15 @@ test_that("best_source_cluster scenario 3: overlapping source chains retain both
 
     # Result: there is overlap (100-200 overlaps with 100-220 in 100-200), so retain both
     expect_equal(nrow(result), 2, info = "Should retain both mappings for overlapping source chains")
-    expect_equal(as.character(result$chrom), c("chr1", "chr2"), info = "Should have mappings to both chromosomes")
-    expect_equal(result$start, c(100, 100), info = "Should have correct start coordinates")
-    expect_equal(result$end, c(200, 180), info = "Should have correct end coordinates")
+    expect_true(any(result$chrom == "chr1"), info = "Should have mapping to chr1")
+    expect_true(any(result$chrom == "chr2"), info = "Should have mapping to chr2")
+    # Check coordinates for each chromosome
+    chr1_result <- result[result$chrom == "chr1", ]
+    chr2_result <- result[result$chrom == "chr2", ]
+    expect_equal(chr1_result$start, 100, info = "chr1 should have correct start")
+    expect_equal(chr1_result$end, 200, info = "chr1 should have correct end")
+    expect_equal(chr2_result$start, 100, info = "chr2 should have correct start")
+    expect_equal(chr2_result$end, 180, info = "chr2 should have correct end")
 })
 
 test_that("best_source_cluster scenario 4: Cluster A+B (overlapping) outweighs C (disjoint)", {
@@ -305,18 +311,18 @@ test_that("best_source_cluster scenario 4: Cluster A+B (overlapping) outweighs C
     chain_file <- new_chain_file()
 
     # --- Cluster 1: Chains A and B overlap in source ---
-    # Chain A: Source 100-200 (Length 100)
-    write_chain_entry(chain_file, "src", 2000, "+", 100, 200, "chr1", 2000, "+", 1000, 1100, 1)
+    # Chain A: Source 100-300 (Length 200)
+    write_chain_entry(chain_file, "src", 2000, "+", 100, 300, "chr1", 2000, "+", 1000, 1200, 1)
 
-    # Chain B: Source 150-250 (Length 100)
-    # Overlaps A in source [150-200].
-    # Total Mass (A+B) = 100 + 100 = 200.
-    write_chain_entry(chain_file, "src", 2000, "+", 150, 250, "chr1", 2000, "+", 1200, 1300, 2)
+    # Chain B: Source 200-400 (Length 200)
+    # Overlaps A in source [200-300].
+    # UNION Mass (A+B) = union(100-300, 200-400) = 100-400 = 300.
+    write_chain_entry(chain_file, "src", 2000, "+", 200, 400, "chr1", 2000, "+", 1200, 1400, 2)
 
     # --- Cluster 2: Chain C is disjoint ---
     # Chain C: Source 500-650 (Length 150)
     # Disjoint from A and B.
-    # Total Mass (C) = 150.
+    # UNION Mass (C) = 150.
     write_chain_entry(chain_file, "src", 2000, "+", 500, 650, "chr1", 2000, "+", 1500, 1650, 3)
 
     # Load chain
@@ -328,11 +334,11 @@ test_that("best_source_cluster scenario 4: Cluster A+B (overlapping) outweighs C
     result <- gintervals.liftover(intervals, chain)
 
     # Expectation:
-    # Cluster 1 (Mass 200) > Cluster 2 (Mass 150).
+    # Cluster 1 (UNION Mass 300) > Cluster 2 (Mass 150).
     # Result should contain Chain A (ID 1) and Chain B (ID 2).
     # Chain C (ID 3) should be discarded.
 
-    expect_equal(nrow(result), 2, info = "Should keep A and B (cluster mass 200) over C (mass 150)")
+    expect_equal(nrow(result), 2, info = "Should keep A and B (cluster union mass 300) over C (mass 150)")
 
     # Verify IDs
     result_ids <- sort(result$chain_id)
@@ -395,22 +401,23 @@ test_that("best_source_cluster scenario 6: Transitive overlap (Bridge) A-B-C out
     chain_file <- new_chain_file()
 
     # --- Cluster 1: Transitive Chain A -> B -> C ---
+    # Using UNION strategy: mass = unique source bp covered
 
-    # Chain A: Source 100-200 (Target Len 100)
+    # Chain A: Source 100-200 (Length 100)
     write_chain_entry(chain_file, "src", 3000, "+", 100, 200, "chr1", 3000, "+", 1000, 1100, 1)
 
-    # Chain B: Source 150-250 (Target Len 100)
+    # Chain B: Source 150-250 (Length 100)
     # Overlaps A (150-200)
     write_chain_entry(chain_file, "src", 3000, "+", 150, 250, "chr1", 3000, "+", 1200, 1300, 2)
 
-    # Chain C: Source 240-340 (Target Len 100)
+    # Chain C: Source 240-440 (Length 200)
     # Overlaps B (240-250), but disjoint from A (ends at 200)
-    write_chain_entry(chain_file, "src", 3000, "+", 240, 340, "chr1", 3000, "+", 1400, 1500, 3)
+    write_chain_entry(chain_file, "src", 3000, "+", 240, 440, "chr1", 3000, "+", 1400, 1600, 3)
 
-    # Total Mass of Cluster A-B-C = 300
+    # UNION Mass of Cluster A-B-C = union(100-200, 150-250, 240-440) = 100-440 = 340
 
     # --- Cluster 2: Disjoint Distractor D ---
-    # Chain D: Source 500-750 (Target Len 250)
+    # Chain D: Source 500-750 (Length 250)
     # Mass = 250
     write_chain_entry(chain_file, "src", 3000, "+", 500, 750, "chr1", 3000, "+", 2000, 2250, 4)
 
@@ -422,8 +429,8 @@ test_that("best_source_cluster scenario 6: Transitive overlap (Bridge) A-B-C out
     result <- gintervals.liftover(intervals, chain)
 
     # Expectation:
-    # The transitive cluster (mass 300) beats the single large distractor (mass 250).
-    # If transitivity failed, A+B (200) vs C (100) vs D (250) -> D would win.
+    # The transitive cluster (union 340) beats the single large distractor (250).
+    # If transitivity failed, A+B (150) vs C (200) vs D (250) -> D would win.
 
     expect_equal(nrow(result), 3, info = "Should keep transitive cluster A, B, C")
 
@@ -478,4 +485,214 @@ test_that("best_source_cluster scenario 8: Tie-breaking (First source position w
     # B is equal, not greater, so A remains the winner.
     expect_equal(nrow(result), 1, info = "Should break ties deterministically")
     expect_equal(result$chain_id, 1, info = "Should keep the first chain (by source position) in a tie")
+})
+
+# ============================================================================
+# NEW TESTS FOR THREE CLUSTERING STRATEGIES
+# ============================================================================
+
+test_that("best_cluster_union scenario: Fragmented chain (split mapping) is combined", {
+    local_db_state()
+    setup_db(list(">chr1\n", paste(rep("A", 5000), collapse = ""), "\n"))
+    chain_file <- new_chain_file()
+
+    # --- Cluster 1: Chain A (Fragmented / Split) ---
+    # Block A1: Source 100-200 (Len 100).
+    write_chain_entry(chain_file, "src", 5000, "+", 100, 200, "chr1", 5000, "+", 1000, 1100, 1)
+
+    # Block A2: Source 400-450 (Len 50).
+    # Disjoint from A1 by 200bp. Same chain_id (1).
+    write_chain_entry(chain_file, "src", 5000, "+", 400, 450, "chr1", 5000, "+", 1200, 1250, 1)
+
+    # Combined Mass should be 100 + 50 = 150.
+
+    # --- Cluster 2: Chain B (Artifact) ---
+    # Source 250-350 (Len 100).
+    # Disjoint from both A1 and A2.
+    # Mass = 100.
+    write_chain_entry(chain_file, "src", 5000, "+", 250, 350, "chr1", 5000, "+", 3000, 3100, 2)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_cluster_union")
+    intervals <- data.frame(chrom = "src", start = 0, end = 1000)
+    result <- gintervals.liftover(intervals, chain)
+
+    # Expectation:
+    # Cluster A (Mass 150) > Cluster B (Mass 100).
+    # Result should keep BOTH blocks of Chain A (ID 1).
+
+    expect_equal(nrow(result), 2, info = "Should keep both blocks of fragmented chain A")
+    expect_true(all(result$chain_id == 1), info = "Should be Chain A")
+    expect_false(2 %in% result$chain_id, info = "Chain B should be discarded")
+})
+
+test_that("best_cluster_sum: Sum of lengths behavior (rewards duplications)", {
+    local_db_state()
+    setup_db(list(">chr1\n", paste(rep("A", 3000), collapse = ""), "\n"))
+    chain_file <- new_chain_file()
+
+    # --- Cluster 1: Overlapping chains A+B ---
+    # Chain A: Source 100-200 (Len 100)
+    write_chain_entry(chain_file, "src", 3000, "+", 100, 200, "chr1", 3000, "+", 1000, 1100, 1)
+    # Chain B: Source 150-250 (Len 100, overlaps A)
+    write_chain_entry(chain_file, "src", 3000, "+", 150, 250, "chr1", 3000, "+", 1200, 1300, 2)
+
+    # UNION: 100-250 = 150
+    # SUM: 100 + 100 = 200
+
+    # --- Cluster 2: Disjoint chain C ---
+    # Chain C: Source 500-680 (Len 180)
+    # UNION: 180, SUM: 180
+    write_chain_entry(chain_file, "src", 3000, "+", 500, 680, "chr1", 3000, "+", 2000, 2180, 3)
+
+    # With best_cluster_sum: Cluster 1 (200) > Cluster 2 (180) -> A+B wins
+    # With best_cluster_union: Cluster 1 (150) < Cluster 2 (180) -> C wins
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_cluster_sum")
+    intervals <- data.frame(chrom = "src", start = 0, end = 1000)
+    result <- gintervals.liftover(intervals, chain)
+
+    expect_equal(nrow(result), 2, info = "SUM strategy should keep A+B (mass 200)")
+    expect_true(all(result$chain_id %in% c(1, 2)), info = "Should be chains A and B")
+    expect_false(3 %in% result$chain_id, info = "Chain C should be discarded")
+})
+
+test_that("best_cluster_union vs best_cluster_sum: Different winners", {
+    local_db_state()
+    setup_db(list(">chr1\n", paste(rep("A", 3000), collapse = ""), "\n"))
+    chain_file <- new_chain_file()
+
+    # Setup same chains as previous test
+    write_chain_entry(chain_file, "src", 3000, "+", 100, 200, "chr1", 3000, "+", 1000, 1100, 1)
+    write_chain_entry(chain_file, "src", 3000, "+", 150, 250, "chr1", 3000, "+", 1200, 1300, 2)
+    write_chain_entry(chain_file, "src", 3000, "+", 500, 680, "chr1", 3000, "+", 2000, 2180, 3)
+
+    intervals <- data.frame(chrom = "src", start = 0, end = 1000)
+
+    # With best_cluster_union: C wins (180 > 150)
+    chain_union <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_cluster_union")
+    result_union <- gintervals.liftover(intervals, chain_union)
+
+    expect_equal(nrow(result_union), 1, info = "UNION strategy should keep C (union 180)")
+    expect_equal(result_union$chain_id, 3, info = "Should be chain C")
+})
+
+test_that("best_cluster_max: Single large chain beats overlapping cluster", {
+    local_db_state()
+    setup_db(list(">chr1\n", paste(rep("A", 3000), collapse = ""), "\n"))
+    chain_file <- new_chain_file()
+
+    # Cluster 1: A (100) + B (100). Overlap.
+    # SUM = 200. UNION = 150. MAX = 100.
+    write_chain_entry(chain_file, "src", 3000, "+", 100, 200, "chr1", 3000, "+", 1000, 1100, 1)
+    write_chain_entry(chain_file, "src", 3000, "+", 150, 250, "chr1", 3000, "+", 1200, 1300, 2)
+
+    # Cluster 2: C (120). Disjoint.
+    # SUM = 120. UNION = 120. MAX = 120.
+    write_chain_entry(chain_file, "src", 3000, "+", 500, 620, "chr1", 3000, "+", 2000, 2120, 3)
+
+    # Use MAX strategy
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_cluster_max")
+    intervals <- data.frame(chrom = "src", start = 0, end = 1000)
+    result <- gintervals.liftover(intervals, chain)
+
+    # Expectation:
+    # Cluster 1 Score = 100 (Max of 100, 100)
+    # Cluster 2 Score = 120 (Max of 120)
+    # Winner: Cluster 2 (Chain C)
+    # Note: Under SUM strategy, Cluster 1 (200) would beat Cluster 2 (120).
+
+    expect_equal(nrow(result), 1)
+    expect_equal(result$chain_id, 3, info = "MAX strategy should keep chain C (120 > 100)")
+})
+
+test_that("best_cluster_max penalizes fragmentation (Split vs Contiguous)", {
+    local_db_state()
+    setup_db(list(">chr1\n", paste(rep("A", 3000), collapse = ""), "\n"))
+    chain_file <- new_chain_file()
+
+    # --- Cluster 1: Fragmented Chain A (Gene) ---
+    # Block A1: 100bp. Block A2: 50bp. Same Chain ID.
+    # Union/Sum = 150. Max = 100.
+    write_chain_entry(chain_file, "src", 3000, "+", 100, 200, "chr1", 3000, "+", 1000, 1100, 1)
+    write_chain_entry(chain_file, "src", 3000, "+", 400, 450, "chr1", 3000, "+", 1200, 1250, 1)
+
+    # --- Cluster 2: Contiguous Chain B (Pseudogene) ---
+    # Length 120bp. Disjoint from A in source space.
+    # Union/Sum/Max = 120.
+    write_chain_entry(chain_file, "src", 3000, "+", 500, 620, "chr1", 3000, "+", 2000, 2120, 2)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_cluster_max")
+    intervals <- data.frame(chrom = "src", start = 0, end = 1000)
+    result <- gintervals.liftover(intervals, chain)
+
+    # Expectation:
+    # Max(A) = 100. Max(B) = 120.
+    # Chain B (Contiguous 120) beats Chain A (Fragmented 100+50).
+
+    expect_equal(nrow(result), 1)
+    expect_equal(result$chain_id, 2, info = "MAX strategy should prefer contiguous 120bp over fragmented 100+50bp")
+})
+
+test_that("best_source_cluster is alias for best_cluster_union", {
+    local_db_state()
+    setup_db(list(">chr1\n", paste(rep("A", 3000), collapse = ""), "\n"))
+    chain_file <- new_chain_file()
+
+    # Setup chains
+    write_chain_entry(chain_file, "src", 3000, "+", 100, 200, "chr1", 3000, "+", 1000, 1100, 1)
+    write_chain_entry(chain_file, "src", 3000, "+", 150, 250, "chr1", 3000, "+", 1200, 1300, 2)
+    write_chain_entry(chain_file, "src", 3000, "+", 500, 680, "chr1", 3000, "+", 2000, 2180, 3)
+
+    intervals <- data.frame(chrom = "src", start = 0, end = 1000)
+
+    # Load with both policy names
+    chain_old <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_source_cluster")
+    chain_new <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_cluster_union")
+
+    result_old <- gintervals.liftover(intervals, chain_old)
+    result_new <- gintervals.liftover(intervals, chain_new)
+
+    # Results should be identical
+    expect_equal(nrow(result_old), nrow(result_new), info = "Same number of results")
+    expect_equal(result_old$chain_id, result_new$chain_id, info = "Same chain IDs")
+    expect_equal(result_old$start, result_new$start, info = "Same start coordinates")
+    expect_equal(result_old$end, result_new$end, info = "Same end coordinates")
+})
+
+test_that("best_cluster_union: Repeat scenario - union beats sum", {
+    local_db_state()
+    setup_db(list(">chr1\n", paste(rep("A", 5000), collapse = ""), "\n"))
+    chain_file <- new_chain_file()
+
+    # Scenario: Repeat element (50bp) maps to 3 locations
+    # Single gene region (150bp) maps to 1 location
+
+    # Cluster 1: Repeat (3 copies of same 50bp region)
+    # All have source 100-150, map to different targets
+    write_chain_entry(chain_file, "src", 5000, "+", 100, 150, "chr1", 5000, "+", 1000, 1050, 1)
+    write_chain_entry(chain_file, "src", 5000, "+", 100, 150, "chr1", 5000, "+", 1100, 1150, 2)
+    write_chain_entry(chain_file, "src", 5000, "+", 100, 150, "chr1", 5000, "+", 1200, 1250, 3)
+    # SUM: 50 + 50 + 50 = 150
+    # UNION: 50 (all same source region)
+
+    # Cluster 2: Gene (single mapping)
+    # Source 500-650 (150bp)
+    write_chain_entry(chain_file, "src", 5000, "+", 500, 650, "chr1", 5000, "+", 2000, 2150, 4)
+    # SUM: 150
+    # UNION: 150
+
+    intervals <- data.frame(chrom = "src", start = 0, end = 1000)
+
+    # UNION: Gene wins (150 > 50)
+    chain_union <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_cluster_union")
+    result_union <- gintervals.liftover(intervals, chain_union)
+
+    expect_equal(nrow(result_union), 1, info = "UNION should keep gene")
+    expect_equal(result_union$chain_id, 4, info = "Should be gene chain")
+
+    # SUM: Tie (150 = 150), first cluster wins -> Repeats win
+    chain_sum <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "best_cluster_sum")
+    result_sum <- gintervals.liftover(intervals, chain_sum)
+
+    expect_equal(nrow(result_sum), 3, info = "SUM should keep all 3 repeat copies")
+    expect_true(all(result_sum$chain_id %in% c(1, 2, 3)), info = "Should be repeat chains")
 })

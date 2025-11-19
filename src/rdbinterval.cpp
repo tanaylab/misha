@@ -1760,6 +1760,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 		int64_t chain_id;
 		int64_t span;
 		const_iterator chain_iter;
+		int     chromid_src;
+		int64_t start_src_mapped;  // Intersection start (common_start)
+		int64_t end_src_mapped;    // Intersection end (common_end)
 	};
 	std::vector<MappedInterval> all_mapped;
 
@@ -1794,6 +1797,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 			mapped.chain_id = hint->chain_id;
 			mapped.span = tgt_end - tgt_start;
 			mapped.chain_iter = hint;
+			mapped.chromid_src = hint->chromid_src;
+			mapped.start_src_mapped = common_start;
+			mapped.end_src_mapped = common_end;
 			all_mapped.push_back(mapped);
 
 			last_checked = hint;
@@ -1857,9 +1863,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 						ChainMappingMetadata meta;
 						meta.score = all_mapped[i].score;
 						meta.chain_id = all_mapped[i].chain_id;
-						meta.chromid_src = all_mapped[i].chain_iter->chromid_src;
-						meta.start_src = all_mapped[i].chain_iter->start_src;
-						meta.end_src = all_mapped[i].chain_iter->end_src;
+						meta.chromid_src = all_mapped[i].chromid_src;
+						meta.start_src = all_mapped[i].start_src_mapped;
+						meta.end_src = all_mapped[i].end_src_mapped;
 						metadata->push_back(meta);
 					}
 				}
@@ -1873,9 +1879,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 				ChainMappingMetadata meta;
 				meta.score = mapped.score;
 				meta.chain_id = mapped.chain_id;
-				meta.chromid_src = mapped.chain_iter->chromid_src;
-				meta.start_src = mapped.chain_iter->start_src;
-				meta.end_src = mapped.chain_iter->end_src;
+				meta.chromid_src = mapped.chromid_src;
+				meta.start_src = mapped.start_src_mapped;
+				meta.end_src = mapped.end_src_mapped;
 				metadata->push_back(meta);
 			}
 		}
