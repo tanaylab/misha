@@ -420,19 +420,7 @@ test_that("gtrack.liftover works from sparse source track and preserves values",
     write_chain_entry(chain_file, "chrsource1", 100, "+", 0, 20, "chr1", 32, "+", 0, 20, 1)
 
     # Create a source DB with 'source1'
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(
-        ">source1\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n",
-        file = source_fasta
-    )
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(">source1\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n"))
 
     # Create a sparse source track on source1
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -664,16 +652,7 @@ test_that("gintervals.load_chain with src_groot validates source chromosomes", {
     target_db <- .misha$GROOT
 
     # Create source genome database with specific chromosomes
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
+    source_db <- setup_source_db(list(">source1\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n"))
 
     # Create chain file with valid source chromosome
     chain_file <- new_chain_file()
@@ -701,16 +680,7 @@ test_that("gintervals.load_chain with src_groot rejects invalid source chromosom
     target_db <- .misha$GROOT
 
     # Create source genome with different chromosome name
-    source_fasta <- file.path(tempdir(), "chrdifferent_chrom.fasta")
-    cat(">different_chrom\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
+    source_db <- setup_source_db(list(">different_chrom\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n"))
 
     # Create chain file with invalid source chromosome
     chain_file <- new_chain_file()
@@ -738,16 +708,7 @@ test_that("gintervals.load_chain with src_groot validates source coordinates", {
     target_db <- .misha$GROOT
 
     # Create source genome with small chromosome
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\nTTTTTTTTTTTTTTTTTTTT\n", file = source_fasta) # Only 20 bp
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
+    source_db <- setup_source_db(list(">source1\nTTTTTTTTTTTTTTTTTTTT\n")) # Only 20 bp
 
     # Create chain file with source coordinates exceeding chromosome size
     chain_file <- new_chain_file()

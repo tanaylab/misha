@@ -22,11 +22,12 @@ write_chain_entry <- function(con, srcName, srcSize, srcStrand, srcStart, srcEnd
     cat(sprintf("%.0f\n\n", as.numeric(srcEnd - srcStart)), file = con, append = TRUE)
 }
 
-setup_db <- function(chrom_defs) {
+setup_db <- function(chrom_defs, return_db = FALSE) {
     # chrom_defs = list(">chr1\nAAAA...", ... as strings to write)
     # OR list(">chr1\n", "AAAA...", "\n", ">chr2\n", "CCCC...", "\n") - header and sequence can be separate
     # .gseq.import() extracts chromosome name from filename: chr(\\w+)
     # We need separate FASTA files for each chromosome with names like chr1.fasta, chr2.fasta
+    # If return_db is TRUE, returns the database path; otherwise returns the first FASTA file path
 
     # Combine all elements into a single string first
     combined <- paste(chrom_defs, collapse = "")
@@ -59,7 +60,7 @@ setup_db <- function(chrom_defs) {
     }
 
     # Extract chromosome names and create files
-    target_fastas <- character(length(chrom_entries))
+    fastas <- character(length(chrom_entries))
 
     for (i in seq_along(chrom_entries)) {
         entry <- chrom_entries[[i]]
@@ -87,7 +88,7 @@ setup_db <- function(chrom_defs) {
             filename_chrom <- paste0("chr", chrom_name)
             db_chrom_name <- paste0("chr", chrom_name)
         }
-        target_fastas[i] <- file.path(tempdir(), paste0(filename_chrom, ".fasta"))
+        fastas[i] <- file.path(tempdir(), paste0(filename_chrom, ".fasta"))
 
         # Update FASTA header to match database chromosome name
         entry_lines[1] <- paste0(">", db_chrom_name)
@@ -97,20 +98,32 @@ setup_db <- function(chrom_defs) {
         if (!grepl("\n$", entry)) {
             entry <- paste0(entry, "\n")
         }
-        cat(entry, file = target_fastas[i])
+        cat(entry, file = fastas[i])
     }
 
-    target_db <- tempfile()
-    gdb.create(groot = target_db, fasta = target_fastas)
-    gdb.init(target_db)
+    db <- tempfile()
+    suppressMessages(gdb.create(groot = db, fasta = fastas))
+    gdb.init(db)
     withr::defer(
         {
-            unlink(target_db, recursive = TRUE)
-            unlink(target_fastas)
+            unlink(db, recursive = TRUE)
+            unlink(fastas)
         },
         testthat::teardown_env()
     )
-    target_fastas[1] # Return first file path for compatibility
+
+    if (return_db) {
+        db # Return database path
+    } else {
+        fastas[1] # Return first file path for compatibility
+    }
+}
+
+setup_source_db <- function(chrom_defs) {
+    # Similar to setup_db but for source databases - returns the database path
+    # chrom_defs = list(">source1\nAAAA...", ... as strings to write)
+    # OR list(">source1\n", "AAAA...", "\n", ">source2\n", "CCCC...", "\n") - header and sequence can be separate
+    setup_db(chrom_defs, return_db = TRUE)
 }
 
 new_chain_file <- function() {
