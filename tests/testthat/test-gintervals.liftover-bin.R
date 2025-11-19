@@ -6,17 +6,7 @@ test_that("gintervals.liftover matches liftOver binary - basic intervals", {
     local_db_state()
 
     # Create target genome
-    target_fasta <- file.path(tempdir(), "chr1.fasta")
-    cat(">chr1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 100), collapse = ""), "\n")))
 
     # Create chain: source1[10-50] -> chr1[5-45]
     chain_file <- tempfile(fileext = ".chain")
@@ -81,20 +71,10 @@ test_that("gintervals.liftover matches liftOver binary - multiple chromosomes", 
     local_db_state()
 
     # Create target genome with multiple chromosomes
-    target_fasta1 <- file.path(tempdir(), "chr1.fasta")
-    target_fasta2 <- file.path(tempdir(), "chr2.fasta")
-    cat(">chr1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = target_fasta1)
-    cat(">chr2\n", paste(rep("C", 200), collapse = ""), "\n", sep = "", file = target_fasta2)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta1)
-        unlink(target_fasta2)
-    })
-
-    gdb.create(groot = target_db, fasta = c(target_fasta1, target_fasta2))
-    gdb.init(target_db)
+    setup_db(list(
+        paste0(">chr1\n", paste(rep("A", 200), collapse = ""), "\n"),
+        paste0(">chr2\n", paste(rep("C", 200), collapse = ""), "\n")
+    ))
 
     # Create chain mapping both source chromosomes
     chain_file <- tempfile(fileext = ".chain")
@@ -164,17 +144,7 @@ test_that("gintervals.liftover matches liftOver binary - reverse strand", {
     local_db_state()
 
     # Create target genome
-    target_fasta <- file.path(tempdir(), "chr1.fasta")
-    cat(">chr1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create chain with reverse strand
     chain_file <- tempfile(fileext = ".chain")
@@ -240,17 +210,7 @@ test_that("gintervals.liftover matches liftOver binary - chain with gaps", {
     local_db_state()
 
     # Create target genome
-    target_fasta <- file.path(tempdir(), "chr1.fasta")
-    cat(">chr1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 300), collapse = ""), "\n")))
 
     # Create chain with gaps: maps [0-50] and [150-250], but NOT [50-150]
     chain_file <- tempfile(fileext = ".chain")
@@ -326,17 +286,7 @@ test_that("gintervals.liftover matches liftOver binary - small intervals", {
     local_db_state()
 
     # Create target genome
-    target_fasta <- file.path(tempdir(), "chr1.fasta")
-    cat(">chr1\n", paste(rep("A", 1000), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 1000), collapse = ""), "\n")))
 
     # Simple 1:1 mapping
     chain_file <- tempfile(fileext = ".chain")
@@ -401,17 +351,7 @@ test_that("gintervals.liftover matches liftOver binary - boundary intervals", {
     local_db_state()
 
     # Create target genome
-    target_fasta <- file.path(tempdir(), "chr1.fasta")
-    cat(">chr1\n", paste(rep("A", 150), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 150), collapse = ""), "\n")))
 
     # Map entire source chromosome to target
     chain_file <- tempfile(fileext = ".chain")
@@ -476,17 +416,7 @@ test_that("gintervals.liftover matches liftOver binary - consecutive intervals",
     local_db_state()
 
     # Create target genome
-    target_fasta <- file.path(tempdir(), "chr1.fasta")
-    cat(">chr1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 300), collapse = ""), "\n")))
 
     # Simple 1:1 mapping with offset
     chain_file <- tempfile(fileext = ".chain")
@@ -551,17 +481,7 @@ test_that("gintervals.liftover matches liftOver binary - one-to-many with keep p
     local_db_state()
 
     # Create target genome
-    target_fasta <- file.path(tempdir(), "chr1.fasta")
-    cat(">chr1\n", paste(rep("A", 400), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 400), collapse = ""), "\n")))
 
     # Create chain with source overlap: source1[100-200] maps to TWO target locations
     chain_file <- tempfile(fileext = ".chain")
@@ -634,17 +554,7 @@ test_that("gintervals.liftover matches liftOver binary - unmapped intervals", {
     local_db_state()
 
     # Create target genome
-    target_fasta <- file.path(tempdir(), "chr1.fasta")
-    cat(">chr1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = target_fasta)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta)
-    })
-
-    gdb.create(groot = target_db, fasta = target_fasta)
-    gdb.init(target_db)
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 300), collapse = ""), "\n")))
 
     # Create chain with gaps: maps [0-50] and [150-250], but NOT [50-150]
     chain_file <- tempfile(fileext = ".chain")
