@@ -91,7 +91,7 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 
 			// SCORE
 				chain_score = strtod(fields[SCORE].c_str(), &endptr);
-				if (*endptr || chain_score < 0)
+				if (*endptr)
 					TGLError("Chain file %s, line %ld: invalid chain score", chainfname, lineno);
 
 				// Check min_score filter
