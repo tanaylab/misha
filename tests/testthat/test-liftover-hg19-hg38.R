@@ -32,7 +32,9 @@ load_test_db()
 # Helper function to parse Kent's unmapped file
 parse_kent_unmapped <- function(unmapped_file) {
     lines <- readLines(unmapped_file)
-    if (length(lines) == 0) return(data.frame(id = integer(), reason = character()))
+    if (length(lines) == 0) {
+        return(data.frame(id = integer(), reason = character()))
+    }
 
     # Unmapped format: reason line (starting with #), then BED line
     reasons <- character()
@@ -160,16 +162,20 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 random interv
         # First check all misha-only intervals are in Kent's unmapped
         unexplained <- only_in_misha[!only_in_misha %in% kent_unmapped$id]
         expect_equal(length(unexplained), 0,
-            label = sprintf("Intervals lifted by misha but not in Kent's unmapped: %s",
-                paste(head(unexplained, 10), collapse = ", "))
+            label = sprintf(
+                "Intervals lifted by misha but not in Kent's unmapped: %s",
+                paste(head(unexplained, 10), collapse = ", ")
+            )
         )
 
         # Then verify the reasons are the expected ones
         misha_only_reasons <- kent_unmapped$reason[kent_unmapped$id %in% only_in_misha]
         unexpected_reasons <- unique(misha_only_reasons[!misha_only_reasons %in% expected_reasons])
         expect_equal(length(unexpected_reasons), 0,
-            label = sprintf("Unexpected Kent unmapped reasons for misha-lifted intervals: %s",
-                paste(unexpected_reasons, collapse = ", "))
+            label = sprintf(
+                "Unexpected Kent unmapped reasons for misha-lifted intervals: %s",
+                paste(unexpected_reasons, collapse = ", ")
+            )
         )
     }
 
@@ -177,13 +183,17 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 random interv
     # This may happen due to different chain coverage handling
     # Track but allow small percentage
     if (length(only_in_kent) > 0) {
-        message(sprintf("Misha rejected %d intervals that Kent lifted: %s",
-            length(only_in_kent), paste(head(only_in_kent, 10), collapse = ", ")))
+        message(sprintf(
+            "Misha rejected %d intervals that Kent lifted: %s",
+            length(only_in_kent), paste(head(only_in_kent, 10), collapse = ", ")
+        ))
     }
     only_kent_pct <- length(only_in_kent) / nrow(random_intervals) * 100
     expect_lt(only_kent_pct, 0.5,
-        label = sprintf("%.2f%% of intervals lifted only by Kent (%d of %d)",
-            only_kent_pct, length(only_in_kent), nrow(random_intervals))
+        label = sprintf(
+            "%.2f%% of intervals lifted only by Kent (%d of %d)",
+            only_kent_pct, length(only_in_kent), nrow(random_intervals)
+        )
     )
 
     # For intervals in both, compare coordinates
@@ -212,8 +222,10 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 random interv
 
         # All mismatches should be on the same chromosome
         expect_equal(nrow(same_chrom), nrow(mismatches),
-            label = sprintf("Chromosome mismatches found: %d intervals on different chromosomes",
-                nrow(mismatches) - nrow(same_chrom))
+            label = sprintf(
+                "Chromosome mismatches found: %d intervals on different chromosomes",
+                nrow(mismatches) - nrow(same_chrom)
+            )
         )
 
         # Track coordinate differences for informational purposes
@@ -231,8 +243,10 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 random interv
     # Allow small number of edge cases due to different merging strategies
     mismatch_pct <- nrow(mismatches) / length(in_both) * 100
     expect_lt(mismatch_pct, 1.0,
-        label = sprintf("%.2f%% coordinate mismatches (%d of %d)",
-            mismatch_pct, nrow(mismatches), length(in_both))
+        label = sprintf(
+            "%.2f%% coordinate mismatches (%d of %d)",
+            mismatch_pct, nrow(mismatches), length(in_both)
+        )
     )
 })
 
@@ -325,24 +339,30 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 with larger r
 
         unexplained <- only_in_misha[!only_in_misha %in% kent_unmapped$id]
         expect_equal(length(unexplained), 0,
-            label = sprintf("Unexplained misha-only intervals: %s",
-                paste(head(unexplained, 10), collapse = ", "))
+            label = sprintf(
+                "Unexplained misha-only intervals: %s",
+                paste(head(unexplained, 10), collapse = ", ")
+            )
         )
 
         # Verify the reasons are the expected ones
         misha_only_reasons <- kent_unmapped$reason[kent_unmapped$id %in% only_in_misha]
         unexpected_reasons <- unique(misha_only_reasons[!misha_only_reasons %in% expected_reasons])
         expect_equal(length(unexpected_reasons), 0,
-            label = sprintf("Unexpected Kent unmapped reasons: %s",
-                paste(unexpected_reasons, collapse = ", "))
+            label = sprintf(
+                "Unexpected Kent unmapped reasons: %s",
+                paste(unexpected_reasons, collapse = ", ")
+            )
         )
     }
 
     # For intervals only in Kent: track but allow small percentage
     only_kent_pct <- length(only_in_kent) / nrow(random_intervals) * 100
     expect_lt(only_kent_pct, 0.5,
-        label = sprintf("%.2f%% of intervals lifted only by Kent (%d of %d)",
-            only_kent_pct, length(only_in_kent), nrow(random_intervals))
+        label = sprintf(
+            "%.2f%% of intervals lifted only by Kent (%d of %d)",
+            only_kent_pct, length(only_in_kent), nrow(random_intervals)
+        )
     )
 
     # For intervals in both, compare coordinates
@@ -371,8 +391,10 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 with larger r
     # Allow small percentage of coordinate mismatches
     mismatch_pct <- nrow(mismatches) / length(in_both) * 100
     expect_lt(mismatch_pct, 1.0,
-        label = sprintf("%.2f%% coordinate mismatches (%d of %d)",
-            mismatch_pct, nrow(mismatches), length(in_both))
+        label = sprintf(
+            "%.2f%% coordinate mismatches (%d of %d)",
+            mismatch_pct, nrow(mismatches), length(in_both)
+        )
     )
 })
 
@@ -477,23 +499,29 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 small interva
 
             unexplained <- only_in_misha[!only_in_misha %in% kent_unmapped$id]
             expect_equal(length(unexplained), 0,
-                label = sprintf("Unexplained misha-only intervals: %s",
-                    paste(head(unexplained, 10), collapse = ", "))
+                label = sprintf(
+                    "Unexplained misha-only intervals: %s",
+                    paste(head(unexplained, 10), collapse = ", ")
+                )
             )
 
             misha_only_reasons <- kent_unmapped$reason[kent_unmapped$id %in% only_in_misha]
             unexpected_reasons <- unique(misha_only_reasons[!misha_only_reasons %in% expected_reasons])
             expect_equal(length(unexpected_reasons), 0,
-                label = sprintf("Unexpected Kent unmapped reasons: %s",
-                    paste(unexpected_reasons, collapse = ", "))
+                label = sprintf(
+                    "Unexpected Kent unmapped reasons: %s",
+                    paste(unexpected_reasons, collapse = ", ")
+                )
             )
         }
 
         # For intervals only in Kent: allow small percentage
         only_kent_pct <- length(only_in_kent) / nrow(random_intervals) * 100
         expect_lt(only_kent_pct, 0.5,
-            label = sprintf("%.2f%% of intervals lifted only by Kent (%d of %d)",
-                only_kent_pct, length(only_in_kent), nrow(random_intervals))
+            label = sprintf(
+                "%.2f%% of intervals lifted only by Kent (%d of %d)",
+                only_kent_pct, length(only_in_kent), nrow(random_intervals)
+            )
         )
 
         # For intervals in both, compare coordinates
@@ -522,8 +550,10 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 small interva
             # Allow small percentage of coordinate mismatches
             mismatch_pct <- nrow(mismatches) / length(in_both) * 100
             expect_lt(mismatch_pct, 1.0,
-                label = sprintf("%.2f%% coordinate mismatches (%d of %d)",
-                    mismatch_pct, nrow(mismatches), length(in_both))
+                label = sprintf(
+                    "%.2f%% coordinate mismatches (%d of %d)",
+                    mismatch_pct, nrow(mismatches), length(in_both)
+                )
             )
         }
     } else {
@@ -644,23 +674,29 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 specific chro
 
             unexplained <- only_in_misha[!only_in_misha %in% kent_unmapped$id]
             expect_equal(length(unexplained), 0,
-                label = sprintf("Unexplained misha-only intervals: %s",
-                    paste(head(unexplained, 10), collapse = ", "))
+                label = sprintf(
+                    "Unexplained misha-only intervals: %s",
+                    paste(head(unexplained, 10), collapse = ", ")
+                )
             )
 
             misha_only_reasons <- kent_unmapped$reason[kent_unmapped$id %in% only_in_misha]
             unexpected_reasons <- unique(misha_only_reasons[!misha_only_reasons %in% expected_reasons])
             expect_equal(length(unexpected_reasons), 0,
-                label = sprintf("Unexpected Kent unmapped reasons: %s",
-                    paste(unexpected_reasons, collapse = ", "))
+                label = sprintf(
+                    "Unexpected Kent unmapped reasons: %s",
+                    paste(unexpected_reasons, collapse = ", ")
+                )
             )
         }
 
         # For intervals only in Kent: allow small percentage
         only_kent_pct <- length(only_in_kent) / nrow(random_intervals) * 100
         expect_lt(only_kent_pct, 1.0,
-            label = sprintf("%.2f%% of intervals lifted only by Kent (%d of %d)",
-                only_kent_pct, length(only_in_kent), nrow(random_intervals))
+            label = sprintf(
+                "%.2f%% of intervals lifted only by Kent (%d of %d)",
+                only_kent_pct, length(only_in_kent), nrow(random_intervals)
+            )
         )
 
         # For intervals in both, compare coordinates
@@ -689,8 +725,10 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 specific chro
             # Allow small percentage of coordinate mismatches
             mismatch_pct <- nrow(mismatches) / length(in_both) * 100
             expect_lt(mismatch_pct, 1.0,
-                label = sprintf("%.2f%% coordinate mismatches (%d of %d)",
-                    mismatch_pct, nrow(mismatches), length(in_both))
+                label = sprintf(
+                    "%.2f%% coordinate mismatches (%d of %d)",
+                    mismatch_pct, nrow(mismatches), length(in_both)
+                )
             )
         }
     } else {
@@ -825,12 +863,16 @@ test_that("gtrack.liftover matches Kent liftOver on hg19->hg38 random sparse tra
     only_kent_pct <- length(only_in_kent) / total_intervals * 100
 
     expect_lt(only_misha_pct, 1.0,
-        label = sprintf("%.2f%% of intervals only in misha (%d of %d)",
-            only_misha_pct, length(only_in_misha), total_intervals)
+        label = sprintf(
+            "%.2f%% of intervals only in misha (%d of %d)",
+            only_misha_pct, length(only_in_misha), total_intervals
+        )
     )
     expect_lt(only_kent_pct, 1.0,
-        label = sprintf("%.2f%% of intervals only in Kent (%d of %d)",
-            only_kent_pct, length(only_in_kent), total_intervals)
+        label = sprintf(
+            "%.2f%% of intervals only in Kent (%d of %d)",
+            only_kent_pct, length(only_in_kent), total_intervals
+        )
     )
 
     # For common intervals, values should match exactly
