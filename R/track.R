@@ -1228,8 +1228,8 @@ gtrack.liftover <- function(track = NULL,
             stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
         }
 
-        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
-            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster")) {
+            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', or 'best_source_cluster'", call. = FALSE)
         }
 
         if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
@@ -1264,8 +1264,8 @@ gtrack.liftover <- function(track = NULL,
                 stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
             }
 
-            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
-                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster")) {
+                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', or 'best_source_cluster'", call. = FALSE)
             }
 
             # Convert "auto" to "auto_score" alias

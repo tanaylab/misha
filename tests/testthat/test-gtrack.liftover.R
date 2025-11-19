@@ -5,18 +5,7 @@ test_that("gtrack.liftover preserves values in one-to-many mapping", {
     local_db_state()
 
     # Create source genome with one chromosome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 300), collapse = ""), "\n")))
 
     # Create sparse track with specific values in source
     # source1: [100,120) = 4, [121,122) = 5, [180,185) = 6
@@ -109,18 +98,7 @@ test_that("gtrack.liftover preserves values in overlapping source regions mappin
     local_db_state()
 
     # Create source genome with one chromosome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 300), collapse = ""), "\n")))
 
     # Create sparse track with specific values in source
     # source1: [130,140) = 4, [140,160) = 5, [170,210) = 6
@@ -217,18 +195,7 @@ test_that("gtrack.liftover preserves values with one chain included in another",
     local_db_state()
 
     # Create source genome with one chromosome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 400), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 400), collapse = ""), "\n")))
 
     # Create sparse track with values:
     # [60,80)=2 (only in inner chain)
@@ -326,18 +293,7 @@ test_that("gtrack.liftover handles dense track with bin averaging", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create dense track with binsize 10
     # Values: bins 0-9 (coords 0-100) have specific values
@@ -396,21 +352,10 @@ test_that("gtrack.liftover with target overlap auto policy truncates correctly",
     local_db_state()
 
     # Create source genome with two chromosomes
-    # Filenames must start with "chr" for .gseq.import() to process them
-    source_fasta1 <- file.path(tempdir(), "chrsource1.fasta")
-    source_fasta2 <- file.path(tempdir(), "chrsource2.fasta")
-    cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta1)
-    cat(">source2\n", paste(rep("C", 100), collapse = ""), "\n", sep = "", file = source_fasta2)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta1)
-        unlink(source_fasta2)
-    })
-
-    gdb.create(groot = source_db, fasta = c(source_fasta1, source_fasta2))
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n"),
+        paste0(">source2\n", paste(rep("C", 100), collapse = ""), "\n")
+    ))
 
     # Create tracks with distinct values for each source chromosome
     # Database chromosome names are "chrsource1" and "chrsource2" (from filenames)
@@ -474,24 +419,11 @@ test_that("gtrack.liftover with discard policies removes overlapping intervals",
     local_db_state()
 
     # Create source genome with two chromosomes
-    # Filenames must start with "chr" for .gseq.import() to process them
-    source_fasta1 <- file.path(tempdir(), "chrsource1.fasta")
-    source_fasta2 <- file.path(tempdir(), "chrsource2.fasta")
-    source_fasta3 <- file.path(tempdir(), "chrsource3.fasta")
-    cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta1)
-    cat(">source2\n", paste(rep("C", 100), collapse = ""), "\n", sep = "", file = source_fasta2)
-    cat(">source3\n", paste(rep("G", 100), collapse = ""), "\n", sep = "", file = source_fasta3)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta1)
-        unlink(source_fasta2)
-        unlink(source_fasta3)
-    })
-
-    gdb.create(groot = source_db, fasta = c(source_fasta1, source_fasta2, source_fasta3))
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n"),
+        paste0(">source2\n", paste(rep("C", 100), collapse = ""), "\n"),
+        paste0(">source3\n", paste(rep("G", 100), collapse = ""), "\n")
+    ))
 
     # Create tracks: chrsource1 will have overlaps, chrsource3 is clean
     # Database chromosome names are "chrsource1", "chrsource2", "chrsource3" (from filenames)
@@ -507,21 +439,10 @@ test_that("gtrack.liftover with discard policies removes overlapping intervals",
     src_track_dir <- file.path(source_db, "tracks", "src_track.track")
 
     # Create target genome
-    # Filenames must start with "chr" for .gseq.import() to process them
-    target_fasta1 <- file.path(tempdir(), "chr1.fasta")
-    target_fasta2 <- file.path(tempdir(), "chr2.fasta")
-    cat(">chr1\n", paste(rep("T", 100), collapse = ""), "\n", sep = "", file = target_fasta1)
-    cat(">chr2\n", paste(rep("T", 100), collapse = ""), "\n", sep = "", file = target_fasta2)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta1)
-        unlink(target_fasta2)
-    })
-
-    gdb.create(groot = target_db, fasta = c(target_fasta1, target_fasta2))
-    gdb.init(target_db)
+    setup_db(list(
+        paste0(">chr1\n", paste(rep("T", 100), collapse = ""), "\n"),
+        paste0(">chr2\n", paste(rep("T", 100), collapse = ""), "\n")
+    ))
 
     # Create chain with source overlap:
     # source1[0-50) -> chr1[0-50)
@@ -579,18 +500,7 @@ test_that("gtrack.liftover preserves sparse track gaps correctly", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create sparse track with gaps
     # [10,20) = 1, [40,50) = 2, [80,90) = 3
@@ -652,18 +562,7 @@ test_that("gtrack.liftover handles reverse strand mapping correctly", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create sparse track with multiple intervals
     src_intervals <- data.frame(
@@ -710,18 +609,7 @@ test_that("gtrack.liftover handles chain gaps (unmapped regions)", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 300), collapse = ""), "\n")))
 
     # Create sparse track with intervals in both mapped and unmapped regions
     src_intervals <- data.frame(
@@ -773,18 +661,7 @@ test_that("gtrack.liftover handles special values (NaN, zero, large)", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create sparse track with special values
     src_intervals <- data.frame(
@@ -836,18 +713,7 @@ test_that("gtrack.liftover handles empty source track", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create empty sparse track
     src_intervals <- data.frame(
@@ -889,18 +755,7 @@ test_that("gtrack.liftover handles single base pair intervals", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create sparse track with single BP intervals
     src_intervals <- data.frame(
@@ -945,24 +800,11 @@ test_that("gtrack.liftover handles multiple source chromosomes to single target"
     local_db_state()
 
     # Create source genome with multiple chromosomes
-    # Filenames must start with "chr" for .gseq.import() to process them
-    source_fasta1 <- file.path(tempdir(), "chrsource1.fasta")
-    source_fasta2 <- file.path(tempdir(), "chrsource2.fasta")
-    source_fasta3 <- file.path(tempdir(), "chrsource3.fasta")
-    cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta1)
-    cat(">source2\n", paste(rep("C", 100), collapse = ""), "\n", sep = "", file = source_fasta2)
-    cat(">source3\n", paste(rep("G", 100), collapse = ""), "\n", sep = "", file = source_fasta3)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta1)
-        unlink(source_fasta2)
-        unlink(source_fasta3)
-    })
-
-    gdb.create(groot = source_db, fasta = c(source_fasta1, source_fasta2, source_fasta3))
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n"),
+        paste0(">source2\n", paste(rep("C", 100), collapse = ""), "\n"),
+        paste0(">source3\n", paste(rep("G", 100), collapse = ""), "\n")
+    ))
 
     # Create sparse track with intervals on all three chromosomes
     src_intervals <- data.frame(
@@ -1020,18 +862,7 @@ test_that("gtrack.liftover handles intervals at chromosome boundaries", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n")))
 
     # Create sparse track with intervals at boundaries
     src_intervals <- data.frame(
@@ -1082,18 +913,7 @@ test_that("gtrack.liftover handles coordinate reversals (inversions)", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create sparse track with ordered intervals
     src_intervals <- data.frame(
@@ -1140,18 +960,7 @@ test_that("gtrack.liftover handles dense track with partial bin coverage", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 1000), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 1000), collapse = ""), "\n")))
 
     # Create dense track with binsize 10
     # Values: bins 0-9 have values 0-9
@@ -1202,18 +1011,7 @@ test_that("gtrack.liftover handles sparse track with very small intervals", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 1000), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 1000), collapse = ""), "\n")))
 
     # Create sparse track with mix of very small and regular intervals
     src_intervals <- data.frame(
@@ -1260,18 +1058,7 @@ test_that("gtrack.liftover handles one-to-many with different bin sizes in targe
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 500), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 500), collapse = ""), "\n")))
 
     # Create dense track
     binsize <- 10
@@ -1328,18 +1115,7 @@ test_that("gtrack.liftover handles source track with consecutive intervals", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 300), collapse = ""), "\n")))
 
     # Create sparse track with consecutive intervals (no gaps)
     # This is like a mini dense track but in sparse format
@@ -1390,18 +1166,7 @@ test_that("gtrack.liftover handles mixed positive and negative values", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create sparse track with mixed positive and negative values
     src_intervals <- data.frame(
@@ -1451,21 +1216,10 @@ test_that("gtrack.liftover handles target overlap with truncation", {
     local_db_state()
 
     # Create source genome with two chromosomes
-    # Filenames must start with "chr" for .gseq.import() to process them
-    source_fasta1 <- file.path(tempdir(), "chrsource1.fasta")
-    source_fasta2 <- file.path(tempdir(), "chrsource2.fasta")
-    cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta1)
-    cat(">source2\n", paste(rep("C", 100), collapse = ""), "\n", sep = "", file = source_fasta2)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta1)
-        unlink(source_fasta2)
-    })
-
-    gdb.create(groot = source_db, fasta = c(source_fasta1, source_fasta2))
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n"),
+        paste0(">source2\n", paste(rep("C", 100), collapse = ""), "\n")
+    ))
 
     # Create sparse track with intervals on both chromosomes
     src_intervals <- data.frame(
@@ -1522,21 +1276,10 @@ test_that("gintervals.liftover works correctly with reverse strand targets", {
     # Bug: when target is on negative strand, offsets were applied in wrong direction
 
     # Create target genome with the chromosomes we need
-    # Filenames must start with "chr" for .gseq.import() to process them
-    target_fasta1 <- file.path(tempdir(), "chrtgt.fasta")
-    target_fasta2 <- file.path(tempdir(), "chrsrc.fasta")
-    cat(">tgt\n", paste(rep("T", 2000), collapse = ""), "\n", sep = "", file = target_fasta1)
-    cat(">src\n", paste(rep("A", 1000), collapse = ""), "\n", sep = "", file = target_fasta2)
-
-    target_db <- tempfile()
-    withr::defer({
-        unlink(target_db, recursive = TRUE)
-        unlink(target_fasta1)
-        unlink(target_fasta2)
-    })
-
-    gdb.create(groot = target_db, fasta = c(target_fasta1, target_fasta2))
-    gdb.init(target_db)
+    setup_db(list(
+        paste0(">tgt\n", paste(rep("T", 2000), collapse = ""), "\n"),
+        paste0(">src\n", paste(rep("A", 1000), collapse = ""), "\n")
+    ))
 
     # Create a minimal chain with reverse strand target
     chain_file <- new_chain_file()
@@ -1619,18 +1362,7 @@ test_that("gtrack.liftover works correctly with reverse strand targets", {
     local_db_state()
 
     # Create source genome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsrc.fasta")
-    cat(">src\n", paste(rep("A", 1000), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">src\n", paste(rep("A", 1000), collapse = ""), "\n")))
 
     # Create sparse track in source at position 300-310
     # Database chromosome name is "chrsrc" (from filename chrsrc.fasta)
@@ -1682,18 +1414,7 @@ test_that("gtrack.liftover finds all overlapping chains when they are non-consec
     # by non-overlapping ones in the sorted (by start_src) chain array.
 
     # Create source genome first
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste0(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste0(rep("A", 100), collapse = ""), "\n")))
 
     # Create source track with an interval overlapping first two chains
     gtrack.create_sparse(
@@ -1749,18 +1470,7 @@ test_that("gtrack.liftover does not miss earlier long overlap when hint is to th
     local_db_state()
 
     # Create source genome first
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste0(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
-
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
+    source_db <- setup_source_db(list(paste0(">source1\n", paste0(rep("A", 200), collapse = ""), "\n")))
 
     # Create source track with two intervals
     gtrack.create_sparse(
@@ -1821,18 +1531,7 @@ test_that("gtrack.liftover has deterministic ordering for chains with identical 
     local_db_state()
 
     # Create source genome first
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste0(rep("A", 500), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
-
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
+    source_db <- setup_source_db(list(paste0(">source1\n", paste0(rep("A", 500), collapse = ""), "\n")))
 
     # Create source track with an interval
     gtrack.create_sparse(
@@ -1900,18 +1599,7 @@ test_that("gtrack.liftover handles minus strand mapping at edges correctly", {
     local_db_state()
 
     # Create source genome first
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste0(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste0(rep("A", 100), collapse = ""), "\n")))
 
     # Create source track with three intervals (left edge, middle, right edge)
     gtrack.create_sparse(
@@ -1965,18 +1653,7 @@ test_that("gtrack.liftover handles dense cluster of chains with same start_src c
     local_db_state()
 
     # Create source genome first
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste0(rep("A", 10000), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
-
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
+    source_db <- setup_source_db(list(paste0(">source1\n", paste0(rep("A", 10000), collapse = ""), "\n")))
 
     # Create source track with one interval that overlaps all chains
     gtrack.create_sparse(

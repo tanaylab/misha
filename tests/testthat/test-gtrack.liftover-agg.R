@@ -4,18 +4,7 @@ test_that("gtrack.liftover multi-target aggregation policies", {
     local_db_state()
 
     # Source genome with a single chromosome
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 400), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 400), collapse = ""), "\n")))
 
     # Dense track with three bins (values 1, 2, 3; binsize 10)
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -97,17 +86,7 @@ test_that("gtrack.liftover multi-target aggregation policies", {
 test_that("gtrack.liftover aggregation edge cases: all NAs", {
     local_db_state()
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n")))
 
     # All NA values
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -161,17 +140,7 @@ test_that("gtrack.liftover aggregation edge cases: all NAs", {
 test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense tracks", {
     local_db_state()
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create dense track with values 5, 3, 5, 2 (testing ties)
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -254,17 +223,7 @@ test_that("gtrack.liftover aggregation edge cases: ties and sorting with dense t
 test_that("gtrack.liftover median with even/odd numbers of contributors", {
     local_db_state()
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create track with 4 values for even-count median test
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -334,17 +293,7 @@ test_that("gtrack.liftover median with even/odd numbers of contributors", {
 test_that("gtrack.liftover aggregation for sparse tracks", {
     local_db_state()
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
@@ -421,18 +370,7 @@ test_that("gtrack.liftover aggregation for sparse tracks", {
 test_that("gtrack.liftover nth aggregator validates params", {
     local_db_state()
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 100), collapse = ""), "\n", sep = "", file = source_fasta)
-
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 100), collapse = ""), "\n")))
 
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
     src_intervals <- data.frame(
@@ -478,17 +416,7 @@ test_that("gtrack.liftover aggregation with non-consecutive overlapping chains",
     # Test aggregation when overlapping chains are separated by non-overlapping ones
     # This tests that the aggregation finds ALL overlapping chains, not just consecutive ones
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create track with interval that overlaps first two chains (but not the third)
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -542,17 +470,7 @@ test_that("gtrack.liftover aggregation with chains of varying lengths starting a
     # Multiple chains starting at same source position but with different lengths
     # Tests deterministic ordering and correct aggregation
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 300), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 300), collapse = ""), "\n")))
 
     # Interval that overlaps all chains
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -605,17 +523,7 @@ test_that("gtrack.liftover aggregation with reverse strand preserves correct val
 
     # Test that aggregation works correctly with reverse strand mappings
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create track with three distinct values
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -662,17 +570,7 @@ test_that("gtrack.liftover aggregation finds earlier long overlap when hint is t
     # Tests the prefix-max fallback logic for finding earlier overlapping chains
     # when the hint points past them
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Two intervals: Q1 and Q2
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -731,17 +629,7 @@ test_that("gtrack.liftover aggregation with dense cluster of same-start chains",
     # Many chains starting at same position with varying lengths
     # Tests that aggregation handles large numbers of contributors correctly
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 1000), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 1000), collapse = ""), "\n")))
 
     # Interval that overlaps many chains
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
@@ -801,17 +689,7 @@ test_that("gtrack.liftover aggregation with partial overlaps and varying coverag
     # Test coverage-based aggregators with varying overlap lengths
     # Create source intervals that will have different coverage lengths when lifted
 
-    # Filename must start with "chr" for .gseq.import() to process it
-    source_fasta <- file.path(tempdir(), "chrsource1.fasta")
-    cat(">source1\n", paste(rep("A", 200), collapse = ""), "\n", sep = "", file = source_fasta)
-    source_db <- tempfile()
-    withr::defer({
-        unlink(source_db, recursive = TRUE)
-        unlink(source_fasta)
-    })
-
-    gdb.create(groot = source_db, fasta = source_fasta)
-    gdb.init(source_db)
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 200), collapse = ""), "\n")))
 
     # Create track with intervals that will map with different coverage
     # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)

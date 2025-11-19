@@ -10,6 +10,7 @@
   - New `include_metadata` parameter in `gintervals.liftover` optionally returns score and chain_id for each mapping
   **BREAKING**: "auto" is now an alias for "auto_score". For the old behavior, use `tgt_overlap_policy = "auto_first"`.
 * Added `canonic` parameter to `gintervals.liftover` (default `FALSE`) to merge adjacent target intervals resulting from the same source interval and chain.
+* Added `tgt_overlap_policy = "best_source_cluster"` that clusters mappings by source overlap: retains all mappings for overlapping source chains (true duplications) but keeps only the cluster with largest total target length for disjoint source chains (conflicting mappings).
 
 # misha 5.1.4
 

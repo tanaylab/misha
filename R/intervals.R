@@ -1689,6 +1689,7 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #'   keep \tab Preserves all overlapping intervals. \cr
 #'   discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
 #'   agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+#'   best_source_cluster \tab Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. \cr
 #' }
 #' @param min_score optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.
 #' @param include_metadata logical; if TRUE, adds 'score' column to the output indicating the alignment score of the chain used for each mapping. Only applicable with "auto_score" or "auto" policy.
@@ -1733,8 +1734,8 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
             stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
         }
 
-        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
-            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster")) {
+            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', or 'best_source_cluster'", call. = FALSE)
         }
 
         if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
@@ -1769,8 +1770,8 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
                 stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
             }
 
-            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
-                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster")) {
+                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', or 'best_source_cluster'", call. = FALSE)
             }
 
             # Convert "auto" to "auto_score" alias
@@ -1924,8 +1925,8 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', or 'best_source_cluster'", call. = FALSE)
     }
 
     if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
