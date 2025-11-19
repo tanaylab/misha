@@ -41,7 +41,10 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
 		std::string effective_tgt_policy = tgt_overlap_policy;
-		if (!strcmp(tgt_overlap_policy, "best_source_cluster")) {
+		if (!strcmp(tgt_overlap_policy, "best_source_cluster") ||
+		    !strcmp(tgt_overlap_policy, "best_cluster_union") ||
+		    !strcmp(tgt_overlap_policy, "best_cluster_sum") ||
+		    !strcmp(tgt_overlap_policy, "best_cluster_max")) {
 			effective_tgt_policy = "keep"; // Load ALL chains to resolve later in liftover
 		} else if (!strcmp(tgt_overlap_policy, "auto")) {
 			effective_tgt_policy = "auto_score";
