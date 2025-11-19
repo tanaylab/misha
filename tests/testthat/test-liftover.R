@@ -91,7 +91,7 @@ test_that("gintervals.load_chain handles source overlaps with 'discard' policy",
     expect_equal(as.numeric(chain$startsrc), 0)
 })
 
-test_that("gintervals.load_chain handles target overlaps with 'auto' policy", {
+test_that("gintervals.load_chain handles target overlaps with 'auto_first' policy", {
     local_db_state()
 
     # Create target genome
@@ -106,8 +106,8 @@ test_that("gintervals.load_chain handles target overlaps with 'auto' policy", {
     # Chain 2: source2[0-20] -> chr1[20-40] (overlaps at chr1[20-30])
     write_chain_entry(chain_file, "source2", 100, "+", 0, 20, "chr1", 40, "+", 20, 40, 2)
 
-    # Auto policy should resolve overlaps by truncating
-    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto")
+    # Auto_first policy should resolve overlaps by truncating
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto_first")
     expect_true(nrow(chain) >= 1)
 
     # Check that no intervals overlap in target
@@ -121,7 +121,7 @@ test_that("gintervals.load_chain handles target overlaps with 'auto' policy", {
     }
 })
 
-test_that("gintervals.load_chain exact truncation with 'auto' policy", {
+test_that("gintervals.load_chain exact truncation with 'auto_first' policy", {
     local_db_state()
 
     setup_db(list(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTGACTGACTG\n"))
@@ -133,7 +133,7 @@ test_that("gintervals.load_chain exact truncation with 'auto' policy", {
     # Chain 2: sourceB[0-20] -> chr1[20-40] (overlaps 20-30)
     write_chain_entry(chain_file, "sourceB", 100, "+", 0, 20, "chr1", 40, "+", 20, 40, 2)
 
-    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto")
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto_first")
     chain_chr1 <- chain[chain$chrom == "chr1", ]
     chain_chr1 <- chain_chr1[order(chain_chr1$start), ]
     # After auto truncation: first keeps its coverage [0,30), second is trimmed to [30,40)
@@ -190,6 +190,86 @@ test_that("gintervals.load_chain handles target overlaps with 'discard' policy",
     expect_equal(as.character(chain$chrom), "chr2")
 })
 
+test_that("gintervals.load_chain segments overlaps for auto and agg policies", {
+    local_db_state()
+
+    setup_db(list(">chrSeg\n", paste(rep("A", 100), collapse = ""), "\n"))
+
+    chain_file <- new_chain_file()
+    # Three overlapping chains on the target: ids 1..3 with increasing scores
+    write_chain_entry(chain_file, "srcA", 200, "+", 0, 20, "chrSeg", 100, "+", 10, 30, 1, score = 10)
+    write_chain_entry(chain_file, "srcB", 200, "+", 0, 20, "chrSeg", 100, "+", 15, 35, 2, score = 20)
+    write_chain_entry(chain_file, "srcC", 200, "+", 0, 20, "chrSeg", 100, "+", 20, 40, 3, score = 30)
+
+    chain_auto <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto_score")
+    chain_auto_chr <- chain_auto[chain_auto$chrom == "chrSeg", ]
+    expect_equal(as.numeric(chain_auto_chr$start), c(10, 15, 20))
+    expect_equal(as.numeric(chain_auto_chr$end), c(15, 20, 40))
+    expect_equal(as.numeric(chain_auto_chr$chain_id), c(1, 2, 3))
+
+    chain_agg <- gintervals.load_chain(chain_file, tgt_overlap_policy = "agg")
+    chain_agg_chr <- chain_agg[chain_agg$chrom == "chrSeg", ]
+    expect_equal(
+        as.numeric(chain_agg_chr$start),
+        c(10, 15, 15, 20, 20, 20, 30, 30, 35)
+    )
+    expect_equal(
+        as.numeric(chain_agg_chr$end),
+        c(15, 20, 20, 30, 30, 30, 35, 35, 40)
+    )
+    expect_equal(
+        as.numeric(chain_agg_chr$chain_id),
+        c(1, 1, 2, 1, 2, 3, 2, 3, 3)
+    )
+
+    # startsrc shifts should match target trim
+    chain1_segments <- chain_agg_chr[chain_agg_chr$chain_id == 1, ]
+    expect_equal(as.numeric(chain1_segments$startsrc), c(0, 5, 10))
+    chain3_segments <- chain_agg_chr[chain_agg_chr$chain_id == 3, ]
+    expect_equal(as.numeric(chain3_segments$startsrc), c(0, 10, 15))
+})
+
+test_that("gintervals.liftover returns parallel slices with agg policy", {
+    local_db_state()
+
+    setup_db(list(">chrLift\n", paste(rep("C", 120), collapse = ""), "\n"))
+
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "srcA", 200, "+", 0, 20, "chrLift", 120, "+", 0, 20, 1, score = 5)
+    write_chain_entry(chain_file, "srcB", 200, "+", 0, 20, "chrLift", 120, "+", 10, 30, 2, score = 10)
+    write_chain_entry(chain_file, "srcC", 200, "+", 0, 20, "chrLift", 120, "+", 15, 35, 3, score = 15)
+
+    src_intervals <- data.frame(
+        chrom = c("srcA", "srcB", "srcC"),
+        start = 0,
+        end = 20,
+        stringsAsFactors = FALSE
+    )
+
+    lifted_agg <- gintervals.liftover(
+        src_intervals,
+        chain_file,
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "agg"
+    )
+    lifted_chr <- lifted_agg[lifted_agg$chrom == "chrLift", ]
+    # Expect duplicated (start, end) pairs when chains collide
+    agg_pairs <- lifted_chr[, c("start", "end")]
+    dup_counts <- table(paste(agg_pairs$start, agg_pairs$end, sep = "-"))
+    expect_true(any(dup_counts > 1))
+
+    lifted_auto <- gintervals.liftover(
+        src_intervals,
+        chain_file,
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "auto_score"
+    )
+    lifted_auto_chr <- lifted_auto[lifted_auto$chrom == "chrLift", ]
+    auto_pairs <- lifted_auto_chr[, c("start", "end")]
+    auto_counts <- table(paste(auto_pairs$start, auto_pairs$end, sep = "-"))
+    expect_true(all(auto_counts == 1))
+})
+
 test_that("gintervals.liftover works with 'keep' source policy", {
     local_db_state()
 
@@ -206,7 +286,7 @@ test_that("gintervals.liftover works with 'keep' source policy", {
     write_chain_entry(chain_file, "source1", 100, "+", 10, 26, "chr2", 16, "+", 0, 16, 2)
 
     # Load chain with keep policy
-    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep")
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
 
     # Create source intervals that overlap with the ambiguous region
     src_intervals <- data.frame(
@@ -217,7 +297,7 @@ test_that("gintervals.liftover works with 'keep' source policy", {
     )
 
     # Liftover should produce multiple target intervals
-    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+    result <- gintervals.liftover(src_intervals, chain)
 
     # Should have entries mapping to both chr1 and chr2
     expect_true(nrow(result) >= 2)
@@ -502,7 +582,7 @@ test_that("complex chain with both source and target overlaps", {
     }
 })
 
-test_that("gintervals.load_chain returns 8 columns with strand information", {
+test_that("gintervals.load_chain returns 10 columns with strand information, chain_id and score", {
     local_db_state()
 
     # Create target genome
@@ -515,8 +595,8 @@ test_that("gintervals.load_chain returns 8 columns with strand information", {
 
     chain <- gintervals.load_chain(chain_file)
 
-    # Check that chain has 8 columns
-    expected_cols <- c("chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc")
+    # Check that chain has 10 columns (including chain_id and score)
+    expected_cols <- c("chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc", "chain_id", "score")
     expect_equal(colnames(chain), expected_cols)
 
     # Check strand format: +1 for forward
@@ -1340,7 +1420,7 @@ test_that("gintervals.liftover finds all overlapping chains when they are non-co
     src_intervals <- data.frame(chrom = "source1", start = 20, end = 21, stringsAsFactors = FALSE)
 
     # Perform liftover
-    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+    result <- gintervals.liftover(src_intervals, chain)
 
     # Should return exactly 2 results (both chains with [10,30) overlap [20,21))
     expect_equal(nrow(result), 2)
@@ -1379,7 +1459,7 @@ test_that("Do not miss earlier long overlap when hint is to the right (policy=ke
         stringsAsFactors = FALSE
     )
 
-    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+    result <- gintervals.liftover(src_intervals, chain)
 
     # Expect: Q1 -> chr1; Q2 -> chr1 and chr3  (total 3 rows)
     # Previous bug would yield only 2 rows (Q1->chr1, Q2->chr3), missing chr1 for Q2.
@@ -1418,8 +1498,8 @@ test_that("Deterministic ordering for chains with identical start_src", {
         stringsAsFactors = FALSE
     )
 
-    result1 <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
-    result2 <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+    result1 <- gintervals.liftover(src_intervals, chain)
+    result2 <- gintervals.liftover(src_intervals, chain)
 
     # Results should be identical (deterministic)
     expect_equal(result1, result2)
@@ -1512,7 +1592,7 @@ test_that("Dense cluster of chains with same start_src performs correctly", {
         stringsAsFactors = FALSE
     )
 
-    result <- gintervals.liftover(src_intervals, chain, src_overlap_policy = "keep")
+    result <- gintervals.liftover(src_intervals, chain)
 
     # Should find many overlapping chains (query at 60 overlaps chains where 50+length > 60)
     # Exact number depends on overlap resolution, but should be substantial
@@ -1544,7 +1624,9 @@ test_that("Target overlap auto keeps primary mapping when later chain is contain
         "chrT", 500, "+", 50, 170, 2
     )
 
-    chain <- gintervals.load_chain(chain_file)
+    # With default "auto" (now "auto_score"), chain B should be kept if it has higher score
+    # But since we want to test the truncation behavior, use "auto_first" to get the old behavior
+    chain <- gintervals.load_chain(chain_file, tgt_overlap_policy = "auto_first")
 
     # Check that chain was loaded successfully
     expect_false(is.null(chain))
@@ -1558,10 +1640,11 @@ test_that("Target overlap auto keeps primary mapping when later chain is contain
     expect_equal(as.numeric(resA$end), 80)
 
     srcB <- data.frame(chrom = "sourceB", start = 60, end = 80, stringsAsFactors = FALSE)
+    # With auto_first, chain B is truncated/discarded because it's contained in chain A
     expect_error(gintervals.liftover(srcB, chain), "does not exist")
 
     chain_keep <- gintervals.load_chain(chain_file, tgt_overlap_policy = "keep")
-    resB_keep <- gintervals.liftover(srcB, chain_keep, tgt_overlap_policy = "keep")
+    resB_keep <- gintervals.liftover(srcB, chain_keep)
     expect_equal(nrow(resB_keep), 1)
     expect_equal(as.character(resB_keep$chrom), "chrT")
 })
@@ -1639,4 +1722,586 @@ test_that("Large coordinates near overflow boundaries work correctly", {
     # Verify mapping is correct: source[+10,+20] -> target[+10,+20]
     expect_equal(result$start, 10)
     expect_equal(result$end, 20)
+})
+
+# Score-based liftover tests
+test_that("auto_score policy segments overlapping targets and selects winners per segment", {
+    local_db_state()
+
+    # Create target genome with enough space for multiple chains
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chain file with overlapping TARGET intervals at different scores
+    # Chain 1: target [10,30), score 5000
+    # Chain 2: target [15,35), score 3000
+    # Chain 3: target [12,32), score 8000
+    chain_file <- new_chain_file()
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 3000 source1 100 + 10 30 chr1 60 + 15 35 2\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 8000 source1 100 + 10 30 chr1 60 + 12 32 3\n20\n\n", file = chain_file, append = TRUE)
+
+    # Load chain with auto_score - should segment overlapping targets
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # After segmentation, should have non-overlapping intervals
+    # Segments: [10,12) from chain 1, [12,15) from chain 3, [15,30) from chain 3, [30,32) from chain 3, [32,35) from chain 2
+    expect_true(nrow(chain) >= 3) # At least 3 segments
+
+    # Check that target intervals don't overlap (sorted by start)
+    chain_sorted <- chain[order(chain$start), ]
+    for (i in 1:(nrow(chain_sorted) - 1)) {
+        expect_true(chain_sorted$end[i] <= chain_sorted$start[i + 1],
+            info = sprintf(
+                "Overlap at row %d: [%d,%d) and [%d,%d)",
+                i, chain_sorted$start[i], chain_sorted$end[i],
+                chain_sorted$start[i + 1], chain_sorted$end[i + 1]
+            )
+        )
+    }
+
+    # Test liftover - source interval maps through segmented chain
+    src_intervals <- data.frame(chrom = "source1", start = 10, end = 30, stringsAsFactors = FALSE)
+    result <- gintervals.liftover(src_intervals, chain)
+
+    # Should get multiple non-overlapping results
+    expect_true(nrow(result) >= 1)
+    expect_true(all(result$chrom == "chr1"))
+})
+
+test_that("auto is an alias for auto_score", {
+    local_db_state()
+
+    # Create target genome with enough space for multiple chains
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chain file with overlapping TARGET intervals at different scores
+    chain_file <- new_chain_file()
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 3000 source1 100 + 10 30 chr1 60 + 15 35 2\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 8000 source1 100 + 10 30 chr1 60 + 12 32 3\n20\n\n", file = chain_file, append = TRUE)
+
+    # Load chain with "auto" (should work as alias for "auto_score")
+    chain_auto <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto")
+    chain_auto_score <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Both should produce the same segmented chain
+    expect_equal(nrow(chain_auto), nrow(chain_auto_score))
+    expect_equal(chain_auto, chain_auto_score)
+
+    # Test intervals that overlap all three chains
+    src_intervals <- data.frame(chrom = "source1", start = 10, end = 30, stringsAsFactors = FALSE)
+
+    # Both should produce identical liftover results
+    result_auto <- gintervals.liftover(src_intervals, chain_auto)
+    result_auto_score <- gintervals.liftover(src_intervals, chain_auto_score)
+
+    expect_equal(result_auto, result_auto_score)
+    expect_true(nrow(result_auto) >= 1)
+    expect_true(all(result_auto$chrom == "chr1"))
+})
+
+test_that("auto_score policy uses length as tiebreaker when scores are equal", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chains with equal scores but different lengths, with overlapping targets
+    # Chain 1: [10,25), len 15, score 5000
+    # Chain 2: [12,32), len 20, score 5000
+    # Chain 3: [15,27), len 12, score 5000
+    chain_file <- new_chain_file()
+    cat("chain 5000 source1 100 + 10 25 chr1 60 + 10 25 1\n15\n\n", file = chain_file)
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 12 32 2\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 5000 source1 100 + 10 22 chr1 60 + 15 27 3\n12\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Should have segmented, non-overlapping intervals
+    chain_sorted <- chain[order(chain$start), ]
+    for (i in 1:(nrow(chain_sorted) - 1)) {
+        expect_true(chain_sorted$end[i] <= chain_sorted$start[i + 1])
+    }
+
+    # In overlapping regions, longer chain (chain 2) should win due to tiebreaker
+    # Check that chain 2 won at least some segments
+    expect_true(any(chain$chain_id == 2))
+})
+
+test_that("auto_score policy uses chain_id as final tiebreaker", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chains with equal scores and equal lengths, with overlapping targets
+    # chain_id from file: 3, 1, 2
+    chain_file <- new_chain_file()
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 10 30 3\n20\n\n", file = chain_file)
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 15 35 1\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 12 32 2\n20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Should have segmented, non-overlapping intervals
+    chain_sorted <- chain[order(chain$start), ]
+    for (i in 1:(nrow(chain_sorted) - 1)) {
+        expect_true(chain_sorted$end[i] <= chain_sorted$start[i + 1])
+    }
+
+    # When scores and lengths are equal, lowest chain_id should win
+    # Check that chain with id=1 won at least some segments
+    expect_true(any(chain$chain_id == 1))
+})
+
+test_that("min_score parameter filters low-scoring chains", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chains with varying scores
+    chain_file <- new_chain_file()
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 3000 source1 100 + 35 55 chr1 60 + 40 60 2\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 8000 source1 100 + 60 80 chr1 60 + 5 25 3\n20\n\n", file = chain_file, append = TRUE)
+
+    # Load without min_score: all chains
+    chain_all <- gintervals.load_chain(chain_file)
+    expect_equal(nrow(chain_all), 3)
+
+    # Load with min_score=4000: should filter out chain 2 (score 3000)
+    chain_filtered <- gintervals.load_chain(chain_file, min_score = 4000)
+    expect_equal(nrow(chain_filtered), 2)
+    expect_true(all(chain_filtered$score >= 4000))
+
+    # Load with min_score=9000: should keep none (returns empty data frame)
+    chain_none <- gintervals.load_chain(chain_file, min_score = 9000)
+    expect_equal(nrow(chain_none), 0)
+})
+
+test_that("include_metadata parameter adds score and chain_id columns", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    chain_file <- new_chain_file()
+    cat("chain 7500 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 6000 source1 100 + 10 30 chr1 60 + 40 60 2\n20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    src_intervals <- data.frame(chrom = "source1", start = 10, end = 30, stringsAsFactors = FALSE)
+
+    # Without metadata - chain_id is always included, score is not
+    result_no_meta <- gintervals.liftover(src_intervals, chain)
+    expect_false("score" %in% colnames(result_no_meta))
+    expect_true("chain_id" %in% colnames(result_no_meta))
+
+    # With metadata - adds score column
+    # Both chains are returned since their targets don't overlap
+    result_with_meta <- gintervals.liftover(src_intervals, chain, include_metadata = TRUE)
+    expect_true("score" %in% colnames(result_with_meta))
+    expect_true("chain_id" %in% colnames(result_with_meta))
+    expect_equal(nrow(result_with_meta), 2)
+    expect_equal(sort(result_with_meta$score), c(6000, 7500))
+    expect_equal(sort(result_with_meta$chain_id), c(1, 2))
+})
+
+test_that("score-based selection works with partial source overlaps", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chains that partially overlap on source but map to non-overlapping targets
+    chain_file <- new_chain_file()
+    cat("chain 9000 source1 100 + 5 25 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 7000 source1 100 + 15 35 chr1 60 + 40 60 2\n20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Query that overlaps both chains on source: [10, 30]
+    # Chain 1: source [5,25] - overlaps query at [10,25]
+    # Chain 2: source [15,35] - overlaps query at [15,30]
+    src_intervals <- data.frame(chrom = "source1", start = 10, end = 30, stringsAsFactors = FALSE)
+
+    result <- gintervals.liftover(src_intervals, chain)
+
+    # Both chains map the overlapping source regions to non-overlapping targets
+    # So we should get results from both chains
+    expect_true(nrow(result) >= 1)
+    expect_true(all(result$chrom == "chr1"))
+})
+
+# Score-based selection tests (misha-specific feature)
+test_that("auto_score segments overlapping targets correctly", {
+    local_db_state()
+
+    # Create target genome
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chain file with same source but overlapping TARGET intervals
+    # Chain 1: target [10,30), score 5000
+    # Chain 2: target [35,55), score 8000 (no overlap with others)
+    # Chain 3: target [5,25), score 3000 (overlaps with chain 1)
+    chain_file <- new_chain_file()
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 8000 source1 100 + 10 30 chr1 60 + 35 55 2\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 3000 source1 100 + 10 30 chr1 60 + 5 25 3\n20\n\n", file = chain_file, append = TRUE)
+
+    # Load with auto_score - should segment overlapping targets [5,25) and [10,30)
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Should have segmented intervals - non-overlapping on target
+    chain_sorted <- chain[order(chain$start), ]
+    for (i in 1:(nrow(chain_sorted) - 1)) {
+        expect_true(chain_sorted$end[i] <= chain_sorted$start[i + 1])
+    }
+
+    # Test liftover
+    src_intervals <- data.frame(chrom = "source1", start = 10, end = 30, stringsAsFactors = FALSE)
+    misha_result <- gintervals.liftover(src_intervals, chain)
+
+    # Should get multiple non-overlapping results
+    expect_true(nrow(misha_result) >= 1)
+    expect_true(all(misha_result$chrom == "chr1"))
+})
+
+
+test_that("auto_score applies tiebreaker rules correctly (score -> span -> chain_id)", {
+    local_db_state()
+
+    # Create larger target genome
+    setup_db(list(">chr1\n", paste(rep("A", 200), collapse = ""), "\n"))
+
+    # Create chain file with overlapping target chains that test tiebreaker logic
+    chain_file <- new_chain_file()
+    # Chains 2 and 4 have tied score (9500), but chain 2 has lower chain_id (2 vs 4)
+    # Target overlaps: chain 4 (10-40) overlaps chain 1 (30-60)
+    cat("chain 7000 source1 200 + 20 50 chr1 200 + 30 60 1\n30\n\n", file = chain_file)
+    cat("chain 9500 source1 200 + 50 80 chr1 200 + 100 130 2\n30\n\n", file = chain_file, append = TRUE)
+    cat("chain 6000 source1 200 + 80 110 chr1 200 + 150 180 3\n30\n\n", file = chain_file, append = TRUE)
+    cat("chain 9500 source1 200 + 110 140 chr1 200 + 10 40 4\n30\n\n", file = chain_file, append = TRUE)
+
+    # Load chain with auto_score - should segment overlapping targets
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Chain 1 (score 7000) at target 30-60 overlaps chain 4 (score 9500) at target 10-40
+    # Segmentation should give:
+    # - 10-30: chain 4 wins (only chain 4)
+    # - 30-40: chain 4 wins (9500 > 7000)
+    # - 40-60: chain 1 wins (only chain 1)
+
+    # Check that chain was loaded and segmented
+    expect_true(nrow(chain) >= 4) # Original 4 chains may be segmented into more
+
+    # Liftover source interval that maps to chain 4
+    src_intervals <- data.frame(chrom = "source1", start = 110, end = 140, stringsAsFactors = FALSE)
+    misha_result <- gintervals.liftover(src_intervals, chain)
+
+    # Chain 4 maps source1:110-140 to chr1:10-40
+    expect_true(nrow(misha_result) >= 1)
+    expect_true(all(misha_result$chrom == "chr1"))
+})
+
+test_that("include_metadata returns correct score and chain_id", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chains with known scores
+    chain_file <- new_chain_file()
+    cat("chain 7500 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 9200 source1 100 + 40 60 chr1 60 + 35 55 2\n20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Verify chain has score and chain_id columns
+    expect_true("score" %in% colnames(chain))
+    expect_true("chain_id" %in% colnames(chain))
+    expect_equal(chain$score, c(7500, 9200))
+    expect_equal(chain$chain_id, c(1, 2))
+
+    # Test liftover with metadata
+    src_intervals <- data.frame(
+        chrom = c("source1", "source1"),
+        start = c(10, 40),
+        end = c(30, 60),
+        stringsAsFactors = FALSE
+    )
+
+    result <- gintervals.liftover(src_intervals, chain, include_metadata = TRUE)
+
+    # Should have score and chain_id columns
+    expect_true("score" %in% colnames(result))
+    expect_true("chain_id" %in% colnames(result))
+
+    # First interval mapped by chain 1 (score 7500, chain_id 1)
+    expect_equal(result$score[1], 7500)
+    expect_equal(result$chain_id[1], 1)
+
+    # Second interval mapped by chain 2 (score 9200, chain_id 2)
+    expect_equal(result$score[2], 9200)
+    expect_equal(result$chain_id[2], 2)
+})
+
+test_that("auto_score works with partial overlaps - selects best for each region", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chains with partial source overlaps but no target overlaps
+    chain_file <- new_chain_file()
+    # Chain 1: high score for source1:10-30 -> target 5-25
+    cat("chain 9000 source1 100 + 10 30 chr1 60 + 5 25 1\n20\n\n", file = chain_file)
+    # Chain 2: low score for source1:25-45 -> target 30-50 (no target overlap)
+    cat("chain 4000 source1 100 + 25 45 chr1 60 + 30 50 2\n20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Chain should be loaded successfully with at least 2 entries
+    expect_true(nrow(chain) >= 2)
+
+    # Test interval fully in chain 1's source range
+    src_intervals1 <- data.frame(chrom = "source1", start = 10, end = 25, stringsAsFactors = FALSE)
+    result1 <- gintervals.liftover(src_intervals1, chain)
+    expect_equal(nrow(result1), 1)
+    expect_equal(result1$start, 5) # Chain 1
+
+    # Test interval fully in chain 2's source range
+    src_intervals2 <- data.frame(chrom = "source1", start = 35, end = 45, stringsAsFactors = FALSE)
+    result2 <- gintervals.liftover(src_intervals2, chain)
+    expect_equal(nrow(result2), 1)
+    expect_equal(result2$start, 40) # Chain 2
+
+    # Test interval in the overlapping source region (25-30)
+    # Both chains cover this source region, so liftover may produce multiple results
+    src_intervals3 <- data.frame(chrom = "source1", start = 25, end = 30, stringsAsFactors = FALSE)
+    result3 <- gintervals.liftover(src_intervals3, chain)
+    expect_true(nrow(result3) >= 1)
+})
+
+test_that("auto_score works correctly with negative strand chains", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chains with different strands - targets overlap at 30-50
+    chain_file <- new_chain_file()
+    # Positive strand, low score -> target 10-30
+    cat("chain 3000 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    # Negative strand, high score -> target 30-50 (coord flip from 60-size to size)
+    cat("chain 8000 source1 100 + 40 60 chr1 60 - 10 30 2\n20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Chain should be loaded successfully
+    expect_true(nrow(chain) >= 2)
+
+    # Test liftover with chain 1's source
+    src_intervals1 <- data.frame(chrom = "source1", start = 10, end = 30, stringsAsFactors = FALSE)
+    result1 <- gintervals.liftover(src_intervals1, chain)
+    expect_equal(nrow(result1), 1)
+    expect_equal(result1$start, 10)
+    expect_equal(result1$end, 30)
+
+    # Test liftover with chain 2's source (negative strand)
+    src_intervals2 <- data.frame(chrom = "source1", start = 40, end = 60, stringsAsFactors = FALSE)
+    result2 <- gintervals.liftover(src_intervals2, chain)
+    expect_equal(nrow(result2), 1)
+    # Negative strand: target coords are reversed
+    expect_equal(result2$start, 30)
+    expect_equal(result2$end, 50)
+})
+
+test_that("keep policy returns all chains regardless of score", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create overlapping chains with very different scores
+    chain_file <- new_chain_file()
+    cat("chain 1000 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 9999 source1 100 + 10 30 chr1 60 + 35 55 2\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 5000 source1 100 + 10 30 chr1 60 + 5 25 3\n20\n\n", file = chain_file, append = TRUE)
+
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    src_intervals <- data.frame(chrom = "source1", start = 10, end = 30, stringsAsFactors = FALSE)
+    result <- gintervals.liftover(src_intervals, chain)
+
+    # Should return all 3 mappings
+    expect_equal(nrow(result), 3)
+    expect_true(10 %in% result$start)
+    expect_true(35 %in% result$start)
+    expect_true(5 %in% result$start)
+})
+
+test_that("min_score filters chains at load time", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create chains with varying scores
+    chain_file <- new_chain_file()
+    cat("chain 2000 source1 100 + 10 30 chr1 60 + 10 30 1\n20\n\n", file = chain_file)
+    cat("chain 6000 source1 100 + 35 55 chr1 60 + 35 55 2\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 4000 source1 100 + 60 80 chr1 60 + 5 25 3\n20\n\n", file = chain_file, append = TRUE)
+
+    # Load with min_score=5000
+    chain_filtered <- gintervals.load_chain(chain_file, min_score = 5000)
+
+    # Should only have chain 2 (score 6000)
+    expect_equal(nrow(chain_filtered), 1)
+    expect_equal(chain_filtered$score, 6000)
+    expect_equal(chain_filtered$startsrc, 35)
+})
+
+test_that("auto_score with min_score combines filtering and selection", {
+    local_db_state()
+
+    setup_db(list(">chr1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"))
+
+    # Create overlapping chains: 2 high-scoring, 1 low-scoring
+    chain_file <- new_chain_file()
+    cat("chain 2000 source1 100 + 10 30 chr1 60 + 5 25 1\n20\n\n", file = chain_file)
+    cat("chain 7000 source1 100 + 10 30 chr1 60 + 10 30 2\n20\n\n", file = chain_file, append = TRUE)
+    cat("chain 9000 source1 100 + 10 30 chr1 60 + 35 55 3\n20\n\n", file = chain_file, append = TRUE)
+
+    # Load with min_score=5000 and auto_score policy
+    chain <- gintervals.load_chain(chain_file, min_score = 5000, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score")
+
+    # Should filter out chain 1, leaving chains 2 and 3
+    expect_equal(nrow(chain), 2)
+
+    src_intervals <- data.frame(chrom = "source1", start = 10, end = 30, stringsAsFactors = FALSE)
+    result <- gintervals.liftover(src_intervals, chain)
+
+    # Chains 2 and 3 both pass min_score and don't overlap on target
+    # Both should be returned
+    expect_equal(nrow(result), 2)
+    result <- result[order(result$start), ]
+    expect_equal(result$start, c(10, 35))
+    expect_equal(result$end, c(30, 55))
+})
+
+test_that("gintervals.liftover returns chain_id to distinguish duplications", {
+    local_db_state()
+
+    # Create target genome with single chromosome
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 1000), collapse = ""), "\n")))
+
+    # Create chain file with two chains that map the same source region
+    # to different target locations on the same chromosome (duplication)
+    chain_file <- new_chain_file()
+
+    # Chain 1: source1[0-100] -> chr1[0-100] with chain_id=101
+    cat("chain 1000 source1 200 + 0 100 chr1 1000 + 0 100 101\n100\n\n", file = chain_file)
+
+    # Chain 2: source1[0-100] -> chr1[500-600] with chain_id=205
+    cat("chain 1000 source1 200 + 0 100 chr1 1000 + 500 600 205\n100\n\n", file = chain_file, append = TRUE)
+
+    # Load chain with keep policy for source overlaps
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Lift over a single source interval
+    src_intervals <- data.frame(chrom = "source1", start = 0, end = 100, stringsAsFactors = FALSE)
+    result <- gintervals.liftover(src_intervals, chain)
+
+    # Should get 2 results (one from each chain)
+    expect_equal(nrow(result), 2)
+
+    # Both should have same intervalID (same source interval)
+    expect_equal(result$intervalID, c(1, 1))
+
+    # But different chain_ids
+    expect_true("chain_id" %in% colnames(result))
+    expect_equal(length(unique(result$chain_id)), 2)
+    expect_true(all(c(101, 205) %in% result$chain_id))
+
+    # Check the actual mapping coordinates
+    result <- result[order(result$start), ]
+    expect_equal(result$start, c(0, 500))
+    expect_equal(result$end, c(100, 600))
+})
+
+test_that("gintervals.liftover chain_id groups blocks from same chain in duplication", {
+    local_db_state()
+
+    # Create target genome
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 1000), collapse = ""), "\n")))
+
+    # Create chain file with two chains, each with multiple blocks
+    chain_file <- new_chain_file()
+
+    # Chain 1: source1[0-200] -> chr1[0-200] with two blocks and a gap
+    # Block 1: 50 bp, gap of 50 in source and 50 in target, Block 2: 100 bp
+    cat("chain 1000 source1 300 + 0 200 chr1 1000 + 0 200 101\n", file = chain_file)
+    cat("50\t50\t50\n100\n\n", file = chain_file, append = TRUE)
+
+    # Chain 2: source1[0-200] -> chr1[500-700] with two blocks
+    cat("chain 1000 source1 300 + 0 200 chr1 1000 + 500 700 205\n", file = chain_file, append = TRUE)
+    cat("50\t50\t50\n100\n\n", file = chain_file, append = TRUE)
+
+    # Load chain
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Lift over source interval that spans both blocks
+    src_intervals <- data.frame(chrom = "source1", start = 0, end = 200, stringsAsFactors = FALSE)
+    result <- gintervals.liftover(src_intervals, chain)
+
+    # Should get 4 results (2 blocks from each of 2 chains)
+    expect_equal(nrow(result), 4)
+
+    # All should have same intervalID
+    expect_true(all(result$intervalID == 1))
+
+    # But grouped by chain_id
+    expect_equal(length(unique(result$chain_id)), 2)
+
+    # Check that each chain_id has 2 blocks
+    chain_101_rows <- result[result$chain_id == 101, ]
+    chain_205_rows <- result[result$chain_id == 205, ]
+    expect_equal(nrow(chain_101_rows), 2)
+    expect_equal(nrow(chain_205_rows), 2)
+
+    # Verify chain 101 blocks
+    chain_101_rows <- chain_101_rows[order(chain_101_rows$start), ]
+    expect_equal(chain_101_rows$start, c(0, 100))
+    expect_equal(chain_101_rows$end, c(50, 200))
+
+    # Verify chain 205 blocks
+    chain_205_rows <- chain_205_rows[order(chain_205_rows$start), ]
+    expect_equal(chain_205_rows$start, c(500, 600))
+    expect_equal(chain_205_rows$end, c(550, 700))
+})
+
+test_that("gintervals.liftover canonic respects chain_id boundaries in duplication", {
+    local_db_state()
+
+    # Create target genome
+    setup_db(list(paste0(">chr1\n", paste(rep("A", 1000), collapse = ""), "\n")))
+
+    # Create chain file with two chains that produce adjacent target blocks
+    chain_file <- new_chain_file()
+
+    # Chain 1: source1[0-50] -> chr1[0-50] with chain_id=101
+    cat("chain 1000 source1 200 + 0 50 chr1 1000 + 0 50 101\n50\n\n", file = chain_file)
+
+    # Chain 2: source1[0-50] -> chr1[50-100] with chain_id=205
+    # Note: Target is adjacent to chain 1's output
+    cat("chain 1000 source1 200 + 0 50 chr1 1000 + 50 100 205\n50\n\n", file = chain_file, append = TRUE)
+
+    # Load chain
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Lift over
+    src_intervals <- data.frame(chrom = "source1", start = 0, end = 50, stringsAsFactors = FALSE)
+    result <- gintervals.liftover(src_intervals, chain, canonic = TRUE)
+
+    # With canonic=TRUE, should NOT merge because they have different chain_ids
+    expect_equal(nrow(result), 2)
+    expect_equal(length(unique(result$chain_id)), 2)
+
+    # Verify the intervals
+    result <- result[order(result$start), ]
+    expect_equal(result$start, c(0, 50))
+    expect_equal(result$end, c(50, 100))
 })

@@ -1,18 +1,25 @@
 write_chain_entry <- function(con, srcName, srcSize, srcStrand, srcStart, srcEnd,
-                              tgtName, tgtSize, tgtStrand, tgtStart, tgtEnd, id) {
+                              tgtName, tgtSize, tgtStrand, tgtStart, tgtEnd, id, score = 1000, append = NULL) {
     # "chain 1000 source1 100 + 10 30 chr1 44 + 0 20 1"
     # where "source*" is the source (query) side and "chr*" is the target side.
     # Use %.0f for large integers to avoid %d overflow
+
+    # Auto-detect append mode: if file exists and has content, append
+    if (is.null(append)) {
+        append <- file.exists(con) && file.info(con)$size > 0
+    }
+
     cat(
         sprintf(
-            "chain 1000 %s %.0f %s %.0f %.0f %s %.0f %s %.0f %.0f %d\n",
+            "chain %.0f %s %.0f %s %.0f %.0f %s %.0f %s %.0f %.0f %d\n",
+            as.numeric(score),
             srcName, as.numeric(srcSize), srcStrand, as.numeric(srcStart), as.numeric(srcEnd),
             tgtName, as.numeric(tgtSize), tgtStrand, as.numeric(tgtStart), as.numeric(tgtEnd), id
         ),
-        file = con, append = TRUE
+        file = con, append = append
     )
-    # single block size line (tgtEnd - tgtStart), then blank line
-    cat(sprintf("%.0f\n\n", as.numeric(tgtEnd - tgtStart)), file = con, append = TRUE)
+    # single block size line (srcEnd - srcStart), then blank line
+    cat(sprintf("%.0f\n\n", as.numeric(srcEnd - srcStart)), file = con, append = TRUE)
 }
 
 setup_db <- function(chrom_defs) {
@@ -133,4 +140,68 @@ has_liftover_binary <- function() {
         )
     }
     return(isTRUE(result))
+}
+
+run_kent_liftover <- function(src_bed, chain_file, multiple = TRUE, minMatch = 1e-7, ret_cmd = FALSE) {
+    withr::local_options(list(scipen = 999999))
+    # Returns a list with 'mapped' (data.frame) and 'unmapped' (data.frame) results
+
+    kent_result <- tempfile(fileext = ".bed")
+    kent_unmapped <- tempfile(fileext = ".unmapped")
+
+    # Run liftOver with -multiple flag if multiple is TRUE
+    system2("liftOver", c(if (multiple) "-multiple" else NULL, if (!is.null(minMatch)) paste0("-minMatch=", minMatch) else NULL, src_bed, chain_file, kent_result, kent_unmapped),
+        stdout = FALSE, stderr = FALSE
+    )
+    if (ret_cmd) {
+        return(paste("liftOver ", if (multiple) "-multiple" else NULL, if (!is.null(minMatch)) paste0("-minMatch=", minMatch) else NULL, src_bed, chain_file, kent_result, kent_unmapped))
+    }
+    # Read mapped results (with name and value columns from -multiple)
+    kent_data <- if (file.exists(kent_result) && file.info(kent_result)$size > 0) {
+        if (multiple) {
+            read.table(kent_result,
+                header = FALSE,
+                col.names = c("chrom", "start", "end", "name", "value"),
+                stringsAsFactors = FALSE
+            )
+        } else {
+            read.table(kent_result,
+                header = FALSE,
+                col.names = c("chrom", "start", "end"),
+                stringsAsFactors = FALSE
+            )
+        }
+    } else {
+        data.frame(
+            chrom = character(), start = integer(), end = integer(),
+            name = character(), value = integer(), stringsAsFactors = FALSE
+        )
+    }
+
+    # Read unmapped results
+    kent_unmapped_data <- if (file.exists(kent_unmapped) && file.info(kent_unmapped)$size > 0) {
+        if (multiple) {
+            read.table(kent_unmapped,
+                header = FALSE,
+                col.names = c("chrom", "start", "end"),
+                stringsAsFactors = FALSE
+            )
+        } else {
+            read.table(kent_unmapped,
+                header = FALSE,
+                col.names = c("chrom", "start", "end"),
+                stringsAsFactors = FALSE
+            )
+        }
+    } else {
+        data.frame(
+            chrom = character(), start = integer(), end = integer(),
+            stringsAsFactors = FALSE
+        )
+    }
+
+    # Clean up temp files
+    unlink(c(kent_result, kent_unmapped))
+
+    return(list(mapped = kent_data, unmapped = kent_unmapped_data))
 }

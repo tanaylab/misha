@@ -1,3 +1,5 @@
+load_test_db()
+
 # Tests for gtrack.liftover value validation
 test_that("gtrack.liftover preserves values in one-to-many mapping", {
     local_db_state()
@@ -437,20 +439,20 @@ test_that("gtrack.liftover with target overlap auto policy truncates correctly",
     # Chain file uses "chrsource2" to match database chromosome name
     write_chain_entry(chain_file, "chrsource2", 100, "+", 0, 60, "chr1", 100, "+", 40, 100, 2)
 
-    # Liftover with auto policy - should truncate overlaps
+    # Liftover with auto_first policy - should truncate overlaps
     lifted_track <- "lifted_auto"
     withr::defer({
         if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
     })
 
     gtrack.liftover(lifted_track, "Lifted track", src_track_dir, chain_file,
-        tgt_overlap_policy = "auto"
+        tgt_overlap_policy = "auto_first"
     )
 
     # Extract and validate
     result <- gextract(lifted_track, gintervals.all())
 
-    # With auto policy, overlapping regions should be truncated
+    # With auto_first policy, overlapping regions should be truncated
     # We expect: chr1[0,40) = 100, chr1[60,100) = 200
     # The overlap region [40,60) should be handled by truncation
 
@@ -1726,8 +1728,7 @@ test_that("gtrack.liftover finds all overlapping chains when they are non-consec
         track = "lifted_track",
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
-        chain = chain,
-        src_overlap_policy = "keep"
+        chain = chain
     )
 
     # Extract result
@@ -1803,8 +1804,7 @@ test_that("gtrack.liftover does not miss earlier long overlap when hint is to th
         track = "lifted_track",
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
-        chain = chain,
-        src_overlap_policy = "keep"
+        chain = chain
     )
 
     result <- gextract("lifted_track", gintervals.all())
@@ -1870,16 +1870,14 @@ test_that("gtrack.liftover has deterministic ordering for chains with identical 
         track = "lifted_track1",
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
-        chain = chain,
-        src_overlap_policy = "keep"
+        chain = chain
     )
 
     gtrack.liftover(
         track = "lifted_track2",
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
-        chain = chain,
-        src_overlap_policy = "keep"
+        chain = chain
     )
 
     result1 <- gextract("lifted_track1", gintervals.all(), colnames = "value")
@@ -2014,8 +2012,7 @@ test_that("gtrack.liftover handles dense cluster of chains with same start_src c
         track = "lifted_track",
         description = "",
         src.track.dir = file.path(source_db, "tracks", "source_track.track"),
-        chain = chain,
-        src_overlap_policy = "keep"
+        chain = chain
     )
 
     result <- gextract("lifted_track", gintervals.all())
