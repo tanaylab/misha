@@ -30,6 +30,8 @@ public:
 
 	// returns id of the new chromosome
 	int add_chrom(const string &chrom, uint64_t size);
+	void add_chrom_alias(const string &alias, int id);
+    void get_aliases(int id, vector<string> &aliases) const;
 
 private:
 	struct Chrom {
@@ -44,6 +46,7 @@ private:
 	typedef std::vector<Chrom> Id2chrom;
 
 	Name2id    m_name2id;
+	Name2id    m_alias2id;
 	Id2chrom   m_id2chrom;
 	int        m_id;
 };
@@ -63,17 +66,25 @@ inline int GenomeChromKey::add_chrom(const string &name, uint64_t size)
 inline int GenomeChromKey::chrom2id(const string &name) const
 {
 	Name2id::const_iterator iname2id = m_name2id.find(name);
-	if (iname2id == m_name2id.end())
-		TGLError<GenomeChromKey>(CHROM_NOEXISTS, "Chromosome \"%s\" does not exist", name.c_str());
-	return iname2id->second;
+	if (iname2id != m_name2id.end())
+		return iname2id->second;
+	Name2id::const_iterator ialias2id = m_alias2id.find(name);
+	if (ialias2id != m_alias2id.end())
+		return ialias2id->second;
+	TGLError<GenomeChromKey>(CHROM_NOEXISTS, "Chromosome \"%s\" does not exist", name.c_str());
+	return 0;
 }
 
 inline int GenomeChromKey::chrom2id(const char *name) const
 {
 	Name2id::const_iterator iname2id = m_name2id.find(name);
-	if (iname2id == m_name2id.end())
-		TGLError<GenomeChromKey>(CHROM_NOEXISTS, "Chromosome \"%s\" does not exist", name);
-	return iname2id->second;
+	if (iname2id != m_name2id.end())
+		return iname2id->second;
+	Name2id::const_iterator ialias2id = m_alias2id.find(name);
+	if (ialias2id != m_alias2id.end())
+		return ialias2id->second;
+	TGLError<GenomeChromKey>(CHROM_NOEXISTS, "Chromosome \"%s\" does not exist", name);
+	return 0;
 }
 
 inline const string &GenomeChromKey::id2chrom(int id) const
@@ -89,6 +100,30 @@ inline uint64_t GenomeChromKey::get_chrom_size(int id) const
 	if (id >= (int)m_id2chrom.size())
 		TGLError<GenomeChromKey>(ID_NOEXISTS, "Id %d cannot be mapped to any chromosome", id);
 	return m_id2chrom[id].size;
+}
+
+inline void GenomeChromKey::add_chrom_alias(const string &alias, int id)
+{
+	if (alias.empty())
+		return;
+	if (m_name2id.find(alias) != m_name2id.end())
+		return;
+	Name2id::const_iterator ialias = m_alias2id.find(alias);
+	if (ialias != m_alias2id.end()) {
+		if (ialias->second == id)
+			return;
+		return;
+	}
+	m_alias2id[alias] = id;
+}
+
+inline void GenomeChromKey::get_aliases(int id, vector<string> &aliases) const
+{
+	aliases.clear();
+	for (Name2id::const_iterator it = m_alias2id.begin(); it != m_alias2id.end(); ++it) {
+		if (it->second == id)
+			aliases.push_back(it->first);
+	}
 }
 
 #endif /* GENOMECHROMKEY_H_ */

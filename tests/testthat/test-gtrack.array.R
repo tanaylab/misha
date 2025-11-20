@@ -1,3 +1,4 @@
+load_test_db()
 test_that("Basic gtrack.array.extract functions", {
     expect_error(gtrack.array.extract("test.fixedbin", NULL, .misha$ALLGENOME))
     expect_regression(gtrack.array.extract("test.array", NULL, gintervals(c(1, 2))), "gtrack_array_extract_array_intervals")
@@ -19,13 +20,13 @@ test_that("gtrack.array.extract with tmpresfile and columns", {
 })
 
 test_that("gtrack.array.extract with intervals after sampling", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     intervs <- gscreen("test.fixedbin>0.2", gintervals(c(2, 4, 5, 10)))
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
-    gtrack.array.extract("test.array", c("col1", "col3", "col5"), intervs, intervals.set.out = "test.testintervs")
-    r <- gintervals.load("test.testintervs")
+    gtrack.array.extract("test.array", c("col1", "col3", "col5"), intervs, intervals.set.out = "temp.testintervs")
+    r <- gintervals.load("temp.testintervs")
     expect_regression(r, "gtrack_array_extract_sampled_intervals")
 })
 

@@ -8,6 +8,7 @@
 #include <set>
 #include <vector>
 #include <algorithm>
+#include <sys/stat.h>
 
 #include "rdbinterval.h"
 #include "rdbprogress.h"
@@ -646,7 +647,6 @@ SEXP gtrack_liftover(SEXP _track,
 			agg_cfg.nth_index = nth_index;
 		}
 
-
 		IntervUtils iu(_envir);
 		ChainIntervals chain_intervs;
 		vector<string> src_id2chrom;
@@ -676,6 +676,8 @@ SEXP gtrack_liftover(SEXP _track,
 		// Build a chromkey from the source genome to get correct chromids for indexed tracks
 		// Read chrom_sizes.txt from the source genome root
 		GenomeChromKey src_genome_chromkey;
+		vector<int>    src_chainid2genomeid(src_id2chrom.size(), -1);
+
 		string track_dir_str(src_track_dir);
 		size_t tracks_pos = track_dir_str.rfind("/tracks/");
 		if (tracks_pos != string::npos) {
@@ -699,23 +701,48 @@ SEXP gtrack_liftover(SEXP _track,
 				fclose(fp);
 			}
 		}
-		// If we didn't successfully load chromkey from chrom_sizes.txt, use src_chromkey as fallback
-		if (src_genome_chromkey.get_num_chroms() == 0)
+
+		if (src_genome_chromkey.get_num_chroms() == 0) {
+			// Fallback: no chrom_sizes.txt, use chain chroms directly
 			src_genome_chromkey = src_chromkey;
-		else {
-			// Ensure all chromosomes from chain file are in src_genome_chromkey
-			// Add any missing chromosomes from src_chromkey (with max size as fallback)
-			for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
+			for (size_t i = 0; i < src_id2chrom.size(); ++i)
+				src_chainid2genomeid[i] = (int)i;
+		} else {
+			// Map each chain source chrom to a genome chromid, with simple alias handling
+			for (size_t i = 0; i < src_id2chrom.size(); ++i) {
+				const string &name = src_id2chrom[i];
+				int mapped_id = -1;
+
+				// 1) Exact match
 				try {
-					src_genome_chromkey.chrom2id(*ichrom);
+					mapped_id = src_genome_chromkey.chrom2id(name);
 				} catch (...) {
-					// Chromosome not in src_genome_chromkey, add it
-					try {
-						src_genome_chromkey.add_chrom(*ichrom, numeric_limits<int64_t>::max());
-					} catch (...) {
-						// Ignore errors (e.g., chromosome already exists)
+					// 2) Strip leading "chr" if present (e.g. chr1 -> 1)
+					if (name.size() > 3 && !name.compare(0, 3, "chr")) {
+						string no_chr = name.substr(3);
+						try {
+							mapped_id = src_genome_chromkey.chrom2id(no_chr);
+						} catch (...) {
+							// 3) Try adding the original name as a fallback chromosome
+							try {
+								src_genome_chromkey.add_chrom(name, numeric_limits<int64_t>::max());
+								mapped_id = src_genome_chromkey.chrom2id(name);
+							} catch (...) {
+								mapped_id = -1;
+							}
+						}
+					} else {
+						// 3) Try adding the original name as a fallback chromosome
+						try {
+							src_genome_chromkey.add_chrom(name, numeric_limits<int64_t>::max());
+							mapped_id = src_genome_chromkey.chrom2id(name);
+						} catch (...) {
+							mapped_id = -1;
+						}
 					}
 				}
+
+				src_chainid2genomeid[i] = mapped_id;
 			}
 		}
 
@@ -739,22 +766,32 @@ SEXP gtrack_liftover(SEXP _track,
 				for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
 					GenomeTrackFixedBin src_track;
 					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
-					int src_chromid_in_genome = -1;
-					
-					try {
-						src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);  // chromid in the source genome
-					} catch (...) {
-						// Chromosome not found in source genome, skip
-						progress.report(1);
-						continue;
-					}
-					
+					int chromid_to_use = src_chromid_in_chain;  // Default to chain chromid
 					float val;
+
+					// Check if source track is indexed (uses track.idx in src_track_dir)
+					string idx_path_check = string(src_track_dir) + "/track.idx";
+					struct stat idx_st_check;
+					bool is_indexed = (stat(idx_path_check.c_str(), &idx_st_check) == 0);
+
+					// For indexed tracks, use the mapped genome chromid (if available)
+					if (is_indexed) {
+						if (src_chromid_in_chain >= 0 &&
+						    (size_t)src_chromid_in_chain < src_chainid2genomeid.size() &&
+						    src_chainid2genomeid[src_chromid_in_chain] >= 0)
+						{
+							chromid_to_use = src_chainid2genomeid[src_chromid_in_chain];
+						} else {
+							// Chromosome not found in source genome index, skip
+							progress.report(1);
+							continue;
+						}
+					}
 
 					try {
 						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
-						// Use src_chromid_in_genome for indexed tracks to read correct data
-						src_track.init_read(filename, src_chromid_in_genome);
+						// Use chromid_to_use: src_chromid_in_genome for indexed tracks, src_chromid_in_chain for non-indexed
+						src_track.init_read(filename, chromid_to_use);
 						if (binsize > 0 && binsize != src_track.get_bin_size()) {
 							char filename2[FILENAME_MAX];
 							snprintf(filename2, sizeof(filename2), "%s/%s", src_track_dir, (ichrom - 1)->c_str());
@@ -791,20 +828,31 @@ SEXP gtrack_liftover(SEXP _track,
 				for (vector<string>::const_iterator ichrom = src_id2chrom.begin(); ichrom != src_id2chrom.end(); ++ichrom) {
 					GenomeTrackSparse src_track;
 					int src_chromid_in_chain = ichrom - src_id2chrom.begin();  // chromid in the chain's coordinate system
-					int src_chromid_in_genome = -1;
-					
-					try {
-						src_chromid_in_genome = src_genome_chromkey.chrom2id(*ichrom);  // chromid in the source genome
-					} catch (...) {
-						// Chromosome not found in source genome, skip
-						progress.report(1);
-						continue;
+					int chromid_to_use = src_chromid_in_chain;  // Default to chain chromid
+
+					// Check if source track is indexed (uses track.idx in src_track_dir)
+					string idx_path_check = string(src_track_dir) + "/track.idx";
+					struct stat idx_st_check;
+					bool is_indexed = (stat(idx_path_check.c_str(), &idx_st_check) == 0);
+
+					// For indexed tracks, use the mapped genome chromid (if available)
+					if (is_indexed) {
+						if (src_chromid_in_chain >= 0 &&
+						    (size_t)src_chromid_in_chain < src_chainid2genomeid.size() &&
+						    src_chainid2genomeid[src_chromid_in_chain] >= 0)
+						{
+							chromid_to_use = src_chainid2genomeid[src_chromid_in_chain];
+						} else {
+							// Chromosome not found in source genome index, skip
+							progress.report(1);
+							continue;
+						}
 					}
 
 					try {
 						snprintf(filename, sizeof(filename), "%s/%s", src_track_dir, ichrom->c_str());
-						// Use src_chromid_in_genome for indexed tracks to read correct data
-						src_track.init_read(filename, src_chromid_in_genome);
+						// Use chromid_to_use: src_chromid_in_genome for indexed tracks, src_chromid_in_chain for non-indexed
+						src_track.init_read(filename, chromid_to_use);
 					} catch (TGLException &) {  // some of source chroms might be missing, this is normal
 						progress.report(1);
 						continue;
@@ -834,22 +882,30 @@ SEXP gtrack_liftover(SEXP _track,
 
 			// Process collected intervals for each chromosome, sort and save to track files
 			for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
-				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
-				
-				// If this chromosome has no data, create an empty track file
+				// Create empty file if this chromosome has no data
 				if (chrom_intervals.find(chromid) == chrom_intervals.end()) {
-					if (src_track_type == GenomeTrack::FIXED_BIN) {
-						GenomeTrackFixedBin gtrack;
-						gtrack.init_write(filename, binsize, chromid);
-						// Write empty track (no bins)
-					} else if (src_track_type == GenomeTrack::SPARSE) {
-						GenomeTrackSparse gtrack;
-						gtrack.init_write(filename, chromid);
-						// Write empty track (no intervals)
+					// For indexed databases, empty chromosome files are not needed since the track
+					// will be converted to indexed format (track.idx + track.dat) automatically.
+					// This avoids creating thousands of empty files on network filesystems.
+					// For non-indexed databases, we still create empty chromosome files for backward compatibility.
+					if (!is_db_indexed(_envir)) {
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+						if (src_track_type == GenomeTrack::FIXED_BIN) {
+							// Only create empty fixed bin tracks if we know the binsize (i.e., at least one chromosome was processed)
+							if (binsize > 0) {
+								GenomeTrackFixedBin gtrack;
+								gtrack.init_write(filename, binsize, chromid);
+							}
+						} else if (src_track_type == GenomeTrack::SPARSE) {
+							GenomeTrackSparse gtrack;
+							gtrack.init_write(filename, chromid);
+						}
 					}
 					progress.report(1);
 					continue;
 				}
+
+				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 
 				vector<GIntervalVal> &interv_vals = chrom_intervals[chromid];
 

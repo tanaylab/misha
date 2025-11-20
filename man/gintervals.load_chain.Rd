@@ -28,6 +28,7 @@ gintervals.load_chain(
   keep \tab Preserves all overlapping intervals. \cr
   discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
   agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+  best_source_cluster \tab Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. \cr
 }}
 
 \item{src_groot}{optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.}
@@ -44,9 +45,25 @@ Loads assembly conversion table from a chain file.
 This function reads a file in 'chain' format and returns assembly conversion
 table that can be used in 'gtrack.liftover' and 'gintervals.liftover'.
 
-Note: chain file might map a few different source intervals into a single
-target one. These ambiguous mappings are not presented in the data frame
-returned by 'gintervals.load_chain'.
+Source overlaps occur when the same source genome position maps to multiple
+target genome positions. Target overlaps occur when multiple source positions
+map to overlapping regions in the target genome.
+
+The 'src_overlap_policy' controls how source overlaps are handled:
+\itemize{
+  \item "error" (default): Throw an error if source overlaps are detected
+  \item "keep": Keep all mappings, allowing one source to map to multiple targets
+  \item "discard": Remove all chain intervals involved in source overlaps
+}
+
+The 'tgt_overlap_policy' controls how target overlaps are handled:
+\itemize{
+  \item "error": Throw an error if target overlaps are detected
+  \item "auto" (default) / "auto_first": Keep the first overlapping chain (original file order) by trimming or discarding later overlaps while keeping source/target lengths consistent
+  \item "auto_longer": Keep the longer overlapping chain and trim/drop the shorter ones
+  \item "discard": Remove all chain intervals involved in target overlaps
+  \item "keep": Allow target overlaps to remain untouched (liftover must be able to handle them)
+}
 }
 \examples{
 \dontshow{
@@ -55,6 +72,7 @@ options(gmax.processes = 2)
 
 gdb.init_examples()
 chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
+# Load chain file with default policies
 gintervals.load_chain(chainfile)
 
 }

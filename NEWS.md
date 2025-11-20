@@ -10,6 +10,10 @@
   - New `include_metadata` parameter in `gintervals.liftover` optionally returns score and chain_id for each mapping
   **BREAKING**: "auto" is now an alias for "auto_score". For the old behavior, use `tgt_overlap_policy = "auto_first"`.
 * Added `canonic` parameter to `gintervals.liftover` (default `FALSE`) to merge adjacent target intervals resulting from the same source interval and chain.
+* Added three clustering strategies for liftover target overlap policies:
+  - `tgt_overlap_policy = "best_cluster_union"` (default, aliased as `"best_source_cluster"`): Uses source union coverage
+  - `tgt_overlap_policy = "best_cluster_sum"`: Uses sum of target lengths
+  - `tgt_overlap_policy = "best_cluster_max"`: Uses longest single member
 
 # misha 5.1.4
 
@@ -30,6 +34,8 @@
 
 # misha 5.1.2
 
+* **BREAKING**: `gintervals.load_chain` now returns a data frame with 8 columns instead of 7. Columns are: `chrom`, `start`, `end`, `strand`, `chromsrc`, `startsrc`, `endsrc`, `strandsrc`.
+* Added `src_overlap_policy` and `tgt_overlap_policy` parameters to `gintervals.load_chain`, `gtrack.liftover` and `gintervals.liftover` functions.
 * Added `neighbor.count` virtual track.
 * Added `gintervals.mark_overlaps` function that marks overlapping intervals with a group ID.
 

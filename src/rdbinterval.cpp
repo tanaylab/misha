@@ -7,12 +7,14 @@
 
 #include <cstdint>
 #include <cmath>
+#include <cctype>
 #include <fstream>
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <utility>
 
 #include "rdbinterval.h"
 #include "rdbutils.h"
@@ -65,6 +67,27 @@ IntervUtils::IntervUtils(SEXP envir)
 			m_chrom_key.add_chrom(chrom, (uint64_t)chrom_size);
 		} catch (TGLException &e) {
 			verror("Reading ALLGENOME: %s", e.msg());
+		}
+	}
+
+	// Populate chromosome aliases from R CHROM_ALIAS map
+	SEXP chrom_alias = find_in_misha(m_envir, "CHROM_ALIAS");
+	if (!Rf_isNull(chrom_alias) && Rf_isVector(chrom_alias)) {
+		SEXP alias_names = Rf_getAttrib(chrom_alias, R_NamesSymbol);
+		if (!Rf_isNull(alias_names)) {
+			int n_aliases = Rf_length(chrom_alias);
+			for (int i = 0; i < n_aliases; i++) {
+				const char *alias = CHAR(STRING_ELT(alias_names, i));
+				const char *canonical = CHAR(STRING_ELT(chrom_alias, i));
+
+				// Find the chromid for the canonical chromosome name
+				try {
+					int chrom_id = m_chrom_key.chrom2id(canonical);
+					m_chrom_key.add_chrom_alias(alias, chrom_id);
+				} catch (TGLException &) {
+					// Silently skip aliases that point to non-existent chromosomes
+				}
+			}
 		}
 	}
 
@@ -297,7 +320,7 @@ unsigned IntervUtils::convert_rintervs(SEXP rintervals, GIntervalsFetcher1D **in
 }
 
 SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GIntervals2D *intervals2d, bool null_if_interv_nonexist,
-								   const GenomeChromKey *chromkey, const char *error_msg_prefix, unsigned *pintervs_type_mask, bool verify) const
+								   const GenomeChromKey *chromkey, const char *error_msg_prefix, unsigned *pintervs_type_mask, bool verify, bool skip_missing_chroms) const
 {
 	monitor_memusage();
 
@@ -356,9 +379,31 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 	}
 
 	SEXP _rintervals = rintervals;
+
+	// Handle empty intervals - determine type based on what the caller expects
+	// For empty intervals, the caller's GIntervals/GIntervals2D objects are already
+	// default-constructed as empty, so we just need to return the appropriate type mask
+	if (Rf_isVector(rintervals) && Rf_length(rintervals) == 0) {
+		unsigned empty_intervs_type_mask;
+		if (intervals && !intervals2d) {
+			empty_intervs_type_mask = INTERVS1D;
+		} else if (intervals2d && !intervals) {
+			empty_intervs_type_mask = INTERVS2D;
+		} else {
+			// Both or neither provided - default to 1D
+			empty_intervs_type_mask = INTERVS1D;
+		}
+
+		if (pintervs_type_mask)
+			*pintervs_type_mask = empty_intervs_type_mask;
+
+		// Return early - the caller's intervals objects are already empty by default
+		return _rintervals;
+	}
+
 	unsigned intervs_type_mask = get_rintervs_type_mask(rintervals, error_msg_prefix);
 
-	if (pintervs_type_mask) 
+	if (pintervs_type_mask)
 		*pintervs_type_mask = intervs_type_mask;
 
 	if (intervs_type_mask == (INTERVS1D | INTERVS2D))
@@ -393,7 +438,15 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 				verror("%sInvalid format of interval at index %d", error_msg_prefix, i + 1);
 
 			const char *chrom = Rf_isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
-			int chromid = chromkey ? chromkey->chrom2id(chrom) : chrom2id(chrom);
+			int chromid;
+			try {
+				chromid = chromkey ? chromkey->chrom2id(chrom) : chrom2id(chrom);
+			} catch (const TGLException &) {
+				// If skip_missing_chroms is enabled, skip intervals with chromosomes not in the key
+				if (skip_missing_chroms && chromkey)
+					continue;
+				throw;
+			}
 			int64_t start = (int64_t)(Rf_isReal(starts) ? REAL(starts)[i] : INTEGER(starts)[i]);
 			int64_t end = (int64_t)(Rf_isReal(ends) ? REAL(ends)[i] : INTEGER(ends)[i]);
 			char strand = 0;
@@ -411,7 +464,7 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 					INTEGER(ends)[i]++;
 			}
 
-			if (verify) 
+			if (verify)
 				interval.verify(chromkey ? *chromkey : m_chrom_key);
 			intervals->push_back(interval);
 		}
@@ -440,8 +493,16 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 
 			const char *chrom1 = Rf_isString(chroms1) ? CHAR(STRING_ELT(chroms1, i)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(chroms1)[i] - 1));
 			const char *chrom2 = Rf_isString(chroms2) ? CHAR(STRING_ELT(chroms2, i)) : CHAR(STRING_ELT(chrom_levels2, INTEGER(chroms2)[i] - 1));
-			int chromid1 = chromkey ? chromkey->chrom2id(chrom1) : chrom2id(chrom1);
-			int chromid2 = chromkey ? chromkey->chrom2id(chrom2) : chrom2id(chrom2);
+			int chromid1, chromid2;
+			try {
+				chromid1 = chromkey ? chromkey->chrom2id(chrom1) : chrom2id(chrom1);
+				chromid2 = chromkey ? chromkey->chrom2id(chrom2) : chrom2id(chrom2);
+			} catch (const TGLException &) {
+				// If skip_missing_chroms is enabled, skip intervals with chromosomes not in the key
+				if (skip_missing_chroms && chromkey)
+					continue;
+				throw;
+			}
 			int64_t start1 = (int64_t)(Rf_isReal(starts1) ? REAL(starts1)[i] : INTEGER(starts1)[i]);
 			int64_t start2 = (int64_t)(Rf_isReal(starts2) ? REAL(starts2)[i] : INTEGER(starts2)[i]);
 			int64_t end1 = (int64_t)(Rf_isReal(ends1) ? REAL(ends1)[i] : INTEGER(ends1)[i]);
@@ -449,7 +510,7 @@ SEXP IntervUtils::convert_rintervs(SEXP rintervals, GIntervals *intervals, GInte
 
 			GInterval2D interval(chromid1, start1, end1, chromid2, start2, end2, (void *)(intptr_t)i);
 
-			if (verify) 
+			if (verify)
 				interval.verify(chromkey ? *chromkey : m_chrom_key);
 			intervals2d->push_back(interval);
 		}
@@ -1633,6 +1694,8 @@ void ChainIntervals::buildSrcAux()
 ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src_interval, GIntervals &tgt_intervs, ChainIntervals::const_iterator hint, std::vector<ChainMappingMetadata> *metadata)
 {
 	tgt_intervs.clear();
+	if (metadata)
+		metadata->clear();
 
 	if (empty())
 		return end();
@@ -1758,6 +1821,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 		int64_t chain_id;
 		int64_t span;
 		const_iterator chain_iter;
+		int     chromid_src;
+		int64_t start_src_mapped;  // Intersection start (common_start)
+		int64_t end_src_mapped;    // Intersection end (common_end)
 	};
 	std::vector<MappedInterval> all_mapped;
 
@@ -1792,6 +1858,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 			mapped.chain_id = hint->chain_id;
 			mapped.span = tgt_end - tgt_start;
 			mapped.chain_iter = hint;
+			mapped.chromid_src = hint->chromid_src;
+			mapped.start_src_mapped = common_start;
+			mapped.end_src_mapped = common_end;
 			all_mapped.push_back(mapped);
 
 			last_checked = hint;
@@ -1855,6 +1924,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 						ChainMappingMetadata meta;
 						meta.score = all_mapped[i].score;
 						meta.chain_id = all_mapped[i].chain_id;
+						meta.chromid_src = all_mapped[i].chromid_src;
+						meta.start_src = all_mapped[i].start_src_mapped;
+						meta.end_src = all_mapped[i].end_src_mapped;
 						metadata->push_back(meta);
 					}
 				}
@@ -1868,6 +1940,9 @@ ChainIntervals::const_iterator ChainIntervals::add2tgt(const_iterator hint, cons
 				ChainMappingMetadata meta;
 				meta.score = mapped.score;
 				meta.chain_id = mapped.chain_id;
+				meta.chromid_src = mapped.chromid_src;
+				meta.start_src = mapped.start_src_mapped;
+				meta.end_src = mapped.end_src_mapped;
 				metadata->push_back(meta);
 			}
 		}

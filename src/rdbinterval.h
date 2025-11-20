@@ -1,8 +1,8 @@
 /*
  * rdbinterval.h
  *
- *  Created on: Jun 3, 2010
- *      Author: hoichman
+ * Created on: Jun 3, 2010
+ * Author: hoichman
  */
 
 #ifndef RDBINTERVAL_H_
@@ -110,9 +110,13 @@ struct ChainInterval : public GInterval {
 struct ChainMappingMetadata {
 	double  score;
 	int64_t chain_id;
+	int     chromid_src;
+	int64_t start_src;
+	int64_t end_src;
 
-	ChainMappingMetadata() : score(0.0), chain_id(0) {}
-	ChainMappingMetadata(double _score, int64_t _chain_id) : score(_score), chain_id(_chain_id) {}
+	ChainMappingMetadata() : score(0.0), chain_id(0), chromid_src(-1), start_src(-1), end_src(-1) {}
+	ChainMappingMetadata(double _score, int64_t _chain_id, int _chromid_src, int64_t _start_src, int64_t _end_src) : 
+		score(_score), chain_id(_chain_id), chromid_src(_chromid_src), start_src(_start_src), end_src(_end_src) {}
 };
 
 
@@ -208,8 +212,9 @@ public:
 
 	// Converts R intervals (data frame with 4 columns or a string marking the filename) to a vector of Intervals.
 	// Returns R intervals in the form of data frame.
+	// If skip_missing_chroms is true and chromkey is provided, intervals with chromosomes not in chromkey are silently skipped.
 	SEXP convert_rintervs(SEXP rintervals, GIntervals *intervals, GIntervals2D *intervals2d, bool null_if_interv_nonexist = false,
-						  const GenomeChromKey *chromkey = NULL, const char *error_msg_prefix = "", unsigned *pintervs_type_mask = NULL, bool verify = true) const;
+						  const GenomeChromKey *chromkey = NULL, const char *error_msg_prefix = "", unsigned *pintervs_type_mask = NULL, bool verify = true, bool skip_missing_chroms = false) const;
 
 	// Returns intervals type mask
 	unsigned convert_rintervs(SEXP rintervals, GIntervalsFetcher1D **intervals, GIntervalsFetcher2D **intervals2d, bool null_if_interv_nonexist = false,
@@ -347,7 +352,28 @@ private:
 
 inline bool rdb::ChainInterval::SrcCompare::operator()(const ChainInterval &obj1, const ChainInterval &obj2) const
 {
-	return obj1.chromid_src < obj2.chromid_src || (obj1.chromid_src == obj2.chromid_src && obj1.start_src < obj2.start_src);
+	// Primary: source chromosome
+	if (obj1.chromid_src != obj2.chromid_src)
+		return obj1.chromid_src < obj2.chromid_src;
+
+	// Secondary: source start position
+	if (obj1.start_src != obj2.start_src)
+		return obj1.start_src < obj2.start_src;
+
+	// Tertiary: source end position (for deterministic ordering with same start)
+	if (obj1.end_src != obj2.end_src)
+		return obj1.end_src < obj2.end_src;
+
+	// Quaternary: target chromosome
+	if (obj1.chromid != obj2.chromid)
+		return obj1.chromid < obj2.chromid;
+
+	// Quinary: target start position
+	if (obj1.start != obj2.start)
+		return obj1.start < obj2.start;
+
+	// Final tiebreaker: chain_id (ensures total order and reproducibility)
+	return obj1.chain_id < obj2.chain_id;
 }
 
 inline bool rdb::ChainInterval::SetCompare::operator()(const ChainInterval &obj1, const ChainInterval &obj2) const

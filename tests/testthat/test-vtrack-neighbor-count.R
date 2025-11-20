@@ -1,3 +1,4 @@
+load_test_db()
 test_that("neighbor.count counts nearby intervals correctly", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())

@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gintervals.intersect works (1)", {
     intervs1 <- gscreen("test.fixedbin > 0.1", gintervals(c(1, 2), 0, -1))
     intervs2 <- gscreen("test.fixedbin < 0.2", gintervals(c(1, 2), 0, -1))
@@ -22,7 +23,9 @@ test_that("gintervals.intersect works on named intervals", {
     expect_regression(gintervals.intersect("test.bigintervs_1d_1", "test.bigintervs_1d_2"), "gintervals.intersect.named.1")
     expect_regression(gintervals.intersect("test.generated_1d_1", "test.generated_1d_2"), "gintervals.intersect.named.2")
     expect_regression(gintervals.intersect("test.bigintervs_2d_5", "test.bigintervs_2d_6"), "gintervals.intersect.named.3")
-    expect_regression(gintervals.intersect("test.generated_2d_5", "test.generated_2d_6"), "gintervals.intersect.named.4")
+    if (getOption("gmulticontig.indexed_format", FALSE)) { # 2D big intervals are now supported in indexed format
+        expect_regression(gintervals.intersect("test.generated_2d_5", "test.generated_2d_6"), "gintervals.intersect.named.4")
+    }
 })
 
 test_that("cannot intersect 1d with 2d", {
@@ -30,12 +33,12 @@ test_that("cannot intersect 1d with 2d", {
 })
 
 test_that("gintervals intersect with intervals.set.out", {
-    gintervals.rm("test.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs", force = TRUE))
+    gintervals.rm("temp.testintervs", force = TRUE)
+    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
     intervs1 <- gscreen("test.fixedbin > 0.2", gintervals(c(1, 2, 4, 8, 9), 0, -1))
     intervs2 <- gscreen("test.fixedbin > 0.4", gintervals(c(1, 2, 4, 7, 9), 0, -1))
-    gintervals.intersect(intervs1, intervs2, intervals.set.out = "test.testintervs")
-    expect_equal(gintervals.load("test.testintervs"), gintervals.intersect(intervs1, intervs2))
+    gintervals.intersect(intervs1, intervs2, intervals.set.out = "temp.testintervs")
+    expect_equal(gintervals.load("temp.testintervs"), gintervals.intersect(intervs1, intervs2))
 })
 
 test_that("cannot diff 2d", {

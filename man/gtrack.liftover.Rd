@@ -43,6 +43,7 @@ gtrack.liftover(
   keep \tab Preserves all overlapping intervals. \cr
   discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
   agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+  best_source_cluster \tab Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. \cr
 }}
 
 \item{multi_target_agg}{aggregation/selection policy for contributors that land on the same target locus. When multiple source intervals map to overlapping regions in the target genome (after applying tgt_overlap_policy), their values must be combined into a single value.}
@@ -74,6 +75,14 @@ be specified - they are taken from the chain's attributes that were set
 during loading. When passing a chain file path, policies can be specified
 and will be used for loading. Aggregation parameters (multi_target_agg,
 params, na.rm, min_n) can always be specified regardless of chain type.
+}
+\note{
+Terminology note for UCSC chain format users: In the UCSC chain format specification,
+the fields prefixed with 't' (tName, tStart, tEnd, etc.) are called "target" or "reference",
+while fields prefixed with 'q' (qName, qStart, qEnd, etc.) are called "query". However,
+misha uses reversed terminology: UCSC's "target/reference" corresponds to misha's "source"
+(chromsrc, startsrc, endsrc), and UCSC's "query" corresponds to misha's "target"
+(chrom, start, end).
 }
 \seealso{
 \code{\link{gintervals.load_chain}},

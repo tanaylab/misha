@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <math.h>
 #include <limits>
+#include <string>
 
 #include "GenomeTrack1D.h"
 
@@ -20,9 +21,9 @@ class GenomeTrackFixedBin : public GenomeTrack1D {
 public:
 	GenomeTrackFixedBin() : GenomeTrack1D(FIXED_BIN), m_bin_size(0), m_num_samples(0), m_cur_coord(0), m_last_min_pos(numeric_limits<double>::quiet_NaN()) {}
 
-	virtual void read_interval(const GInterval &interval);
-	virtual double last_max_pos() const;
-	virtual double last_min_pos() const;
+	void read_interval(const GInterval &interval) override;
+	double last_max_pos() const override;
+	double last_min_pos() const override;
 
 	void init_read(const char *filename, int chromid) { init_read(filename, "rb", chromid); }
 	void init_write(const char *filename, unsigned bin_size, int chromid);
@@ -43,8 +44,17 @@ protected:
 	int64_t   m_num_samples;
 	int64_t   m_cur_coord;
 	double    m_last_min_pos;
+	int64_t   m_base_offset{0};
+
+	// State for indexed "smart handle"
+	std::string m_dat_path;
+	std::string m_dat_mode;
+	bool        m_dat_open{false};
 
 	void init_read(const char *filename, const char *mode, int chromid);
+
+	// Helper to parse header at current file position
+	void read_header_at_current_pos_(BufferedFile &bf);
 };
 
 
@@ -52,7 +62,8 @@ protected:
 
 inline void GenomeTrackFixedBin::goto_bin(uint64_t bin)
 {
-	if (m_bfile.seek((long)(bin * sizeof(float) + sizeof(m_bin_size)), SEEK_SET))
+	// Add m_base_offset to the absolute seek for indexed format support
+	if (m_bfile.seek((long)(m_base_offset + sizeof(m_bin_size) + (uint64_t)bin * sizeof(float)), SEEK_SET))
 		TGLError<GenomeTrackFixedBin>("Failed to seek a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
 	m_cur_coord = bin * m_bin_size;
 }

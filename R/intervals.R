@@ -135,6 +135,15 @@
                 if (!is.null(intervals.set.out) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
                 }
+
+                # If database is indexed and output is bigset, convert to indexed format
+                if (!is.null(intervals.set.out) && .gdb.is_indexed() && .gintervals.is_bigset(intervals.set.out)) {
+                    if (.gintervals.is1d(intervals.set.out)) {
+                        gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    } else {
+                        gintervals.2d.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    }
+                }
             },
             finally = {
                 if (!success && !is.null(intervals.set.out)) {
@@ -153,6 +162,15 @@
             }
             if (.gintervals.needs_bigset(res)) {
                 .gintervals.small2big(intervals.set.out, res)
+
+                # If database is indexed, convert to indexed format
+                if (.gdb.is_indexed()) {
+                    if (.gintervals.is1d(res)) {
+                        gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    } else {
+                        gintervals.2d.convert_to_indexed(intervals.set.out, remove.old = TRUE)
+                    }
+                }
             } else {
                 .gintervals.save_file(fullpath, res)
             }
@@ -258,14 +276,14 @@
         zeroline <- meta$zeroline
         t <- Sys.time()
         progress.percentage <- -1
-
         if (.gintervals.big.is1d(intervals.set)) {
             if (!is.null(chrom1) || !is.null(chrom2)) {
                 stop(sprintf("%s is a 1D big intervals set.\nchrom1 or chrom2 parameters can be applied only to 2D intervals.", intervals.set), call. = FALSE)
             }
 
             if (!is.null(chrom)) {
-                meta$stats <- meta$stats[meta$stats$chrom == chrom, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom) == as.character(chrom), ]
             }
 
             if (!.gintervals.loadable(intervals.set, chrom = chrom)) {
@@ -281,7 +299,6 @@
                     ), call. = FALSE)
                 }
             }
-
             if (nrow(meta$stats) > 1) {
                 res <- list(zeroline)
                 lapply(
@@ -317,10 +334,12 @@
             }
 
             if (!is.null(chrom1)) {
-                meta$stats <- meta$stats[meta$stats$chrom1 == chrom1, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom1) == as.character(chrom1), ]
             }
             if (!is.null(chrom2)) {
-                meta$stats <- meta$stats[meta$stats$chrom2 == chrom2, ]
+                # Convert to character for comparison to handle different factor levels
+                meta$stats <- meta$stats[as.character(meta$stats$chrom2) == as.character(chrom2), ]
             }
 
             if (!.gintervals.loadable(intervals.set, chrom1 = chrom1, chrom2 = chrom2)) {
@@ -442,7 +461,15 @@
             intervals.set
         } else {
             if (.gintervals.is_bigset(intervals.set)) {
-                .gintervals.big.meta(intervals.set)$zeroline
+                # For big intervals sets, check if we're loading a specific chromosome
+                # and use the C++ function that handles both per-chromosome and indexed formats
+                if (!is.null(chrom)) {
+                    return(.gcall("gbigintervs_load_chrom", intervals.set, chrom, .misha_env()))
+                } else if (!is.null(chrom1) && !is.null(chrom2)) {
+                    return(.gcall("gbigintervs_load_chrom2d", intervals.set, chrom1, chrom2, .misha_env()))
+                } else {
+                    .gintervals.big.meta(intervals.set)$zeroline
+                }
             } else {
                 stop(sprintf("File %s does not exist", intervfname), call. = FALSE)
             }
@@ -829,7 +856,32 @@ gintervals.2d <- function(chroms1 = NULL, starts1 = 0, ends1 = -1, chroms2 = NUL
 #' @export gintervals.2d.all
 gintervals.2d.all <- function() {
     .gcheckroot()
-    get("ALLGENOME", envir = .misha)[[2]]
+    intervals2d <- get("ALLGENOME", envir = .misha)[[2]]
+
+    # Check if 2D is deferred and generate on demand
+    if (.is_2d_deferred(intervals2d)) {
+        mode <- getOption("gmulticontig.2d.mode", "diagonal")
+        n_contigs <- attr(intervals2d, "n_contigs")
+
+        if (mode == "full") {
+            warning(sprintf(
+                "Generating full 2D genome with %d contigs (%d pairs). This may take time and use significant memory.",
+                n_contigs, n_contigs * n_contigs
+            ))
+        }
+
+        intervals <- get("ALLGENOME", envir = .misha)[[1]]
+        intervals2d <- .generate_2d_on_demand(intervals, mode)
+
+        # Cache if requested
+        if (getOption("gmulticontig.2d.cache", FALSE)) {
+            allgenome <- get("ALLGENOME", envir = .misha)
+            allgenome[[2]] <- intervals2d
+            assign("ALLGENOME", allgenome, envir = .misha)
+        }
+    }
+
+    intervals2d
 }
 
 
@@ -1637,6 +1689,7 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #'   keep \tab Preserves all overlapping intervals. \cr
 #'   discard \tab Discards any chain interval that has a target overlap with another chain interval. \cr
 #'   agg \tab Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region. \cr
+#'   best_source_cluster \tab Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept. \cr
 #' }
 #' @param min_score optional minimum alignment score threshold. Chains with scores below this value are filtered out. Useful for excluding low-quality alignments.
 #' @param include_metadata logical; if TRUE, adds 'score' column to the output indicating the alignment score of the chain used for each mapping. Only applicable with "auto_score" or "auto" policy.
@@ -1656,7 +1709,11 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #'     chrom = "chr25", start = c(0, 7000),
 #'     end = c(6000, 20000)
 #' )
+#' # Liftover with default policies
 #' gintervals.liftover(intervs, chainfile)
+#'
+#' # Liftover keeping source overlaps (one source interval may map to multiple targets)
+#' # gintervals.liftover(intervs, chainfile, src_overlap_policy = "keep")
 #'
 #' @export gintervals.liftover
 gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", min_score = NULL, include_metadata = FALSE, canonic = FALSE) {
@@ -1677,8 +1734,8 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
             stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
         }
 
-        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
-            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+        if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
+            stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', 'best_source_cluster', 'best_cluster_union', 'best_cluster_sum', or 'best_cluster_max'", call. = FALSE)
         }
 
         if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
@@ -1713,8 +1770,8 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
                 stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
             }
 
-            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
-                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+            if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
+                stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', 'best_source_cluster', 'best_cluster_union', 'best_cluster_sum', or 'best_cluster_max'", call. = FALSE)
             }
 
             # Convert "auto" to "auto_score" alias
@@ -1770,6 +1827,49 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
     .gintervals.load_ext(intervals.set, chrom, chrom1, chrom2, TRUE)
 }
 
+#' Validate source chromosomes against source genome
+#'
+#' @param chain Chain data frame with source chromosome information
+#' @param src_groot Path to source genome database
+#' @return NULL (stops with error if validation fails)
+#' @keywords internal
+#' @noRd
+.validate_source_chromosomes <- function(chain, src_groot) {
+    # Save current genome state
+    old_groot <- .misha$GROOT
+    old_allgenome <- .misha$ALLGENOME
+    old_chrom_alias <- if (exists("CHROM_ALIAS", envir = .misha)) .misha$CHROM_ALIAS else NULL
+
+    # Ensure genome is restored even if error occurs
+    on.exit(
+        {
+            .misha$GROOT <- old_groot
+            .misha$ALLGENOME <- old_allgenome
+            if (!is.null(old_chrom_alias)) {
+                .misha$CHROM_ALIAS <- old_chrom_alias
+            } else if (exists("CHROM_ALIAS", envir = .misha)) {
+                rm("CHROM_ALIAS", envir = .misha)
+            }
+        },
+        add = TRUE
+    )
+
+    # Temporarily switch to source genome for validation
+    gdb.init(src_groot)
+
+    # Create source intervals data frame
+    src_intervals <- data.frame(
+        chrom = chain$chromsrc,
+        start = chain$startsrc,
+        end = chain$endsrc,
+        stringsAsFactors = FALSE
+    )
+
+    validated <- .gintervals(chain$chromsrc, chain$startsrc, chain$endsrc, chain$strandsrc)
+
+    # Genome will be restored by on.exit
+}
+
 
 #' Loads assembly conversion table from a chain file
 #'
@@ -1778,9 +1878,25 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #' This function reads a file in 'chain' format and returns assembly conversion
 #' table that can be used in 'gtrack.liftover' and 'gintervals.liftover'.
 #'
-#' Note: chain file might map a few different source intervals into a single
-#' target one. These ambiguous mappings are not presented in the data frame
-#' returned by 'gintervals.load_chain'.
+#' Source overlaps occur when the same source genome position maps to multiple
+#' target genome positions. Target overlaps occur when multiple source positions
+#' map to overlapping regions in the target genome.
+#'
+#' The 'src_overlap_policy' controls how source overlaps are handled:
+#' \itemize{
+#'   \item "error" (default): Throw an error if source overlaps are detected
+#'   \item "keep": Keep all mappings, allowing one source to map to multiple targets
+#'   \item "discard": Remove all chain intervals involved in source overlaps
+#' }
+#'
+#' The 'tgt_overlap_policy' controls how target overlaps are handled:
+#' \itemize{
+#'   \item "error": Throw an error if target overlaps are detected
+#'   \item "auto" (default) / "auto_first": Keep the first overlapping chain (original file order) by trimming or discarding later overlaps while keeping source/target lengths consistent
+#'   \item "auto_longer": Keep the longer overlapping chain and trim/drop the shorter ones
+#'   \item "discard": Remove all chain intervals involved in target overlaps
+#'   \item "keep": Allow target overlaps to remain untouched (liftover must be able to handle them)
+#' }
 #'
 #' @param file name of chain file
 #' @param src_groot optional path to source genome database for validating source chromosomes and coordinates. If provided, the function temporarily switches to this database to verify that all source chromosomes exist and coordinates are within bounds, then restores the original database.
@@ -1794,6 +1910,7 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
 #'
 #' gdb.init_examples()
 #' chainfile <- paste(.misha$GROOT, "data/test.chain", sep = "/")
+#' # Load chain file with default policies
 #' gintervals.load_chain(chainfile)
 #'
 #' @inheritParams gintervals.liftover
@@ -1808,8 +1925,8 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
         stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
     }
 
-    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
-        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg", "best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', 'agg', 'best_source_cluster', 'best_cluster_union', 'best_cluster_sum', or 'best_cluster_max'", call. = FALSE)
     }
 
     if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {

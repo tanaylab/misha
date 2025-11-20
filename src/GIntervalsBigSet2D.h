@@ -2,20 +2,33 @@
 #define _GINTERVALSBIGSET2D_H_INCLUDED_
 
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <map>
 #include "GIntervals2D.h"
 #include "GIntervalsBigSet.h"
 #include "GIntervalsFetcher2D.h"
 #include "GIntervalsMeta2D.h"
 #include "rdbinterval.h"
 
+// Forward declarations
+class IntervalsIndex2D;
+
 //------------------------------------- GIntervalsBigSet2D --------------------------------------
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
 class GIntervalsBigSet2D : public GIntervalsBigSet, public GIntervalsMeta2D {
 public:
-	GIntervalsBigSet2D() {}
-	GIntervalsBigSet2D(const char *intervset, SEXP meta, const IntervUtils &iu) { init(intervset, meta, iu); }
-	virtual ~GIntervalsBigSet2D() {}
+	GIntervalsBigSet2D() : m_dat2d_fp(nullptr), m_dat2d_open(false) {}
+	GIntervalsBigSet2D(const char *intervset, SEXP meta, const IntervUtils &iu) : m_dat2d_fp(nullptr), m_dat2d_open(false) { init(intervset, meta, iu); }
+	virtual ~GIntervalsBigSet2D() {
+		// Close file handle if open
+		if (m_dat2d_open && m_dat2d_fp) {
+			fclose(m_dat2d_fp);
+			m_dat2d_fp = nullptr;
+			m_dat2d_open = false;
+		}
+	}
 
 	void init(const char *intervset, SEXP meta, const IntervUtils &iu);
 
@@ -81,6 +94,21 @@ private:
 	uint64_t                       m_iter_chrom_index;
 	Compare_t                    m_compare;
 	bool                         m_do_sort;
+
+	// State for indexed format "smart handle"
+	std::string m_dat2d_path;       // Path to currently open intervals2d.dat
+	FILE*       m_dat2d_fp;         // Open file pointer for intervals2d.dat
+	bool        m_dat2d_open;       // Whether m_dat2d_fp is valid
+
+	// Static index cache (thread-safe)
+	static std::map<std::string, std::shared_ptr<IntervalsIndex2D>> s_index_cache;
+	static std::mutex s_cache_mutex;
+
+	// Helper to get or load index from cache
+	static std::shared_ptr<IntervalsIndex2D> get_intervals_index(const std::string &intervset_dir);
+
+	// Helper to get interval set directory from intervset name
+	static std::string get_intervset_dir(const std::string &intervset, SEXP envir);
 
 	int chroms2idx(int chromid1, int chromid2) const { return GIntervalsMeta2D::chroms2idx(chromid1, chromid2); }
 	int idx2chrom1(int idx) const { return GIntervalsMeta2D::idx2chrom1(idx); }

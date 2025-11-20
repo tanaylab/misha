@@ -10,15 +10,56 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unordered_set>
 
 #include "GenomeTrack.h"
+#include "TrackIndex.h"
 #include "TGLException.h"
+#include "rdbutils.h"
 
 const char *GenomeTrack::TYPE_NAMES[GenomeTrack::NUM_TYPES] = { "dense", "sparse", "array", "rectangles", "points", "computed", "obsolete rectangles", "obsolete rectangles", "obsolete computed", "obsolete computed", "obsolete computed" };
 const bool  GenomeTrack::IS_1D_TRACK[NUM_TYPES] =             { true,    true,     true,     false,        false,    false,      false,                 false,                 false,               false,               false };
 const int   GenomeTrack::FORMAT_SIGNATURES[NUM_TYPES] =       { 0,       -1,       -8,       -9,           -10,      -11,        -4,                    -6,                    -3,                  -5,                  -7 };
 
 double (*GenomeTrack::s_rnd_func)() = drand48;
+
+// Static members for track index cache
+std::map<std::string, std::shared_ptr<TrackIndex>> GenomeTrack::s_index_cache;
+std::mutex GenomeTrack::s_cache_mutex;
+
+std::shared_ptr<TrackIndex> GenomeTrack::get_track_index(const std::string &track_dir) {
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+
+	// Check if already in cache
+	auto it = s_index_cache.find(track_dir);
+	if (it != s_index_cache.end()) {
+		return it->second;
+	}
+
+	// Create new index and try to load
+	auto idx = std::make_shared<TrackIndex>();
+	std::string idx_path = track_dir + "/track.idx";
+
+	if (!idx->load(idx_path)) {
+		// Index file doesn't exist - return nullptr
+		return nullptr;
+	}
+
+	// Cache and return
+	s_index_cache[track_dir] = idx;
+	return idx;
+}
+
+std::string GenomeTrack::get_track_dir(const std::string &filename) {
+	// Extract directory from filename
+	// filename is typically like "/path/to/trackdir/chrN"
+	size_t pos = filename.find_last_of("/");
+	if (pos == std::string::npos) {
+		// No path separator - assume current directory
+		return ".";
+	}
+	return filename.substr(0, pos);
+}
 
 const pair<int, int> GenomeTrack::get_chromid_2d(const GenomeChromKey &chromkey, const string &filename)
 {
@@ -33,50 +74,102 @@ const pair<int, int> GenomeTrack::get_chromid_2d(const GenomeChromKey &chromkey,
 	return pair<int, int>(chromkey.chrom2id(chrom1), chromkey.chrom2id(chrom2));
 }
 
+string GenomeTrack::find_existing_1d_filename(const GenomeChromKey &chromkey, const string &track_dir, int chromid)
+{
+	const string &base = get_1d_filename(chromkey, chromid);
+	vector<string> candidates;
+	candidates.push_back(base);
+
+	if (base.compare(0, 3, "chr") == 0 && base.size() > 3)
+		candidates.push_back(base.substr(3));
+	else
+		candidates.push_back(string("chr") + base);
+
+	vector<string> aliases;
+	chromkey.get_aliases(chromid, aliases);
+	candidates.insert(candidates.end(), aliases.begin(), aliases.end());
+
+	unordered_set<string> seen;
+	for (const string &candidate : candidates) {
+		if (candidate.empty())
+			continue;
+		if (!seen.insert(candidate).second)
+			continue;
+		string full = track_dir + "/" + candidate;
+		if (access(full.c_str(), F_OK) == 0)
+			return candidate;
+	}
+
+	return base;
+}
+
+
 GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChromKey &chromkey, bool return_obsolete_types)
 {
 	if (access(track_dir, F_OK))
 		TGLError<GenomeTrack>(FILE_ERROR, "Accessing directory %s: %s\n", track_dir, strerror(errno));
 
-	// first try to access it as a 1D track
-	Type type;
-	bool is_1d = false;
-
-	for (uint64_t chromid = 0; chromid < chromkey.get_num_chroms(); chromid++) {
+	// First, try to read from track.idx if it exists
+	std::string idx_path = std::string(track_dir) + "/track.idx";
+	struct stat st;
+	if (stat(idx_path.c_str(), &st) == 0) {
 		try {
-			type = s_read_type((string(track_dir) + "/" + get_1d_filename(chromkey, chromid)).c_str());
-			is_1d = true;
-			break;
-		} catch (TGLException &err) {}
-	}
-
-	if (is_1d) {
-		if (type != FIXED_BIN && type != SPARSE && type != ARRAYS)
-			TGLError<GenomeTrack>(BAD_FORMAT, "Invalid format of track file at %s", track_dir);
-		return type;
-	}
-
-	for (uint64_t chromid1 = 0; chromid1 < chromkey.get_num_chroms(); chromid1++) {
-		for (uint64_t chromid2 = 0; chromid2 < chromkey.get_num_chroms(); chromid2++) {
-			bool is_2d = false;
-
-			try {
-				type = s_read_type((string(track_dir) + "/" + get_2d_filename(chromkey, chromid1, chromid2)).c_str());
-				is_2d = true;
-			} catch (TGLException &) {}
-
-			if (is_2d) {
-				if (type == OLD_RECTS1 || type == OLD_RECTS2 ||type == OLD_COMPUTED1 || type == OLD_COMPUTED2 || type == OLD_COMPUTED3) {
-					if (return_obsolete_types)
-						return type;
-					TGLError<GenomeTrack>(OBSOLETE_FORMAT, "Track file at %s is in obsolete format and requires conversion", track_dir);
+			auto idx = get_track_index(track_dir);
+			if (idx) {
+				// Map MishaTrackType to GenomeTrack::Type
+				switch (idx->get_track_type()) {
+					case MishaTrackType::DENSE:  return FIXED_BIN;
+					case MishaTrackType::SPARSE: return SPARSE;
+					case MishaTrackType::ARRAY:  return ARRAYS;
+					default:
+						// Unknown type, fall through to per-chromosome probing
+						break;
 				}
+			}
+		} catch (...) {
+			// Fall through to per-chromosome probing on any index error
+		}
+	}
 
-				if (type != RECTS && type != POINTS && type != COMPUTED)
+	// Fall back to per-chromosome probing (per-chrom files)
+	vector<string> filenames;
+	rdb::get_chrom_files(track_dir, filenames);
+
+	sort(filenames.begin(), filenames.end());
+
+	for (const string &fname : filenames) {
+		string fullpath = string(track_dir) + "/" + fname;
+		bool is_2d = fname.find('-') != string::npos;
+
+		try {
+			Type type = s_read_type(fullpath.c_str());
+
+			if (!is_2d) {
+				if (type != FIXED_BIN && type != SPARSE && type != ARRAYS)
 					TGLError<GenomeTrack>(BAD_FORMAT, "Invalid format of track file at %s", track_dir);
 				return type;
 			}
+
+			// 2D track file
+			if (type == OLD_RECTS1 || type == OLD_RECTS2 || type == OLD_COMPUTED1 || type == OLD_COMPUTED2 || type == OLD_COMPUTED3) {
+				if (return_obsolete_types)
+					return type;
+				TGLError<GenomeTrack>(OBSOLETE_FORMAT, "Track file at %s is in obsolete format and requires conversion", track_dir);
+			}
+
+			if (type != RECTS && type != POINTS && type != COMPUTED)
+				TGLError<GenomeTrack>(BAD_FORMAT, "Invalid format of track file at %s", track_dir);
+			return type;
+		} catch (TGLException &) {
+			// ignore files that cannot be read as track data (attributes, etc.)
+			continue;
 		}
+	}
+
+	// If no valid track files found, treat as empty sparse track
+	// This allows for empty tracks created by liftover or other operations
+	if (filenames.empty()) {
+		return SPARSE;
 	}
 
 	TGLError<GenomeTrack>(BAD_FORMAT, "Invalid format of track at %s", track_dir);
@@ -218,4 +311,3 @@ void GenomeTrack::save_attrs(const char *track, const char *filename, const Trac
 	if (bfile.error())
 		TGLError<GenomeTrack>(FILE_ERROR, "Failed to write attributes file %s: %s", filename, strerror(errno));
 }
-

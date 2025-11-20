@@ -1,3 +1,4 @@
+load_test_db()
 test_that("gdist works", {
     expect_regression(gdist("test.fixedbin", seq(0, 1, by = 0.001)), "gdist.1")
     expect_regression(gdist("test.fixedbin", seq(0.2, 1, by = 0.001)), "gdist.2")

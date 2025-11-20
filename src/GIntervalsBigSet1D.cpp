@@ -3,9 +3,38 @@
 #include <sys/types.h>
 
 #include "GIntervalsBigSet1D.h"
+#include "IntervalsIndex1D.h"
 #include "rdbutils.h"
 
 //------------------------------------- GIntervalsBigSet1D --------------------------------------
+
+// Static members initialization
+std::map<std::string, std::shared_ptr<IntervalsIndex1D>> GIntervalsBigSet1D::s_index_cache;
+std::mutex GIntervalsBigSet1D::s_cache_mutex;
+
+std::shared_ptr<IntervalsIndex1D> GIntervalsBigSet1D::get_intervals_index(const std::string &intervset_dir) {
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	auto it = s_index_cache.find(intervset_dir);
+	if (it != s_index_cache.end()) {
+		return it->second;
+	}
+
+	// Load index
+	auto idx = std::make_shared<IntervalsIndex1D>();
+	std::string idx_path = intervset_dir + "/intervals.idx";
+	if (!idx->load(idx_path)) {
+		// Index doesn't exist - return nullptr
+		return nullptr;
+	}
+
+	// Cache it
+	s_index_cache[intervset_dir] = idx;
+	return idx;
+}
+
+std::string GIntervalsBigSet1D::get_intervset_dir(const std::string &intervset, SEXP envir) {
+	return interv2path(envir, intervset.c_str());
+}
 
 void GIntervalsBigSet1D::init(const char *intervset, SEXP meta, const IntervUtils &iu)
 {
@@ -19,6 +48,10 @@ void GIntervalsBigSet1D::init(const char *intervset, SEXP meta, const IntervUtil
 	m_do_sort = false;
 	m_do_unify_overlaps = false;
 	m_iinterval = m_intervals.end();
+
+	// Initialize smart handle state
+	m_dat_fp = nullptr;
+	m_dat_open = false;
 }
 
 void GIntervalsBigSet1D::load_chrom(int chromid)
@@ -26,24 +59,76 @@ void GIntervalsBigSet1D::load_chrom(int chromid)
 	m_iter_chrom_index = 0;
 	if (get_num_intervals(chromid)) {
 		if (m_intervals.empty() || m_intervals.front().chromid != chromid) {
-			string filename = interv2path(m_iu->get_env(), m_intervset);
-			filename += "/";
-			filename += m_iu->id2chrom(chromid);
-			SEXP rintervals = rprotect_ptr(RSaneUnserialize(filename.c_str()));
+			// Construct per-chromosome filename
+			string intervset_dir = interv2path(m_iu->get_env(), m_intervset);
+			string filename = intervset_dir + "/" + m_iu->id2chrom(chromid);
+
+			// SURGICAL PIVOT: Check for per-chromosome file first
+			struct stat st;
+			SEXP rintervals = R_NilValue;
+
+			if (stat(filename.c_str(), &st) == 0) {
+				// PER-CHROMOSOME PATH: Per-chromosome file exists
+				rintervals = rprotect_ptr(RSaneUnserialize(filename.c_str()));
+			} else {
+				// INDEXED PATH: Use intervals.dat with index
+				string dat_path = intervset_dir + "/intervals.dat";
+
+				// Smart handle: open intervals.dat once, reuse across chromosomes
+				if (!m_dat_open || m_dat_path != dat_path) {
+					// Close previous file if open
+					if (m_dat_open && m_dat_fp) {
+						fclose(m_dat_fp);
+						m_dat_fp = nullptr;
+					}
+
+					// Open new file
+					m_dat_fp = fopen(dat_path.c_str(), "rb");
+					if (!m_dat_fp) {
+						verror("Cannot open indexed intervals file %s: %s",
+							   dat_path.c_str(), strerror(errno));
+					}
+					m_dat_open = true;
+					m_dat_path = dat_path;
+				}
+
+				// Get index and lookup entry
+				auto idx = get_intervals_index(intervset_dir);
+				if (!idx) {
+					verror("Intervals index not found for %s", m_intervset.c_str());
+				}
+
+				const IntervalsContigEntry* entry = idx->get_entry(chromid);
+				if (!entry || entry->length == 0) {
+					// Empty chromosome
+					m_intervals.clear();
+					return;
+				}
+
+				// Seek to the chromosome's data in intervals.dat
+				if (fseek(m_dat_fp, entry->offset, SEEK_SET) != 0) {
+					verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
+				}
+
+				// Read serialized R object from current position
+				rintervals = rprotect_ptr(RSaneUnserialize(m_dat_fp));
+			}
+
+			// Convert R intervals to C++ intervals
 			m_iu->convert_rintervs(rintervals, &m_intervals, NULL);
 			runprotect(1);
-			
+
 			// set udata
 			uint64_t offset = 0;
 			for (int i = 0; i < chromid; ++i)
 				offset += m_orig_chrom2size[i];
-			for (GIntervals::iterator iinterval = m_intervals.begin(); iinterval < m_intervals.end(); ++iinterval) 
+			for (GIntervals::iterator iinterval = m_intervals.begin(); iinterval < m_intervals.end(); ++iinterval)
 				iinterval->udata = (void *)(intptr_t)(iinterval - m_intervals.begin() + offset);
-			
-			if (m_do_sort) 
+
+			if (m_do_sort)
 				m_intervals.sort(m_compare);
-			
-			if (m_do_unify_overlaps) 
+
+			if (m_do_unify_overlaps)
 				m_intervals.unify_overlaps(m_unify_touching_intervals);
 		}
 	} else
