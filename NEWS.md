@@ -1,3 +1,8 @@
+# misha 5.2.1
+
+* Added `gintervals.as_chain` function that converts a data frame to a chain object.
+* Added value column aggregation support to `gintervals.liftover` via `value_col` and `multi_target_agg` parameters.
+
 # misha 5.2.0
 
 * Added `src_overlap_policy` and `tgt_overlap_policy` parameters to `gintervals.liftover`, `gintervals.load_chain`, and `gtrack.liftover` functions.

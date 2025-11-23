@@ -2266,3 +2266,442 @@ test_that("gintervals.liftover canonic respects chain_id boundaries in duplicati
     expect_equal(result$start, c(0, 50))
     expect_equal(result$end, c(50, 100))
 })
+
+test_that("gintervals.as_chain validates required columns", {
+    local_db_state()
+
+    # Missing chrom column
+    intervals <- data.frame(
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L,
+        score = 1000.0
+    )
+    expect_error(
+        gintervals.as_chain(intervals),
+        "Missing required columns"
+    )
+
+    # Missing chain_id column
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        score = 1000.0
+    )
+    expect_error(
+        gintervals.as_chain(intervals),
+        "Missing required columns"
+    )
+
+    # Missing score column
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L
+    )
+    expect_error(
+        gintervals.as_chain(intervals),
+        "Missing required columns"
+    )
+})
+
+test_that("gintervals.as_chain validates data types", {
+    local_db_state()
+
+    # Invalid start/end (character instead of numeric)
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = "0",
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L,
+        score = 1000.0,
+        stringsAsFactors = FALSE
+    )
+    expect_error(
+        gintervals.as_chain(intervals),
+        "start and end columns must be numeric"
+    )
+
+    # Invalid chain_id (character instead of integer/numeric)
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = "1",
+        score = 1000.0,
+        stringsAsFactors = FALSE
+    )
+    expect_error(
+        gintervals.as_chain(intervals),
+        "chain_id column must be integer or numeric"
+    )
+
+    # Invalid score (character instead of numeric)
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L,
+        score = "1000.0",
+        stringsAsFactors = FALSE
+    )
+    expect_error(
+        gintervals.as_chain(intervals),
+        "score column must be numeric"
+    )
+})
+
+test_that("gintervals.as_chain validates strand values", {
+    local_db_state()
+
+    # Invalid strand value (2 instead of -1, 0, or 1)
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 2,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L,
+        score = 1000.0
+    )
+    expect_error(
+        gintervals.as_chain(intervals),
+        "strand values must be -1, 0, or 1"
+    )
+
+    # Invalid strandsrc value (-2 instead of -1, 0, or 1)
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = -2,
+        chain_id = 1L,
+        score = 1000.0
+    )
+    expect_error(
+        gintervals.as_chain(intervals),
+        "strandsrc values must be -1, 0, or 1"
+    )
+})
+
+test_that("gintervals.as_chain validates policies", {
+    local_db_state()
+
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L,
+        score = 1000.0
+    )
+
+    # Invalid src_overlap_policy
+    expect_error(
+        gintervals.as_chain(intervals, src_overlap_policy = "invalid"),
+        "src_overlap_policy must be"
+    )
+
+    # Invalid tgt_overlap_policy
+    expect_error(
+        gintervals.as_chain(intervals, tgt_overlap_policy = "invalid"),
+        "tgt_overlap_policy must be"
+    )
+
+    # Invalid min_score (not a single value)
+    expect_error(
+        gintervals.as_chain(intervals, min_score = c(100, 200)),
+        "min_score must be a single numeric value"
+    )
+})
+
+test_that("gintervals.as_chain creates valid chain with attributes", {
+    local_db_state()
+
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 1,
+        chromsrc = "chr2",
+        startsrc = 50,
+        endsrc = 150,
+        strandsrc = -1,
+        chain_id = 42L,
+        score = 5000.0
+    )
+
+    chain <- gintervals.as_chain(intervals, src_overlap_policy = "keep", tgt_overlap_policy = "auto_score", min_score = 1000)
+
+    # Check that all columns are preserved
+    expect_equal(nrow(chain), 1)
+    expect_equal(as.character(chain$chrom), "chr1")
+    expect_equal(as.numeric(chain$start), 0)
+    expect_equal(as.numeric(chain$end), 100)
+    expect_equal(as.numeric(chain$strand), 1)
+    expect_equal(as.character(chain$chromsrc), "chr2")
+    expect_equal(as.numeric(chain$startsrc), 50)
+    expect_equal(as.numeric(chain$endsrc), 150)
+    expect_equal(as.numeric(chain$strandsrc), -1)
+    expect_equal(as.integer(chain$chain_id), 42L)
+    expect_equal(as.numeric(chain$score), 5000.0)
+
+    # Check attributes
+    expect_equal(attr(chain, "src_overlap_policy"), "keep")
+    expect_equal(attr(chain, "tgt_overlap_policy"), "auto_score")
+    expect_equal(attr(chain, "min_score"), 1000)
+})
+
+test_that("gintervals.as_chain converts chain_id to integer", {
+    local_db_state()
+
+    # chain_id as numeric (not integer)
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 42.0, # numeric, not integer
+        score = 1000.0
+    )
+
+    chain <- gintervals.as_chain(intervals)
+    expect_true(is.integer(chain$chain_id))
+    expect_equal(chain$chain_id, 42L)
+})
+
+test_that("gintervals.as_chain converts auto to auto_score", {
+    local_db_state()
+
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L,
+        score = 1000.0
+    )
+
+    chain <- gintervals.as_chain(intervals, tgt_overlap_policy = "auto")
+    expect_equal(attr(chain, "tgt_overlap_policy"), "auto_score")
+})
+
+test_that("gintervals.as_chain works with empty data frame", {
+    local_db_state()
+
+    intervals <- data.frame(
+        chrom = character(0),
+        start = numeric(0),
+        end = numeric(0),
+        strand = numeric(0),
+        chromsrc = character(0),
+        startsrc = numeric(0),
+        endsrc = numeric(0),
+        strandsrc = numeric(0),
+        chain_id = integer(0),
+        score = numeric(0),
+        stringsAsFactors = FALSE
+    )
+
+    chain <- gintervals.as_chain(intervals)
+    expect_equal(nrow(chain), 0)
+    expect_equal(attr(chain, "src_overlap_policy"), "error")
+    expect_equal(attr(chain, "tgt_overlap_policy"), "auto_score")
+})
+
+test_that("gintervals.as_chain works with multiple intervals", {
+    local_db_state()
+
+    intervals <- data.frame(
+        chrom = c("chr1", "chr2"),
+        start = c(0, 100),
+        end = c(100, 200),
+        strand = c(1, -1),
+        chromsrc = c("chrA", "chrB"),
+        startsrc = c(0, 50),
+        endsrc = c(100, 150),
+        strandsrc = c(1, -1),
+        chain_id = c(1L, 2L),
+        score = c(1000.0, 2000.0)
+    )
+
+    chain <- gintervals.as_chain(intervals)
+    expect_equal(nrow(chain), 2)
+    expect_equal(as.character(chain$chrom), c("chr1", "chr2"))
+    expect_equal(as.integer(chain$chain_id), c(1L, 2L))
+})
+
+test_that("gintervals.as_chain works with liftover after conversion", {
+    local_db_state()
+
+    # Create target genome
+    setup_db(list(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n", ">chr2\nGGGGCCCCTTTTAAAA\n"))
+
+    # Create a chain file first to get the structure
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "source1", 100, "+", 0, 20, "chr1", 32, "+", 0, 20, 1)
+    chain_loaded <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Convert to chain format using as_chain with same policies
+    chain_converted <- gintervals.as_chain(chain_loaded, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Check that the chains are identical (data and attributes)
+    expect_equal(nrow(chain_loaded), nrow(chain_converted))
+    expect_equal(chain_loaded$chrom, chain_converted$chrom)
+    expect_equal(chain_loaded$start, chain_converted$start)
+    expect_equal(chain_loaded$end, chain_converted$end)
+    expect_equal(chain_loaded$strand, chain_converted$strand)
+    expect_equal(chain_loaded$chromsrc, chain_converted$chromsrc)
+    expect_equal(chain_loaded$startsrc, chain_converted$startsrc)
+    expect_equal(chain_loaded$endsrc, chain_converted$endsrc)
+    expect_equal(chain_loaded$strandsrc, chain_converted$strandsrc)
+    expect_equal(chain_loaded$chain_id, chain_converted$chain_id)
+    expect_equal(chain_loaded$score, chain_converted$score)
+
+    # Check attributes match
+    expect_equal(attr(chain_loaded, "src_overlap_policy"), attr(chain_converted, "src_overlap_policy"))
+    expect_equal(attr(chain_loaded, "tgt_overlap_policy"), attr(chain_converted, "tgt_overlap_policy"))
+
+    # Create source intervals
+    src_intervals <- data.frame(
+        chrom = "source1",
+        start = 5,
+        end = 15,
+        stringsAsFactors = FALSE
+    )
+
+    # Both should work with liftover and produce identical results
+    result_loaded <- gintervals.liftover(src_intervals, chain_loaded)
+    result_converted <- gintervals.liftover(src_intervals, chain_converted)
+
+    # Results should be identical
+    expect_equal(result_loaded, result_converted)
+})
+
+test_that("gintervals.as_chain rejects non-data.frame input", {
+    local_db_state()
+
+    expect_error(
+        gintervals.as_chain(NULL),
+        "Usage:"
+    )
+
+    expect_error(
+        gintervals.as_chain(list(chrom = "chr1", start = 0, end = 100)),
+        "intervals must be a data frame"
+    )
+
+    expect_error(
+        gintervals.as_chain("not a data frame"),
+        "intervals must be a data frame"
+    )
+})
+
+test_that("gintervals.as_chain handles min_score attribute correctly", {
+    local_db_state()
+
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L,
+        score = 1000.0
+    )
+
+    # Without min_score
+    chain_no_min <- gintervals.as_chain(intervals)
+    expect_null(attr(chain_no_min, "min_score"))
+
+    # With min_score
+    chain_with_min <- gintervals.as_chain(intervals, min_score = 500)
+    expect_equal(attr(chain_with_min, "min_score"), 500)
+})
+
+test_that("gintervals.as_chain accepts all valid policy values", {
+    local_db_state()
+
+    intervals <- data.frame(
+        chrom = "chr1",
+        start = 0,
+        end = 100,
+        strand = 0,
+        chromsrc = "chr1",
+        startsrc = 0,
+        endsrc = 100,
+        strandsrc = 0,
+        chain_id = 1L,
+        score = 1000.0
+    )
+
+    # Test all valid src_overlap_policy values
+    for (policy in c("error", "keep", "discard")) {
+        chain <- gintervals.as_chain(intervals, src_overlap_policy = policy)
+        expect_equal(attr(chain, "src_overlap_policy"), policy)
+    }
+
+    # Test all valid tgt_overlap_policy values
+    for (policy in c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
+        chain <- gintervals.as_chain(intervals, tgt_overlap_policy = policy)
+        if (policy == "auto") {
+            expect_equal(attr(chain, "tgt_overlap_policy"), "auto_score")
+        } else {
+            expect_equal(attr(chain, "tgt_overlap_policy"), policy)
+        }
+    }
+})
