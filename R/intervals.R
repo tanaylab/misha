@@ -1659,9 +1659,25 @@ gintervals.is.bigset <- function(intervals.set = NULL) {
 #' gintervals.liftover(intervs, chainfile)
 #'
 #' @export gintervals.liftover
-gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", min_score = NULL, include_metadata = FALSE, canonic = FALSE) {
+gintervals.liftover <- function(intervals = NULL,
+                                chain = NULL,
+                                src_overlap_policy = "error",
+                                tgt_overlap_policy = "auto",
+                                min_score = NULL,
+                                include_metadata = FALSE,
+                                canonic = FALSE,
+                                value_col = NULL,
+                                multi_target_agg = c(
+                                    "mean", "median", "sum", "min", "max", "count",
+                                    "first", "last", "nth",
+                                    "max.coverage_len", "min.coverage_len",
+                                    "max.coverage_frac", "min.coverage_frac"
+                                ),
+                                params = NULL,
+                                na.rm = TRUE,
+                                min_n = NULL) {
     if (is.null(intervals) || is.null(chain)) {
-        stop("Usage: gintervals.liftover(intervals, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", min_score = NULL, include_metadata = FALSE, canonic = FALSE)", call. = FALSE)
+        stop("Usage: gintervals.liftover(intervals, chain, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", min_score = NULL, include_metadata = FALSE, canonic = FALSE, value_col = NULL, multi_target_agg = \"mean\", params = NULL, na.rm = TRUE, min_n = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -1728,7 +1744,80 @@ gintervals.liftover <- function(intervals = NULL, chain = NULL, src_overlap_poli
         stop("canonic must be a single logical value", call. = FALSE)
     }
 
-    .gcall("gintervs_liftover", intervals, chain.intervs, src_overlap_policy, tgt_overlap_policy, canonic, include_metadata, .misha_env())
+    # Validate value_col and aggregation parameters
+    use_aggregation <- !is.null(value_col)
+
+    if (use_aggregation) {
+        # Validate value_col exists in intervals
+        if (!is.character(value_col) || length(value_col) != 1) {
+            stop("value_col must be a single character string specifying the column name", call. = FALSE)
+        }
+
+        if (!value_col %in% names(intervals)) {
+            stop(sprintf("value_col '%s' not found in intervals", value_col), call. = FALSE)
+        }
+
+        # Validate aggregation parameters
+        multi_target_agg <- match.arg(multi_target_agg)
+
+        if (!is.logical(na.rm) || length(na.rm) != 1 || is.na(na.rm)) {
+            stop("na.rm must be a single non-NA logical value", call. = FALSE)
+        }
+
+        if (!is.null(min_n)) {
+            if (!is.numeric(min_n) || length(min_n) != 1 ||
+                is.na(min_n) || min_n < 0 || min_n != as.integer(min_n)) {
+                stop("min_n must be NULL or a non-negative integer", call. = FALSE)
+            }
+            min_n <- as.integer(min_n)
+        }
+
+        nth_param <- NA_integer_
+        if (identical(multi_target_agg, "nth")) {
+            if (is.null(params)) {
+                stop("params must be supplied for 'nth' aggregation (e.g. params = 2 or params = list(n = 2))", call. = FALSE)
+            }
+
+            extract_n <- function(obj) {
+                if (is.list(obj)) {
+                    if (length(obj) == 0L) {
+                        stop("params list must contain an element 'n' for 'nth'", call. = FALSE)
+                    }
+                    if (!is.null(names(obj)) && "n" %in% names(obj)) {
+                        return(obj[["n"]])
+                    }
+                    if (length(obj) == 1L) {
+                        return(obj[[1]])
+                    }
+                    stop("params must contain a single numeric value (or named 'n') for 'nth'", call. = FALSE)
+                }
+                obj
+            }
+
+            n_value <- extract_n(params)
+            if (length(n_value) != 1L || is.na(n_value) || !is.numeric(n_value)) {
+                stop("params for 'nth' must be a single positive integer", call. = FALSE)
+            }
+            nth_param <- as.integer(n_value)
+            if (nth_param <= 0L) {
+                stop("params for 'nth' must be a positive integer", call. = FALSE)
+            }
+        } else if (!is.null(params)) {
+            stop(sprintf("params is only supported for 'nth' aggregation, not '%s'", multi_target_agg), call. = FALSE)
+        }
+    } else {
+        # No aggregation - use defaults
+        multi_target_agg <- "mean"
+        nth_param <- NA_integer_
+        min_n <- -1L # -1 means disabled
+    }
+
+    # Convert NA/NULL min_n to -1 (disabled) for C++
+    if (is.null(min_n) || (length(min_n) == 1 && is.na(min_n))) {
+        min_n <- -1L
+    }
+
+    .gcall("gintervs_liftover", intervals, chain.intervs, src_overlap_policy, tgt_overlap_policy, canonic, include_metadata, value_col, multi_target_agg, nth_param, na.rm, min_n, .misha_env())
 }
 
 
