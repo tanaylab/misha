@@ -47,9 +47,19 @@ gintervals.liftover(
 \item{include_metadata}{logical; if TRUE, adds 'score' column to the output indicating the alignment score of the chain used for each mapping. Only applicable with "auto_score" or "auto" policy.}
 
 \item{canonic}{logical; if TRUE, merges adjacent target intervals that originated from the same source interval (same intervalID) and same chain (same chain_id). This is useful when a source interval maps to multiple adjacent target blocks due to chain gaps.}
+
+\item{value_col}{optional character string specifying the name of a numeric column in the intervals data frame to track through the liftover. When specified, this column's values are preserved in the output with the same column name. Use with multi_target_agg to aggregate values when multiple source intervals map to overlapping target regions.}
+
+\item{multi_target_agg}{aggregation method to use when value_col is specified. One of: "mean", "median", "sum", "min", "max", "count", "first", "last", "nth", "max.coverage_len", "min.coverage_len", "max.coverage_frac", "min.coverage_frac". Default: "mean". Ignored when value_col is NULL.}
+
+\item{params}{additional parameters for specific aggregation methods. Currently only used for "nth" aggregation, where it specifies which element to select (e.g., params = 2 for second element, or params = list(n = 2)).}
+
+\item{na.rm}{logical; if TRUE (default), NA values are removed before aggregation. If FALSE, any NA in the values will cause the result to be NA. Only used when value_col is specified.}
+
+\item{min_n}{optional minimum number of non-NA observations required for aggregation. If fewer observations are available, the result is NA. NULL (default) means no minimum. Only used when value_col is specified.}
 }
 \value{
-A data frame representing the converted intervals. For 1D intervals, always includes 'intervalID' (index of original interval) and 'chain_id' (identifier of the chain that produced the mapping) columns. The chain_id column is essential for distinguishing results when a source interval maps to multiple target regions via different chains (duplications). When include_metadata=TRUE, also includes 'score' column.
+A data frame representing the converted intervals. For 1D intervals, always includes 'intervalID' (index of original interval) and 'chain_id' (identifier of the chain that produced the mapping) columns. The chain_id column is essential for distinguishing results when a source interval maps to multiple target regions via different chains (duplications). When include_metadata=TRUE, also includes 'score' column. When value_col is specified, includes the value column with its original name.
 }
 \description{
 Converts intervals from another assembly to the current one.
