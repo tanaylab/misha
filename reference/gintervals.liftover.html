@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.2.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.2.1</span>
       </span>
     </div>
 
@@ -73,7 +73,14 @@
 <span>  tgt_overlap_policy <span class="op">=</span> <span class="st">"auto"</span>,</span>
 <span>  min_score <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  include_metadata <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  canonic <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  canonic <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  value_col <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  multi_target_agg <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mean"</span>, <span class="st">"median"</span>, <span class="st">"sum"</span>, <span class="st">"min"</span>, <span class="st">"max"</span>, <span class="st">"count"</span>, <span class="st">"first"</span>, <span class="st">"last"</span>,</span>
+<span>    <span class="st">"nth"</span>, <span class="st">"max.coverage_len"</span>, <span class="st">"min.coverage_len"</span>, <span class="st">"max.coverage_frac"</span>,</span>
+<span>    <span class="st">"min.coverage_frac"</span><span class="op">)</span>,</span>
+<span>  params <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  na.rm <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  min_n <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -109,10 +116,30 @@
 <dt id="arg-canonic">canonic<a class="anchor" aria-label="anchor" href="#arg-canonic"></a></dt>
 <dd><p>logical; if TRUE, merges adjacent target intervals that originated from the same source interval (same intervalID) and same chain (same chain_id). This is useful when a source interval maps to multiple adjacent target blocks due to chain gaps.</p></dd>
 
+
+<dt id="arg-value-col">value_col<a class="anchor" aria-label="anchor" href="#arg-value-col"></a></dt>
+<dd><p>optional character string specifying the name of a numeric column in the intervals data frame to track through the liftover. When specified, this column's values are preserved in the output with the same column name. Use with multi_target_agg to aggregate values when multiple source intervals map to overlapping target regions.</p></dd>
+
+
+<dt id="arg-multi-target-agg">multi_target_agg<a class="anchor" aria-label="anchor" href="#arg-multi-target-agg"></a></dt>
+<dd><p>aggregation method to use when value_col is specified. One of: "mean", "median", "sum", "min", "max", "count", "first", "last", "nth", "max.coverage_len", "min.coverage_len", "max.coverage_frac", "min.coverage_frac". Default: "mean". Ignored when value_col is NULL.</p></dd>
+
+
+<dt id="arg-params">params<a class="anchor" aria-label="anchor" href="#arg-params"></a></dt>
+<dd><p>additional parameters for specific aggregation methods. Currently only used for "nth" aggregation, where it specifies which element to select (e.g., params = 2 for second element, or params = list(n = 2)).</p></dd>
+
+
+<dt id="arg-na-rm">na.rm<a class="anchor" aria-label="anchor" href="#arg-na-rm"></a></dt>
+<dd><p>logical; if TRUE (default), NA values are removed before aggregation. If FALSE, any NA in the values will cause the result to be NA. Only used when value_col is specified.</p></dd>
+
+
+<dt id="arg-min-n">min_n<a class="anchor" aria-label="anchor" href="#arg-min-n"></a></dt>
+<dd><p>optional minimum number of non-NA observations required for aggregation. If fewer observations are available, the result is NA. NULL (default) means no minimum. Only used when value_col is specified.</p></dd>
+
 </dl></div>
     <div id="value">
     <h2>Value</h2>
-    <p>A data frame representing the converted intervals. For 1D intervals, always includes 'intervalID' (index of original interval) and 'chain_id' (identifier of the chain that produced the mapping) columns. The chain_id column is essential for distinguishing results when a source interval maps to multiple target regions via different chains (duplications). When include_metadata=TRUE, also includes 'score' column.</p>
+    <p>A data frame representing the converted intervals. For 1D intervals, always includes 'intervalID' (index of original interval) and 'chain_id' (identifier of the chain that produced the mapping) columns. The chain_id column is essential for distinguishing results when a source interval maps to multiple target regions via different chains (duplications). When include_metadata=TRUE, also includes 'score' column. When value_col is specified, includes the value column with its original name.</p>
     </div>
     <div id="details">
     <h2>Details</h2>
