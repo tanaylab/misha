@@ -11,7 +11,14 @@ gintervals.liftover(
   tgt_overlap_policy = "auto",
   min_score = NULL,
   include_metadata = FALSE,
-  canonic = FALSE
+  canonic = FALSE,
+  value_col = NULL,
+  multi_target_agg = c("mean", "median", "sum", "min", "max", "count", "first", "last",
+    "nth", "max.coverage_len", "min.coverage_len", "max.coverage_frac",
+    "min.coverage_frac"),
+  params = NULL,
+  na.rm = TRUE,
+  min_n = NULL
 )
 }
 \arguments{
