@@ -69,6 +69,7 @@ reference:
       - gintervals.liftover
       - gintervals.load
       - gintervals.load_chain
+      - gintervals.as_chain
       - gintervals.ls
       - gintervals.mapply
       - gintervals.neighbors
