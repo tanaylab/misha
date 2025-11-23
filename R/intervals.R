@@ -1854,6 +1854,133 @@ gintervals.load_chain <- function(file = NULL, src_overlap_policy = "error", tgt
     chain
 }
 
+#' Transforms existing intervals to a chain format
+#'
+#' Transforms existing intervals to a chain format by validating required columns
+#' and adding chain attributes.
+#'
+#' This function checks that the input intervals data frame has all the required
+#' columns for a chain format and adds the necessary attributes. A chain format
+#' requires both target coordinates (chrom, start, end, strand) and source
+#' coordinates (chromsrc, startsrc, endsrc, strandsrc), as well as chain_id and
+#' score columns.
+#'
+#' @param intervals a data frame with chain columns: chrom, start, end, strand,
+#'   chromsrc, startsrc, endsrc, strandsrc, chain_id, score
+#' @param src_overlap_policy source overlap policy: "error", "keep", or "discard"
+#' @param tgt_overlap_policy target overlap policy: "error", "auto", "auto_first",
+#'   "auto_longer", "auto_score", "discard", "keep", or "agg"
+#' @param min_score optional minimum alignment score threshold
+#' @return A data frame in chain format with chain attributes set
+#' @seealso \code{\link{gintervals.load_chain}}, \code{\link{gintervals.liftover}}
+#' @keywords ~intervals ~liftover ~chain
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#'
+#' # Create a chain from existing intervals
+#' chain_data <- data.frame(
+#'     chrom = "chr1",
+#'     start = 1000,
+#'     end = 2000,
+#'     strand = 0,
+#'     chromsrc = "chr1",
+#'     startsrc = 5000,
+#'     endsrc = 6000,
+#'     strandsrc = 0,
+#'     chain_id = 1L,
+#'     score = 1000.0
+#' )
+#' chain <- gintervals.as_chain(chain_data)
+#'
+#' @export gintervals.as_chain
+gintervals.as_chain <- function(intervals = NULL, src_overlap_policy = "error", tgt_overlap_policy = "auto", min_score = NULL) {
+    if (!is.data.frame(intervals)) {
+        if (is.null(intervals)) {
+            stop("Usage: gintervals.as_chain(intervals, src_overlap_policy = \"error\", tgt_overlap_policy = \"auto\", min_score = NULL)", call. = FALSE)
+        }
+        stop("intervals must be a data frame", call. = FALSE)
+    }
+
+    # Required columns for chain format
+    required_cols <- c("chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc", "chain_id", "score")
+    missing_cols <- setdiff(required_cols, colnames(intervals))
+    if (length(missing_cols) > 0) {
+        stop(sprintf("Missing required columns: %s", paste(missing_cols, collapse = ", ")), call. = FALSE)
+    }
+
+    # Validate policies
+    if (!src_overlap_policy %in% c("error", "keep", "discard")) {
+        stop("src_overlap_policy must be 'error', 'keep', or 'discard'", call. = FALSE)
+    }
+
+    if (!tgt_overlap_policy %in% c("error", "auto", "auto_first", "auto_longer", "auto_score", "discard", "keep", "agg")) {
+        stop("tgt_overlap_policy must be 'error', 'auto', 'auto_first', 'auto_longer', 'auto_score', 'keep', 'discard', or 'agg'", call. = FALSE)
+    }
+
+    if (!is.null(min_score) && (!is.numeric(min_score) || length(min_score) != 1)) {
+        stop("min_score must be a single numeric value", call. = FALSE)
+    }
+
+    # Convert "auto" to "auto_score" alias
+    if (tgt_overlap_policy == "auto") {
+        tgt_overlap_policy <- "auto_score"
+    }
+
+    # Validate data types
+    if (!is.numeric(intervals$start) || !is.numeric(intervals$end)) {
+        stop("start and end columns must be numeric", call. = FALSE)
+    }
+
+    if (!is.numeric(intervals$startsrc) || !is.numeric(intervals$endsrc)) {
+        stop("startsrc and endsrc columns must be numeric", call. = FALSE)
+    }
+
+    if (!is.numeric(intervals$strand)) {
+        stop("strand column must be numeric", call. = FALSE)
+    }
+
+    if (!is.numeric(intervals$strandsrc)) {
+        stop("strandsrc column must be numeric", call. = FALSE)
+    }
+
+    if (!is.integer(intervals$chain_id) && !is.numeric(intervals$chain_id)) {
+        stop("chain_id column must be integer or numeric", call. = FALSE)
+    }
+
+    if (!is.numeric(intervals$score)) {
+        stop("score column must be numeric", call. = FALSE)
+    }
+
+    # Validate strand values
+    invalid_strand <- intervals$strand != as.integer(intervals$strand) | intervals$strand < -1 | intervals$strand > 1
+    if (any(invalid_strand, na.rm = TRUE)) {
+        stop("strand values must be -1, 0, or 1", call. = FALSE)
+    }
+
+    invalid_strandsrc <- intervals$strandsrc != as.integer(intervals$strandsrc) | intervals$strandsrc < -1 | intervals$strandsrc > 1
+    if (any(invalid_strandsrc, na.rm = TRUE)) {
+        stop("strandsrc values must be -1, 0, or 1", call. = FALSE)
+    }
+
+    # Ensure chain_id is integer
+    if (!is.integer(intervals$chain_id)) {
+        intervals$chain_id <- as.integer(intervals$chain_id)
+    }
+
+    # Store policies as attributes so they can be used during liftover
+    attr(intervals, "src_overlap_policy") <- src_overlap_policy
+    attr(intervals, "tgt_overlap_policy") <- tgt_overlap_policy
+    if (!is.null(min_score)) {
+        attr(intervals, "min_score") <- min_score
+    }
+
+    intervals
+}
+
 .validate_source_chromosomes <- function(chain, src_groot) {
     # Save current genome state
     old_groot <- .misha$GROOT
