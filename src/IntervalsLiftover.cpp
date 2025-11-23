@@ -4,13 +4,14 @@
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
+#include "AggregationHelpers.h"
 
 using namespace std;
 using namespace rdb;
 
 extern "C" {
 
-SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _canonic, SEXP _include_metadata, SEXP _envir)
+SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy, SEXP _tgt_overlap_policy, SEXP _canonic, SEXP _include_metadata, SEXP _value_col, SEXP _multi_target_agg, SEXP _nth_param, SEXP _na_rm, SEXP _min_n, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -23,6 +24,49 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 
 		bool canonic = Rf_asLogical(_canonic);
 		bool include_metadata = Rf_asLogical(_include_metadata);
+
+		// Parse aggregation parameters
+		bool use_aggregation = false;
+		const char *value_col_name = NULL;
+		AggregationConfig agg_cfg;
+		agg_cfg.na_rm = true;
+		agg_cfg.min_n = -1;
+		agg_cfg.nth_index = -1;
+		SEXP value_col_data = R_NilValue;
+		int value_col_idx = -1;
+
+		if (!Rf_isNull(_value_col)) {
+			use_aggregation = true;
+			if (!Rf_isString(_value_col) || Rf_length(_value_col) != 1)
+				verror("value_col must be a single string");
+
+			value_col_name = CHAR(STRING_ELT(_value_col, 0));
+
+			// Parse multi_target_agg
+			if (!Rf_isString(_multi_target_agg) || Rf_length(_multi_target_agg) != 1)
+				verror("multi_target_agg must be a single string");
+			const char *agg_type_str = CHAR(STRING_ELT(_multi_target_agg, 0));
+			agg_cfg.type = parse_aggregation_type(agg_type_str);
+
+			// Parse na.rm
+			if (!Rf_isLogical(_na_rm) || Rf_length(_na_rm) != 1)
+				verror("na.rm must be a single logical value");
+			agg_cfg.na_rm = Rf_asLogical(_na_rm);
+
+			// Parse min_n
+			if (!Rf_isInteger(_min_n) || Rf_length(_min_n) != 1)
+				verror("min_n must be a single integer");
+			int min_n_val = INTEGER(_min_n)[0];
+			if (min_n_val != NA_INTEGER)
+				agg_cfg.min_n = min_n_val;
+
+			// Parse nth_index for nth aggregation
+			if (!Rf_isInteger(_nth_param) || Rf_length(_nth_param) != 1)
+				verror("nth_param must be a single integer");
+			int nth_val = INTEGER(_nth_param)[0];
+			if (nth_val != NA_INTEGER)
+				agg_cfg.nth_index = nth_val;
+		}
 
 		IntervUtils iu(_envir);
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
@@ -88,9 +132,48 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		src_intervs1d.sort();
 		src_intervs2d.sort();
 
+		// Extract value column if aggregation is enabled
+		vector<double> src_values;
+		if (use_aggregation) {
+			// Find the value column in the source intervals dataframe
+			SEXP col_names = Rf_getAttrib(_src_intervs, R_NamesSymbol);
+			if (Rf_isNull(col_names))
+				verror("Source intervals must have column names when value_col is specified");
+
+			int ncols = Rf_length(_src_intervs);
+			value_col_idx = -1;
+			for (int i = 0; i < ncols; ++i) {
+				if (!strcmp(CHAR(STRING_ELT(col_names, i)), value_col_name)) {
+					value_col_idx = i;
+					value_col_data = VECTOR_ELT(_src_intervs, i);
+					break;
+				}
+			}
+
+			if (value_col_idx < 0)
+				verror("value_col '%s' not found in source intervals", value_col_name);
+
+			// Extract values as doubles
+			int n_rows = Rf_length(value_col_data);
+			src_values.resize(n_rows);
+
+			if (Rf_isReal(value_col_data)) {
+				double *vals = REAL(value_col_data);
+				for (int i = 0; i < n_rows; ++i)
+					src_values[i] = vals[i];
+			} else if (Rf_isInteger(value_col_data)) {
+				int *vals = INTEGER(value_col_data);
+				for (int i = 0; i < n_rows; ++i)
+					src_values[i] = (vals[i] == NA_INTEGER) ? numeric_limits<double>::quiet_NaN() : static_cast<double>(vals[i]);
+			} else {
+				verror("value_col must be numeric or integer");
+			}
+		}
+
 		vector<int> src_indices;
 		vector<int64_t> chain_ids;
 		vector<double> scores;
+		vector<double> values;  // Track values for aggregation
 		GIntervals tgt_intervs1d;
 		GIntervals2D tgt_intervs2d;
 
@@ -238,11 +321,17 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				}
 
 				if (!tmp_tgt_intervs.empty()) {
+					int src_idx = iu.get_orig_interv_idx(*isrc_interv);
 					tgt_intervs1d.insert(tgt_intervs1d.end(), tmp_tgt_intervs.begin(), tmp_tgt_intervs.end());
-					src_indices.insert(src_indices.end(), tmp_tgt_intervs.size(), iu.get_orig_interv_idx(*isrc_interv) + 1);
+					src_indices.insert(src_indices.end(), tmp_tgt_intervs.size(), src_idx + 1);
 					for (size_t i = 0; i < tmp_metadata.size(); ++i) {
 						chain_ids.push_back(tmp_metadata[i].chain_id);
 						scores.push_back(tmp_metadata[i].score);
+					}
+					if (use_aggregation) {
+						// Track value for this source interval
+						double val = src_values[src_idx];
+						values.insert(values.end(), tmp_tgt_intervs.size(), val);
 					}
 					iu.verify_max_data_size(tgt_intervs1d.size(), "Result");
 				}
@@ -298,6 +387,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			vector<int> merged_indices;
 			vector<int64_t> merged_chain_ids;
 			vector<double> merged_scores;
+			vector<double> merged_values;
 
 			for (size_t i = 0; i < order.size(); ++i) {
 				size_t idx = order[i];
@@ -305,6 +395,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				int intervalID = src_indices[idx];
 				int64_t chainID = chain_ids[idx];
 				double score = scores[idx];
+				double val = use_aggregation ? values[idx] : 0.0;
 
 				if (merged_intervs.empty() ||
 				    merged_indices.back() != intervalID ||
@@ -316,8 +407,11 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 					merged_indices.push_back(intervalID);
 					merged_chain_ids.push_back(chainID);
 					merged_scores.push_back(score);
+					if (use_aggregation)
+						merged_values.push_back(val);
 				} else {
 					// Merge with previous (extend end)
+					// Values stay the same (same source interval)
 					merged_intervs.back().end = interval.end;
 				}
 			}
@@ -326,6 +420,8 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			src_indices = merged_indices;
 			chain_ids = merged_chain_ids;
 			scores = merged_scores;
+			if (use_aggregation)
+				values = merged_values;
 		}
 
 		// assemble the answer
@@ -333,8 +429,10 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		unsigned num_interv_cols;
 
 		if (!tgt_intervs1d.empty()) {
-			// Add extra columns for intervalID, chain_id, and optionally score
-			int extra_cols = include_metadata ? 3 : 2;
+			// Add extra columns for intervalID, chain_id, score (if include_metadata), and value (if use_aggregation)
+			int extra_cols = 2;  // intervalID, chain_id
+			if (include_metadata) extra_cols++;  // score
+			if (use_aggregation) extra_cols++;  // value
 			answer = iu.convert_intervs(&tgt_intervs1d, GInterval::NUM_COLS + extra_cols);
 			num_interv_cols = GInterval::NUM_COLS;
 		} else if (!tgt_intervs2d.empty()) {
@@ -343,11 +441,12 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		} else
 			return R_NilValue;
 
-		// Add intervalID, chain_id, and optionally score columns for 1D intervals
+		// Add intervalID, chain_id, and optionally score and value columns for 1D intervals
 		if (!tgt_intervs1d.empty()) {
 			SEXP rsrc_indices;
 			SEXP rchain_ids;
 			SEXP rscores = R_NilValue;
+			SEXP rvalues = R_NilValue;
 			SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
 			rprotect(col_names);
 
@@ -365,16 +464,29 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			SET_STRING_ELT(col_names, num_interv_cols + 1, Rf_mkChar("chain_id"));
 			SET_VECTOR_ELT(answer, num_interv_cols + 1, rchain_ids);
 
+			int col_idx = num_interv_cols + 2;
+			int num_protected = 2;  // rsrc_indices, rchain_ids
+
 			if (include_metadata) {
 				rprotect(rscores = RSaneAllocVector(REALSXP, scores.size()));
 				for (size_t i = 0; i < scores.size(); ++i)
 					REAL(rscores)[i] = scores[i];
-				SET_STRING_ELT(col_names, num_interv_cols + 2, Rf_mkChar("score"));
-				SET_VECTOR_ELT(answer, num_interv_cols + 2, rscores);
-				runprotect(3); // rsrc_indices, rchain_ids, rscores
-			} else {
-				runprotect(2); // rsrc_indices, rchain_ids
+				SET_STRING_ELT(col_names, col_idx, Rf_mkChar("score"));
+				SET_VECTOR_ELT(answer, col_idx, rscores);
+				col_idx++;
+				num_protected++;
 			}
+
+			if (use_aggregation) {
+				rprotect(rvalues = RSaneAllocVector(REALSXP, values.size()));
+				for (size_t i = 0; i < values.size(); ++i)
+					REAL(rvalues)[i] = values[i];
+				SET_STRING_ELT(col_names, col_idx, Rf_mkChar(value_col_name));
+				SET_VECTOR_ELT(answer, col_idx, rvalues);
+				num_protected++;
+			}
+
+			runprotect(num_protected);
 			return answer;
 		}
 
