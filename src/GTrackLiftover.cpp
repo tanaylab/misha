@@ -569,9 +569,24 @@ SEXP gtrack_liftover(SEXP _track,
 				// If this chromosome has no data, create an empty track file
 				if (chrom_intervals.find(chromid) == chrom_intervals.end()) {
 					if (src_track_type == GenomeTrack::FIXED_BIN) {
-						GenomeTrackFixedBin gtrack;
-						gtrack.init_write(filename, binsize, chromid);
-						// Write empty track (no bins)
+						// Only create if we know the bin size; otherwise skip as there is nothing to write
+						if (binsize > 0) {
+							GenomeTrackFixedBin gtrack;
+							gtrack.init_write(filename, binsize, chromid);
+							// Fill bins with NaN so the chromosome has the expected bin count
+							int64_t chrom_size = iu.get_chromkey().get_chrom_size(chromid);
+							int64_t end_bin = (int64_t)ceil(chrom_size / (double)binsize);
+							if (end_bin > 0) {
+								const int64_t chunk_size = 65536;
+								vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
+								int64_t remaining = end_bin;
+								while (remaining > 0) {
+									uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
+									gtrack.write_next_bins(&na_chunk[0], to_write);
+									remaining -= to_write;
+								}
+							}
+						}
 					} else if (src_track_type == GenomeTrack::SPARSE) {
 						GenomeTrackSparse gtrack;
 						gtrack.init_write(filename, chromid);
