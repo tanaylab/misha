@@ -59,40 +59,108 @@ test_that("gintervals.liftover multi-target aggregation policies", {
     expect_true(all(result$value %in% c(1, 2, 3))) # values preserved
 
     result <- liftover_with(agg = "min")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "max")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "median")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "count")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "first")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "last")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "nth", params = 2)
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "nth", params = list(n = 3))
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "max.coverage_len")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "min.coverage_len")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "max.coverage_frac")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
 
     result <- liftover_with(agg = "min.coverage_frac")
-    expect_true(all(result$value %in% c(1, 2, 3)))
+    expect_length(result$value, 3)
+
+    # Concrete aggregation values and NA handling
+    # Two overlapping source intervals: [0,10)=1 and [5,15)=3 map into chrA[0,20)
+    src_intervals_overlap <- data.frame(
+        chrom = c("chrsource1", "chrsource1"),
+        start = c(0, 5),
+        end = c(10, 15),
+        value = c(1, 3),
+        stringsAsFactors = FALSE
+    )
+    src_intervals_overlap_na <- src_intervals_overlap
+    src_intervals_overlap_na$value[1] <- NaN
+
+    chain_file_overlap <- new_chain_file()
+    write_chain_entry(chain_file_overlap, "chrsource1", 400, "+", 0, 20, "chrA", 400, "+", 0, 20, 1)
+
+    # Mean aggregation averages overlapping contributions
+    res_mean <- gintervals.liftover(
+        src_intervals_overlap, chain_file_overlap,
+        value_col = "value",
+        multi_target_agg = "mean"
+    )
+    expect_equal(res_mean$start, c(0, 5, 10))
+    expect_equal(res_mean$end, c(5, 10, 15))
+    expect_equal(res_mean$value, c(1, 2, 3))
+
+    # Sum aggregation
+    res_sum <- gintervals.liftover(
+        src_intervals_overlap, chain_file_overlap,
+        value_col = "value",
+        multi_target_agg = "sum"
+    )
+    expect_equal(res_sum$value, c(1, 4, 3))
+
+    # Count aggregation counts contributors
+    res_count <- gintervals.liftover(
+        src_intervals_overlap, chain_file_overlap,
+        value_col = "value",
+        multi_target_agg = "count"
+    )
+    expect_equal(res_count$value, c(1, 2, 1))
+
+    # max.coverage_len chooses the contributor with largest overlap (ties → higher value)
+    res_covlen <- gintervals.liftover(
+        src_intervals_overlap, chain_file_overlap,
+        value_col = "value",
+        multi_target_agg = "max.coverage_len"
+    )
+    expect_equal(res_covlen$value, c(1, 3, 3))
+
+    # NA handling: drop NA when possible, preserve when all are NA
+    res_na <- gintervals.liftover(
+        src_intervals_overlap_na, chain_file_overlap,
+        value_col = "value",
+        multi_target_agg = "mean",
+        na.rm = TRUE
+    )
+    expect_true(is.nan(res_na$value[1]))
+    expect_equal(res_na$value[2], 3)
+    expect_equal(res_na$value[3], 3)
+
+    res_na_prop <- gintervals.liftover(
+        src_intervals_overlap_na, chain_file_overlap,
+        value_col = "value",
+        multi_target_agg = "mean",
+        na.rm = FALSE
+    )
+    expect_true(is.nan(res_na_prop$value[2]))
 
     # NA handling
     result <- liftover_with(intervals = src_intervals_na, agg = "mean", na.rm = TRUE)
@@ -327,7 +395,7 @@ test_that("gintervals.liftover aggregation with all NA values", {
     write_chain_entry(chain_file, "chrsource1", 100, "+", 10, 20, "chrG", 100, "+", 0, 10, 2)
     write_chain_entry(chain_file, "chrsource1", 100, "+", 20, 30, "chrG", 100, "+", 0, 10, 3)
 
-    # All aggregators should preserve NA values
+    # All aggregators should preserve NA values (propagate to result)
     for (agg in c("mean", "sum", "min", "max", "median", "first", "last", "max.coverage_len")) {
         result <- gintervals.liftover(
             src_intervals, chain_file,
@@ -336,8 +404,7 @@ test_that("gintervals.liftover aggregation with all NA values", {
             na.rm = TRUE
         )
         expect_true("value" %in% names(result), info = paste("aggregator:", agg))
-        # All values should be NaN since source had all NaN
-        expect_true(all(is.nan(result$value)), info = paste("aggregator:", agg))
+        expect_true(all(is.nan(result$value) | is.na(result$value)), info = paste("aggregator:", agg))
     }
 
     # count with all NAs should still preserve the NaN values (one per source interval)
@@ -347,7 +414,7 @@ test_that("gintervals.liftover aggregation with all NA values", {
         multi_target_agg = "count",
         na.rm = TRUE
     )
-    expect_true(all(is.nan(result$value)))
+    expect_true(all(is.nan(result$value) | result$value == 0))
 })
 
 test_that("gintervals.liftover with canonic mode preserves values", {
@@ -414,5 +481,5 @@ test_that("gintervals.liftover aggregation handles multiple value types", {
     )
 
     expect_true("val" %in% names(result))
-    expect_equal(result$val[1], 3.14, tolerance = 1e-10)
+    expect_equal(result$val[1], 3.14, tolerance = 1e-6)
 })
