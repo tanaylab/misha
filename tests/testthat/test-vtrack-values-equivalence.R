@@ -25,9 +25,11 @@ test_that("value-based vtrack matches sparse track with avg function", {
     expect_equal(track_iter$value, vtrack_iter$value, tolerance = 1e-6)
 
     # Test with multiple non-overlapping intervals
-    test_ints <- gintervals(c("chr1", "chr1", "chr2"),
-                           c(1000, 5000, 2000),
-                           c(2000, 6000, 4000))
+    test_ints <- gintervals(
+        c("chr1", "chr1", "chr2"),
+        c(1000, 5000, 2000),
+        c(2000, 6000, 4000)
+    )
     track_multi <- gextract("test.sparse", intervals = test_ints, iterator = test_ints, colnames = "value")
     vtrack_multi <- gextract("test.sparse.vt", intervals = test_ints, iterator = test_ints, colnames = "value")
 
@@ -50,23 +52,32 @@ test_that("value-based vtrack matches track-based vtrack for all aggregation fun
     for (func in functions) {
         # Create track-based vtrack (from original track)
         track_vtrack_name <- paste0("test.track.", func)
-        gvtrack.create(track_vtrack_name, "test.sparse", func = func,
-                      params = if (func == "quantile") 0.5 else NULL)
+        gvtrack.create(track_vtrack_name, "test.sparse",
+            func = func,
+            params = if (func == "quantile") 0.5 else NULL
+        )
 
         # Create value-based vtrack (from extracted data)
         value_vtrack_name <- paste0("test.value.", func)
-        gvtrack.create(value_vtrack_name, src = extracted, func = func,
-                      params = if (func == "quantile") 0.5 else NULL)
+        gvtrack.create(value_vtrack_name,
+            src = extracted, func = func,
+            params = if (func == "quantile") 0.5 else NULL
+        )
 
         # Extract from both
-        track_vtrack_result <- gextract(track_vtrack_name, intervals = test_int,
-                                       iterator = test_int, colnames = "value")
-        value_vtrack_result <- gextract(value_vtrack_name, intervals = test_int,
-                                       iterator = test_int, colnames = "value")
+        track_vtrack_result <- gextract(track_vtrack_name,
+            intervals = test_int,
+            iterator = test_int, colnames = "value"
+        )
+        value_vtrack_result <- gextract(value_vtrack_name,
+            intervals = test_int,
+            iterator = test_int, colnames = "value"
+        )
 
         # They should match
         expect_equal(track_vtrack_result$value, value_vtrack_result$value,
-                    tolerance = 1e-6, info = paste("Function:", func))
+            tolerance = 1e-6, info = paste("Function:", func)
+        )
 
         # Clean up
         gvtrack.rm(track_vtrack_name)
@@ -124,9 +135,11 @@ test_that("value-based vtrack matches track-based vtrack for position and select
     extracted <- gextract("test.sparse", intervals = intervals_with_data, iterator = intervals_with_data)
 
     # Test position and selector functions
-    functions <- c("nearest", "exists", "size", "first", "last",  
-                  "first.pos.abs", "last.pos.abs",
-                  "min.pos.abs", "max.pos.abs")
+    functions <- c(
+        "nearest", "exists", "size", "first", "last",
+        "first.pos.abs", "last.pos.abs",
+        "min.pos.abs", "max.pos.abs"
+    )
 
     test_int <- gintervals("chr1", 3000, 8000)
 
@@ -140,14 +153,19 @@ test_that("value-based vtrack matches track-based vtrack for position and select
         gvtrack.create(value_vtrack_name, src = extracted, func = func)
 
         # Extract from both
-        track_vtrack_result <- gextract(track_vtrack_name, intervals = test_int,
-                                       iterator = test_int, colnames = "value")
-        value_vtrack_result <- gextract(value_vtrack_name, intervals = test_int,
-                                       iterator = test_int, colnames = "value")
+        track_vtrack_result <- gextract(track_vtrack_name,
+            intervals = test_int,
+            iterator = test_int, colnames = "value"
+        )
+        value_vtrack_result <- gextract(value_vtrack_name,
+            intervals = test_int,
+            iterator = test_int, colnames = "value"
+        )
 
         # They should match
         expect_equal(track_vtrack_result$value, value_vtrack_result$value,
-                    tolerance = 1e-6, info = paste("Function:", func))
+            tolerance = 1e-6, info = paste("Function:", func)
+        )
 
         # Clean up
         gvtrack.rm(track_vtrack_name)
@@ -181,7 +199,8 @@ test_that("value-based vtrack with iterator matches track-based vtrack", {
         # Compare all values
         expect_equal(nrow(track_result), nrow(value_result), info = paste("Function:", func, "- row count"))
         expect_equal(track_result[[track_vtrack_name]], value_result[[value_vtrack_name]],
-                    tolerance = 1e-6, info = paste("Function:", func, "- with iterator"))
+            tolerance = 1e-6, info = paste("Function:", func, "- with iterator")
+        )
 
         # Clean up
         gvtrack.rm(track_vtrack_name)
@@ -219,7 +238,8 @@ test_that("value-based vtrack with multiple chromosomes matches track-based vtra
         # Compare all values
         expect_equal(nrow(track_result), nrow(value_result), info = paste("Function:", func))
         expect_equal(track_result[[track_vtrack_name]], value_result[[value_vtrack_name]],
-                    tolerance = 1e-6, info = paste("Function:", func, "- multiple chromosomes"))
+            tolerance = 1e-6, info = paste("Function:", func, "- multiple chromosomes")
+        )
 
         # Clean up
         gvtrack.rm(track_vtrack_name)
@@ -252,7 +272,8 @@ test_that("value-based vtrack with quantile matches track-based vtrack for diffe
 
         # Compare
         expect_equal(track_result[[track_vtrack_name]], value_result[[value_vtrack_name]],
-                    tolerance = 1e-6, info = paste("Percentile:", pct))
+            tolerance = 1e-6, info = paste("Percentile:", pct)
+        )
 
         # Clean up
         gvtrack.rm(track_vtrack_name)
@@ -326,7 +347,8 @@ test_that("value-based vtrack in complex expressions matches track-based vtrack"
 
         # Compare
         expect_equal(track_result$value, value_result$value,
-                    tolerance = 1e-6, info = paste("Expression:", expr))
+            tolerance = 1e-6, info = paste("Expression:", expr)
+        )
     }
 
     # Clean up
