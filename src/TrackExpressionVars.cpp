@@ -32,6 +32,18 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage", "neighbor.count" };
 
+const char *TrackExpressionVars::Value_var::FUNC_NAMES[TrackExpressionVars::Value_var::NUM_FUNCS] = {
+	"avg", "min", "max", "stddev", "sum", "quantile",
+	"nearest",
+	"exists", "size",
+	"first", "last", "sample",
+	"first.pos.abs", "first.pos.relative",
+	"last.pos.abs", "last.pos.relative",
+	"sample.pos.abs", "sample.pos.relative",
+	"min.pos.abs", "min.pos.relative",
+	"max.pos.abs", "max.pos.relative"
+};
+
 using namespace rdb;
 
 
@@ -50,6 +62,8 @@ TrackExpressionVars::~TrackExpressionVars()
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ivar++)
 		runprotect(ivar->rvar);
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ivar++)
+		runprotect(ivar->rvar);
+	for (Value_vars::iterator ivar = m_value_vars.begin(); ivar != m_value_vars.end(); ivar++)
 		runprotect(ivar->rvar);
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 		delete itrack_n_imdf->track;
@@ -127,6 +141,8 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 		if (ivar->val_func == Interv_var::DIST || ivar->val_func == Interv_var::NEIGHBOR_COUNT)
 			ivar->eiinterv = ivar->eintervs.begin();
 	}
+
+	// Value vars don't need initialization - they use track objects
 }
 
 void TrackExpressionVars::parse_imdf(SEXP rvtrack, const string &vtrack, Iterator_modifier1D *imdf1d, Iterator_modifier2D *imdf2d)
@@ -321,6 +337,27 @@ void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrac
 	}
 }
 
+void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrack, Value_var &var)
+{
+	// Check for filter field in rvtrack
+	SEXP rfilter = get_rvector_col(rvtrack, "filter", vtrack.c_str(), false);
+
+	if (Rf_isNull(rfilter) || !Rf_isString(rfilter) || Rf_length(rfilter) != 1) {
+		var.filter = nullptr;
+		return;
+	}
+
+	// Get filter key
+	const char *filter_key = CHAR(STRING_ELT(rfilter, 0));
+
+	// Look up filter in registry
+	var.filter = FilterRegistry::instance().get(filter_key);
+
+	if (var.filter == nullptr) {
+		verror("Virtual track %s: filter with key '%s' not found in registry", vtrack.c_str(), filter_key);
+	}
+}
+
 void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 {
 	// Check for existing track vars
@@ -332,6 +369,13 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 
 	// Check for existing interval vars
 	for (Interv_vars::const_iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ++ivar)
+	{
+		if (ivar->var_name == vtrack)
+			return;
+	}
+
+	// Check for existing value vars
+	for (Value_vars::const_iterator ivar = m_value_vars.begin(); ivar != m_value_vars.end(); ++ivar)
 	{
 		if (ivar->var_name == vtrack)
 			return;
@@ -441,6 +485,79 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             }
         }
     }
+
+	// Check if rsrc is a data.frame with interval columns and value column (value-based vtrack)
+	if (TYPEOF(rsrc) == VECSXP) {  // data.frame is a VECSXP (list)
+		SEXP names = Rf_getAttrib(rsrc, R_NamesSymbol);
+		if (names != R_NilValue && TYPEOF(names) == STRSXP) {
+			// Check if it has chrom, start, end columns
+			bool has_chrom = false, has_start = false, has_end = false;
+			int chrom_idx = -1, start_idx = -1, end_idx = -1;
+			int value_idx = -1;
+
+			for (int i = 0; i < Rf_length(names); i++) {
+				const char *name = CHAR(STRING_ELT(names, i));
+				if (!strcmp(name, "chrom")) { has_chrom = true; chrom_idx = i; }
+				else if (!strcmp(name, "start")) { has_start = true; start_idx = i; }
+				else if (!strcmp(name, "end")) { has_end = true; end_idx = i; }
+				// Look for numeric columns (not chrom/start/end/strand) as value columns
+				else if (strcmp(name, "strand") != 0 && strcmp(name, "intervalID") != 0) {
+					SEXP col = VECTOR_ELT(rsrc, i);
+					if (TYPEOF(col) == REALSXP || TYPEOF(col) == INTSXP) {
+						if (value_idx == -1) {  // Take first numeric column as value
+							value_idx = i;
+						}
+					}
+				}
+			}
+
+			// Check what function is requested
+			SEXP rfunc = get_rvector_col(rvtrack, "func", vtrack.c_str(), false);
+			string func;
+			if (Rf_isNull(rfunc))
+				func = Value_var::FUNC_NAMES[Value_var::AVG];
+			else {
+				func = CHAR(STRING_ELT(rfunc, 0));
+				transform(func.begin(), func.end(), func.begin(), ::tolower);
+			}
+
+			// Check if this is an interval-based function (coverage, neighbor_count)
+			bool is_interval_func = (!strcmp(func.c_str(), "coverage") ||
+			                         !strcmp(func.c_str(), "neighbor_count"));
+
+			// If we have interval columns AND a value column AND it's NOT an interval function,
+			// treat as value-based vtrack
+			if (has_chrom && has_start && has_end && value_idx >= 0 && !is_interval_func) {
+				GIntervals intervs;
+				vector<float> vals;
+
+				// Convert to intervals and extract values
+				m_iu.convert_rintervs(rsrc, &intervs, NULL);
+
+				// Extract values
+				SEXP value_col = VECTOR_ELT(rsrc, value_idx);
+				int n = Rf_length(value_col);
+				vals.reserve(n);
+
+				if (TYPEOF(value_col) == REALSXP) {
+					for (int i = 0; i < n; i++) {
+						vals.push_back(static_cast<float>(REAL(value_col)[i]));
+					}
+				} else if (TYPEOF(value_col) == INTSXP) {
+					for (int i = 0; i < n; i++) {
+						int ival = INTEGER(value_col)[i];
+						if (ival == NA_INTEGER)
+							vals.push_back(numeric_limits<float>::quiet_NaN());
+						else
+							vals.push_back(static_cast<float>(ival));
+					}
+				}
+
+				add_vtrack_var_src_value(rvtrack, vtrack, intervs, vals);
+				return;
+			}
+		}
+	}
 
 	GIntervals intervs1d;
 	GIntervals2D intervs2d;
@@ -810,6 +927,174 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 	return var;
 }
 
+TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SEXP rvtrack, const string &vtrack, GIntervals &intervs, vector<float> &vals)
+{
+	if (intervs.size() != vals.size())
+		verror("Virtual track %s: number of intervals (%zu) does not match number of values (%zu)", vtrack.c_str(), intervs.size(), vals.size());
+
+	m_value_vars.push_back(Value_var());
+	Value_var &var = m_value_vars.back();
+
+	var.var_name = vtrack;
+	Iterator_modifier1D imdf1d;
+	parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+	var.imdf1d = add_imdf(imdf1d);
+
+	SEXP rfunc = get_rvector_col(rvtrack, "func", vtrack.c_str(), false);
+	SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
+	string func;
+
+	if (Rf_isNull(rfunc))
+		func = Value_var::FUNC_NAMES[Value_var::AVG];
+	else {
+		func = CHAR(STRING_ELT(rfunc, 0));
+		transform(func.begin(), func.end(), func.begin(), ::tolower);
+	}
+
+	// Parse function name
+	bool func_found = false;
+	for (int i = 0; i < Value_var::NUM_FUNCS; i++) {
+		if (!strcmp(func.c_str(), Value_var::FUNC_NAMES[i])) {
+			var.val_func = static_cast<Value_var::Val_func>(i);
+			func_found = true;
+			break;
+		}
+	}
+
+	if (!func_found)
+		verror("Virtual track %s: invalid function %s used with value-based intervals", vtrack.c_str(), func.c_str());
+
+	// Parse percentile parameter for quantile function
+	var.percentile = 0;
+	if (var.val_func == Value_var::QUANTILE) {
+		if (Rf_isNull(rparams))
+			verror("Virtual track %s: function %s requires percentile parameter", vtrack.c_str(), func.c_str());
+
+		if (Rf_isReal(rparams) && Rf_length(rparams) == 1)
+			var.percentile = REAL(rparams)[0];
+		else if (Rf_isInteger(rparams) && Rf_length(rparams) == 1)
+			var.percentile = INTEGER(rparams)[0];
+		else
+			verror("Virtual track %s: invalid percentile parameter for function %s", vtrack.c_str(), func.c_str());
+
+		if (var.percentile < 0 || var.percentile > 1)
+			verror("Virtual track %s: percentile must be between 0 and 1, got %g", vtrack.c_str(), var.percentile);
+	} else {
+		if (!Rf_isNull(rparams))
+			verror("Virtual track %s: function %s does not accept any parameters", vtrack.c_str(), func.c_str());
+	}
+
+	// Sort intervals and values together
+	// Create pairs, sort, then separate
+	vector<pair<GInterval, float>> paired;
+	paired.reserve(intervs.size());
+	for (size_t i = 0; i < intervs.size(); i++) {
+		paired.push_back(make_pair(intervs[i], vals[i]));
+	}
+
+	sort(paired.begin(), paired.end(), [](const pair<GInterval, float> &a, const pair<GInterval, float> &b) {
+		return a.first < b.first;
+	});
+
+	// Separate back into sorted intervals and values
+	GIntervals sorted_intervals;
+	vector<float> sorted_values;
+	sorted_intervals.reserve(paired.size());
+	sorted_values.reserve(paired.size());
+	for (size_t i = 0; i < paired.size(); i++) {
+		sorted_intervals.push_back(paired[i].first);
+		sorted_values.push_back(paired[i].second);
+	}
+
+	// Check for overlaps (Phase 1: error only)
+	for (size_t i = 1; i < sorted_intervals.size(); i++) {
+		if (sorted_intervals[i-1].chromid == sorted_intervals[i].chromid &&
+		    sorted_intervals[i-1].end > sorted_intervals[i].start) {
+			verror("Virtual track %s: overlapping intervals detected. Interval at position %zu [%s:%ld-%ld] overlaps with previous interval [%s:%ld-%ld]. "
+			       "Value-based virtual tracks do not support overlapping intervals.",
+			       vtrack.c_str(), i,
+			       m_iu.get_chromkey().id2chrom(sorted_intervals[i].chromid).c_str(),
+			       sorted_intervals[i].start, sorted_intervals[i].end,
+			       m_iu.get_chromkey().id2chrom(sorted_intervals[i-1].chromid).c_str(),
+			       sorted_intervals[i-1].start, sorted_intervals[i-1].end);
+		}
+	}
+
+	// Create the track object
+	var.track = make_shared<GenomeTrackInMemory>();
+
+	// Determine chromid (assuming all intervals are on same chrom, or 0 if empty)
+	int chromid = sorted_intervals.empty() ? 0 : sorted_intervals.front().chromid;
+
+	// Initialize track with data
+	var.track->init_from_data(sorted_intervals, sorted_values, chromid);
+
+	// Register required function
+	switch (var.val_func) {
+		case Value_var::AVG:
+			var.track->register_function(GenomeTrack1D::AVG);
+			break;
+		case Value_var::MIN:
+			var.track->register_function(GenomeTrack1D::MIN);
+			break;
+		case Value_var::MAX:
+			var.track->register_function(GenomeTrack1D::MAX);
+			break;
+		case Value_var::SUM:
+			var.track->register_function(GenomeTrack1D::SUM);
+			break;
+		case Value_var::STDDEV:
+			var.track->register_function(GenomeTrack1D::STDDEV);
+			break;
+		case Value_var::QUANTILE:
+			var.track->register_quantile(10000, 1000, 1000);
+			break;
+		case Value_var::NEAREST:
+			var.track->register_function(GenomeTrack1D::NEAREST);
+			break;
+		case Value_var::EXISTS:
+			var.track->register_function(GenomeTrack1D::EXISTS);
+			break;
+		case Value_var::SIZE:
+			var.track->register_function(GenomeTrack1D::SIZE);
+			break;
+		case Value_var::FIRST:
+			var.track->register_function(GenomeTrack1D::FIRST);
+			break;
+		case Value_var::LAST:
+			var.track->register_function(GenomeTrack1D::LAST);
+			break;
+		case Value_var::SAMPLE:
+			var.track->register_function(GenomeTrack1D::SAMPLE);
+			break;
+		case Value_var::FIRST_POS_ABS:
+		case Value_var::FIRST_POS_REL:
+			var.track->register_function(GenomeTrack1D::FIRST_POS);
+			break;
+		case Value_var::LAST_POS_ABS:
+		case Value_var::LAST_POS_REL:
+			var.track->register_function(GenomeTrack1D::LAST_POS);
+			break;
+		case Value_var::SAMPLE_POS_ABS:
+		case Value_var::SAMPLE_POS_REL:
+			var.track->register_function(GenomeTrack1D::SAMPLE_POS);
+			break;
+		case Value_var::MIN_POS_ABS:
+		case Value_var::MIN_POS_REL:
+			var.track->register_function(GenomeTrack1D::MIN_POS);
+			break;
+		case Value_var::MAX_POS_ABS:
+		case Value_var::MAX_POS_REL:
+			var.track->register_function(GenomeTrack1D::MAX_POS);
+			break;
+	}
+
+	// Attach filter if present
+	attach_filter_to_var(rvtrack, vtrack, var);
+
+	return var;
+}
+
 void TrackExpressionVars::register_track_functions()
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
@@ -1105,6 +1390,11 @@ void TrackExpressionVars::define_r_vars(unsigned size)
 		ivar->var = REAL(ivar->rvar);
 	}
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ivar++) {
+		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
+		Rf_defineVar(Rf_install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
+		ivar->var = REAL(ivar->rvar);
+	}
+	for (Value_vars::iterator ivar = m_value_vars.begin(); ivar != m_value_vars.end(); ivar++) {
 		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
 		Rf_defineVar(Rf_install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
 		ivar->var = REAL(ivar->rvar);
@@ -2037,6 +2327,222 @@ void TrackExpressionVars::set_vars(unsigned idx)
 			}
 
 			ivar->var[idx] = (double)total_overlap / total_unmasked_length;
+		}
+	}
+
+	// set value variables - now using GenomeTrackInMemory for DRY principle
+	for (Value_vars::iterator ivar = m_value_vars.begin(); ivar != m_value_vars.end(); ++ivar) {
+		const GInterval &interval = ivar->imdf1d ? ivar->imdf1d->interval : m_interval1d;
+
+		if (ivar->imdf1d && ivar->imdf1d->out_of_range) {
+			ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+			continue;
+		}
+
+		// Apply filter if present
+		if (ivar->filter) {
+			std::vector<GInterval> eval_intervals;
+			ivar->filter->subtract(interval, eval_intervals);
+
+			if (eval_intervals.empty()) {
+				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+				continue;
+			}
+
+			// For filtered intervals, we need to combine results across multiple sub-intervals
+			// This matches the pattern used for track variables with filters
+			double combined_result = 0;
+			int64_t total_coverage = 0;
+			bool has_value = false;
+
+			for (const auto &eval_interval : eval_intervals) {
+				ivar->track->read_interval(eval_interval);
+
+				// Collect results based on function type
+				switch (ivar->val_func) {
+					case Value_var::AVG:
+					case Value_var::STDDEV: {
+						// For avg/stddev, we need coverage-weighted combination
+						if (!std::isnan(ivar->track->last_avg())) {
+							int64_t coverage = eval_interval.end - eval_interval.start;
+							combined_result += ivar->track->last_avg() * coverage;
+							total_coverage += coverage;
+							has_value = true;
+						}
+						break;
+					}
+					case Value_var::MIN: {
+						float val = ivar->track->last_min();
+						if (!std::isnan(val)) {
+							if (!has_value || val < combined_result) {
+								combined_result = val;
+								has_value = true;
+							}
+						}
+						break;
+					}
+					case Value_var::MAX: {
+						float val = ivar->track->last_max();
+						if (!std::isnan(val)) {
+							if (!has_value || val > combined_result) {
+								combined_result = val;
+								has_value = true;
+							}
+						}
+						break;
+					}
+					case Value_var::SUM: {
+						float val = ivar->track->last_sum();
+						if (!std::isnan(val)) {
+							combined_result += val;
+							has_value = true;
+						}
+						break;
+					}
+					case Value_var::QUANTILE: {
+						// For quantile with filter, just use first non-empty result
+						// (proper multi-interval quantile would require more complex logic)
+						float val = ivar->track->last_quantile(ivar->percentile);
+						if (!has_value && !std::isnan(val)) {
+							combined_result = val;
+							has_value = true;
+						}
+						break;
+					}
+					case Value_var::NEAREST:
+					case Value_var::EXISTS:
+					case Value_var::SIZE:
+					case Value_var::FIRST:
+					case Value_var::LAST:
+					case Value_var::SAMPLE:
+					case Value_var::FIRST_POS_ABS:
+					case Value_var::FIRST_POS_REL:
+					case Value_var::LAST_POS_ABS:
+					case Value_var::LAST_POS_REL:
+					case Value_var::SAMPLE_POS_ABS:
+					case Value_var::SAMPLE_POS_REL:
+					case Value_var::MIN_POS_ABS:
+					case Value_var::MIN_POS_REL:
+					case Value_var::MAX_POS_ABS:
+					case Value_var::MAX_POS_REL: {
+						// For these functions, use first non-empty result
+						// (combining across filtered intervals doesn't make semantic sense)
+						if (!has_value) {
+							double val = numeric_limits<double>::quiet_NaN();
+							switch (ivar->val_func) {
+								case Value_var::NEAREST: val = ivar->track->last_nearest(); break;
+								case Value_var::EXISTS: val = ivar->track->last_exists(); break;
+								case Value_var::SIZE: val = ivar->track->last_size(); break;
+								case Value_var::FIRST: val = ivar->track->last_first(); break;
+								case Value_var::LAST: val = ivar->track->last_last(); break;
+								case Value_var::SAMPLE: val = ivar->track->last_sample(); break;
+								case Value_var::FIRST_POS_ABS: val = ivar->track->last_first_pos(); break;
+								case Value_var::FIRST_POS_REL: val = ivar->track->last_first_pos() - eval_interval.start; break;
+								case Value_var::LAST_POS_ABS: val = ivar->track->last_last_pos(); break;
+								case Value_var::LAST_POS_REL: val = ivar->track->last_last_pos() - eval_interval.start; break;
+								case Value_var::SAMPLE_POS_ABS: val = ivar->track->last_sample_pos(); break;
+								case Value_var::SAMPLE_POS_REL: val = ivar->track->last_sample_pos() - eval_interval.start; break;
+								case Value_var::MIN_POS_ABS: val = ivar->track->last_min_pos(); break;
+								case Value_var::MIN_POS_REL: val = ivar->track->last_min_pos() - eval_interval.start; break;
+								case Value_var::MAX_POS_ABS: val = ivar->track->last_max_pos(); break;
+								case Value_var::MAX_POS_REL: val = ivar->track->last_max_pos() - eval_interval.start; break;
+								default: break;
+							}
+							if (!std::isnan(val)) {
+								combined_result = val;
+								has_value = true;
+							}
+						}
+						break;
+					}
+				}
+			}
+
+			// Finalize result for filtered case
+			if (!has_value) {
+				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+			} else {
+				if ((ivar->val_func == Value_var::AVG || ivar->val_func == Value_var::STDDEV) && total_coverage > 0) {
+					ivar->var[idx] = combined_result / total_coverage;
+				} else {
+					ivar->var[idx] = combined_result;
+				}
+			}
+		} else {
+			// No filter - simple case, use track interface directly
+			ivar->track->read_interval(interval);
+
+			// Extract result based on function
+			switch (ivar->val_func) {
+				case Value_var::AVG:
+					ivar->var[idx] = ivar->track->last_avg();
+					break;
+				case Value_var::MIN:
+					ivar->var[idx] = ivar->track->last_min();
+					break;
+				case Value_var::MAX:
+					ivar->var[idx] = ivar->track->last_max();
+					break;
+				case Value_var::SUM:
+					ivar->var[idx] = ivar->track->last_sum();
+					break;
+				case Value_var::STDDEV:
+					ivar->var[idx] = ivar->track->last_stddev();
+					break;
+				case Value_var::QUANTILE:
+					ivar->var[idx] = ivar->track->last_quantile(ivar->percentile);
+					break;
+				case Value_var::NEAREST:
+					ivar->var[idx] = ivar->track->last_nearest();
+					break;
+				case Value_var::EXISTS:
+					ivar->var[idx] = ivar->track->last_exists();
+					break;
+				case Value_var::SIZE:
+					ivar->var[idx] = ivar->track->last_size();
+					break;
+				case Value_var::FIRST:
+					ivar->var[idx] = ivar->track->last_first();
+					break;
+				case Value_var::LAST:
+					ivar->var[idx] = ivar->track->last_last();
+					break;
+				case Value_var::SAMPLE:
+					ivar->var[idx] = ivar->track->last_sample();
+					break;
+				case Value_var::FIRST_POS_ABS:
+					ivar->var[idx] = ivar->track->last_first_pos();
+					break;
+				case Value_var::FIRST_POS_REL:
+					ivar->var[idx] = ivar->track->last_first_pos() - interval.start;
+					break;
+				case Value_var::LAST_POS_ABS:
+					ivar->var[idx] = ivar->track->last_last_pos();
+					break;
+				case Value_var::LAST_POS_REL:
+					ivar->var[idx] = ivar->track->last_last_pos() - interval.start;
+					break;
+				case Value_var::SAMPLE_POS_ABS:
+					ivar->var[idx] = ivar->track->last_sample_pos();
+					break;
+				case Value_var::SAMPLE_POS_REL:
+					ivar->var[idx] = ivar->track->last_sample_pos() - interval.start;
+					break;
+				case Value_var::MIN_POS_ABS:
+					ivar->var[idx] = ivar->track->last_min_pos();
+					break;
+				case Value_var::MIN_POS_REL:
+					ivar->var[idx] = ivar->track->last_min_pos() - interval.start;
+					break;
+				case Value_var::MAX_POS_ABS:
+					ivar->var[idx] = ivar->track->last_max_pos();
+					break;
+				case Value_var::MAX_POS_REL:
+					ivar->var[idx] = ivar->track->last_max_pos() - interval.start;
+					break;
+				default:
+					verror("Internal error: unsupported value variable function %d", ivar->val_func);
+			}
 		}
 	}
 }
