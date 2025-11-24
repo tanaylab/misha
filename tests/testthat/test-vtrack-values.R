@@ -43,14 +43,14 @@ test_that("value-based vtrack min/max functions work", {
     gvtrack.create("test.min.vt", src = intervals_df, func = "min")
     iter_int <- gintervals("chr1", 150, 350)
     result <- gextract("test.min.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
-    expect_equal(result$value, 10)  # Min of 10 and 20
+    expect_equal(result$value, 10) # Min of 10 and 20
     gvtrack.rm("test.min.vt")
 
     # Test MAX function
     gvtrack.create("test.max.vt", src = intervals_df, func = "max")
     iter_int <- gintervals("chr1", 150, 350)
     result <- gextract("test.max.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
-    expect_equal(result$value, 20)  # Max of 10 and 20
+    expect_equal(result$value, 20) # Max of 10 and 20
     gvtrack.rm("test.max.vt")
 })
 
@@ -116,7 +116,7 @@ test_that("value-based vtrack detects overlapping intervals", {
     # Create overlapping intervals
     intervals_df <- data.frame(
         chrom = "chr1",
-        start = c(100, 150),  # These overlap
+        start = c(100, 150), # These overlap
         end = c(200, 250),
         score = c(10, 20)
     )
@@ -165,12 +165,12 @@ test_that("value-based vtrack works across multiple chromosomes", {
     # Extract from chr1
     iter_int <- gintervals("chr1", 150, 350)
     result <- gextract("test.multichrom.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
-    expect_equal(result$value, 15)  # (10*50 + 20*50) / 100
+    expect_equal(result$value, 15) # (10*50 + 20*50) / 100
 
     # Extract from chr2
     iter_int <- gintervals("chr2", 150, 350)
     result <- gextract("test.multichrom.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
-    expect_equal(result$value, 35)  # (30*50 + 40*50) / 100
+    expect_equal(result$value, 35) # (30*50 + 40*50) / 100
 
     gvtrack.rm("test.multichrom.vt")
 })
@@ -207,12 +207,12 @@ test_that("value-based vtrack works in track expressions", {
     # Use in expression
     iter_int <- gintervals("chr1", 150, 350)
     result <- gextract("test.expr.vt * 2", intervals = iter_int, iterator = iter_int, colnames = "value")
-    expect_equal(result$value, 30)  # 15 * 2
+    expect_equal(result$value, 30) # 15 * 2
 
     # Use in expression with another vtrack
     gvtrack.create("test.expr2.vt", src = intervals_df, func = "max")
     result <- gextract("test.expr.vt + test.expr2.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
-    expect_equal(result$value, 35)  # 15 + 20
+    expect_equal(result$value, 35) # 15 + 20
 
     gvtrack.rm("test.expr.vt")
     gvtrack.rm("test.expr2.vt")
@@ -279,8 +279,8 @@ test_that("value-based vtrack first/last functions work", {
     iter_int <- gintervals("chr1", 0, 1000)
     first_result <- gextract("test.first.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
     last_result <- gextract("test.last.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
-    expect_equal(first_result$value, 10)  # First value
-    expect_equal(last_result$value, 30)   # Last value
+    expect_equal(first_result$value, 10) # First value
+    expect_equal(last_result$value, 30) # Last value
 
     gvtrack.rm("test.first.vt")
     gvtrack.rm("test.last.vt")
@@ -299,7 +299,7 @@ test_that("value-based vtrack nearest function works", {
     # Interval with data - should return avg
     iter_int <- gintervals("chr1", 150, 350)
     result <- gextract("test.nearest.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
-    expect_equal(result$value, 15)  # Average like sparse tracks
+    expect_equal(result$value, 15) # Average like sparse tracks
 
     gvtrack.rm("test.nearest.vt")
 })
@@ -309,7 +309,7 @@ test_that("value-based vtrack position functions work", {
         chrom = "chr1",
         start = c(100, 300, 500),
         end = c(200, 400, 600),
-        score = c(10, 30, 20)  # Middle one is max
+        score = c(10, 30, 20) # Middle one is max
     )
 
     # Test absolute positions
@@ -325,10 +325,10 @@ test_that("value-based vtrack position functions work", {
     first_pos_abs <- gextract("test.first.pos.abs.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
     last_pos_abs <- gextract("test.last.pos.abs.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
 
-    expect_equal(min_pos_abs$value, 100)  # Position of min value (10)
-    expect_equal(max_pos_abs$value, 300)  # Position of max value (30)
-    expect_equal(first_pos_abs$value, 100)  # Position of first interval
-    expect_equal(last_pos_abs$value, 500)   # Position of last interval
+    expect_equal(min_pos_abs$value, 100) # Position of min value (10)
+    expect_equal(max_pos_abs$value, 300) # Position of max value (30)
+    expect_equal(first_pos_abs$value, 100) # Position of first interval
+    expect_equal(last_pos_abs$value, 500) # Position of last interval
 
     # Test relative positions
     gvtrack.create("test.min.pos.rel.vt", src = intervals_df, func = "min.pos.relative")
@@ -339,8 +339,8 @@ test_that("value-based vtrack position functions work", {
     min_pos_rel <- gextract("test.min.pos.rel.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
     max_pos_rel <- gextract("test.max.pos.rel.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
 
-    expect_equal(min_pos_rel$value, 50)   # 100 - 50
-    expect_equal(max_pos_rel$value, 250)  # 300 - 50
+    expect_equal(min_pos_rel$value, 50) # 100 - 50
+    expect_equal(max_pos_rel$value, 250) # 300 - 50
 
     # Clean up
     gvtrack.rm("test.min.pos.abs.vt")
