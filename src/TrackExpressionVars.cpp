@@ -492,14 +492,13 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 		if (names != R_NilValue && TYPEOF(names) == STRSXP) {
 			// Check if it has chrom, start, end columns
 			bool has_chrom = false, has_start = false, has_end = false;
-			int chrom_idx = -1, start_idx = -1, end_idx = -1;
 			int value_idx = -1;
 
 			for (int i = 0; i < Rf_length(names); i++) {
 				const char *name = CHAR(STRING_ELT(names, i));
-				if (!strcmp(name, "chrom")) { has_chrom = true; chrom_idx = i; }
-				else if (!strcmp(name, "start")) { has_start = true; start_idx = i; }
-				else if (!strcmp(name, "end")) { has_end = true; end_idx = i; }
+				if (!strcmp(name, "chrom")) { has_chrom = true; }
+				else if (!strcmp(name, "start")) { has_start = true; }
+				else if (!strcmp(name, "end")) { has_end = true; }
 				// Look for numeric columns (not chrom/start/end/strand) as value columns
 				else if (strcmp(name, "strand") != 0 && strcmp(name, "intervalID") != 0) {
 					SEXP col = VECTOR_ELT(rsrc, i);
@@ -1086,6 +1085,10 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 		case Value_var::MAX_POS_ABS:
 		case Value_var::MAX_POS_REL:
 			var.track->register_function(GenomeTrack1D::MAX_POS);
+			break;
+		case Value_var::NUM_FUNCS:
+		default:
+			// NUM_FUNCS is a sentinel value, not a valid function type
 			break;
 	}
 
@@ -2455,6 +2458,10 @@ void TrackExpressionVars::set_vars(unsigned idx)
 						}
 						break;
 					}
+					case Value_var::NUM_FUNCS:
+					default:
+						// NUM_FUNCS is a sentinel value, not a valid function type
+						break;
 				}
 			}
 
