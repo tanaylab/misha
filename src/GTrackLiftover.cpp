@@ -614,22 +614,31 @@ SEXP gtrack_liftover(SEXP _track,
 			for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
 				// Create empty file if this chromosome has no data
 				if (chrom_intervals.find(chromid) == chrom_intervals.end()) {
-					// For indexed databases, empty chromosome files are not needed since the track
-					// will be converted to indexed format (track.idx + track.dat) automatically.
-					// This avoids creating thousands of empty files on network filesystems.
-					// For non-indexed databases, we still create empty chromosome files for backward compatibility.
-					if (!is_db_indexed(_envir)) {
-						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
-						if (src_track_type == GenomeTrack::FIXED_BIN) {
-							// Only create empty fixed bin tracks if we know the binsize (i.e., at least one chromosome was processed)
-							if (binsize > 0) {
-								GenomeTrackFixedBin gtrack;
-								gtrack.init_write(filename, binsize, chromid);
+					// Always create empty chromosome files so downstream readers and indexing
+					// see the expected number of bins/intervals, even when the database is indexed.
+					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+					if (src_track_type == GenomeTrack::FIXED_BIN) {
+						// Only create empty fixed bin tracks if we know the binsize (i.e., at least one chromosome was processed)
+						if (binsize > 0) {
+							GenomeTrackFixedBin gtrack;
+							gtrack.init_write(filename, binsize, chromid);
+							// Fill the chromosome with NaN values so the bin count matches the chromosome size
+							int64_t chrom_size = iu.get_chromkey().get_chrom_size(chromid);
+							int64_t end_bin = (int64_t)ceil(chrom_size / (double)binsize);
+							if (end_bin > 0) {
+								const int64_t chunk_size = 65536;
+								vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
+								int64_t remaining = end_bin;
+								while (remaining > 0) {
+									uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
+									gtrack.write_next_bins(&na_chunk[0], to_write);
+									remaining -= to_write;
+								}
 							}
-						} else if (src_track_type == GenomeTrack::SPARSE) {
-							GenomeTrackSparse gtrack;
-							gtrack.init_write(filename, chromid);
 						}
+					} else if (src_track_type == GenomeTrack::SPARSE) {
+						GenomeTrackSparse gtrack;
+						gtrack.init_write(filename, chromid);
 					}
 					progress.report(1);
 					continue;
