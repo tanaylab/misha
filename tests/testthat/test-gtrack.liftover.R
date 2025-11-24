@@ -1705,3 +1705,60 @@ test_that("gtrack.liftover handles dense cluster of chains with same start_src c
     # All should have the same value
     expect_true(all(result$lifted_track == 777))
 })
+
+test_that("gtrack.liftover fills missing target contigs for dense tracks", {
+    local_db_state()
+
+    # Source genome with a single chromosome (no chrMT)
+    source_db <- setup_source_db(list(paste0(">chrA\n", paste(rep("A", 60), collapse = ""), "\n")))
+
+    # Dense track with bin size 10 across chrA
+    src_binsize <- 10
+    withr::defer({
+        if (gtrack.exists("src_dense")) gtrack.rm("src_dense", force = TRUE)
+    })
+    gtrack.create("src_dense", "source dense", "1", iterator = src_binsize)
+    src_track_dir <- file.path(source_db, "tracks", "src_dense.track")
+
+    # Target genome has an extra contig chrMT that is absent from the chain
+    mt_len <- 30
+    setup_db(list(
+        paste0(">chr1\n", paste(rep("T", 60), collapse = ""), "\n"),
+        paste0(">chrMT\n", paste(rep("C", mt_len), collapse = ""), "\n")
+    ))
+
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "chrA", 60, "+", 0, 60, "chr1", 60, "+", 0, 60, 1)
+
+    lifted_track <- "lifted_missing_mt"
+    withr::defer({
+        if (gtrack.exists(lifted_track)) gtrack.rm(lifted_track, force = TRUE)
+    })
+
+    # Should liftover without creating corrupt chrMT file
+    expect_error(
+        gtrack.liftover(lifted_track, "lift with missing contig", src_track_dir, chain_file),
+        NA
+    )
+
+    # gextract should work on both chromosomes and chrMT values should be NA
+    result <- gextract(lifted_track, gintervals(c("chr1", "chrMT")))
+    chrmt_rows <- result[result$chrom == "chrMT", ]
+    expect_equal(nrow(chrmt_rows), ceiling(mt_len / src_binsize))
+    expect_true(all(is.na(chrmt_rows[[lifted_track]])))
+
+    # Verify chrMT file has the expected number of bins (all NaN)
+    track_dir <- file.path(get("GROOT", envir = .misha), "tracks", paste0(lifted_track, ".track"))
+    chrmt_file <- file.path(track_dir, "chrMT")
+    expect_true(file.exists(chrmt_file))
+
+    expected_bins <- ceiling(mt_len / src_binsize)
+    expected_size <- 4 + expected_bins * 4 # 4-byte header + 4 bytes per float
+    expect_equal(file.info(chrmt_file)$size, expected_size)
+
+    con <- file(chrmt_file, "rb")
+    on.exit(close(con), add = TRUE)
+    readBin(con, integer(), n = 1, size = 4, endian = .Platform$endian) # bin size
+    vals <- readBin(con, numeric(), n = expected_bins, size = 4, endian = .Platform$endian)
+    expect_true(all(is.nan(vals)))
+})

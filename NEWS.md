@@ -1,3 +1,7 @@
+# misha 5.2.2
+
+* Fix: `gtrack.liftover` did not fill chromosomes missing the chain with NA values. This caused errors when trying to access the tracks afterwards.
+
 # misha 5.2.1
 
 * Added `gintervals.as_chain` function that converts a data frame to a chain object.
