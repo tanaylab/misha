@@ -364,6 +364,143 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			}
 		}
 
+		// If aggregation is requested, combine overlapping target intervals (per chrom + chain_id) using agg_cfg
+		if (use_aggregation && !tgt_intervs1d.empty()) {
+			AggregationConfig agg_cfg_local = agg_cfg; // copy
+			struct IntervalEntry {
+				int64_t start;
+				int64_t end;
+				double  value;
+				int     interval_id;
+				double  score;
+			};
+
+			// Group by chromid and chain_id
+			std::map<std::pair<int, int64_t>, std::vector<IntervalEntry> > groups;
+			for (size_t i = 0; i < tgt_intervs1d.size(); ++i) {
+				IntervalEntry entry;
+				entry.start = tgt_intervs1d[i].start;
+				entry.end = tgt_intervs1d[i].end;
+				entry.value = values[i];
+				entry.interval_id = src_indices[i];
+				entry.score = scores.empty() ? numeric_limits<double>::quiet_NaN() : scores[i];
+				groups[std::make_pair(tgt_intervs1d[i].chromid, chain_ids[i])].push_back(entry);
+			}
+
+			GIntervals aggregated_intervs;
+			vector<int> aggregated_src_indices;
+			vector<int64_t> aggregated_chain_ids;
+			vector<double> aggregated_scores;
+			vector<double> aggregated_values;
+
+			for (std::map<std::pair<int, int64_t>, std::vector<IntervalEntry> >::iterator g = groups.begin(); g != groups.end(); ++g) {
+				const int chromid = g->first.first;
+				const int64_t chain_id = g->first.second;
+				std::vector<IntervalEntry> &entries = g->second;
+
+				// Collect breakpoints
+				std::vector<int64_t> breaks;
+				breaks.reserve(entries.size() * 2);
+				for (size_t i = 0; i < entries.size(); ++i) {
+					breaks.push_back(entries[i].start);
+					breaks.push_back(entries[i].end);
+				}
+				std::sort(breaks.begin(), breaks.end());
+				breaks.erase(std::unique(breaks.begin(), breaks.end()), breaks.end());
+
+				AggregationState agg_state;
+				agg_state.contributions.reserve(entries.size());
+
+				// Sweep adjacent breakpoints
+				for (size_t b = 0; b + 1 < breaks.size(); ++b) {
+					int64_t seg_start = breaks[b];
+					int64_t seg_end = breaks[b + 1];
+					if (seg_start >= seg_end)
+						continue;
+
+					agg_state.reset();
+					bool any_contrib = false;
+					int first_interval_id = -1;
+					bool same_interval_id = true;
+					double seg_score = numeric_limits<double>::quiet_NaN();
+					bool same_score = true;
+
+					for (size_t i = 0; i < entries.size(); ++i) {
+						int64_t overlap_start = std::max<int64_t>(seg_start, entries[i].start);
+						int64_t overlap_end = std::min<int64_t>(seg_end, entries[i].end);
+						if (overlap_start < overlap_end) {
+							any_contrib = true;
+							double overlap_len = static_cast<double>(overlap_end - overlap_start);
+							double locus_len = static_cast<double>(seg_end - seg_start);
+							// Use unique contributor id (chain + interval) to avoid coalescing distinct source intervals
+							int64_t contrib_chain_id = (chain_id << 32) ^ static_cast<int64_t>(entries[i].interval_id);
+							aggregation_state_add(
+								agg_state,
+								entries[i].value,
+								overlap_len,
+								locus_len,
+								overlap_start,
+								overlap_end,
+								contrib_chain_id
+							);
+
+							if (first_interval_id < 0)
+								first_interval_id = entries[i].interval_id;
+							else if (first_interval_id != entries[i].interval_id)
+								same_interval_id = false;
+
+							if (std::isnan(seg_score))
+								seg_score = entries[i].score;
+							else if (seg_score != entries[i].score)
+								same_score = false;
+						}
+					}
+
+					if (!any_contrib)
+						continue;
+
+					double aggregated = aggregate_values(agg_cfg_local, agg_state);
+					float out_val = numeric_limits<float>::quiet_NaN();
+					if (!std::isnan(aggregated))
+						out_val = static_cast<float>(aggregated);
+
+					int out_interval_id = same_interval_id ? first_interval_id : NA_INTEGER;
+					double out_score = numeric_limits<double>::quiet_NaN();
+					if (include_metadata && same_score)
+						out_score = seg_score;
+
+					GInterval out_interv(chromid, seg_start, seg_end, 0);
+					if (!aggregated_intervs.empty()) {
+						// Merge with previous if contiguous and identical metadata/value
+						size_t last = aggregated_intervs.size() - 1;
+						bool same_meta = aggregated_src_indices[last] == out_interval_id &&
+						                 aggregated_chain_ids[last] == chain_id &&
+						                 ((!include_metadata) || (aggregated_scores[last] == out_score || (std::isnan(aggregated_scores[last]) && std::isnan(out_score))));
+						bool same_val = aggregated_values[last] == out_val || (std::isnan(aggregated_values[last]) && std::isnan(out_val));
+						if (same_meta && same_val && aggregated_intervs[last].chromid == chromid && aggregated_intervs[last].end == seg_start) {
+							aggregated_intervs[last].end = seg_end;
+							continue;
+						}
+					}
+
+					aggregated_intervs.push_back(out_interv);
+					aggregated_src_indices.push_back(out_interval_id);
+					aggregated_chain_ids.push_back(chain_id);
+					if (include_metadata)
+						aggregated_scores.push_back(out_score);
+					aggregated_values.push_back(out_val);
+				}
+			}
+
+			// Replace original vectors with aggregated results
+			tgt_intervs1d.swap(aggregated_intervs);
+			src_indices.swap(aggregated_src_indices);
+			chain_ids.swap(aggregated_chain_ids);
+			if (include_metadata)
+				scores.swap(aggregated_scores);
+			values.swap(aggregated_values);
+		}
+
 		// Canonicalization: merge adjacent intervals within the same intervalID and chain_id
 		if (canonic && !tgt_intervs1d.empty()) {
 			// Create index pairs for sorting: (index, intervalID, chain_id, chromid, start)
