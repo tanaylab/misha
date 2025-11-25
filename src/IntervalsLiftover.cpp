@@ -72,6 +72,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		const char *src_overlap_policy = CHAR(STRING_ELT(_src_overlap_policy, 0));
 		const char *tgt_overlap_policy = CHAR(STRING_ELT(_tgt_overlap_policy, 0));
 		std::string effective_tgt_policy = tgt_overlap_policy;
+		bool is_agg_policy = !strcmp(tgt_overlap_policy, "agg");
 
 		// Strategy enum for clustering policies
 		enum ClusterStrategy { STRAT_UNION, STRAT_SUM, STRAT_MAX };
@@ -427,8 +428,6 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 					bool same_chain_id = true;
 					double seg_score = numeric_limits<double>::quiet_NaN();
 					bool same_score = true;
-					double best_score = numeric_limits<double>::quiet_NaN();
-					int64_t best_chain_id = -1;
 
 					for (size_t i = 0; i < entries.size(); ++i) {
 						int64_t overlap_start = std::max<int64_t>(seg_start, entries[i].start);
@@ -463,12 +462,6 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 								seg_score = entries[i].score;
 							else if (seg_score != entries[i].score)
 								same_score = false;
-
-							// Track best chain_id by score (for selecting representative when aggregating across chains)
-							if (best_chain_id < 0 || (!std::isnan(entries[i].score) && (std::isnan(best_score) || entries[i].score > best_score))) {
-								best_score = entries[i].score;
-								best_chain_id = entries[i].chain_id;
-							}
 						}
 					}
 
@@ -584,9 +577,10 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		unsigned num_interv_cols;
 
 		// Check if intervalID and chain_id are all NA (aggregated across multiple sources/chains)
+		// When using agg policy with aggregation, always exclude these columns
 		bool has_valid_interval_ids = false;
 		bool has_valid_chain_ids = false;
-		if (!tgt_intervs1d.empty()) {
+		if (!tgt_intervs1d.empty() && !(is_agg_policy && use_aggregation)) {
 			for (size_t i = 0; i < src_indices.size(); ++i) {
 				if (src_indices[i] != NA_INTEGER) {
 					has_valid_interval_ids = true;
@@ -594,7 +588,8 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				}
 			}
 			for (size_t i = 0; i < chain_ids.size(); ++i) {
-				if (chain_ids[i] != NA_INTEGER) {
+				// For int64_t, check against NA_INTEGER cast to int64_t
+				if (chain_ids[i] != static_cast<int64_t>(NA_INTEGER)) {
 					has_valid_chain_ids = true;
 					break;
 				}
