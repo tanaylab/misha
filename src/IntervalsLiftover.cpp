@@ -480,8 +480,9 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 					if (!std::isnan(aggregated))
 						out_val = static_cast<float>(aggregated);
 
+					// When aggregating across multiple sources/chains, use NA to indicate aggregated result
 					int out_interval_id = same_interval_id ? first_interval_id : NA_INTEGER;
-					int64_t out_chain_id = same_chain_id ? first_chain_id : best_chain_id;
+					int64_t out_chain_id = same_chain_id ? first_chain_id : NA_INTEGER;
 					double out_score = numeric_limits<double>::quiet_NaN();
 					if (include_metadata && same_score)
 						out_score = seg_score;
@@ -582,11 +583,31 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 		SEXP answer;
 		unsigned num_interv_cols;
 
+		// Check if intervalID and chain_id are all NA (aggregated across multiple sources/chains)
+		bool has_valid_interval_ids = false;
+		bool has_valid_chain_ids = false;
 		if (!tgt_intervs1d.empty()) {
-			// Add extra columns for intervalID, chain_id, score (if include_metadata), and value (if use_aggregation)
-			int extra_cols = 2;  // intervalID, chain_id
-			if (include_metadata) extra_cols++;  // score
-			if (use_aggregation) extra_cols++;  // value
+			for (size_t i = 0; i < src_indices.size(); ++i) {
+				if (src_indices[i] != NA_INTEGER) {
+					has_valid_interval_ids = true;
+					break;
+				}
+			}
+			for (size_t i = 0; i < chain_ids.size(); ++i) {
+				if (chain_ids[i] != NA_INTEGER) {
+					has_valid_chain_ids = true;
+					break;
+				}
+			}
+		}
+
+		if (!tgt_intervs1d.empty()) {
+			// Count columns: intervalID and chain_id only if they contain non-NA values
+			int extra_cols = 0;
+			if (has_valid_interval_ids) extra_cols++;  // intervalID
+			if (has_valid_chain_ids) extra_cols++;     // chain_id
+			if (include_metadata) extra_cols++;        // score
+			if (use_aggregation) extra_cols++;         // value
 			answer = iu.convert_intervs(&tgt_intervs1d, GInterval::NUM_COLS + extra_cols);
 			num_interv_cols = GInterval::NUM_COLS;
 		} else if (!tgt_intervs2d.empty()) {
@@ -597,29 +618,37 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 
 		// Add intervalID, chain_id, and optionally score and value columns for 1D intervals
 		if (!tgt_intervs1d.empty()) {
-			SEXP rsrc_indices;
-			SEXP rchain_ids;
+			SEXP rsrc_indices = R_NilValue;
+			SEXP rchain_ids = R_NilValue;
 			SEXP rscores = R_NilValue;
 			SEXP rvalues = R_NilValue;
 			SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
 			rprotect(col_names);
 
-			rprotect(rsrc_indices = RSaneAllocVector(INTSXP, src_indices.size()));
-			rprotect(rchain_ids = RSaneAllocVector(REALSXP, chain_ids.size()));
+			int col_idx = num_interv_cols;
+			int num_protected = 0;
 
-			for (size_t i = 0; i < src_indices.size(); ++i)
-				INTEGER(rsrc_indices)[i] = src_indices[i];
+			// Only add intervalID if it contains non-NA values
+			if (has_valid_interval_ids) {
+				rprotect(rsrc_indices = RSaneAllocVector(INTSXP, src_indices.size()));
+				for (size_t i = 0; i < src_indices.size(); ++i)
+					INTEGER(rsrc_indices)[i] = src_indices[i];
+				SET_STRING_ELT(col_names, col_idx, Rf_mkChar("intervalID"));
+				SET_VECTOR_ELT(answer, col_idx, rsrc_indices);
+				col_idx++;
+				num_protected++;
+			}
 
-			for (size_t i = 0; i < chain_ids.size(); ++i)
-				REAL(rchain_ids)[i] = (double)chain_ids[i];
-
-			SET_STRING_ELT(col_names, num_interv_cols, Rf_mkChar("intervalID"));
-			SET_VECTOR_ELT(answer, num_interv_cols, rsrc_indices);
-			SET_STRING_ELT(col_names, num_interv_cols + 1, Rf_mkChar("chain_id"));
-			SET_VECTOR_ELT(answer, num_interv_cols + 1, rchain_ids);
-
-			int col_idx = num_interv_cols + 2;
-			int num_protected = 2;  // rsrc_indices, rchain_ids
+			// Only add chain_id if it contains non-NA values
+			if (has_valid_chain_ids) {
+				rprotect(rchain_ids = RSaneAllocVector(REALSXP, chain_ids.size()));
+				for (size_t i = 0; i < chain_ids.size(); ++i)
+					REAL(rchain_ids)[i] = (double)chain_ids[i];
+				SET_STRING_ELT(col_names, col_idx, Rf_mkChar("chain_id"));
+				SET_VECTOR_ELT(answer, col_idx, rchain_ids);
+				col_idx++;
+				num_protected++;
+			}
 
 			if (include_metadata) {
 				rprotect(rscores = RSaneAllocVector(REALSXP, scores.size()));

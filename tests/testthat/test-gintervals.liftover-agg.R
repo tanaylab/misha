@@ -520,7 +520,8 @@ test_that("gintervals.liftover aggregates across multiple chain_ids mapping to s
     )
     expect_equal(nrow(result_max), 1, info = "Should return 1 row when aggregating across chain_ids")
     expect_equal(result_max$value[1], 0.9, tolerance = 1e-6, info = "Max of 0.9 and 0.85 should be 0.9")
-    expect_equal(result_max$chain_id[1], 1, info = "Should use chain_id with highest score")
+    expect_false("intervalID" %in% names(result_max), info = "intervalID column should not be present when aggregating across different sources")
+    expect_false("chain_id" %in% names(result_max), info = "chain_id column should not be present when aggregating across different chains")
 
     # Test mean aggregation
     result_mean <- gintervals.liftover(
