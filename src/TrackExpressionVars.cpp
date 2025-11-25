@@ -520,9 +520,11 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 				transform(func.begin(), func.end(), func.begin(), ::tolower);
 			}
 
-			// Check if this is an interval-based function (coverage, neighbor_count)
-			bool is_interval_func = (!strcmp(func.c_str(), "coverage") ||
-			                         !strcmp(func.c_str(), "neighbor_count"));
+			// Check if this is an interval-based function (distance, distance.center, coverage, neighbor.count)
+			bool is_interval_func = (!strcmp(func.c_str(), "distance") ||
+			                         !strcmp(func.c_str(), "distance.center") ||
+			                         !strcmp(func.c_str(), "coverage") ||
+			                         !strcmp(func.c_str(), "neighbor.count"));
 
 			// If we have interval columns AND a value column AND it's NOT an interval function,
 			// treat as value-based vtrack
