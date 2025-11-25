@@ -93,6 +93,33 @@ test_that("value-based vtrack stddev function works", {
     gvtrack.rm("test.stddev.vt")
 })
 
+test_that("value-based vtrack filters preserve count-based averaging and stddev", {
+    intervals_df <- data.frame(
+        chrom = "chr1",
+        start = c(0, 200),
+        end = c(100, 400),
+        score = c(2, 8)
+    )
+
+    gvtrack.create("test.filter.avg.vt", src = intervals_df, func = "avg")
+    gvtrack.create("test.filter.sd.vt", src = intervals_df, func = "stddev")
+
+    # Mask out most of the first interval to create unequal coverage without changing counts
+    mask <- gintervals("chr1", 50, 200)
+    gvtrack.filter("test.filter.avg.vt", filter = mask)
+    gvtrack.filter("test.filter.sd.vt", filter = mask)
+
+    iter_int <- gintervals("chr1", 0, 400)
+    avg_res <- gextract("test.filter.avg.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
+    sd_res <- gextract("test.filter.sd.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
+
+    expect_equal(avg_res$value, mean(c(2, 8)))
+    expect_equal(sd_res$value, sd(c(2, 8)), tolerance = 1e-6)
+
+    gvtrack.rm("test.filter.avg.vt")
+    gvtrack.rm("test.filter.sd.vt")
+})
+
 test_that("value-based vtrack quantile function works", {
     intervals_df <- data.frame(
         chrom = "chr1",
@@ -349,6 +376,28 @@ test_that("value-based vtrack position functions work", {
     gvtrack.rm("test.last.pos.abs.vt")
     gvtrack.rm("test.min.pos.rel.vt")
     gvtrack.rm("test.max.pos.rel.vt")
+})
+
+test_that("value-based vtrack relative positions stay iterator-relative under filters", {
+    intervals_df <- data.frame(
+        chrom = "chr1",
+        start = 100,
+        end = 150,
+        score = 10
+    )
+
+    gvtrack.create("test.filter.pos.vt", src = intervals_df, func = "first.pos.relative")
+
+    # Mask away the iterator start to ensure relative positions remain anchored to the iterator
+    mask <- gintervals("chr1", 50, 120)
+    gvtrack.filter("test.filter.pos.vt", filter = mask)
+
+    iter_int <- gintervals("chr1", 50, 200)
+    res <- gextract("test.filter.pos.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
+
+    expect_equal(res$value, 50)
+
+    gvtrack.rm("test.filter.pos.vt")
 })
 
 test_that("intervals with value column work with interval-based summarizers even when overlapping", {
