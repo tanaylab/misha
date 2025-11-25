@@ -1,4 +1,4 @@
-load_test_db()
+create_isolated_test_db()
 test_that("gintervals.load_chain handles source overlaps with 'error' policy", {
     local_db_state()
 

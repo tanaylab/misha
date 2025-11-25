@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("gintervals.random basic functionality works", {
     # Generate intervals
     set.seed(123)

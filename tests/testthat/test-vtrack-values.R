@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("value-based vtrack basic functionality works", {
     # Create simple intervals with values
     intervals_df <- data.frame(

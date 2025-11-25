@@ -1,6 +1,7 @@
+create_isolated_test_db()
+
 # Tests to verify that value-based vtracks produce identical results to the original tracks
 # they're derived from
-load_test_db()
 
 test_that("value-based vtrack matches sparse track with avg function", {
     # Extract data from sparse track - get actual intervals with data, not whole chromosomes
