@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("gintervals.annotate basic annotation with distance", {
     intervs <- gintervals(1, c(1000, 5000), c(1100, 5050))
     ann <- gintervals(1, c(900, 5400), c(950, 5500))
@@ -237,8 +239,9 @@ test_that("gintervals.annotate supports scalar na_value with threshold", {
 })
 
 test_that("gintervals.annotate works with intervals.set.out", {
-    gintervals.rm("test.testintervs_ann", force = TRUE)
-    withr::defer(gintervals.rm("test.testintervs_ann", force = TRUE))
+    temp_track_name <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gintervals.rm(temp_track_name, force = TRUE)
+    withr::defer(gintervals.rm(temp_track_name, force = TRUE))
 
     intervs <- gintervals(1, c(1000, 5000), c(1100, 5050))
     ann <- gintervals(1, c(900, 5400), c(950, 5500))
@@ -248,9 +251,9 @@ test_that("gintervals.annotate works with intervals.set.out", {
         tibble::repair_names() %>%
         arrange(chrom, start, end)
 
-    gintervals.annotate(intervs, ann, annotation_columns = "remark", intervals.set.out = "test.testintervs_ann")
+    gintervals.annotate(intervs, ann, annotation_columns = "remark", intervals.set.out = temp_track_name)
 
-    res_file <- gintervals.load("test.testintervs_ann") %>%
+    res_file <- gintervals.load(temp_track_name) %>%
         tibble::repair_names() %>%
         arrange(chrom, start, end)
 

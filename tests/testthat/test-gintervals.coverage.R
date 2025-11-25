@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("gintervals.covered_bp works with simple non-overlapping intervals", {
     intervs <- gintervals(c("chr1", "chr1", "chr2"), c(100, 500, 1000), c(200, 700, 2000))
     # Expected: (200-100) + (700-500) + (2000-1000) = 100 + 200 + 1000 = 1300

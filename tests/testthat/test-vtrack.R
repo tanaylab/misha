@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 remove_all_vtracks <- function() {
     vtracks <- gvtrack.ls()
     for (vtrack in vtracks) {

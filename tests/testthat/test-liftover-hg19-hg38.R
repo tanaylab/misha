@@ -1,4 +1,4 @@
-load_test_db()
+create_isolated_test_db()
 
 # These tests use real hg19/hg38 genomes and the UCSC hg19ToHg38 chain file
 # to verify our liftover implementation against Kent's liftOver binary
@@ -204,7 +204,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 random interv
 
     # Check for coordinate mismatches
     mismatches <- misha_merged %>%
-        filter(
+        dplyr::filter(
             as.character(chrom_misha) != chrom_kent |
                 start_misha != start_kent |
                 end_misha != end_kent
@@ -218,7 +218,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 random interv
         # - Different chain alignment selection (both valid but different paths)
         # - Different fragment merging when intervals split
         same_chrom <- mismatches %>%
-            filter(as.character(chrom_misha) == chrom_kent)
+            dplyr::filter(as.character(chrom_misha) == chrom_kent)
 
         # All mismatches should be on the same chromosome
         expect_equal(nrow(same_chrom), nrow(mismatches),
@@ -372,7 +372,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 with larger r
     )
 
     mismatches <- misha_merged %>%
-        filter(
+        dplyr::filter(
             as.character(chrom_misha) != chrom_kent |
                 start_misha != start_kent |
                 end_misha != end_kent
@@ -381,7 +381,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 with larger r
     if (nrow(mismatches) > 0) {
         # Verify mismatches are on the same chromosome
         same_chrom <- mismatches %>%
-            filter(as.character(chrom_misha) == chrom_kent)
+            dplyr::filter(as.character(chrom_misha) == chrom_kent)
 
         expect_equal(nrow(same_chrom), nrow(mismatches),
             label = sprintf("Chromosome mismatches: %d intervals", nrow(mismatches) - nrow(same_chrom))
@@ -532,7 +532,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 small interva
             )
 
             mismatches <- misha_merged %>%
-                filter(
+                dplyr::filter(
                     as.character(chrom_misha) != chrom_kent |
                         start_misha != start_kent |
                         end_misha != end_kent
@@ -540,7 +540,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 small interva
 
             if (nrow(mismatches) > 0) {
                 same_chrom <- mismatches %>%
-                    filter(as.character(chrom_misha) == chrom_kent)
+                    dplyr::filter(as.character(chrom_misha) == chrom_kent)
 
                 expect_equal(nrow(same_chrom), nrow(mismatches),
                     label = sprintf("Chromosome mismatches: %d intervals", nrow(mismatches) - nrow(same_chrom))
@@ -707,7 +707,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 specific chro
             )
 
             mismatches <- misha_merged %>%
-                filter(
+                dplyr::filter(
                     as.character(chrom_misha) != chrom_kent |
                         start_misha != start_kent |
                         end_misha != end_kent
@@ -715,7 +715,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 specific chro
 
             if (nrow(mismatches) > 0) {
                 same_chrom <- mismatches %>%
-                    filter(as.character(chrom_misha) == chrom_kent)
+                    dplyr::filter(as.character(chrom_misha) == chrom_kent)
 
                 expect_equal(nrow(same_chrom), nrow(mismatches),
                     label = sprintf("Chromosome mismatches: %d intervals", nrow(mismatches) - nrow(same_chrom))

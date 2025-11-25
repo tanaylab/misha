@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("gsummary with test.fixedbin", {
     expect_regression(gsummary("test.fixedbin"), "gsummary_fixedbin")
 })

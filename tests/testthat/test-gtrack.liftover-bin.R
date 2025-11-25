@@ -1,4 +1,4 @@
-load_test_db()
+create_isolated_test_db()
 
 # Helper function to check if liftOver binary is available
 has_liftover_binary <- function() {

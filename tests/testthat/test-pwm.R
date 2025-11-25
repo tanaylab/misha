@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("pwm vtrack works", {
     remove_all_vtracks()
 

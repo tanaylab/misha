@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("glookup with test.fixedbin and test.sparse", {
     m1 <- matrix(1:15, nrow = 5, ncol = 3)
     result <- glookup(m1, "test.fixedbin", seq(0.1, 0.2, length.out = 6),
