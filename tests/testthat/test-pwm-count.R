@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("pwm.count counts hits above threshold", {
     remove_all_vtracks()
 
