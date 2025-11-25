@@ -350,3 +350,70 @@ test_that("value-based vtrack position functions work", {
     gvtrack.rm("test.min.pos.rel.vt")
     gvtrack.rm("test.max.pos.rel.vt")
 })
+
+test_that("intervals with value column work with interval-based summarizers even when overlapping", {
+    # Create overlapping intervals with a value column
+    # When using interval-based functions, the value column should be ignored
+    # and intervals should be treated as regular intervals (overlaps allowed)
+    intervals_df <- data.frame(
+        chrom = "chr1",
+        start = c(100, 150, 300), # First two overlap
+        end = c(200, 250, 400),
+        score = c(10, 20, 30) # Value column (should be ignored for interval functions)
+    )
+
+    # Test coverage function - should work with overlapping intervals
+    gvtrack.create("test.coverage.vt", src = intervals_df, func = "coverage")
+    iter_int <- gintervals("chr1", 100, 400)
+    result <- gextract("test.coverage.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
+    # Coverage: [100-200] and [150-250] unified to [100-250] = 150bp, plus [300-400] = 100bp
+    # Total = 250bp out of 300bp = 0.833...
+    expect_equal(result$value, 250 / 300, tolerance = 1e-6)
+    gvtrack.rm("test.coverage.vt")
+
+    # Test neighbor.count function - should work with overlapping intervals
+    gvtrack.create("test.neighbor.vt", src = intervals_df, func = "neighbor.count", params = 10)
+    iter_int <- gintervals("chr1", 250, 260) # Between second and third interval
+    result <- gextract("test.neighbor.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
+    # Should count both overlapping intervals if within distance
+    expect_true(result$value >= 0) # Should not error
+    gvtrack.rm("test.neighbor.vt")
+
+    # Test distance function - should work with overlapping intervals
+    gvtrack.create("test.distance.vt", src = intervals_df, func = "distance")
+    iter_int <- gintervals("chr1", 170, 180) # Center at 175, between first two intervals
+    result <- gextract("test.distance.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
+    # Should calculate distance to nearest interval center
+    expect_true(!is.na(result$value))
+    gvtrack.rm("test.distance.vt")
+
+    # Test distance.center function - note: this function requires non-overlapping intervals
+    # but the key point is that it's treated as an interval-based function, not value-based
+    # So the overlap check in the value-based path is skipped (which is the fix)
+    # However, distance.center itself will check for overlaps and error if they exist
+    expect_error(
+        gvtrack.create("test.distance.center.vt", src = intervals_df, func = "distance.center"),
+        regexp = "overlapping"
+    )
+})
+
+test_that("intervals with value column and interval-based functions ignore value column", {
+    # Verify that when using interval-based functions, the value column is ignored
+    # and the intervals are treated as regular intervals
+
+    # Create intervals with overlapping regions and different values
+    intervals_df <- data.frame(
+        chrom = "chr1",
+        start = c(100, 150),
+        end = c(200, 250),
+        score = c(999, 888) # Values that would be used if treated as value-based
+    )
+
+    # With coverage, both intervals should contribute regardless of values
+    gvtrack.create("test.coverage.ignore.vt", src = intervals_df, func = "coverage")
+    iter_int <- gintervals("chr1", 100, 250)
+    result <- gextract("test.coverage.ignore.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
+    # Coverage: [100-200] and [150-250] unified to [100-250] = 150bp out of 150bp = 1.0
+    expect_equal(result$value, 1.0, tolerance = 1e-6)
+    gvtrack.rm("test.coverage.ignore.vt")
+})
