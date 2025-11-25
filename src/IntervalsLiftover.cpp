@@ -364,7 +364,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			}
 		}
 
-		// If aggregation is requested, combine overlapping target intervals (per chrom + chain_id) using agg_cfg
+		// If aggregation is requested, combine overlapping target intervals (per chrom) using agg_cfg
 		if (use_aggregation && !tgt_intervs1d.empty()) {
 			AggregationConfig agg_cfg_local = agg_cfg; // copy
 			struct IntervalEntry {
@@ -372,19 +372,21 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				int64_t end;
 				double  value;
 				int     interval_id;
+				int64_t chain_id;
 				double  score;
 			};
 
-			// Group by chromid and chain_id
-			std::map<std::pair<int, int64_t>, std::vector<IntervalEntry> > groups;
+			// Group by chromid only (aggregate across all chain_ids)
+			std::map<int, std::vector<IntervalEntry> > groups;
 			for (size_t i = 0; i < tgt_intervs1d.size(); ++i) {
 				IntervalEntry entry;
 				entry.start = tgt_intervs1d[i].start;
 				entry.end = tgt_intervs1d[i].end;
 				entry.value = values[i];
 				entry.interval_id = src_indices[i];
+				entry.chain_id = chain_ids[i];
 				entry.score = scores.empty() ? numeric_limits<double>::quiet_NaN() : scores[i];
-				groups[std::make_pair(tgt_intervs1d[i].chromid, chain_ids[i])].push_back(entry);
+				groups[tgt_intervs1d[i].chromid].push_back(entry);
 			}
 
 			GIntervals aggregated_intervs;
@@ -393,9 +395,8 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			vector<double> aggregated_scores;
 			vector<double> aggregated_values;
 
-			for (std::map<std::pair<int, int64_t>, std::vector<IntervalEntry> >::iterator g = groups.begin(); g != groups.end(); ++g) {
-				const int chromid = g->first.first;
-				const int64_t chain_id = g->first.second;
+			for (std::map<int, std::vector<IntervalEntry> >::iterator g = groups.begin(); g != groups.end(); ++g) {
+				const int chromid = g->first;
 				std::vector<IntervalEntry> &entries = g->second;
 
 				// Collect breakpoints
@@ -422,8 +423,12 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 					bool any_contrib = false;
 					int first_interval_id = -1;
 					bool same_interval_id = true;
+					int64_t first_chain_id = -1;
+					bool same_chain_id = true;
 					double seg_score = numeric_limits<double>::quiet_NaN();
 					bool same_score = true;
+					double best_score = numeric_limits<double>::quiet_NaN();
+					int64_t best_chain_id = -1;
 
 					for (size_t i = 0; i < entries.size(); ++i) {
 						int64_t overlap_start = std::max<int64_t>(seg_start, entries[i].start);
@@ -433,7 +438,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 							double overlap_len = static_cast<double>(overlap_end - overlap_start);
 							double locus_len = static_cast<double>(seg_end - seg_start);
 							// Use unique contributor id (chain + interval) to avoid coalescing distinct source intervals
-							int64_t contrib_chain_id = (chain_id << 32) ^ static_cast<int64_t>(entries[i].interval_id);
+							int64_t contrib_chain_id = (entries[i].chain_id << 32) ^ static_cast<int64_t>(entries[i].interval_id);
 							aggregation_state_add(
 								agg_state,
 								entries[i].value,
@@ -449,10 +454,21 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 							else if (first_interval_id != entries[i].interval_id)
 								same_interval_id = false;
 
+							if (first_chain_id < 0)
+								first_chain_id = entries[i].chain_id;
+							else if (first_chain_id != entries[i].chain_id)
+								same_chain_id = false;
+
 							if (std::isnan(seg_score))
 								seg_score = entries[i].score;
 							else if (seg_score != entries[i].score)
 								same_score = false;
+
+							// Track best chain_id by score (for selecting representative when aggregating across chains)
+							if (best_chain_id < 0 || (!std::isnan(entries[i].score) && (std::isnan(best_score) || entries[i].score > best_score))) {
+								best_score = entries[i].score;
+								best_chain_id = entries[i].chain_id;
+							}
 						}
 					}
 
@@ -465,6 +481,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 						out_val = static_cast<float>(aggregated);
 
 					int out_interval_id = same_interval_id ? first_interval_id : NA_INTEGER;
+					int64_t out_chain_id = same_chain_id ? first_chain_id : best_chain_id;
 					double out_score = numeric_limits<double>::quiet_NaN();
 					if (include_metadata && same_score)
 						out_score = seg_score;
@@ -474,7 +491,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 						// Merge with previous if contiguous and identical metadata/value
 						size_t last = aggregated_intervs.size() - 1;
 						bool same_meta = aggregated_src_indices[last] == out_interval_id &&
-						                 aggregated_chain_ids[last] == chain_id &&
+						                 aggregated_chain_ids[last] == out_chain_id &&
 						                 ((!include_metadata) || (aggregated_scores[last] == out_score || (std::isnan(aggregated_scores[last]) && std::isnan(out_score))));
 						bool same_val = aggregated_values[last] == out_val || (std::isnan(aggregated_values[last]) && std::isnan(out_val));
 						if (same_meta && same_val && aggregated_intervs[last].chromid == chromid && aggregated_intervs[last].end == seg_start) {
@@ -485,7 +502,7 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 
 					aggregated_intervs.push_back(out_interv);
 					aggregated_src_indices.push_back(out_interval_id);
-					aggregated_chain_ids.push_back(chain_id);
+					aggregated_chain_ids.push_back(out_chain_id);
 					if (include_metadata)
 						aggregated_scores.push_back(out_score);
 					aggregated_values.push_back(out_val);
