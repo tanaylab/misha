@@ -311,7 +311,7 @@ See the table below:
 
 So far we showed that the value of a `mytrack` variable is set to be the average (or weighted average) of the track values that are covered by the iterator interval. But what if we do not want to average the values but rather pick up the maximal or minimal values? What if we want to use the percentile of a track value rather than the value itself? And maybe we even want to alter the iterator interval itself on the fly? This is where virtual tracks become useful.
 
-Virtual track is a set of rules that describe how the "source" (a real track or intervals) should be proceeded, and how the iterator interval should be modified. Virtual tracks are created with `gvtrack.create` function:
+Virtual track is a set of rules that describe how the "source" (a real track, intervals, or a value-based track) should be proceeded, and how the iterator interval should be modified. Virtual tracks are created with `gvtrack.create` function:
 
 ```{r, eval=FALSE}
 gvtrack.create("myvtrack", "dense_track")
@@ -362,6 +362,30 @@ gextract("myvtrack", .misha$ALLGENOME, iterator = intervs)
 ```
 
 In this example `myvtrack` returns the minimal distance between intervals from an interval set `annotations` and the center of the current iterator interval from `intervs`.
+
+#### Value-Based Tracks
+
+In addition to using database tracks and interval sets as sources, virtual tracks can also use **value-based tracks** as sources. Value-based tracks are data frames containing genomic intervals with associated numeric values. They function as in-memory sparse tracks without requiring track creation in the database.
+
+To create a value-based virtual track, provide a data frame with columns `chrom`, `start`, `end`, and one numeric value column (any column name is acceptable):
+
+```{r, eval=FALSE}
+# Create a data frame with intervals and numeric values
+intervals_with_values <- data.frame(
+    chrom = "chr1",
+    start = c(100, 300, 500),
+    end = c(200, 400, 600),
+    score = c(10, 20, 30)
+)
+
+# Use as value-based sparse track
+gvtrack.create("myvtrack", intervals_with_values, "avg")
+gvtrack.create("myvtrack_max", intervals_with_values, "max")
+```
+
+Value-based tracks support all track-based summarizer functions (e.g., `avg`, `min`, `max`, `sum`, `stddev`, `quantile`, `nearest`, `exists`, `size`, `first`, `last`, `sample`, and position functions). However, they have one important restriction: **intervals must not overlap**. Unlike interval-based summarizers (which work with overlapping intervals), value-based tracks behave like sparse tracks and require non-overlapping intervals.
+
+Value-based tracks aggregate values using count-based averaging (each interval contributes equally regardless of length), matching the behavior of sparse tracks. This means when multiple intervals are covered by an iterator interval, each interval's value contributes equally to the aggregation, regardless of the interval's length.
 
 For a full list of supported functions please see `gvtrack.create` and `gvtrack.array.slice` functions.
 
