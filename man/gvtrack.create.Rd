@@ -4,16 +4,45 @@
 \alias{gvtrack.create}
 \title{Creates a new virtual track}
 \usage{
-gvtrack.create(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...)
+gvtrack.create(
+  vtrack = NULL,
+  src = NULL,
+  func = NULL,
+  params = NULL,
+  dim = NULL,
+  sshift = NULL,
+  eshift = NULL,
+  filter = NULL,
+  ...
+)
 }
 \arguments{
 \item{vtrack}{virtual track name}
 
-\item{src}{source (track/intervals). NULL for PWM functions}
+\item{src}{source (track/intervals). NULL for PWM functions. For value-based
+tracks, provide a data frame with columns \code{chrom}, \code{start}, \code{end},
+and one numeric value column. The data frame functions as an in-memory sparse
+track and supports all track-based summarizer functions. Intervals must not overlap.}
 
 \item{func}{function name (see above)}
 
 \item{params}{function parameters (see above)}
+
+\item{dim}{use 'NULL' or '0' for 1D iterators. '1' converts 2D iterator to
+(chrom1, start1, end1) , '2' converts 2D iterator to (chrom2, start2, end2)}
+
+\item{sshift}{shift of 'start' coordinate}
+
+\item{eshift}{shift of 'end' coordinate}
+
+\item{filter}{genomic mask to apply. Can be:
+\itemize{
+  \item A data.frame with columns 'chrom', 'start', 'end' (intervals to mask)
+  \item A character string naming an intervals set
+  \item A character string naming a track (must be intervals-type track)
+  \item A list of any combination of the above (all will be unified)
+  \item NULL to clear the filter
+}}
 
 \item{...}{additional PWM parameters}
 }
@@ -25,8 +54,22 @@ Creates a new virtual track.
 }
 \details{
 This function creates a new virtual track named 'vtrack' with the given
-source, function and parameters. 'src' can be either a track or intervals
-(1D or 2D). The tables below summarize the supported combinations.
+source, function and parameters. 'src' can be either a track, intervals
+(1D or 2D), or a data frame with intervals and a numeric value column
+(value-based track). The tables below summarize the supported combinations.
+
+\strong{Value-based tracks}
+Value-based tracks are data frames containing genomic intervals with associated
+numeric values. They function as in-memory sparse tracks without requiring
+track creation in the database. To create a value-based track, provide a data
+frame with columns \code{chrom}, \code{start}, \code{end}, and one numeric
+value column (any name is acceptable). Value-based tracks support all track-based
+summarizer functions (e.g., \code{avg}, \code{min}, \code{max}, \code{sum},
+\code{stddev}, \code{quantile}, \code{nearest}, \code{exists}, \code{size},
+\code{first}, \code{last}, \code{sample}, and position functions), but do not
+support overlapping intervals. They behave like sparse tracks in aggregation:
+values are aggregated using count-based averaging (each interval contributes equally
+regardless of length), not coverage-based averaging.
 
 \strong{Track-based summarizers}
 \tabular{llll}{
@@ -217,6 +260,22 @@ gextract("g_frac + c_frac", gintervals(1, 0, 10000),
     colnames = "gc_content"
 )
 
+# Value-based track examples
+# Create a data frame with intervals and numeric values
+intervals_with_values <- data.frame(
+    chrom = "chr1",
+    start = c(100, 300, 500),
+    end = c(200, 400, 600),
+    score = c(10, 20, 30)
+)
+# Use as value-based sparse track (functions like sparse track)
+gvtrack.create("value_track", intervals_with_values, "avg")
+gvtrack.create("value_track_max", intervals_with_values, "max")
+gextract(c("value_track", "value_track_max"),
+    gintervals(1, 0, 10000),
+    iterator = 1000
+)
+
 # Spatial PWM examples
 # Create a PWM with higher weight in the center of intervals
 pssm <- matrix(
@@ -294,5 +353,7 @@ gextract("window_spatial_pwm", gintervals(1, 0, 10000), iterator = 500)
 \code{\link{gvtrack.info}}, \code{\link{gvtrack.iterator}},
 \code{\link{gvtrack.iterator.2d}}, \code{\link{gvtrack.array.slice}},
 \code{\link{gvtrack.ls}}, \code{\link{gvtrack.rm}}
+
+\code{\link{gvtrack.iterator}}, \code{\link{gvtrack.iterator.2d}}, \code{\link{gvtrack.filter}}
 }
 \keyword{~virtual}

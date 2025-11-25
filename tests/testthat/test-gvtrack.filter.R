@@ -1033,3 +1033,26 @@ test_that("gvtrack.filter does not leak state to unfiltered vtracks sharing same
     gvtrack.rm("filtered_vtrack")
     gvtrack.rm("unfiltered_vtrack")
 })
+
+
+test_that("gvtrack.filter works with gvtrack.create", {
+    withr::defer(gvtrack.rm("test_filter"))
+    # Create a mask that completely covers one interval
+    mask <- gintervals(1, 1000, 2000)
+    gvtrack.create("test_filter", "test.fixedbin", func = "avg", filter = mask)
+
+    info <- gvtrack.info("test_filter")
+    expect_true(!is.null(info$filter))
+
+    # Extract from an interval completely covered by the mask
+    result_covered <- gextract("test_filter", gintervals(1, 1000, 2000))
+
+    # The result should be NA for the masked interval
+    expect_true(is.na(result_covered$test_filter[1]))
+
+    # Extract from an interval NOT covered by the mask
+    result_uncovered <- gextract("test_filter", gintervals(1, 5000, 6000))
+
+    # The result should NOT be NA for the unmasked interval
+    expect_false(is.na(result_uncovered$test_filter[1]))
+})
