@@ -88,14 +88,39 @@
     })
 }
 
+.set_vtrack_iterator_1d <- function(vtrackstr, dim = NULL, sshift = 0, eshift = 0) {
+    var <- .gvtrack.get(vtrackstr)
+    itr <- list()
+    itr$type <- "1d"
+    itr$dim <- dim
+    itr$sshift <- sshift
+    itr$eshift <- eshift
+    var$itr <- itr
+    .gvtrack.set(vtrackstr, var)
+}
+
 
 #' Creates a new virtual track
 #'
 #' Creates a new virtual track.
 #'
 #' This function creates a new virtual track named 'vtrack' with the given
-#' source, function and parameters. 'src' can be either a track or intervals
-#' (1D or 2D). The tables below summarize the supported combinations.
+#' source, function and parameters. 'src' can be either a track, intervals
+#' (1D or 2D), or a data frame with intervals and a numeric value column
+#' (value-based track). The tables below summarize the supported combinations.
+#'
+#' \strong{Value-based tracks}
+#' Value-based tracks are data frames containing genomic intervals with associated
+#' numeric values. They function as in-memory sparse tracks without requiring
+#' track creation in the database. To create a value-based track, provide a data
+#' frame with columns \code{chrom}, \code{start}, \code{end}, and one numeric
+#' value column (any name is acceptable). Value-based tracks support all track-based
+#' summarizer functions (e.g., \code{avg}, \code{min}, \code{max}, \code{sum},
+#' \code{stddev}, \code{quantile}, \code{nearest}, \code{exists}, \code{size},
+#' \code{first}, \code{last}, \code{sample}, and position functions), but do not
+#' support overlapping intervals. They behave like sparse tracks in aggregation:
+#' values are aggregated using count-based averaging (each interval contributes equally
+#' regardless of length), not coverage-based averaging.
 #'
 #' \strong{Track-based summarizers}
 #' \tabular{llll}{
@@ -214,10 +239,15 @@
 #' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 #'
 #' @param vtrack virtual track name
-#' @param src source (track/intervals). NULL for PWM functions
+#' @param src source (track/intervals). NULL for PWM functions. For value-based
+#' tracks, provide a data frame with columns \code{chrom}, \code{start}, \code{end},
+#' and one numeric value column. The data frame functions as an in-memory sparse
+#' track and supports all track-based summarizer functions. Intervals must not overlap.
 #' @param func function name (see above)
 #' @param params function parameters (see above)
 #' @param ... additional PWM parameters
+#' @inheritParams gvtrack.iterator
+#' @inheritParams gvtrack.filter
 #' @return None.
 #' @seealso \code{\link{gvtrack.info}}, \code{\link{gvtrack.iterator}},
 #' \code{\link{gvtrack.iterator.2d}}, \code{\link{gvtrack.array.slice}},
@@ -296,6 +326,22 @@
 #'     colnames = "gc_content"
 #' )
 #'
+#' # Value-based track examples
+#' # Create a data frame with intervals and numeric values
+#' intervals_with_values <- data.frame(
+#'     chrom = "chr1",
+#'     start = c(100, 300, 500),
+#'     end = c(200, 400, 600),
+#'     score = c(10, 20, 30)
+#' )
+#' # Use as value-based sparse track (functions like sparse track)
+#' gvtrack.create("value_track", intervals_with_values, "avg")
+#' gvtrack.create("value_track_max", intervals_with_values, "max")
+#' gextract(c("value_track", "value_track_max"),
+#'     gintervals(1, 0, 10000),
+#'     iterator = 1000
+#' )
+#'
 #' # Spatial PWM examples
 #' # Create a PWM with higher weight in the center of intervals
 #' pssm <- matrix(
@@ -368,13 +414,14 @@
 #'     spat_max = 450
 #' )
 #' gextract("window_spatial_pwm", gintervals(1, 0, 10000), iterator = 500)
+#' @seealso \code{\link{gvtrack.iterator}}, \code{\link{gvtrack.iterator.2d}}, \code{\link{gvtrack.filter}}
 #' @export gvtrack.create
-gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, ...) {
+gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, dim = NULL, sshift = NULL, eshift = NULL, filter = NULL, ...) {
     if (is.null(substitute(vtrack))) {
-        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
+        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, dim = NULL, sshift = NULL, eshift = NULL, filter = NULL, ...)", call. = FALSE)
     }
     if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac"))) {
-        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, ...)", call. = FALSE)
+        stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, dim = NULL, sshift = NULL, eshift = NULL, filter = NULL, ...)", call. = FALSE)
     }
 
     .gcheckroot()
@@ -556,6 +603,21 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 
     .gvtrack.set(vtrackstr, var)
 
+    # Apply iterator shifts if specified
+    if (!is.null(dim) || !is.null(sshift) || !is.null(eshift)) {
+        .set_vtrack_iterator_1d(
+            vtrackstr,
+            dim = dim,
+            sshift = ifelse(is.null(sshift), 0, sshift),
+            eshift = ifelse(is.null(eshift), 0, eshift)
+        )
+    }
+
+    # Apply filter if specified
+    if (!is.null(filter)) {
+        gvtrack.filter(vtrackstr, filter)
+    }
+
     invisible(vtrackstr)
 }
 
@@ -660,14 +722,7 @@ gvtrack.iterator <- function(vtrack = NULL, dim = NULL, sshift = 0, eshift = 0) 
 
     vtrackstr <- do.call(.gvtrack, list(substitute(vtrack)), envir = parent.frame())
 
-    var <- .gvtrack.get(vtrackstr)
-    itr <- list()
-    itr$type <- "1d"
-    itr$dim <- dim
-    itr$sshift <- sshift
-    itr$eshift <- eshift
-    var$itr <- itr
-    .gvtrack.set(vtrackstr, var)
+    .set_vtrack_iterator_1d(vtrackstr, dim = dim, sshift = sshift, eshift = eshift)
     retv <- NULL
 }
 

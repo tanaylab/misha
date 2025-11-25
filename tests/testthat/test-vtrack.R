@@ -892,6 +892,84 @@ test_that("vtrack.computed2d_iterator2d_customShifts_gintervals2d_testcomputed2d
     expect_regression(r, "vtrack.computed2d_iterator2d_customShifts_gintervals2d_testcomputed2d_regression")
 })
 
+# Test for gvtrack.create with sshift parameter
+test_that("vtrack.create_with_sshift", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create with sshift parameter
+    gvtrack.create("v1", "test.fixedbin", func = "avg", sshift = -100)
+    r1 <- gextract("v1", gintervals(c(1, 2)), iterator = 233)
+
+    # Create separately and use gvtrack.iterator
+    gvtrack.create("v2", "test.fixedbin", func = "avg")
+    gvtrack.iterator("v2", sshift = -100, eshift = 0)
+    r2 <- gextract("v2", gintervals(c(1, 2)), iterator = 233)
+
+    # Should be equivalent
+    expect_equal(r1$v1, r2$v2)
+})
+
+# Test for gvtrack.create with eshift parameter
+test_that("vtrack.create_with_eshift", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create with eshift parameter
+    gvtrack.create("v1", "test.fixedbin", func = "avg", eshift = 100)
+    r1 <- gextract("v1", gintervals(c(1, 2)), iterator = 233)
+
+    # Create separately and use gvtrack.iterator
+    gvtrack.create("v2", "test.fixedbin", func = "avg")
+    gvtrack.iterator("v2", sshift = 0, eshift = 100)
+    r2 <- gextract("v2", gintervals(c(1, 2)), iterator = 233)
+
+    # Should be equivalent
+    expect_equal(r1$v1, r2$v2)
+})
+
+# Test for gvtrack.create with both sshift and eshift parameters
+test_that("vtrack.create_with_sshift_and_eshift", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create with both parameters
+    gvtrack.create("v1", "test.fixedbin", func = "avg", sshift = -130, eshift = 224)
+    r1 <- gextract("v1", gintervals(c(1, 2)), iterator = 233)
+
+    # Create separately and use gvtrack.iterator
+    gvtrack.create("v2", "test.fixedbin", func = "avg")
+    gvtrack.iterator("v2", sshift = -130, eshift = 224)
+    r2 <- gextract("v2", gintervals(c(1, 2)), iterator = 233)
+
+    # Should be equivalent
+    expect_equal(r1$v1, r2$v2)
+    expect_equal(r1$chrom, r2$chrom)
+    expect_equal(r1$start, r2$start)
+    expect_equal(r1$end, r2$end)
+})
+
+# Test for equivalence: gvtrack.create with sshift/eshift should be the same as calling gvtrack.iterator separately
+test_that("vtrack.create_sshift_eshift_equivalence", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Create vtrack with sshift and eshift parameters
+    gvtrack.create("v1", "test.fixedbin", func = "avg", sshift = -130, eshift = 224)
+    r1 <- gextract("v1", gintervals(c(1, 2)), iterator = 233)
+
+    # Create vtrack and then call gvtrack.iterator separately
+    gvtrack.create("v2", "test.fixedbin", func = "avg")
+    gvtrack.iterator("v2", sshift = -130, eshift = 224)
+    r2 <- gextract("v2", gintervals(c(1, 2)), iterator = 233)
+
+    # Results should be identical (compare values, not column names)
+    expect_equal(r1$v1, r2$v2)
+    expect_equal(r1$chrom, r2$chrom)
+    expect_equal(r1$start, r2$start)
+    expect_equal(r1$end, r2$end)
+})
+
 # Test for multiple track creations and gvtrack.ls() functionality
 test_that("vtrack.multipleCreation_gvtrackls", {
     remove_all_vtracks()
