@@ -483,3 +483,76 @@ test_that("gintervals.liftover aggregation handles multiple value types", {
     expect_true("val" %in% names(result))
     expect_equal(result$val[1], 3.14, tolerance = 1e-6)
 })
+
+test_that("gintervals.liftover aggregates across multiple chain_ids mapping to same target", {
+    local_db_state()
+
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", paste(rep("A", 300), collapse = ""), "\n")
+    ))
+
+    # Source intervals from different regions that will map to the same target
+    # Database chromosome name is "chrsource1" (from filename chrsource1.fasta)
+    src_intervals <- data.frame(
+        chrom = c("chrsource1", "chrsource1"),
+        start = c(0, 100),
+        end = c(100, 200),
+        value = c(0.9, 0.85),
+        stringsAsFactors = FALSE
+    )
+
+    setup_db(list(paste0(">chrTarget\n", paste(rep("G", 200), collapse = ""), "\n")))
+
+    # Two chains mapping to the SAME target location but from different source regions
+    # This is the scenario where we had the bug: aggregation should combine these
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "chrsource1", 300, "+", 0, 100, "chrTarget", 200, "+", 50, 150, 1, score = 100)
+    write_chain_entry(chain_file, "chrsource1", 300, "+", 100, 200, "chrTarget", 200, "+", 50, 150, 2, score = 95)
+
+    # Load the chain with tgt_overlap_policy="agg" to enable aggregation across chain_ids
+    # Test max aggregation - should return 1 row with max value
+    result_max <- gintervals.liftover(
+        src_intervals, chain_file,
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
+        value_col = "value",
+        multi_target_agg = "max"
+    )
+    expect_equal(nrow(result_max), 1, info = "Should return 1 row when aggregating across chain_ids")
+    expect_equal(result_max$value[1], 0.9, tolerance = 1e-6, info = "Max of 0.9 and 0.85 should be 0.9")
+    expect_false("intervalID" %in% names(result_max), info = "intervalID column should not be present when aggregating across different sources")
+    expect_false("chain_id" %in% names(result_max), info = "chain_id column should not be present when aggregating across different chains")
+
+    # Test mean aggregation
+    result_mean <- gintervals.liftover(
+        src_intervals, chain_file,
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
+        value_col = "value",
+        multi_target_agg = "mean"
+    )
+    expect_equal(nrow(result_mean), 1, info = "Should return 1 row")
+    expect_equal(result_mean$value[1], 0.875, tolerance = 1e-6, info = "Mean of 0.9 and 0.85 should be 0.875")
+
+    # Test sum aggregation
+    result_sum <- gintervals.liftover(
+        src_intervals, chain_file,
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
+        value_col = "value",
+        multi_target_agg = "sum"
+    )
+    expect_equal(nrow(result_sum), 1, info = "Should return 1 row")
+    expect_equal(result_sum$value[1], 1.75, tolerance = 1e-6, info = "Sum of 0.9 and 0.85 should be 1.75")
+
+    # Test count aggregation
+    result_count <- gintervals.liftover(
+        src_intervals, chain_file,
+        src_overlap_policy = "keep",
+        tgt_overlap_policy = "agg",
+        value_col = "value",
+        multi_target_agg = "count"
+    )
+    expect_equal(nrow(result_count), 1, info = "Should return 1 row")
+    expect_equal(result_count$value[1], 2, info = "Count should be 2 (two contributing sources)")
+})
