@@ -1,4 +1,4 @@
-load_test_db()
+create_isolated_test_db()
 
 test_that("gintervals.liftover with canonic merges adjacent blocks from same interval", {
     local_db_state()

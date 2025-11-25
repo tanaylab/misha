@@ -2,7 +2,7 @@ test_that("gdir.cd works", {
     gdir.cd("test")
     r <- gtrack.ls()
     gdir.cd("..")
-    expect_equal(r, c(
+    expected <- c(
         "array", "bigsparse", "computed2d", "fixedbin", "fixedbin_1bp",
         "fixedbin_1bp2", "generated_1d_1", "generated_1d_2", "generated_2d_1",
         "generated_2d_2", "generated_2d_3", "generated_2d_4", "generated_2d_5",
@@ -10,7 +10,10 @@ test_that("gdir.cd works", {
         "rects_converted2", "rects_new_format", "rects_new_format_backup",
         "rects_old_format", "rects_old_format_backup", "sparse", "sparse2",
         "tmptrack11", "tmptrack12", "tmptrack2"
-    ))
+    )
+    r <- r[!grepl("tmptrack", r)]
+    expected <- expected[!grepl("tmptrack", expected)]
+    expect_equal(r, expected)
 })
 
 test_that("gdir.cd works (2)", {
@@ -36,7 +39,7 @@ test_that("gtrack.exists works correctly", {
 })
 
 test_that("gtrack.ls works", {
-    expect_equal(gtrack.ls(), c(
+    expected <- c(
         "test.array", "test.bigsparse", "test.computed2d", "test.fixedbin",
         "test.fixedbin_1bp", "test.fixedbin_1bp2", "test.generated_1d_1",
         "test.generated_1d_2", "test.generated_2d_1", "test.generated_2d_2",
@@ -44,10 +47,13 @@ test_that("gtrack.ls works", {
         "test.generated_2d_6", "test.rects", "test.rects_big_rects",
         "test.rects_converted", "test.rects_converted2", "test.rects_new_format",
         "test.rects_new_format_backup", "test.rects_old_format", "test.rects_old_format_backup",
-        "test.sparse", "test.sparse2", "test.tmptrack11", "test.tmptrack12",
-        "test.tmptrack2", "test2d", "test2d2", "track2d"
-    ))
-    expect_equal(gtrack.ls("tes"), c(
+        "test.sparse", "test.sparse2", "test2d", "test2d2", "track2d"
+    )
+    observed <- gtrack.ls()
+    expected <- expected[!grepl("tmptrack", expected)]
+    observed <- observed[!grepl("tmptrack", observed)]
+    expect_equal(observed, expected)
+    expected <- c(
         "test.array", "test.bigsparse", "test.computed2d", "test.fixedbin",
         "test.fixedbin_1bp", "test.fixedbin_1bp2", "test.generated_1d_1",
         "test.generated_1d_2", "test.generated_2d_1", "test.generated_2d_2",
@@ -57,42 +63,50 @@ test_that("gtrack.ls works", {
         "test.rects_new_format_backup", "test.rects_old_format", "test.rects_old_format_backup",
         "test.sparse", "test.sparse2", "test.tmptrack11", "test.tmptrack12",
         "test.tmptrack2", "test2d", "test2d2"
-    ))
+    )
+    observed <- gtrack.ls("test")
+    expected <- expected[!grepl("tmptrack", expected)]
+    observed <- observed[!grepl("tmptrack", observed)]
+    expect_equal(observed, expected)
     expect_null(gtrack.ls(blalaattr = "bubu"))
     expect_null(gtrack.ls("wig", created.by = "import"))
 })
 
 test_that("gtrack modify and extract for fixedbin", {
-    gtrack.rm("test.tmptrack", force = TRUE)
-    withr::defer(gtrack.rm("test.tmptrack", force = TRUE))
-    gtrack.create("test.tmptrack", "", "test.fixedbin")
+    tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gtrack.rm(tmptrack, force = TRUE)
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    gtrack.create(tmptrack, "", "test.fixedbin")
     intervs <- gscreen("test.fixedbin > 0.17 | is.na(test.fixedbin)", gintervals(c(1, 7)))
-    gtrack.modify("test.tmptrack", "test.fixedbin + test.fixedbin", intervs)
-    r <- gextract("test.tmptrack", gintervals(c(1, 2)))
+    gtrack.modify(tmptrack, "test.fixedbin + test.fixedbin", intervs)
+    r <- gextract(tmptrack, gintervals(c(1, 2)), colnames = "test.tmptrack")
     expect_regression(r, "gtrack.modify_and_extract_for_fixedbin")
 })
 
 test_that("gtrack modify for sparse", {
-    gtrack.rm("test.tmptrack", force = TRUE)
-    withr::defer(gtrack.rm("test.tmptrack", force = TRUE))
-    gtrack.create("test.tmptrack", "", "test.sparse")
-    expect_error(gtrack.modify("test.tmptrack", "test.fixedbin + test.fixedbin", gintervals(1, 1000, 2000)))
+    tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gtrack.rm(tmptrack, force = TRUE)
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    gtrack.create(tmptrack, "", "test.sparse")
+    expect_error(gtrack.modify(tmptrack, "test.fixedbin + test.fixedbin", gintervals(1, 1000, 2000)))
 })
 
 test_that("gtrack modify for rects", {
-    gtrack.rm("test.tmptrack", force = TRUE)
-    withr::defer(gtrack.rm("test.tmptrack", force = TRUE))
-    gtrack.create("test.tmptrack", "", "test.rects")
-    expect_error(gtrack.modify("test.tmptrack", "test.fixedbin + test.fixedbin", gintervals.2d(1, 1000, 2000, 2, 3000, 4000)))
+    tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gtrack.rm(tmptrack, force = TRUE)
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    gtrack.create(tmptrack, "", "test.rects")
+    expect_error(gtrack.modify(tmptrack, "test.fixedbin + test.fixedbin", gintervals.2d(1, 1000, 2000, 2, 3000, 4000)))
 })
 
 test_that("gtrack creation and removal for sparse", {
-    gtrack.rm("temp.tmptrack", force = TRUE)
-    withr::defer(gtrack.rm("temp.tmptrack", force = TRUE))
-    gtrack.create_sparse("temp.tmptrack", "", gintervals(c(1, 2), 100, 2000), c(100, 200))
+    tmptrack <- paste0("temp.tmptrack_", sample(1:1e9, 1))
+    gtrack.rm(tmptrack, force = TRUE)
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    gtrack.create_sparse(tmptrack, "", gintervals(c(1, 2), 100, 2000), c(100, 200))
     r1 <- gtrack.ls()
-    gtrack.rm("temp.tmptrack", force = TRUE)
+    gtrack.rm(tmptrack, force = TRUE)
     r2 <- gtrack.ls()
-    expect_true("temp.tmptrack" %in% r1)
-    expect_false("temp.tmptrack" %in% r2)
+    expect_true(tmptrack %in% r1)
+    expect_false(tmptrack %in% r2)
 })

@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 manual_max_pos <- function(track_name, interval_row, relative = FALSE, relative_ref = NULL) {
     interval <- gintervals(interval_row$chrom, interval_row$start, interval_row$end)
     values <- gextract(track_name, interval, iterator = 1)

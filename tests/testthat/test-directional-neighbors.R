@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("TSS directional neighbors work correctly", {
     # Create simple test data
     tss <- data.frame(

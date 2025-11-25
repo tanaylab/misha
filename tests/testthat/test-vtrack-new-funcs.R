@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 # Helper functions for manual computation
 # These use the track's native iterator to match C++ behavior
 manual_exists <- function(track_name, interval_row) {

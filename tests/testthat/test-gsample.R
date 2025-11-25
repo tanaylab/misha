@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("gsample with test.sparse", {
     set.seed(60427)
     expect_regression(gsample("test.sparse", 100, gintervals(c(1, 2))), "gsample.sparse")
