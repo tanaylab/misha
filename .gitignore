@@ -18,3 +18,4 @@ misha.Rcheck/
 ADAPTIVE_MEMORY_PLAN.md
 *.md
 dev
+tests/testthat/tmpresfile
