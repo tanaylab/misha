@@ -1034,6 +1034,7 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 	switch (var.val_func) {
 		case Value_var::AVG:
 			var.track->register_function(GenomeTrack1D::AVG);
+			var.track->register_function(GenomeTrack1D::SIZE);
 			break;
 		case Value_var::MIN:
 			var.track->register_function(GenomeTrack1D::MIN);
@@ -1046,6 +1047,7 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 			break;
 		case Value_var::STDDEV:
 			var.track->register_function(GenomeTrack1D::STDDEV);
+			var.track->register_function(GenomeTrack1D::SIZE);
 			break;
 		case Value_var::QUANTILE:
 			var.track->register_quantile(10000, 1000, 1000);
@@ -2357,7 +2359,9 @@ void TrackExpressionVars::set_vars(unsigned idx)
 			// For filtered intervals, we need to combine results across multiple sub-intervals
 			// This matches the pattern used for track variables with filters
 			double combined_result = 0;
-			int64_t total_coverage = 0;
+			double total_sum = 0;
+			double total_sum_sq = 0;
+			int64_t total_size = 0;
 			bool has_value = false;
 
 			for (const auto &eval_interval : eval_intervals) {
@@ -2367,11 +2371,24 @@ void TrackExpressionVars::set_vars(unsigned idx)
 				switch (ivar->val_func) {
 					case Value_var::AVG:
 					case Value_var::STDDEV: {
-						// For avg/stddev, we need coverage-weighted combination
-						if (!std::isnan(ivar->track->last_avg())) {
-							int64_t coverage = eval_interval.end - eval_interval.start;
-							combined_result += ivar->track->last_avg() * coverage;
-							total_coverage += coverage;
+						double part_avg = ivar->track->last_avg();
+						double part_size = ivar->track->last_size();
+						double part_sum = ivar->track->last_sum();
+						double part_stddev = ivar->track->last_stddev();
+
+						if (!std::isnan(part_avg) && part_size > 0) {
+							total_sum += part_sum;
+							total_size += static_cast<int64_t>(part_size);
+
+							if (ivar->val_func == Value_var::STDDEV) {
+								double var_term = 0;
+
+								if (part_size > 1 && !std::isnan(part_stddev))
+									var_term = part_stddev * part_stddev * (part_size - 1);
+
+								total_sum_sq += var_term + part_avg * part_avg * part_size;
+							}
+
 							has_value = true;
 						}
 						break;
@@ -2442,15 +2459,15 @@ void TrackExpressionVars::set_vars(unsigned idx)
 								case Value_var::LAST: val = ivar->track->last_last(); break;
 								case Value_var::SAMPLE: val = ivar->track->last_sample(); break;
 								case Value_var::FIRST_POS_ABS: val = ivar->track->last_first_pos(); break;
-								case Value_var::FIRST_POS_REL: val = ivar->track->last_first_pos() - eval_interval.start; break;
+								case Value_var::FIRST_POS_REL: val = ivar->track->last_first_pos() - interval.start; break;
 								case Value_var::LAST_POS_ABS: val = ivar->track->last_last_pos(); break;
-								case Value_var::LAST_POS_REL: val = ivar->track->last_last_pos() - eval_interval.start; break;
+								case Value_var::LAST_POS_REL: val = ivar->track->last_last_pos() - interval.start; break;
 								case Value_var::SAMPLE_POS_ABS: val = ivar->track->last_sample_pos(); break;
-								case Value_var::SAMPLE_POS_REL: val = ivar->track->last_sample_pos() - eval_interval.start; break;
+								case Value_var::SAMPLE_POS_REL: val = ivar->track->last_sample_pos() - interval.start; break;
 								case Value_var::MIN_POS_ABS: val = ivar->track->last_min_pos(); break;
-								case Value_var::MIN_POS_REL: val = ivar->track->last_min_pos() - eval_interval.start; break;
+								case Value_var::MIN_POS_REL: val = ivar->track->last_min_pos() - interval.start; break;
 								case Value_var::MAX_POS_ABS: val = ivar->track->last_max_pos(); break;
-								case Value_var::MAX_POS_REL: val = ivar->track->last_max_pos() - eval_interval.start; break;
+								case Value_var::MAX_POS_REL: val = ivar->track->last_max_pos() - interval.start; break;
 								default: break;
 							}
 							if (!std::isnan(val)) {
@@ -2471,10 +2488,21 @@ void TrackExpressionVars::set_vars(unsigned idx)
 			if (!has_value) {
 				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
 			} else {
-				if ((ivar->val_func == Value_var::AVG || ivar->val_func == Value_var::STDDEV) && total_coverage > 0) {
-					ivar->var[idx] = combined_result / total_coverage;
-				} else {
-					ivar->var[idx] = combined_result;
+				switch (ivar->val_func) {
+					case Value_var::AVG:
+						ivar->var[idx] = total_size > 0 ? total_sum / total_size : numeric_limits<double>::quiet_NaN();
+						break;
+					case Value_var::STDDEV:
+						if (total_size > 1) {
+							double mean = total_sum / total_size;
+							double variance = total_sum_sq / (total_size - 1) - mean * mean * ((double)total_size / (total_size - 1));
+							ivar->var[idx] = sqrt(std::max(0.0, variance));
+						} else
+							ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+						break;
+					default:
+						ivar->var[idx] = combined_result;
+						break;
 				}
 			}
 		} else {
