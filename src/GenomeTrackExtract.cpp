@@ -51,8 +51,10 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
     for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
         SEXP expr_vals;
         expr_vals = rprotect_ptr(RSaneAllocVector(REALSXP, values[iexpr].size()));
-		for (unsigned i = 0; i < values[iexpr].size(); ++i)
-			REAL(expr_vals)[i] = values[iexpr][i];
+		// Use memcpy for bulk copy instead of manual loop for better performance
+		if (values[iexpr].size() > 0) {
+			memcpy(REAL(expr_vals), values[iexpr].data(), values[iexpr].size() * sizeof(double));
+		}
         SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
 	}
 
@@ -132,15 +134,15 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band);
 
 			if (scanner.get_iterator()->is_1d()) {
-				for (int i = 0; i < GInterval::NUM_COLS; ++i) 
+				for (int i = 0; i < GInterval::NUM_COLS; ++i)
 					outfile << GInterval::COL_NAMES[i] << "\t";
 			} else {
-				for (int i = 0; i < GInterval2D::NUM_COLS; ++i) 
+				for (int i = 0; i < GInterval2D::NUM_COLS; ++i)
 					outfile << GInterval2D::COL_NAMES[i] << "\t";
 			}
 
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-				if (iexpr) 
+				if (iexpr)
 					outfile << "\t";
 				if (Rf_isNull(_colnames))
 					outfile << get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr)));
@@ -149,22 +151,48 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			}
 			outfile << "\n";
 
-			for (; !scanner.isend(); scanner.next()) { 
+			// Use buffered writing with snprintf for better performance than iostream
+			const size_t BUFFER_SIZE = 65536;  // 64KB buffer
+			char buffer[BUFFER_SIZE];
+			size_t buffer_pos = 0;
+
+			for (; !scanner.isend(); scanner.next()) {
+				char line[4096];  // Temporary buffer for one line
+				int len = 0;
+
 				if (scanner.get_iterator()->is_1d()) {
 					const GInterval &interval = scanner.last_interval1d();
-					outfile << iu.id2chrom(interval.chromid) << "\t" << interval.start << "\t" << interval.end;
+					len = snprintf(line, sizeof(line), "%s\t%d\t%d",
+						iu.id2chrom(interval.chromid).c_str(), interval.start, interval.end);
 				} else {
 					const GInterval2D &interval = scanner.last_interval2d();
-					outfile << iu.id2chrom(interval.chromid1()) << "\t" << interval.start1() << "\t" << interval.end1() << "\t" <<
-						iu.id2chrom(interval.chromid2()) << "\t" << interval.start2() << "\t" << interval.end2();
+					len = snprintf(line, sizeof(line), "%s\t%d\t%d\t%s\t%d\t%d",
+						iu.id2chrom(interval.chromid1()).c_str(), interval.start1(), interval.end1(),
+						iu.id2chrom(interval.chromid2()).c_str(), interval.start2(), interval.end2());
 				}
 
-				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
-					outfile << "\t" << scanner.last_real(iexpr);
-				outfile << "\n";
+				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+					len += snprintf(line + len, sizeof(line) - len, "\t%.15g", scanner.last_real(iexpr));
+				}
+				len += snprintf(line + len, sizeof(line) - len, "\n");
+
+				// Flush buffer if not enough space for this line
+				if (buffer_pos + len >= BUFFER_SIZE) {
+					outfile.write(buffer, buffer_pos);
+					buffer_pos = 0;
+				}
+
+				memcpy(buffer + buffer_pos, line, len);
+				buffer_pos += len;
 
 				check_interrupt();
 			}
+
+			// Flush any remaining data
+			if (buffer_pos > 0) {
+				outfile.write(buffer, buffer_pos);
+			}
+
 			if (outfile.fail())
 				verror("Failed to write to file %s: %s\n", filename, strerror(errno));
 
@@ -174,6 +202,9 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 		GIntervals out_intervals1d;
 		GIntervals2D out_intervals2d;
 		vector< vector<double> > values(num_exprs);
+
+		// Pre-reserve memory for the regular (non-file) path to avoid reallocations
+		uint64_t max_size = intervals1d ? intervals1d->size() : intervals2d->size();
 
 		if (!intervset_out.empty()) {
 			bool is_1d_iterator = iu.is_1d_iterator(_exprs, intervals1d, intervals2d, _iterator_policy);
@@ -249,6 +280,16 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 		}
 
 		vector<unsigned> interv_ids;
+
+		// Reserve memory to avoid reallocations during the main loop
+		for (auto& v : values) {
+			v.reserve(max_size);
+		}
+		if (intervals1d)
+			out_intervals1d.reserve(max_size);
+		else
+			out_intervals2d.reserve(max_size);
+		interv_ids.reserve(max_size);
 
 		for (scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band); !scanner.isend(); scanner.next()) {
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
@@ -343,15 +384,15 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band);
 
 			if (scanner.get_iterator()->is_1d()) {
-				for (int i = 0; i < GInterval::NUM_COLS; ++i) 
+				for (int i = 0; i < GInterval::NUM_COLS; ++i)
 					outfile << GInterval::COL_NAMES[i] << "\t";
 			} else {
-				for (int i = 0; i < GInterval2D::NUM_COLS; ++i) 
+				for (int i = 0; i < GInterval2D::NUM_COLS; ++i)
 					outfile << GInterval2D::COL_NAMES[i] << "\t";
 			}
 
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-				if (iexpr) 
+				if (iexpr)
 					outfile << "\t";
 				if (Rf_isNull(_colnames))
 					outfile << get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr)));
@@ -360,22 +401,48 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			}
 			outfile << "\n";
 
-			for (; !scanner.isend(); scanner.next()) { 
+			// Use buffered writing with snprintf for better performance than iostream
+			const size_t BUFFER_SIZE = 65536;  // 64KB buffer
+			char buffer[BUFFER_SIZE];
+			size_t buffer_pos = 0;
+
+			for (; !scanner.isend(); scanner.next()) {
+				char line[4096];  // Temporary buffer for one line
+				int len = 0;
+
 				if (scanner.get_iterator()->is_1d()) {
 					const GInterval &interval = scanner.last_interval1d();
-					outfile << iu.id2chrom(interval.chromid) << "\t" << interval.start << "\t" << interval.end;
+					len = snprintf(line, sizeof(line), "%s\t%d\t%d",
+						iu.id2chrom(interval.chromid).c_str(), interval.start, interval.end);
 				} else {
 					const GInterval2D &interval = scanner.last_interval2d();
-					outfile << iu.id2chrom(interval.chromid1()) << "\t" << interval.start1() << "\t" << interval.end1() << "\t" <<
-						iu.id2chrom(interval.chromid2()) << "\t" << interval.start2() << "\t" << interval.end2();
+					len = snprintf(line, sizeof(line), "%s\t%d\t%d\t%s\t%d\t%d",
+						iu.id2chrom(interval.chromid1()).c_str(), interval.start1(), interval.end1(),
+						iu.id2chrom(interval.chromid2()).c_str(), interval.start2(), interval.end2());
 				}
 
-				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
-					outfile << "\t" << scanner.last_real(iexpr);
-				outfile << "\n";
+				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+					len += snprintf(line + len, sizeof(line) - len, "\t%.15g", scanner.last_real(iexpr));
+				}
+				len += snprintf(line + len, sizeof(line) - len, "\n");
+
+				// Flush buffer if not enough space for this line
+				if (buffer_pos + len >= BUFFER_SIZE) {
+					outfile.write(buffer, buffer_pos);
+					buffer_pos = 0;
+				}
+
+				memcpy(buffer + buffer_pos, line, len);
+				buffer_pos += len;
 
 				check_interrupt();
 			}
+
+			// Flush any remaining data
+			if (buffer_pos > 0) {
+				outfile.write(buffer, buffer_pos);
+			}
+
 			if (outfile.fail())
 				verror("Failed to write to file %s: %s\n", filename, strerror(errno));
 
