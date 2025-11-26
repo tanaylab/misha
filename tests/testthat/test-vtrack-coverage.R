@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 test_that("Coverage virtual track works correctly", {
     # Basic coverage test - single overlap
     gvtrack.create("cov1", gintervals(1, 50, 100), "coverage")

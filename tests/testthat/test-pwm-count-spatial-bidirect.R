@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("pwm.count spatial sliding counts bidirectional hits once per position", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())

@@ -1,3 +1,8 @@
+# misha 5.3.0
+
+* Added in-memory value-based virtual tracks (`gvtrack.create` with `src` parameter). These tracks behave exactly like regular sparse tracks, but are stored in memory and can be used in track expressions.
+* Added `sshift`, `eshift` and `filter` parameters to `gvtrack.create`.
+
 # misha 5.2.2
 
 * Fix: `gtrack.liftover` did not fill chromosomes missing the chain with NA values. This caused errors when trying to access the tracks afterwards.

@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 test_that("gwilcox on test.fixedbin", {
     r <- gwilcox("test.fixedbin", 100000, 1000, maxpval = 0.000001, intervals = gintervals(c(1, 2), 0, -1))
     expect_regression(r, "gwilcox.fixedbin")
@@ -27,11 +28,12 @@ test_that("gwilcox on test.fixedbin with screening", {
 })
 
 test_that("gwilcox with interval setting and maximum data size", {
-    gintervals.rm("temp.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    temp_track_name <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gintervals.rm(temp_track_name, force = TRUE)
+    withr::defer(gintervals.rm(temp_track_name, force = TRUE))
     withr::with_options(c(gmax.data.size = 8700), {
-        gwilcox("test.fixedbin", 100000, 1000, maxpval = 0.000001, intervals = gintervals(c(1, 2), 0, -1), intervals.set.out = "temp.testintervs")
+        gwilcox("test.fixedbin", 100000, 1000, maxpval = 0.000001, intervals = gintervals(c(1, 2), 0, -1), intervals.set.out = temp_track_name)
     })
-    r <- gintervals.load("temp.testintervs")
+    r <- gintervals.load(temp_track_name)
     expect_regression(r, "gwilcox.fixedbin_interval_setting")
 })

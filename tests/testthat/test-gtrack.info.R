@@ -1,4 +1,4 @@
-load_test_db()
+create_isolated_test_db()
 test_that("gtrack.info works", {
     expect_equal(
         gtrack.info("test.fixedbin"),

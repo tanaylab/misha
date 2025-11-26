@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 test_that("gquantiles with test.fixedbin", {
     intervs <- gscreen("test.fixedbin > 0.2", gintervals(c(1, 2), 0, -1))
     result <- gquantiles("test.fixedbin+0.2", percentile = c(0.5, 0.3, 0.2, 0.9), intervs)

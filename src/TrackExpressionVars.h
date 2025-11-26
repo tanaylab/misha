@@ -25,6 +25,7 @@
 #include "FilterRegistry.h"
 #include "GenomeTrack.h"
 #include "GenomeTrackArrays.h"
+#include "GenomeTrackInMemory.h"
 #include "GInterval.h"
 #include "GInterval2D.h"
 #include "TrackExpressionIteratorBase.h"
@@ -173,11 +174,44 @@ public:
 
     typedef vector<Interv_var> Interv_vars;
 
+    struct Value_var {
+        enum Val_func {
+            AVG, MIN, MAX, STDDEV, SUM, QUANTILE,
+            NEAREST,
+            EXISTS, SIZE,
+            FIRST, LAST, SAMPLE,
+            FIRST_POS_ABS, FIRST_POS_REL,
+            LAST_POS_ABS, LAST_POS_REL,
+            SAMPLE_POS_ABS, SAMPLE_POS_REL,
+            MIN_POS_ABS, MIN_POS_REL,
+            MAX_POS_ABS, MAX_POS_REL,
+            NUM_FUNCS
+        };
+
+        static const char *FUNC_NAMES[NUM_FUNCS];
+
+        string                     var_name;
+        SEXP                       rvar{R_NilValue};
+        double                    *var;
+        Iterator_modifier1D       *imdf1d;
+        Val_func                   val_func;
+        double                     percentile;
+
+        // Track object that holds the intervals and values
+        std::shared_ptr<GenomeTrackInMemory> track;
+
+        // Filter for masking genomic regions (applied after iterator modifiers)
+        std::shared_ptr<Genome1DFilter> filter;
+    };
+
+    typedef vector<Value_var> Value_vars;
+
 	TrackExpressionVars(rdb::IntervUtils &iu);
 	~TrackExpressionVars();
 
 	unsigned get_num_track_vars() const { return m_track_vars.size(); }
 	unsigned get_num_interv_vars() const { return m_interv_vars.size(); }
+	unsigned get_num_value_vars() const { return m_value_vars.size(); }
 
 	const string &get_track_name(unsigned ivar) const { return m_track_vars[ivar].track_n_imdf->name; }
 	GenomeTrack::Type get_track_type(unsigned ivar) const { return m_track_vars[ivar].track_n_imdf->type; }
@@ -202,6 +236,7 @@ private:
     string                  m_groot;
 	Track_vars              m_track_vars;
 	Interv_vars             m_interv_vars;
+	Value_vars              m_value_vars;
 	Track_n_imdfs           m_track_n_imdfs;
 	Iterator_modifiers1D    m_imdfs1d;
 	Iterator_modifiers2D    m_imdfs2d;
@@ -222,8 +257,10 @@ private:
 	void                 add_vtrack_var(const string &track, SEXP rvtrack);
 	Track_var           &add_vtrack_var_src_track(SEXP rvtrack, const string &vtrack, const string &track);
 	Interv_var          &add_vtrack_var_src_interv(SEXP rvtrack, const string &vtrack, GIntervals &intervs1d, GIntervals2D &intervs2d);
+	Value_var           &add_vtrack_var_src_value(SEXP rvtrack, const string &vtrack, GIntervals &intervs, vector<float> &vals);
 	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, Track_var &var);
 	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, Interv_var &var);
+	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, Value_var &var);
 	void                 register_track_functions();
 
 	void start_chrom(const GInterval &interval);
@@ -234,6 +271,7 @@ private:
 	void set_track_vars(unsigned idx);
 	void set_sequence_vars(unsigned idx);
 	void set_interval_vars(unsigned idx);
+	void set_value_vars(unsigned idx);
 
 	// Filter aggregation helpers for 1D tracks
 	double aggregate_avg_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);

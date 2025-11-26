@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 # Helper function to manually count kmer occurrences in a sequence
 # This matches the C++ implementation's approach
 count_kmers_manually <- function(sequence, kmer, original_interval, extended_interval = NULL) {

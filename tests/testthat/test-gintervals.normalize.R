@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 test_that("gintervals.normalize works with basic intervals", {
     # Test basic normalization with even size
     intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
@@ -144,13 +145,14 @@ test_that("gintervals.normalize with large size", {
 
 test_that("gintervals.normalize works with intervals.set.out", {
     # Test saving result to intervals set
-    gintervals.rm("temp.testintervs", force = TRUE)
-    withr::defer(gintervals.rm("temp.testintervs", force = TRUE))
+    temp_track_name <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gintervals.rm(temp_track_name, force = TRUE)
+    withr::defer(gintervals.rm(temp_track_name, force = TRUE))
 
     intervs <- gintervals(c(1, 2), c(1000, 2000), c(2000, 3000))
-    gintervals.normalize(intervs, 800, intervals.set.out = "temp.testintervs")
+    gintervals.normalize(intervs, 800, intervals.set.out = temp_track_name)
 
-    result <- gintervals.load("temp.testintervs")
+    result <- gintervals.load(temp_track_name)
 
     # Expected: center of first interval is 1500, expansion is 400, so normalized interval should be [1100, 1900]
     # Expected: center of second interval is 2500, expansion is 400, so normalized interval should be [2100, 2900]

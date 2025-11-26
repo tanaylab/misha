@@ -1,4 +1,4 @@
-load_test_db()
+create_isolated_test_db()
 
 test_that("gintervals.liftover multi-target aggregation policies", {
     local_db_state()

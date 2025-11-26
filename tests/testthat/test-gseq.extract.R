@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 test_that("gseq.extract with gscreen results on test.fixedbin", {
     intervs <- gscreen("test.fixedbin > 0.6", gintervals(c(1, 2, 3)))
     expect_regression(gseq.extract(intervs), "gseq_extract_gscreen_fixedbin")
