@@ -3,19 +3,45 @@
         chroms <- as.character(chroms)
     }
 
+    allchroms <- get("ALLGENOME", envir = .misha)[[1]]$chrom
+    uniq <- unique(chroms)
 
     if (exists("CHROM_ALIAS", envir = .misha, inherits = FALSE)) {
         alias_map <- get("CHROM_ALIAS", envir = .misha)
         if (length(alias_map)) {
-            mapped <- alias_map[chroms]
-            matched <- !is.na(mapped)
-            if (any(matched)) {
-                chroms[matched] <- mapped[matched]
+            alias_names <- names(alias_map)
+            # If none of the chromosomes match any alias names, short-circuit
+            if (length(alias_names) && !any(uniq %in% alias_names)) {
+                if (all(uniq %in% allchroms)) {
+                    return(chroms)
+                }
+            } else {
+                mapped <- alias_map[chroms]
+                matched <- !is.na(mapped)
+                # If there are zero alias hits, and all names are canonical, return early
+                if (!any(matched)) {
+                    if (all(uniq %in% allchroms)) {
+                        return(chroms)
+                    }
+                }
+                if (any(matched)) {
+                    chroms[matched] <- mapped[matched]
+                }
             }
+        } else {
+            # Fast path: when no aliases are defined and all names are already canonical,
+            # skip the full-length match() to avoid O(N) normalization on large extracts.
+            if (all(uniq %in% allchroms)) {
+                return(chroms)
+            }
+        }
+    } else {
+        # Same fast path when alias map is absent
+        if (all(uniq %in% allchroms)) {
+            return(chroms)
         }
     }
 
-    allchroms <- get("ALLGENOME", envir = .misha)[[1]]$chrom
     indices <- match(chroms, allchroms)
 
     err.chroms <- chroms[is.na(indices)]
