@@ -28,12 +28,10 @@ using namespace rdb;
 void gscreen_add_interval2res(const GInterval &interval, GIntervals &res_intervals, const string &intervset_out,
 							  vector<GIntervalsBigSet1D::ChromStat> &chromstats1d, IntervUtils &iu)
 {
-	static char error_prefix[1000];
 	static GInterval last_interval;
 
 	if (last_interval.chromid != interval.chromid) {
 		last_interval = interval;
-		snprintf(error_prefix, sizeof(error_prefix), "Big intervals set %s, chrom %s", intervset_out.c_str(), iu.id2chrom(interval.chromid).c_str());
 	}
 
 	if (!intervset_out.empty() && res_intervals.size() && res_intervals.front().chromid != interval.chromid)
@@ -41,33 +39,50 @@ void gscreen_add_interval2res(const GInterval &interval, GIntervals &res_interva
 
 	res_intervals.push_back(interval);
 
-	if (intervset_out.empty())
+	if (intervset_out.empty()) {
 		iu.verify_max_data_size(res_intervals.size(), "Result");
-	else
-		iu.verify_max_data_size(res_intervals.size(), error_prefix, false);
+	} else {
+		// Only format the error string if we're actually going to error
+		// This defers the expensive snprintf until it's truly needed
+		if (res_intervals.size() > iu.get_max_data_size()) {
+			char error_prefix[1000];
+			snprintf(error_prefix, sizeof(error_prefix), "Big intervals set %s, chrom %s",
+				intervset_out.c_str(), iu.id2chrom(interval.chromid).c_str());
+			iu.verify_max_data_size(res_intervals.size(), error_prefix, false);
+		} else {
+			iu.verify_max_data_size(res_intervals.size(), "", false);
+		}
+	}
 }
 
 void gscreen_add_interval2res(const GInterval2D &interval, GIntervals2D &res_intervals, const string &intervset_out,
 							  vector<GIntervalsBigSet2D::ChromStat> &chromstats2d, IntervUtils &iu)
 {
-	static char error_prefix[1000];
 	static GInterval2D last_interval;
 
 	if (!last_interval.is_same_chrom(interval)) {
 		last_interval = interval;
-		snprintf(error_prefix, sizeof(error_prefix), "Big intervals set %s, chroms (%s, %s)",
-				intervset_out.c_str(), iu.id2chrom(interval.chromid1()).c_str(), iu.id2chrom(interval.chromid2()).c_str());
 	}
 
 	if (!intervset_out.empty() && res_intervals.size() && !res_intervals.front().is_same_chrom(interval))
-		GIntervalsBigSet2D::save_chrom_plain_intervals(intervset_out.c_str(), res_intervals, iu, chromstats2d); 
+		GIntervalsBigSet2D::save_chrom_plain_intervals(intervset_out.c_str(), res_intervals, iu, chromstats2d);
 
 	res_intervals.push_back(interval);
 
-	if (intervset_out.empty())
+	if (intervset_out.empty()) {
 		iu.verify_max_data_size(res_intervals.size(), "Result");
-	else
-		iu.verify_max_data_size(res_intervals.size(), error_prefix, false);
+	} else {
+		// Only format the error string if we're actually going to error
+		// This defers the expensive snprintf until it's truly needed
+		if (res_intervals.size() > iu.get_max_data_size()) {
+			char error_prefix[1000];
+			snprintf(error_prefix, sizeof(error_prefix), "Big intervals set %s, chroms (%s, %s)",
+				intervset_out.c_str(), iu.id2chrom(interval.chromid1()).c_str(), iu.id2chrom(interval.chromid2()).c_str());
+			iu.verify_max_data_size(res_intervals.size(), error_prefix, false);
+		} else {
+			iu.verify_max_data_size(res_intervals.size(), "", false);
+		}
+	}
 }
 
 extern "C" {
