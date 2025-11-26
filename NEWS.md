@@ -1,5 +1,15 @@
 # misha 5.3.0
 
+* **Multi-contig support**: Added support for genomes with many contigs (100+) through new indexed database format
+  - New indexed format (default): Uses unified `genome.seq` + `genome.idx` files instead of per-chromosome files
+  - Dramatically reduces file descriptor usage for genomes with many contigs
+  - Provides 4-14% performance improvement for large-scale analyses
+  - Removes the requirement for "chr" prefix in chromosome names.
+  - **Backward compatible**: Legacy per-chromosome format fully supported
+  - Automatic format detection - no user action required
+  - New functions: `gdb.info()`, `gdb.convert_to_indexed()`, `gtrack.convert_to_indexed()`, `gintervals.convert_to_indexed()`, `gintervals.2d.convert_to_indexed()`
+  - Set `options(gmulticontig.indexed_format = FALSE)` to create databases in legacy format for compatibility with older misha versions
+  - See `vignette("Database-Formats")` for more details.
 * Added in-memory value-based virtual tracks (`gvtrack.create` with `src` parameter). These tracks behave exactly like regular sparse tracks, but are stored in memory and can be used in track expressions.
 * Added `sshift`, `eshift` and `filter` parameters to `gvtrack.create`.
 

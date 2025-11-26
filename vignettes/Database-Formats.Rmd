@@ -1,0 +1,370 @@
+---
+title: "Database Formats and Multi-Contig Support"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Database Formats and Multi-Contig Support}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>"
+)
+```
+
+```{r setup}
+library(misha)
+```
+
+# Overview
+
+Starting with misha 5.3.0, databases can be stored in two formats:
+
+- **Indexed format** (default, recommended): Single unified files for sequences and tracks
+- **Per-chromosome format** (legacy): Separate files for each chromosome
+
+The indexed format provides better performance and scalability, especially for genomes with many contigs (>50 chromosomes).
+
+## Key Features
+
+- **Automatic format detection** - misha automatically detects which format your database uses
+- **Fully backward compatible** - existing databases continue to work without modification
+- **Transparent to users** - same API for both formats
+- **Migration tools** - convert databases when convenient
+- **Performance benefits** - 4-14% faster for large-scale analyses
+
+# Database Formats
+
+## Indexed Format (Recommended)
+
+The indexed format uses unified files:
+
+**Sequence data:**
+- `seq/genome.seq` - All chromosome sequences concatenated
+- `seq/genome.idx` - Index mapping chromosome names to positions
+
+**Track data:**
+- `tracks/mytrack.track/track.dat` - All chromosome data concatenated
+- `tracks/mytrack.track/track.idx` - Index with offset/length per chromosome
+
+**Advantages:**
+- Fewer file descriptors (important for genomes with 100+ contigs)
+- Better performance for large workloads (14% faster)
+- Smaller disk footprint
+- Faster track creation and conversion
+
+## Per-Chromosome Format (Legacy)
+
+The per-chromosome format uses separate files:
+
+**Sequence data:**
+- `seq/chr1.seq`, `seq/chr2.seq`, ... - One file per chromosome
+
+**Track data:**
+- `tracks/mytrack.track/chr1.track`, `chr2.track`, ... - One file per chromosome
+
+**When to use:**
+- Compatibility with older misha versions (<5.3.0)
+- Small genomes (<25 chromosomes) where performance difference is negligible
+
+# Creating Databases
+
+## New Databases (Indexed Format)
+
+By default, new databases use the indexed format:
+
+```{r, eval = FALSE}
+# Create database from FASTA file
+gdb.create("mydb", "/path/to/genome.fa")
+
+# Or download pre-built genome
+gdb.create_genome("hg38", path = "/path/to/install")
+```
+
+## Force Legacy Format
+
+To create a database in legacy format (for compatibility with older misha):
+
+```{r, eval = FALSE}
+# Set option before creating database
+options(gmulticontig.indexed_format = FALSE)
+gdb.create("mydb", "/path/to/genome.fa")
+```
+
+# Checking Database Format
+
+Use `gdb.info()` to check your database format:
+
+```{r, eval = FALSE}
+gsetroot("/path/to/mydb")
+info <- gdb.info()
+print(info$format) # "indexed" or "per-chromosome"
+```
+
+Example output:
+
+```{r, eval = FALSE}
+info <- gdb.info()
+# $path
+# [1] "/path/to/mydb"
+#
+# $is_db
+# [1] TRUE
+#
+# $format
+# [1] "indexed"
+#
+# $num_chromosomes
+# [1] 24
+#
+# $genome_size
+# [1] 3095693983
+```
+
+# Converting Databases
+
+## Convert Entire Database
+
+Convert all tracks and sequences to indexed format:
+
+```{r, eval = FALSE}
+gsetroot("/path/to/mydb")
+gdb.convert_to_indexed()
+```
+
+This will:
+1. Convert sequence files (`chr*.seq` → `genome.seq + genome.idx`)
+2. Convert all tracks to indexed format
+3. Validate conversions
+4. Remove old files after successful conversion
+
+## Convert Individual Tracks
+
+Convert specific tracks while keeping others in legacy format:
+
+```{r, eval = FALSE}
+gtrack.convert_to_indexed("mytrack")
+```
+
+Note that 2D tracks cannot be converted to indexed format yet.
+
+## Convert Intervals
+
+Convert interval sets to indexed format:
+
+```{r, eval = FALSE}
+# 1D intervals
+gintervals.convert_to_indexed("myintervals")
+
+# 2D intervals
+gintervals.2d.convert_to_indexed("my2dintervals")
+```
+
+# Migration Guide
+
+## When to Migrate
+
+**High priority (significant benefits):**
+- Genomes with many contigs (>50 chromosomes)
+- Large-scale analyses (10M+ bp regions frequently)
+- 2D track workflows
+- File descriptor limit issues
+
+**Medium priority (moderate benefits):**
+- Repeated extraction workflows
+- Regular analyses on medium-sized regions (1-10M bp)
+
+**Low priority (minimal benefits):**
+- Small genomes (<25 chromosomes)
+- One-off analyses
+- Simple queries on small regions
+
+## Migration Workflow
+
+**Step 1: Backup (optional but recommended)**
+
+```{r, eval = FALSE}
+# Create backup of important database
+system("cp -r /path/to/mydb /path/to/mydb.backup")
+```
+
+**Step 2: Check current format**
+
+```{r, eval = FALSE}
+gsetroot("/path/to/mydb")
+info <- gdb.info()
+print(paste("Current format:", info$format))
+```
+
+**Step 3: Convert**
+
+```{r, eval = FALSE}
+gdb.convert_to_indexed()
+```
+
+**Step 4: Verify**
+
+```{r, eval = FALSE}
+# Check format changed
+info <- gdb.info()
+print(paste("New format:", info$format))
+
+# Test a few operations
+result <- gextract("mytrack", gintervals(1, 0, 1000))
+print(head(result))
+```
+
+**Step 5: Remove backup (after validation)**
+
+```{r, eval = FALSE}
+# After thorough testing
+system("rm -rf /path/to/mydb.backup")
+```
+
+# Copying Tracks Between Databases
+
+You can freely copy tracks between databases with different formats.
+
+## Method 1: Export and Import
+
+```{r, eval = FALSE}
+# Export from source database
+gsetroot("/path/to/source_db")
+gextract("mytrack", gintervals.all(),
+    iterator = "mytrack",
+    file = "/tmp/mytrack.txt"
+)
+
+# Import to target database (format auto-detected)
+gsetroot("/path/to/target_db")
+gtrack.import("mytrack", "Copied track", "/tmp/mytrack.txt", binsize = 0)
+# Automatically converted to target database format!
+```
+
+## Method 2: Batch Copy
+
+```{r, eval = FALSE}
+# Copy multiple tracks
+tracks <- c("track1", "track2", "track3")
+
+for (track in tracks) {
+    # Export
+    gsetroot("/path/to/source_db")
+    file_path <- sprintf("/tmp/%s.txt", track)
+    gextract(track, gintervals.all(), iterator = track, file = file_path)
+
+    # Import
+    gsetroot("/path/to/target_db")
+    info <- gtrack.info(track) # Get description
+    gtrack.import(track, info$description, file_path, binsize = 0)
+    unlink(file_path)
+}
+```
+
+# Performance Comparison
+
+Based on comprehensive benchmarks comparing indexed vs legacy formats:
+
+## Operations Faster with Indexed Format
+
+- **Very large workloads (10M+ bp)**: 14% faster
+- **2D track operations**: 2% faster (was 36% slower in legacy)
+- **Repeated extractions**: 14% faster
+- **Real workflows**: 8% faster on average
+
+## Operations Similar Performance
+
+- Single chromosome extraction: Within 5%
+- Multi-chromosome (10-22 chr): Within 1%
+- PWM operations: Within 3%
+- Small workloads (<1M bp): Within 10%
+
+## Summary
+
+- **64% of operations are faster** with indexed format
+- **93% within 5%** of legacy format (statistically equal)
+- **Average: 4% faster** across all benchmarks
+- **No regressions** for common use cases
+
+# Backward Compatibility
+
+## Fully Compatible
+
+- ✅ Existing databases work without modification
+- ✅ Existing scripts work without changes
+- ✅ Same API for both formats
+- ✅ Automatic format detection
+- ✅ Can mix formats in same analysis
+
+## Example: Mixed Environment
+
+```{r, eval = FALSE}
+# Work with both formats in same session
+gsetroot("/path/to/legacy_db")
+data1 <- gextract("track1", gintervals(1, 0, 1000))
+
+gsetroot("/path/to/indexed_db")
+data2 <- gextract("track2", gintervals(1, 0, 1000))
+```
+
+# Troubleshooting
+
+## "File descriptor limit reached"
+
+This occurs with many-contig genomes in legacy format:
+
+**Solution:** Convert to indexed format
+
+```{r, eval = FALSE}
+gdb.convert_to_indexed()
+```
+
+## "Track not found after copying files"
+
+After manually copying track directories:
+
+**Solution:** Reload database
+
+```{r, eval = FALSE}
+gdb.reload()
+```
+
+## "Conversion fails with disk space error"
+
+Conversion needs 2x track size temporarily:
+
+**Solution:** Free disk space or convert tracks individually
+
+```{r, eval = FALSE}
+# Convert one track at a time
+gtrack.convert_to_indexed("track1")
+gtrack.convert_to_indexed("track2")
+# etc.
+```
+
+# Best Practices
+
+## For New Projects
+
+1. Use indexed format (default) for new databases
+2. Use `gdb.create_genome()` for standard genomes
+3. Use `gdb.create()` with multi-FASTA for custom genomes
+
+## For Existing Projects
+
+1. Check format with `gdb.info()`
+2. Migrate if beneficial (many contigs, large analyses)
+3. No rush - legacy format remains fully supported
+
+# Summary
+
+- **Indexed format is the default and recommended** for new databases
+- **Legacy format remains fully supported** - no forced migration
+- **Automatic format detection** - users don't need to think about it
+- **Significant performance benefits** for large-scale analyses
+- **Easy migration** with `gdb.convert_to_indexed()`
+- **Fully backward compatible** - existing code works unchanged
+
+
