@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 test_that("gcis_decay works", {
     domain <- rbind(
         gintervals(1, 800000 * (0:5), 800000 * (0:5) + 400000),
@@ -14,5 +15,5 @@ test_that("gcis_decay works", {
 })
 
 test_that("gcompute_strands_autocorr works", {
-    expect_regression(gcompute_strands_autocorr(file.path(.misha$GROOT, "s_7_export.txt"), 1, 50), "gcompute_strands_autocorr.1")
+    expect_regression(gcompute_strands_autocorr("/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/input_files/s_7_export.txt", 1, 50), "gcompute_strands_autocorr.1")
 })

@@ -1,4 +1,4 @@
-load_test_db()
+create_isolated_test_db()
 
 test_that("auto_score produces segmented results when targets overlap", {
     skip_if_not(has_liftover_binary(), "liftOver binary not found")

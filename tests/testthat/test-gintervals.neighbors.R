@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 test_that("gintervals.neighbors works", {
     intervs <- gscreen("test.fixedbin > 0.3")
     set.seed(60427)
@@ -23,14 +24,15 @@ test_that("gintervals.neighbors works in 2D", {
 })
 
 test_that("gintervals.neighbors works with intervals.set.out", {
-    gintervals.rm("temp.testintervs_nei", force = TRUE)
-    withr::defer(gintervals.rm("temp.testintervs_nei", force = TRUE))
+    temp_track_name <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gintervals.rm(temp_track_name, force = TRUE)
+    withr::defer(gintervals.rm(temp_track_name, force = TRUE))
     intervs <- gscreen("test.fixedbin > 0.3")
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
-    gintervals.neighbors("test.tss", intervs, 100, -10000, 10000, intervals.set.out = "temp.testintervs_nei")
+    gintervals.neighbors("test.tss", intervs, 100, -10000, 10000, intervals.set.out = temp_track_name)
     expect_equal(
-        gintervals.load("temp.testintervs_nei") %>%
+        gintervals.load(temp_track_name) %>%
             tibble::repair_names() %>%
             arrange(chrom, start, end),
         gintervals.neighbors("test.tss", intervs, 100, -10000, 10000) %>%
@@ -79,14 +81,15 @@ test_that("columns are maintained (2d)", {
 })
 
 test_that("gintervals.neighbors works with intervals.set.out without min and max dist", {
-    gintervals.rm("temp.testintervs_nei", force = TRUE)
-    withr::defer(gintervals.rm("temp.testintervs_nei", force = TRUE))
+    temp_track_name <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gintervals.rm(temp_track_name, force = TRUE)
+    withr::defer(gintervals.rm(temp_track_name, force = TRUE))
     intervs <- gscreen("test.fixedbin > 0.2", gintervals(c(1, 2, 4), 0, -1))
     set.seed(60427)
     intervs <- intervs[sample(nrow(intervs)), ]
-    gintervals.neighbors(intervs, "test.tss", 1, intervals.set.out = "temp.testintervs_nei")
+    gintervals.neighbors(intervs, "test.tss", 1, intervals.set.out = temp_track_name)
     expect_equal(
-        gintervals.load("temp.testintervs_nei") %>%
+        gintervals.load(temp_track_name) %>%
             tibble::repair_names() %>%
             arrange(chrom, start, end),
         gintervals.neighbors(intervs, "test.tss", 1) %>%
@@ -96,17 +99,18 @@ test_that("gintervals.neighbors works with intervals.set.out without min and max
 })
 
 test_that("gintervals.neighbors works with intervals.set.out with extra columns", {
-    gintervals.rm("temp.testintervs_nei", force = TRUE)
-    withr::defer(gintervals.rm("temp.testintervs_nei", force = TRUE))
+    temp_track_name <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gintervals.rm(temp_track_name, force = TRUE)
+    withr::defer(gintervals.rm(temp_track_name, force = TRUE))
     intervs1 <- gscreen("test.fixedbin > 0.2 & test.fixedbin < 0.3", gintervals(c(1, 2), 0, -1))
     set.seed(60427)
     intervs1 <- intervs1[sample(nrow(intervs1)), ]
     intervs2 <- gscreen("test.fixedbin > 0.25 & test.fixedbin < 0.35", gintervals(c(1, 2), 0, -1))
     intervs2$usercol1 <- "aaa"
     intervs2$usercol2 <- 10 + (1:dim(intervs2)[1])
-    gintervals.neighbors(intervs1, intervs2, 1, intervals.set.out = "temp.testintervs_nei")
+    gintervals.neighbors(intervs1, intervs2, 1, intervals.set.out = temp_track_name)
     expect_equal(
-        gintervals.load("temp.testintervs_nei") %>%
+        gintervals.load(temp_track_name) %>%
             tibble::repair_names() %>%
             arrange(chrom, start, end),
         gintervals.neighbors(intervs1, intervs2, 1) %>%
@@ -116,16 +120,17 @@ test_that("gintervals.neighbors works with intervals.set.out with extra columns"
 })
 
 test_that("gintervals.neighbors works with intervals.set.out (2d)", {
-    gintervals.rm("temp.testintervs_nei", force = TRUE)
-    withr::defer(gintervals.rm("temp.testintervs_nei", force = TRUE))
+    temp_track_name <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    gintervals.rm(temp_track_name, force = TRUE)
+    withr::defer(gintervals.rm(temp_track_name, force = TRUE))
     intervs1 <- gscreen("test.rects > 95")
     intervs2 <- gscreen("test.rects < 97 & test.rects > 94")
     set.seed(60427)
     intervs1 <- intervs1[sample(nrow(intervs1)), ]
     intervs2$blabla <- 1:nrow(intervs2)
-    gintervals.neighbors(intervs1, intervs2, 1, intervals.set.out = "temp.testintervs_nei")
+    gintervals.neighbors(intervs1, intervs2, 1, intervals.set.out = temp_track_name)
     expect_equal(
-        gintervals.load("temp.testintervs_nei") %>%
+        gintervals.load(temp_track_name) %>%
             tibble::repair_names() %>%
             arrange(chrom1, start1, end1, chrom2, start2, end2),
         gintervals.neighbors(intervs1, intervs2, 1) %>%
@@ -158,7 +163,7 @@ test_that("gintervals.neighbors finds all zero-distance neighbors (touching inte
 
     # Count non-self neighbors per query
     counts <- res_zero %>%
-        filter(id != id1) %>%
+        dplyr::filter(id != id1) %>%
         group_by(id) %>%
         summarize(n = n(), .groups = "drop")
 
@@ -191,14 +196,14 @@ test_that("gintervals.neighbors finds all zero-distance neighbors (touching inte
         maxneighbors = 100,
         mindist = -1e9, maxdist = 0,
         na.if.notfound = TRUE
-    ) %>% filter(dist == 0)
+    ) %>% dplyr::filter(dist == 0)
 
     counts_broad <- res_broad %>%
-        filter(id != id1) %>%
+        dplyr::filter(id != id1) %>%
         group_by(id) %>%
         summarize(n = n(), .groups = "drop")
 
-    # Counts should match between exact [0,0] and filtered broad window
+    # Counts should match between exact [0,0] and dplyr::filtered broad window
     expect_equal(counts$n[order(counts$id)], counts_broad$n[order(counts_broad$id)])
 })
 
@@ -245,32 +250,32 @@ test_that("gintervals.neighbors correctly finds overlapping, touching, and separ
 
     # Query 1 (100-150) should find targets 1 (overlap), 2 (touch right), 3 (touch left)
     query1_neighbors <- res_zero %>%
-        filter(query_id == 1) %>%
+        dplyr::filter(query_id == 1) %>%
         pull(target_id)
     expect_true(all(c(1, 2, 3) %in% query1_neighbors))
     expect_false(4 %in% query1_neighbors) # dist=1, should not be included
 
     # Query 2 (200-250) should find target 5 (touch right)
     query2_neighbors <- res_zero %>%
-        filter(query_id == 2) %>%
+        dplyr::filter(query_id == 2) %>%
         pull(target_id)
     expect_true(5 %in% query2_neighbors)
 
     # Query 3 (300-350) should find targets 6 (touch left), 7 (equals)
     query3_neighbors <- res_zero %>%
-        filter(query_id == 3) %>%
+        dplyr::filter(query_id == 3) %>%
         pull(target_id)
     expect_true(all(c(6, 7) %in% query3_neighbors))
 
     # Query 4 (400-450) should find target 8 (equals)
     query4_neighbors <- res_zero %>%
-        filter(query_id == 4) %>%
+        dplyr::filter(query_id == 4) %>%
         pull(target_id)
     expect_true(8 %in% query4_neighbors)
 
     # Query 5 (500-550) should find target 10 (touch right)
     query5_neighbors <- res_zero %>%
-        filter(query_id == 5) %>%
+        dplyr::filter(query_id == 5) %>%
         pull(target_id)
     expect_true(10 %in% query5_neighbors)
 
@@ -480,19 +485,19 @@ test_that("gintervals.neighbors works across multiple chromosomes", {
     res <- gintervals.neighbors(queries, targets, maxneighbors = 10, mindist = 0, maxdist = 0)
 
     # Query on chr1 should only find targets on chr1
-    q1_res <- res %>% filter(qid == 1)
+    q1_res <- res %>% dplyr::filter(qid == 1)
     expect_true(all(q1_res$chrom1 == "chr1"))
     expect_equal(nrow(q1_res), 1) # Only target 1 overlaps
     expect_equal(q1_res$tid, 1)
 
     # Query on chr2 should only find targets on chr2
-    q2_res <- res %>% filter(qid == 2)
+    q2_res <- res %>% dplyr::filter(qid == 2)
     expect_true(all(q2_res$chrom1 == "chr2"))
     expect_equal(nrow(q2_res), 1)
     expect_equal(q2_res$tid, 3)
 
     # Query on chr3 should only find targets on chr3
-    q3_res <- res %>% filter(qid == 3)
+    q3_res <- res %>% dplyr::filter(qid == 3)
     expect_true(all(q3_res$chrom1 == "chr3"))
     expect_equal(nrow(q3_res), 1)
     expect_equal(q3_res$tid, 5)
@@ -577,7 +582,7 @@ test_that("gintervals.neighbors handles identical intervals correctly", {
 
     # Each query should have 3 results
     for (i in 1:3) {
-        qres <- res %>% filter(qid == i)
+        qres <- res %>% dplyr::filter(qid == i)
         expect_equal(nrow(qres), 3)
         expect_setequal(qres$tid, c(1, 2, 3))
     }

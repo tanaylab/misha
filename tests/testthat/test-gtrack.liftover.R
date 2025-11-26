@@ -1,4 +1,4 @@
-load_test_db()
+create_isolated_test_db()
 
 # Tests for gtrack.liftover value validation
 test_that("gtrack.liftover preserves values in one-to-many mapping", {

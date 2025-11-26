@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 # test_that("gcluster.run works", {
 #     v <- 17
 #     r <- gcluster.run(2 + 3, gsummary("test.fixedbin+v+qwe"), 3 + 4, 4 + 5, gsummary("test.sparse-v"), gsummary("test.rects*v"))

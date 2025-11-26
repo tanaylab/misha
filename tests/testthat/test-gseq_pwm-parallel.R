@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+
 test_that("gseq.pwm multitask produces identical results to sequential (mode=lse)", {
     withr::local_options(list(gmultitasking = FALSE))
 
