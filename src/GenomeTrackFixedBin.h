@@ -45,6 +45,9 @@ protected:
 	int64_t   m_cur_coord;
 	double    m_last_min_pos;
 	int64_t   m_base_offset{0};
+	int64_t   m_cached_bin_idx{-1};
+	float     m_cached_bin_val{numeric_limits<float>::quiet_NaN()};
+	bool      m_cache_valid{false};
 
 	// State for indexed "smart handle"
 	std::string m_dat_path;

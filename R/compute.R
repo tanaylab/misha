@@ -309,7 +309,11 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
         x
     }
 
-    res <- normalize_output(res)
+    # Output normalization (chrom aliases) is only needed for per-chromosome DBs.
+    # Indexed multi-contig stores canonical chrom names already; skip to avoid extra O(N) passes.
+    if (!isTRUE(.ggetOption("gmulticontig.indexed_format"))) {
+        res <- normalize_output(res)
+    }
 
     # refresh the list of GINTERVS, etc.
     if (!is.null(intervals.set.out)) {

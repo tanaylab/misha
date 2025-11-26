@@ -36,6 +36,10 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 	// optimization of the most common case when the expression iterator starts at 0 and steps by bin_size
 	if (interval.start == m_cur_coord && interval.end == m_cur_coord + m_bin_size) {
 		if (read_next_bin(m_last_avg)) {
+			m_cached_bin_idx = (int64_t)(interval.start / m_bin_size);
+			m_cached_bin_val = m_last_avg;
+			m_cache_valid = true;
+
 			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
 			if (m_functions[MAX_POS])
@@ -73,9 +77,34 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 	int64_t sbin = (int64_t)(interval.start / m_bin_size);
 	int64_t ebin = (int64_t)ceil(interval.end / (double)m_bin_size);
 
-	if (ebin == sbin + 1) {
-		goto_bin(sbin);
-		if (read_next_bin(m_last_avg)) {
+	const bool single_bin = ebin == sbin + 1;
+	float cached_val = numeric_limits<float>::quiet_NaN();
+	bool use_cache = false;
+	bool have_value = false;
+
+	if (single_bin && m_cache_valid && m_cached_bin_idx == sbin) {
+		cached_val = m_cached_bin_val;
+		use_cache = true;
+		have_value = true;
+	}
+
+	if (single_bin) {
+		if (!use_cache) {
+			if (m_cur_coord != sbin * m_bin_size)
+				goto_bin(sbin);
+			if (read_next_bin(m_last_avg)) {
+				m_cached_bin_idx = sbin;
+				m_cached_bin_val = m_last_avg;
+				m_cache_valid = true;
+				have_value = true;
+			}
+		} else {
+			m_last_avg = cached_val;
+			// Keep virtual cursor at the end of this bin to match read_next_bin behaviour
+			m_cur_coord = (sbin + 1) * m_bin_size;
+		}
+
+		if (have_value) {
 			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
 			double overlap_start = std::max(static_cast<double>(sbin * m_bin_size), static_cast<double>(interval.start));
@@ -131,7 +160,14 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 		goto_bin(sbin);
 		for (int64_t bin = sbin; bin < ebin; ++bin) {
-			if (read_next_bin(v) && !std::isnan(v)) {
+			if (!read_next_bin(v))
+				continue;
+
+			m_cached_bin_idx = bin;
+			m_cached_bin_val = v;
+			m_cache_valid = true;
+
+			if (!std::isnan(v)) {
 				m_last_sum += v;
 				double bin_start = static_cast<double>(bin * m_bin_size);
 				double overlap_start = std::max(bin_start, static_cast<double>(interval.start));
@@ -236,6 +272,9 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 	m_cur_coord = 0;
 	uint64_t header_start = 0;
 	uint64_t total_bytes = 0;
+	m_cached_bin_idx = -1;
+	m_cached_bin_val = numeric_limits<float>::quiet_NaN();
+	m_cache_valid = false;
 
 	// Check for indexed format FIRST
 	const std::string track_dir = GenomeTrack::get_track_dir(filename);
