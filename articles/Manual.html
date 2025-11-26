@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.2.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.0</span>
       </span>
     </div>
 
@@ -781,9 +781,9 @@ want to use the percentile of a track value rather than the value
 itself? And maybe we even want to alter the iterator interval itself on
 the fly? This is where virtual tracks become useful.</p>
 <p>Virtual track is a set of rules that describe how the “source” (a
-real track or intervals) should be proceeded, and how the iterator
-interval should be modified. Virtual tracks are created with
-<code>gvtrack.create</code> function:</p>
+real track, intervals, or a value-based track) should be proceeded, and
+how the iterator interval should be modified. Virtual tracks are created
+with <code>gvtrack.create</code> function:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"dense_track"</span><span class="op">)</span></span></code></pre></div>
 <p>This call creates a new virtual track named <code>myvtrack</code>.
@@ -875,9 +875,47 @@ account the “source” intervals and the current iterator interval.</p>
 <p>In this example <code>myvtrack</code> returns the minimal distance
 between intervals from an interval set <code>annotations</code> and the
 center of the current iterator interval from <code>intervs</code>.</p>
+<div class="section level5">
+<h5 id="value-based-tracks">Value-Based Tracks<a class="anchor" aria-label="anchor" href="#value-based-tracks"></a>
+</h5>
+<p>In addition to using database tracks and interval sets as sources,
+virtual tracks can also use <strong>value-based tracks</strong> as
+sources. Value-based tracks are data frames containing genomic intervals
+with associated numeric values. They function as in-memory sparse tracks
+without requiring track creation in the database.</p>
+<p>To create a value-based virtual track, provide a data frame with
+columns <code>chrom</code>, <code>start</code>, <code>end</code>, and
+one numeric value column (any column name is acceptable):</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create a data frame with intervals and numeric values</span></span>
+<span><span class="va">intervals_with_values</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    chrom <span class="op">=</span> <span class="st">"chr1"</span>,</span>
+<span>    start <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100</span>, <span class="fl">300</span>, <span class="fl">500</span><span class="op">)</span>,</span>
+<span>    end <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">200</span>, <span class="fl">400</span>, <span class="fl">600</span><span class="op">)</span>,</span>
+<span>    score <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">20</span>, <span class="fl">30</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Use as value-based sparse track</span></span>
+<span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="va">intervals_with_values</span>, <span class="st">"avg"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack_max"</span>, <span class="va">intervals_with_values</span>, <span class="st">"max"</span><span class="op">)</span></span></code></pre></div>
+<p>Value-based tracks support all track-based summarizer functions
+(e.g., <code>avg</code>, <code>min</code>, <code>max</code>,
+<code>sum</code>, <code>stddev</code>, <code>quantile</code>,
+<code>nearest</code>, <code>exists</code>, <code>size</code>,
+<code>first</code>, <code>last</code>, <code>sample</code>, and position
+functions). However, they have one important restriction:
+<strong>intervals must not overlap</strong>. Unlike interval-based
+summarizers (which work with overlapping intervals), value-based tracks
+behave like sparse tracks and require non-overlapping intervals.</p>
+<p>Value-based tracks aggregate values using count-based averaging (each
+interval contributes equally regardless of length), matching the
+behavior of sparse tracks. This means when multiple intervals are
+covered by an iterator interval, each interval’s value contributes
+equally to the aggregation, regardless of the interval’s length.</p>
 <p>For a full list of supported functions please see
 <code>gvtrack.create</code> and <code>gvtrack.array.slice</code>
 functions.</p>
+</div>
 </div>
 <div class="section level4">
 <h4 id="administrating-virtual-tracks">Administrating Virtual Tracks<a class="anchor" aria-label="anchor" href="#administrating-virtual-tracks"></a>
@@ -941,7 +979,7 @@ option. By default it equals to 1000. Altering this value (for instance
 setting it to 1) might significantly affect the run-time of various
 functions in the library. If you still wish to force the functions to
 define scalars rather than vectors, set <code>gbuf.size</code> to 1:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gbuf.size <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
 <p>One might wonder why should we care about the fact that
 <code>mytrack</code> is not a scalar but rather a vector? Indeed in many
@@ -1103,7 +1141,7 @@ reported.</td>
 accept an additional set of intervals that limit the scope of a
 function. This scope also limits the iterator intervals. For
 instance:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">340</span>, <span class="fl">520</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>As one can notice the first and the last intervals in the result are
 truncated by the scope <code>[340, 520)</code>.</p>
@@ -1153,7 +1191,7 @@ the iterator interval is skipped as it lies outside of the band or the
 two chromosomes are not equal.</p>
 <p>The <code>gintervals.2d.band_intersect</code> function can help one
 better understand the concept:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">200</span>, <span class="fl">800</span>, <span class="fl">1</span>, <span class="fl">100</span>, <span class="fl">1000</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="va">intervs</span>, <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">900</span>, <span class="fl">950</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="va">intervs</span>, <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">100</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">400</span><span class="op">)</span><span class="op">)</span></span>
@@ -1172,7 +1210,7 @@ different chromosomes and therefore is also filtered out.</p>
 <p>As said band filters out and alters 2D iterator intervals. Yet it
 also affects the result of 2D tracks. Let’s look at the following
 example:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100</span>, <span class="fl">400</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">300</span>, <span class="fl">490</span><span class="op">)</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">120</span>, <span class="fl">180</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">200</span>, <span class="fl">500</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.2d.create.html">gtrack.2d.create</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="st">"test 2D track"</span>, <span class="va">intervs</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">20</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span><span class="op">)</span></span>
@@ -1211,7 +1249,7 @@ use of pseudo-random number generator. Each time the function is invoked
 a unique series of random numbers is issued. Hence two identical calls
 might produce different results. To guarantee reproducible results call
 <code>set.seed</code> before invoking the function.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">60427</span><span class="op">)</span></span>
 <span><span class="va">r1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gsample.html">gsample</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fl">10</span><span class="op">)</span></span>
 <span><span class="va">r2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gsample.html">gsample</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fl">10</span><span class="op">)</span> <span class="co"># r2 differs from r1</span></span>

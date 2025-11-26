@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.2.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.0</span>
       </span>
     </div>
 
@@ -66,7 +66,17 @@
     </div>
 
     <div id="ref-usage">
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gvtrack.create</span><span class="op">(</span>vtrack <span class="op">=</span> <span class="cn">NULL</span>, src <span class="op">=</span> <span class="cn">NULL</span>, func <span class="op">=</span> <span class="cn">NULL</span>, params <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gvtrack.create</span><span class="op">(</span></span>
+<span>  vtrack <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  src <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  func <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  params <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  dim <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  sshift <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  eshift <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  filter <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  <span class="va">...</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div id="arguments">
@@ -78,7 +88,10 @@
 
 
 <dt id="arg-src">src<a class="anchor" aria-label="anchor" href="#arg-src"></a></dt>
-<dd><p>source (track/intervals). NULL for PWM functions</p></dd>
+<dd><p>source (track/intervals). NULL for PWM functions. For value-based
+tracks, provide a data frame with columns <code>chrom</code>, <code>start</code>, <code>end</code>,
+and one numeric value column. The data frame functions as an in-memory sparse
+track and supports all track-based summarizer functions. Intervals must not overlap.</p></dd>
 
 
 <dt id="arg-func">func<a class="anchor" aria-label="anchor" href="#arg-func"></a></dt>
@@ -87,6 +100,28 @@
 
 <dt id="arg-params">params<a class="anchor" aria-label="anchor" href="#arg-params"></a></dt>
 <dd><p>function parameters (see above)</p></dd>
+
+
+<dt id="arg-dim">dim<a class="anchor" aria-label="anchor" href="#arg-dim"></a></dt>
+<dd><p>use 'NULL' or '0' for 1D iterators. '1' converts 2D iterator to
+(chrom1, start1, end1) , '2' converts 2D iterator to (chrom2, start2, end2)</p></dd>
+
+
+<dt id="arg-sshift">sshift<a class="anchor" aria-label="anchor" href="#arg-sshift"></a></dt>
+<dd><p>shift of 'start' coordinate</p></dd>
+
+
+<dt id="arg-eshift">eshift<a class="anchor" aria-label="anchor" href="#arg-eshift"></a></dt>
+<dd><p>shift of 'end' coordinate</p></dd>
+
+
+<dt id="arg-filter">filter<a class="anchor" aria-label="anchor" href="#arg-filter"></a></dt>
+<dd><p>genomic mask to apply. Can be:</p><ul><li><p>A data.frame with columns 'chrom', 'start', 'end' (intervals to mask)</p></li>
+<li><p>A character string naming an intervals set</p></li>
+<li><p>A character string naming a track (must be intervals-type track)</p></li>
+<li><p>A list of any combination of the above (all will be unified)</p></li>
+<li><p>NULL to clear the filter</p></li>
+</ul></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -100,8 +135,21 @@
     <div id="details">
     <h2>Details</h2>
     <p>This function creates a new virtual track named 'vtrack' with the given
-source, function and parameters. 'src' can be either a track or intervals
-(1D or 2D). The tables below summarize the supported combinations.</p>
+source, function and parameters. 'src' can be either a track, intervals
+(1D or 2D), or a data frame with intervals and a numeric value column
+(value-based track). The tables below summarize the supported combinations.</p>
+<p><strong>Value-based tracks</strong>
+Value-based tracks are data frames containing genomic intervals with associated
+numeric values. They function as in-memory sparse tracks without requiring
+track creation in the database. To create a value-based track, provide a data
+frame with columns <code>chrom</code>, <code>start</code>, <code>end</code>, and one numeric
+value column (any name is acceptable). Value-based tracks support all track-based
+summarizer functions (e.g., <code>avg</code>, <code>min</code>, <code>max</code>, <code>sum</code>,
+<code>stddev</code>, <code>quantile</code>, <code>nearest</code>, <code>exists</code>, <code>size</code>,
+<code>first</code>, <code>last</code>, <code>sample</code>, and position functions), but do not
+support overlapping intervals. They behave like sparse tracks in aggregation:
+values are aggregated using count-based averaging (each interval contributes equally
+regardless of length), not coverage-based averaging.</p>
 <p><strong>Track-based summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>params</td><td>Description</td></tr><tr><td>Track</td><td>avg</td><td>NULL</td><td>Average track value in the iterator interval.</td></tr><tr><td>Track (1D)</td><td>exists</td><td>vals (optional)</td><td>Returns 1 if any value exists (or specific vals if provided), 0 otherwise.</td></tr><tr><td>Track (1D)</td><td>first</td><td>NULL</td><td>First value in the iterator interval.</td></tr><tr><td>Track (1D)</td><td>last</td><td>NULL</td><td>Last value in the iterator interval.</td></tr><tr><td>Track</td><td>max</td><td>NULL</td><td>Maximum track value in the iterator interval.</td></tr><tr><td>Track</td><td>min</td><td>NULL</td><td>Minimum track value in the iterator interval.</td></tr><tr><td>Dense / Sparse / Array track</td><td>nearest</td><td>NULL</td><td>Average value inside the iterator; for sparse tracks with no samples in the interval, falls back to the closest sample outside the interval (by genomic distance).</td></tr><tr><td>Track (1D)</td><td>sample</td><td>NULL</td><td>Uniformly sampled source value from the iterator interval.</td></tr><tr><td>Track (1D)</td><td>size</td><td>NULL</td><td>Number of non-NaN values in the iterator interval.</td></tr><tr><td>Dense / Sparse / Array track</td><td>stddev</td><td>NULL</td><td>Unbiased standard deviation of values in the iterator interval.</td></tr><tr><td>Dense / Sparse / Array track</td><td>sum</td><td>NULL</td><td>Sum of values in the iterator interval.</td></tr><tr><td>Dense / Sparse / Array track</td><td>quantile</td><td>Percentile in [0, 1]</td><td>Quantile of values in the iterator interval.</td></tr><tr><td>Dense track</td><td>global.percentile</td><td>NULL</td><td>Percentile of the interval average relative to the full-track distribution.</td></tr><tr><td>Dense track</td><td>global.percentile.max</td><td>NULL</td><td>Percentile of the interval maximum relative to the full-track distribution.</td></tr><tr><td>Dense track</td><td>global.percentile.min</td><td>NULL</td><td>Percentile of the interval minimum relative to the full-track distribution.</td></tr></table><p><strong>Track position summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>params</td><td>Description</td></tr><tr><td>Track (1D)</td><td>first.pos.abs</td><td>NULL</td><td>Absolute genomic coordinate of the first value.</td></tr><tr><td>Track (1D)</td><td>first.pos.relative</td><td>NULL</td><td>Zero-based position (relative to interval start) of the first value.</td></tr><tr><td>Track (1D)</td><td>last.pos.abs</td><td>NULL</td><td>Absolute genomic coordinate of the last value.</td></tr><tr><td>Track (1D)</td><td>last.pos.relative</td><td>NULL</td><td>Zero-based position (relative to interval start) of the last value.</td></tr><tr><td>Track (1D)</td><td>max.pos.abs</td><td>NULL</td><td>Absolute genomic coordinate of the maximum value inside the iterator interval.</td></tr><tr><td>Track (1D)</td><td>max.pos.relative</td><td>NULL</td><td>Zero-based position (relative to interval start) of the maximum value.</td></tr><tr><td>Track (1D)</td><td>min.pos.abs</td><td>NULL</td><td>Absolute genomic coordinate of the minimum value inside the iterator interval.</td></tr><tr><td>Track (1D)</td><td>min.pos.relative</td><td>NULL</td><td>Zero-based position (relative to interval start) of the minimum value.</td></tr><tr><td>Track (1D)</td><td>sample.pos.abs</td><td>NULL</td><td>Absolute genomic coordinate of a uniformly sampled value.</td></tr><tr><td>Track (1D)</td><td>sample.pos.relative</td><td>NULL</td><td>Zero-based position (relative to interval start) of a uniformly sampled value.</td></tr></table><p>For <code>max.pos.relative</code>, <code>min.pos.relative</code>, <code>first.pos.relative</code>, <code>last.pos.relative</code>, <code>sample.pos.relative</code>,
 iterator modifiers (including <code>sshift</code> /
 <code>eshift</code> and 1D projections generated via <code>gvtrack.iterator</code>) are
@@ -141,7 +189,8 @@ or when the strand column is absent. The result is <code>NA</code> if no interva
     <h2>See also</h2>
     <div class="dont-index"><p><code><a href="gvtrack.info.html">gvtrack.info</a></code>, <code><a href="gvtrack.iterator.html">gvtrack.iterator</a></code>,
 <code><a href="gvtrack.iterator.2d.html">gvtrack.iterator.2d</a></code>, <code><a href="gvtrack.array.slice.html">gvtrack.array.slice</a></code>,
-<code><a href="gvtrack.ls.html">gvtrack.ls</a></code>, <code><a href="gvtrack.rm.html">gvtrack.rm</a></code></p></div>
+<code><a href="gvtrack.ls.html">gvtrack.ls</a></code>, <code><a href="gvtrack.rm.html">gvtrack.rm</a></code></p>
+<p><code><a href="gvtrack.iterator.html">gvtrack.iterator</a></code>, <code><a href="gvtrack.iterator.2d.html">gvtrack.iterator.2d</a></code>, <code><a href="gvtrack.filter.html">gvtrack.filter</a></code></p></div>
     </div>
 
     <div id="ref-examples">
@@ -330,6 +379,33 @@ or when the strand column is absent. The result is <code>NA</code> if no interva
 <span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  7000  8000      0.626          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  8000  9000      0.587          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  9000 10000      0.565          1</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Value-based track examples</span></span></span>
+<span class="r-in"><span><span class="co"># Create a data frame with intervals and numeric values</span></span></span>
+<span class="r-in"><span><span class="va">intervals_with_values</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>    chrom <span class="op">=</span> <span class="st">"chr1"</span>,</span></span>
+<span class="r-in"><span>    start <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100</span>, <span class="fl">300</span>, <span class="fl">500</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    end <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">200</span>, <span class="fl">400</span>, <span class="fl">600</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    score <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">20</span>, <span class="fl">30</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># Use as value-based sparse track (functions like sparse track)</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"value_track"</span>, <span class="va">intervals_with_values</span>, <span class="st">"avg"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"value_track_max"</span>, <span class="va">intervals_with_values</span>, <span class="st">"max"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"value_track"</span>, <span class="st">"value_track_max"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">1000</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start   end value_track value_track_max intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  1000          20              30          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1  1000  2000         NaN             NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1  2000  3000         NaN             NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1  3000  4000         NaN             NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1  4000  5000         NaN             NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  5000  6000         NaN             NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  6000  7000         NaN             NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  7000  8000         NaN             NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  8000  9000         NaN             NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  9000 10000         NaN             NaN          1</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Spatial PWM examples</span></span></span>
 <span class="r-in"><span><span class="co"># Create a PWM with higher weight in the center of intervals</span></span></span>
