@@ -6,6 +6,7 @@
  */
 
 #include <cstdint>
+#include <inttypes.h>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -162,11 +163,11 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 
 				if (scanner.get_iterator()->is_1d()) {
 					const GInterval &interval = scanner.last_interval1d();
-					len = snprintf(line, sizeof(line), "%s\t%d\t%d",
+					len = snprintf(line, sizeof(line), "%s\t%" PRId64 "\t%" PRId64,
 						iu.id2chrom(interval.chromid).c_str(), interval.start, interval.end);
 				} else {
 					const GInterval2D &interval = scanner.last_interval2d();
-					len = snprintf(line, sizeof(line), "%s\t%d\t%d\t%s\t%d\t%d",
+					len = snprintf(line, sizeof(line), "%s\t%" PRId64 "\t%" PRId64 "\t%s\t%" PRId64 "\t%" PRId64,
 						iu.id2chrom(interval.chromid1()).c_str(), interval.start1(), interval.end1(),
 						iu.id2chrom(interval.chromid2()).c_str(), interval.start2(), interval.end2());
 				}
@@ -412,11 +413,11 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 
 				if (scanner.get_iterator()->is_1d()) {
 					const GInterval &interval = scanner.last_interval1d();
-					len = snprintf(line, sizeof(line), "%s\t%d\t%d",
+					len = snprintf(line, sizeof(line), "%s\t%" PRId64 "\t%" PRId64,
 						iu.id2chrom(interval.chromid).c_str(), interval.start, interval.end);
 				} else {
 					const GInterval2D &interval = scanner.last_interval2d();
-					len = snprintf(line, sizeof(line), "%s\t%d\t%d\t%s\t%d\t%d",
+					len = snprintf(line, sizeof(line), "%s\t%" PRId64 "\t%" PRId64 "\t%s\t%" PRId64 "\t%" PRId64,
 						iu.id2chrom(interval.chromid1()).c_str(), interval.start1(), interval.end1(),
 						iu.id2chrom(interval.chromid2()).c_str(), interval.start2(), interval.end2());
 				}
