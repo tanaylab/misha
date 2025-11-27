@@ -19,10 +19,12 @@ URL: https://tanaylab.github.io/misha/, https://github.com/tanaylab/misha
 BugReports: https://github.com/tanaylab/misha/issues
 Depends: 
     R (>= 3.0.0)
-Imports: 
+Imports:
     magrittr,
     curl,
     digest,
+    ps,
+    parallel,
     utils
 Suggests:
     data.table,

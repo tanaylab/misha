@@ -10,6 +10,14 @@
   - New functions: `gdb.info()`, `gdb.convert_to_indexed()`, `gtrack.convert_to_indexed()`, `gintervals.convert_to_indexed()`, `gintervals.2d.convert_to_indexed()`
   - Set `options(gmulticontig.indexed_format = FALSE)` to create databases in legacy format for compatibility with older misha versions
   - See `vignette("Database-Formats")` for more details.
+* **Auto-configuration**: Package now automatically configures itself based on system resources
+  - `gmax.processes` automatically set to 70% of available CPU cores
+  - `gmax.data.size` coordinated with process limits to ensure total memory usage <= 70% of RAM (capped at 10GB per process)
+  - Formula: `gmax.data.size = min((RAM * 0.7) / gmax.processes, 10GB)` ensures safe memory usage across all parallel processes
+  - Dynamic auto-disable threshold: small datasets automatically use single-threaded mode to avoid fork overhead
+  - Threshold scales with system: `gmax.processes * 1000 records` (e.g., 2K on laptops, 89K on 128-core servers)
+  - Manual override still supported via `options()`
+  - See "Auto-Configuration" section in `vignette("Manual")` for details
 * Added in-memory value-based virtual tracks (`gvtrack.create` with `src` parameter). These tracks behave exactly like regular sparse tracks, but are stored in memory and can be used in track expressions.
 * Added `sshift`, `eshift` and `filter` parameters to `gvtrack.create`.
 

@@ -452,6 +452,15 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 
 		bool is_1d_iterator = iu.is_1d_iterator(_exprs, intervals1d, intervals2d, _iterator_policy);
 
+		// Estimate result size and select appropriate multitasking mode
+		uint64_t estimated_records = is_1d_iterator ? intervals1d->size() : intervals2d->size();
+		rdb::MultitaskingMode mode = iu.select_multitasking_mode(true, estimated_records);
+
+		// If mode is SINGLE (size too large), fall back to non-multitasking version
+		if (mode == rdb::MT_MODE_SINGLE) {
+			return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _envir);
+		}
+
 		if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band))
 			rreturn(R_NilValue);
 

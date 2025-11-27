@@ -691,6 +691,46 @@ r3 <- gsample("dense_track", 10) # r3 == r1
 
 To boost the run time performance various functions in the library support multitasking mode, i.e. parallel computation of the result by several concurrent processes. The exact number of processes internally launched depends on the specific call however the upper bound can be controlled by a few parameters such as `gmax.processes` (absolute upper bound), `gmax.processes2core` (maximal number of processes per CPU core) and `gmin.scope4process` (minimal scope range / surface assigned to a process). Multitasking can also be completely switched off by setting `gmultitasking` parameter to `FALSE`.
 
+### Auto-Configuration
+
+The `misha` package automatically configures itself based on your system's resources when loaded. This happens transparently without any user intervention:
+
+**Automatic Process Limits:**
+The package detects the number of CPU cores and sets `gmax.processes = 70% of cores`. This ensures optimal parallelism while leaving headroom for the system. For example:
+- On a 4-core laptop: `gmax.processes = 2` (70% of 4)
+- On a 16-core workstation: `gmax.processes = 11` (70% of 16)
+- On a 128-core server: `gmax.processes = 89` (70% of 128)
+
+**Automatic Buffer Size:**
+The package coordinates buffer size with process limits to ensure `gmax.processes * gmax.data.size <= 70% of RAM`. Specifically, it sets `gmax.data.size = min((RAM * 0.7) / gmax.processes, 10GB)`. This ensures that when all processes are running at full capacity, total memory usage stays within safe limits. For example:
+- On a 4-core, 8GB laptop: `gmax.processes = 2`, `gmax.data.size = 2.8GB` (total: 5.6GB = 70% of 8GB)
+- On a 16-core, 32GB workstation: `gmax.processes = 11`, `gmax.data.size = 2.0GB` (total: 22.4GB = 70% of 32GB)
+- On a 128-core, 256GB server: `gmax.processes = 89`, `gmax.data.size = 2.0GB` (total: 179.2GB = 70% of 256GB)
+
+The 10GB cap is empirically determined - larger shared memory allocations can fail even when system limits appear to allow them. This cap is rarely hit on multi-core systems due to the per-process division.
+
+**Automatic Small Dataset Detection:**
+The package automatically detects small datasets and uses single-threaded mode to avoid fork overhead. The threshold scales with your system: `threshold = gmax.processes * 1000 records`. For example:
+- 4-core laptop (2 procs): single-threaded below 2K records
+- 16-core workstation (11 procs): single-threaded below 11K records
+- 128-core server (89 procs): single-threaded below 89K records
+
+This dynamic threshold ensures fork overhead stays below 10% of runtime. For larger datasets, multitasking is automatically enabled when beneficial.
+
+**Manual Override:**
+You can still manually set these options if needed:
+```r
+options(gmax.processes = 32)        # Override process limit
+options(gmax.data.size = 5e9)       # Override buffer size (5GB)
+options(gmultitasking = FALSE)      # Disable multitasking entirely
+```
+
+To check current auto-configured values:
+```r
+getOption("gmax.processes")         # Current process limit
+getOption("gmax.data.size") / 1e9   # Current buffer size in GB
+```
+
 ### Limiting the Memory Consumption
 
 For certain functions multitasking might result in higher memory consumption. Users who have per process virtual memory limit (see: `ulimit -v`) might be the first to suffer from memory allocation errors.

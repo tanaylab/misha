@@ -9,12 +9,27 @@
 
     options(.ginteractive = FALSE)
     options(.gautocompletion = FALSE)
-    options(gmax.data.size = 1e7)
+
+    # Auto-configure process limits based on number of cores
+    num_cores <- parallel::detectCores(logical = TRUE)
+    if (is.na(num_cores) || num_cores < 1) {
+        num_cores <- 1
+    }
+
+    # Set gmax.processes based on cores:
+    # - Use 70% of cores for parallelism while leaving headroom for system
+    options(gmax.processes = as.integer(num_cores * 0.7))
+    options(gmax.processes2core = 2)
+
+    # Auto-configure gmax.data.size based on system memory and cores
+    # This ensures the package "just works" for most users without manual tuning
+    sys_mem <- get_system_memory()
+    optimal_size <- calculate_optimal_gmax_data_size(sys_mem)
+    options(gmax.data.size = optimal_size)
+
     options(gmax.mem.usage = 10000000) # in KB
     options(gbig.intervals.size = 1000000)
     options(gbuf.size = 1000)
-    options(gmax.processes = 16)
-    options(gmax.processes2core = 2)
     options(gmin.scope4process = 10000)
     options(gmultitasking = TRUE)
 
