@@ -1073,6 +1073,32 @@ uint64_t IntervUtils::get_quantile_edge_data_size() const
 	return m_quantile_edge_data_size;
 }
 
+rdb::MultitaskingMode IntervUtils::select_multitasking_mode(bool is_deterministic, uint64_t estimated_size) const
+{
+	// If multitasking is disabled, use single-threaded mode
+	if (!get_multitasking())
+		return rdb::MT_MODE_SINGLE;
+
+	// Auto-disable multitasking for small datasets to avoid fork overhead
+	// Fork overhead scales with number of processes, and I/O-bound workloads
+	// show minimal parallel benefit even at large sizes.
+	// Dynamic threshold: 1000 records per process ensures overhead < 10% of runtime
+	// Examples: 2 procs -> 2K threshold, 89 procs -> 89K threshold
+	// Empirical testing: 89 procs was slower at 20K records, validating this approach
+	const uint64_t RECORDS_PER_PROCESS_THRESHOLD = 1000;
+	uint64_t min_size_for_multitasking = get_max_processes() * RECORDS_PER_PROCESS_THRESHOLD;
+	if (estimated_size < min_size_for_multitasking)
+		return rdb::MT_MODE_SINGLE;
+
+	// For deterministic operations, use MMAP mode if size fits in buffer
+	if (is_deterministic && estimated_size <= get_max_data_size())
+		return rdb::MT_MODE_MMAP;
+
+	// If size is too large, fall back to single-threaded mode
+	// (In the future, we might add dynamic buffer allocation or other strategies)
+	return rdb::MT_MODE_SINGLE;
+}
+
 uint64_t IntervUtils::get_track_chunk_size() const
 {
 	if (!m_track_chunk_size) {
@@ -1112,13 +1138,45 @@ bool IntervUtils::is_1d_iterator(SEXP rtrack_exprs, GIntervalsFetcher1D *scope1d
 
 void IntervUtils::verify_max_data_size(uint64_t data_size, const char *data_name, bool check_all_kids)
 {
-	if (data_size > get_max_data_size())
-		verror("%s size exceeded the maximal allowed (%ld).\n"
-				"Try to bound the scope of the function.\n"
-				"Note: the maximum data size is controlled via gmax.data.size option (see options, getOptions).",
-			   data_name, get_max_data_size());
+	if (data_size > get_max_data_size()) {
+		// Calculate a suggested size (50% larger than needed)
+		uint64_t suggested_size = (uint64_t)(data_size * 1.5);
 
-	if (check_all_kids) 
+		// Format sizes as human-readable strings
+		char current_size_str[100], needed_size_str[100], suggested_size_str[100];
+		if (get_max_data_size() >= 1e9)
+			snprintf(current_size_str, sizeof(current_size_str), "%.1f GB", get_max_data_size() / 1e9);
+		else if (get_max_data_size() >= 1e6)
+			snprintf(current_size_str, sizeof(current_size_str), "%.1f MB", get_max_data_size() / 1e6);
+		else
+			snprintf(current_size_str, sizeof(current_size_str), "%lu bytes", (unsigned long)get_max_data_size());
+
+		if (data_size >= 1e9)
+			snprintf(needed_size_str, sizeof(needed_size_str), "%.1f GB", data_size / 1e9);
+		else if (data_size >= 1e6)
+			snprintf(needed_size_str, sizeof(needed_size_str), "%.1f MB", data_size / 1e6);
+		else
+			snprintf(needed_size_str, sizeof(needed_size_str), "%lu bytes", (unsigned long)data_size);
+
+		if (suggested_size >= 1e9)
+			snprintf(suggested_size_str, sizeof(suggested_size_str), "%.0f", (double)suggested_size);
+		else if (suggested_size >= 1e6)
+			snprintf(suggested_size_str, sizeof(suggested_size_str), "%.0f", (double)suggested_size);
+		else
+			snprintf(suggested_size_str, sizeof(suggested_size_str), "%lu", (unsigned long)suggested_size);
+
+		verror("%s size (%s) exceeded the maximum allowed (%s).\n\n"
+			   "Suggestions:\n"
+			   "  1. Increase buffer size:\n"
+			   "     options(gmax.data.size = %s)\n"
+			   "  2. Reduce scope (use smaller genomic regions or filters)\n"
+			   "  3. Process data in smaller chunks\n\n"
+			   "Note: gmax.data.size is auto-configured based on your system RAM.\n"
+			   "      You can check the current setting with getOption('gmax.data.size')",
+			   data_name, needed_size_str, current_size_str, suggested_size_str);
+	}
+
+	if (check_all_kids)
 		update_res_data_size(data_size);
 }
 
@@ -1338,9 +1396,23 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 	return m_num_planned_kids;
 }
 
+// Original 2-parameter version for backward compatibility
 bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
 								  uint64_t res_record_size)   // size in bytes per datum in the result
 {
+	return distribute_task(res_const_size, res_record_size, rdb::MT_MODE_MMAP);
+}
+
+// New 3-parameter version with explicit mode
+bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
+								  uint64_t res_record_size,   // size in bytes per datum in the result
+								  rdb::MultitaskingMode mode)
+{
+	// For now, we only support MMAP mode in this function
+	// MT_MODE_SINGLE should be handled by the caller (not calling distribute_task at all)
+	if (mode != rdb::MT_MODE_MMAP)
+		verror("distribute_task called with unsupported mode %d", mode);
+
 	uint64_t max_res_size = get_max_data_size() * res_record_size + m_num_planned_kids * res_const_size;
 
 	rdb::prepare4multitasking(res_const_size, res_record_size, max_res_size, get_max_mem_usage(), m_num_planned_kids);

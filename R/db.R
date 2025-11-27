@@ -1320,9 +1320,9 @@ gdb.reload <- function(rescan = TRUE) {
             close(con)
             on.exit(NULL, add = FALSE)
 
-            if (!file.rename(tmp_path, cache_path)) {
+            if (!suppressWarnings(file.rename(tmp_path, cache_path))) {
                 unlink(cache_path)
-                if (!file.rename(tmp_path, cache_path)) {
+                if (!suppressWarnings(file.rename(tmp_path, cache_path))) {
                     stop("Failed to replace .db.cache file")
                 }
             }
