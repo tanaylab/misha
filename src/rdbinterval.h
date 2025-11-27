@@ -17,6 +17,12 @@
 
 using namespace std;
 
+// Forward declare MultitaskingMode enum from rdb namespace
+// (defined in rdbutils.h which includes this file)
+namespace rdb {
+	enum MultitaskingMode : int;
+}
+
 #include <list>
 #include <memory>
 #include <set>
@@ -283,6 +289,11 @@ public:
 	// Returns the size of the buffer used to store highest/lowest values for high-precision computation of quantiles
 	uint64_t get_quantile_edge_data_size() const;
 
+	// Selects the appropriate multitasking mode based on estimated result size
+	// is_deterministic: true if result size can be known precisely before running
+	// estimated_size: estimated number of result records (intervals, values, etc.)
+	rdb::MultitaskingMode select_multitasking_mode(bool is_deterministic, uint64_t estimated_size) const;
+
 	// Returns the chunk size of 2D track
 	uint64_t get_track_chunk_size() const;
 
@@ -319,6 +330,11 @@ public:
 	// Returns true if a child, false if a parent.
 	bool distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
 						 uint64_t res_record_size);  // size in bytes per datum in the result
+
+	// Overload with explicit mode parameter (for future use)
+	bool distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
+						 uint64_t res_record_size,   // size in bytes per datum in the result
+						 rdb::MultitaskingMode mode);
 
 private:
 	GenomeChromKey                m_chrom_key;

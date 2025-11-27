@@ -205,8 +205,18 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
 		vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
 
+		// Estimate result size - gscreen is non-deterministic (depends on filter)
+		// Use conservative estimate: assume all intervals might pass
+		uint64_t estimated_records = is_1d_iterator ? intervals1d->size() : intervals2d->size();
+		rdb::MultitaskingMode mode = iu.select_multitasking_mode(false, estimated_records);
+
+		// If mode is SINGLE (size too large), fall back to non-multitasking version
+		if (mode == rdb::MT_MODE_SINGLE) {
+			return C_gscreen(_expr, _intervals, _iterator_policy, _band, _intervals_set_out, _envir);
+		}
+
 		if (!intervset_out.empty()) {
-			if (is_1d_iterator) 
+			if (is_1d_iterator)
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
 			else
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);

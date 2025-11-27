@@ -54,6 +54,16 @@ static inline MISHA_MAYBE_UNUSED int clock_gettime(int clk_id, struct timespec *
 #include <unistd.h>
 #include <sys/types.h>
 
+// Forward declare MultitaskingMode enum before including rdbinterval.h
+// since rdbinterval.h needs to use this type
+namespace rdb {
+	// Multitasking execution modes
+	enum MultitaskingMode : int {
+		MT_MODE_SINGLE = 0,   // Single-threaded with unlimited heap
+		MT_MODE_MMAP = 1      // Fast path with fixed mmap buffer (fork-based parallelism)
+	};
+}
+
 #include "rdbinterval.h"
 #include "Thread.h"
 
