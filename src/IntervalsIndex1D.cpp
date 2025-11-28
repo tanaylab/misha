@@ -72,11 +72,11 @@ bool IntervalsIndex1D::load(const string &index_path) {
             "Failed to read entry count from %s", index_path.c_str());
     }
 
-    // Sanity check: 2 million entries should be more than enough for any genome
-    if (num_entries > 2000000) {
+    // Sanity check: 20 million entries should be more than enough for any genome
+    if (num_entries > 20000000) {
         fclose(fp);
         TGLError<IntervalsIndex1D>(INVALID_FORMAT,
-            "Number of entries %u exceeds maximum (2000000) in %s", num_entries, index_path.c_str());
+            "Number of entries %u exceeds maximum (20000000) in %s", num_entries, index_path.c_str());
     }
 
     // Read flags
