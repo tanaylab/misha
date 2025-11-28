@@ -496,8 +496,8 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 
             {
                 SEXP rexp;
-                rprotect(rexp = Rf_ScalarReal(chromstat.contains_overlaps));
-                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::CONTAINS_OVERLAPS_COL], RSaneAllocVector(LGLSXP, 1));
+                rprotect(rexp = Rf_ScalarLogical(chromstat.contains_overlaps));
+                SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet1D::CONTAINS_OVERLAPS_COL], rexp);
             }
 
             Rf_setAttrib(answer, R_NamesSymbol, colnames);
@@ -532,7 +532,7 @@ SEXP gintervals_stats(SEXP _intervs, SEXP _envir)
 
             {
                 SEXP rexp;
-                rprotect(rexp = Rf_ScalarReal(chromstat.contains_overlaps));
+                rprotect(rexp = Rf_ScalarLogical(chromstat.contains_overlaps));
                 SET_VECTOR_ELT(answer, idx2ridx[GIntervalsBigSet2D::CONTAINS_OVERLAPS_COL], rexp);
             }
 
