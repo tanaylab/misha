@@ -486,6 +486,48 @@ gtrack.exists <- function(track = NULL) {
 }
 
 
+#' Returns the path on disk of a track
+#'
+#' Returns the path on disk of a track.
+#'
+#' This function returns the actual file system path where a track is stored.
+#' The function works with a single track name or a vector of track names.
+#'
+#' @param track track name or a vector of track names
+#' @return A character vector containing the full paths to the tracks on disk.
+#' @seealso \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}},
+#' \code{\link{gintervals.path}}
+#' @keywords ~track ~path
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gtrack.path("dense_track")
+#' gtrack.path(c("dense_track", "sparse_track"))
+#'
+#' @export gtrack.path
+gtrack.path <- function(track = NULL) {
+    if (is.null(substitute(track))) {
+        stop("Usage: gtrack.path(track)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
+
+    # Handle vectorized input
+    if (length(trackstr) == 0) {
+        return(character(0))
+    }
+
+    # Use .track_dir function for each track
+    paths <- vapply(trackstr, .track_dir, character(1), USE.NAMES = FALSE)
+
+    paths
+}
+
+
 get_bigWigToWig_bin <- function() {
     dir <- tempdir()
     utils::untar(system.file("bigWigToWig.tar.gz", package = "misha"), exdir = dir)

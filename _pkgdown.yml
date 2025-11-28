@@ -24,6 +24,7 @@ reference:
       - gtrack.import_mappedseq
       - gtrack.import_set
       - gtrack.info
+      - gtrack.path
       - gtrack.liftover
       - gtrack.lookup
       - gtrack.ls
@@ -71,6 +72,7 @@ reference:
       - gintervals.load
       - gintervals.load_chain
       - gintervals.as_chain
+      - gintervals.path
       - gintervals.ls
       - gintervals.mapply
       - gintervals.neighbors
