@@ -20,6 +20,7 @@
   - See "Auto-Configuration" section in `vignette("Manual")` for details
 * Added in-memory value-based virtual tracks (`gvtrack.create` with `src` parameter). These tracks behave exactly like regular sparse tracks, but are stored in memory and can be used in track expressions.
 * Added `sshift`, `eshift` and `filter` parameters to `gvtrack.create`.
+* Added `gintervals.path()` and `gtrack.path()` functions that return the actual file system paths for interval sets and tracks. 
 
 # misha 5.2.2
 

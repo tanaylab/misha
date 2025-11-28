@@ -136,8 +136,8 @@
                     .gintervals.big2small(intervals.set.out)
                 }
 
-                # If database is indexed and output is bigset, convert to indexed format
-                if (!is.null(intervals.set.out) && .gdb.is_indexed() && .gintervals.is_bigset(intervals.set.out)) {
+                # If indexed format is enabled and output is bigset, convert to indexed format
+                if (!is.null(intervals.set.out) && getOption("gmulticontig.indexed_format", FALSE) && .gintervals.is_bigset(intervals.set.out)) {
                     if (.gintervals.is1d(intervals.set.out)) {
                         gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
                     } else {
@@ -163,8 +163,8 @@
             if (.gintervals.needs_bigset(res)) {
                 .gintervals.small2big(intervals.set.out, res)
 
-                # If database is indexed, convert to indexed format
-                if (.gdb.is_indexed()) {
+                # If indexed format is enabled, convert to indexed format
+                if (getOption("gmulticontig.indexed_format", FALSE)) {
                     if (.gintervals.is1d(res)) {
                         gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
                     } else {
@@ -1211,6 +1211,51 @@ gintervals.exists <- function(intervals.set = NULL) {
 
     intervals.set <- do.call(.gexpr2str, list(substitute(intervals.set)), envir = parent.frame())
     !is.na(match(intervals.set, get("GINTERVS", envir = .misha)))
+}
+
+
+#' Returns the path on disk of an interval set
+#'
+#' Returns the path on disk of an interval set.
+#'
+#' This function returns the actual file system path where an interval set is stored.
+#' The function works with a single interval set name or a vector of names.
+#'
+#' @param intervals.set name of an interval set or a vector of interval set names
+#' @return A character vector containing the full paths to the interval sets on disk.
+#' @seealso \code{\link{gintervals.exists}}, \code{\link{gintervals.ls}},
+#' \code{\link{gtrack.path}}
+#' @keywords ~intervals ~path
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gintervals.path("annotations")
+#' gintervals.path(c("annotations", "coding"))
+#'
+#' @export gintervals.path
+gintervals.path <- function(intervals.set = NULL) {
+    if (is.null(substitute(intervals.set))) {
+        stop("Usage: gintervals.path(intervals.set)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    intervals.set <- do.call(.gexpr2str, list(substitute(intervals.set)), envir = parent.frame())
+
+    # Handle vectorized input
+    if (length(intervals.set) == 0) {
+        return(character(0))
+    }
+
+    # Construct paths for each interval set
+    paths <- vapply(intervals.set, function(interv) {
+        path <- gsub("\\.", "/", interv)
+        sprintf("%s.interv", paste(get("GWD", envir = .misha), path, sep = "/"))
+    }, character(1), USE.NAMES = FALSE)
+
+    paths
 }
 
 
