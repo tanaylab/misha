@@ -203,7 +203,7 @@ print(info$format) # "indexed" or "per-chromosome"
 
 **Validation Limits:** To prevent issues with corrupted or malicious index files, the following limits are enforced:
 
-- **Maximum contigs per index**: 2,000,000 (applies to genome.idx, track.idx, intervals.idx)
+- **Maximum contigs per index**: 20,000,000 (applies to genome.idx, track.idx, intervals.idx)
 - **Maximum contig name length**: 1,024 bytes
 
 

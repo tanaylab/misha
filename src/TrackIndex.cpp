@@ -86,11 +86,11 @@ bool TrackIndex::load(const string &index_path) {
             "Failed to read contig count from %s", index_path.c_str());
     }
 
-    // Sanity check: 2 million contigs should be more than enough for any genome
-    if (num_contigs > 2000000) {
+    // Sanity check: 20 million contigs should be more than enough for any genome
+    if (num_contigs > 20000000) {
         fclose(fp);
         TGLError<TrackIndex>(INVALID_FORMAT,
-            "Number of contigs %u exceeds maximum (2000000) in %s", num_contigs, index_path.c_str());
+            "Number of contigs %u exceeds maximum (20000000) in %s", num_contigs, index_path.c_str());
     }
 
     // Read flags
