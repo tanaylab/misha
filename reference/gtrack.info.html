@@ -32,6 +32,9 @@
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/Database-Formats.html">Database Formats and Multi-Contig Support</a>
+    </li>
+    <li>
       <a href="../articles/Genomes.html">Genomes</a>
     </li>
     <li>
@@ -66,7 +69,7 @@
     </div>
 
     <div id="ref-usage">
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gtrack.info</span><span class="op">(</span>track <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gtrack.info</span><span class="op">(</span>track <span class="op">=</span> <span class="cn">NULL</span>, validate <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div id="arguments">
@@ -75,6 +78,10 @@
 
 <dl><dt id="arg-track">track<a class="anchor" aria-label="anchor" href="#arg-track"></a></dt>
 <dd><p>track name</p></dd>
+
+
+<dt id="arg-validate">validate<a class="anchor" aria-label="anchor" href="#arg-validate"></a></dt>
+<dd><p>if TRUE, validates the track index file integrity (for indexed tracks). Default: FALSE</p></dd>
 
 </dl></div>
     <div id="value">
@@ -105,6 +112,9 @@ The fields in the returned value vary depending on the type of the track.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $size.in.bytes</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 80012</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $format</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "per-chromosome"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $bin.size</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 50</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
@@ -117,6 +127,9 @@ The fields in the returned value vary depending on the type of the track.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $size.in.bytes</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 104844</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $format</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "per-chromosome"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

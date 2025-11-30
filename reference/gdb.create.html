@@ -32,6 +32,9 @@
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/Database-Formats.html">Database Formats and Multi-Contig Support</a>
+    </li>
+    <li>
       <a href="../articles/Genomes.html">Genomes</a>
     </li>
     <li>
@@ -71,7 +74,9 @@
 <span>  fasta <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  genes.file <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  annots.file <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  annots.names <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  annots.names <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  format <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -101,6 +106,16 @@ annotations are imported</p></dd>
 <dt id="arg-annots-names">annots.names<a class="anchor" aria-label="anchor" href="#arg-annots-names"></a></dt>
 <dd><p>annotations names</p></dd>
 
+
+<dt id="arg-format">format<a class="anchor" aria-label="anchor" href="#arg-format"></a></dt>
+<dd><p>database format: "indexed" (default, single genome.seq + genome.idx)
+or "per-chromosome" (separate .seq file per contig). If NULL, uses the value from
+<code>getOption("gmulticontig.indexed_format", TRUE)</code></p></dd>
+
+
+<dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
+<dd><p>if TRUE, prints verbose messages</p></dd>
+
 </dl></div>
     <div id="value">
     <h2>Value</h2>
@@ -111,7 +126,10 @@ annotations are imported</p></dd>
     <p>This function creates a new Genomic Database at the location specified by
 'groot'. FASTA files are converted to 'Seq' format and appropriate
 'chrom_sizes.txt' file is generated (see "User Manual" for more details).</p>
-<p>If 'genes.file' is not 'NULL' four sets of intervals are created in the
+<p>Two database formats are supported:</p><ul><li><p><strong>indexed</strong>: Single genome.seq + genome.idx (default). Recommended for
+        genomes with many contigs. Provides better performance and scalability.</p></li>
+<li><p><strong>per-chromosome</strong>: Separate .seq file per contig.</p></li>
+</ul><p>If 'genes.file' is not 'NULL' four sets of intervals are created in the
 database: <code>tss</code>, <code>exons</code>, <code>utr3</code> and <code>utr5</code>. See
 <a href="gintervals.import_genes.html">gintervals.import_genes</a> for more details about importing genes
 intervals.</p>

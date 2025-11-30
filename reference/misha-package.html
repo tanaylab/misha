@@ -33,6 +33,9 @@ data achieved from various experiments."><!-- mathjax --><script src="https://cd
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/Database-Formats.html">Database Formats and Multi-Contig Support</a>
+    </li>
+    <li>
       <a href="../articles/Genomes.html">Genomes</a>
     </li>
     <li>
@@ -73,18 +76,11 @@ data achieved from various experiments.</p>
     <p>For a complete list of help resources, use <code><a href="https://rdrr.io/r/base/library.html" class="external-link">library(help = "misha")</a></code>.</p>
 <p>The following options are available for the package. Use 'options' function
 to alter the value of the options.</p>
-<table class="table table"><tr><td>NAME</td><td>DEFAULT</td><td>DESCRIPTION</td></tr><tr><td>gmax.data.size</td><td>10000000</td><td>Maximal number of data (intervals, ...) in large data sets
-stored</td></tr><tr><td></td><td></td><td>in memory. Prevents excessive memory usage by various
-functions</td></tr><tr><td></td><td></td><td>such as 'gextract', 'gscreen', etc.</td></tr><tr><td>gbig.intervals.size</td><td>1000000</td><td>Minimal number of intervals in a big
-intervals set format</td></tr><tr><td>gmax.mem.usage</td><td>10000000</td><td>Maximal memory
-consumption of all child processes in KB before the limiting algorithm is
-invoked.</td></tr><tr><td>gmax.processes</td><td>16</td><td>Maximal number of processes for
-multitasking</td></tr><tr><td>gmax.processes2core</td><td>2</td><td>Maximal number of processes
-per CPU core for multitasking</td></tr><tr><td>gmin.scope4process</td><td>10000</td><td>Minimal
-scope range (for 2D: surface) assigned to a</td></tr><tr><td></td><td></td><td>process in
-multitasking mode.</td></tr><tr><td>gbuf.size</td><td>1000</td><td>Size of track expression
-values buffer.</td></tr><tr><td>gtrack.chunk.size</td><td>100000</td><td>Chunk size in bytes of
-a 2D track. If '0' chunk size is unlimited.</td></tr><tr><td>gtrack.num.chunks</td><td>0</td><td>Maximal number of 2D track chunks simultaneously stored in</td></tr><tr><td></td><td></td><td>memory.</td></tr></table><p>More information about the options can be found in 'User manual' of the
+<table class="table table"><tr><td>NAME</td><td>DEFAULT</td><td>DESCRIPTION</td></tr><tr><td>gmax.data.size</td><td>AUTO</td><td>Auto-configured based on system RAM and processes.</td></tr><tr><td></td><td></td><td>Formula: min((RAM * 0.7) / gmax.processes, 10GB).</td></tr><tr><td></td><td></td><td>Prevents
+excessive memory usage by 'gextract', 'gscreen', etc.</td></tr><tr><td>gbig.intervals.size</td><td>1000000</td><td>Minimal number of intervals in a big intervals set format</td></tr><tr><td>gmax.mem.usage</td><td>10000000</td><td>Maximal memory consumption of all child
+processes in KB before</td></tr><tr><td></td><td></td><td>the limiting algorithm is invoked.</td></tr><tr><td>gmax.processes</td><td>AUTO</td><td>Auto-configured to 70% of CPU cores.</td></tr><tr><td></td><td></td><td>Maximal number of processes for multitasking.</td></tr><tr><td>gmax.processes2core</td><td>2</td><td>Maximal number of processes per CPU core for multitasking</td></tr><tr><td>gmin.scope4process</td><td>10000</td><td>Minimal scope range (for 2D: surface)
+assigned to a process</td></tr><tr><td></td><td></td><td>in multitasking mode.</td></tr><tr><td>gbuf.size</td><td>1000</td><td>Size of track expression values buffer.</td></tr><tr><td>gtrack.chunk.size</td><td>100000</td><td>Chunk size in bytes of a 2D track. If '0' chunk size</td></tr><tr><td></td><td></td><td>is unlimited.</td></tr><tr><td>gtrack.num.chunks</td><td>0</td><td>Maximal number of 2D track
+chunks simultaneously stored</td></tr><tr><td></td><td></td><td>in memory.</td></tr><tr><td>gmultitasking</td><td>TRUE</td><td>Enable/disable automatic parallelization. Small datasets</td></tr><tr><td></td><td></td><td>(&lt; gmax.processes * 1000 records) use single-threaded mode.</td></tr></table><p>More information about the options can be found in 'User manual' of the
 package.</p>
     </div>
     <div id="see-also">
