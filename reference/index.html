@@ -32,6 +32,9 @@
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/Database-Formats.html">Database Formats and Multi-Contig Support</a>
+    </li>
+    <li>
       <a href="../articles/Genomes.html">Genomes</a>
     </li>
     <li>
@@ -152,6 +155,10 @@
         </td>
         <td><p>Returns information about a track</p></td>
       </tr><tr><td>
+          <p><code><a href="gtrack.path.html">gtrack.path()</a></code> </p>
+        </td>
+        <td><p>Returns the path on disk of a track</p></td>
+      </tr><tr><td>
           <p><code><a href="gtrack.liftover.html">gtrack.liftover()</a></code> </p>
         </td>
         <td><p>Imports a track from another assembly</p></td>
@@ -191,6 +198,10 @@
           <p><code><a href="gtrack.var.set.html">gtrack.var.set()</a></code> </p>
         </td>
         <td><p>Assigns value to a track variable</p></td>
+      </tr><tr><td>
+          <p><code><a href="gtrack.convert_to_indexed.html">gtrack.convert_to_indexed()</a></code> </p>
+        </td>
+        <td><p>Convert a track to indexed format</p></td>
       </tr></tbody><tbody><tr><th colspan="2">
           <h2 id="virtual-track-functions">Virtual track functions <a href="#virtual-track-functions" class="anchor" aria-hidden="true"></a></h2>
           <p class="section-desc"></p><p>Functions to manipulate and create virtual tracks</p>
@@ -320,6 +331,10 @@
         </td>
         <td><p>Transforms existing intervals to a chain format</p></td>
       </tr><tr><td>
+          <p><code><a href="gintervals.path.html">gintervals.path()</a></code> </p>
+        </td>
+        <td><p>Returns the path on disk of an interval set</p></td>
+      </tr><tr><td>
           <p><code><a href="gintervals.ls.html">gintervals.ls()</a></code> </p>
         </td>
         <td><p>Returns a list of named intervals sets</p></td>
@@ -367,6 +382,14 @@
           <p><code><a href="gintervals.update.html">gintervals.update()</a></code> </p>
         </td>
         <td><p>Updates a named intervals set</p></td>
+      </tr><tr><td>
+          <p><code><a href="gintervals.2d.convert_to_indexed.html">gintervals.2d.convert_to_indexed()</a></code> </p>
+        </td>
+        <td><p>Convert 2D interval set to indexed format</p></td>
+      </tr><tr><td>
+          <p><code><a href="gintervals.convert_to_indexed.html">gintervals.convert_to_indexed()</a></code> </p>
+        </td>
+        <td><p>Convert 1D interval set to indexed format</p></td>
       </tr><tr><td>
           <p><code><a href="giterator.cartesian_grid.html">giterator.cartesian_grid()</a></code> </p>
         </td>
@@ -491,6 +514,18 @@
           <p><code><a href="gdb.set_readonly_attrs.html">gdb.set_readonly_attrs()</a></code> </p>
         </td>
         <td><p>Sets read-only track attributes</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdb.convert_to_indexed.html">gdb.convert_to_indexed()</a></code> </p>
+        </td>
+        <td><p>Change Database to Indexed Genome Format</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdb.info.html">gdb.info()</a></code> </p>
+        </td>
+        <td><p>Get Database Information</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdb.mark_cache_dirty.html">gdb.mark_cache_dirty()</a></code> </p>
+        </td>
+        <td><p>Mark cached track list as dirty</p></td>
       </tr><tr><td>
           <p><code><a href="gdir.cd.html">gdir.cd()</a></code> </p>
         </td>

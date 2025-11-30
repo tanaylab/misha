@@ -32,6 +32,9 @@
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/Database-Formats.html">Database Formats and Multi-Contig Support</a>
+    </li>
+    <li>
       <a href="../articles/Genomes.html">Genomes</a>
     </li>
     <li>
@@ -102,7 +105,7 @@
 
 
 <dt id="arg-tgt-overlap-policy">tgt_overlap_policy<a class="anchor" aria-label="anchor" href="#arg-tgt-overlap-policy"></a></dt>
-<dd><p>policy for handling target overlaps. One of:</p><table class="table table"><tr><td>Policy</td><td>Description</td></tr><tr><td>error</td><td>Throws an error if any target overlaps are detected.</td></tr><tr><td>auto</td><td>Default. Alias for "auto_score".</td></tr><tr><td>auto_score</td><td>Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id.</td></tr><tr><td>auto_longer</td><td>Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id.</td></tr><tr><td>auto_first</td><td>Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment.</td></tr><tr><td>keep</td><td>Preserves all overlapping intervals.</td></tr><tr><td>discard</td><td>Discards any chain interval that has a target overlap with another chain interval.</td></tr><tr><td>agg</td><td>Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region.</td></tr></table></dd>
+<dd><p>policy for handling target overlaps. One of:</p><table class="table table"><tr><td>Policy</td><td>Description</td></tr><tr><td>error</td><td>Throws an error if any target overlaps are detected.</td></tr><tr><td>auto</td><td>Default. Alias for "auto_score".</td></tr><tr><td>auto_score</td><td>Resolves overlaps by segmenting the target region and selecting the best chain for each segment based on alignment score (highest score wins). Tie-breakers: longest span, then lowest chain_id.</td></tr><tr><td>auto_longer</td><td>Resolves overlaps by segmenting and selecting the chain with the longest span for each segment. Tie-breakers: highest score, then lowest chain_id.</td></tr><tr><td>auto_first</td><td>Resolves overlaps by segmenting and selecting the chain with the lowest chain_id for each segment.</td></tr><tr><td>keep</td><td>Preserves all overlapping intervals.</td></tr><tr><td>discard</td><td>Discards any chain interval that has a target overlap with another chain interval.</td></tr><tr><td>agg</td><td>Segments overlaps into smaller disjoint regions where each region contains all contributing chains, allowing downstream aggregation to process multiple values per region.</td></tr><tr><td>best_source_cluster</td><td>Best source cluster strategy based on source overlap. When multiple chains map a source interval, clusters them by source overlap: if chain source intervals overlap (indicating true duplications), all mappings are retained; if chain source intervals are disjoint (indicating conflicting/alternative mappings), only the cluster with the largest total target length is kept.</td></tr></table></dd>
 
 
 <dt id="arg-min-score">min_score<a class="anchor" aria-label="anchor" href="#arg-min-score"></a></dt>
@@ -170,6 +173,7 @@ and will be used for loading.</p>
 <span class="r-in"><span>    chrom <span class="op">=</span> <span class="st">"chr25"</span>, start <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">7000</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>    end <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">6000</span>, <span class="fl">20000</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># Liftover with default policies</span></span></span>
 <span class="r-in"><span><span class="fu">gintervals.liftover</span><span class="op">(</span><span class="va">intervs</span>, <span class="va">chainfile</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start   end intervalID chain_id</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1 12000 12500          1        1</span>
@@ -177,6 +181,9 @@ and will be used for loading.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1 14100 16500          1        1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1 17500 18500          2        1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 5  chrX  5000  7000          2        2</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Liftover keeping source overlaps (one source interval may map to multiple targets)</span></span></span>
+<span class="r-in"><span><span class="co"># gintervals.liftover(intervs, chainfile, src_overlap_policy = "keep")</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

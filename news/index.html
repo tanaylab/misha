@@ -32,6 +32,9 @@
     <span class="caret"></span>
   </a>
   <ul class="dropdown-menu" role="menu"><li>
+      <a href="../articles/Database-Formats.html">Database Formats and Multi-Contig Support</a>
+    </li>
+    <li>
       <a href="../articles/Genomes.html">Genomes</a>
     </li>
     <li>
@@ -62,8 +65,36 @@
 
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.3.0" id="misha-530">misha 5.3.0<a class="anchor" aria-label="anchor" href="#misha-530"></a></h2>
-<ul><li>Added in-memory value-based virtual tracks (<code>gvtrack.create</code> with <code>src</code> parameter). These tracks behave exactly like regular sparse tracks, but are stored in memory and can be used in track expressions.</li>
+<ul><li>
+<strong>Multi-contig support</strong>: Added support for genomes with many contigs (100+) through new indexed database format
+<ul><li>New indexed format (default): Uses unified <code>genome.seq</code> + <code>genome.idx</code> files instead of per-chromosome files</li>
+<li>Dramatically reduces file descriptor usage for genomes with many contigs</li>
+<li>Provides 4-14% performance improvement for large-scale analyses</li>
+<li>Removes the requirement for “chr” prefix in chromosome names.</li>
+<li>
+<strong>Backward compatible</strong>: Legacy per-chromosome format fully supported</li>
+<li>Automatic format detection - no user action required</li>
+<li>New functions: <code><a href="../reference/gdb.info.html">gdb.info()</a></code>, <code><a href="../reference/gdb.convert_to_indexed.html">gdb.convert_to_indexed()</a></code>, <code><a href="../reference/gtrack.convert_to_indexed.html">gtrack.convert_to_indexed()</a></code>, <code><a href="../reference/gintervals.convert_to_indexed.html">gintervals.convert_to_indexed()</a></code>, <code><a href="../reference/gintervals.2d.convert_to_indexed.html">gintervals.2d.convert_to_indexed()</a></code>
+</li>
+<li>Set <code>options(gmulticontig.indexed_format = FALSE)</code> to create databases in legacy format for compatibility with older misha versions</li>
+<li>See <code><a href="../articles/Database-Formats.html">vignette("Database-Formats")</a></code> for more details.</li>
+</ul></li>
+<li>
+<strong>Auto-configuration</strong>: Package now automatically configures itself based on system resources
+<ul><li>
+<code>gmax.processes</code> automatically set to 70% of available CPU cores</li>
+<li>
+<code>gmax.data.size</code> coordinated with process limits to ensure total memory usage &lt;= 70% of RAM (capped at 10GB per process)</li>
+<li>Formula: <code>gmax.data.size = min((RAM * 0.7) / gmax.processes, 10GB)</code> ensures safe memory usage across all parallel processes</li>
+<li>Dynamic auto-disable threshold: small datasets automatically use single-threaded mode to avoid fork overhead</li>
+<li>Threshold scales with system: <code>gmax.processes * 1000 records</code> (e.g., 2K on laptops, 89K on 128-core servers)</li>
+<li>Manual override still supported via <code><a href="https://rdrr.io/r/base/options.html" class="external-link">options()</a></code>
+</li>
+<li>See “Auto-Configuration” section in <code><a href="../articles/Manual.html">vignette("Manual")</a></code> for details</li>
+</ul></li>
+<li>Added in-memory value-based virtual tracks (<code>gvtrack.create</code> with <code>src</code> parameter). These tracks behave exactly like regular sparse tracks, but are stored in memory and can be used in track expressions.</li>
 <li>Added <code>sshift</code>, <code>eshift</code> and <code>filter</code> parameters to <code>gvtrack.create</code>.</li>
+<li>Added <code><a href="../reference/gintervals.path.html">gintervals.path()</a></code> and <code><a href="../reference/gtrack.path.html">gtrack.path()</a></code> functions that return the actual file system paths for interval sets and tracks.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.2.2" id="misha-522">misha 5.2.2<a class="anchor" aria-label="anchor" href="#misha-522"></a></h2>
@@ -88,6 +119,14 @@
 <li>New <code>include_metadata</code> parameter in <code>gintervals.liftover</code> optionally returns score and chain_id for each mapping <strong>BREAKING</strong>: “auto” is now an alias for “auto_score”. For the old behavior, use <code>tgt_overlap_policy = "auto_first"</code>.</li>
 </ul></li>
 <li>Added <code>canonic</code> parameter to <code>gintervals.liftover</code> (default <code>FALSE</code>) to merge adjacent target intervals resulting from the same source interval and chain.</li>
+<li>Added three clustering strategies for liftover target overlap policies:
+<ul><li>
+<code>tgt_overlap_policy = "best_cluster_union"</code> (default, aliased as <code>"best_source_cluster"</code>): Uses source union coverage</li>
+<li>
+<code>tgt_overlap_policy = "best_cluster_sum"</code>: Uses sum of target lengths</li>
+<li>
+<code>tgt_overlap_policy = "best_cluster_max"</code>: Uses longest single member</li>
+</ul></li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.1.4" id="misha-514">misha 5.1.4<a class="anchor" aria-label="anchor" href="#misha-514"></a></h2>
@@ -116,7 +155,10 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.1.2" id="misha-512">misha 5.1.2<a class="anchor" aria-label="anchor" href="#misha-512"></a></h2>
-<ul><li>Added <code>neighbor.count</code> virtual track.</li>
+<ul><li>
+<strong>BREAKING</strong>: <code>gintervals.load_chain</code> now returns a data frame with 8 columns instead of 7. Columns are: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>strand</code>, <code>chromsrc</code>, <code>startsrc</code>, <code>endsrc</code>, <code>strandsrc</code>.</li>
+<li>Added <code>src_overlap_policy</code> and <code>tgt_overlap_policy</code> parameters to <code>gintervals.load_chain</code>, <code>gtrack.liftover</code> and <code>gintervals.liftover</code> functions.</li>
+<li>Added <code>neighbor.count</code> virtual track.</li>
 <li>Added <code>gintervals.mark_overlaps</code> function that marks overlapping intervals with a group ID.</li>
 </ul></div>
     <div class="section level2">
