@@ -4,11 +4,6 @@ interv2path <- function(intervname) {
 }
 
 test_that("2D intervals functionality is identical between Legacy and Indexed formats", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     # 1. Setup a standard test environment
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
@@ -114,11 +109,6 @@ test_that("2D intervals output regression", {
 })
 
 test_that("2D intervals with extra columns maintain parity", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -166,11 +156,6 @@ test_that("2D intervals with extra columns maintain parity", {
 })
 
 test_that("2D intervals with sparse chromosome pairs maintain parity", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -227,11 +212,6 @@ test_that("2D intervals with sparse chromosome pairs maintain parity", {
 })
 
 test_that("2D intervals gintervals.chrom_sizes produces identical results", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -264,11 +244,6 @@ test_that("2D intervals gintervals.chrom_sizes produces identical results", {
 })
 
 test_that("2D intervals edge cases: single interval per pair", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -306,11 +281,6 @@ test_that("2D intervals edge cases: single interval per pair", {
 })
 
 test_that("2D intervals update operations maintain parity", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -367,11 +337,6 @@ test_that("2D intervals update operations maintain parity", {
 })
 
 test_that("2D intervals with all chromosome combinations", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -417,11 +382,6 @@ test_that("2D intervals with all chromosome combinations", {
 })
 
 test_that("2D intervals work as iterators in gextract", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -470,11 +430,6 @@ test_that("2D intervals work as iterators in gextract", {
 })
 
 test_that("2D intervals work with gscreen", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -518,11 +473,6 @@ test_that("2D intervals work with gscreen", {
 })
 
 test_that("2D intervals work with virtual tracks", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -584,11 +534,6 @@ test_that("2D intervals work with virtual tracks", {
 })
 
 test_that("2D intervals work with giterator.intervals", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -626,11 +571,6 @@ test_that("2D intervals work with giterator.intervals", {
 })
 
 test_that("2D intervals work with complex gextract expressions", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -673,11 +613,6 @@ test_that("2D intervals work with complex gextract expressions", {
 })
 
 test_that("2D intervals work with colnames parameter in gextract", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -726,11 +661,6 @@ test_that("2D intervals work with colnames parameter in gextract", {
 })
 
 test_that("2D intervals work with band parameter in gextract", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -778,11 +708,6 @@ test_that("2D intervals work with band parameter in gextract", {
 })
 
 test_that("2D intervals work with gpartition", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -829,11 +754,6 @@ test_that("2D intervals work with gpartition", {
 })
 
 test_that("2D intervals work with multiple tracks in gextract", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -889,11 +809,6 @@ test_that("2D intervals work with multiple tracks in gextract", {
 # Shaman-style tests: operations used in real HiC analysis
 
 test_that("2D intervals with gintervals.2d.band_intersect (shaman-style)", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -936,11 +851,6 @@ test_that("2D intervals with gintervals.2d.band_intersect (shaman-style)", {
 })
 
 test_that("2D intervals with negative band range (shaman cis-interactions style)", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -978,11 +888,6 @@ test_that("2D intervals with negative band range (shaman cis-interactions style)
 })
 
 test_that("2D intervals with expand.grid pattern (shaman regional matrix style)", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -1037,11 +942,6 @@ test_that("2D intervals with expand.grid pattern (shaman regional matrix style)"
 })
 
 test_that("2D intervals with per-chromosome loading (shaman per-chrom processing)", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -1082,11 +982,6 @@ test_that("2D intervals with per-chromosome loading (shaman per-chrom processing
 })
 
 test_that("2D intervals with distance calculations (shaman min_dist filtering)", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
@@ -1138,11 +1033,6 @@ test_that("2D intervals with distance calculations (shaman min_dist filtering)",
 })
 
 test_that("2D intervals large-scale operations (shaman-scale HiC data)", {
-    if (!getOption("gmulticontig.indexed_format", FALSE)) {
-        skip("Indexed format is not enabled")
-    }
-
-
     gdb.init_examples()
     gdir.create("test", showWarnings = FALSE)
 
