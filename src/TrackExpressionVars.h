@@ -36,6 +36,12 @@
 #include "rdbinterval.h"
 #include "rdbutils.h"
 
+// Forward declarations to avoid circular dependency
+class TrackVarProcessor;
+class IntervVarProcessor;
+class ValueVarProcessor;
+class SequenceVarProcessor;
+
 using namespace std;
 
 class TrackExpressionVars {
@@ -252,6 +258,12 @@ private:
 	// Shared sequence fetcher for all sequence-based vtracks to enable caching
 	GenomeSeqFetch          m_shared_seqfetch;
 
+	// Processors for different variable types (using pointers to avoid circular dependency)
+	std::unique_ptr<TrackVarProcessor>       m_track_processor;
+	std::unique_ptr<IntervVarProcessor>      m_interv_processor;
+	std::unique_ptr<ValueVarProcessor>       m_value_processor;
+	std::unique_ptr<SequenceVarProcessor>    m_sequence_processor;
+
 	void                 parse_imdf(SEXP rvtrack, const string &vtrack, Iterator_modifier1D *imdf1d, Iterator_modifier2D *imdf2d);
 	Iterator_modifier1D *add_imdf(const Iterator_modifier1D &imdf1d);
 	Iterator_modifier2D *add_imdf(const Iterator_modifier2D &imdf2d);
@@ -272,36 +284,6 @@ private:
 	void start_chrom(const GInterval2D &interval);
 	void set_vars(unsigned idx);
 
-	// Helper methods for track variable processing
-	void set_track_vars(unsigned idx);
-	void set_sequence_vars(unsigned idx);
-	void set_interval_vars(unsigned idx);
-	void set_value_vars(unsigned idx);
-
-	// Filter aggregation helpers for 1D tracks
-	double aggregate_avg_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_sum_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_min_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_max_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_max_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_max_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start);
-	double aggregate_min_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_min_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start);
-	bool find_best_max_pos_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double &best_pos);
-	bool find_best_min_pos_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double &best_pos);
-	double aggregate_stddev_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_quantile_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, double percentile);
-	double aggregate_exists_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_size_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_sample_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_sample_pos_abs_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts);
-	double aggregate_sample_pos_rel_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts, int64_t base_start);
-
-	// Batch processing for sequence-based vtracks
-	void batch_process_sequence_vtracks(vector<Track_var*> &kmer_vtracks,
-	                                    vector<Track_var*> &pwm_vtracks,
-	                                    const GInterval &interval,
-	                                    unsigned idx);
 
 	bool is_var(const string &str, uint64_t start, uint64_t end) const { return (!start || !rdb::is_R_var_char(str[start - 1])) && (end == str.size() || !rdb::is_R_var_char(str[end])); }
 

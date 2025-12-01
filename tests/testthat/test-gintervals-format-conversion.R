@@ -1,5 +1,5 @@
 load_test_db()
-skip_if(getOption("gmulticontig.indexed_format", FALSE), "Indexed format not enabled, set gmulticontig.indexed_format = TRUE to run this test")
+skip_if(getOption("gmulticontig.indexed_format", FALSE) || gdb.info(.misha$GROOT)$format == "indexed", "Indexed format enbaled, set gmulticontig.indexed_format = FALSE to run this test")
 
 test_that("gintervals.convert_to_indexed fails for non-existent interval set", {
     expect_error(
