@@ -20,6 +20,17 @@
 #include <R.h>
 #include <Rinternals.h>
 
+// Undefine R macros that conflict with C++ standard library
+#ifdef length
+#undef length
+#endif
+#ifdef error
+#undef error
+#endif
+#ifdef warning
+#undef warning
+#endif
+
 #include "BinFinder.h"
 #include "Filter.h"
 #include "FilterRegistry.h"
