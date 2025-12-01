@@ -145,7 +145,14 @@ interval after all modifier adjustments.
   NULL (sequence) \tab kmer.frac \tab kmer, extend, strand \tab Fraction of possible anchors within the interval that match the k-mer. \cr
 }
 
-The sections below provide additional notes for motif, interval, and k-mer functions.
+\strong{Masked sequence summarizers}
+\tabular{llll}{
+  Source \tab func \tab Key params \tab Description \cr
+  NULL (sequence) \tab masked.count \tab NULL \tab Number of masked (lowercase) base pairs in the iterator interval. \cr
+  NULL (sequence) \tab masked.frac \tab NULL \tab Fraction of base pairs in the iterator interval that are masked (lowercase). \cr
+}
+
+The sections below provide additional notes for motif, interval, k-mer, and masked sequence functions.
 
 \strong{Motif (PWM) notes}
 \itemize{
@@ -259,6 +266,15 @@ gextract("g_frac + c_frac", gintervals(1, 0, 10000),
     iterator = 1000,
     colnames = "gc_content"
 )
+
+# Masked base pair counting
+gvtrack.create("masked_count", NULL, "masked.count")
+gvtrack.create("masked_frac", NULL, "masked.frac")
+gextract(c("masked_count", "masked_frac"), gintervals(1, 0, 10000), iterator = 1000)
+
+# Combined with GC content (unmasked regions only)
+gvtrack.create("gc", NULL, "kmer.frac", kmer = "G")
+gextract("gc * (1 - masked_frac)", gintervals(1, 0, 10000), iterator = 1000, colnames = "gc_unmasked")
 
 # Value-based track examples
 # Create a data frame with intervals and numeric values

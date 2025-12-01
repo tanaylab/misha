@@ -31,6 +31,7 @@
 #include "TrackExpressionIteratorBase.h"
 #include "PWMScorer.h"
 #include "KmerCounter.h"
+#include "MaskedBpCounter.h"
 #include "GenomeSeqFetch.h"
 #include "rdbinterval.h"
 #include "rdbutils.h"
@@ -112,6 +113,8 @@ public:
             PWM_COUNT,
             KMER_COUNT,
             KMER_FRAC,
+            MASKED_COUNT,
+            MASKED_FRAC,
             MAX_POS_ABS,
             MAX_POS_REL,
             MIN_POS_ABS,
@@ -142,6 +145,7 @@ public:
         Track_n_imdf       *track_n_imdf;
         std::unique_ptr<PWMScorer> pwm_scorer;
         std::unique_ptr<KmerCounter> kmer_counter;
+        std::unique_ptr<MaskedBpCounter> masked_counter;
         char strand;
         // When the virtual track is sequence-based (PWM/KMER) we may still
         // have per-vtrack iterator modifiers; store them here.
@@ -227,6 +231,7 @@ public:
     static bool is_sequence_based_function(Track_var::Val_func func);
     static bool is_pwm_function(Track_var::Val_func func);
     static bool is_kmer_function(Track_var::Val_func func);
+    static bool is_masked_function(Track_var::Val_func func);
 
 	void set_vars(const GInterval &interval, unsigned idx);
 	void set_vars(const GInterval2D &interval, const DiagonalBand &band, unsigned idx);
@@ -368,14 +373,17 @@ inline bool TrackExpressionVars::is_seq_variable(unsigned ivar) const {
            m_track_vars[ivar].val_func == Track_var::PWM_MAX_POS ||
            m_track_vars[ivar].val_func == Track_var::PWM_COUNT ||
            m_track_vars[ivar].val_func == Track_var::KMER_COUNT ||
-           m_track_vars[ivar].val_func == Track_var::KMER_FRAC;
+           m_track_vars[ivar].val_func == Track_var::KMER_FRAC ||
+           m_track_vars[ivar].val_func == Track_var::MASKED_COUNT ||
+           m_track_vars[ivar].val_func == Track_var::MASKED_FRAC;
 }
 
 // Helper methods to check variable function types
 inline bool TrackExpressionVars::is_sequence_based_function(Track_var::Val_func func) {
     return func == Track_var::PWM || func == Track_var::PWM_MAX ||
            func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT ||
-           func == Track_var::KMER_COUNT || func == Track_var::KMER_FRAC;
+           func == Track_var::KMER_COUNT || func == Track_var::KMER_FRAC ||
+           func == Track_var::MASKED_COUNT || func == Track_var::MASKED_FRAC;
 }
 
 inline bool TrackExpressionVars::is_pwm_function(Track_var::Val_func func) {
@@ -385,6 +393,10 @@ inline bool TrackExpressionVars::is_pwm_function(Track_var::Val_func func) {
 
 inline bool TrackExpressionVars::is_kmer_function(Track_var::Val_func func) {
     return func == Track_var::KMER_COUNT || func == Track_var::KMER_FRAC;
+}
+
+inline bool TrackExpressionVars::is_masked_function(Track_var::Val_func func) {
+    return func == Track_var::MASKED_COUNT || func == Track_var::MASKED_FRAC;
 }
 
 #endif /* TRACKEXPRESSIONVARS_H_ */
