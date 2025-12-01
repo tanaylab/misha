@@ -39,6 +39,17 @@ namespace rdb {
 #include <R.h>
 #include <Rinternals.h>
 
+// Undefine R macros that conflict with C++ standard library
+#ifdef length
+#undef length
+#endif
+#ifdef error
+#undef error
+#endif
+#ifdef warning
+#undef warning
+#endif
+
 #include "GenomeTrack.h"
 #include "ConfigurationManager.h"
 #include "DataFrameUtils.h"
