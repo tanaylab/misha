@@ -75,6 +75,17 @@ namespace rdb {
 #include <Rinterface.h>
 #include <Rversion.h>
 
+// Undefine R macros that conflict with C++ standard library
+#ifdef length
+#undef length
+#endif
+#ifdef error
+#undef error
+#endif
+#ifdef warning
+#undef warning
+#endif
+
 #define MISHA_PRENV(x) TAG(x)
 #define MISHA_PRVALUE(x) CAR(x)
 #define MISHA_PREXPR(x) R_BytecodeExpr(CDR(x))
