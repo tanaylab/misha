@@ -26,6 +26,7 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
 	"avg", "min", "max", "nearest", "stddev", "sum", "quantile",
 	"global.percentile", "global.percentile.min", "global.percentile.max",
 	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac",
+    "masked.count", "masked.frac",
     "max.pos.abs", "max.pos.relative", "min.pos.abs", "min.pos.relative",
     "exists", "size", "sample", "sample.pos.abs", "sample.pos.relative",
     "first", "first.pos.abs", "first.pos.relative", "last", "last.pos.abs", "last.pos.relative"};
@@ -457,6 +458,32 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 
             // Attach filter if present
             attach_filter_to_var(rvtrack, vtrack, var);
+			return;
+		} else if (func == "masked.count" || func == "masked.frac") {
+			// Create the Track_var without a Track_n_imdf
+			m_track_vars.push_back(Track_var());
+			Track_var &var = m_track_vars.back();
+			var.var_name = vtrack;
+			var.val_func = func == "masked.count" ? Track_var::MASKED_COUNT : Track_var::MASKED_FRAC;
+			var.track_n_imdf = nullptr; // No track needed for masked counting
+			var.seq_imdf1d = nullptr;
+			var.percentile = numeric_limits<double>::quiet_NaN();
+
+			// No parameters needed for masked counting (unlike PWM/KMER)
+			// Just create the counter with the appropriate mode
+			MaskedBpCounter::CountMode mode =
+				func == "masked.count" ? MaskedBpCounter::COUNT : MaskedBpCounter::FRACTION;
+			var.masked_counter = std::make_unique<MaskedBpCounter>(&m_shared_seqfetch, mode);
+
+			// Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
+			Iterator_modifier1D imdf1d;
+			parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+			var.seq_imdf1d = add_imdf(imdf1d);
+
+			var.requires_pv = false;
+
+			// Attach filter if present
+			attach_filter_to_var(rvtrack, vtrack, var);
 			return;
 		}
 	}
@@ -1599,12 +1626,15 @@ void TrackExpressionVars::set_vars(unsigned idx)
     // Collect sequence-based vtracks for potential batch processing
     vector<Track_var*> kmer_vtracks;
     vector<Track_var*> pwm_vtracks;
+    vector<Track_var*> masked_vtracks;
 
     for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
         if (TrackExpressionVars::is_pwm_function(ivar->val_func)) {
             pwm_vtracks.push_back(&*ivar);
         } else if (TrackExpressionVars::is_kmer_function(ivar->val_func)) {
             kmer_vtracks.push_back(&*ivar);
+        } else if (TrackExpressionVars::is_masked_function(ivar->val_func)) {
+            masked_vtracks.push_back(&*ivar);
         }
     }
 
@@ -1624,11 +1654,24 @@ void TrackExpressionVars::set_vars(unsigned idx)
             }
         }
     }
+    if (!any_filtered) {
+        for (Track_var* ivar : masked_vtracks) {
+            if (ivar->filter) {
+                any_filtered = true;
+                break;
+            }
+        }
+    }
 
     // Batch process if we have multiple sequence vtracks (threshold: 4+) AND no filters
     // (batch processing with filters is complex due to variable-length segments)
-    if (!any_filtered && kmer_vtracks.size() + pwm_vtracks.size() >= 4) {
+    if (!any_filtered && kmer_vtracks.size() + pwm_vtracks.size() + masked_vtracks.size() >= 4) {
         batch_process_sequence_vtracks(kmer_vtracks, pwm_vtracks, m_interval1d, idx);
+        // Process masked vtracks individually even in batch mode (simpler than batching)
+        for (Track_var* ivar : masked_vtracks) {
+            const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+            ivar->var[idx] = ivar->masked_counter->score_interval(seq_interval, m_iu.get_chromkey());
+        }
     } else {
         // Process individually if too few
         for (Track_var* ivar : pwm_vtracks) {
@@ -1722,6 +1765,54 @@ void TrackExpressionVars::set_vars(unsigned idx)
                 } else {
                     // No filter
                     ivar->var[idx] = ivar->kmer_counter->score_interval(seq_interval, m_iu.get_chromkey());
+                }
+            } else {
+                ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+            }
+        }
+        // Process masked vtracks individually
+        for (Track_var* ivar : masked_vtracks) {
+            const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : m_interval1d;
+
+            if (ivar->masked_counter) {
+                if (ivar->filter) {
+                    // Filter application: score unmasked parts and aggregate
+                    std::vector<GInterval> unmasked_parts;
+                    ivar->filter->subtract(seq_interval, unmasked_parts);
+
+                    if (unmasked_parts.empty()) {
+                        // Completely masked
+                        ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
+                    } else if (unmasked_parts.size() == 1) {
+                        // Single unmasked part
+                        ivar->var[idx] = ivar->masked_counter->score_interval(unmasked_parts[0], m_iu.get_chromkey());
+                    } else {
+                        // Multiple unmasked parts - score each and aggregate
+                        double total_masked_count = 0.0;
+                        int64_t total_bases = 0;
+
+                        for (const auto& part : unmasked_parts) {
+                            double part_score = ivar->masked_counter->score_interval(part, m_iu.get_chromkey());
+
+                            if (ivar->val_func == Track_var::MASKED_COUNT) {
+                                // Sum counts
+                                total_masked_count += part_score;
+                            } else {
+                                // MASKED_FRAC - need to weight by length
+                                total_masked_count += part_score * part.range();
+                                total_bases += part.range();
+                            }
+                        }
+
+                        if (ivar->val_func == Track_var::MASKED_FRAC && total_bases > 0) {
+                            ivar->var[idx] = total_masked_count / total_bases;
+                        } else {
+                            ivar->var[idx] = total_masked_count;
+                        }
+                    }
+                } else {
+                    // No filter
+                    ivar->var[idx] = ivar->masked_counter->score_interval(seq_interval, m_iu.get_chromkey());
                 }
             } else {
                 ivar->var[idx] = std::numeric_limits<double>::quiet_NaN();
