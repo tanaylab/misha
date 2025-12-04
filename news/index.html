@@ -60,7 +60,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/5.3.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
     <div class="section level2">
@@ -95,6 +95,7 @@
 <li>Added in-memory value-based virtual tracks (<code>gvtrack.create</code> with <code>src</code> parameter). These tracks behave exactly like regular sparse tracks, but are stored in memory and can be used in track expressions.</li>
 <li>Added <code>sshift</code>, <code>eshift</code> and <code>filter</code> parameters to <code>gvtrack.create</code>.</li>
 <li>Added <code><a href="../reference/gintervals.path.html">gintervals.path()</a></code> and <code><a href="../reference/gtrack.path.html">gtrack.path()</a></code> functions that return the actual file system paths for interval sets and tracks.</li>
+<li>Added <code>masked.count</code> and <code>masked.frac</code> virtual track functions that count and fraction masked base pairs (lowercase letters) in the current iterator interval.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.2.2" id="misha-522">misha 5.2.2<a class="anchor" aria-label="anchor" href="#misha-522"></a></h2>
