@@ -31,6 +31,12 @@ private:
 		unsigned idx
 	);
 
+	void process_distance_edge(
+		TrackExpressionVars::Interv_var &var,
+		const GInterval &interval,
+		unsigned idx
+	);
+
 	void process_coverage(
 		TrackExpressionVars::Interv_var &var,
 		const GInterval &interval,

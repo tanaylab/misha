@@ -118,6 +118,7 @@ interval after all modifier adjustments.
   Source \tab func \tab params \tab Description \cr
   1D intervals \tab distance \tab Minimal distance from center (default 0) \tab Signed distance using normalized formula when inside intervals, distance to edge when outside; see notes below for exact formula. \cr
   1D intervals \tab distance.center \tab NULL \tab Distance from iterator center to the closest interval center, \code{NA} if outside all intervals. \cr
+  1D intervals \tab distance.edge \tab NULL \tab Edge-to-edge distance from iterator interval to closest source interval (like \code{gintervals.neighbors}); see notes below for strand handling. \cr
   1D intervals \tab coverage \tab NULL \tab Fraction of iterator length covered by source intervals (after unifying overlaps). \cr
   1D intervals \tab neighbor.count \tab Max distance (>= 0) \tab Number of source intervals whose edge-to-edge distance from the iterator interval is within params (no unification). \cr
 }
@@ -184,9 +185,11 @@ PWM parameters can be supplied either as a single list (\code{params}) or via na
 
 \code{distance.center}: Given the center 'C' of the current iterator interval, returns \code{NaN} if 'C' is outside of all intervals, otherwise returns the distance between 'C' and the center of the closest interval.
 
-For both functions, distance can be positive or negative depending on the position of the coordinate relative to the interval and the strand (-1 or 1) of the interval. Distance is always positive if \code{strand = 0} or if the strand column is missing. The result is \code{NA} if no intervals exist for the current chromosome.
+\code{distance.edge}: Computes edge-to-edge distance from the iterator interval to the closest source interval, using the same calculation as \code{gintervals.neighbors}. Returns 0 for overlapping intervals. Distance sign depends on the strand column of source intervals; returns unsigned (absolute) distance if no strand column exists. Returns \code{NA} if no source intervals exist on the current chromosome.
 
-\strong{Difference from \code{gintervals.neighbors}:} The \code{distance} function measures from the \emph{center} of the iterator interval (a single coordinate point) to the closest \emph{edge} of source intervals when outside, or returns a normalized distance within the interval when inside. The \code{distance.center} function measures from the center of the iterator interval to the \emph{center} of source intervals. In contrast, \code{gintervals.neighbors} measures \emph{edge-to-edge} distance between two intervals (from the last base pair of the query interval to the first base pair of the target interval). Use virtual track distance functions when you need center-based distances within a sliding window context, and use \code{gintervals.neighbors} when you need precise edge-to-edge distances between interval pairs.
+For \code{distance} and \code{distance.center}, distance can be positive or negative depending on the position of the coordinate relative to the interval and the strand (-1 or 1) of the interval. Distance is always positive if \code{strand = 0} or if the strand column is missing. The result is \code{NA} if no intervals exist for the current chromosome.
+
+\strong{Difference between distance functions:} The \code{distance} function measures from the \emph{center} of the iterator interval (a single coordinate point) to the closest \emph{edge} of source intervals when outside, or returns a normalized distance within the interval when inside. The \code{distance.center} function measures from the center of the iterator interval to the \emph{center} of source intervals. The \code{distance.edge} function measures \emph{edge-to-edge} distance between intervals, exactly like \code{gintervals.neighbors}. Use \code{distance.edge} when you need the same distance computation as \code{gintervals.neighbors} within a virtual track context.
 
 \strong{K-mer notes}
 \itemize{
