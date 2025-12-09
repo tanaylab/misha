@@ -26,6 +26,9 @@ void IntervVarProcessor::process_interv_vars(
 		case TrackExpressionVars::Interv_var::DIST_CENTER:
 			process_distance_center(*ivar, interval, idx);
 			break;
+		case TrackExpressionVars::Interv_var::DIST_EDGE:
+			process_distance_edge(*ivar, interval, idx);
+			break;
 		case TrackExpressionVars::Interv_var::COVERAGE:
 			process_coverage(*ivar, interval, idx);
 			break;
@@ -153,6 +156,115 @@ void IntervVarProcessor::process_distance_center(
 		}
 
 		var.var[idx] = dist;
+	}
+}
+
+void IntervVarProcessor::process_distance_edge(
+	TrackExpressionVars::Interv_var &var,
+	const GInterval &interval,
+	unsigned idx)
+{
+	// If iterator modifier exists, intervals might not come sorted => perform binary search
+	if (var.imdf1d) {
+		const GInterval &eval_interval = var.imdf1d->interval;
+
+		if (var.imdf1d->out_of_range) {
+			var.var[idx] = numeric_limits<double>::quiet_NaN();
+			return;
+		}
+
+		int64_t min_dist = numeric_limits<int64_t>::max();
+		int64_t dist;
+
+		// Search in start-sorted intervals
+		GIntervals::const_iterator iinterv = lower_bound(var.sintervs.begin(), var.sintervs.end(),
+														 eval_interval, GIntervals::compare_by_start_coord);
+
+		// Check the interval at and after the lower_bound position
+		if (iinterv != var.sintervs.end() && iinterv->chromid == eval_interval.chromid) {
+			dist = eval_interval.dist2interv(*iinterv);
+			if (llabs(dist) < llabs(min_dist) || min_dist == numeric_limits<int64_t>::max())
+				min_dist = dist;
+		}
+
+		// Check the interval before the lower_bound position
+		if (iinterv != var.sintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid) {
+			dist = eval_interval.dist2interv(*(iinterv - 1));
+			if (llabs(dist) < llabs(min_dist))
+				min_dist = dist;
+		}
+
+		// If no interval found on same chromosome, return NaN
+		if (min_dist == numeric_limits<int64_t>::max()) {
+			var.var[idx] = numeric_limits<double>::quiet_NaN();
+			return;
+		}
+
+		// Also search in end-sorted intervals to find potentially closer intervals
+		iinterv = lower_bound(var.eintervs.begin(), var.eintervs.end(),
+							  eval_interval, GIntervals::compare_by_end_coord);
+
+		if (iinterv != var.eintervs.end() && iinterv->chromid == eval_interval.chromid) {
+			dist = eval_interval.dist2interv(*iinterv);
+			if (llabs(dist) < llabs(min_dist))
+				min_dist = dist;
+		}
+
+		if (iinterv != var.eintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid) {
+			dist = eval_interval.dist2interv(*(iinterv - 1));
+			if (llabs(dist) < llabs(min_dist))
+				min_dist = dist;
+		}
+
+		var.var[idx] = (double)min_dist;
+	} else {
+		// Sequential access mode - iterate through sorted intervals
+		const GIntervals *pintervs[2] = { &var.sintervs, &var.eintervs };
+		GIntervals::const_iterator *piinterv[2] = { &var.siinterv, &var.eiinterv };
+		int64_t dist[2] = { 0, 0 };
+
+		for (int i = 0; i < 2; ++i) {
+			const GIntervals &intervs = *pintervs[i];
+			GIntervals::const_iterator &iinterv = *piinterv[i];
+
+			// Skip past intervals on earlier chromosomes
+			while (iinterv != intervs.end() && iinterv->chromid < interval.chromid)
+				++iinterv;
+
+			if (iinterv == intervs.end() || iinterv->chromid != interval.chromid) {
+				// No intervals on this chromosome
+				dist[i] = numeric_limits<int64_t>::max();
+			} else {
+				// Calculate edge-to-edge distance using dist2interv
+				// Use default touch_is_at_dist_one = false to match gintervals.neighbors
+				dist[i] = interval.dist2interv(*iinterv);
+				GIntervals::const_iterator iinterv_next = iinterv + 1;
+
+				// Look ahead for closer intervals
+				while (iinterv_next != intervs.end() && iinterv_next->chromid == interval.chromid) {
+					int64_t dist_next = interval.dist2interv(*iinterv_next);
+
+					// Stop if we're getting further away
+					if (llabs(dist[i]) < llabs(dist_next))
+						break;
+
+					iinterv = iinterv_next;
+					dist[i] = dist_next;
+					++iinterv_next;
+				}
+			}
+		}
+
+		// Return the distance with smaller absolute value
+		if (dist[0] == numeric_limits<int64_t>::max() && dist[1] == numeric_limits<int64_t>::max()) {
+			var.var[idx] = numeric_limits<double>::quiet_NaN();
+		} else if (dist[0] == numeric_limits<int64_t>::max()) {
+			var.var[idx] = (double)dist[1];
+		} else if (dist[1] == numeric_limits<int64_t>::max()) {
+			var.var[idx] = (double)dist[0];
+		} else {
+			var.var[idx] = llabs(dist[0]) <= llabs(dist[1]) ? (double)dist[0] : (double)dist[1];
+		}
 	}
 }
 

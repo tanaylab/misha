@@ -35,7 +35,7 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
     "exists", "size", "sample", "sample.pos.abs", "sample.pos.relative",
     "first", "first.pos.abs", "first.pos.relative", "last", "last.pos.abs", "last.pos.relative"};
 
-const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "coverage", "neighbor.count" };
+const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "distance.edge", "coverage", "neighbor.count" };
 
 const char *TrackExpressionVars::Value_var::FUNC_NAMES[TrackExpressionVars::Value_var::NUM_FUNCS] = {
 	"avg", "min", "max", "stddev", "sum", "quantile",
@@ -147,7 +147,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ++ivar) {
 		ivar->siinterv = ivar->sintervs.begin();
-		if (ivar->val_func == Interv_var::DIST || ivar->val_func == Interv_var::NEIGHBOR_COUNT)
+		if (ivar->val_func == Interv_var::DIST || ivar->val_func == Interv_var::DIST_EDGE || ivar->val_func == Interv_var::NEIGHBOR_COUNT)
 			ivar->eiinterv = ivar->eintervs.begin();
 	}
 
@@ -900,6 +900,18 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 			if (iinterv->do_touch(*(iinterv - 1)))
 				verror("Virtual track %s: intervals are overlapping and hence incompatible with %s function", vtrack.c_str(), func.c_str());
 		}
+	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::DIST_EDGE])) {
+		var.val_func = Interv_var::DIST_EDGE;
+
+		if (!Rf_isNull(rparams))
+			verror("Virtual track %s: function %s does not accept any parameters", vtrack.c_str(), func.c_str());
+
+		var.dist_margin = 0.;
+		var.sintervs.swap(intervs1d);
+		var.sintervs.sort();
+		var.eintervs = var.sintervs;
+		var.eintervs.sort(GIntervals::compare_by_end_coord);
+		// Overlapping intervals are allowed for edge-to-edge distance
 	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::COVERAGE])) {
         var.val_func = Interv_var::COVERAGE;
 
