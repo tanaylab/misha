@@ -1,3 +1,6 @@
+# misha 5.3.1
+* Fixed a CRAN check warning about long lines in documentation.
+
 # misha 5.3.0
 
 * **Multi-contig support**: Added support for genomes with many contigs (100+) through new indexed database format
