@@ -22,6 +22,8 @@
 * Added `sshift`, `eshift` and `filter` parameters to `gvtrack.create`.
 * Added `gintervals.path()` and `gtrack.path()` functions that return the actual file system paths for interval sets and tracks. 
 * Added `masked.count` and `masked.frac` virtual track functions that count and fraction masked base pairs (lowercase letters) in the current iterator interval.
+* Added `gtrack.export_bw` function that exports a track to a BigWig file. Requires `rtracklayer` package.
+* Added `gtrack.export_bed` and `gintervals.export_bed` functions that export a track or intervals set to a BED file.
 
 # misha 5.2.2
 
