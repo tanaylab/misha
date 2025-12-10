@@ -282,7 +282,11 @@ gextract(c("masked_count", "masked_frac"), gintervals(1, 0, 10000), iterator = 1
 
 # Combined with GC content (unmasked regions only)
 gvtrack.create("gc", NULL, "kmer.frac", kmer = "G")
-gextract("gc * (1 - masked_frac)", gintervals(1, 0, 10000), iterator = 1000, colnames = "gc_unmasked")
+gextract("gc * (1 - masked_frac)",
+    gintervals(1, 0, 10000),
+    iterator = 1000,
+    colnames = "gc_unmasked"
+)
 
 # Value-based track examples
 # Create a data frame with intervals and numeric values
