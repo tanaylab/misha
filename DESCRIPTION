@@ -1,7 +1,7 @@
 Type: Package
 Package: misha
 Title: Toolkit for Analysis of Genomic Data
-Version: 5.3.0
+Version: 5.3.1
 Authors@R: c(
     person("Misha", "Hoichman", , "misha@hoichman.com", role = "aut"),
     person("Aviezer", "Lifshitz", , "aviezer.lifshitz@weizmann.ac.il", role = c("aut", "cre")),
