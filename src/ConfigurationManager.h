@@ -67,7 +67,7 @@ public:
 	void verify_max_data_size(uint64_t data_size, const char *data_name = "Result", bool check_all_kids = true) const;
 
 private:
-	SEXP m_envir;
+	[[maybe_unused]] SEXP m_envir;
 
 	// Mutable cache for lazy-loaded configuration values
 	mutable int                   m_multitasking{-1};

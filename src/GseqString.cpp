@@ -709,12 +709,12 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
         SEXP r_strand_out = R_NilValue;
 
         if (mode == "pos") {
-            PROTECT(r_pos = Rf_allocVector(INTSXP, n_seqs));
+            PROTECT(r_pos = Rf_allocVector(INTSXP, n_seqs)); // rchk: protect
             if (return_strand) {
-                PROTECT(r_strand_out = Rf_allocVector(INTSXP, n_seqs));
+                PROTECT(r_strand_out = Rf_allocVector(INTSXP, n_seqs)); // rchk: protect
             }
         } else {
-            PROTECT(r_result = Rf_allocVector(REALSXP, n_seqs));
+            PROTECT(r_result = Rf_allocVector(REALSXP, n_seqs)); // rchk: protect
         }
         
         // Process each sequence
@@ -770,24 +770,24 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             if (return_strand) {
                 // Return data.frame with pos and strand
                 SEXP df;
-                PROTECT(df = Rf_allocVector(VECSXP, 2));
+                PROTECT(df = Rf_allocVector(VECSXP, 2)); // rchk: protect
                 SET_VECTOR_ELT(df, 0, r_pos);
                 SET_VECTOR_ELT(df, 1, r_strand_out);
-                
+
                 SEXP names;
-                PROTECT(names = Rf_allocVector(STRSXP, 2));
+                PROTECT(names = Rf_allocVector(STRSXP, 2)); // rchk: protect
                 SET_STRING_ELT(names, 0, Rf_mkChar("pos"));
                 SET_STRING_ELT(names, 1, Rf_mkChar("strand"));
                 Rf_setAttrib(df, R_NamesSymbol, names);
-                
-                UNPROTECT(4);
+
+                UNPROTECT(4); // rchk: unprotect:4 (r_pos, r_strand_out, df, names)
                 return df;
             } else {
-                UNPROTECT(1);
+                UNPROTECT(1); // rchk: unprotect:1 (r_pos)
                 return r_pos;
             }
         } else {
-            UNPROTECT(1);
+            UNPROTECT(1); // rchk: unprotect:1 (r_result)
             return r_result;
         }
         
