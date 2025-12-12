@@ -494,7 +494,8 @@ inline SEXP rdb::rprotect_ptr(SEXP expr)
 {
     if (expr != R_NilValue) {
         RdbInitializer::s_protect_counter++;
-        return PROTECT(expr);
+        PROTECT(expr); // rchk: protect
+        return expr;
     }
     return expr;
 }

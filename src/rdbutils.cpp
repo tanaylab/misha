@@ -723,7 +723,8 @@ SEXP rdb::rprotect(SEXP &expr)
 {
 	if (expr != R_NilValue) {
 		RdbInitializer::s_protect_counter++;
-		return PROTECT(expr);
+		PROTECT(expr); // rchk: protect
+		return expr;
 	}
 	return expr;
 }
@@ -741,7 +742,7 @@ void rdb::runprotect(SEXP &expr)
 	if (expr != R_NilValue) {
 		if (RdbInitializer::s_protect_counter < 1)
 			Rf_errorcall(R_NilValue, "Number of calls to unprotect exceeds the number of calls to protect\n");
-		UNPROTECT_PTR(expr);
+		UNPROTECT_PTR(expr); // rchk: unprotect:1
 		expr = R_NilValue;
 		RdbInitializer::s_protect_counter--;
 	}
@@ -757,7 +758,7 @@ void rdb::runprotect_all()
 {
 	if (RdbInitializer::s_protect_counter)
 		UNPROTECT(RdbInitializer::s_protect_counter);
-	RdbInitializer::s_protect_counter -= 0;
+	RdbInitializer::s_protect_counter = 0;
 }
 
 void rdb::get_chrom_files(const char *dirname, vector<string> &chrom_files)
