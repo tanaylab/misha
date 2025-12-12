@@ -890,12 +890,14 @@ SEXP gbigintervs_load_chrom(SEXP _intervset, SEXP _chrom, SEXP _envir)
 			const IntervalsContigEntry* entry = idx->get_entry(chromid);
 			if (!entry || entry->length == 0) {
 				// Empty chromosome - return empty data frame with proper structure
-				SEXP colnames = Rf_allocVector(STRSXP, 3);
+				SEXP colnames;
+				PROTECT(colnames = Rf_allocVector(STRSXP, 3));
 				SET_STRING_ELT(colnames, 0, Rf_mkChar("chrom"));
 				SET_STRING_ELT(colnames, 1, Rf_mkChar("start"));
 				SET_STRING_ELT(colnames, 2, Rf_mkChar("end"));
 
-				SEXP df = Rf_allocVector(VECSXP, 3);
+				SEXP df;
+				PROTECT(df = Rf_allocVector(VECSXP, 3));
 				SET_VECTOR_ELT(df, 0, Rf_allocVector(INTSXP, 0));  // chrom (factor)
 				SET_VECTOR_ELT(df, 1, Rf_allocVector(INTSXP, 0));  // start
 				SET_VECTOR_ELT(df, 2, Rf_allocVector(INTSXP, 0));  // end
@@ -904,6 +906,7 @@ SEXP gbigintervs_load_chrom(SEXP _intervset, SEXP _chrom, SEXP _envir)
 				Rf_setAttrib(df, R_ClassSymbol, Rf_mkString("data.frame"));
 				Rf_setAttrib(df, R_RowNamesSymbol, Rf_allocVector(INTSXP, 0));
 
+				UNPROTECT(2); // colnames, df
 				return df;
 			}
 
@@ -991,7 +994,8 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 			const IntervalsPairEntry* entry = idx->get_entry(chromid1, chromid2);
 			if (!entry || entry->length == 0) {
 				// Empty chromosome pair - return empty data frame with proper structure
-				SEXP colnames = Rf_allocVector(STRSXP, 6);
+				SEXP colnames;
+				PROTECT(colnames = Rf_allocVector(STRSXP, 6));
 				SET_STRING_ELT(colnames, 0, Rf_mkChar("chrom1"));
 				SET_STRING_ELT(colnames, 1, Rf_mkChar("start1"));
 				SET_STRING_ELT(colnames, 2, Rf_mkChar("end1"));
@@ -999,7 +1003,8 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 				SET_STRING_ELT(colnames, 4, Rf_mkChar("start2"));
 				SET_STRING_ELT(colnames, 5, Rf_mkChar("end2"));
 
-				SEXP df = Rf_allocVector(VECSXP, 6);
+				SEXP df;
+				PROTECT(df = Rf_allocVector(VECSXP, 6));
 				SET_VECTOR_ELT(df, 0, Rf_allocVector(INTSXP, 0));  // chrom1 (factor)
 				SET_VECTOR_ELT(df, 1, Rf_allocVector(INTSXP, 0));  // start1
 				SET_VECTOR_ELT(df, 2, Rf_allocVector(INTSXP, 0));  // end1
@@ -1011,6 +1016,7 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 				Rf_setAttrib(df, R_ClassSymbol, Rf_mkString("data.frame"));
 				Rf_setAttrib(df, R_RowNamesSymbol, Rf_allocVector(INTSXP, 0));
 
+				UNPROTECT(2); // colnames, df
 				return df;
 			}
 

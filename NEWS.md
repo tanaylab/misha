@@ -1,4 +1,9 @@
+# misha 5.3.2
+
+* Fixed GCC-ASAN / LTO compilation warnings. 
+
 # misha 5.3.1
+
 * Fixed a CRAN check warning about long lines in documentation.
 
 # misha 5.3.0

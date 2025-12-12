@@ -80,8 +80,6 @@ using namespace rdb;
 //    SEXP srcref;            /* The source line in effect */
 //} RCNTXT, *context;
 
-static const char *CHROM_FILE_PREFIX = "chr";
-static const unsigned CHROM_FILE_PREFIX_LEN = strlen(CHROM_FILE_PREFIX);
 const string rdb::TRACK_FILE_EXT = ".track";
 const string rdb::INTERV_FILE_EXT = ".interv";
 

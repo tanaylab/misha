@@ -92,10 +92,10 @@ SEXP gchain2interv(SEXP _chainfile, SEXP _src_overlap_policy, SEXP _tgt_overlap_
 				}
 
 				// CHAIN
-			if (strcmp(fields[CHAIN].c_str(), "chain"))
-				TGLError("Chain file %s, line %ld: invalid file format", chainfname, lineno);
+				if (strcmp(fields[CHAIN].c_str(), "chain"))
+					TGLError("Chain file %s, line %ld: invalid file format", chainfname, lineno);
 
-			// SCORE
+				// SCORE
 				chain_score = strtod(fields[SCORE].c_str(), &endptr);
 				if (*endptr)
 					TGLError("Chain file %s, line %ld: invalid chain score", chainfname, lineno);
