@@ -17,7 +17,7 @@ public:
 	);
 
 private:
-	rdb::IntervUtils &m_iu;
+	[[maybe_unused]] rdb::IntervUtils &m_iu;
 
 	void process_single_value_var(
 		TrackExpressionVars::Value_var &var,
