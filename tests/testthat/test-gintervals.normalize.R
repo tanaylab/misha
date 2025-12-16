@@ -14,16 +14,18 @@ test_that("gintervals.normalize works with basic intervals", {
 })
 
 test_that("gintervals.normalize works with odd size", {
-    # Test normalization with odd size
+    # Test normalization with odd size - should give exact size
     intervs <- gintervals(1, c(1000, 5000), c(3000, 8000))
     result <- gintervals.normalize(intervs, 499)
 
-    # Expected: center of first interval is 2000, expansion is 249, so normalized interval should be [1751, 2249]
-    # Expected: center of second interval is 6500, expansion is 249, so normalized interval should be [6251, 6749]
+    # Expected: center of first interval is 2000, size=499 → [1751, 2250] (exactly 499bp)
+    # Expected: center of second interval is 6500, size=499 → [6251, 6750] (exactly 499bp)
     expect_equal(nrow(result), 2)
     expect_equal(result$chrom, factor(c("chr1", "chr1"), levels = gintervals.all()$chrom))
     expect_equal(result$start, c(1751, 6251))
-    expect_equal(result$end, c(2249, 6749))
+    expect_equal(result$end, c(2250, 6750))
+    # Verify exact size
+    expect_equal(result$end - result$start, c(499, 499))
 })
 
 test_that("gintervals.normalize handles chromosome boundaries", {
@@ -107,8 +109,11 @@ test_that("gintervals.normalize rejects invalid size parameters", {
     # Test non-numeric size
     expect_error(gintervals.normalize(intervs, "500"))
 
-    # Test multiple sizes
-    expect_error(gintervals.normalize(intervs, c(500, 600)))
+    # Test mismatched multiple sizes (1 interval with 2 sizes is now allowed as one-to-many)
+    # But 1 interval with 3 sizes that are mismatched should work (one-to-many)
+    # So we test a different mismatch case: 2 intervals with 3 sizes
+    intervs2 <- gintervals(1, c(1000, 5000), c(2000, 6000))
+    expect_error(gintervals.normalize(intervs2, c(500, 600, 700)))
 })
 
 test_that("gintervals.normalize rejects 2D intervals", {
@@ -173,4 +178,179 @@ test_that("gintervals.normalize maintains interval count", {
     expect_equal(result$chrom, factor(c("chr1", "chr2", "chr1"), levels = gintervals.all()$chrom))
     expect_equal(result$start, c(1250, 2250, 5250))
     expect_equal(result$end, c(1750, 2750, 5750))
+})
+
+# ===== Tests for vector of sizes =====
+
+test_that("gintervals.normalize works with vector of sizes", {
+    # Use intervals all on same chromosome, already sorted by start
+    # Note: gintervals() sorts intervals by start position
+    intervs <- gintervals(1, c(1000, 3000, 5000), c(2000, 4000, 6000))
+    sizes <- c(500, 750, 1000)
+    result <- gintervals.normalize(intervs, sizes)
+
+    # Centers: 1500, 3500, 5500
+    # Expansions: 250, 375, 500
+    # Note: All on chr1, order matches sorted intervals
+    expect_equal(nrow(result), 3)
+    expect_equal(result$start, c(1250, 3125, 5000))
+    expect_equal(result$end, c(1750, 3875, 6000))
+})
+
+test_that("gintervals.normalize vector of identical sizes matches single size", {
+    intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
+
+    # Use single size
+    result_single <- gintervals.normalize(intervs, 500)
+
+    # Use vector of same sizes
+    result_vector <- gintervals.normalize(intervs, c(500, 500))
+
+    expect_equal(result_single, result_vector)
+})
+
+test_that("gintervals.normalize one-to-many: single interval with multiple sizes", {
+    interv <- gintervals(1, 1000, 2000)
+    sizes <- c(500, 1000, 1500)
+    result <- gintervals.normalize(interv, sizes)
+
+    # Center: 1500
+    # All intervals centered at 1500 with different sizes
+    expect_equal(nrow(result), 3)
+    expect_equal(result$start, c(1250, 1000, 750))
+    expect_equal(result$end, c(1750, 2000, 2250))
+})
+
+test_that("gintervals.normalize rejects mismatched sizes", {
+    intervs <- gintervals(1, c(1000, 5000, 3000), c(2000, 6000, 4000))
+
+    # 3 intervals with 5 sizes should error
+    expect_error(
+        gintervals.normalize(intervs, c(500, 600, 700, 800, 900)),
+        "must either match"
+    )
+
+    # 3 intervals with 2 sizes should error (neither 1 nor 3)
+    expect_error(
+        gintervals.normalize(intervs, c(500, 600)),
+        "must either match"
+    )
+})
+
+test_that("gintervals.normalize validates all size values are positive", {
+    intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
+
+    # Vector with negative value
+    expect_error(
+        gintervals.normalize(intervs, c(500, -100)),
+        "positive"
+    )
+
+    # Vector with zero
+    expect_error(
+        gintervals.normalize(intervs, c(500, 0)),
+        "positive"
+    )
+})
+
+test_that("gintervals.normalize handles size=1", {
+    intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
+    result <- gintervals.normalize(intervs, 1)
+
+    # Centers: 1500, 5500
+    # Size=1 should create [center, center+1]
+    expect_equal(nrow(result), 2)
+    expect_equal(result$start, c(1500, 5500))
+    expect_equal(result$end, c(1501, 5501))
+})
+
+test_that("gintervals.normalize handles size=1 in vector mode", {
+    intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
+    result <- gintervals.normalize(intervs, c(1, 500))
+
+    # First interval: center=1500, size=1 -> [1500, 1501]
+    # Second interval: center=5500, size=500 -> [5250, 5750]
+    expect_equal(nrow(result), 2)
+    expect_equal(result$start, c(1500, 5250))
+    expect_equal(result$end, c(1501, 5750))
+})
+
+test_that("gintervals.normalize vector mode works across multiple chromosomes", {
+    # Create intervals using data.frame to control exact order
+    # Note: gintervals() would sort these, so we use data.frame directly
+    intervs <- data.frame(
+        chrom = factor(c("chr1", "chr1", "chr2"), levels = gintervals.all()$chrom),
+        start = c(1000, 5000, 2000),
+        end = c(2000, 6000, 3000)
+    )
+    sizes <- c(600, 400, 800) # Matches the sorted order of intervals
+    result <- gintervals.normalize(intervs, sizes)
+
+    # Verify each interval gets correct size
+    expect_equal(nrow(result), 3)
+    # All intervals already sorted: chr1 (1000-2000, size=600), chr1 (5000-6000, size=400), chr2 (2000-3000, size=800)
+    # Centers: 1500, 5500, 2500
+    # Expansions: 300, 200, 400
+    expect_equal(result$start, c(1200, 5300, 2100))
+    expect_equal(result$end, c(1800, 5700, 2900))
+    expect_equal(as.character(result$chrom), c("chr1", "chr1", "chr2"))
+})
+
+test_that("gintervals.normalize preserves metadata with vector sizes", {
+    intervs <- gintervals(c(1, 1), c(1000, 5000), c(2000, 6000), c(1, -1))
+    intervs$name <- c("interval1", "interval2")
+    intervs$score <- c(10.5, 20.3)
+    result <- gintervals.normalize(intervs, c(600, 800))
+
+    expect_true("name" %in% colnames(result))
+    expect_true("strand" %in% colnames(result))
+    expect_true("score" %in% colnames(result))
+    expect_equal(result$name, c("interval1", "interval2"))
+    expect_equal(result$strand, c(1, -1))
+    expect_equal(result$score, c(10.5, 20.3))
+    expect_equal(colnames(result), colnames(intervs))
+})
+
+test_that("gintervals.normalize preserves column order with vector sizes", {
+    intervs <- gintervals(c(1, 1), c(1000, 5000), c(2000, 6000))
+    intervs$col1 <- c("a", "b")
+    intervs$col2 <- c(1, 2)
+    intervs$col3 <- c(TRUE, FALSE)
+
+    original_cols <- colnames(intervs)
+    result <- gintervals.normalize(intervs, c(500, 600))
+
+    expect_equal(colnames(result), original_cols)
+})
+
+test_that("gintervals.normalize vector mode respects chromosome boundaries", {
+    # Test intervals near chromosome boundaries with different sizes
+    intervs <- gintervals(1, c(0, 247249700), c(100, 247249719))
+    sizes <- c(1000, 200)
+    result <- gintervals.normalize(intervs, sizes)
+
+    chrom_size <- 247249719 # chr1 size in test database
+    expect_equal(nrow(result), 2)
+    expect_true(all(result$start >= 0))
+    expect_true(all(result$end <= chrom_size))
+
+    # First interval: center=50, size=1000, expansion=500
+    # -> [0, 550] (clamped at start)
+    # Second interval: center=247249709.5, size=200, expansion=100
+    # -> [247249609, 247249719] (clamped at end)
+    expect_equal(result$start, c(0, 247249609))
+    expect_equal(result$end, c(550, 247249719))
+})
+
+test_that("gintervals.normalize one-to-many preserves metadata", {
+    interv <- gintervals(1, 1000, 2000, 1)
+    interv$name <- "test_interval"
+    interv$score <- 42.5
+
+    result <- gintervals.normalize(interv, c(500, 1000))
+
+    expect_equal(nrow(result), 2)
+    expect_equal(result$name, c("test_interval", "test_interval"))
+    expect_equal(result$score, c(42.5, 42.5))
+    expect_equal(result$strand, c(1, 1))
 })

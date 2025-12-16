@@ -696,12 +696,23 @@ SEXP gintervals_normalize(SEXP _intervals, SEXP _size, SEXP _envir)
 	try {
 		RdbInitializer rdb_init;
 		
-		if (!Rf_isInteger(_size) || Rf_length(_size) != 1)
-			verror("Size argument must be a single integer");
-		
-		int size = INTEGER(_size)[0];
-		if (size <= 0)
-			verror("Size must be a positive integer");
+		// Validate size argument - can be single value or vector matching intervals length
+		if (!Rf_isInteger(_size))
+			verror("Size argument must be an integer or integer vector");
+
+		int size_len = Rf_length(_size);
+		if (size_len < 1)
+			verror("Size argument cannot be empty");
+
+		// Check if vector mode or scalar mode
+		bool is_vector_mode = size_len > 1;
+
+		// Validate all size values are positive
+		const int* size_values = INTEGER(_size);
+		for (int i = 0; i < size_len; ++i) {
+			if (size_values[i] <= 0)
+				verror("All size values must be positive integers");
+		}
 		
 		IntervUtils iu(_envir);
 		GIntervals intervals;
@@ -713,29 +724,39 @@ SEXP gintervals_normalize(SEXP _intervals, SEXP _size, SEXP _envir)
 		
 		if (intervals.empty())
 			return R_NilValue;
-		
+
+		// Validate vector length if in vector mode
+		if (is_vector_mode && size_len != (int)intervals.size()) {
+			verror("Length of size vector (%d) must match number of intervals (%d)",
+				   size_len, (int)intervals.size());
+		}
+
 		GIntervals result_intervals;
 		result_intervals.reserve(intervals.size());
-		
-		int expansion = size / 2;
-		
-		for (GIntervals::const_iterator it = intervals.begin(); it != intervals.end(); ++it) {
-			const GInterval &interv = *it;
-			
+
+		// Process each interval with its corresponding size
+		for (size_t i = 0; i < intervals.size(); ++i) {
+			const GInterval &interv = intervals[i];
+
+			// Get size: per-interval (vector mode) or same for all (scalar mode)
+			int current_size = is_vector_mode ? size_values[i] : size_values[0];
+
 			// Calculate center
 			int center = (interv.start + interv.end) / 2;
-			
-			// Create normalized interval: center ± expansion
-			int new_start = center - expansion;
-			int new_end = center + expansion;
-			
+
+			// Create normalized interval ensuring exact size
+			// For even sizes: center is exactly in the middle
+			// For odd sizes: extra bp goes to the right side
+			int new_start = center - (current_size / 2);
+			int new_end = new_start + current_size;
+
 			// Ensure we don't cross chromosome boundaries
 			int chrom_size = iu.get_chromkey().get_chrom_size(interv.chromid);
 			if (new_start < 0)
 				new_start = 0;
 			if (new_end > chrom_size)
 				new_end = chrom_size;
-			
+
 			// Only add if the interval is valid
 			if (new_start < new_end) {
 				result_intervals.push_back(GInterval(interv.chromid, new_start, new_end, interv.strand, interv.udata));
