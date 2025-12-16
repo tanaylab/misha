@@ -4,7 +4,7 @@
 * **BREAKING**: `gintervals.normalize` now returns +1bp for intervals with odd sizes:
   - Old: expansion = size/2; [center-expansion, center+expansion] (loses 1bp for odd sizes)
   - New: new_start = center - (size/2); new_end = new_start + size (exact size always)
-
+* Added `interval_relative` parameter to `giterator.intervals()` for interval-aligned bin iteration.
 
 # misha 5.3.2
 

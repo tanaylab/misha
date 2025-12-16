@@ -118,6 +118,11 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
 #' set. Use this parameter if the result size exceeds the limits of the
 #' physical memory.
 #'
+#' When 'interval_relative' is TRUE, bins are aligned to each input interval's
+#' start position rather than chromosome position 0. This mode requires a
+#' numeric iterator (binsize) and returns an additional 'intervalID' column
+#' indicating which input interval spawned each bin.
+#'
 #' @param expr track expression
 #' @param intervals genomic scope
 #' @param iterator track expression iterator. If 'NULL' iterator is determined
@@ -125,8 +130,13 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
-#' @return If 'intervals.set.out' is 'NULL' a data frame representing iterator
-#' intervals.
+#' @param interval_relative if TRUE, and iterator is numeric, bins start at each interval's start
+#' position instead of chromosome position 0. Returns intervalID column. Default: FALSE.
+#' @param partial_bins how to handle partial bins at interval boundaries when
+#' interval_relative is TRUE. One of "clip" (default, truncate last bin to
+#' interval boundary), "exact" or "drop" (only output full-size bins).
+#' @return If 'intervals.set.out' is 'NULL' a data frame representing iterator intervals.
+#' When 'interval_relative' is TRUE, includes an 'intervalID' column.
 #' @seealso \code{\link{giterator.cartesian_grid}}
 #' @keywords ~iterator ~intervals
 #' @examples
@@ -155,10 +165,16 @@ giterator.cartesian_grid <- function(intervals1 = NULL, expansion1 = NULL, inter
 #'     c(100000, 50000)
 #' )
 #'
+#' ## interval_relative mode: bins aligned to each interval's start
+#' intervs <- gintervals(1, c(100, 500), c(300, 700))
+#' giterator.intervals(NULL, intervs, iterator = 50, interval_relative = TRUE)
+#'
 #' @export giterator.intervals
-giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL) {
+giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL,
+                                intervals.set.out = NULL, interval_relative = FALSE,
+                                partial_bins = c("clip", "exact", "drop")) {
     if (is.null(substitute(expr)) && is.null(substitute(iterator))) {
-        stop("Usage: giterator.intervals(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL)", call. = FALSE)
+        stop("Usage: giterator.intervals(expr = NULL, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL, interval_relative = FALSE, partial_bins = 'clip')", call. = FALSE)
     }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
@@ -172,6 +188,18 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
+    # Validate and convert partial_bins to integer code
+    partial_bins <- match.arg(partial_bins)
+    partial_bins_code <- match(partial_bins, c("clip", "exact", "drop")) - 1L # 0=clip, 1=exact, 2=drop
+    if (partial_bins_code == 2L) partial_bins_code <- 1L # "drop" is alias for "exact"
+
+    # Validate interval_relative mode
+    if (interval_relative) {
+        if (!is.numeric(.iterator) || length(.iterator) != 1) {
+            stop("interval_relative mode requires a numeric iterator (binsize)", call. = FALSE)
+        }
+    }
+
     if (!is.null(intervals.set.out)) {
         fullpath <- .gintervals.check_new_set(intervals.set.out)
     }
@@ -182,7 +210,10 @@ giterator.intervals <- function(expr = NULL, intervals = .misha$ALLGENOME, itera
     tryCatch(
         {
             if (!is.null(intervals)) {
-                res <- .gcall("giterator_intervals", exprstr, intervals, .iterator, band, intervals.set.out, .misha_env())
+                res <- .gcall(
+                    "giterator_intervals", exprstr, intervals, .iterator, band, intervals.set.out,
+                    interval_relative, as.integer(partial_bins_code), .misha_env()
+                )
 
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
                     .gintervals.big2small(intervals.set.out)
