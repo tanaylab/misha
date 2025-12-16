@@ -9,7 +9,9 @@ giterator.intervals(
   intervals = .misha$ALLGENOME,
   iterator = NULL,
   band = NULL,
-  intervals.set.out = NULL
+  intervals.set.out = NULL,
+  interval_relative = FALSE,
+  partial_bins = c("clip", "exact", "drop")
 )
 }
 \arguments{
@@ -24,10 +26,17 @@ implicitly based on track expression.}
 
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputted}
+
+\item{interval_relative}{if TRUE, and iterator is numeric, bins start at each interval's start
+position instead of chromosome position 0. Returns intervalID column. Default: FALSE.}
+
+\item{partial_bins}{how to handle partial bins at interval boundaries when
+interval_relative is TRUE. One of "clip" (default, truncate last bin to
+interval boundary), "exact" or "drop" (only output full-size bins).}
 }
 \value{
-If 'intervals.set.out' is 'NULL' a data frame representing iterator
-intervals.
+If 'intervals.set.out' is 'NULL' a data frame representing iterator intervals.
+When 'interval_relative' is TRUE, includes an 'intervalID' column.
 }
 \description{
 Returns iterator intervals given track expression, scope, iterator and band.
@@ -43,6 +52,11 @@ work of these functions.
 If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
 set. Use this parameter if the result size exceeds the limits of the
 physical memory.
+
+When 'interval_relative' is TRUE, bins are aligned to each input interval's
+start position rather than chromosome position 0. This mode requires a
+numeric iterator (binsize) and returns an additional 'intervalID' column
+indicating which input interval spawned each bin.
 }
 \examples{
 \dontshow{
@@ -69,6 +83,10 @@ giterator.intervals(
     gintervals.2d(chroms1 = 1, chroms2 = "chrX"),
     c(100000, 50000)
 )
+
+## interval_relative mode: bins aligned to each interval's start
+intervs <- gintervals(1, c(100, 500), c(300, 700))
+giterator.intervals(NULL, intervs, iterator = 50, interval_relative = TRUE)
 
 }
 \seealso{

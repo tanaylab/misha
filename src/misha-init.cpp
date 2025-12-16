@@ -40,7 +40,7 @@ extern "C" {
     extern SEXP gintervs_liftover(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gintervsort(SEXP, SEXP);
     extern SEXP gintervunion(SEXP, SEXP, SEXP);
-    extern SEXP giterator_intervals(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP giterator_intervals(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gmapply(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gmapply_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gpartition(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -124,7 +124,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gintervs_liftover", (DL_FUNC)&gintervs_liftover, 12},
     {"gintervsort", (DL_FUNC)&gintervsort, 2},
     {"gintervunion", (DL_FUNC)&gintervunion, 3},
-    {"giterator_intervals", (DL_FUNC)&giterator_intervals, 6},
+    {"giterator_intervals", (DL_FUNC)&giterator_intervals, 8},
     {"gmapply", (DL_FUNC)&gmapply, 9},
     {"gmapply_multitask", (DL_FUNC)&gmapply_multitask, 9},
     {"C_gpartition", (DL_FUNC)&C_gpartition, 8},
