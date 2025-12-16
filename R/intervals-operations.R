@@ -440,16 +440,23 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
     } # suppress return value
 }
 
-#' Normalize intervals to a fixed size
+#' Normalize intervals to fixed or variable sizes
 #'
 #' This function normalizes intervals by computing their centers and then expanding
-#' them to a fixed size, while ensuring they don't cross chromosome boundaries.
+#' them to fixed or variable sizes, while ensuring they don't cross chromosome boundaries.
 #'
 #' @param intervals intervals set
-#' @param size target size for normalized intervals (must be positive integer)
+#' @param size target size(s) for normalized intervals. Can be either:
+#'   \itemize{
+#'     \item A single positive integer: all intervals normalized to this size
+#'     \item A numeric vector: each interval normalized to its corresponding size.
+#'           Vector length must exactly match the number of intervals, OR
+#'           a single interval can be provided with multiple sizes to create
+#'           multiple output intervals (one-to-many expansion).
+#'   }
 #' @param intervals.set.out intervals set name where the function result is saved.
 #' If NULL, the result is returned to the user.
-#' @return Normalized intervals set with fixed size, or NULL if result is saved to intervals.set.out
+#' @return Normalized intervals set with fixed or variable sizes, or NULL if result is saved to intervals.set.out
 #' @seealso \code{\link{gintervals.force_range}}
 #' @examples
 #' \dontshow{
@@ -457,8 +464,18 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
 #' }
 #'
 #' gdb.init_examples()
+#'
+#' # Single size (all intervals normalized to 500bp)
 #' intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
 #' gintervals.normalize(intervs, 500)
+#'
+#' # Vector of sizes (each interval gets its own size)
+#' intervs <- gintervals(1, c(1000, 3000, 5000), c(2000, 4000, 6000))
+#' gintervals.normalize(intervs, c(500, 1000, 750))
+#'
+#' # One-to-many: single interval with multiple sizes
+#' interv <- gintervals(1, 1000, 2000)
+#' gintervals.normalize(interv, c(500, 1000, 1500))
 #'
 #' @export gintervals.normalize
 gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.out = NULL) {
@@ -467,12 +484,42 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
     }
     .gcheckroot()
 
-    if (!is.numeric(size) || length(size) != 1 || size <= 0) {
-        stop("Size must be a positive number", call. = FALSE)
+    # Validate size parameter
+    if (!is.numeric(size) || length(size) < 1 || any(size <= 0)) {
+        stop("Size must be a positive number or a vector of positive numbers", call. = FALSE)
+    }
+
+    # Check vector length matches intervals or is one-to-many case
+    is_size_vector <- length(size) > 1
+    if (is_size_vector) {
+        intervals_temp <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+        n_intervals <- nrow(intervals_temp)
+        n_sizes <- length(size)
+
+        # Valid cases: exact match OR single interval with multiple sizes
+        if (n_sizes != n_intervals && n_intervals != 1) {
+            stop(sprintf(
+                "Length of size vector (%d) must either match number of intervals (%d) or intervals must have exactly 1 row for one-to-many expansion",
+                n_sizes, n_intervals
+            ), call. = FALSE)
+        }
     }
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
+
+    # Handle one-to-many case: single interval with multiple sizes
+    if (is_size_vector && nrow(intervals) == 1) {
+        # Replicate the interval for each size
+        n_sizes <- length(size)
+        intervals <- intervals[rep(1, n_sizes), , drop = FALSE]
+        rownames(intervals) <- NULL
+    }
+
+    # If size is a vector, attach it to intervals as temporary column
+    if (is_size_vector) {
+        intervals$.normalize_size <- as.integer(size)
+    }
 
     res <- NULL
     FUN <- function(intervals, intervals.set.out, envir) {
@@ -486,7 +533,15 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
         basic_cols <- c("chrom", "start", "end", "strand")
         extra_cols <- setdiff(original_cols, basic_cols)
 
-        normalized <- .gcall("gintervals_normalize", intervals, as.integer(size), .misha_env())
+        # Determine size parameter: vector or scalar
+        if (".normalize_size" %in% names(intervals)) {
+            size_param <- as.integer(intervals$.normalize_size)
+            extra_cols <- setdiff(extra_cols, ".normalize_size") # Remove temp column
+        } else {
+            size_param <- as.integer(size) # Scalar mode
+        }
+
+        normalized <- .gcall("gintervals_normalize", intervals, size_param, .misha_env())
 
         # Preserve additional columns from original intervals in the correct order
         if (!is.null(normalized) && nrow(normalized) > 0 && length(extra_cols) > 0) {
@@ -507,6 +562,8 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
         if (!is.null(normalized) && nrow(normalized) > 0) {
             # Get the columns that exist in normalized result
             available_cols <- intersect(original_cols, names(normalized))
+            # Remove .normalize_size from output
+            available_cols <- setdiff(available_cols, ".normalize_size")
             # Reorder to match original order
             normalized <- normalized[, available_cols, drop = FALSE]
         }

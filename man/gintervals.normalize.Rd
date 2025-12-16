@@ -2,24 +2,31 @@
 % Please edit documentation in R/intervals-operations.R
 \name{gintervals.normalize}
 \alias{gintervals.normalize}
-\title{Normalize intervals to a fixed size}
+\title{Normalize intervals to fixed or variable sizes}
 \usage{
 gintervals.normalize(intervals = NULL, size = NULL, intervals.set.out = NULL)
 }
 \arguments{
 \item{intervals}{intervals set}
 
-\item{size}{target size for normalized intervals (must be positive integer)}
+\item{size}{target size(s) for normalized intervals. Can be either:
+\itemize{
+  \item A single positive integer: all intervals normalized to this size
+  \item A numeric vector: each interval normalized to its corresponding size.
+        Vector length must exactly match the number of intervals, OR
+        a single interval can be provided with multiple sizes to create
+        multiple output intervals (one-to-many expansion).
+}}
 
 \item{intervals.set.out}{intervals set name where the function result is saved.
 If NULL, the result is returned to the user.}
 }
 \value{
-Normalized intervals set with fixed size, or NULL if result is saved to intervals.set.out
+Normalized intervals set with fixed or variable sizes, or NULL if result is saved to intervals.set.out
 }
 \description{
 This function normalizes intervals by computing their centers and then expanding
-them to a fixed size, while ensuring they don't cross chromosome boundaries.
+them to fixed or variable sizes, while ensuring they don't cross chromosome boundaries.
 }
 \examples{
 \dontshow{
@@ -27,8 +34,18 @@ options(gmax.processes = 2)
 }
 
 gdb.init_examples()
+
+# Single size (all intervals normalized to 500bp)
 intervs <- gintervals(1, c(1000, 5000), c(2000, 6000))
 gintervals.normalize(intervs, 500)
+
+# Vector of sizes (each interval gets its own size)
+intervs <- gintervals(1, c(1000, 3000, 5000), c(2000, 4000, 6000))
+gintervals.normalize(intervs, c(500, 1000, 750))
+
+# One-to-many: single interval with multiple sizes
+interv <- gintervals(1, 1000, 2000)
+gintervals.normalize(interv, c(500, 1000, 1500))
 
 }
 \seealso{
