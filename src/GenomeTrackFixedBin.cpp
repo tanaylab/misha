@@ -140,7 +140,6 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 	} else {
 		float num_vs = 0;
 		double mean_square_sum = 0;
-		float v;
 
 		// For sampling, collect all values/positions
 		vector<float> all_values;
@@ -158,10 +157,13 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		if (m_functions[MIN_POS])
 			m_last_min_pos = numeric_limits<double>::quiet_NaN();
 
-		goto_bin(sbin);
-		for (int64_t bin = sbin; bin < ebin; ++bin) {
-			if (!read_next_bin(v))
-				continue;
+		// Bulk read all bins at once instead of one-by-one
+		vector<float> bin_vals;
+		int64_t bins_read = read_bins_bulk(sbin, ebin - sbin, bin_vals);
+
+		for (int64_t i = 0; i < bins_read; ++i) {
+			int64_t bin = sbin + i;
+			float v = bin_vals[i];
 
 			m_cached_bin_idx = bin;
 			m_cached_bin_val = v;
@@ -255,6 +257,48 @@ double GenomeTrackFixedBin::last_max_pos() const
 double GenomeTrackFixedBin::last_min_pos() const
 {
 	return m_last_min_pos;
+}
+
+int64_t GenomeTrackFixedBin::read_bins_bulk(int64_t start_bin, int64_t num_bins, std::vector<float> &vals)
+{
+	if (num_bins <= 0) {
+		vals.clear();
+		return 0;
+	}
+
+	// Clamp to available samples
+	int64_t available = m_num_samples - start_bin;
+	if (available <= 0) {
+		vals.clear();
+		return 0;
+	}
+	int64_t to_read = std::min(num_bins, available);
+
+	vals.resize(to_read);
+	goto_bin(start_bin);
+
+	// Bulk read all bins in one syscall
+	size_t bytes_to_read = to_read * sizeof(float);
+	uint64_t bytes_read = m_bfile.read(vals.data(), bytes_to_read);
+
+	if (bytes_read != bytes_to_read) {
+		if (m_bfile.error())
+			TGLError<GenomeTrackFixedBin>("Failed to read a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+		// Partial read - adjust size
+		to_read = bytes_read / sizeof(float);
+		vals.resize(to_read);
+	}
+
+	// Convert infinity to NaN (matching read_next_bin behavior)
+	for (int64_t i = 0; i < to_read; ++i) {
+		if (std::isinf(vals[i]))
+			vals[i] = numeric_limits<float>::quiet_NaN();
+	}
+
+	// Update cursor position
+	m_cur_coord = (start_bin + to_read) * m_bin_size;
+
+	return to_read;
 }
 
 void GenomeTrackFixedBin::read_header_at_current_pos_(BufferedFile &bf)
