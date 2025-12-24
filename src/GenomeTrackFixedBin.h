@@ -9,9 +9,10 @@
 #define GENOMETRACKFIXEDBIN_H_
 
 #include <cstdint>
-#include <math.h>
+#include <cmath>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include "GenomeTrack1D.h"
 
@@ -36,6 +37,8 @@ public:
 	void goto_bin(uint64_t bin);
 
 	bool read_next_bin(float &val);
+	// Bulk read multiple bins into buffer, returns number of bins actually read
+	int64_t read_bins_bulk(int64_t start_bin, int64_t num_bins, std::vector<float> &vals);
 	void write_next_bin(float val);
 	void write_next_bins(float *vals, uint64_t num_vals);
 
