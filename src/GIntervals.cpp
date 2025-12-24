@@ -5,18 +5,15 @@
 
 void GIntervals::sort(bool (*cmp_function)(const GInterval &, const GInterval &))
 {
-	// if the intervals are empty do not sort 
+	// if the intervals are empty do not sort
 	if (empty()){
 		return;
 	}
-	
-	// do not sort automatically, check first that the intervals are not sorted yet
-	for (iterator iinterv = begin() + 1; iinterv < end(); ++iinterv) {
-		if (cmp_function(*iinterv, *(iinterv - 1))) {
-			std::sort(begin(), end(), cmp_function);
-			break;
-		}
-	}	
+
+	// Only sort if not already sorted (std::is_sorted may have better optimizations)
+	if (!std::is_sorted(begin(), end(), cmp_function)) {
+		std::sort(begin(), end(), cmp_function);
+	}
 }
 
 // intervs are expected to be already sorted
@@ -105,71 +102,46 @@ void GIntervals::unify(const GIntervals &intervs1, const GIntervals &intervs2, G
 	res_intervs.unify_overlaps();
 }
 
-void GIntervals::intersect(const GIntervals &_intervs1, const GIntervals &_intervs2, GIntervals &res_intervs)
+void GIntervals::intersect(const GIntervals &intervs1, const GIntervals &intervs2, GIntervals &res_intervs)
 {
-	GIntervals intervs[] = { _intervs1, _intervs2 };  // yes, we want to copy the intervals (we are going to change them)
-	iterator iintervs[2] = { intervs[0].begin(), intervs[1].begin() };
+	// use local state to track virtual start positions
+	// instead of copying entire input vectors
+	const_iterator iintervs[2] = { intervs1.begin(), intervs2.begin() };
+	const_iterator intervends[2] = { intervs1.end(), intervs2.end() };
+	// Virtual start positions - allows "modifying" interval starts without copying
+	int64_t virt_start[2] = { 0, 0 };
+	bool use_virt[2] = { false, false };
 	int last_chromid[2] = { -1, -1 };
 	int idx = 0;
 
 	res_intervs.clear();
-	while (iintervs[0] != intervs[0].end() && iintervs[1] != intervs[1].end()) {
+	while (iintervs[0] != intervends[0] && iintervs[1] != intervends[1]) {
+		// Get effective start positions (use virtual if set, otherwise actual)
+		int64_t eff_start0 = use_virt[0] ? virt_start[0] : iintervs[0]->start;
+		int64_t eff_start1 = use_virt[1] ? virt_start[1] : iintervs[1]->start;
+
 		if (iintervs[0]->chromid == iintervs[1]->chromid) {
-			if (iintervs[0]->start < iintervs[1]->start && iintervs[0]->end <= iintervs[1]->start)
+			if (eff_start0 < eff_start1 && iintervs[0]->end <= eff_start1) {
 				++iintervs[0];
-			else if (iintervs[1]->start < iintervs[0]->start && iintervs[1]->end <= iintervs[0]->start)
+				use_virt[0] = false;
+			}
+			else if (eff_start1 < eff_start0 && iintervs[1]->end <= eff_start0) {
 				++iintervs[1];
+				use_virt[1] = false;
+			}
 			else { // intervals intersect
-				int64_t start = max(iintervs[0]->start, iintervs[1]->start);
+				int64_t start = max(eff_start0, eff_start1);
 				int64_t end = min(iintervs[0]->end, iintervs[1]->end);
 
 				res_intervs.push_back(GInterval(iintervs[0]->chromid, start, end, 0));
 				for (int i = 0; i < 2; i++) {
-					if (iintervs[i]->end == end)
+					if (iintervs[i]->end == end) {
 						++iintervs[i];
-					else
-						iintervs[i]->start = end;
-				}
-			}
-		} else {
-			if (last_chromid[0] != iintervs[0]->chromid || last_chromid[1] != iintervs[1]->chromid) {
-				idx = compare_by_start_coord(*iintervs[0], *iintervs[1]) ? 0 : 1;
-				last_chromid[0] = iintervs[0]->chromid;
-				last_chromid[1] = iintervs[1]->chromid;
-			} else
-				++iintervs[idx];
-		}
-	}
-}
-
-void GIntervals::diff(const GIntervals &_intervs1, const GIntervals &_intervs2, GIntervals &res_intervs)
-{
-	GIntervals intervs[] = { _intervs1, _intervs2 };  // yes, we want to copy the intervals (we are going to change them)
-	iterator iintervs[] = { intervs[0].begin(), intervs[1].begin() };
-	int last_chromid[] = { -1, -1 };
-	int idx = 0;
-
-	res_intervs.clear();
-	while (iintervs[0] != intervs[0].end() && iintervs[1] != intervs[1].end()) {
-		if (iintervs[0]->chromid == iintervs[1]->chromid) {
-			if (iintervs[0]->start < iintervs[1]->start && iintervs[0]->end <= iintervs[1]->start) {
-				res_intervs.push_back(*iintervs[0]);
-				++iintervs[0];
-			}
-			else if (iintervs[1]->start < iintervs[0]->start && iintervs[1]->end <= iintervs[0]->start)
-				++iintervs[1];
-			else { // intervals intersect
-				int64_t intersect_start = max(iintervs[0]->start, iintervs[1]->start);
-				int64_t intersect_end = min(iintervs[0]->end, iintervs[1]->end);
-
-				if (iintervs[0]->start < intersect_start)
-					res_intervs.push_back(GInterval(iintervs[0]->chromid, iintervs[0]->start, intersect_start, 0));
-
-				for (int i = 0; i < 2; i++) {
-					if (iintervs[i]->end == intersect_end)
-						++iintervs[i];
-					else
-						iintervs[i]->start = intersect_end;
+						use_virt[i] = false;
+					} else {
+						virt_start[i] = end;
+						use_virt[i] = true;
+					}
 				}
 			}
 		} else {
@@ -178,15 +150,83 @@ void GIntervals::diff(const GIntervals &_intervs1, const GIntervals &_intervs2, 
 				last_chromid[0] = iintervs[0]->chromid;
 				last_chromid[1] = iintervs[1]->chromid;
 			} else {
-				if (!idx)
-					res_intervs.push_back(*iintervs[0]);
 				++iintervs[idx];
+				use_virt[idx] = false;
+			}
+		}
+	}
+}
+
+void GIntervals::diff(const GIntervals &intervs1, const GIntervals &intervs2, GIntervals &res_intervs)
+{
+	// Optimized version: use local state to track virtual start positions
+	// instead of copying entire input vectors
+	const_iterator iintervs[2] = { intervs1.begin(), intervs2.begin() };
+	const_iterator intervends[2] = { intervs1.end(), intervs2.end() };
+	// Virtual start positions - allows "modifying" interval starts without copying
+	int64_t virt_start[2] = { 0, 0 };
+	bool use_virt[2] = { false, false };
+	int last_chromid[2] = { -1, -1 };
+	int idx = 0;
+
+	res_intervs.clear();
+	while (iintervs[0] != intervends[0] && iintervs[1] != intervends[1]) {
+		// Get effective start positions (use virtual if set, otherwise actual)
+		int64_t eff_start0 = use_virt[0] ? virt_start[0] : iintervs[0]->start;
+		int64_t eff_start1 = use_virt[1] ? virt_start[1] : iintervs[1]->start;
+
+		if (iintervs[0]->chromid == iintervs[1]->chromid) {
+			if (eff_start0 < eff_start1 && iintervs[0]->end <= eff_start1) {
+				res_intervs.push_back(GInterval(iintervs[0]->chromid, eff_start0, iintervs[0]->end, 0));
+				++iintervs[0];
+				use_virt[0] = false;
+			}
+			else if (eff_start1 < eff_start0 && iintervs[1]->end <= eff_start0) {
+				++iintervs[1];
+				use_virt[1] = false;
+			}
+			else { // intervals intersect
+				int64_t intersect_start = max(eff_start0, eff_start1);
+				int64_t intersect_end = min(iintervs[0]->end, iintervs[1]->end);
+
+				if (eff_start0 < intersect_start)
+					res_intervs.push_back(GInterval(iintervs[0]->chromid, eff_start0, intersect_start, 0));
+
+				for (int i = 0; i < 2; i++) {
+					if (iintervs[i]->end == intersect_end) {
+						++iintervs[i];
+						use_virt[i] = false;
+					} else {
+						virt_start[i] = intersect_end;
+						use_virt[i] = true;
+					}
+				}
+			}
+		} else {
+			if (last_chromid[0] != iintervs[0]->chromid || last_chromid[1] != iintervs[1]->chromid) {
+				idx = compare_by_start_coord(*iintervs[0], *iintervs[1]) ? 0 : 1;
+				last_chromid[0] = iintervs[0]->chromid;
+				last_chromid[1] = iintervs[1]->chromid;
+			} else {
+				if (!idx) {
+					int64_t eff_start = use_virt[0] ? virt_start[0] : iintervs[0]->start;
+					res_intervs.push_back(GInterval(iintervs[0]->chromid, eff_start, iintervs[0]->end, 0));
+				}
+				++iintervs[idx];
+				use_virt[idx] = false;
 			}
 		}
 	}
 
-	for (const_iterator iinterv = iintervs[0]; iinterv != intervs[0].end(); ++iinterv)
-		res_intervs.push_back(*iinterv);
+	// Append remaining intervals from intervs1 (with virtual start if applicable)
+	if (iintervs[0] != intervends[0]) {
+		if (use_virt[0]) {
+			res_intervs.push_back(GInterval(iintervs[0]->chromid, virt_start[0], iintervs[0]->end, 0));
+			++iintervs[0];
+		}
+		for (const_iterator iinterv = iintervs[0]; iinterv != intervends[0]; ++iinterv)
+			res_intervs.push_back(*iinterv);
+	}
 }
 
 const GInterval *GIntervals::containing_interval(const GInterval &interv)

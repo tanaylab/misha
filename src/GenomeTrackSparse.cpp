@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstring>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -105,18 +106,40 @@ void GenomeTrackSparse::read_file_into_mem()
 	m_intervals.resize(m_num_records);
 	m_vals.resize(m_num_records);
 
+	if (m_num_records == 0) {
+		m_icur_interval = m_intervals.begin();
+		m_loaded = true;
+		return;
+	}
+
+	// Bulk read 
+	const size_t total_bytes = m_num_records * kSparseRecBytes;
+	std::vector<char> buffer(total_bytes);
+
+	uint64_t bytes_read = m_bfile.read(buffer.data(), total_bytes);
+	if (bytes_read != total_bytes) {
+		if (m_bfile.error())
+			TGLError<GenomeTrackSparse>("Failed to read a sparse track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+		TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s (expected %zu bytes, got %llu)",
+			m_bfile.file_name().c_str(), total_bytes, (unsigned long long)bytes_read);
+	}
+
+	// Parse buffer into intervals and values
+	const char *ptr = buffer.data();
 	for (int64_t i = 0; i < m_num_records; ++i) {
 		GInterval &interval = m_intervals[i];
 
-		uint64_t r1 = m_bfile.read(&interval.start, sizeof(int64_t));
-		uint64_t r2 = m_bfile.read(&interval.end, sizeof(int64_t));
-		uint64_t r3 = m_bfile.read(&m_vals[i], sizeof(float));
+		// Read start (int64_t)
+		memcpy(&interval.start, ptr, sizeof(int64_t));
+		ptr += sizeof(int64_t);
 
-		if (r1 != sizeof(int64_t) || r2 != sizeof(int64_t) || r3 != sizeof(float)) {
-			if (m_bfile.error())
-				TGLError<GenomeTrackSparse>("Failed to read a sparse track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
-			TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s", m_bfile.file_name().c_str());
-		}
+		// Read end (int64_t)
+		memcpy(&interval.end, ptr, sizeof(int64_t));
+		ptr += sizeof(int64_t);
+
+		// Read val (float)
+		memcpy(&m_vals[i], ptr, sizeof(float));
+		ptr += sizeof(float);
 
 		if (isinf(m_vals[i])) {
 			m_vals[i] = numeric_limits<float>::quiet_NaN();
