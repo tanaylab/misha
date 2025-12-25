@@ -1,6 +1,8 @@
 # misha 5.3.4
 
 * Added `dataframe` and `names` parameters to `gdist` function that return a data frame instead of an N-dimensional vector.
+* Added `gcanvas.train`, `gcanvas.sample` and `gcanvas.save` functions that train a Markov model from a genome sequence and sample a synthetic genome from the model
+* Added `gseq.kmer.dist` function that counts the number of occurrences of k-mers in genomic intervals.
 
 # misha 5.3.3
 
