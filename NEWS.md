@@ -1,3 +1,7 @@
+# misha 5.3.4
+
+* Added `dataframe` and `names` parameters to `gdist` function that return a data frame instead of an N-dimensional vector.
+
 # misha 5.3.3
 
 * Allow a vector of sizes in `gintervals.normalize`.
