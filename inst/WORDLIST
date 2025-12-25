@@ -20,6 +20,7 @@ FIELDNAME
 GAPPLY
 GBINSIZE
 GBUFSIZE
+GC
 GERROR
 GINTERVID
 GINTERVS
@@ -112,6 +113,7 @@ gbins
 gbuf
 gcachemult
 gcachemultires
+gcanvas
 gcc
 gcis
 gcluster
