@@ -18,7 +18,7 @@ bins."><!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/mathj
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.3</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.4</span>
       </span>
     </div>
 
@@ -76,7 +76,9 @@ bins.</p>
 <span>  intervals <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  include.lowest <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  iterator <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  band <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  band <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  dataframe <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  names <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -105,10 +107,18 @@ implicitly based on track expressions.</p></dd>
 <dt id="arg-band">band<a class="anchor" aria-label="anchor" href="#arg-band"></a></dt>
 <dd><p>track expression band. If 'NULL' no band is used.</p></dd>
 
+
+<dt id="arg-dataframe">dataframe<a class="anchor" aria-label="anchor" href="#arg-dataframe"></a></dt>
+<dd><p>return a data frame instead of an N-dimensional vector.</p></dd>
+
+
+<dt id="arg-names">names<a class="anchor" aria-label="anchor" href="#arg-names"></a></dt>
+<dd><p>names for track expressions in the returned dataframe (only relevant when <code>dataframe == TRUE</code>)</p></dd>
+
 </dl></div>
     <div id="value">
     <h2>Value</h2>
-    <p>N-dimensional vector where N is the number of 'expr'-'breaks' pairs.</p>
+    <p>N-dimensional vector where N is the number of 'expr'-'breaks' pairs. If <code>dataframe == TRUE</code> - a data frame with a column for each track expression and an additional column 'n' with counts.</p>
     </div>
     <div id="details">
     <h2>Details</h2>
