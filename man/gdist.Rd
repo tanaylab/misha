@@ -9,7 +9,9 @@ gdist(
   intervals = NULL,
   include.lowest = FALSE,
   iterator = NULL,
-  band = NULL
+  band = NULL,
+  dataframe = FALSE,
+  names = NULL
 )
 }
 \arguments{
@@ -24,9 +26,13 @@ breaks is included}
 implicitly based on track expressions.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
+
+\item{dataframe}{return a data frame instead of an N-dimensional vector.}
+
+\item{names}{names for track expressions in the returned dataframe (only relevant when \code{dataframe == TRUE})}
 }
 \value{
-N-dimensional vector where N is the number of 'expr'-'breaks' pairs.
+N-dimensional vector where N is the number of 'expr'-'breaks' pairs. If \code{dataframe == TRUE} - a data frame with a column for each track expression and an additional column 'n' with counts.
 }
 \description{
 Calculates distribution of track expressions' values over the given set of

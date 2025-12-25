@@ -123,7 +123,9 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 #' @param iterator track expression iterator. If 'NULL' iterator is determined
 #' implicitly based on track expressions.
 #' @param band track expression band. If 'NULL' no band is used.
-#' @return N-dimensional vector where N is the number of 'expr'-'breaks' pairs.
+#' @param dataframe return a data frame instead of an N-dimensional vector.
+#' @param names names for track expressions in the returned dataframe (only relevant when \code{dataframe == TRUE})
+#' @return N-dimensional vector where N is the number of 'expr'-'breaks' pairs. If \code{dataframe == TRUE} - a data frame with a column for each track expression and an additional column 'n' with counts.
 #' @seealso \code{\link{gextract}}
 #' @keywords ~distribution
 #' @examples
@@ -145,10 +147,10 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 #' )
 #'
 #' @export gdist
-gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL, band = NULL) {
+gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL, band = NULL, dataframe = FALSE, names = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
     if (length(args) < 2 || (length(args) %% 2 != 0 && (length(args) - 1) %% 2 != 0)) {
-        stop("Usage: gdist([expr, breaks]+, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL)", call. = FALSE)
+        stop("Usage: gdist([expr, breaks]+, intervals = .misha$ALLGENOME, include.lowest = FALSE, iterator = NULL, band = NULL, dataframe = FALSE, names = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -178,73 +180,14 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
         res <- .gcall("gtrackdist", intervals, exprs, breaks, include.lowest, .iterator, band, .misha_env())
     }
     attr(res, "breaks") <- breaks
+
+    if (dataframe) {
+        res <- as.data.frame.table(res)
+        if (is.null(names)) {
+            names <- exprs
+        }
+        colnames(res) <- c(names, "n")
+    }
+
     res
 }
-
-
-#' Returns evaluated track expression
-#'
-#' Returns the result of track expressions evaluation for each of the iterator
-#' intervals.
-#'
-#' This function returns the result of track expressions evaluation for each of
-#' the iterator intervals. The returned value is a set of intervals with an
-#' additional column for each of the track expressions. This value can be used
-#' as an input for any other function that accepts intervals. If the intervals
-#' inside 'intervals' argument overlap gextract returns the overlapped
-#' coordinate more than once.
-#'
-#' The order inside the result might not be the same as the order of intervals.
-#' An additional column 'intervalID' is added to the return value. Use this
-#' column to refer to the index of the original interval from the supplied
-#' 'intervals'.
-#'
-#' If 'file' parameter is not 'NULL' the result is outputted to a tab-delimited
-#' text file (without 'intervalID' column) rather than returned to the user.
-#' This can be especially useful when the result is too big to fit into the
-#' physical memory.  The resulted file can be used as an input for
-#' 'gtrack.import' or 'gtrack.array.import' functions.
-#'
-#' If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
-#' set. Similarly to 'file' parameter 'intervals.set.out' can be useful to
-#' overcome the limits of the physical memory.
-#'
-#' 'colnames' parameter controls the names of the columns that contain the
-#' evaluated expressions. By default the column names match the track
-#' expressions.
-#'
-#' @param ... track expression
-#' @param intervals genomic scope for which the function is applied
-#' @param colnames sets the columns names in the returned value. If 'NULL'
-#' names are set to track expression.
-#' @param iterator track expression iterator. If 'NULL' iterator is determined
-#' implicitly based on track expressions.
-#' @param band track expression band. If 'NULL' no band is used.
-#' @param file file name where the function result is optionally outputted in
-#' tab-delimited format
-#' @param intervals.set.out intervals set name where the function result is
-#' optionally outputted
-#' @return If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
-#' an additional column for each of the track expressions and 'columnID'
-#' column.
-#' @seealso \code{\link{gtrack.array.extract}}, \code{\link{gsample}},
-#' \code{\link{gtrack.import}}, \code{\link{gtrack.array.import}},
-#' \code{\link{glookup}}, \code{\link{gpartition}}, \code{\link{gdist}}
-#' @keywords ~extract
-#' @examples
-#' \dontshow{
-#' options(gmax.processes = 2)
-#' }
-#'
-#' gdb.init_examples()
-#'
-#' ## get values of 'dense_track' for [0, 400), chrom 1
-#' gextract("dense_track", gintervals(1, 0, 400))
-#'
-#' ## get values of 'rects_track' (a 2D track) for a 2D interval
-#' gextract(
-#'     "rects_track",
-#'     gintervals.2d("chr1", 0, 4000, "chr2", 2000, 5000)
-#' )
-#'
-#' @export gextract
