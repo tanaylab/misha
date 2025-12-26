@@ -511,3 +511,65 @@ gseq.kmer <- function(seqs,
 
     return(result)
 }
+
+#' Compute k-mer distribution in genomic intervals
+#'
+#' Counts the occurrence of all k-mers (of size k) within the specified
+#' genomic intervals, optionally excluding masked regions.
+#'
+#' @param intervals Genomic intervals to analyze
+#' @param k Integer k-mer size (1-10). Default is 6.
+#' @param mask Optional intervals to exclude from counting. Positions within
+#'        the mask will not contribute to k-mer counts.
+#'
+#' @return A data frame with columns:
+#'   \describe{
+#'     \item{kmer}{Character string representing the k-mer sequence}
+#'     \item{count}{Number of occurrences of this k-mer}
+#'   }
+#'   Only k-mers with count > 0 are included. K-mers containing N bases
+#'   are not counted.
+#'
+#' @examples
+#' gdb.init_examples()
+#'
+#' # Count all 6-mers in first 10kb of chr1
+#' intervals <- data.frame(chrom = "chr1", start = 0, end = 10000)
+#' kmer_dist <- gseq.kmer.dist(intervals, k = 6)
+#' head(kmer_dist)
+#'
+#' # Count dinucleotides
+#' dinucs <- gseq.kmer.dist(intervals, k = 2)
+#' dinucs
+#'
+#' # Count with mask
+#' mask <- data.frame(chrom = "chr1", start = 5000, end = 6000)
+#' kmer_dist_masked <- gseq.kmer.dist(intervals, k = 6, mask = mask)
+#'
+#' @seealso \code{\link{gseq.extract}}, \code{\link{gseq.kmer}}
+#' @export
+gseq.kmer.dist <- function(intervals, k = 6L, mask = NULL) {
+    .gcheckroot()
+
+    # Validate k
+    k <- as.integer(k)
+    if (length(k) != 1 || is.na(k) || k < 1 || k > 10) {
+        stop("k must be an integer between 1 and 10", call. = FALSE)
+    }
+
+    # Validate intervals
+    if (is.null(intervals) || !is.data.frame(intervals)) {
+        stop("intervals must be a data frame", call. = FALSE)
+    }
+
+    # Call C++ implementation
+    result <- .gcall(
+        "C_gseq_kmer_dist",
+        intervals,
+        k,
+        mask,
+        .misha_env()
+    )
+
+    result
+}

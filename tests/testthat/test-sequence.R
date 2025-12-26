@@ -1629,3 +1629,454 @@ test_that("gseq.pwm matches prego::compute_pwm: vectorized sequences", {
     gseq_results <- gseq.pwm(seqs, ctcf_mot, mode = "max", prior = 0.01, skip_gaps = FALSE)
     expect_equal(gseq_results, as.numeric(prego_results), tolerance = 1e-4)
 })
+
+# Tests for gseq.kmer.dist ------------------------------------------------
+
+test_that("gseq.kmer.dist counts k-mers correctly", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    # Test k=1 (monomers)
+    result <- gseq.kmer.dist(intervals, k = 1)
+    expect_equal(nrow(result), 4) # A, C, G, T
+    expect_equal(sum(result$count), 1000) # 1000 positions
+    expect_true(all(c("A", "C", "G", "T") %in% result$kmer))
+
+    # Test k=2 (dinucleotides)
+    result <- gseq.kmer.dist(intervals, k = 2)
+    expect_equal(nrow(result), 16) # 4^2 = 16
+    expect_equal(sum(result$count), 999) # 1000 - k + 1 = 999
+
+    # Test k=3 (trinucleotides)
+    result <- gseq.kmer.dist(intervals, k = 3)
+    expect_equal(sum(result$count), 998) # 1000 - k + 1 = 998
+})
+
+test_that("gseq.kmer.dist validates k parameter", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    expect_error(gseq.kmer.dist(intervals, k = 0), "k must be an integer between 1 and 10")
+    expect_error(gseq.kmer.dist(intervals, k = 11), "k must be an integer between 1 and 10")
+    expect_error(gseq.kmer.dist(intervals, k = -1), "k must be an integer between 1 and 10")
+})
+
+test_that("gseq.kmer.dist mask excludes positions correctly", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    # Without mask
+    result_no_mask <- gseq.kmer.dist(intervals, k = 3)
+    total_no_mask <- sum(result_no_mask$count)
+
+    # With mask that covers 100 bp
+    mask <- data.frame(chrom = "chr1", start = 500, end = 600)
+    result_with_mask <- gseq.kmer.dist(intervals, k = 3, mask = mask)
+    total_with_mask <- sum(result_with_mask$count)
+
+    # Mask should reduce the count by exactly 100 positions
+    expect_equal(total_no_mask - total_with_mask, 100)
+})
+
+test_that("gseq.kmer.dist handles multiple intervals", {
+    gdb.init_examples()
+    # Two disjoint intervals
+    intervals <- data.frame(
+        chrom = c("chr1", "chr1"),
+        start = c(0, 2000),
+        end = c(1000, 3000)
+    )
+
+    result <- gseq.kmer.dist(intervals, k = 2)
+    # 2 intervals x (1000 - 1) = 1998 dinucleotides
+    expect_equal(sum(result$count), 1998)
+})
+
+test_that("gseq.kmer.dist handles multiple chromosomes", {
+    gdb.init_examples()
+    intervals <- data.frame(
+        chrom = c("chr1", "chr2"),
+        start = c(0, 0),
+        end = c(1000, 1000)
+    )
+
+    result <- gseq.kmer.dist(intervals, k = 1)
+    expect_equal(sum(result$count), 2000)
+})
+
+test_that("gseq.kmer.dist returns correct data frame structure", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    result <- gseq.kmer.dist(intervals, k = 4)
+
+    expect_true(is.data.frame(result))
+    expect_equal(names(result), c("kmer", "count"))
+    expect_true(is.character(result$kmer))
+    expect_true(is.numeric(result$count))
+    expect_true(all(nchar(result$kmer) == 4)) # All k-mers have length k
+})
+
+test_that("gseq.kmer.dist only returns non-zero counts", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 100)
+
+    result <- gseq.kmer.dist(intervals, k = 5)
+
+    # With only 100bp, not all 4^5 = 1024 possible 5-mers will appear
+    expect_lt(nrow(result), 1024)
+    expect_true(all(result$count > 0))
+})
+
+test_that("gseq.kmer.dist handles interval shorter than k", {
+    gdb.init_examples()
+
+    # Interval of 3bp with k=6 should return empty result
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 3)
+    result <- gseq.kmer.dist(intervals, k = 6)
+    expect_equal(nrow(result), 0)
+    expect_equal(sum(result$count), 0)
+
+    # Interval of 5bp with k=6 should return empty result
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 5)
+    result <- gseq.kmer.dist(intervals, k = 6)
+    expect_equal(nrow(result), 0)
+
+    # Interval of 6bp with k=6 should return exactly 1 k-mer
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 6)
+    result <- gseq.kmer.dist(intervals, k = 6)
+    expect_equal(sum(result$count), 1)
+})
+
+test_that("gseq.kmer.dist matches manual counting from gseq.extract", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 500)
+
+    # Get sequence (gseq.extract returns a character vector in lowercase)
+    seq <- toupper(gseq.extract(intervals)[1])
+
+    # Count dinucleotides manually
+    manual_counts <- list()
+    for (i in 1:(nchar(seq) - 1)) {
+        dinuc <- substr(seq, i, i + 1)
+        if (!grepl("N", dinuc)) {
+            if (is.null(manual_counts[[dinuc]])) {
+                manual_counts[[dinuc]] <- 0
+            }
+            manual_counts[[dinuc]] <- manual_counts[[dinuc]] + 1
+        }
+    }
+
+    # Get counts from gseq.kmer.dist
+    result <- gseq.kmer.dist(intervals, k = 2)
+    result_list <- setNames(as.list(result$count), result$kmer)
+
+    # Compare
+    for (kmer in names(manual_counts)) {
+        expect_equal(result_list[[kmer]], manual_counts[[kmer]],
+            info = sprintf("Mismatch for k-mer %s", kmer)
+        )
+    }
+})
+
+test_that("gseq.kmer.dist handles mask at interval boundaries", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 100, end = 200)
+
+    # Mask at the beginning of interval [100, 120)
+    mask_start <- data.frame(chrom = "chr1", start = 100, end = 120)
+    result_mask_start <- gseq.kmer.dist(intervals, k = 2, mask = mask_start)
+
+    # Mask at the end of interval [180, 200)
+    mask_end <- data.frame(chrom = "chr1", start = 180, end = 200)
+    result_mask_end <- gseq.kmer.dist(intervals, k = 2, mask = mask_end)
+
+    result_no_mask <- gseq.kmer.dist(intervals, k = 2)
+    # Without mask: 99 dinucleotides (positions 100-198)
+    expect_equal(sum(result_no_mask$count), 99)
+
+    # Mask at start [100, 120) covers dinucleotide starts at 100-119 = 20 positions
+    expect_equal(sum(result_no_mask$count) - sum(result_mask_start$count), 20)
+
+    # Mask at end [180, 200) covers dinucleotide starts at 180-198 = 19 positions
+    # (position 199 can't start a dinucleotide in interval ending at 200)
+    expect_equal(sum(result_no_mask$count) - sum(result_mask_end$count), 19)
+})
+
+test_that("gseq.kmer.dist handles overlapping intervals correctly", {
+    gdb.init_examples()
+
+    # Two overlapping intervals
+    intervals <- data.frame(
+        chrom = c("chr1", "chr1"),
+        start = c(0, 500),
+        end = c(1000, 1500)
+    )
+
+    result <- gseq.kmer.dist(intervals, k = 2)
+
+    # Should count k-mers from both intervals (including overlap region twice)
+    # Total: (1000-1) + (1000-1) = 1998 dinucleotides
+    expect_equal(sum(result$count), 1998)
+})
+
+test_that("gseq.kmer.dist handles multiple mask intervals", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    # Multiple mask regions
+    mask <- data.frame(
+        chrom = c("chr1", "chr1", "chr1"),
+        start = c(100, 300, 700),
+        end = c(150, 400, 800)
+    )
+
+    result_no_mask <- gseq.kmer.dist(intervals, k = 3)
+    result_with_mask <- gseq.kmer.dist(intervals, k = 3, mask = mask)
+
+    # Total masked: 50 + 100 + 100 = 250
+    expected_diff <- 250
+    actual_diff <- sum(result_no_mask$count) - sum(result_with_mask$count)
+    expect_equal(actual_diff, expected_diff)
+})
+
+test_that("gseq.kmer.dist with k=10 works", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    result <- gseq.kmer.dist(intervals, k = 10)
+
+    # Should have 1000 - 10 + 1 = 991 10-mers
+    expect_equal(sum(result$count), 991)
+    expect_true(all(nchar(result$kmer) == 10))
+})
+
+test_that("gseq.kmer.dist with gintervals.all works", {
+    gdb.init_examples()
+
+    result <- gseq.kmer.dist(gintervals.all(), k = 2)
+
+    # Should have all 16 dinucleotides
+    expect_equal(nrow(result), 16)
+
+    # Total should be positive and less than or equal to sum of (chrom_size - 1)
+    # (may be less if there are N's in the sequence)
+    all_intervals <- gintervals.all()
+    max_possible <- sum(all_intervals$end - all_intervals$start - 1)
+    expect_gt(sum(result$count), 0)
+    expect_lte(sum(result$count), max_possible)
+})
+
+test_that("gseq.kmer.dist k-mer strings are sorted alphabetically", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 10000)
+
+    result <- gseq.kmer.dist(intervals, k = 3)
+
+    # Check that the result is sorted by kmer
+    expect_equal(result$kmer, sort(result$kmer))
+})
+
+test_that("gseq.kmer.dist handles mask on different chromosome", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    # Mask on chr2 should have no effect on chr1 intervals
+    mask <- data.frame(chrom = "chr2", start = 0, end = 500)
+
+    result_no_mask <- gseq.kmer.dist(intervals, k = 2)
+    result_with_mask <- gseq.kmer.dist(intervals, k = 2, mask = mask)
+
+    expect_equal(sum(result_no_mask$count), sum(result_with_mask$count))
+})
+
+test_that("gseq.kmer.dist is deterministic", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 5000)
+
+    result1 <- gseq.kmer.dist(intervals, k = 4)
+    result2 <- gseq.kmer.dist(intervals, k = 4)
+
+    expect_identical(result1, result2)
+})
+
+test_that("gseq.kmer.dist handles adjacent intervals", {
+    gdb.init_examples()
+
+    # Two adjacent intervals
+    intervals_adjacent <- data.frame(
+        chrom = c("chr1", "chr1"),
+        start = c(0, 1000),
+        end = c(1000, 2000)
+    )
+
+    # One continuous interval
+    intervals_continuous <- data.frame(chrom = "chr1", start = 0, end = 2000)
+
+    result_adjacent <- gseq.kmer.dist(intervals_adjacent, k = 3)
+    result_continuous <- gseq.kmer.dist(intervals_continuous, k = 3)
+
+    # Adjacent should have 2 fewer k-mers (one at each boundary)
+    expect_equal(
+        sum(result_continuous$count) - sum(result_adjacent$count),
+        2
+    )
+})
+
+test_that("gseq.kmer.dist with mask covering entire interval returns empty", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 100, end = 200)
+    mask <- data.frame(chrom = "chr1", start = 0, end = 500)
+
+    result <- gseq.kmer.dist(intervals, k = 2, mask = mask)
+
+    expect_equal(nrow(result), 0)
+    expect_equal(sum(result$count), 0)
+})
+
+test_that("gseq.kmer.dist k-mer counts are consistent across k values", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    # Monomers should sum to interval length
+    mono <- gseq.kmer.dist(intervals, k = 1)
+    expect_equal(sum(mono$count), 1000)
+
+    # Each k should have (length - k + 1) k-mers
+    for (k in 2:6) {
+        result <- gseq.kmer.dist(intervals, k = k)
+        expect_equal(sum(result$count), 1000 - k + 1,
+            info = sprintf("Failed for k=%d", k)
+        )
+    }
+})
+
+test_that("gseq.kmer.dist frequencies sum correctly", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 10000)
+
+    result <- gseq.kmer.dist(intervals, k = 3)
+
+    # Convert to frequencies
+    freqs <- result$count / sum(result$count)
+
+    # Frequencies should sum to 1
+    expect_equal(sum(freqs), 1, tolerance = 1e-10)
+})
+
+test_that("gseq.kmer.dist handles very small intervals", {
+    gdb.init_examples()
+
+    # Interval of length 1 with k=2 should return empty result
+    intervals <- data.frame(chrom = "chr1", start = 100, end = 101)
+    result <- gseq.kmer.dist(intervals, k = 2)
+
+    expect_equal(nrow(result), 0)
+    expect_equal(sum(result$count), 0)
+})
+
+test_that("gseq.kmer.dist reverse complement k-mers are counted separately", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 10000)
+
+    result <- gseq.kmer.dist(intervals, k = 2)
+
+    # AT and AT are same, but CG and CG are different from GC
+    # AA and TT are reverse complements
+    aa_count <- result$count[result$kmer == "AA"]
+    tt_count <- result$count[result$kmer == "TT"]
+
+    # They should be counted separately (not combined)
+    expect_true(aa_count > 0)
+    expect_true(tt_count > 0)
+})
+
+test_that("gseq.kmer.dist handles unsorted intervals", {
+    gdb.init_examples()
+
+    # Unsorted intervals
+    intervals_unsorted <- data.frame(
+        chrom = c("chr1", "chr1"),
+        start = c(2000, 0),
+        end = c(3000, 1000)
+    )
+
+    # Sorted intervals
+    intervals_sorted <- data.frame(
+        chrom = c("chr1", "chr1"),
+        start = c(0, 2000),
+        end = c(1000, 3000)
+    )
+
+    result_unsorted <- gseq.kmer.dist(intervals_unsorted, k = 2)
+    result_sorted <- gseq.kmer.dist(intervals_sorted, k = 2)
+
+    # Should give same results
+    expect_equal(sum(result_unsorted$count), sum(result_sorted$count))
+})
+
+test_that("gseq.kmer.dist handles mask larger than interval", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 500, end = 600)
+    mask <- data.frame(chrom = "chr1", start = 0, end = 1000)
+
+    result <- gseq.kmer.dist(intervals, k = 2, mask = mask)
+
+    expect_equal(nrow(result), 0)
+})
+
+test_that("gseq.kmer.dist handles partial mask overlap", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 100)
+
+    # Mask overlaps only partially [50, 150)
+    mask <- data.frame(chrom = "chr1", start = 50, end = 150)
+
+    result_no_mask <- gseq.kmer.dist(intervals, k = 2)
+    result_with_mask <- gseq.kmer.dist(intervals, k = 2, mask = mask)
+
+    # For k=2, positions 0-98 can start a dinucleotide (99 total)
+    # Mask covers positions 50-99 in our interval
+    # K-mers starting at positions 50-98 are masked (49 k-mers)
+    expect_equal(sum(result_no_mask$count) - sum(result_with_mask$count), 49)
+})
+
+test_that("gseq.kmer.dist with all possible k values", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 100)
+
+    for (k in 1:10) {
+        result <- gseq.kmer.dist(intervals, k = k)
+
+        # All k-mers should have correct length
+        expect_true(all(nchar(result$kmer) == k),
+            info = sprintf("k=%d has wrong k-mer lengths", k)
+        )
+
+        # Total count should be length - k + 1 (if >= k)
+        expected <- max(0, 100 - k + 1)
+        expect_equal(sum(result$count), expected,
+            info = sprintf("k=%d has wrong total count", k)
+        )
+    }
+})
+
+test_that("gseq.kmer.dist GC content matches monomer frequencies", {
+    gdb.init_examples()
+    intervals <- data.frame(chrom = "chr1", start = 0, end = 10000)
+
+    result <- gseq.kmer.dist(intervals, k = 1)
+
+    g_count <- result$count[result$kmer == "G"]
+    c_count <- result$count[result$kmer == "C"]
+    total <- sum(result$count)
+
+    gc_content <- (g_count + c_count) / total
+
+    # Verify this matches what we'd get from sequence
+    # gseq.extract returns lowercase, so uppercase before comparing
+    seq <- toupper(gseq.extract(intervals)[1])
+    gc_from_seq <- (nchar(gsub("[^GC]", "", seq))) / nchar(seq)
+
+    expect_equal(gc_content, gc_from_seq, tolerance = 1e-10)
+})
