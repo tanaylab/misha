@@ -126,6 +126,8 @@ reference:
       - gcanvas.sample
       - gcanvas.save
       - gcanvas.load 
+      - gcanvas.bin_map
+      - print.gcanvas.model
   - title: Database functions
     desc: Database functions
     contents:
