@@ -8,8 +8,7 @@ gcanvas.sample(
   model,
   output_path = NULL,
   output_format = c("misha", "fasta", "vector"),
-  mask = NULL,
-  mask_mode = c("sample", "copy"),
+  mask_copy = NULL,
   seed = NULL,
   intervals = NULL,
   n_samples = 1,
@@ -28,13 +27,10 @@ gcanvas.sample(
   \item "vector": Return sequences as a character vector (does not write to file)
 }}
 
-\item{mask}{Optional intervals for special handling during sampling}
-
-\item{mask_mode}{How to handle masked regions:
-\itemize{
-  \item "sample": Sample masked regions like any other (ignore mask)
-  \item "copy": Copy masked regions from the original genome
-}}
+\item{mask_copy}{Optional intervals to copy from the original genome instead of
+sampling. Use this to preserve specific regions (e.g., repeats, regulatory
+elements) exactly as they appear in the reference. Regions not in mask_copy
+will be sampled using the Markov model.}
 
 \item{seed}{Random seed for reproducibility. If NULL, uses current random state.}
 
@@ -69,13 +65,13 @@ gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
 gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
 gvtrack.create("masked_frac", NULL, "masked.frac")
 
-# Define repeat mask
+# Define repeat mask (regions to preserve from original)
 repeats <- gscreen("masked_frac > 0.5",
     intervals = gintervals.all(),
     iterator = 100
 )
 
-# Train model WITHOUT bin_merge to see all bins
+# Train model (excluding repeats from training)
 model <- gcanvas.train(
     list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.025)),
     list(expr = "cg_frac", breaks = c(0, 0.01, 0.02, 0.03, 0.04, 0.2)),
@@ -84,11 +80,10 @@ model <- gcanvas.train(
     min_obs = 1000
 )
 
-# Sample with bin_merge to handle sparse bins at sampling time
+# Sample with mask_copy to preserve repeats from original genome
 gcanvas.sample(model, "synthetic_genome.fa",
     output_format = "fasta",
-    mask = repeats,
-    mask_mode = "copy",
+    mask_copy = repeats,
     seed = 60427,
     bin_merge = list(
         list(list(from = 0.7, to = c(0.675, 0.7))),
