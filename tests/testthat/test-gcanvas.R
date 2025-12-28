@@ -732,7 +732,7 @@ test_that("gcanvas handles empty bins gracefully", {
     gvtrack.rm("test_vt")
 })
 
-test_that("gcanvas.sample with mask_mode copy preserves original sequence in masked regions", {
+test_that("gcanvas.sample with mask_copy preserves original sequence in masked regions", {
     gdb.init_examples()
 
     if ("test_vt" %in% gvtrack.ls()) {
@@ -752,8 +752,8 @@ test_that("gcanvas.sample with mask_mode copy preserves original sequence in mas
         iterator = 200
     )
 
-    # Define a mask region
-    mask <- gintervals(1, 1000, 2000)
+    # Define a mask_copy region (to preserve from original)
+    mask_copy <- gintervals(1, 1000, 2000)
     sample_intervals <- gintervals(1, 0, 3000)
 
     output_fasta <- tempfile(fileext = ".fa")
@@ -762,8 +762,7 @@ test_that("gcanvas.sample with mask_mode copy preserves original sequence in mas
         output_fasta,
         output_format = "fasta",
         intervals = sample_intervals,
-        mask = mask,
-        mask_mode = "copy",
+        mask_copy = mask_copy,
         seed = 60427
     )
 
@@ -772,7 +771,7 @@ test_that("gcanvas.sample with mask_mode copy preserves original sequence in mas
     sampled_seq <- paste(lines[!grepl("^>", lines)], collapse = "")
 
     # Get original sequence for the mask region (gseq.extract returns character vector)
-    original_seq <- gseq.extract(mask)[1]
+    original_seq <- gseq.extract(mask_copy)[1]
 
     # The mask region (positions 1000-2000 within the 0-3000 interval)
     # should match the original (case-insensitive due to different output formats)

@@ -80,8 +80,7 @@ extern "C" {
  * @param _iter_starts Integer vector of iterator interval start positions
  * @param _iter_chroms Integer vector of iterator interval chromosome IDs
  * @param _intervals R intervals object for output regions
- * @param _mask R intervals object for mask regions (NULL if no mask)
- * @param _mask_mode Integer: 0 = sample (ignore mask), 1 = copy from original
+ * @param _mask_copy R intervals object for regions to copy from original (NULL if none)
  * @param _output_path Output file path (ignored if output_format = 2)
  * @param _output_format Integer: 0 = misha .seq, 1 = FASTA, 2 = return vector
  * @param _n_samples Integer: number of samples to generate per interval
@@ -92,7 +91,7 @@ extern "C" {
  */
 SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                       SEXP _iter_starts, SEXP _iter_chroms, SEXP _intervals,
-                      SEXP _mask, SEXP _mask_mode, SEXP _output_path,
+                      SEXP _mask_copy, SEXP _output_path,
                       SEXP _output_format, SEXP _n_samples, SEXP _envir) {
     try {
         struct RNGStateGuard {
@@ -186,14 +185,13 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
             }
         }
 
-        // Parse mask intervals
-        int mask_mode = Rf_asInteger(_mask_mode);
-        vector<vector<GInterval>> mask_per_chrom;
-        mask_per_chrom.resize(num_chroms);
+        // Parse mask_copy intervals (regions to copy from original genome)
+        vector<vector<GInterval>> mask_copy_per_chrom;
+        mask_copy_per_chrom.resize(num_chroms);
 
-        if (!Rf_isNull(_mask)) {
+        if (!Rf_isNull(_mask_copy)) {
             GIntervalsFetcher1D* mask_intervals = NULL;
-            iu.convert_rintervs(_mask, &mask_intervals, NULL);
+            iu.convert_rintervs(_mask_copy, &mask_intervals, NULL);
             unique_ptr<GIntervalsFetcher1D> mask_guard(mask_intervals);
             mask_intervals->sort();
 
@@ -201,8 +199,8 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                  mask_intervals->next()) {
                 const GInterval& iv = mask_intervals->cur_interval();
                 if (iv.chromid >= 0 &&
-                    iv.chromid < (int)mask_per_chrom.size()) {
-                    mask_per_chrom[iv.chromid].push_back(iv);
+                    iv.chromid < (int)mask_copy_per_chrom.size()) {
+                    mask_copy_per_chrom[iv.chromid].push_back(iv);
                 }
             }
         }
@@ -274,8 +272,8 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
             if (chrom_size <= 0) continue;
 
             const string& chrom_name = chromkey.id2chrom(chromid);
-            const vector<GInterval>& mask_ivs = mask_per_chrom[chromid];
-                const vector<pair<int64_t, int>>& bins = chrom_bins[chromid];
+            const vector<GInterval>& mask_copy_ivs = mask_copy_per_chrom[chromid];
+            const vector<pair<int64_t, int>>& bins = chrom_bins[chromid];
 
             for (size_t iv_idx = 0; iv_idx < sample_ivs.size(); ++iv_idx) {
                 const GInterval& iv = sample_ivs[iv_idx];
@@ -287,9 +285,9 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
 
                 int64_t interval_len = interval_end - interval_start;
 
-                // Load original sequence for mask_mode = copy (only once per interval)
+                // Load original sequence for mask_copy regions (only once per interval)
                 vector<char> original_seq;
-                if (mask_mode == 1 && !mask_ivs.empty()) {
+                if (!mask_copy_ivs.empty()) {
                     GInterval interval(chromid, interval_start, interval_end, 0);
                     seqfetch.read_interval(interval, chromkey, original_seq);
                 }
@@ -309,22 +307,22 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                     vector<char> synth_seq(interval_len);
 
                     size_t mask_cursor = 0;
-                    while (mask_cursor < mask_ivs.size() &&
-                           mask_ivs[mask_cursor].end <= interval_start) {
+                    while (mask_cursor < mask_copy_ivs.size() &&
+                           mask_copy_ivs[mask_cursor].end <= interval_start) {
                         ++mask_cursor;
                     }
 
-                    // Initialize first 5 bases, honoring mask copy semantics.
+                    // Initialize first 5 bases, honoring mask_copy semantics.
                     int64_t init_len = min<int64_t>(5, interval_len);
                     for (int64_t i = 0; i < init_len; ++i) {
                         int64_t pos = interval_start + i;
-                        synth_seq[i] = StratifiedMarkovModel::decode_base(
-                            static_cast<int>(unif_rand() * NUM_BASES));
-                        if (is_masked_sample(pos, mask_ivs, mask_cursor)) {
-                            if (mask_mode == 1 &&
-                                i < (int64_t)original_seq.size()) {
-                                synth_seq[i] = original_seq[i];
-                            }
+                        // Check if this position should be copied from original
+                        if (is_masked_sample(pos, mask_copy_ivs, mask_cursor) &&
+                            i < (int64_t)original_seq.size()) {
+                            synth_seq[i] = original_seq[i];
+                        } else {
+                            synth_seq[i] = StratifiedMarkovModel::decode_base(
+                                static_cast<int>(unif_rand() * NUM_BASES));
                         }
                     }
 
@@ -332,9 +330,8 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                     for (int64_t pos = interval_start + init_len; pos < interval_end; ++pos) {
                         int64_t rel_pos = pos - interval_start;
 
-                        // Check mask only if mask_mode is "copy" (1)
-                        // When mask_mode is "sample" (0), ignore mask and sample normally
-                        if (mask_mode == 1 && is_masked_sample(pos, mask_ivs, mask_cursor)) {
+                        // Check if this position should be copied from original
+                        if (is_masked_sample(pos, mask_copy_ivs, mask_cursor)) {
                             if (rel_pos < (int64_t)original_seq.size()) {
                                 // Copy from original
                                 synth_seq[rel_pos] = original_seq[rel_pos];
