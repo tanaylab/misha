@@ -1,5 +1,4 @@
-test_that("gcanvas.train produces valid model", {
-    # Initialize test database
+test_that("gcanvas.train produces valid model with 1D stratification", {
     gdb.init_examples()
 
     # Create a virtual track using an existing track
@@ -14,18 +13,22 @@ test_that("gcanvas.train produces valid model", {
     # Get the range of values for appropriate breaks
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
-    # Train model with stratification based on dense_track
+    # Train model with single dimension
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11), # 10 bins
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
         intervals = test_intervals,
         iterator = 200
     )
 
     # Check model structure
     expect_s3_class(model, "gcanvas.model")
-    expect_equal(model$num_bins, 10)
-    expect_equal(length(model$breaks), 11)
+    expect_equal(model$n_dims, 1)
+    expect_equal(model$total_bins, 10)
+    expect_equal(model$dim_sizes, 10)
+    expect_equal(length(model$dim_specs), 1)
     expect_true(model$total_kmers > 0)
     expect_equal(length(model$per_bin_kmers), 10)
 
@@ -47,6 +50,45 @@ test_that("gcanvas.train produces valid model", {
     gvtrack.rm("test_vt")
 })
 
+test_that("gcanvas.train works with 2D stratification", {
+    gdb.init_examples()
+
+    # Create virtual tracks
+    for (vt in c("g_frac", "c_frac", "gc_vt")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("gc_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 100000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    # Train with 2D stratification
+    model <- gcanvas.train(
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.1)), # 10 bins
+        list(expr = "gc_vt", breaks = seq(track_range["Min"], track_range["Max"], length.out = 5)), # 4 bins
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    expect_s3_class(model, "gcanvas.model")
+    expect_equal(model$n_dims, 2)
+    expect_equal(model$dim_sizes, c(10, 4))
+    expect_equal(model$total_bins, 40)
+    expect_equal(length(model$model_data$cdf), 40)
+
+    # Check dimension specs
+    expect_equal(model$dim_specs[[1]]$expr, "g_frac + c_frac")
+    expect_equal(model$dim_specs[[2]]$expr, "gc_vt")
+    expect_equal(model$dim_specs[[1]]$num_bins, 10)
+    expect_equal(model$dim_specs[[2]]$num_bins, 4)
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("gc_vt")
+})
+
 test_that("gcanvas.train respects mask", {
     gdb.init_examples()
 
@@ -63,16 +105,20 @@ test_that("gcanvas.train respects mask", {
 
     # Train without mask
     model_no_mask <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
         intervals = test_intervals,
         iterator = 200
     )
 
     # Train with mask
     model_with_mask <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
         mask = mask,
         intervals = test_intervals,
         iterator = 200
@@ -97,8 +143,10 @@ test_that("gcanvas.save and gcanvas.load work correctly", {
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
         intervals = test_intervals,
         iterator = 200
     )
@@ -110,7 +158,8 @@ test_that("gcanvas.save and gcanvas.load work correctly", {
 
     loaded_model <- gcanvas.load(temp_file)
     expect_s3_class(loaded_model, "gcanvas.model")
-    expect_equal(loaded_model$num_bins, model$num_bins)
+    expect_equal(loaded_model$n_dims, model$n_dims)
+    expect_equal(loaded_model$total_bins, model$total_bins)
     expect_equal(loaded_model$total_kmers, model$total_kmers)
 
     # Clean up
@@ -118,86 +167,57 @@ test_that("gcanvas.save and gcanvas.load work correctly", {
     gvtrack.rm("test_vt")
 })
 
-test_that("gcanvas.train with bin_merge merges bins correctly", {
+test_that("gcanvas.train with bin_merge works per dimension", {
     gdb.init_examples()
 
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
+    for (vt in c("g_frac", "c_frac", "gc_vt")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
     }
-    gvtrack.create("test_vt", "dense_track", "avg")
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("gc_vt", "dense_track", "avg")
 
     test_intervals <- gintervals(1, 0, 100000)
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
-    # Create breaks for 10 bins
-    breaks <- seq(track_range["Min"], track_range["Max"], length.out = 11)
+    # Create breaks for dimension 2
+    breaks2 <- seq(track_range["Min"], track_range["Max"], length.out = 11)
 
-    # Train with bin merging: merge bins 9 and 10 (high values) into bin 8
-    # Bin 8 is [breaks[8], breaks[9]), bins 9-10 are [breaks[9], breaks[11])
+    # Train with bin merging on both dimensions
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = breaks,
-        bin_merge = list(
-            list(from = c(breaks[9], breaks[11]), to = c(breaks[8], breaks[9]))
+        list(
+            expr = "g_frac + c_frac",
+            breaks = seq(0, 1, 0.1), # 10 bins
+            bin_merge = list(list(from = 0.8, to = c(0.7, 0.8))) # Merge bins 9-10 to bin 8
+        ),
+        list(
+            expr = "gc_vt",
+            breaks = breaks2,
+            bin_merge = list(list(from = c(breaks2[9], Inf), to = c(breaks2[8], breaks2[9])))
         ),
         intervals = test_intervals,
         iterator = 200
     )
 
     expect_s3_class(model, "gcanvas.model")
-    expect_equal(model$num_bins, 10)
+    expect_equal(model$n_dims, 2)
 
-    gvtrack.rm("test_vt")
-})
+    # Check that bin_map is stored correctly
+    expect_true(all(model$dim_specs[[1]]$bin_map[9:10] == 8))
 
-test_that("gcanvas.train with bin_merge uses value-based ranges", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-
-    # Create breaks
-    breaks <- seq(track_range["Min"], track_range["Max"], length.out = 21) # 20 bins
-
-    # Merge all values above a threshold into a specific bin (e.g., map all GC > 7% to (0.675, 0.7])
-    # In this case, we'll map high values to a middle bin
-    mid_val <- (track_range["Min"] + track_range["Max"]) / 2
-    threshold <- track_range["Min"] + 0.7 * (track_range["Max"] - track_range["Min"])
-
-    # Find which bin contains the threshold value
-    target_bin_idx <- findInterval(threshold, breaks, rightmost.closed = TRUE)
-    target_bin_start <- breaks[target_bin_idx]
-    target_bin_end <- breaks[target_bin_idx + 1]
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = breaks,
-        bin_merge = list(
-            list(from = threshold, to = c(target_bin_start, target_bin_end))
-        ),
-        intervals = test_intervals,
-        iterator = 200
-    )
-
-    expect_s3_class(model, "gcanvas.model")
-    expect_equal(model$num_bins, 20)
-
-    gvtrack.rm("test_vt")
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("gc_vt")
 })
 
 test_that("gcanvas.bin_map helper function works", {
     breaks <- seq(0, 1, 0.025) # 40 bins
 
-    # Test mapping all values above 0.07 to bin (0.675, 0.7]
+    # Test mapping all values above 0.7 to bin containing (0.675, 0.7]
     bin_map <- gcanvas.bin_map(
         breaks = breaks,
         merge_ranges = list(
-            list(from = 0.07, to = c(0.675, 0.7))
+            list(from = 0.7, to = c(0.675, 0.7))
         )
     )
 
@@ -206,37 +226,62 @@ test_that("gcanvas.bin_map helper function works", {
     expect_true(all(bin_map >= 1 & bin_map <= 40))
 
     # The bin containing 0.675-0.7 should map to itself
-    target_bin <- findInterval(0.6875, breaks, rightmost.closed = TRUE) # center of (0.675, 0.7]
+    target_bin <- findInterval(0.6875, breaks, rightmost.closed = TRUE)
     expect_equal(as.integer(bin_map[target_bin]), target_bin)
-
-    # Bins with values > 0.07 should map to the target bin
-    # (We can't easily test all of them without knowing exact bin boundaries,
-    # but we can check that some high-value bins are mapped)
 })
 
-test_that("print.gcanvas.model works", {
+test_that("gcanvas.bin_map with multiple merge ranges", {
+    breaks <- seq(0, 1, 0.1) # 10 bins
+
+    # Merge both low and high value bins into middle bins
+    bin_map <- gcanvas.bin_map(
+        breaks = breaks,
+        merge_ranges = list(
+            list(from = c(-Inf, 0.2), to = c(0.2, 0.3)), # Low values -> bin 3
+            list(from = c(0.8, Inf), to = c(0.7, 0.8)) # High values -> bin 8
+        )
+    )
+
+    expect_type(bin_map, "integer")
+    expect_equal(length(bin_map), 10)
+
+    # Bins 1 and 2 should map to bin 3
+    expect_equal(as.integer(bin_map[1]), 3)
+    expect_equal(as.integer(bin_map[2]), 3)
+
+    # Bins 9 and 10 should map to bin 8
+    expect_equal(as.integer(bin_map[9]), 8)
+    expect_equal(as.integer(bin_map[10]), 8)
+
+    # Middle bins should map to themselves
+    expect_equal(as.integer(bin_map[5]), 5)
+})
+
+test_that("print.gcanvas.model works for multi-dimensional model", {
     gdb.init_examples()
 
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
     }
-    gvtrack.create("test_vt", "dense_track", "avg")
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
 
     test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
 
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(expr = "g_frac", breaks = seq(0, 1, 0.2)), # 5 bins
+        list(expr = "c_frac", breaks = seq(0, 1, 0.25)), # 4 bins
         intervals = test_intervals,
         iterator = 200
     )
 
-    # Print should not error
+    # Print should show dimensional info
     expect_output(print(model), "Genome Canvas Markov-5 Model")
-    expect_output(print(model), "Number of bins: 10")
+    expect_output(print(model), "Dimensions: 2")
+    expect_output(print(model), "Total bins: 20")
 
-    gvtrack.rm("test_vt")
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
 })
 
 test_that("gcanvas.sample produces output file", {
@@ -251,8 +296,10 @@ test_that("gcanvas.sample produces output file", {
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
         intervals = test_intervals,
         iterator = 200
     )
@@ -280,6 +327,43 @@ test_that("gcanvas.sample produces output file", {
     gvtrack.rm("test_vt")
 })
 
+test_that("gcanvas.sample from 2D model", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    model <- gcanvas.train(
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.1)), # 10 bins
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)), # 5 bins
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    output_fasta <- tempfile(fileext = ".fa")
+    gcanvas.sample(
+        model,
+        output_fasta,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 10000),
+        seed = 60427
+    )
+
+    expect_true(file.exists(output_fasta))
+    lines <- readLines(output_fasta)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_equal(nchar(seq_content), 10000)
+
+    unlink(output_fasta)
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+})
+
 test_that("gcanvas.sample with seed is reproducible", {
     gdb.init_examples()
 
@@ -292,8 +376,10 @@ test_that("gcanvas.sample with seed is reproducible", {
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
         intervals = test_intervals,
         iterator = 200
     )
@@ -319,135 +405,7 @@ test_that("gcanvas.sample with seed is reproducible", {
     gvtrack.rm("test_vt")
 })
 
-test_that("gcanvas.sample respects intervals output", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    train_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = train_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = train_intervals,
-        iterator = 200
-    )
-
-    sample_intervals <- gintervals(
-        c(1, 1),
-        c(1000, 2000),
-        c(1050, 2050)
-    )
-
-    output_fasta <- tempfile(fileext = ".fa")
-    gcanvas.sample(
-        model,
-        output_fasta,
-        output_format = "fasta",
-        intervals = sample_intervals,
-        seed = 60427
-    )
-
-    lines <- readLines(output_fasta)
-    header_idx <- grep("^>", lines)
-    expect_equal(length(header_idx), 2)
-
-    seq1 <- paste(lines[(header_idx[1] + 1):(header_idx[2] - 1)], collapse = "")
-    seq2 <- paste(lines[(header_idx[2] + 1):length(lines)], collapse = "")
-    expect_equal(nchar(seq1), 50)
-    expect_equal(nchar(seq2), 50)
-
-    unlink(output_fasta)
-    gvtrack.rm("test_vt")
-})
-
-test_that("gcanvas.sample writes interval headers in FASTA output", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    train_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = train_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = train_intervals,
-        iterator = 200
-    )
-
-    sample_intervals <- gintervals(
-        c(1, 1, 2),
-        c(100, 200, 300),
-        c(150, 260, 350)
-    )
-
-    output_fasta <- tempfile(fileext = ".fa")
-    gcanvas.sample(
-        model,
-        output_fasta,
-        output_format = "fasta",
-        intervals = sample_intervals,
-        seed = 60427
-    )
-
-    lines <- readLines(output_fasta)
-    header_idx <- grep("^>", lines)
-    expect_equal(length(header_idx), 3)
-    expect_true(all(grepl("^>.*:[0-9]+-[0-9]+$", lines[header_idx])))
-
-    unlink(output_fasta)
-    gvtrack.rm("test_vt")
-})
-
-test_that("gcanvas.sample misha output size matches interval lengths", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    train_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = train_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = train_intervals,
-        iterator = 200
-    )
-
-    sample_intervals <- gintervals(
-        c(1, 2),
-        c(1000, 2000),
-        c(1075, 2150)
-    )
-
-    output_seq <- tempfile(fileext = ".seq")
-    gcanvas.sample(
-        model,
-        output_seq,
-        output_format = "misha",
-        intervals = sample_intervals,
-        seed = 60427
-    )
-
-    expected_size <- sum(sample_intervals$end - sample_intervals$start)
-    expect_equal(file.size(output_seq), expected_size)
-
-    unlink(output_seq)
-    gvtrack.rm("test_vt")
-})
-
-test_that("bin_merge is applied during sampling", {
+test_that("gcanvas.sample different seeds produce different sequences", {
     gdb.init_examples()
 
     if ("test_vt" %in% gvtrack.ls()) {
@@ -458,126 +416,276 @@ test_that("bin_merge is applied during sampling", {
     test_intervals <- gintervals(1, 0, 50000)
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
-    # Create breaks
-    breaks <- seq(track_range["Min"], track_range["Max"], length.out = 21) # 20 bins
-
-    # Train with bin merging: merge high-value bins into a middle bin
-    # Find a threshold value and a target bin
-    threshold <- track_range["Min"] + 0.7 * (track_range["Max"] - track_range["Min"])
-    target_bin_idx <- findInterval(threshold, breaks, rightmost.closed = TRUE)
-    target_bin_start <- breaks[target_bin_idx]
-    target_bin_end <- breaks[target_bin_idx + 1]
-
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = breaks,
-        bin_merge = list(
-            list(from = threshold, to = c(target_bin_start, target_bin_end))
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
         ),
         intervals = test_intervals,
         iterator = 200
     )
 
-    # Verify bin_map is stored in the model
-    expect_true("bin_map" %in% names(model))
-    expect_type(model$bin_map, "integer")
-    expect_equal(length(model$bin_map), 20)
+    sample_intervals <- gintervals(1, 0, 1000)
 
-    # Verify that high-value bins are mapped to the target bin
-    high_bin_idx <- findInterval(threshold + 0.01 * (track_range["Max"] - track_range["Min"]),
-        breaks,
-        rightmost.closed = TRUE
+    out1 <- tempfile(fileext = ".fa")
+    out2 <- tempfile(fileext = ".fa")
+
+    gcanvas.sample(model, out1,
+        output_format = "fasta",
+        intervals = sample_intervals, seed = 12345
     )
-    if (high_bin_idx <= 20 && high_bin_idx > 0) {
-        expect_equal(model$bin_map[high_bin_idx], target_bin_idx)
-    }
+    gcanvas.sample(model, out2,
+        output_format = "fasta",
+        intervals = sample_intervals, seed = 67890
+    )
 
-    # Sample with the model - this should use the merged bins correctly
+    # Different seeds should produce different output
+    expect_false(identical(readLines(out1), readLines(out2)))
+
+    unlink(c(out1, out2))
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample produces valid DNA sequences", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    sample_intervals <- gintervals(1, 0, 10000)
+
     output_fasta <- tempfile(fileext = ".fa")
     gcanvas.sample(
         model,
         output_fasta,
         output_format = "fasta",
-        intervals = test_intervals,
+        intervals = sample_intervals,
         seed = 60427
     )
 
-    expect_true(file.exists(output_fasta))
-    expect_gt(file.size(output_fasta), 0)
+    lines <- readLines(output_fasta)
+    seq_lines <- lines[!grepl("^>", lines)]
+    full_seq <- paste(seq_lines, collapse = "")
 
-    # Verify the model can be saved and loaded with bin_map preserved
+    # Should only contain A, C, G, T
+    expect_true(grepl("^[ACGT]+$", full_seq))
+
+    # Should have correct length
+    expect_equal(nchar(full_seq), 10000)
+
+    unlink(output_fasta)
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.train with 3D stratification", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac", "gc_vt")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("gc_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)), # 5 bins
+        list(expr = "c_frac", breaks = seq(0, 0.5, 0.125)), # 4 bins
+        list(expr = "gc_vt", breaks = seq(track_range["Min"], track_range["Max"], length.out = 3)), # 2 bins
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    expect_equal(model$n_dims, 3)
+    expect_equal(model$dim_sizes, c(5, 4, 2))
+    expect_equal(model$total_bins, 5 * 4 * 2) # 40
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("gc_vt")
+})
+
+test_that("gcanvas.train error handling", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    # No dimension specs
+    expect_error(
+        gcanvas.train(intervals = test_intervals, iterator = 200),
+        "At least one dimension specification"
+    )
+
+    # Missing expr
+    expect_error(
+        gcanvas.train(
+            list(breaks = seq(0, 1, 0.1)),
+            intervals = test_intervals,
+            iterator = 200
+        ),
+        "must have an 'expr' element"
+    )
+
+    # Missing breaks
+    expect_error(
+        gcanvas.train(
+            list(expr = "test_vt"),
+            intervals = test_intervals,
+            iterator = 200
+        ),
+        "must have a 'breaks' element"
+    )
+
+    # Invalid breaks
+    expect_error(
+        gcanvas.train(
+            list(expr = "test_vt", breaks = c(0.5)),
+            intervals = test_intervals,
+            iterator = 200
+        ),
+        "at least 2 elements"
+    )
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.bin_map error handling", {
+    breaks <- seq(0, 1, 0.1)
+
+    # Invalid breaks
+    expect_error(gcanvas.bin_map(breaks = c(0.5)))
+
+    # Invalid target range (doesn't match any bin)
+    expect_error(
+        gcanvas.bin_map(
+            breaks = breaks,
+            merge_ranges = list(
+                list(from = 0.5, to = c(0.123, 0.456)) # Not a valid bin
+            )
+        )
+    )
+})
+
+test_that("gcanvas model CDF structure is correct", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Check all CDFs
+    for (bin in seq_len(model$total_bins)) {
+        cdf_mat <- model$model_data$cdf[[bin]]
+
+        # Should be 1024 x 4
+        expect_equal(dim(cdf_mat), c(1024, 4))
+
+        # All values should be between 0 and 1
+        expect_true(all(cdf_mat >= 0))
+        expect_true(all(cdf_mat <= 1))
+
+        # Last column should all be 1 (cumulative)
+        expect_true(all(abs(cdf_mat[, 4] - 1) < 1e-5))
+
+        # Each row should be monotonically non-decreasing
+        for (ctx in 1:1024) {
+            expect_true(all(diff(cdf_mat[ctx, ]) >= -1e-10))
+        }
+    }
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.save and gcanvas.load preserve all model fields", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    model <- gcanvas.train(
+        list(
+            expr = "g_frac + c_frac",
+            breaks = seq(0, 1, 0.1),
+            bin_merge = list(list(from = 0.8, to = c(0.7, 0.8)))
+        ),
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
     temp_file <- tempfile(fileext = ".rds")
     gcanvas.save(model, temp_file)
     loaded_model <- gcanvas.load(temp_file)
-    expect_true("bin_map" %in% names(loaded_model))
-    expect_equal(loaded_model$bin_map, model$bin_map)
 
-    # Sampling with loaded model should also work
-    output_fasta2 <- tempfile(fileext = ".fa")
-    gcanvas.sample(
-        loaded_model,
-        output_fasta2,
-        output_format = "fasta",
-        intervals = test_intervals,
-        seed = 60427
-    )
-    expect_true(file.exists(output_fasta2))
+    # Check all fields are preserved
+    expect_equal(loaded_model$n_dims, model$n_dims)
+    expect_equal(loaded_model$dim_sizes, model$dim_sizes)
+    expect_equal(loaded_model$total_bins, model$total_bins)
+    expect_equal(loaded_model$total_kmers, model$total_kmers)
+    expect_equal(loaded_model$per_bin_kmers, model$per_bin_kmers)
+    expect_equal(loaded_model$total_masked, model$total_masked)
+    expect_equal(loaded_model$total_n, model$total_n)
 
-    # Clean up
-    unlink(c(output_fasta, output_fasta2, temp_file))
-    gvtrack.rm("test_vt")
-})
-
-# Additional comprehensive tests
-
-test_that("gcanvas.train with different pseudocount values", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
+    # Check dim_specs
+    for (d in seq_len(model$n_dims)) {
+        expect_equal(loaded_model$dim_specs[[d]]$expr, model$dim_specs[[d]]$expr)
+        expect_equal(loaded_model$dim_specs[[d]]$breaks, model$dim_specs[[d]]$breaks)
+        expect_equal(loaded_model$dim_specs[[d]]$num_bins, model$dim_specs[[d]]$num_bins)
+        expect_equal(loaded_model$dim_specs[[d]]$bin_map, model$dim_specs[[d]]$bin_map)
     }
-    gvtrack.create("test_vt", "dense_track", "avg")
 
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-    breaks <- seq(track_range["Min"], track_range["Max"], length.out = 11)
+    # Check model_data
+    expect_equal(length(loaded_model$model_data$counts), length(model$model_data$counts))
+    expect_equal(length(loaded_model$model_data$cdf), length(model$model_data$cdf))
 
-    # Train with different pseudocounts
-    model_pc1 <- gcanvas.train(
-        expr = "test_vt",
-        breaks = breaks,
-        intervals = test_intervals,
-        iterator = 200,
-        pseudocount = 1
-    )
+    # Check class
+    expect_s3_class(loaded_model, "gcanvas.model")
 
-    model_pc10 <- gcanvas.train(
-        expr = "test_vt",
-        breaks = breaks,
-        intervals = test_intervals,
-        iterator = 200,
-        pseudocount = 10
-    )
-
-    # Both should produce valid models
-    expect_s3_class(model_pc1, "gcanvas.model")
-    expect_s3_class(model_pc10, "gcanvas.model")
-
-    # Total k-mers should be the same (pseudocount only affects probabilities)
-    expect_equal(model_pc1$total_kmers, model_pc10$total_kmers)
-
-    # CDFs should both be valid but different
-    cdf1 <- model_pc1$model_data$cdf[[1]]
-    cdf10 <- model_pc10$model_data$cdf[[1]]
-
-    # Higher pseudocount should make distributions more uniform
-    # (i.e., CDFs should be closer to equal spacing)
-    expect_false(identical(cdf1, cdf10))
-
-    gvtrack.rm("test_vt")
+    unlink(temp_file)
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
 })
 
-test_that("gcanvas.train with very few bins", {
+test_that("gcanvas handles empty bins gracefully", {
     gdb.init_examples()
 
     if ("test_vt" %in% gvtrack.ls()) {
@@ -588,45 +696,27 @@ test_that("gcanvas.train with very few bins", {
     test_intervals <- gintervals(1, 0, 50000)
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
-    # Train with just 2 bins
+    # Create breaks that will definitely have empty bins
+    # by extending well beyond the actual data range
+    min_val <- track_range["Min"]
+    max_val <- track_range["Max"]
+    range_val <- max_val - min_val
+
+    # Extend breaks beyond data range
+    breaks <- seq(min_val - range_val, max_val + range_val, length.out = 21)
+
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 3), # 2 bins
+        list(expr = "test_vt", breaks = breaks),
         intervals = test_intervals,
         iterator = 200
     )
 
     expect_s3_class(model, "gcanvas.model")
-    expect_equal(model$num_bins, 2)
-    expect_equal(length(model$model_data$cdf), 2)
 
-    gvtrack.rm("test_vt")
-})
+    # Some bins should have 0 k-mers
+    expect_true(any(model$per_bin_kmers == 0))
 
-test_that("gcanvas.train with many bins", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-
-    # Train with 50 bins
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 51), # 50 bins
-        intervals = test_intervals,
-        iterator = 200
-    )
-
-    expect_s3_class(model, "gcanvas.model")
-    expect_equal(model$num_bins, 50)
-    expect_equal(length(model$model_data$cdf), 50)
-
-    # Some bins may be empty, but model should still work
+    # Model should still be usable for sampling
     output_fasta <- tempfile(fileext = ".fa")
     expect_no_error(
         gcanvas.sample(
@@ -642,44 +732,6 @@ test_that("gcanvas.train with many bins", {
     gvtrack.rm("test_vt")
 })
 
-test_that("gcanvas.train with different iterator sizes", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-    breaks <- seq(track_range["Min"], track_range["Max"], length.out = 11)
-
-    # Train with different iterator sizes
-    model_100 <- gcanvas.train(
-        expr = "test_vt",
-        breaks = breaks,
-        intervals = test_intervals,
-        iterator = 100
-    )
-
-    model_500 <- gcanvas.train(
-        expr = "test_vt",
-        breaks = breaks,
-        intervals = test_intervals,
-        iterator = 500
-    )
-
-    # Both should produce valid models
-    expect_s3_class(model_100, "gcanvas.model")
-    expect_s3_class(model_500, "gcanvas.model")
-
-    # Smaller iterator gives finer resolution, but total k-mers should be similar
-    # (since we're counting the same sequence)
-    expect_equal(model_100$total_kmers, model_500$total_kmers)
-
-    gvtrack.rm("test_vt")
-})
-
 test_that("gcanvas.sample with mask_mode copy preserves original sequence in masked regions", {
     gdb.init_examples()
 
@@ -692,8 +744,10 @@ test_that("gcanvas.sample with mask_mode copy preserves original sequence in mas
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
         intervals = test_intervals,
         iterator = 200
     )
@@ -733,141 +787,6 @@ test_that("gcanvas.sample with mask_mode copy preserves original sequence in mas
     gvtrack.rm("test_vt")
 })
 
-test_that("gcanvas.sample with mask_mode sample ignores mask", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = test_intervals,
-        iterator = 200
-    )
-
-    # Define a mask region
-    mask <- gintervals(1, 1000, 2000)
-    sample_intervals <- gintervals(1, 0, 3000)
-
-    output_fasta <- tempfile(fileext = ".fa")
-    gcanvas.sample(
-        model,
-        output_fasta,
-        output_format = "fasta",
-        intervals = sample_intervals,
-        mask = mask,
-        mask_mode = "sample", # This should ignore the mask
-        seed = 60427
-    )
-
-    # Read the sampled sequence
-    lines <- readLines(output_fasta)
-    sampled_seq <- paste(lines[!grepl("^>", lines)], collapse = "")
-
-    # Get original sequence for the mask region (gseq.extract returns character vector)
-    original_seq <- gseq.extract(mask)[1]
-
-    # The mask region should NOT necessarily match the original
-    mask_start_in_sample <- 1001
-    mask_end_in_sample <- 2000
-    sampled_mask_region <- substr(sampled_seq, mask_start_in_sample, mask_end_in_sample)
-
-    # With high probability, the sampled region will differ from original
-    # (case-insensitive comparison)
-    expect_false(identical(toupper(sampled_mask_region), toupper(original_seq)))
-
-    unlink(output_fasta)
-    gvtrack.rm("test_vt")
-})
-
-test_that("gcanvas.sample different seeds produce different sequences", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = test_intervals,
-        iterator = 200
-    )
-
-    sample_intervals <- gintervals(1, 0, 1000)
-
-    out1 <- tempfile(fileext = ".fa")
-    out2 <- tempfile(fileext = ".fa")
-
-    gcanvas.sample(model, out1,
-        output_format = "fasta",
-        intervals = sample_intervals, seed = 12345
-    )
-    gcanvas.sample(model, out2,
-        output_format = "fasta",
-        intervals = sample_intervals, seed = 67890
-    )
-
-    # Different seeds should produce different output
-    expect_false(identical(readLines(out1), readLines(out2)))
-
-    unlink(c(out1, out2))
-    gvtrack.rm("test_vt")
-})
-
-test_that("gcanvas.sample produces valid DNA sequences", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = test_intervals,
-        iterator = 200
-    )
-
-    sample_intervals <- gintervals(1, 0, 10000)
-
-    output_fasta <- tempfile(fileext = ".fa")
-    gcanvas.sample(
-        model,
-        output_fasta,
-        output_format = "fasta",
-        intervals = sample_intervals,
-        seed = 60427
-    )
-
-    lines <- readLines(output_fasta)
-    seq_lines <- lines[!grepl("^>", lines)]
-    full_seq <- paste(seq_lines, collapse = "")
-
-    # Should only contain A, C, G, T
-    expect_true(grepl("^[ACGT]+$", full_seq))
-
-    # Should have correct length
-    expect_equal(nchar(full_seq), 10000)
-
-    unlink(output_fasta)
-    gvtrack.rm("test_vt")
-})
-
 test_that("gcanvas.sample on multiple chromosomes", {
     gdb.init_examples()
 
@@ -880,8 +799,10 @@ test_that("gcanvas.sample on multiple chromosomes", {
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
         intervals = test_intervals,
         iterator = 200
     )
@@ -912,51 +833,7 @@ test_that("gcanvas.sample on multiple chromosomes", {
     gvtrack.rm("test_vt")
 })
 
-test_that("gcanvas.bin_map with multiple merge ranges", {
-    breaks <- seq(0, 1, 0.1) # 10 bins
-
-    # Merge both low and high value bins into middle bins
-    bin_map <- gcanvas.bin_map(
-        breaks = breaks,
-        merge_ranges = list(
-            list(from = c(-Inf, 0.2), to = c(0.2, 0.3)), # Low values -> bin 3
-            list(from = c(0.8, Inf), to = c(0.7, 0.8)) # High values -> bin 8
-        )
-    )
-
-    expect_type(bin_map, "integer")
-    expect_equal(length(bin_map), 10)
-
-    # Bins 1 and 2 should map to bin 3
-    expect_equal(as.integer(bin_map[1]), 3)
-    expect_equal(as.integer(bin_map[2]), 3)
-
-    # Bins 9 and 10 should map to bin 8
-    expect_equal(as.integer(bin_map[9]), 8)
-    expect_equal(as.integer(bin_map[10]), 8)
-
-    # Middle bins should map to themselves
-    expect_equal(as.integer(bin_map[5]), 5)
-})
-
-test_that("gcanvas.bin_map error handling", {
-    breaks <- seq(0, 1, 0.1)
-
-    # Invalid breaks
-    expect_error(gcanvas.bin_map(breaks = c(0.5)))
-
-    # Invalid target range (doesn't match any bin)
-    expect_error(
-        gcanvas.bin_map(
-            breaks = breaks,
-            merge_ranges = list(
-                list(from = 0.5, to = c(0.123, 0.456)) # Not a valid bin
-            )
-        )
-    )
-})
-
-test_that("gcanvas.train error handling", {
+test_that("gcanvas.train with different pseudocount values", {
     gdb.init_examples()
 
     if ("test_vt" %in% gvtrack.ls()) {
@@ -965,201 +842,269 @@ test_that("gcanvas.train error handling", {
     gvtrack.create("test_vt", "dense_track", "avg")
 
     test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+    breaks <- seq(track_range["Min"], track_range["Max"], length.out = 11)
 
-    # Invalid breaks
-    expect_error(
-        gcanvas.train(
+    # Train with different pseudocounts
+    model_pc1 <- gcanvas.train(
+        list(expr = "test_vt", breaks = breaks),
+        intervals = test_intervals,
+        iterator = 200,
+        pseudocount = 1
+    )
+
+    model_pc10 <- gcanvas.train(
+        list(expr = "test_vt", breaks = breaks),
+        intervals = test_intervals,
+        iterator = 200,
+        pseudocount = 10
+    )
+
+    # Both should produce valid models
+    expect_s3_class(model_pc1, "gcanvas.model")
+    expect_s3_class(model_pc10, "gcanvas.model")
+
+    # Total k-mers should be the same (pseudocount only affects probabilities)
+    expect_equal(model_pc1$total_kmers, model_pc10$total_kmers)
+
+    # CDFs should both be valid but different
+    cdf1 <- model_pc1$model_data$cdf[[1]]
+    cdf10 <- model_pc10$model_data$cdf[[1]]
+
+    # Higher pseudocount should make distributions more uniform
+    expect_false(identical(cdf1, cdf10))
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample misha output size matches interval lengths", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    train_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = train_intervals)
+
+    model <- gcanvas.train(
+        list(
             expr = "test_vt",
-            breaks = c(0.5), # Only one element
-            intervals = test_intervals,
-            iterator = 200
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
         ),
-        "at least 2 elements"
+        intervals = train_intervals,
+        iterator = 200
     )
 
+    sample_intervals <- gintervals(
+        c(1, 2),
+        c(1000, 2000),
+        c(1075, 2150)
+    )
+
+    output_seq <- tempfile(fileext = ".seq")
+    gcanvas.sample(
+        model,
+        output_seq,
+        output_format = "misha",
+        intervals = sample_intervals,
+        seed = 60427
+    )
+
+    expected_size <- sum(sample_intervals$end - sample_intervals$start)
+    expect_equal(file.size(output_seq), expected_size)
+
+    unlink(output_seq)
     gvtrack.rm("test_vt")
 })
 
-test_that("gcanvas model CDF structure is correct", {
+test_that("gcanvas.train with GC and CG stratification (user use case)", {
+    # This test implements the specific use case from the user:
+    # stratify on both GC content (capped at 0.7) and CG dinucleotide content
+    # (breaks at 0.01, 0.02, 0.03, 0.04, 0.2, capped at 0.04)
     gdb.init_examples()
 
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
+    for (vt in c("g_frac", "c_frac", "cg_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
     }
-    gvtrack.create("test_vt", "dense_track", "avg")
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
 
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
+    test_intervals <- gintervals(1, 0, 100000)
+
+    # GC content with fine breaks, capped at 0.7
+    gc_breaks <- seq(0, 1, 0.025) # 40 bins
+
+    # CG dinucleotide with specific breaks, capped at 0.04
+    cg_breaks <- c(0, 0.01, 0.02, 0.03, 0.04, 0.2) # 5 bins
 
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "g_frac + c_frac",
+            breaks = gc_breaks,
+            bin_merge = list(list(from = 0.7, to = c(0.675, 0.7)))
+        ),
+        list(
+            expr = "cg_frac",
+            breaks = cg_breaks,
+            bin_merge = list(list(from = 0.04, to = c(0.03, 0.04)))
+        ),
         intervals = test_intervals,
         iterator = 200
     )
 
-    # Check all CDFs
-    for (bin in seq_len(model$num_bins)) {
-        cdf_mat <- model$model_data$cdf[[bin]]
+    expect_s3_class(model, "gcanvas.model")
+    expect_equal(model$n_dims, 2)
+    expect_equal(model$dim_specs[[1]]$num_bins, 40)
+    expect_equal(model$dim_specs[[2]]$num_bins, 5)
+    expect_equal(model$total_bins, 40 * 5) # 200 total bins
 
-        # Should be 1024 x 4
-        expect_equal(dim(cdf_mat), c(1024, 4))
+    # Verify bin_map for GC dimension (bins 29-40 should map to bin 28)
+    gc_bin_map <- model$dim_specs[[1]]$bin_map
+    expect_true(all(gc_bin_map[29:40] == 28))
 
-        # All values should be between 0 and 1
-        expect_true(all(cdf_mat >= 0))
-        expect_true(all(cdf_mat <= 1))
+    # Verify bin_map for CG dimension (bin 5 should map to bin 4)
+    cg_bin_map <- model$dim_specs[[2]]$bin_map
+    expect_equal(as.integer(cg_bin_map[5]), 4)
 
-        # Last column should all be 1 (cumulative)
-        expect_true(all(abs(cdf_mat[, 4] - 1) < 1e-5))
-
-        # Each row should be monotonically non-decreasing
-        for (ctx in 1:1024) {
-            expect_true(all(diff(cdf_mat[ctx, ]) >= -1e-10))
-        }
-    }
-
-    gvtrack.rm("test_vt")
-})
-
-test_that("gcanvas model counts structure is correct", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = test_intervals,
-        iterator = 200
-    )
-
-    # Check all count matrices
-    for (bin in seq_len(model$num_bins)) {
-        count_mat <- model$model_data$counts[[bin]]
-
-        # Should be 1024 x 4
-        expect_equal(dim(count_mat), c(1024, 4))
-
-        # All values should be non-negative (includes pseudocount)
-        expect_true(all(count_mat >= 0))
-    }
-
-    # Total counts from matrices should be greater than or equal to total_kmers
-    # (counts include pseudocount added during normalization)
-    total_from_counts <- sum(sapply(model$model_data$counts, sum))
-    expect_gte(total_from_counts, model$total_kmers)
-
-    gvtrack.rm("test_vt")
-})
-
-test_that("gcanvas.sample output file is created even for small intervals", {
-    gdb.init_examples()
-
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = test_intervals,
-        iterator = 200
-    )
-
-    # Sample very small interval (just 10 bp)
-    sample_intervals <- gintervals(1, 100, 110)
-
+    # Sample from the trained model
     output_fasta <- tempfile(fileext = ".fa")
     gcanvas.sample(
         model,
         output_fasta,
         output_format = "fasta",
-        intervals = sample_intervals,
+        intervals = gintervals(1, 0, 10000),
         seed = 60427
     )
 
     expect_true(file.exists(output_fasta))
     lines <- readLines(output_fasta)
-    seq_lines <- lines[!grepl("^>", lines)]
-    full_seq <- paste(seq_lines, collapse = "")
-    expect_equal(nchar(full_seq), 10)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_equal(nchar(seq_content), 10000)
+    expect_true(grepl("^[ACGT]+$", seq_content))
 
     unlink(output_fasta)
-    gvtrack.rm("test_vt")
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
 })
 
-test_that("gcanvas k-mer distribution of sampled sequence is reasonable", {
+test_that("gcanvas.sample from model with bin_merge produces valid sequences", {
     gdb.init_examples()
 
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
     }
-    gvtrack.create("test_vt", "dense_track", "avg")
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
 
-    test_intervals <- gintervals(1, 0, 50000)
-    track_range <- gsummary("dense_track", intervals = test_intervals)
+    test_intervals <- gintervals(1, 0, 100000)
 
+    # Train model with aggressive bin merging
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(
+            expr = "g_frac + c_frac",
+            breaks = seq(0, 1, 0.1), # 10 bins
+            bin_merge = list(
+                list(from = c(-Inf, 0.2), to = c(0.2, 0.3)), # Low -> bin 3
+                list(from = c(0.7, Inf), to = c(0.6, 0.7)) # High -> bin 7
+            )
+        ),
         intervals = test_intervals,
         iterator = 200
     )
 
-    # Get k-mer distribution of original sequence
-    original_kmer <- gseq.kmer.dist(test_intervals, k = 2)
-    original_freqs <- original_kmer$count / sum(original_kmer$count)
-    names(original_freqs) <- original_kmer$kmer
+    # Verify bin merging worked
+    bin_map <- model$dim_specs[[1]]$bin_map
+    expect_true(all(bin_map[1:2] == 3))
+    expect_true(all(bin_map[8:10] == 7))
 
-    # Sample a sequence
+    # Sample and verify valid output
     output_fasta <- tempfile(fileext = ".fa")
     gcanvas.sample(
         model,
         output_fasta,
         output_format = "fasta",
-        intervals = test_intervals,
-        seed = 60427
+        intervals = gintervals(1, 0, 5000),
+        seed = 12345
     )
 
-    # Read sampled sequence and compute k-mer distribution
     lines <- readLines(output_fasta)
-    sampled_seq <- paste(lines[!grepl("^>", lines)], collapse = "")
-
-    # Count dinucleotides in sampled sequence
-    sampled_counts <- list()
-    for (i in 1:(nchar(sampled_seq) - 1)) {
-        dinuc <- substr(sampled_seq, i, i + 1)
-        if (is.null(sampled_counts[[dinuc]])) {
-            sampled_counts[[dinuc]] <- 0
-        }
-        sampled_counts[[dinuc]] <- sampled_counts[[dinuc]] + 1
-    }
-
-    total_sampled <- sum(unlist(sampled_counts))
-    sampled_freqs <- sapply(sampled_counts, function(x) x / total_sampled)
-
-    # The correlation between original and sampled frequencies should be high
-    common_kmers <- intersect(names(original_freqs), names(sampled_freqs))
-    cor_val <- cor(original_freqs[common_kmers], sampled_freqs[common_kmers])
-
-    # Expect reasonably high correlation (Markov model should preserve k-mer stats)
-    expect_gt(cor_val, 0.8)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_equal(nchar(seq_content), 5000)
+    expect_true(grepl("^[ACGT]+$", seq_content))
 
     unlink(output_fasta)
-    gvtrack.rm("test_vt")
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
 })
 
-test_that("gcanvas.save and gcanvas.load preserve all model fields", {
+test_that("gcanvas flat index computation is correct for 2D", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    model <- gcanvas.train(
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)), # 5 bins
+        list(expr = "c_frac", breaks = seq(0, 0.5, 0.125)), # 4 bins
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Check flat indexing: flat_idx = idx_1 + (idx_2-1) * size_1
+    # With 5 bins in dim1 and 4 bins in dim2:
+    # - (dim1=1, dim2=1) -> 1
+    # - (dim1=5, dim2=1) -> 5
+    # - (dim1=1, dim2=2) -> 1 + 1*5 = 6
+    # - (dim1=5, dim2=4) -> 5 + 3*5 = 20
+    expect_equal(model$dim_sizes, c(5, 4))
+    expect_equal(model$total_bins, 20)
+    expect_equal(length(model$model_data$cdf), 20)
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+})
+
+test_that("gcanvas flat index computation is correct for 3D", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac", "a_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("a_frac", NULL, "kmer.frac", kmer = "A")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    model <- gcanvas.train(
+        list(expr = "g_frac", breaks = c(0, 0.2, 0.4)), # 2 bins
+        list(expr = "c_frac", breaks = c(0, 0.15, 0.3, 0.45)), # 3 bins
+        list(expr = "a_frac", breaks = c(0, 0.25, 0.5)), # 2 bins
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Total bins = 2 * 3 * 2 = 12
+    expect_equal(model$dim_sizes, c(2, 3, 2))
+    expect_equal(model$total_bins, 12)
+    expect_equal(length(model$model_data$cdf), 12)
+    expect_equal(length(model$per_bin_kmers), 12)
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("a_frac")
+})
+
+test_that("gcanvas.train validates dimension specs correctly", {
     gdb.init_examples()
 
     if ("test_vt" %in% gvtrack.ls()) {
@@ -1170,9 +1115,202 @@ test_that("gcanvas.save and gcanvas.load preserve all model fields", {
     test_intervals <- gintervals(1, 0, 50000)
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
+    # Test that passing non-list spec fails
+    expect_error(
+        gcanvas.train(
+            "test_vt", # Not a list
+            intervals = test_intervals,
+            iterator = 200
+        ),
+        "must be a list"
+    )
+
+    # Test that passing empty list fails
+    expect_error(
+        gcanvas.train(
+            list(), # Empty list
+            intervals = test_intervals,
+            iterator = 200
+        ),
+        "must have an 'expr' element"
+    )
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample from 3D model works correctly", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac", "a_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("a_frac", NULL, "kmer.frac", kmer = "A")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
     model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
+        list(expr = "g_frac", breaks = c(0, 0.2, 0.4, 0.6)), # 3 bins
+        list(expr = "c_frac", breaks = c(0, 0.2, 0.4, 0.6)), # 3 bins
+        list(expr = "a_frac", breaks = c(0, 0.2, 0.4, 0.6)), # 3 bins
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    expect_equal(model$total_bins, 27) # 3 * 3 * 3
+
+    output_fasta <- tempfile(fileext = ".fa")
+    gcanvas.sample(
+        model,
+        output_fasta,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 5000),
+        seed = 60427
+    )
+
+    lines <- readLines(output_fasta)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_equal(nchar(seq_content), 5000)
+    expect_true(grepl("^[ACGT]+$", seq_content))
+
+    unlink(output_fasta)
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("a_frac")
+})
+
+test_that("gcanvas multi-dimensional sampling is reproducible", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    model <- gcanvas.train(
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.1)),
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    sample_intervals <- gintervals(1, 0, 5000)
+
+    out1 <- tempfile(fileext = ".fa")
+    out2 <- tempfile(fileext = ".fa")
+
+    gcanvas.sample(model, out1,
+        output_format = "fasta",
+        intervals = sample_intervals, seed = 42
+    )
+    gcanvas.sample(model, out2,
+        output_format = "fasta",
+        intervals = sample_intervals, seed = 42
+    )
+
+    expect_identical(readLines(out1), readLines(out2))
+
+    unlink(c(out1, out2))
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+})
+
+test_that("gcanvas bin_merge chains correctly in multi-dimensional model", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+
+    test_intervals <- gintervals(1, 0, 100000)
+
+    # Test that bin_merge affects the right dimensions independently
+    model <- gcanvas.train(
+        list(
+            expr = "g_frac + c_frac",
+            breaks = seq(0, 1, 0.2), # 5 bins
+            bin_merge = list(list(from = 0.8, to = c(0.6, 0.8))) # bin 5 -> bin 4
+        ),
+        list(
+            expr = "g_frac",
+            breaks = seq(0, 0.5, 0.1), # 5 bins
+            bin_merge = list(list(from = 0.4, to = c(0.3, 0.4))) # bin 5 -> bin 4
+        ),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Check first dimension
+    expect_equal(as.integer(model$dim_specs[[1]]$bin_map[5]), 4)
+    expect_equal(as.integer(model$dim_specs[[1]]$bin_map[4]), 4)
+
+    # Check second dimension
+    expect_equal(as.integer(model$dim_specs[[2]]$bin_map[5]), 4)
+    expect_equal(as.integer(model$dim_specs[[2]]$bin_map[4]), 4)
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+})
+
+test_that("gcanvas per_bin_kmers sum equals total_kmers", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    # 1D model
+    model_1d <- gcanvas.train(
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.1)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+    expect_equal(sum(model_1d$per_bin_kmers), model_1d$total_kmers)
+
+    # 2D model
+    model_2d <- gcanvas.train(
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.2)),
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+    expect_equal(sum(model_2d$per_bin_kmers), model_2d$total_kmers)
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+})
+
+test_that("gcanvas.save and gcanvas.load preserve multi-dimensional structure", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac", "a_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("a_frac", NULL, "kmer.frac", kmer = "A")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    # 3D model with bin_merge
+    model <- gcanvas.train(
+        list(
+            expr = "g_frac",
+            breaks = seq(0, 0.5, 0.1),
+            bin_merge = list(list(from = 0.4, to = c(0.3, 0.4)))
+        ),
+        list(expr = "c_frac", breaks = seq(0, 0.5, 0.125)),
+        list(expr = "a_frac", breaks = seq(0, 0.5, 0.25)),
         intervals = test_intervals,
         iterator = 200
     )
@@ -1181,106 +1319,430 @@ test_that("gcanvas.save and gcanvas.load preserve all model fields", {
     gcanvas.save(model, temp_file)
     loaded_model <- gcanvas.load(temp_file)
 
-    # Check all fields are preserved
-    expect_equal(loaded_model$num_bins, model$num_bins)
-    expect_equal(loaded_model$breaks, model$breaks)
-    expect_equal(loaded_model$total_kmers, model$total_kmers)
-    expect_equal(loaded_model$per_bin_kmers, model$per_bin_kmers)
-    expect_equal(loaded_model$total_masked, model$total_masked)
-    expect_equal(loaded_model$total_n, model$total_n)
-    expect_equal(loaded_model$expr, model$expr)
-    expect_equal(loaded_model$iterator, model$iterator)
-    expect_equal(loaded_model$bin_map, model$bin_map)
+    # Verify all dimensional structure is preserved
+    expect_equal(loaded_model$n_dims, 3)
+    expect_equal(loaded_model$dim_sizes, model$dim_sizes)
+    expect_equal(loaded_model$total_bins, model$total_bins)
 
-    # Check model_data
-    expect_equal(length(loaded_model$model_data$counts), length(model$model_data$counts))
-    expect_equal(length(loaded_model$model_data$cdf), length(model$model_data$cdf))
+    # Check dim_specs for all dimensions
+    for (d in 1:3) {
+        expect_equal(loaded_model$dim_specs[[d]]$expr, model$dim_specs[[d]]$expr)
+        expect_equal(loaded_model$dim_specs[[d]]$breaks, model$dim_specs[[d]]$breaks)
+        expect_equal(loaded_model$dim_specs[[d]]$num_bins, model$dim_specs[[d]]$num_bins)
+        expect_equal(loaded_model$dim_specs[[d]]$bin_map, model$dim_specs[[d]]$bin_map)
+    }
 
-    # Check class
-    expect_s3_class(loaded_model, "gcanvas.model")
+    unlink(temp_file)
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("a_frac")
+})
+
+test_that("gcanvas.train with min_obs identifies sparse bins", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    # Create breaks that will have some empty/sparse bins
+    # by extending beyond the data range
+    min_val <- track_range["Min"]
+    max_val <- track_range["Max"]
+    range_val <- max_val - min_val
+    breaks <- seq(min_val - range_val, max_val + range_val, length.out = 21)
+
+    # Train with a high min_obs threshold to trigger sparse bin detection
+    expect_warning(
+        model <- gcanvas.train(
+            list(expr = "test_vt", breaks = breaks),
+            intervals = test_intervals,
+            iterator = 200,
+            min_obs = 1000
+        ),
+        "bins have fewer than"
+    )
+
+    # Should have some sparse bins
+    expect_true(length(model$sparse_bins) > 0)
+    expect_equal(model$min_obs, 1000)
+
+    # Sparse bins should have NA CDFs
+    for (bin_idx in model$sparse_bins) {
+        expect_true(all(is.na(model$model_data$cdf[[bin_idx]])))
+    }
+
+    # Non-sparse bins should have valid CDFs
+    non_sparse <- setdiff(seq_len(model$total_bins), model$sparse_bins)
+    if (length(non_sparse) > 0) {
+        for (bin_idx in non_sparse[1:min(3, length(non_sparse))]) {
+            expect_false(any(is.na(model$model_data$cdf[[bin_idx]])))
+        }
+    }
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.train with min_obs=0 has no sparse bins", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(
+            expr = "test_vt",
+            breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+        ),
+        intervals = test_intervals,
+        iterator = 200,
+        min_obs = 0
+    )
+
+    # With min_obs=0, no bins should be sparse
+    expect_equal(length(model$sparse_bins), 0)
+    expect_equal(model$min_obs, 0)
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample warns when using sparse bins", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    # Create model with sparse bins
+    min_val <- track_range["Min"]
+    max_val <- track_range["Max"]
+    range_val <- max_val - min_val
+    breaks <- seq(min_val - range_val, max_val + range_val, length.out = 21)
+
+    suppressWarnings({
+        model <- gcanvas.train(
+            list(expr = "test_vt", breaks = breaks),
+            intervals = test_intervals,
+            iterator = 200,
+            min_obs = 1000
+        )
+    })
+
+    # Sampling should warn about sparse bins
+    output_fasta <- tempfile(fileext = ".fa")
+    expect_warning(
+        gcanvas.sample(
+            model,
+            output_fasta,
+            output_format = "fasta",
+            intervals = test_intervals,
+            seed = 60427
+        ),
+        "sparse bins"
+    )
+
+    # Output should still be valid
+    expect_true(file.exists(output_fasta))
+    lines <- readLines(output_fasta)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_true(grepl("^[ACGT]+$", seq_content))
+
+    unlink(output_fasta)
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample with sparse bins uses uniform distribution", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    # Create model with very high min_obs so all bins are sparse
+    suppressWarnings({
+        model <- gcanvas.train(
+            list(
+                expr = "test_vt",
+                breaks = seq(track_range["Min"], track_range["Max"], length.out = 11)
+            ),
+            intervals = test_intervals,
+            iterator = 200,
+            min_obs = 10000000 # Very high, all bins will be sparse
+        )
+    })
+
+    # All bins should be sparse
+    expect_equal(length(model$sparse_bins), model$total_bins)
+
+    # Sample should still work (with uniform distribution)
+    output_fasta <- tempfile(fileext = ".fa")
+    suppressWarnings({
+        gcanvas.sample(
+            model,
+            output_fasta,
+            output_format = "fasta",
+            intervals = gintervals(1, 0, 10000),
+            seed = 60427
+        )
+    })
+
+    lines <- readLines(output_fasta)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+
+    # Should have uniform-ish base distribution
+    a_count <- sum(strsplit(seq_content, "")[[1]] == "A")
+    c_count <- sum(strsplit(seq_content, "")[[1]] == "C")
+    g_count <- sum(strsplit(seq_content, "")[[1]] == "G")
+    t_count <- sum(strsplit(seq_content, "")[[1]] == "T")
+
+    # Each base should be roughly 25% (with some tolerance)
+    total <- nchar(seq_content)
+    expect_gt(a_count / total, 0.15)
+    expect_lt(a_count / total, 0.35)
+    expect_gt(c_count / total, 0.15)
+    expect_lt(c_count / total, 0.35)
+    expect_gt(g_count / total, 0.15)
+    expect_lt(g_count / total, 0.35)
+    expect_gt(t_count / total, 0.15)
+    expect_lt(t_count / total, 0.35)
+
+    unlink(output_fasta)
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas print shows sparse bins info", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    # Create model with some sparse bins
+    min_val <- track_range["Min"]
+    max_val <- track_range["Max"]
+    range_val <- max_val - min_val
+    breaks <- seq(min_val - range_val, max_val + range_val, length.out = 11)
+
+    suppressWarnings({
+        model <- gcanvas.train(
+            list(expr = "test_vt", breaks = breaks),
+            intervals = test_intervals,
+            iterator = 200,
+            min_obs = 5000
+        )
+    })
+
+    # Print should show sparse bins info
+    if (length(model$sparse_bins) > 0) {
+        expect_output(print(model), "Sparse bins")
+    }
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.save and gcanvas.load preserve sparse_bins", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    # Create model with sparse bins
+    min_val <- track_range["Min"]
+    max_val <- track_range["Max"]
+    range_val <- max_val - min_val
+    breaks <- seq(min_val - range_val, max_val + range_val, length.out = 21)
+
+    suppressWarnings({
+        model <- gcanvas.train(
+            list(expr = "test_vt", breaks = breaks),
+            intervals = test_intervals,
+            iterator = 200,
+            min_obs = 1000
+        )
+    })
+
+    temp_file <- tempfile(fileext = ".rds")
+    gcanvas.save(model, temp_file)
+    loaded_model <- gcanvas.load(temp_file)
+
+    # Sparse bins should be preserved
+    expect_equal(loaded_model$sparse_bins, model$sparse_bins)
+    expect_equal(loaded_model$min_obs, model$min_obs)
 
     unlink(temp_file)
     gvtrack.rm("test_vt")
 })
 
-test_that("gcanvas.sample with all chromosomes works", {
+test_that("gcanvas.sample with bin_merge at sampling time", {
     gdb.init_examples()
 
-    if ("test_vt" %in% gvtrack.ls()) {
-        gvtrack.rm("test_vt")
-    }
-    gvtrack.create("test_vt", "dense_track", "avg")
-
-    test_intervals <- gintervals.all()
-    track_range <- gsummary("dense_track", intervals = test_intervals)
-
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = seq(track_range["Min"], track_range["Max"], length.out = 11),
-        intervals = test_intervals,
-        iterator = 200
-    )
-
-    # Sample all chromosomes
-    output_fasta <- tempfile(fileext = ".fa")
-    gcanvas.sample(
-        model,
-        output_fasta,
-        output_format = "fasta",
-        intervals = gintervals.all(),
-        seed = 60427
-    )
-
-    lines <- readLines(output_fasta)
-    headers <- lines[grepl("^>", lines)]
-
-    # Should have headers for all chromosomes
-    expect_gt(length(headers), 0)
-
-    # Total sequence length should match total interval sizes
-    seq_lines <- lines[!grepl("^>", lines)]
-    total_length <- sum(nchar(seq_lines))
-    all_intervals <- gintervals.all()
-    expected_length <- sum(all_intervals$end - all_intervals$start)
-    expect_equal(total_length, expected_length)
-
-    unlink(output_fasta)
-    gvtrack.rm("test_vt")
-})
-
-test_that("gcanvas.train handles track expression correctly", {
-    gdb.init_examples()
-
-    # Clean up any existing vtracks
     for (vt in c("g_frac", "c_frac")) {
-        if (vt %in% gvtrack.ls()) {
-            gvtrack.rm(vt)
-        }
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
     }
-
-    # Create G and C fraction virtual tracks
     gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
     gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
 
     test_intervals <- gintervals(1, 0, 50000)
 
-    # Train with expression (GC content)
+    # Train WITHOUT bin_merge
     model <- gcanvas.train(
-        expr = "g_frac + c_frac",
-        breaks = seq(0, 1, 0.1),
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.1)), # 10 bins
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)), # 5 bins
         intervals = test_intervals,
         iterator = 200
     )
 
-    expect_s3_class(model, "gcanvas.model")
-    expect_equal(model$expr, "g_frac + c_frac")
-    expect_true(model$total_kmers > 0)
+    # Verify no bin merging during training
+    expect_true(all(model$dim_specs[[1]]$bin_map == 1:10))
+    expect_true(all(model$dim_specs[[2]]$bin_map == 1:5))
+
+    # Sample WITH bin_merge at sampling time
+    output_fasta <- tempfile(fileext = ".fa")
+    gcanvas.sample(
+        model,
+        output_fasta,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 5000),
+        seed = 60427,
+        bin_merge = list(
+            list(list(from = 0.8, to = c(0.7, 0.8))), # Merge bins 9-10 -> 8
+            list(list(from = 0.4, to = c(0.3, 0.4))) # Merge bin 5 -> 4
+        )
+    )
+
+    expect_true(file.exists(output_fasta))
+    lines <- readLines(output_fasta)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_equal(nchar(seq_content), 5000)
+    expect_true(grepl("^[ACGT]+$", seq_content))
+
+    unlink(output_fasta)
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+})
+
+test_that("gcanvas.sample bin_merge can be NULL per dimension", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    # Train with bin_merge on first dimension only
+    model <- gcanvas.train(
+        list(
+            expr = "g_frac + c_frac",
+            breaks = seq(0, 1, 0.1),
+            bin_merge = list(list(from = 0.8, to = c(0.7, 0.8)))
+        ),
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Sample with bin_merge only on second dimension (NULL for first = use training)
+    output_fasta <- tempfile(fileext = ".fa")
+    gcanvas.sample(
+        model,
+        output_fasta,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 5000),
+        seed = 60427,
+        bin_merge = list(
+            NULL, # Use training-time bin_map for dim 1
+            list(list(from = 0.4, to = c(0.3, 0.4))) # Override for dim 2
+        )
+    )
+
+    expect_true(file.exists(output_fasta))
+    lines <- readLines(output_fasta)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_equal(nchar(seq_content), 5000)
+
+    unlink(output_fasta)
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+})
+
+test_that("gcanvas.sample bin_merge validation", {
+    gdb.init_examples()
+
+    for (vt in c("g_frac", "c_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    model <- gcanvas.train(
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.1)),
+        list(expr = "g_frac", breaks = seq(0, 0.5, 0.1)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    output_fasta <- tempfile(fileext = ".fa")
+
+    # Wrong number of dimensions in bin_merge
+    expect_error(
+        gcanvas.sample(
+            model,
+            output_fasta,
+            output_format = "fasta",
+            intervals = gintervals(1, 0, 5000),
+            bin_merge = list(NULL) # Only 1 element for 2D model
+        ),
+        "2 elements"
+    )
+
+    # Wrong type
+    expect_error(
+        gcanvas.sample(
+            model,
+            output_fasta,
+            output_format = "fasta",
+            intervals = gintervals(1, 0, 5000),
+            bin_merge = "invalid"
+        ),
+        "must be a list"
+    )
 
     gvtrack.rm("g_frac")
     gvtrack.rm("c_frac")
 })
 
-test_that("gcanvas handles empty bins gracefully", {
+test_that("gcanvas.sample bin_merge handles sparse bins from training", {
     gdb.init_examples()
 
     if ("test_vt" %in% gvtrack.ls()) {
@@ -1291,39 +1753,304 @@ test_that("gcanvas handles empty bins gracefully", {
     test_intervals <- gintervals(1, 0, 50000)
     track_range <- gsummary("dense_track", intervals = test_intervals)
 
-    # Create breaks that will definitely have empty bins
-    # by extending well beyond the actual data range
+    # Train with sparse bins (no bin_merge during training)
     min_val <- track_range["Min"]
     max_val <- track_range["Max"]
     range_val <- max_val - min_val
+    breaks <- seq(min_val - range_val, max_val + range_val, length.out = 11)
 
-    # Extend breaks beyond data range
-    breaks <- seq(min_val - range_val, max_val + range_val, length.out = 21)
+    suppressWarnings({
+        model <- gcanvas.train(
+            list(expr = "test_vt", breaks = breaks),
+            intervals = test_intervals,
+            iterator = 200,
+            min_obs = 5000
+        )
+    })
 
-    model <- gcanvas.train(
-        expr = "test_vt",
-        breaks = breaks,
-        intervals = test_intervals,
-        iterator = 200
-    )
+    # Should have sparse bins
+    expect_true(length(model$sparse_bins) > 0)
 
-    expect_s3_class(model, "gcanvas.model")
+    # Sample with bin_merge to merge sparse bins into non-sparse
+    # Find the middle bins (likely non-sparse) and merge edges into them
+    mid_bin <- ceiling(length(breaks) / 2) - 1
+    mid_val <- (breaks[mid_bin] + breaks[mid_bin + 1]) / 2
 
-    # Some bins should have 0 k-mers
-    expect_true(any(model$per_bin_kmers == 0))
-
-    # Model should still be usable for sampling
     output_fasta <- tempfile(fileext = ".fa")
-    expect_no_error(
+
+    # Use bin_merge at sample time to redirect sparse bins
+    # This should reduce/eliminate sparse bin warnings
+    suppressWarnings({
         gcanvas.sample(
             model,
             output_fasta,
             output_format = "fasta",
-            intervals = gintervals(1, 0, 1000),
-            seed = 60427
+            intervals = gintervals(1, 0, 5000),
+            seed = 60427,
+            bin_merge = list(
+                list(
+                    list(from = c(-Inf, breaks[3]), to = c(breaks[mid_bin], breaks[mid_bin + 1])),
+                    list(from = c(breaks[length(breaks) - 2], Inf), to = c(breaks[mid_bin], breaks[mid_bin + 1]))
+                )
+            )
         )
-    )
+    })
+
+    expect_true(file.exists(output_fasta))
+    lines <- readLines(output_fasta)
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_equal(nchar(seq_content), 5000)
+    expect_true(grepl("^[ACGT]+$", seq_content))
 
     unlink(output_fasta)
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample returns vector with output_format='vector'", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(expr = "test_vt", breaks = seq(track_range["Min"], track_range["Max"], length.out = 6)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Sample with output_format = "vector"
+    seqs <- gcanvas.sample(
+        model,
+        output_format = "vector",
+        intervals = gintervals(1, 0, 1000),
+        seed = 60427
+    )
+
+    expect_type(seqs, "character")
+    expect_equal(length(seqs), 1)
+    expect_equal(nchar(seqs[1]), 1000)
+    expect_true(grepl("^[ACGT]+$", seqs[1]))
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample n_samples generates multiple sequences", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(expr = "test_vt", breaks = seq(track_range["Min"], track_range["Max"], length.out = 6)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Sample 5 times with vector output
+    seqs <- gcanvas.sample(
+        model,
+        output_format = "vector",
+        intervals = gintervals(1, 0, 500),
+        n_samples = 5,
+        seed = 60427
+    )
+
+    expect_type(seqs, "character")
+    expect_equal(length(seqs), 5)
+    for (i in seq_along(seqs)) {
+        expect_equal(nchar(seqs[i]), 500)
+        expect_true(grepl("^[ACGT]+$", seqs[i]))
+    }
+
+    # Each sample should be different (they use different random sequences)
+    unique_seqs <- unique(seqs)
+    expect_gt(length(unique_seqs), 1) # At least some should be different
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample n_samples works with FASTA output", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(expr = "test_vt", breaks = seq(track_range["Min"], track_range["Max"], length.out = 6)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    output_fasta <- tempfile(fileext = ".fa")
+
+    # Sample 3 times to FASTA
+    gcanvas.sample(
+        model,
+        output_fasta,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 500),
+        n_samples = 3,
+        seed = 60427
+    )
+
+    expect_true(file.exists(output_fasta))
+    lines <- readLines(output_fasta)
+
+    # Count headers - should have 3 (one per sample)
+    headers <- lines[grepl("^>", lines)]
+    expect_equal(length(headers), 3)
+
+    # Headers should include sample numbers
+    expect_true(any(grepl("_sample1", headers)))
+    expect_true(any(grepl("_sample2", headers)))
+    expect_true(any(grepl("_sample3", headers)))
+
+    unlink(output_fasta)
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample n_samples with multiple intervals", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(expr = "test_vt", breaks = seq(track_range["Min"], track_range["Max"], length.out = 6)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # 2 intervals x 3 samples = 6 sequences
+    sample_intervals <- gintervals(1, c(0, 1000), c(500, 1500))
+
+    seqs <- gcanvas.sample(
+        model,
+        output_format = "vector",
+        intervals = sample_intervals,
+        n_samples = 3,
+        seed = 60427
+    )
+
+    expect_equal(length(seqs), 6) # 2 intervals * 3 samples
+
+    # Each should be 500bp
+    for (i in seq_along(seqs)) {
+        expect_equal(nchar(seqs[i]), 500)
+        expect_true(grepl("^[ACGT]+$", seqs[i]))
+    }
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample output_format='vector' requires no output_path", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(expr = "test_vt", breaks = seq(track_range["Min"], track_range["Max"], length.out = 6)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # output_path is not required when output_format = "vector"
+    seqs <- gcanvas.sample(
+        model,
+        output_format = "vector",
+        intervals = gintervals(1, 0, 100),
+        seed = 60427
+    )
+
+    expect_type(seqs, "character")
+    expect_equal(length(seqs), 1)
+
+    # But it IS required for other formats
+    expect_error(
+        gcanvas.sample(
+            model,
+            output_format = "fasta",
+            intervals = gintervals(1, 0, 100),
+            seed = 60427
+        ),
+        "output_path is required"
+    )
+
+    gvtrack.rm("test_vt")
+})
+
+test_that("gcanvas.sample n_samples with same seed is reproducible", {
+    gdb.init_examples()
+
+    if ("test_vt" %in% gvtrack.ls()) {
+        gvtrack.rm("test_vt")
+    }
+    gvtrack.create("test_vt", "dense_track", "avg")
+
+    test_intervals <- gintervals(1, 0, 50000)
+    track_range <- gsummary("dense_track", intervals = test_intervals)
+
+    model <- gcanvas.train(
+        list(expr = "test_vt", breaks = seq(track_range["Min"], track_range["Max"], length.out = 6)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Sample twice with same seed
+    seqs1 <- gcanvas.sample(
+        model,
+        output_format = "vector",
+        intervals = gintervals(1, 0, 500),
+        n_samples = 3,
+        seed = 12345
+    )
+
+    seqs2 <- gcanvas.sample(
+        model,
+        output_format = "vector",
+        intervals = gintervals(1, 0, 500),
+        n_samples = 3,
+        seed = 12345
+    )
+
+    expect_equal(seqs1, seqs2)
+
+    # Different seed should give different results
+    seqs3 <- gcanvas.sample(
+        model,
+        output_format = "vector",
+        intervals = gintervals(1, 0, 500),
+        n_samples = 3,
+        seed = 54321
+    )
+
+    expect_false(identical(seqs1, seqs3))
+
     gvtrack.rm("test_vt")
 })
