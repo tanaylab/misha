@@ -1,7 +1,7 @@
 /*
  * StratifiedMarkovModel.h
  *
- * Stratified Markov-5 model for genome canvas generation.
+ * Stratified Markov-5 model for synthetic genome generation.
  * Stores transition probabilities for 5-mer -> base transitions,
  * stratified by bins of a track expression (e.g., GC content).
  */

@@ -1,5 +1,5 @@
 /*
- * GenomeCanvasSample.cpp
+ * GenomeSynthSample.cpp
  *
  * C++ implementation for sampling a synthetic genome from a trained
  * stratified Markov-5 model.
@@ -72,7 +72,7 @@ static void write_seq(BufferedFile& bfile, const vector<char>& seq) {
 extern "C" {
 
 /**
- * C_gcanvas_sample: Sample a synthetic genome from a trained Markov model.
+ * C_gsynth_sample: Sample a synthetic genome from a trained Markov model.
  *
  * @param _cdf_list List of CDF matrices (one per bin)
  * @param _breaks Numeric vector of bin boundaries
@@ -89,7 +89,7 @@ extern "C" {
  * @return R_NilValue on success for file output, or character vector for
  *         output_format = 2
  */
-SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
+SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                       SEXP _iter_starts, SEXP _iter_chroms, SEXP _intervals,
                       SEXP _mask_copy, SEXP _output_path,
                       SEXP _output_format, SEXP _n_samples, SEXP _envir) {

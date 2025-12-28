@@ -1,13 +1,13 @@
-# Genome Canvas: Generate synthetic genomes from stratified Markov models
+# Genome Synthesis: Generate synthetic genomes from stratified Markov models
 
 #' Create a bin mapping from value-based merge specifications
 #'
 #' Converts value-based bin merge specifications into a bin_map named vector
-#' that can be used with \code{\link{gcanvas.train}}. This allows you to
+#' that can be used with \code{\link{gsynth.train}}. This allows you to
 #' specify merges using actual track values rather than bin indices.
 #'
 #' @param breaks Numeric vector of bin boundaries (same as used in
-#'        \code{\link{gcanvas.train}})
+#'        \code{\link{gsynth.train}})
 #' @param merge_ranges List of merge specifications. Each specification is a
 #'        named list with:
 #'   \describe{
@@ -21,7 +21,7 @@
 #'   }
 #'
 #' @return A named vector (bin_map) compatible with \code{bin_map} parameter
-#'         in \code{\link{gcanvas.train}}. The names are source bin indices
+#'         in \code{\link{gsynth.train}}. The names are source bin indices
 #'         (1-based), and values are target bin indices (1-based).
 #'
 #' @examples
@@ -29,7 +29,7 @@
 #' breaks <- seq(0, 1, 0.025)
 #'
 #' # Merge all GC content above 70% (0.7) into the bin (0.675, 0.7]
-#' bin_map <- gcanvas.bin_map(
+#' bin_map <- gsynth.bin_map(
 #'     breaks = breaks,
 #'     merge_ranges = list(
 #'         list(from = 0.7, to = c(0.675, 0.7))
@@ -37,7 +37,7 @@
 #' )
 #'
 #' # Multiple merges: merge low GC (< 0.3) and high GC (> 0.7) into middle bins
-#' bin_map2 <- gcanvas.bin_map(
+#' bin_map2 <- gsynth.bin_map(
 #'     breaks = breaks,
 #'     merge_ranges = list(
 #'         list(from = c(-Inf, 0.3), to = c(0.4, 0.425)), # low GC -> (0.4, 0.425]
@@ -45,9 +45,9 @@
 #'     )
 #' )
 #'
-#' @seealso \code{\link{gcanvas.train}}
+#' @seealso \code{\link{gsynth.train}}
 #' @export
-gcanvas.bin_map <- function(breaks, merge_ranges = NULL) {
+gsynth.bin_map <- function(breaks, merge_ranges = NULL) {
     if (!is.numeric(breaks) || length(breaks) < 2) {
         stop("breaks must be a numeric vector with at least 2 elements", call. = FALSE)
     }
@@ -166,7 +166,7 @@ gcanvas.bin_map <- function(breaks, merge_ranges = NULL) {
 #'        issued. Default is 0 (no minimum). During sampling, NA bins will fall back
 #'        to uniform sampling unless merged via \code{bin_merge}.
 #'
-#' @return A \code{gcanvas.model} object containing:
+#' @return A \code{gsynth.model} object containing:
 #'   \describe{
 #'     \item{n_dims}{Number of stratification dimensions}
 #'     \item{dim_specs}{List of dimension specifications (expr, breaks, num_bins, bin_map)}
@@ -195,7 +195,7 @@ gcanvas.bin_map <- function(breaks, merge_ranges = NULL) {
 #' )
 #'
 #' # Train model with 2D stratification (GC content and CG dinucleotide)
-#' model <- gcanvas.train(
+#' model <- gsynth.train(
 #'     list(
 #'         expr = "g_frac + c_frac",
 #'         breaks = seq(0, 1, 0.025),
@@ -211,15 +211,15 @@ gcanvas.bin_map <- function(breaks, merge_ranges = NULL) {
 #'     iterator = 200
 #' )
 #'
-#' @seealso \code{\link{gcanvas.sample}}, \code{\link{gcanvas.save}},
-#'          \code{\link{gcanvas.load}}, \code{\link{gcanvas.bin_map}}
+#' @seealso \code{\link{gsynth.sample}}, \code{\link{gsynth.save}},
+#'          \code{\link{gsynth.load}}, \code{\link{gsynth.bin_map}}
 #' @export
-gcanvas.train <- function(...,
-                          mask = NULL,
-                          intervals = NULL,
-                          iterator = NULL,
-                          pseudocount = 1,
-                          min_obs = 0) {
+gsynth.train <- function(...,
+                         mask = NULL,
+                         intervals = NULL,
+                         iterator = NULL,
+                         pseudocount = 1,
+                         min_obs = 0) {
     .gcheckroot()
 
     # Capture all dimension specs from ...
@@ -259,7 +259,7 @@ gcanvas.train <- function(...,
         # Process bin_merge -> bin_map for this dimension
         bin_map <- seq_len(num_bins) # Identity mapping
         if (!is.null(spec$bin_merge)) {
-            bin_map_result <- gcanvas.bin_map(breaks, spec$bin_merge)
+            bin_map_result <- gsynth.bin_map(breaks, spec$bin_merge)
             # Convert from named vector format to integer vector
             for (j in seq_along(bin_map_result)) {
                 src_bin <- as.integer(names(bin_map_result)[j])
@@ -373,7 +373,7 @@ gcanvas.train <- function(...,
     dummy_breaks <- seq(0, total_bins, length.out = total_bins + 1)
 
     result <- .gcall(
-        "C_gcanvas_train",
+        "C_gsynth_train",
         as.integer(chrom_ids),
         as.integer(chrom_starts),
         as.integer(chrom_ends),
@@ -435,7 +435,7 @@ gcanvas.train <- function(...,
         }
     }
 
-    class(result) <- "gcanvas.model"
+    class(result) <- "gsynth.model"
 
     message(sprintf(
         "Trained model: %s 6-mers across %d bins (%d dimensions)",
@@ -454,14 +454,14 @@ gcanvas.train <- function(...,
     result
 }
 
-#' Print summary of a gcanvas.model
+#' Print summary of a gsynth.model
 #'
-#' @param x A gcanvas.model object
+#' @param x A gsynth.model object
 #' @param ... Additional arguments (ignored)
 #'
 #' @export
-print.gcanvas.model <- function(x, ...) {
-    cat("Genome Canvas Markov-5 Model\n")
+print.gsynth.model <- function(x, ...) {
+    cat("Synthetic Genome Markov-5 Model\n")
     cat("----------------------------\n")
 
     if (!is.null(x$n_dims)) {
@@ -522,40 +522,40 @@ print.gcanvas.model <- function(x, ...) {
     invisible(x)
 }
 
-#' Save a gcanvas.model to disk
+#' Save a gsynth.model to disk
 #'
 #' Saves a trained Markov model to an RDS file for later use.
 #'
-#' @param model A gcanvas.model object from \code{\link{gcanvas.train}}
+#' @param model A gsynth.model object from \code{\link{gsynth.train}}
 #' @param file Path to save the model
 #'
-#' @seealso \code{\link{gcanvas.load}}, \code{\link{gcanvas.train}}
+#' @seealso \code{\link{gsynth.load}}, \code{\link{gsynth.train}}
 #' @export
-gcanvas.save <- function(model, file) {
-    if (!inherits(model, "gcanvas.model")) {
-        stop("model must be a gcanvas.model object", call. = FALSE)
+gsynth.save <- function(model, file) {
+    if (!inherits(model, "gsynth.model")) {
+        stop("model must be a gsynth.model object", call. = FALSE)
     }
     saveRDS(model, file)
     invisible(file)
 }
 
-#' Load a gcanvas.model from disk
+#' Load a gsynth.model from disk
 #'
 #' Loads a previously saved Markov model from an RDS file.
 #'
 #' @param file Path to the saved model file
 #'
-#' @return A gcanvas.model object
+#' @return A gsynth.model object
 #'
-#' @seealso \code{\link{gcanvas.save}}, \code{\link{gcanvas.train}}
+#' @seealso \code{\link{gsynth.save}}, \code{\link{gsynth.train}}
 #' @export
-gcanvas.load <- function(file) {
+gsynth.load <- function(file) {
     if (!file.exists(file)) {
         stop(sprintf("File not found: %s", file), call. = FALSE)
     }
     model <- readRDS(file)
-    if (!inherits(model, "gcanvas.model")) {
-        stop("File does not contain a valid gcanvas.model", call. = FALSE)
+    if (!inherits(model, "gsynth.model")) {
+        stop("File does not contain a valid gsynth.model", call. = FALSE)
     }
     model
 }
@@ -566,7 +566,7 @@ gcanvas.load <- function(file) {
 #' model. The generated genome preserves the k-mer statistics of the original
 #' genome within each stratification bin.
 #'
-#' @param model A gcanvas.model object from \code{\link{gcanvas.train}}
+#' @param model A gsynth.model object from \code{\link{gsynth.train}}
 #' @param output_path Path to the output file (ignored when output_format = "vector")
 #' @param output_format Output format:
 #'   \itemize{
@@ -585,7 +585,7 @@ gcanvas.load <- function(file) {
 #'        When output_format = "vector", returns n_samples * n_intervals sequences.
 #' @param bin_merge Optional list of bin merge specifications to apply during sampling,
 #'        one per dimension. Each element should be a list of merge specifications
-#'        (same format as in \code{\link{gcanvas.train}}), or NULL to use the
+#'        (same format as in \code{\link{gsynth.train}}), or NULL to use the
 #'        bin mapping from training. This allows merging sparse bins at sampling time
 #'        without re-training the model.
 #'
@@ -609,7 +609,7 @@ gcanvas.load <- function(file) {
 #' )
 #'
 #' # Train model (excluding repeats from training)
-#' model <- gcanvas.train(
+#' model <- gsynth.train(
 #'     list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.025)),
 #'     list(expr = "cg_frac", breaks = c(0, 0.01, 0.02, 0.03, 0.04, 0.2)),
 #'     mask = repeats,
@@ -618,7 +618,7 @@ gcanvas.load <- function(file) {
 #' )
 #'
 #' # Sample with mask_copy to preserve repeats from original genome
-#' gcanvas.sample(model, "synthetic_genome.fa",
+#' gsynth.sample(model, "synthetic_genome.fa",
 #'     output_format = "fasta",
 #'     mask_copy = repeats,
 #'     seed = 60427,
@@ -628,20 +628,20 @@ gcanvas.load <- function(file) {
 #'     )
 #' )
 #'
-#' @seealso \code{\link{gcanvas.train}}, \code{\link{gcanvas.save}}
+#' @seealso \code{\link{gsynth.train}}, \code{\link{gsynth.save}}
 #' @export
-gcanvas.sample <- function(model,
-                           output_path = NULL,
-                           output_format = c("misha", "fasta", "vector"),
-                           mask_copy = NULL,
-                           seed = NULL,
-                           intervals = NULL,
-                           n_samples = 1,
-                           bin_merge = NULL) {
+gsynth.sample <- function(model,
+                          output_path = NULL,
+                          output_format = c("misha", "fasta", "vector"),
+                          mask_copy = NULL,
+                          seed = NULL,
+                          intervals = NULL,
+                          n_samples = 1,
+                          bin_merge = NULL) {
     .gcheckroot()
 
-    if (!inherits(model, "gcanvas.model")) {
-        stop("model must be a gcanvas.model object", call. = FALSE)
+    if (!inherits(model, "gsynth.model")) {
+        stop("model must be a gsynth.model object", call. = FALSE)
     }
 
     output_format <- match.arg(output_format)
@@ -703,7 +703,7 @@ gcanvas.sample <- function(model,
                 sample_bin_maps[[d]] <- spec$bin_map
             } else {
                 # Compute new bin_map from sampling-time bin_merge
-                bin_map_result <- gcanvas.bin_map(spec$breaks, dim_merge)
+                bin_map_result <- gsynth.bin_map(spec$breaks, dim_merge)
                 new_bin_map <- seq_len(spec$num_bins)
                 for (j in seq_along(bin_map_result)) {
                     src_bin <- as.integer(names(bin_map_result)[j])
@@ -820,7 +820,7 @@ gcanvas.sample <- function(model,
     output_path_str <- if (is.null(output_path)) "" else as.character(output_path)
 
     result <- .gcall(
-        "C_gcanvas_sample",
+        "C_gsynth_sample",
         cdf_list,
         as.numeric(dummy_breaks),
         flat_indices,
