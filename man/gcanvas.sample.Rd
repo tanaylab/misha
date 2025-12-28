@@ -6,21 +6,27 @@
 \usage{
 gcanvas.sample(
   model,
-  output_path,
-  output_format = c("misha", "fasta"),
+  output_path = NULL,
+  output_format = c("misha", "fasta", "vector"),
   mask = NULL,
   mask_mode = c("sample", "copy"),
   seed = NULL,
-  intervals = NULL
+  intervals = NULL,
+  n_samples = 1,
+  bin_merge = NULL
 )
 }
 \arguments{
 \item{model}{A gcanvas.model object from \code{\link{gcanvas.train}}}
 
-\item{output_path}{Path to the output file}
+\item{output_path}{Path to the output file (ignored when output_format = "vector")}
 
-\item{output_format}{Output format: "misha" for .seq binary format,
-"fasta" for FASTA text format}
+\item{output_format}{Output format:
+\itemize{
+  \item "misha": .seq binary format (default)
+  \item "fasta": FASTA text format
+  \item "vector": Return sequences as a character vector (does not write to file)
+}}
 
 \item{mask}{Optional intervals for special handling during sampling}
 
@@ -33,9 +39,21 @@ gcanvas.sample(
 \item{seed}{Random seed for reproducibility. If NULL, uses current random state.}
 
 \item{intervals}{Genomic intervals to sample. If NULL, uses all chromosomes.}
+
+\item{n_samples}{Number of samples to generate per interval. Default is 1.
+When n_samples > 1 and output_format = "fasta", headers include "_sampleN".
+When output_format = "vector", returns n_samples * n_intervals sequences.}
+
+\item{bin_merge}{Optional list of bin merge specifications to apply during sampling,
+one per dimension. Each element should be a list of merge specifications
+(same format as in \code{\link{gcanvas.train}}), or NULL to use the
+bin mapping from training. This allows merging sparse bins at sampling time
+without re-training the model.}
 }
 \value{
-Invisible NULL. The synthetic genome is written to output_path.
+When output_format is "misha" or "fasta", returns invisible NULL and
+        writes the synthetic genome to output_path. When output_format is "vector",
+        returns a character vector of sequences (length = n_intervals * n_samples).
 }
 \description{
 Generates a synthetic genome by sampling from a trained stratified Markov-5
@@ -45,9 +63,10 @@ genome within each stratification bin.
 \examples{
 gdb.init_examples()
 
-# Train a model first
+# Create virtual tracks
 gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
 gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
 gvtrack.create("masked_frac", NULL, "masked.frac")
 
 # Define repeat mask
@@ -55,19 +74,26 @@ repeats <- gscreen("masked_frac > 0.5",
     intervals = gintervals.all(),
     iterator = 100
 )
+
+# Train model WITHOUT bin_merge to see all bins
 model <- gcanvas.train(
-    expr = "g_frac + c_frac",
-    breaks = seq(0, 1, 0.025),
+    list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.025)),
+    list(expr = "cg_frac", breaks = c(0, 0.01, 0.02, 0.03, 0.04, 0.2)),
     mask = repeats,
-    iterator = 200
+    iterator = 200,
+    min_obs = 1000
 )
 
-# Sample a synthetic genome
+# Sample with bin_merge to handle sparse bins at sampling time
 gcanvas.sample(model, "synthetic_genome.fa",
     output_format = "fasta",
     mask = repeats,
     mask_mode = "copy",
-    seed = 60427
+    seed = 60427,
+    bin_merge = list(
+        list(list(from = 0.7, to = c(0.675, 0.7))),
+        list(list(from = 0.04, to = c(0.03, 0.04)))
+    )
 )
 
 }

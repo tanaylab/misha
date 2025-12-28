@@ -82,16 +82,18 @@ extern "C" {
  * @param _intervals R intervals object for output regions
  * @param _mask R intervals object for mask regions (NULL if no mask)
  * @param _mask_mode Integer: 0 = sample (ignore mask), 1 = copy from original
- * @param _output_path Output file path
- * @param _output_format Integer: 0 = misha .seq, 1 = FASTA
+ * @param _output_path Output file path (ignored if output_format = 2)
+ * @param _output_format Integer: 0 = misha .seq, 1 = FASTA, 2 = return vector
+ * @param _n_samples Integer: number of samples to generate per interval
  * @param _envir R environment
  *
- * @return R_NilValue on success
+ * @return R_NilValue on success for file output, or character vector for
+ *         output_format = 2
  */
 SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                       SEXP _iter_starts, SEXP _iter_chroms, SEXP _intervals,
                       SEXP _mask, SEXP _mask_mode, SEXP _output_path,
-                      SEXP _output_format, SEXP _envir) {
+                      SEXP _output_format, SEXP _n_samples, SEXP _envir) {
     try {
         struct RNGStateGuard {
             bool active = false;
@@ -208,6 +210,13 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         // Get output settings
         const char* output_path = CHAR(STRING_ELT(_output_path, 0));
         int output_format = Rf_asInteger(_output_format);
+        int n_samples = Rf_asInteger(_n_samples);
+        if (n_samples < 1) {
+            n_samples = 1;
+        }
+
+        // Vector to collect sequences when output_format = 2 (vector mode)
+        vector<string> collected_seqs;
 
         // Compute total range for progress reporting
         uint64_t total_range = 0;
@@ -216,6 +225,7 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                 total_range += iv.end - iv.start;
             }
         }
+        total_range *= n_samples;  // Multiply by number of samples
 
         Progress_reporter progress;
         progress.init(total_range, 1000000);
@@ -224,7 +234,7 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         GenomeSeqFetch seqfetch;
         seqfetch.set_seqdir(string(rdb::get_groot(_envir)) + "/seq");
 
-        // Open output file
+        // Open output file (only if not vector mode)
         ofstream fasta_ofs;
         BufferedFile seq_bfile;
         if (output_format == 1) {
@@ -233,13 +243,14 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
             if (!fasta_ofs) {
                 verror("Failed to open output file: %s", output_path);
             }
-        } else {
+        } else if (output_format == 0) {
             // .seq binary
             seq_bfile.open(output_path, "wb");
             if (seq_bfile.error()) {
                 verror("Failed to open output file: %s", output_path);
             }
         }
+        // output_format == 2: vector mode, no file to open
 
         // Build per-chromosome bin lookup
         vector<vector<pair<int64_t, int>>> chrom_bins(num_chroms);
@@ -273,116 +284,129 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                 if (interval_end <= interval_start) {
                     continue;
                 }
-                size_t bin_cursor = 0;
-                if (!bins.empty()) {
-                    while (bin_cursor + 1 < bins.size() &&
-                           interval_start >= bins[bin_cursor + 1].first) {
-                        ++bin_cursor;
-                    }
-                }
 
                 int64_t interval_len = interval_end - interval_start;
 
-                // Load original sequence for mask_mode = copy
+                // Load original sequence for mask_mode = copy (only once per interval)
                 vector<char> original_seq;
                 if (mask_mode == 1 && !mask_ivs.empty()) {
                     GInterval interval(chromid, interval_start, interval_end, 0);
                     seqfetch.read_interval(interval, chromkey, original_seq);
                 }
 
-                // Allocate output sequence
-                vector<char> synth_seq(interval_len);
-
-                size_t mask_cursor = 0;
-                while (mask_cursor < mask_ivs.size() &&
-                       mask_ivs[mask_cursor].end <= interval_start) {
-                    ++mask_cursor;
-                }
-
-                // Initialize first 5 bases, honoring mask copy semantics.
-                int64_t init_len = min<int64_t>(5, interval_len);
-                for (int64_t i = 0; i < init_len; ++i) {
-                    int64_t pos = interval_start + i;
-                    synth_seq[i] = StratifiedMarkovModel::decode_base(
-                        static_cast<int>(unif_rand() * NUM_BASES));
-                    if (is_masked_sample(pos, mask_ivs, mask_cursor)) {
-                        if (mask_mode == 1 &&
-                            i < (int64_t)original_seq.size()) {
-                            synth_seq[i] = original_seq[i];
-                        }
-                    }
-                }
-
-                // Sample remaining bases using Markov chain
-                for (int64_t pos = interval_start + init_len; pos < interval_end; ++pos) {
-                    int64_t rel_pos = pos - interval_start;
-
-                    // Check mask
-                    if (is_masked_sample(pos, mask_ivs, mask_cursor)) {
-                        if (mask_mode == 1 &&
-                            rel_pos < (int64_t)original_seq.size()) {
-                            // Copy from original
-                            synth_seq[rel_pos] = original_seq[rel_pos];
-                        } else {
-                            // Sample uniformly
-                            synth_seq[rel_pos] = StratifiedMarkovModel::decode_base(
-                                static_cast<int>(unif_rand() * NUM_BASES));
-                        }
-                        continue;
-                    }
-
-                    // Find bin for this position using a forward cursor
-                    int bin_idx = -1;
+                // Generate n_samples samples for this interval
+                for (int sample_idx = 0; sample_idx < n_samples; ++sample_idx) {
+                    // Reset bin cursor for each sample
+                    size_t bin_cursor = 0;
                     if (!bins.empty()) {
                         while (bin_cursor + 1 < bins.size() &&
-                               pos >= bins[bin_cursor + 1].first) {
+                               interval_start >= bins[bin_cursor + 1].first) {
                             ++bin_cursor;
-                        }
-                        if (pos >= bins[bin_cursor].first &&
-                            pos < bins[bin_cursor].first + iter_size) {
-                            bin_idx = bins[bin_cursor].second;
                         }
                     }
 
-                    // Get 5-mer context from already-sampled bases
-                    int context_idx = StratifiedMarkovModel::encode_5mer(
-                        &synth_seq[rel_pos - 5]);
+                    // Allocate output sequence
+                    vector<char> synth_seq(interval_len);
 
-                    int next_base;
-                    if (context_idx < 0 || bin_idx < 0 || bin_idx >= num_bins) {
-                        // Invalid context or bin - sample uniformly
-                        next_base = static_cast<int>(unif_rand() * NUM_BASES);
-                    } else {
-                        // Sample from CDF
-                        float r = unif_rand();
-                        const auto& cdf = cdf_data[bin_idx][context_idx];
-                        next_base = NUM_BASES - 1;
-                        for (int b = 0; b < NUM_BASES; ++b) {
-                            if (r < cdf[b]) {
-                                next_base = b;
-                                break;
+                    size_t mask_cursor = 0;
+                    while (mask_cursor < mask_ivs.size() &&
+                           mask_ivs[mask_cursor].end <= interval_start) {
+                        ++mask_cursor;
+                    }
+
+                    // Initialize first 5 bases, honoring mask copy semantics.
+                    int64_t init_len = min<int64_t>(5, interval_len);
+                    for (int64_t i = 0; i < init_len; ++i) {
+                        int64_t pos = interval_start + i;
+                        synth_seq[i] = StratifiedMarkovModel::decode_base(
+                            static_cast<int>(unif_rand() * NUM_BASES));
+                        if (is_masked_sample(pos, mask_ivs, mask_cursor)) {
+                            if (mask_mode == 1 &&
+                                i < (int64_t)original_seq.size()) {
+                                synth_seq[i] = original_seq[i];
                             }
                         }
                     }
 
-                    synth_seq[rel_pos] =
-                        StratifiedMarkovModel::decode_base(next_base);
-                }
+                    // Sample remaining bases using Markov chain
+                    for (int64_t pos = interval_start + init_len; pos < interval_end; ++pos) {
+                        int64_t rel_pos = pos - interval_start;
 
-                // Write interval to output
-                if (output_format == 1) {
-                    string header = chrom_name;
-                    if (!(interval_start == 0 && interval_end == chrom_size)) {
-                        header = chrom_name + ":" +
-                            to_string(interval_start) + "-" +
-                            to_string(interval_end);
+                        // Check mask only if mask_mode is "copy" (1)
+                        // When mask_mode is "sample" (0), ignore mask and sample normally
+                        if (mask_mode == 1 && is_masked_sample(pos, mask_ivs, mask_cursor)) {
+                            if (rel_pos < (int64_t)original_seq.size()) {
+                                // Copy from original
+                                synth_seq[rel_pos] = original_seq[rel_pos];
+                            } else {
+                                // No original sequence available, sample uniformly
+                                synth_seq[rel_pos] = StratifiedMarkovModel::decode_base(
+                                    static_cast<int>(unif_rand() * NUM_BASES));
+                            }
+                            continue;
+                        }
+
+                        // Find bin for this position using a forward cursor
+                        int bin_idx = -1;
+                        if (!bins.empty()) {
+                            while (bin_cursor + 1 < bins.size() &&
+                                   pos >= bins[bin_cursor + 1].first) {
+                                ++bin_cursor;
+                            }
+                            if (pos >= bins[bin_cursor].first &&
+                                pos < bins[bin_cursor].first + iter_size) {
+                                bin_idx = bins[bin_cursor].second;
+                            }
+                        }
+
+                        // Get 5-mer context from already-sampled bases
+                        int context_idx = StratifiedMarkovModel::encode_5mer(
+                            &synth_seq[rel_pos - 5]);
+
+                        int next_base;
+                        if (context_idx < 0 || bin_idx < 0 || bin_idx >= num_bins) {
+                            // Invalid context or bin - sample uniformly
+                            next_base = static_cast<int>(unif_rand() * NUM_BASES);
+                        } else {
+                            // Sample from CDF
+                            float r = unif_rand();
+                            const auto& cdf = cdf_data[bin_idx][context_idx];
+                            next_base = NUM_BASES - 1;
+                            for (int b = 0; b < NUM_BASES; ++b) {
+                                if (r < cdf[b]) {
+                                    next_base = b;
+                                    break;
+                                }
+                            }
+                        }
+
+                        synth_seq[rel_pos] =
+                            StratifiedMarkovModel::decode_base(next_base);
                     }
-                    write_fasta(fasta_ofs, header, synth_seq);
-                } else {
-                    write_seq(seq_bfile, synth_seq);
-                }
 
-                progress.report(interval_len);
+                    // Write interval to output
+                    if (output_format == 2) {
+                        // Vector mode: collect sequence as string
+                        collected_seqs.push_back(string(synth_seq.begin(), synth_seq.end()));
+                    } else if (output_format == 1) {
+                        // FASTA
+                        string header = chrom_name;
+                        if (!(interval_start == 0 && interval_end == chrom_size)) {
+                            header = chrom_name + ":" +
+                                to_string(interval_start) + "-" +
+                                to_string(interval_end);
+                        }
+                        if (n_samples > 1) {
+                            header += "_sample" + to_string(sample_idx + 1);
+                        }
+                        write_fasta(fasta_ofs, header, synth_seq);
+                    } else {
+                        // .seq binary
+                        write_seq(seq_bfile, synth_seq);
+                    }
+
+                    progress.report(interval_len);
+                }  // end sample loop
             }
 
             check_interrupt();
@@ -390,15 +414,25 @@ SEXP C_gcanvas_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
 
         progress.report_last();
 
-        // Close output
+        // Close output files
         if (output_format == 1) {
             fasta_ofs.close();
-        } else {
+        } else if (output_format == 0) {
             seq_bfile.close();
         }
 
         // Save R's RNG state
         rng_guard.release();
+
+        // Return vector of sequences if requested
+        if (output_format == 2) {
+            SEXP result;
+            rprotect(result = Rf_allocVector(STRSXP, collected_seqs.size()));
+            for (size_t i = 0; i < collected_seqs.size(); ++i) {
+                SET_STRING_ELT(result, i, Rf_mkChar(collected_seqs[i].c_str()));
+            }
+            return result;
+        }
 
         return R_NilValue;
 

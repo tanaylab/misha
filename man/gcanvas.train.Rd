@@ -5,34 +5,23 @@
 \title{Train a stratified Markov-5 model from genome sequences}
 \usage{
 gcanvas.train(
-  expr,
-  breaks,
-  bin_merge = NULL,
+  ...,
   mask = NULL,
   intervals = NULL,
   iterator = NULL,
-  pseudocount = 1
+  pseudocount = 1,
+  min_obs = 0
 )
 }
 \arguments{
-\item{expr}{Track expression for stratification (e.g., a GC virtual track)}
-
-\item{breaks}{Numeric vector of bin boundaries. For example, \code{seq(0, 1, 0.025)}
-creates 40 bins of 2.5\% width.}
-
-\item{bin_merge}{Optional list of merge specifications for merging sparse bins.
-     Each specification is a named list with:
+\item{...}{One or more dimension specifications. Each specification is a list
+     containing:
 \describe{
-  \item{from}{Numeric vector of length 2 \code{c(min, max)} defining the
-        source value range to merge. Use \code{-Inf} or \code{Inf} for
-        open-ended ranges. Can also be a single number (shorthand for
-        \code{c(value, Inf)}).}
-  \item{to}{Numeric vector of length 2 \code{c(min, max)} defining the
-        target bin that source bins should map to. Must exactly match a bin
-        defined by \code{breaks}.}
-}
-     For example, to map all GC content above 70\% to the (0.675, 0.7] bin:
-     \code{bin_merge = list(list(from = 0.7, to = c(0.675, 0.7)))}}
+  \item{expr}{Track expression for this dimension (required)}
+  \item{breaks}{Numeric vector of bin boundaries for this dimension (required)}
+  \item{bin_merge}{Optional list of merge specifications for merging sparse bins.
+        Each specification is a named list with 'from' and 'to' elements.}
+}}
 
 \item{mask}{Optional intervals to exclude from training. Regions in the mask
 will not contribute to k-mer counts. Can be computed using \code{gscreen()}.}
@@ -44,12 +33,19 @@ track values are computed.}
 
 \item{pseudocount}{Pseudocount added to all k-mer counts to avoid zero probabilities.
 Default is 1.}
+
+\item{min_obs}{Minimum number of observations (6-mers) required per bin. Bins with
+fewer observations will be marked as NA (not learned) and a warning will be
+issued. Default is 0 (no minimum). During sampling, NA bins will fall back
+to uniform sampling unless merged via \code{bin_merge}.}
 }
 \value{
 A \code{gcanvas.model} object containing:
   \describe{
-    \item{num_bins}{Number of stratification bins}
-    \item{breaks}{Bin boundaries}
+    \item{n_dims}{Number of stratification dimensions}
+    \item{dim_specs}{List of dimension specifications (expr, breaks, num_bins, bin_map)}
+    \item{dim_sizes}{Vector of bin counts per dimension}
+    \item{total_bins}{Total number of bins (product of dim_sizes)}
     \item{total_kmers}{Total number of valid 6-mers counted}
     \item{per_bin_kmers}{Number of 6-mers counted per bin}
     \item{total_masked}{Number of positions skipped due to mask}
@@ -58,16 +54,18 @@ A \code{gcanvas.model} object containing:
   }
 }
 \description{
-Computes a 5th-order Markov model stratified by bins of a track expression
-(e.g., GC content). This model can be used to generate synthetic genomes
-that preserve the k-mer statistics of the original genome within each bin.
+Computes a 5th-order Markov model stratified by bins of one or more track
+expressions (e.g., GC content and CG dinucleotide frequency). This model can
+be used to generate synthetic genomes that preserve the k-mer statistics of
+the original genome within each stratification bin.
 }
 \examples{
 gdb.init_examples()
 
-# Create GC virtual track at 200bp resolution
+# Create virtual tracks for stratification
 gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
 gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
 gvtrack.create("masked_frac", NULL, "masked.frac")
 
 # Define repeat mask
@@ -76,14 +74,20 @@ repeats <- gscreen("masked_frac > 0.5",
     iterator = 100
 )
 
-# Train model with GC stratification
+# Train model with 2D stratification (GC content and CG dinucleotide)
 model <- gcanvas.train(
-    expr = "g_frac + c_frac",
-    breaks = seq(0, 1, 0.025),
-    bin_merge = list(
-        list(from = 0.7, to = c(0.675, 0.7)) # Map high GC (>70\%) to (0.675, 0.7]
+    list(
+        expr = "g_frac + c_frac",
+        breaks = seq(0, 1, 0.025),
+        bin_merge = list(list(from = 0.7, to = c(0.675, 0.7)))
+    ),
+    list(
+        expr = "cg_frac",
+        breaks = c(0, 0.01, 0.02, 0.03, 0.04, 0.2),
+        bin_merge = list(list(from = 0.04, to = c(0.03, 0.04)))
     ),
     mask = repeats,
+    intervals = gintervals.all(),
     iterator = 200
 )
 
