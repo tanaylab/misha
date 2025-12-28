@@ -557,11 +557,6 @@ gseq.kmer.dist <- function(intervals, k = 6L, mask = NULL) {
         stop("k must be an integer between 1 and 10", call. = FALSE)
     }
 
-    # Validate intervals
-    if (is.null(intervals) || !is.data.frame(intervals)) {
-        stop("intervals must be a data frame", call. = FALSE)
-    }
-
     # Call C++ implementation
     result <- .gcall(
         "C_gseq_kmer_dist",
