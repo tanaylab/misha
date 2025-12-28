@@ -1,5 +1,5 @@
 /*
- * GenomeCanvasTrain.cpp
+ * GenomeSynthTrain.cpp
  *
  * C++ implementation for training a stratified Markov-5 model
  * from genomic sequences.
@@ -49,7 +49,7 @@ static bool is_masked(int64_t pos, const vector<GInterval>& mask_intervals,
 extern "C" {
 
 /**
- * C_gcanvas_train: Train a stratified Markov-5 model from genome sequences.
+ * C_gsynth_train: Train a stratified Markov-5 model from genome sequences.
  *
  * @param _chrom_ids Integer vector of chromosome IDs to process
  * @param _chrom_starts Integer vector of start positions for each chromosome
@@ -66,7 +66,7 @@ extern "C" {
  *
  * @return A list containing the trained model data
  */
-SEXP C_gcanvas_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
+SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                      SEXP _bin_indices, SEXP _iter_starts, SEXP _iter_chroms,
                      SEXP _breaks, SEXP _bin_map, SEXP _mask,
                      SEXP _pseudocount, SEXP _envir) {

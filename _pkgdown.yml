@@ -119,15 +119,15 @@ reference:
       - grevcomp
       - gseq.rev
       - gseq.comp
-  - title: Genome Canvas functions
+  - title: Synthetic genome functions
     desc: Generate synthetic genomes using stratified Markov models
     contents:
-      - gcanvas.train
-      - gcanvas.sample
-      - gcanvas.save
-      - gcanvas.load 
-      - gcanvas.bin_map
-      - print.gcanvas.model
+      - gsynth.train
+      - gsynth.sample
+      - gsynth.save
+      - gsynth.load 
+      - gsynth.bin_map
+      - print.gsynth.model
   - title: Database functions
     desc: Database functions
     contents:
