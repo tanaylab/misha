@@ -196,6 +196,42 @@ void StratifiedMarkovModel::decode_5mer(int idx, char* out) {
     }
 }
 
+int StratifiedMarkovModel::complement_base(int base_idx) {
+    // A(0) <-> T(3), C(1) <-> G(2)
+    return 3 - base_idx;
+}
+
+void StratifiedMarkovModel::revcomp_6mer(int context_5mer_idx, int next_base_idx,
+                                          int& revcomp_context_idx, int& revcomp_next_idx) {
+    // Forward 6-mer: B0 B1 B2 B3 B4 B5
+    //   context = B0*256 + B1*64 + B2*16 + B3*4 + B4
+    //   next = B5
+    //
+    // Reverse complement: comp(B5) comp(B4) comp(B3) comp(B2) comp(B1) comp(B0)
+    //   revcomp_context = comp(B5)*256 + comp(B4)*64 + comp(B3)*16 + comp(B2)*4 + comp(B1)
+    //   revcomp_next = comp(B0)
+
+    // Extract the 5 bases from context (B0 is most significant)
+    int b4 = context_5mer_idx & 3;
+    int b3 = (context_5mer_idx >> 2) & 3;
+    int b2 = (context_5mer_idx >> 4) & 3;
+    int b1 = (context_5mer_idx >> 6) & 3;
+    int b0 = (context_5mer_idx >> 8) & 3;
+    int b5 = next_base_idx;
+
+    // Compute complements
+    int c0 = complement_base(b0);
+    int c1 = complement_base(b1);
+    int c2 = complement_base(b2);
+    int c3 = complement_base(b3);
+    int c4 = complement_base(b4);
+    int c5 = complement_base(b5);
+
+    // Build reverse complement context: c5 c4 c3 c2 c1
+    revcomp_context_idx = (c5 << 8) | (c4 << 6) | (c3 << 4) | (c2 << 2) | c1;
+    revcomp_next_idx = c0;
+}
+
 void StratifiedMarkovModel::save(const std::string& path) const {
     std::ofstream ofs(path, std::ios::binary);
     if (!ofs) {
