@@ -12,6 +12,7 @@
 #include "GenomeChromKey.h"
 #include "GenomeSeqFetch.h"
 #include "GIntervalsBigSet1D.h"
+#include "MaskUtils.h"
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
@@ -19,26 +20,6 @@
 
 using namespace std;
 using namespace rdb;
-
-/**
- * Helper: Check if a position is within any masked interval.
- * Uses a cursor for efficient sequential access.
- */
-static bool is_masked_kmer(int64_t pos, const vector<GInterval>& mask_intervals,
-                           size_t& cursor) {
-    while (cursor < mask_intervals.size() &&
-           mask_intervals[cursor].end <= pos) {
-        ++cursor;
-    }
-
-    if (cursor < mask_intervals.size() &&
-        mask_intervals[cursor].start <= pos &&
-        pos < mask_intervals[cursor].end) {
-        return true;
-    }
-
-    return false;
-}
 
 /**
  * Encode a k-mer string to an integer index.
@@ -166,7 +147,7 @@ SEXP C_gseq_kmer_dist(SEXP _intervals, SEXP _k, SEXP _mask, SEXP _envir) {
                 int64_t genome_pos = iv.start + pos;
 
                 // Check if masked
-                if (is_masked_kmer(genome_pos, mask_ivs, mask_cursor)) {
+                if (is_position_masked(genome_pos, mask_ivs, mask_cursor)) {
                     ++total_masked;
                     continue;
                 }

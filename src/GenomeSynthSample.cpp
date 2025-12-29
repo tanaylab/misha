@@ -19,6 +19,7 @@
 #include "GenomeChromKey.h"
 #include "GenomeSeqFetch.h"
 #include "GIntervalsBigSet1D.h"
+#include "MaskUtils.h"
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
@@ -26,28 +27,6 @@
 
 using namespace std;
 using namespace rdb;
-
-/**
- * Helper: Check if a position is within any masked interval.
- * Uses a cursor for efficient sequential access.
- */
-static bool is_masked_sample(int64_t pos, const vector<GInterval>& mask_intervals,
-                             size_t& cursor) {
-    // Advance cursor past intervals that end before this position
-    while (cursor < mask_intervals.size() &&
-           mask_intervals[cursor].end <= pos) {
-        ++cursor;
-    }
-
-    // Check if position is within current interval
-    if (cursor < mask_intervals.size() &&
-        mask_intervals[cursor].start <= pos &&
-        pos < mask_intervals[cursor].end) {
-        return true;
-    }
-
-    return false;
-}
 
 /**
  * Helper: Write sequence to FASTA format.
@@ -317,7 +296,7 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                     for (int64_t i = 0; i < init_len; ++i) {
                         int64_t pos = interval_start + i;
                         // Check if this position should be copied from original
-                        if (is_masked_sample(pos, mask_copy_ivs, mask_cursor) &&
+                        if (is_position_masked(pos, mask_copy_ivs, mask_cursor) &&
                             i < (int64_t)original_seq.size()) {
                             synth_seq[i] = original_seq[i];
                         } else {
@@ -331,7 +310,7 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                         int64_t rel_pos = pos - interval_start;
 
                         // Check if this position should be copied from original
-                        if (is_masked_sample(pos, mask_copy_ivs, mask_cursor)) {
+                        if (is_position_masked(pos, mask_copy_ivs, mask_cursor)) {
                             if (rel_pos < (int64_t)original_seq.size()) {
                                 // Copy from original
                                 synth_seq[rel_pos] = original_seq[rel_pos];

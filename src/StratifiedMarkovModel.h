@@ -111,6 +111,27 @@ public:
      */
     static void decode_5mer(int idx, char* out);
 
+    /**
+     * Get the complement of a base index.
+     * @param base_idx Base index (0=A, 1=C, 2=G, 3=T)
+     * @return Complement base index (A↔T, C↔G)
+     */
+    static int complement_base(int base_idx);
+
+    /**
+     * Compute the reverse complement of a 6-mer given as context + next base.
+     * Given forward 6-mer B0B1B2B3B4B5 (context=B0-B4, next=B5),
+     * computes reverse complement: comp(B5)comp(B4)comp(B3)comp(B2)comp(B1)comp(B0)
+     * where the new context is comp(B5)-comp(B1) and new next is comp(B0).
+     *
+     * @param context_5mer_idx Encoded 5-mer context (0 to 1023)
+     * @param next_base_idx Next base index (0=A, 1=C, 2=G, 3=T)
+     * @param revcomp_context_idx [out] Reverse complement 5-mer context index
+     * @param revcomp_next_idx [out] Reverse complement next base index
+     */
+    static void revcomp_6mer(int context_5mer_idx, int next_base_idx,
+                             int& revcomp_context_idx, int& revcomp_next_idx);
+
     // Accessors
     int get_num_bins() const { return m_num_bins; }
     const std::vector<double>& get_breaks() const { return m_breaks; }

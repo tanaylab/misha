@@ -531,10 +531,9 @@ test_that("gsynth.train error handling", {
 
     test_intervals <- gintervals(1, 0, 50000)
 
-    # No dimension specs
-    expect_error(
-        gsynth.train(intervals = test_intervals, iterator = 200),
-        "At least one dimension specification"
+    # No dimension specs should now work (0D model)
+    expect_no_error(
+        gsynth.train(intervals = test_intervals, iterator = 200)
     )
 
     # Missing expr
@@ -2052,4 +2051,628 @@ test_that("gsynth.sample n_samples with same seed is reproducible", {
     expect_false(identical(seqs1, seqs3))
 
     gvtrack.rm("test_vt")
+})
+
+test_that("gsynth.train works without stratification (0D model)", {
+    gdb.init_examples()
+
+    # Train 0D model (no dimensions)
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 100000),
+        iterator = 1000
+    )
+
+    # Check model structure
+    expect_s3_class(model, "gsynth.model")
+    expect_equal(model$n_dims, 0)
+    expect_equal(model$total_bins, 1)
+    expect_length(model$dim_specs, 0)
+    expect_length(model$dim_sizes, 0)
+    expect_true(model$total_kmers > 0)
+    expect_equal(length(model$per_bin_kmers), 1)
+    expect_equal(length(model$model_data$cdf), 1)
+
+    # Check CDF structure for single bin
+    cdf_mat <- model$model_data$cdf[[1]]
+    expect_equal(dim(cdf_mat), c(1024, 4))
+
+    # CDF should be valid
+    for (ctx in 1:10) {
+        expect_true(all(diff(cdf_mat[ctx, ]) >= 0))
+        expect_equal(cdf_mat[ctx, 4], 1.0, tolerance = 1e-5)
+    }
+})
+
+test_that("gsynth.sample works with 0D model", {
+    gdb.init_examples()
+
+    # Train 0D model
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 100000),
+        iterator = 1000
+    )
+
+    # Sample as vector
+    seqs <- gsynth.sample(
+        model,
+        output_format = "vector",
+        intervals = gintervals(1, 0, 10000),
+        seed = 42
+    )
+
+    expect_type(seqs, "character")
+    expect_equal(length(seqs), 1)
+    expect_true(all(nchar(seqs) > 0))
+    expect_true(all(grepl("^[ACGT]+$", seqs)))
+    expect_equal(nchar(seqs[1]), 10000)
+})
+
+test_that("0D model can be saved and loaded", {
+    gdb.init_examples()
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 1000
+    )
+
+    tmp <- tempfile(fileext = ".rds")
+    gsynth.save(model, tmp)
+
+    loaded <- gsynth.load(tmp)
+    expect_s3_class(loaded, "gsynth.model")
+    expect_equal(loaded$n_dims, 0)
+    expect_equal(loaded$total_bins, 1)
+    expect_equal(loaded$total_kmers, model$total_kmers)
+    expect_equal(loaded$per_bin_kmers, model$per_bin_kmers)
+
+    unlink(tmp)
+})
+
+test_that("0D model print method works", {
+    gdb.init_examples()
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 1000
+    )
+
+    output <- capture.output(print(model))
+    expect_true(any(grepl("Stratification.*None", output, ignore.case = TRUE)))
+    expect_true(any(grepl("single global", output, ignore.case = TRUE)))
+    expect_true(any(grepl("Total bins: 1", output)))
+})
+
+test_that("0D model with mask works correctly", {
+    gdb.init_examples()
+
+    test_intervals <- gintervals(1, 0, 100000)
+
+    # Create a mask
+    mask <- gintervals(1, 0, 50000)
+
+    # Train without mask
+    model_no_mask <- gsynth.train(
+        intervals = test_intervals,
+        iterator = 1000
+    )
+
+    # Train with mask
+    model_with_mask <- gsynth.train(
+        mask = mask,
+        intervals = test_intervals,
+        iterator = 1000
+    )
+
+    # Model with mask should have fewer k-mers
+    expect_lt(model_with_mask$total_kmers, model_no_mask$total_kmers)
+    expect_gt(model_with_mask$total_masked, 0)
+    expect_equal(model_no_mask$total_masked, 0)
+})
+
+test_that("0D model sampling with mask_copy preserves original sequence", {
+    gdb.init_examples()
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    model <- gsynth.train(
+        intervals = test_intervals,
+        iterator = 1000
+    )
+
+    # Define a mask_copy region (to preserve from original)
+    mask_copy <- gintervals(1, 1000, 2000)
+    sample_intervals <- gintervals(1, 0, 3000)
+
+    output_fasta <- tempfile(fileext = ".fa")
+    gsynth.sample(
+        model,
+        output_fasta,
+        output_format = "fasta",
+        intervals = sample_intervals,
+        mask_copy = mask_copy,
+        seed = 60427
+    )
+
+    # Read the sampled sequence
+    lines <- readLines(output_fasta)
+    sampled_seq <- paste(lines[!grepl("^>", lines)], collapse = "")
+
+    # Get original sequence for the mask region
+    original_seq <- gseq.extract(mask_copy)[1]
+
+    # The mask region should match the original
+    mask_start_in_sample <- 1001
+    mask_end_in_sample <- 2000
+    sampled_mask_region <- substr(sampled_seq, mask_start_in_sample, mask_end_in_sample)
+
+    expect_equal(toupper(sampled_mask_region), toupper(original_seq))
+
+    unlink(output_fasta)
+})
+
+test_that("0D model with n_samples generates multiple sequences", {
+    gdb.init_examples()
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 100000),
+        iterator = 1000
+    )
+
+    # Sample 5 times
+    seqs <- gsynth.sample(
+        model,
+        output_format = "vector",
+        intervals = gintervals(1, 0, 1000),
+        n_samples = 5,
+        seed = 60427
+    )
+
+    expect_type(seqs, "character")
+    expect_equal(length(seqs), 5)
+    for (i in seq_along(seqs)) {
+        expect_equal(nchar(seqs[i]), 1000)
+        expect_true(grepl("^[ACGT]+$", seqs[i]))
+    }
+
+    # Each sample should be different
+    unique_seqs <- unique(seqs)
+    expect_gt(length(unique_seqs), 1)
+})
+
+test_that("0D model is reproducible with seed", {
+    gdb.init_examples()
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 1000
+    )
+
+    sample_intervals <- gintervals(1, 0, 5000)
+
+    # Sample twice with same seed
+    seqs1 <- gsynth.sample(
+        model,
+        output_format = "vector",
+        intervals = sample_intervals,
+        seed = 12345
+    )
+
+    seqs2 <- gsynth.sample(
+        model,
+        output_format = "vector",
+        intervals = sample_intervals,
+        seed = 12345
+    )
+
+    expect_equal(seqs1, seqs2)
+
+    # Different seed should give different results
+    seqs3 <- gsynth.sample(
+        model,
+        output_format = "vector",
+        intervals = sample_intervals,
+        seed = 54321
+    )
+
+    expect_false(identical(seqs1, seqs3))
+})
+
+test_that("0D model works with multiple chromosomes", {
+    gdb.init_examples()
+
+    # Train on all chromosomes
+    model <- gsynth.train(
+        intervals = gintervals.all(),
+        iterator = 1000
+    )
+
+    expect_equal(model$n_dims, 0)
+    expect_equal(model$total_bins, 1)
+
+    # Sample from multiple chromosomes
+    sample_intervals <- gintervals(
+        c(1, 2),
+        c(0, 0),
+        c(1000, 1000)
+    )
+
+    seqs <- gsynth.sample(
+        model,
+        output_format = "vector",
+        intervals = sample_intervals,
+        seed = 60427
+    )
+
+    expect_equal(length(seqs), 2)
+    expect_equal(nchar(seqs[1]), 1000)
+    expect_equal(nchar(seqs[2]), 1000)
+})
+
+test_that("0D model training message indicates unstratified", {
+    gdb.init_examples()
+
+    # Capture messages during training
+    messages <- capture.output(
+        model <- gsynth.train(
+            intervals = gintervals(1, 0, 50000),
+            iterator = 1000
+        ),
+        type = "message"
+    )
+
+    # Should mention unstratified or no stratification
+    all_messages <- paste(messages, collapse = " ")
+    expect_true(grepl("unstratified|no stratification", all_messages, ignore.case = TRUE))
+})
+
+test_that("0D model CDF structure is valid", {
+    gdb.init_examples()
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 100000),
+        iterator = 1000
+    )
+
+    # Check the single CDF
+    cdf_mat <- model$model_data$cdf[[1]]
+
+    # Should be 1024 x 4
+    expect_equal(dim(cdf_mat), c(1024, 4))
+
+    # All values should be between 0 and 1
+    expect_true(all(cdf_mat >= 0))
+    expect_true(all(cdf_mat <= 1))
+
+    # Last column should all be 1 (cumulative)
+    expect_true(all(abs(cdf_mat[, 4] - 1) < 1e-5))
+
+    # Each row should be monotonically non-decreasing
+    for (ctx in 1:1024) {
+        expect_true(all(diff(cdf_mat[ctx, ]) >= -1e-10))
+    }
+})
+
+test_that("0D model per_bin_kmers equals total_kmers", {
+    gdb.init_examples()
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 1000
+    )
+
+    # Single bin should contain all k-mers
+    expect_equal(length(model$per_bin_kmers), 1)
+    expect_equal(model$per_bin_kmers[1], model$total_kmers)
+})
+
+test_that("gsynth.train error handling no longer requires dimensions", {
+    gdb.init_examples()
+
+    test_intervals <- gintervals(1, 0, 50000)
+
+    # No dimension specs should now work (0D model)
+    expect_no_error(
+        gsynth.train(intervals = test_intervals, iterator = 200)
+    )
+})
+
+# Tests for gsynth.random
+
+test_that("gsynth.random generates sequences with uniform probabilities", {
+    gdb.init_examples()
+
+    seqs <- gsynth.random(
+        intervals = gintervals(1, 0, 10000),
+        output_format = "vector",
+        seed = 42
+    )
+
+    expect_type(seqs, "character")
+    expect_equal(length(seqs), 1)
+    expect_equal(nchar(seqs[1]), 10000)
+    expect_true(grepl("^[ACGT]+$", seqs[1]))
+})
+
+test_that("gsynth.random respects nucleotide probabilities", {
+    gdb.init_examples()
+
+    # Generate sequence with only A and T (no G or C)
+    seqs <- gsynth.random(
+        intervals = gintervals(1, 0, 10000),
+        output_format = "vector",
+        nuc_probs = c(A = 0.5, C = 0, G = 0, T = 0.5),
+        seed = 42
+    )
+
+    expect_equal(nchar(seqs[1]), 10000)
+
+    # Count nucleotides
+    chars <- strsplit(seqs[1], "")[[1]]
+    at_count <- sum(chars %in% c("A", "T"))
+    gc_count <- sum(chars %in% c("G", "C"))
+
+    # Note: first 5 nucleotides are sampled uniformly for context initialization,
+    # so we may have up to 5 C/G nucleotides even with 0 probability
+    expect_lte(gc_count, 5)
+    expect_gte(at_count / length(chars), 0.995) # At least 99.5% A/T
+})
+
+test_that("gsynth.random generates GC-rich sequences", {
+    gdb.init_examples()
+
+    # Generate GC-rich sequence (80% GC)
+    seqs <- gsynth.random(
+        intervals = gintervals(1, 0, 10000),
+        output_format = "vector",
+        nuc_probs = c(A = 0.1, C = 0.4, G = 0.4, T = 0.1),
+        seed = 42
+    )
+
+    # Count nucleotides
+    chars <- strsplit(seqs[1], "")[[1]]
+    gc_count <- sum(chars %in% c("G", "C"))
+    gc_frac <- gc_count / length(chars)
+
+    # Should be roughly 80% GC (with tolerance)
+    expect_gt(gc_frac, 0.7)
+    expect_lt(gc_frac, 0.9)
+})
+
+test_that("gsynth.random handles named nuc_probs in any order", {
+    gdb.init_examples()
+
+    # Provide in different order
+    seqs <- gsynth.random(
+        intervals = gintervals(1, 0, 1000),
+        output_format = "vector",
+        nuc_probs = c(T = 0.5, G = 0, A = 0.5, C = 0),
+        seed = 42
+    )
+
+    # Count nucleotides
+    chars <- strsplit(seqs[1], "")[[1]]
+    at_count <- sum(chars %in% c("A", "T"))
+    gc_count <- sum(chars %in% c("G", "C"))
+
+    # Note: first 5 nucleotides are sampled uniformly for context initialization,
+    # so we may have up to 5 C/G nucleotides even with 0 probability
+    expect_lte(gc_count, 5)
+    expect_gte(at_count / length(chars), 0.99) # At least 99% A/T
+})
+
+test_that("gsynth.random normalizes probabilities", {
+    gdb.init_examples()
+
+    # Provide non-normalized probabilities
+    seqs <- gsynth.random(
+        intervals = gintervals(1, 0, 1000),
+        output_format = "vector",
+        nuc_probs = c(A = 1, C = 1, G = 1, T = 1), # Sums to 4, not 1
+        seed = 42
+    )
+
+    expect_equal(nchar(seqs[1]), 1000)
+    expect_true(grepl("^[ACGT]+$", seqs[1]))
+})
+
+test_that("gsynth.random with n_samples generates multiple sequences", {
+    gdb.init_examples()
+
+    seqs <- gsynth.random(
+        intervals = gintervals(1, 0, 500),
+        output_format = "vector",
+        n_samples = 5,
+        seed = 42
+    )
+
+    expect_equal(length(seqs), 5)
+    for (i in seq_along(seqs)) {
+        expect_equal(nchar(seqs[i]), 500)
+        expect_true(grepl("^[ACGT]+$", seqs[i]))
+    }
+
+    # Sequences should be different
+    unique_seqs <- unique(seqs)
+    expect_gt(length(unique_seqs), 1)
+})
+
+test_that("gsynth.random is reproducible with seed", {
+    gdb.init_examples()
+
+    sample_intervals <- gintervals(1, 0, 1000)
+
+    seqs1 <- gsynth.random(
+        intervals = sample_intervals,
+        output_format = "vector",
+        seed = 12345
+    )
+
+    seqs2 <- gsynth.random(
+        intervals = sample_intervals,
+        output_format = "vector",
+        seed = 12345
+    )
+
+    expect_equal(seqs1, seqs2)
+
+    # Different seed should give different results
+    seqs3 <- gsynth.random(
+        intervals = sample_intervals,
+        output_format = "vector",
+        seed = 54321
+    )
+
+    expect_false(identical(seqs1, seqs3))
+})
+
+test_that("gsynth.random writes FASTA output", {
+    gdb.init_examples()
+
+    output_fasta <- tempfile(fileext = ".fa")
+    gsynth.random(
+        intervals = gintervals(1, 0, 1000),
+        output_path = output_fasta,
+        output_format = "fasta",
+        seed = 42
+    )
+
+    expect_true(file.exists(output_fasta))
+    lines <- readLines(output_fasta)
+    expect_true(grepl("^>", lines[1]))
+    seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
+    expect_true(grepl("^[ACGT]+$", seq_content))
+    expect_equal(nchar(seq_content), 1000)
+
+    unlink(output_fasta)
+})
+
+test_that("gsynth.random with mask_copy preserves original sequence", {
+    gdb.init_examples()
+
+    # Define a mask_copy region
+    mask_copy <- gintervals(1, 500, 700)
+    sample_intervals <- gintervals(1, 0, 1000)
+
+    output_fasta <- tempfile(fileext = ".fa")
+    gsynth.random(
+        intervals = sample_intervals,
+        output_path = output_fasta,
+        output_format = "fasta",
+        mask_copy = mask_copy,
+        seed = 42
+    )
+
+    lines <- readLines(output_fasta)
+    sampled_seq <- paste(lines[!grepl("^>", lines)], collapse = "")
+
+    # Get original sequence for the mask region
+    original_seq <- gseq.extract(mask_copy)[1]
+
+    # The mask region should match the original
+    sampled_mask_region <- substr(sampled_seq, 501, 700)
+    expect_equal(toupper(sampled_mask_region), toupper(original_seq))
+
+    unlink(output_fasta)
+})
+
+test_that("gsynth.random works with multiple intervals", {
+    gdb.init_examples()
+
+    sample_intervals <- gintervals(
+        c(1, 2),
+        c(0, 0),
+        c(500, 500)
+    )
+
+    seqs <- gsynth.random(
+        intervals = sample_intervals,
+        output_format = "vector",
+        seed = 42
+    )
+
+    expect_equal(length(seqs), 2)
+    expect_equal(nchar(seqs[1]), 500)
+    expect_equal(nchar(seqs[2]), 500)
+})
+
+test_that("gsynth.random error handling", {
+    gdb.init_examples()
+
+    # Invalid nuc_probs length
+    expect_error(
+        gsynth.random(
+            intervals = gintervals(1, 0, 100),
+            output_format = "vector",
+            nuc_probs = c(0.5, 0.5)
+        ),
+        "length 4"
+    )
+
+    # Negative probabilities
+    expect_error(
+        gsynth.random(
+            intervals = gintervals(1, 0, 100),
+            output_format = "vector",
+            nuc_probs = c(A = -0.1, C = 0.4, G = 0.4, T = 0.3)
+        ),
+        "non-negative"
+    )
+
+    # All zero probabilities
+    expect_error(
+        gsynth.random(
+            intervals = gintervals(1, 0, 100),
+            output_format = "vector",
+            nuc_probs = c(A = 0, C = 0, G = 0, T = 0)
+        ),
+        "positive value"
+    )
+
+    # Missing output_path for non-vector format
+    expect_error(
+        gsynth.random(
+            intervals = gintervals(1, 0, 100),
+            output_format = "fasta"
+        ),
+        "output_path is required"
+    )
+
+    # Invalid nuc_probs names
+    expect_error(
+        gsynth.random(
+            intervals = gintervals(1, 0, 100),
+            output_format = "vector",
+            nuc_probs = c(X = 0.25, Y = 0.25, Z = 0.25, W = 0.25)
+        ),
+        "names must be A, C, G, T"
+    )
+})
+
+test_that("gsynth.random produces uniform distribution with default probs", {
+    gdb.init_examples()
+
+    # Generate a longer sequence to get better statistics
+    seqs <- gsynth.random(
+        intervals = gintervals(1, 0, 40000),
+        output_format = "vector",
+        seed = 42
+    )
+
+    chars <- strsplit(seqs[1], "")[[1]]
+    total <- length(chars)
+
+    a_frac <- sum(chars == "A") / total
+    c_frac <- sum(chars == "C") / total
+    g_frac <- sum(chars == "G") / total
+    t_frac <- sum(chars == "T") / total
+
+    # Each should be roughly 25% (with tolerance for randomness)
+    expect_gt(a_frac, 0.22)
+    expect_lt(a_frac, 0.28)
+    expect_gt(c_frac, 0.22)
+    expect_lt(c_frac, 0.28)
+    expect_gt(g_frac, 0.22)
+    expect_lt(g_frac, 0.28)
+    expect_gt(t_frac, 0.22)
+    expect_lt(t_frac, 0.28)
 })
