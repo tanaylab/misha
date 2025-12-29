@@ -16,6 +16,7 @@
 #include "GenomeChromKey.h"
 #include "GenomeSeqFetch.h"
 #include "GIntervalsBigSet1D.h"
+#include "MaskUtils.h"
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
@@ -23,28 +24,6 @@
 
 using namespace std;
 using namespace rdb;
-
-/**
- * Helper: Check if a position is within any masked interval.
- * Uses a cursor for efficient sequential access.
- */
-static bool is_masked(int64_t pos, const vector<GInterval>& mask_intervals,
-                      size_t& cursor) {
-    // Advance cursor past intervals that end before this position
-    while (cursor < mask_intervals.size() &&
-           mask_intervals[cursor].end <= pos) {
-        ++cursor;
-    }
-
-    // Check if position is within current interval
-    if (cursor < mask_intervals.size() &&
-        mask_intervals[cursor].start <= pos &&
-        pos < mask_intervals[cursor].end) {
-        return true;
-    }
-
-    return false;
-}
 
 extern "C" {
 
@@ -209,7 +188,7 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                 int64_t genome_pos = start + pos;
 
                 // Check if masked
-                if (is_masked(genome_pos, mask_ivs, mask_cursor)) {
+                if (is_position_masked(genome_pos, mask_ivs, mask_cursor)) {
                     ++total_masked;
                     continue;
                 }
@@ -251,8 +230,19 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                     StratifiedMarkovModel::encode_base(seq[pos + 5]);
 
                 if (context_idx >= 0 && next_base_idx >= 0) {
+                    // Add forward strand count
                     model.increment_count(bin_idx, context_idx, next_base_idx);
-                    ++total_valid;
+
+                    // Add reverse complement count for strand symmetry
+                    // This ensures the model learns symmetric transition probabilities
+                    int revcomp_context_idx, revcomp_next_idx;
+                    StratifiedMarkovModel::revcomp_6mer(
+                        context_idx, next_base_idx,
+                        revcomp_context_idx, revcomp_next_idx);
+                    model.increment_count(bin_idx, revcomp_context_idx, revcomp_next_idx);
+
+                    // Count as 2 k-mers (forward + reverse complement)
+                    total_valid += 2;
                 }
             }
 

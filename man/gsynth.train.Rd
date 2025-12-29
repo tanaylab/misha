@@ -14,14 +14,15 @@ gsynth.train(
 )
 }
 \arguments{
-\item{...}{One or more dimension specifications. Each specification is a list
+\item{...}{Zero or more dimension specifications. Each specification is a list
      containing:
 \describe{
   \item{expr}{Track expression for this dimension (required)}
   \item{breaks}{Numeric vector of bin boundaries for this dimension (required)}
   \item{bin_merge}{Optional list of merge specifications for merging sparse bins.
         Each specification is a named list with 'from' and 'to' elements.}
-}}
+}
+If no dimensions are provided, trains an unstratified model with a single bin.}
 
 \item{mask}{Optional intervals to exclude from training. Regions in the mask
 will not contribute to k-mer counts. Can be computed using \code{gscreen()}.}
@@ -54,10 +55,21 @@ A \code{gsynth.model} object containing:
   }
 }
 \description{
-Computes a 5th-order Markov model stratified by bins of one or more track
-expressions (e.g., GC content and CG dinucleotide frequency). This model can
-be used to generate synthetic genomes that preserve the k-mer statistics of
-the original genome within each stratification bin.
+Computes a 5th-order Markov model optionally stratified by bins of one or more
+track expressions (e.g., GC content and CG dinucleotide frequency). This model
+can be used to generate synthetic genomes that preserve the k-mer statistics of
+the original genome within each stratification bin. When called with no dimension
+specifications, trains a single unstratified model.
+}
+\details{
+\strong{Strand symmetry:} The training process counts both the forward strand
+6-mer and its reverse complement for each position, ensuring strand-symmetric
+transition probabilities. This means the reported total_kmers is approximately
+double the number of genomic positions processed.
+
+\strong{N bases:} Positions where the 6-mer contains any N (unknown) bases are
+skipped during training and counted in \code{total_n}. The model only learns
+from valid A/C/G/T sequences.
 }
 \examples{
 gdb.init_examples()
@@ -72,6 +84,13 @@ gvtrack.create("masked_frac", NULL, "masked.frac")
 repeats <- gscreen("masked_frac > 0.5",
     intervals = gintervals.all(),
     iterator = 100
+)
+
+# Train unstratified model (no stratification)
+model_0d <- gsynth.train(
+    mask = repeats,
+    intervals = gintervals.all(),
+    iterator = 200
 )
 
 # Train model with 2D stratification (GC content and CG dinucleotide)

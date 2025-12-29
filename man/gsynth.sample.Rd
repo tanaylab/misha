@@ -30,7 +30,11 @@ gsynth.sample(
 \item{mask_copy}{Optional intervals to copy from the original genome instead of
 sampling. Use this to preserve specific regions (e.g., repeats, regulatory
 elements) exactly as they appear in the reference. Regions not in mask_copy
-will be sampled using the Markov model.}
+will be sampled using the Markov model.
+Note: mask_copy intervals should be non-overlapping and sorted by start
+position within each chromosome. Overlapping intervals may result in
+only the first overlapping region being copied, with subsequent overlaps
+skipped due to cursor advancement during sequential processing.}
 
 \item{seed}{Random seed for reproducibility. If NULL, uses current random state.}
 
@@ -41,10 +45,22 @@ When n_samples > 1 and output_format = "fasta", headers include "_sampleN".
 When output_format = "vector", returns n_samples * n_intervals sequences.}
 
 \item{bin_merge}{Optional list of bin merge specifications to apply during sampling,
-one per dimension. Each element should be a list of merge specifications
-(same format as in \code{\link{gsynth.train}}), or NULL to use the
-bin mapping from training. This allows merging sparse bins at sampling time
-without re-training the model.}
+       one per dimension (length must equal model$n_dims). Each element should be:
+       \itemize{
+         \item A list of merge specifications (same format as in
+               \code{\link{gsynth.train}}: each spec is \code{list(from = ..., to = ...)})
+         \item Or NULL to use the bin mapping from training for that dimension
+       }
+       This allows merging sparse bins at sampling time without re-training.
+       Example for a 2D model:
+       \preformatted{
+bin_merge = list(
+  # Dimension 1: merge bins with values >= 0.8 to bin [0.7, 0.8)
+  list(list(from = c(0.8, Inf), to = c(0.7, 0.8))),
+  # Dimension 2: use training-time bin_map (no override)
+  NULL
+)
+       }}
 }
 \value{
 When output_format is "misha" or "fasta", returns invisible NULL and
@@ -55,6 +71,17 @@ When output_format is "misha" or "fasta", returns invisible NULL and
 Generates a synthetic genome by sampling from a trained stratified Markov-5
 model. The generated genome preserves the k-mer statistics of the original
 genome within each stratification bin.
+}
+\details{
+\strong{N bases during sampling:} When the sampler needs to initialize the
+first 5-mer context and encounters regions with only N bases, it falls back
+to uniform random base selection until a valid context is established.
+Similarly, if a bin has no learned statistics (sparse bin with NA CDF),
+uniform sampling is used for that position.
+
+\strong{Sparse bins:} If the model has sparse bins (from \code{min_obs} during
+training), a warning is issued when sampling regions that fall into these bins.
+Consider using \code{bin_merge} to redirect sparse bins to well-populated ones.
 }
 \examples{
 gdb.init_examples()
