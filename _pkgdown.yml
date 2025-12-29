@@ -124,6 +124,7 @@ reference:
     contents:
       - gsynth.train
       - gsynth.sample
+      - gsynth.random
       - gsynth.save
       - gsynth.load 
       - gsynth.bin_map
