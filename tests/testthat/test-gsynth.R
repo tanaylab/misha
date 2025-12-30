@@ -928,7 +928,7 @@ test_that("gsynth.train with GC and CG stratification (user use case)", {
     }
     gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
     gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
-    gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
+    gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG", strand = 1)
 
     test_intervals <- gintervals(1, 0, 100000)
 
@@ -2675,4 +2675,387 @@ test_that("gsynth.random produces uniform distribution with default probs", {
     expect_lt(g_frac, 0.28)
     expect_gt(t_frac, 0.22)
     expect_lt(t_frac, 0.28)
+})
+
+# Tests for gsynth.replace_kmer
+test_that("gsynth.replace_kmer basic vector output works", {
+    gdb.init_examples()
+
+    # Test basic CG -> GC replacement
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_format = "vector",
+        intervals = gintervals(1, 0, 1000)
+    )
+
+    # Check structure
+    expect_type(result, "character")
+    expect_equal(length(result), 1)
+    expect_equal(nchar(result[1]), 1000)
+
+    # Check that all CG instances were replaced
+    cg_count <- length(gregexpr("CG", result[1], fixed = TRUE)[[1]])
+    if (cg_count == 1 && gregexpr("CG", result[1], fixed = TRUE)[[1]][1] == -1) {
+        cg_count <- 0
+    }
+    expect_equal(cg_count, 0)
+})
+
+test_that("gsynth.replace_kmer iterative replacement works correctly", {
+    gdb.init_examples()
+
+    # Test with a sequence that should trigger iterative replacement
+    # CCG -> CGC after first replacement, then -> GCC after second
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_format = "vector",
+        intervals = gintervals(1, 0, 5000)
+    )
+
+    # Should have zero CG dinucleotides
+    cg_count <- length(gregexpr("CG", result[1], fixed = TRUE)[[1]])
+    if (cg_count == 1 && gregexpr("CG", result[1], fixed = TRUE)[[1]][1] == -1) {
+        cg_count <- 0
+    }
+    expect_equal(cg_count, 0)
+})
+
+test_that("gsynth.replace_kmer composition check works", {
+    gdb.init_examples()
+
+    # Should succeed with matching composition
+    result <- suppressMessages({
+        gsynth.replace_kmer(
+            target = "CG",
+            replacement = "GC",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 100),
+            check_composition = TRUE
+        )
+    })
+    expect_type(result, "character")
+
+    # Should fail with different composition
+    expect_error(
+        gsynth.replace_kmer(
+            target = "CG",
+            replacement = "AT",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 100),
+            check_composition = TRUE
+        ),
+        "Composition mismatch"
+    )
+
+    # Should succeed with check disabled
+    result <- suppressMessages({
+        gsynth.replace_kmer(
+            target = "CG",
+            replacement = "AT",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 100),
+            check_composition = FALSE
+        )
+    })
+    expect_type(result, "character")
+})
+
+test_that("gsynth.replace_kmer FASTA output works", {
+    gdb.init_examples()
+
+    output_file <- tempfile(fileext = ".fa")
+
+    # Create FASTA output
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_path = output_file,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 500)
+    )
+
+    # Check file exists
+    expect_true(file.exists(output_file))
+
+    # Read and validate FASTA format
+    lines <- readLines(output_file)
+    expect_true(length(lines) > 0)
+    expect_true(grepl("^>", lines[1])) # Header line
+
+    # Read sequence and check CG removal
+    seq_lines <- lines[!grepl("^>", lines)]
+    full_seq <- paste(seq_lines, collapse = "")
+    cg_count <- length(gregexpr("CG", full_seq, fixed = TRUE)[[1]])
+    if (cg_count == 1 && gregexpr("CG", full_seq, fixed = TRUE)[[1]][1] == -1) {
+        cg_count <- 0
+    }
+    expect_equal(cg_count, 0)
+
+    unlink(output_file)
+})
+
+test_that("gsynth.replace_kmer misha binary output works", {
+    gdb.init_examples()
+
+    output_file <- tempfile(fileext = ".seq")
+
+    # Create binary output
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_path = output_file,
+        output_format = "misha",
+        intervals = gintervals(1, 0, 500)
+    )
+
+    # Check file exists
+    expect_true(file.exists(output_file))
+
+    # File should have content
+    file_info <- file.info(output_file)
+    expect_true(file_info$size > 0)
+
+    unlink(output_file)
+})
+
+test_that("gsynth.replace_kmer handles multiple intervals", {
+    gdb.init_examples()
+
+    # Test with multiple intervals
+    intervals <- gintervals(c(1, 1, 2), c(0, 5000, 0), c(1000, 6000, 1000))
+
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_format = "vector",
+        intervals = intervals
+    )
+
+    # Should return one sequence per interval
+    expect_equal(length(result), 3)
+
+    # Each sequence should have no CG
+    for (seq in result) {
+        cg_count <- length(gregexpr("CG", seq, fixed = TRUE)[[1]])
+        if (cg_count == 1 && gregexpr("CG", seq, fixed = TRUE)[[1]][1] == -1) {
+            cg_count <- 0
+        }
+        expect_equal(cg_count, 0)
+    }
+})
+
+test_that("gsynth.replace_kmer works with different k-mer sizes", {
+    gdb.init_examples()
+
+    # Test with 3-mer (ACG and CAG have same composition: 1A, 1C, 1G)
+    result_3mer <- suppressMessages({
+        gsynth.replace_kmer(
+            target = "ACG",
+            replacement = "CAG",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 1000),
+            check_composition = TRUE
+        )
+    })
+
+    expect_type(result_3mer, "character")
+    expect_equal(length(result_3mer), 1)
+
+    # Check ACG removed
+    acg_count <- length(gregexpr("ACG", result_3mer[1], fixed = TRUE)[[1]])
+    if (acg_count == 1 && gregexpr("ACG", result_3mer[1], fixed = TRUE)[[1]][1] == -1) {
+        acg_count <- 0
+    }
+    expect_equal(acg_count, 0)
+
+    # Test with 4-mer (CGCG and GCGC have same composition)
+    result_4mer <- suppressMessages({
+        gsynth.replace_kmer(
+            target = "CGCG",
+            replacement = "GCGC",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 1000),
+            check_composition = TRUE
+        )
+    })
+
+    expect_type(result_4mer, "character")
+})
+
+test_that("gsynth.replace_kmer validates inputs correctly", {
+    gdb.init_examples()
+
+    # Empty target
+    expect_error(
+        gsynth.replace_kmer(
+            target = "",
+            replacement = "GC",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 100)
+        ),
+        "target must be a non-empty string"
+    )
+
+    # Empty replacement
+    expect_error(
+        gsynth.replace_kmer(
+            target = "CG",
+            replacement = "",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 100)
+        ),
+        "replacement must be a non-empty string"
+    )
+
+    # Identical target and replacement
+    expect_error(
+        gsynth.replace_kmer(
+            target = "CG",
+            replacement = "CG",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 100)
+        ),
+        "target and replacement cannot be identical"
+    )
+
+    # Missing output_path for file output
+    expect_error(
+        gsynth.replace_kmer(
+            target = "CG",
+            replacement = "GC",
+            output_format = "fasta",
+            intervals = gintervals(1, 0, 100)
+        ),
+        "output_path is required"
+    )
+})
+
+test_that("gsynth.replace_kmer preserves sequence length", {
+    gdb.init_examples()
+
+    interval_length <- 2000
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_format = "vector",
+        intervals = gintervals(1, 0, interval_length)
+    )
+
+    # Sequence length should be preserved
+    expect_equal(nchar(result[1]), interval_length)
+})
+
+test_that("gsynth.replace_kmer handles case insensitivity", {
+    gdb.init_examples()
+
+    # Target and replacement should work regardless of case
+    result_upper <- suppressMessages({
+        gsynth.replace_kmer(
+            target = "CG",
+            replacement = "GC",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 1000)
+        )
+    })
+
+    result_lower <- suppressMessages({
+        gsynth.replace_kmer(
+            target = "cg",
+            replacement = "gc",
+            output_format = "vector",
+            intervals = gintervals(1, 0, 1000)
+        )
+    })
+
+    # Both should produce uppercase output (allowing for N bases) and remove all CG
+    expect_true(grepl("^[ACGTN]+$", result_upper[1], ignore.case = TRUE))
+    expect_true(grepl("^[ACGTN]+$", result_lower[1], ignore.case = TRUE))
+
+    # Check CG was removed
+    cg_count_upper <- length(gregexpr("CG", toupper(result_upper[1]), fixed = TRUE)[[1]])
+    if (cg_count_upper == 1 && gregexpr("CG", toupper(result_upper[1]), fixed = TRUE)[[1]][1] == -1) {
+        cg_count_upper <- 0
+    }
+    expect_equal(cg_count_upper, 0)
+})
+
+test_that("gsynth.replace_kmer works with all chromosomes", {
+    gdb.init_examples()
+
+    # Use gintervals.all() to process all chromosomes
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_format = "vector",
+        intervals = NULL # NULL should default to all chromosomes
+    )
+
+    # Should have sequences for all chromosomes
+    all_chroms <- gintervals.all()
+    expect_equal(length(result), nrow(all_chroms))
+
+    # Check that each sequence has no CG
+    for (seq in result) {
+        if (nchar(seq) > 0) {
+            cg_count <- length(gregexpr("CG", seq, fixed = TRUE)[[1]])
+            if (cg_count == 1 && gregexpr("CG", seq, fixed = TRUE)[[1]][1] == -1) {
+                cg_count <- 0
+            }
+            expect_equal(cg_count, 0)
+        }
+    }
+})
+
+test_that("gsynth.replace_kmer bubble sort behavior", {
+    gdb.init_examples()
+
+    # Test that the bubble sort behavior works correctly
+    # When we replace CG with GC, sequences like CCG should become GCC
+    # not CGC (which would still contain CG)
+
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_format = "vector",
+        intervals = gintervals(1, 0, 10000)
+    )
+
+    # The result should have NO CG dinucleotides at all
+    # This verifies the iterative/bubble sort behavior
+    cg_count <- length(gregexpr("CG", result[1], fixed = TRUE)[[1]])
+    if (cg_count == 1 && gregexpr("CG", result[1], fixed = TRUE)[[1]][1] == -1) {
+        cg_count <- 0
+    }
+
+    expect_equal(cg_count, 0)
+})
+
+test_that("gsynth.replace_kmer maintains base composition when enabled", {
+    gdb.init_examples()
+
+    # Read original sequence
+    original_seq <- gseq.extract(intervals = gintervals(1, 0, 5000))
+
+    # Count bases in original
+    orig_c <- nchar(gsub("[^Cc]", "", original_seq[1]))
+    orig_g <- nchar(gsub("[^Gg]", "", original_seq[1]))
+
+    # Replace CG with GC (composition-preserving)
+    result <- gsynth.replace_kmer(
+        target = "CG",
+        replacement = "GC",
+        output_format = "vector",
+        intervals = gintervals(1, 0, 5000),
+        check_composition = TRUE
+    )
+
+    # Count bases in result
+    result_c <- nchar(gsub("[^Cc]", "", result[1]))
+    result_g <- nchar(gsub("[^Gg]", "", result[1]))
+
+    # C and G counts should be identical
+    expect_equal(orig_c, result_c)
+    expect_equal(orig_g, result_g)
 })

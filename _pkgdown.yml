@@ -125,6 +125,7 @@ reference:
       - gsynth.train
       - gsynth.sample
       - gsynth.random
+      - gsynth.replace_kmer
       - gsynth.save
       - gsynth.load 
       - gsynth.bin_map

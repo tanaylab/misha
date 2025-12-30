@@ -1087,6 +1087,133 @@ gsynth.random <- function(intervals = NULL,
         intervals <- gintervals.all()
     }
 
+    # Check if we need to process in chunks to avoid R vector length limits
+    # R's vector length limit is 2^31-1, but we use a conservative threshold
+    total_bases <- sum(intervals$end - intervals$start)
+    max_chunk_size <- 1e9 # 1 billion bases per chunk (conservative)
+
+    if (total_bases > max_chunk_size && output_format != "vector") {
+        # Process in chunks (chromosome by chromosome) with parallelization
+        n_chunks <- nrow(intervals)
+        message(sprintf(
+            "Large genome detected (%s bases). Processing %d chunks in parallel...",
+            format(total_bases, big.mark = ","), n_chunks
+        ))
+
+        # Use misha's parallelization settings
+        n_cores <- min(getOption("gmax.processes"), n_chunks)
+        message(sprintf("Using %d cores for parallel processing", n_cores))
+
+        # Generate seeds for each chunk to ensure reproducibility
+        chunk_seeds <- if (!is.null(seed)) {
+            # Use seed to generate deterministic seeds for each chunk
+            set.seed(seed)
+            sample.int(.Machine$integer.max, n_chunks)
+        } else {
+            rep(NA, n_chunks)
+        }
+
+        # Process all chunks in parallel
+        temp_files <- parallel::mclapply(seq_len(n_chunks), function(i) {
+            chunk_interval <- intervals[i, , drop = FALSE]
+            chunk_mask <- if (!is.null(mask_copy)) {
+                mask_copy[mask_copy$chrom == chunk_interval$chrom[1], ]
+            } else {
+                NULL
+            }
+
+            temp_file <- tempfile(fileext = if (output_format == "fasta") ".fa" else ".seq")
+
+            gsynth.random(
+                intervals = chunk_interval,
+                output_path = temp_file,
+                output_format = output_format,
+                nuc_probs = nuc_probs,
+                mask_copy = chunk_mask,
+                seed = if (!is.na(chunk_seeds[i])) chunk_seeds[i] else NULL,
+                n_samples = n_samples,
+                iterator = iterator
+            )
+
+            return(temp_file)
+        }, mc.cores = n_cores, mc.preschedule = FALSE)
+
+        # Combine results in order
+        message("Combining results...")
+        for (i in seq_along(temp_files)) {
+            temp_file <- temp_files[[i]]
+            if (!file.exists(temp_file)) {
+                stop(sprintf("Failed to generate chunk %d", i), call. = FALSE)
+            }
+
+            if (i == 1) {
+                # First chunk: copy to output
+                file.copy(temp_file, output_path, overwrite = TRUE)
+            } else {
+                # Subsequent chunks: append
+                if (output_format == "fasta") {
+                    temp_content <- readLines(temp_file)
+                    cat(temp_content, file = output_path, sep = "\n", append = TRUE)
+                } else {
+                    temp_content <- readBin(temp_file, "raw", n = file.info(temp_file)$size)
+                    con <- file(output_path, "ab")
+                    writeBin(temp_content, con)
+                    close(con)
+                }
+            }
+            unlink(temp_file)
+        }
+
+        message(sprintf("Random sequences written to: %s", output_path))
+        return(invisible(NULL))
+    }
+
+    if (total_bases > max_chunk_size && output_format == "vector") {
+        # For vector output with large genomes, process in chunks and combine
+        n_chunks <- nrow(intervals)
+        message(sprintf(
+            "Large genome detected (%s bases). Processing %d chunks in parallel...",
+            format(total_bases, big.mark = ","), n_chunks
+        ))
+
+        # Use misha's parallelization settings
+        n_cores <- min(getOption("gmax.processes"), n_chunks)
+        message(sprintf("Using %d cores for parallel processing", n_cores))
+
+        # Generate seeds for each chunk
+        chunk_seeds <- if (!is.null(seed)) {
+            set.seed(seed)
+            sample.int(.Machine$integer.max, n_chunks)
+        } else {
+            rep(NA, n_chunks)
+        }
+
+        # Process chunks in parallel
+        all_seqs <- parallel::mclapply(seq_len(n_chunks), function(i) {
+            chunk_interval <- intervals[i, , drop = FALSE]
+            chunk_mask <- if (!is.null(mask_copy)) {
+                mask_copy[mask_copy$chrom == chunk_interval$chrom[1], ]
+            } else {
+                NULL
+            }
+
+            gsynth.random(
+                intervals = chunk_interval,
+                output_path = NULL,
+                output_format = "vector",
+                nuc_probs = nuc_probs,
+                mask_copy = chunk_mask,
+                seed = if (!is.na(chunk_seeds[i])) chunk_seeds[i] else NULL,
+                n_samples = n_samples,
+                iterator = iterator
+            )
+        }, mc.cores = n_cores, mc.preschedule = FALSE)
+
+        result <- unlist(all_seqs)
+        message(sprintf("Generated %d random sequence(s)", length(result)))
+        return(result)
+    }
+
     # Set up iterator
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
@@ -1158,5 +1285,218 @@ gsynth.random <- function(intervals = NULL,
 
     message(sprintf("Random sequences written to: %s", output_path))
 
+    invisible(NULL)
+}
+
+#' Iteratively replace a k-mer in the genome
+#'
+#' Performs an iterative replacement of a \code{target} k-mer with a
+#' \code{replacement} sequence. This is useful for creating synthetic genomes
+#' with specific motifs removed (e.g., creating a CpG-null genome by iteratively
+#' swapping CG to GC).
+#'
+#' @param target The k-mer sequence to remove (e.g., "CG").
+#' @param replacement The replacement sequence (e.g., "GC").
+#' @param output_path Path to the output file (ignored when output_format = "vector").
+#' @param output_format Output format:
+#'   \itemize{
+#'     \item "misha": .seq binary format (default)
+#'     \item "fasta": FASTA text format
+#'     \item "vector": Return sequences as a character vector (does not write to file)
+#'   }
+#' @param intervals Genomic intervals to process. If NULL, uses all chromosomes.
+#' @param check_composition Logical. If TRUE (default), ensures target and
+#'        replacement have the same nucleotide composition (preserving exact
+#'        base counts).
+#'
+#' @details
+#' \strong{Bubble Sort / Iterative Logic:} The function scans the sequence and
+#' replaces occurrences of \code{target} with \code{replacement}. If a replacement
+#' creates a new instance of \code{target} (e.g., removing "CG" with "GC" in
+#' the sequence "CCG" -> "CGC"), the new instance is also replaced. This continues
+#' until the sequence is free of the \code{target} k-mer.
+#'
+#' When \code{target} and \code{replacement} are permutations of each other
+#' (e.g., "CG" and "GC"), this acts as a "bubble sort" of nucleotides, moving
+#' bases locally without altering the total GC content or base counts of the genome.
+#'
+#' @return When output_format is "misha" or "fasta", returns invisible NULL and
+#'         writes to output_path. When output_format is "vector", returns a
+#'         character vector of modified sequences.
+#'
+#' @examples
+#' \dontrun{
+#' # Robust removal of all CpG dinucleotides (preserving GC%)
+#' gsynth.replace_kmer(
+#'     target = "CG",
+#'     replacement = "GC",
+#'     output_path = "genome_no_cpg.seq",
+#'     output_format = "misha"
+#' )
+#' }
+#' @export
+gsynth.replace_kmer <- function(target,
+                                replacement,
+                                output_path = NULL,
+                                output_format = c("misha", "fasta", "vector"),
+                                intervals = NULL,
+                                check_composition = TRUE) {
+    .gcheckroot()
+    output_format <- match.arg(output_format)
+
+    # Validate inputs
+    if (!is.character(target) || length(target) != 1 || nchar(target) == 0) {
+        stop("target must be a non-empty string", call. = FALSE)
+    }
+    if (!is.character(replacement) || length(replacement) != 1 || nchar(replacement) == 0) {
+        stop("replacement must be a non-empty string", call. = FALSE)
+    }
+    if (target == replacement) {
+        stop("target and replacement cannot be identical", call. = FALSE)
+    }
+
+    # Composition check for robustness
+    if (check_composition) {
+        t_counts <- table(strsplit(target, "")[[1]])
+        r_counts <- table(strsplit(replacement, "")[[1]])
+        if (!identical(t_counts, r_counts)) {
+            stop(sprintf(
+                "Composition mismatch between '%s' and '%s'. Set check_composition=FALSE to override.",
+                target, replacement
+            ), call. = FALSE)
+        }
+    }
+
+    # Validate output path
+    if (output_format != "vector" && is.null(output_path)) {
+        stop("output_path is required when output_format is not 'vector'", call. = FALSE)
+    }
+
+    if (is.null(intervals)) {
+        intervals <- gintervals.all()
+    }
+
+    # Check if we need to process in chunks to avoid R vector length limits
+    total_bases <- sum(intervals$end - intervals$start)
+    max_chunk_size <- 1e9 # 1 billion bases per chunk (conservative)
+
+    if (total_bases > max_chunk_size && output_format != "vector") {
+        # Process in chunks (chromosome by chromosome) with parallelization
+        n_chunks <- nrow(intervals)
+        message(sprintf(
+            "Large genome detected (%s bases). Processing %d chunks in parallel...",
+            format(total_bases, big.mark = ","), n_chunks
+        ))
+        message(sprintf("Iteratively replacing '%s' with '%s'...", target, replacement))
+
+        # Use misha's parallelization settings
+        n_cores <- min(getOption("gmax.processes"), n_chunks)
+        message(sprintf("Using %d cores for parallel processing", n_cores))
+
+        # Process all chunks in parallel
+        temp_files <- parallel::mclapply(seq_len(n_chunks), function(i) {
+            chunk_interval <- intervals[i, , drop = FALSE]
+            temp_file <- tempfile(fileext = if (output_format == "fasta") ".fa" else ".seq")
+
+            gsynth.replace_kmer(
+                target = target,
+                replacement = replacement,
+                output_path = temp_file,
+                output_format = output_format,
+                intervals = chunk_interval,
+                check_composition = FALSE # Already checked above
+            )
+
+            return(temp_file)
+        }, mc.cores = n_cores, mc.preschedule = FALSE)
+
+        # Combine results in order
+        message("Combining results...")
+        for (i in seq_along(temp_files)) {
+            temp_file <- temp_files[[i]]
+            if (!file.exists(temp_file)) {
+                stop(sprintf("Failed to generate chunk %d", i), call. = FALSE)
+            }
+
+            if (i == 1) {
+                # First chunk: copy to output
+                file.copy(temp_file, output_path, overwrite = TRUE)
+            } else {
+                # Subsequent chunks: append
+                if (output_format == "fasta") {
+                    temp_content <- readLines(temp_file)
+                    cat(temp_content, file = output_path, sep = "\n", append = TRUE)
+                } else {
+                    temp_content <- readBin(temp_file, "raw", n = file.info(temp_file)$size)
+                    con <- file(output_path, "ab")
+                    writeBin(temp_content, con)
+                    close(con)
+                }
+            }
+            unlink(temp_file)
+        }
+
+        message(sprintf("Modified genome written to: %s", output_path))
+        return(invisible(NULL))
+    }
+
+    if (total_bases > max_chunk_size && output_format == "vector") {
+        # For vector output with large genomes, process in chunks and combine
+        n_chunks <- nrow(intervals)
+        message(sprintf(
+            "Large genome detected (%s bases). Processing %d chunks in parallel...",
+            format(total_bases, big.mark = ","), n_chunks
+        ))
+        message(sprintf("Iteratively replacing '%s' with '%s'...", target, replacement))
+
+        # Use misha's parallelization settings
+        n_cores <- min(getOption("gmax.processes"), n_chunks)
+        message(sprintf("Using %d cores for parallel processing", n_cores))
+
+        # Process chunks in parallel
+        all_seqs <- parallel::mclapply(seq_len(n_chunks), function(i) {
+            chunk_interval <- intervals[i, , drop = FALSE]
+
+            gsynth.replace_kmer(
+                target = target,
+                replacement = replacement,
+                output_path = NULL,
+                output_format = "vector",
+                intervals = chunk_interval,
+                check_composition = FALSE
+            )
+        }, mc.cores = n_cores, mc.preschedule = FALSE)
+
+        result <- unlist(all_seqs)
+        return(result)
+    }
+
+    # Map format to integer for C++
+    fmt_int <- switch(output_format,
+        misha = 0L,
+        fasta = 1L,
+        vector = 2L
+    )
+
+    # Handle NULL path for vector output
+    path_str <- if (is.null(output_path)) "" else as.character(output_path)
+
+    message(sprintf("Iteratively replacing '%s' with '%s'...", target, replacement))
+
+    res <- .gcall(
+        "C_gsynth_replace_kmer",
+        as.character(target),
+        as.character(replacement),
+        intervals,
+        path_str,
+        fmt_int,
+        .misha_env()
+    )
+
+    if (output_format == "vector") {
+        return(res)
+    }
+
+    message(sprintf("Modified genome written to: %s", output_path))
     invisible(NULL)
 }
