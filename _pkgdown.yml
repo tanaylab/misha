@@ -108,16 +108,28 @@ reference:
       - gscreen
       - gsegment
       - gsummary
-  - title: Sequence functions 
-    desc: Sequence functions 
+  - title: Sequence functions
+    desc: Sequence functions
     contents:
-      - gseq.extract 
-      - gseq.pwm 
-      - gseq.kmer 
-      - gseq.revcomp 
+      - gseq.extract
+      - gseq.pwm
+      - gseq.kmer
+      - gseq.kmer.dist
+      - gseq.revcomp
       - grevcomp
-      - gseq.rev 
-      - gseq.comp 
+      - gseq.rev
+      - gseq.comp
+  - title: Synthetic genome functions
+    desc: Generate synthetic genomes using stratified Markov models
+    contents:
+      - gsynth.train
+      - gsynth.sample
+      - gsynth.random
+      - gsynth.replace_kmer
+      - gsynth.save
+      - gsynth.load 
+      - gsynth.bin_map
+      - print.gsynth.model
   - title: Database functions
     desc: Database functions
     contents:
