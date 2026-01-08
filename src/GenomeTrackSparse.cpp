@@ -84,7 +84,8 @@ void GenomeTrackSparse::init_read(const char *filename, int chromid)
 	const double n = (total_bytes - header_size) / (double)kSparseRecBytes;
 
 	if (n != (int64_t)n)
-		TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s (n=%f, (int64_t)n=%lld)", filename, n, (long long)(int64_t)n);
+		TGLError<GenomeTrackSparse>("Invalid sparse track file %s: file size (%llu bytes) minus header (%llu bytes) is not divisible by record size (%zu bytes). Computed %.2f records.",
+			filename, (unsigned long long)total_bytes, (unsigned long long)header_size, kSparseRecBytes, n);
 
 	m_num_records = (int64_t)n;
 	m_chromid = chromid;
@@ -119,8 +120,8 @@ void GenomeTrackSparse::read_file_into_mem()
 	uint64_t bytes_read = m_bfile.read(buffer.data(), total_bytes);
 	if (bytes_read != total_bytes) {
 		if (m_bfile.error())
-			TGLError<GenomeTrackSparse>("Failed to read a sparse track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
-		TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s (expected %zu bytes, got %llu)",
+			TGLError<GenomeTrackSparse>("Failed to read sparse track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+		TGLError<GenomeTrackSparse>("Truncated sparse track file %s: expected %zu bytes of data, but only read %llu bytes",
 			m_bfile.file_name().c_str(), total_bytes, (unsigned long long)bytes_read);
 	}
 
@@ -147,8 +148,19 @@ void GenomeTrackSparse::read_file_into_mem()
 
 		interval.chromid = m_chromid;
 
-		if (interval.start < 0 || interval.start >= interval.end || (i && interval.start < m_intervals[i - 1].end)) {
-			TGLError<GenomeTrackSparse>("Invalid format of a sparse track file %s", m_bfile.file_name().c_str());
+		if (interval.start < 0) {
+			TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld has negative start (%lld)",
+				m_bfile.file_name().c_str(), (long long)i, (long long)interval.start);
+		}
+		if (interval.start >= interval.end) {
+			TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld has start (%lld) >= end (%lld)",
+				m_bfile.file_name().c_str(), (long long)i, (long long)interval.start, (long long)interval.end);
+		}
+		if (i && interval.start < m_intervals[i - 1].end) {
+			TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld [%lld, %lld) overlaps with previous interval [%lld, %lld)",
+				m_bfile.file_name().c_str(), (long long)i,
+				(long long)interval.start, (long long)interval.end,
+				(long long)m_intervals[i - 1].start, (long long)m_intervals[i - 1].end);
 		}
 	}
 
