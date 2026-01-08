@@ -712,25 +712,35 @@ SEXP gtrack_liftover(SEXP _track,
 					AggregationState agg_state;
 					agg_state.contributions.reserve(4);
 
+					// Merge overlapping intervals before writing
+					// Intervals are sorted by start, then end
 					size_t idx = 0;
 					while (idx < interv_vals.size()) {
-						const GInterval &interval = interv_vals[idx].interval;
-						double locus_len = static_cast<double>(std::max<int64_t>(0, interval.end - interval.start));
-						if (locus_len == 0.0)
-							locus_len = 1.0;
-
+						// Start a new merged interval
+						int64_t merged_start = interv_vals[idx].interval.start;
+						int64_t merged_end = interv_vals[idx].interval.end;
 						agg_state.reset();
 
+						// Collect all intervals that overlap with the current merged region
 						while (idx < interv_vals.size() &&
-								interv_vals[idx].interval.start == interval.start &&
-								interv_vals[idx].interval.end == interval.end) {
+								interv_vals[idx].interval.start < merged_end) {
+							// This interval overlaps with merged region
+							// Extend merged_end if needed
+							if (interv_vals[idx].interval.end > merged_end)
+								merged_end = interv_vals[idx].interval.end;
+
+							double contrib_len = static_cast<double>(
+								std::max<int64_t>(0, interv_vals[idx].interval.end - interv_vals[idx].interval.start));
+							if (contrib_len == 0.0)
+								contrib_len = 1.0;
+
 							aggregation_state_add(
 								agg_state,
 								static_cast<double>(interv_vals[idx].val),
-								locus_len,
-								locus_len,
-								interval.start,
-								interval.end,
+								contrib_len,
+								contrib_len,
+								interv_vals[idx].interval.start,
+								interv_vals[idx].interval.end,
 								interv_vals[idx].chain_id
 							);
 							++idx;
@@ -742,7 +752,8 @@ SEXP gtrack_liftover(SEXP _track,
 						if (!std::isnan(aggregated))
 							out_val = static_cast<float>(aggregated);
 
-						gtrack.write_next_interval(interval, out_val);
+						GInterval merged_interval(chromid, merged_start, merged_end, 0);
+						gtrack.write_next_interval(merged_interval, out_val);
 						check_interrupt();
 					}
 				}
