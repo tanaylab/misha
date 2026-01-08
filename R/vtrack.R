@@ -99,6 +99,193 @@
     .gvtrack.set(vtrackstr, var)
 }
 
+# =============================================================================
+# Virtual Track Function Parameter Handlers
+# =============================================================================
+# Each handler validates and processes parameters for a specific function type.
+# Handlers return the processed params list, or stop() on validation errors.
+
+#' Validate and process PWM function parameters
+#' @noRd
+.vtrack_params_pwm <- function(func, params, dots) {
+    if (!is.null(params)) {
+        if (!is.list(params) || !("pssm" %in% names(params))) {
+            stop("pwm function requires a list with at least 'pssm' matrix parameter")
+        }
+        dots <- params
+    }
+
+    if (!("pssm" %in% names(dots))) {
+        stop("pwm function requires a 'pssm' matrix parameter")
+    }
+
+    pssm <- dots$pssm
+    bidirect <- if (!is.null(dots$bidirect)) dots$bidirect else TRUE
+    prior <- if (!is.null(dots$prior)) dots$prior else 0.01
+    extend <- if (!is.null(dots$extend)) dots$extend else TRUE
+    strand <- if (!is.null(dots$strand)) dots$strand else 1
+
+    # Optional spatial parameters
+    spat_factor <- dots$spat_factor
+    spat_bin <- dots$spat_bin
+    spat_min <- dots$spat_min
+    spat_max <- dots$spat_max
+
+    # Optional score threshold for pwm.count
+    score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
+
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "PSSM must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "PSSM must have columns named A, C, G, T",
+        colnames_msg = "PSSM must have columns named A, C, G, T"
+    )
+
+    if (!is.numeric(prior) || prior < 0 || prior > 1) {
+        stop("prior must be a number between 0 and 1")
+    }
+
+    if (!is.logical(bidirect)) {
+        stop("bidirect must be TRUE or FALSE")
+    }
+
+    if (!is.logical(extend)) {
+        stop("extend must be TRUE or FALSE")
+    }
+
+    if (strand != 1 && strand != -1) {
+        stop("strand must be 1 or -1")
+    }
+
+    # Validate spatial parameters if provided
+    if (!is.null(spat_factor)) {
+        if (!is.numeric(spat_factor) || any(spat_factor <= 0)) {
+            stop("spat_factor must be a numeric vector with all positive values")
+        }
+        if (is.null(spat_bin)) {
+            spat_bin <- 1L
+        }
+        if (!is.numeric(spat_bin) || spat_bin <= 0) {
+            stop("spat_bin must be a positive integer")
+        }
+        spat_bin <- as.integer(spat_bin)
+    }
+
+    # Build params with processed values
+    result <- list(
+        pssm = pssm,
+        bidirect = bidirect,
+        prior = prior,
+        extend = extend,
+        strand = strand,
+        score.thresh = score.thresh
+    )
+
+    # Handle spat_min/spat_max coordinate conversion
+    if (!is.null(spat_min)) {
+        result$spat_min <- as.integer(spat_min - 1)
+    }
+    if (!is.null(spat_max)) {
+        motif_length <- nrow(pssm)
+        adjusted_spat_max <- (spat_max - 1) - motif_length + 1
+        result$spat_max <- as.integer(adjusted_spat_max)
+    }
+
+    # Add spatial weighting parameters if provided
+    if (!is.null(spat_factor)) {
+        result$spat_factor <- spat_factor
+        result$spat_bin <- spat_bin
+    }
+
+    result
+}
+
+#' Validate and process kmer function parameters
+#' @noRd
+.vtrack_params_kmer <- function(func, params, dots) {
+    kmer_params <- NULL
+
+    if (!is.null(params)) {
+        if (is.list(params)) {
+            if (!("kmer" %in% names(params))) {
+                stop("kmer function requires a list with at least 'kmer' parameter")
+            }
+            kmer_params <- params
+        }
+    } else if ("kmer" %in% names(dots)) {
+        kmer_params <- dots
+    } else {
+        stop("kmer functions require a 'kmer' parameter")
+    }
+
+    kmer_params$extend <- if (!is.null(kmer_params$extend)) kmer_params$extend else TRUE
+    kmer_params$strand <- if (!is.null(kmer_params$strand)) kmer_params$strand else 0
+
+    # Validate required kmer parameter
+    if (!("kmer" %in% names(kmer_params)) || !is.character(kmer_params$kmer) || length(kmer_params$kmer) != 1) {
+        stop("kmer parameter must be a single string")
+    }
+
+    if (nchar(kmer_params$kmer) == 0) {
+        stop("kmer sequence cannot be empty")
+    }
+
+    if (kmer_params$kmer == grevcomp(kmer_params$kmer) && kmer_params$strand == 0) {
+        warning(paste0("kmer sequence '", kmer_params$kmer, "' is palindromic, please set strand to 1 or -1 to avoid double counting"))
+    }
+
+    kmer_params
+}
+
+#' Validate and process masked function parameters
+#' @noRd
+.vtrack_params_masked <- function(func, params, dots) {
+    if (length(dots) > 0) {
+        warning("masked.count and masked.frac functions do not accept parameters; ignoring extra arguments")
+    }
+    list()
+}
+
+#' Validate and process neighbor.count function parameters
+#' @noRd
+.vtrack_params_neighbor_count <- function(func, params, dots) {
+    if (is.null(params)) {
+        params <- 0
+    }
+
+    if (!is.numeric(params) || length(params) != 1 || is.na(params)) {
+        stop("neighbor.count requires 'params' to be a single numeric value")
+    }
+
+    params <- as.numeric(params)
+
+    if (params < 0) {
+        stop("neighbor.count requires 'params' to be non-negative")
+    }
+
+    params
+}
+
+# Dispatch table mapping function names to their parameter handlers
+# Functions not in this table use default parameter handling (pass-through)
+.VTRACK_PARAM_HANDLERS <- list(
+    pwm = .vtrack_params_pwm,
+    pwm.max = .vtrack_params_pwm,
+    pwm.max.pos = .vtrack_params_pwm,
+    pwm.count = .vtrack_params_pwm,
+    kmer.count = .vtrack_params_kmer,
+    kmer.frac = .vtrack_params_kmer,
+    masked.count = .vtrack_params_masked,
+    masked.frac = .vtrack_params_masked,
+    neighbor.count = .vtrack_params_neighbor_count
+)
+
+# Functions that don't require a source track
+.VTRACK_SOURCELESS_FUNCS <- c(
+    "pwm", "pwm.max", "pwm.max.pos", "pwm.count",
+    "kmer.count", "kmer.frac",
+    "masked.count", "masked.frac"
+)
 
 #' Creates a new virtual track
 #'
@@ -448,169 +635,16 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
     if (is.null(substitute(vtrack))) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, dim = NULL, sshift = NULL, eshift = NULL, filter = NULL, ...)", call. = FALSE)
     }
-    if (is.null(substitute(src)) && !(func %in% c("pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac", "masked.count", "masked.frac"))) {
+    if (is.null(substitute(src)) && !(func %in% .VTRACK_SOURCELESS_FUNCS)) {
         stop("Usage: gvtrack.create(vtrack, src, func = NULL, params = NULL, dim = NULL, sshift = NULL, eshift = NULL, filter = NULL, ...)", call. = FALSE)
     }
 
     .gcheckroot()
 
-    if (!is.null(func) && func %in% c("pwm", "pwm.max", "pwm.max.pos", "pwm.count")) {
-        dots <- list(...)
-
-        if (!is.null(params)) {
-            # params list
-            if (!is.list(params) || !("pssm" %in% names(params))) {
-                stop("pwm function requires a list with at least 'pssm' matrix parameter")
-            }
-            dots <- params
-        }
-
-        if (!("pssm" %in% names(dots))) {
-            stop("pwm function requires a 'pssm' matrix parameter")
-        }
-        pssm <- dots$pssm
-        bidirect <- if (!is.null(dots$bidirect)) dots$bidirect else TRUE
-        prior <- if (!is.null(dots$prior)) dots$prior else 0.01
-        extend <- if (!is.null(dots$extend)) dots$extend else TRUE
-        strand <- if (!is.null(dots$strand)) dots$strand else 1
-
-        # Optional spatial parameters
-        spat_factor <- dots$spat_factor
-        spat_bin <- dots$spat_bin
-        spat_min <- dots$spat_min
-        spat_max <- dots$spat_max
-
-        # Optional score threshold for pwm.count
-        score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
-
-        pssm <- .coerce_pssm_matrix(
-            pssm,
-            numeric_msg = "PSSM must be a numeric matrix or data frame with numeric columns",
-            ncol_msg = "PSSM must have columns named A, C, G, T",
-            colnames_msg = "PSSM must have columns named A, C, G, T"
-        )
-
-        if (!is.numeric(prior) || prior < 0 || prior > 1) {
-            stop("prior must be a number between 0 and 1")
-        }
-
-        if (!is.logical(bidirect)) {
-            stop("bidirect must be TRUE or FALSE")
-        }
-
-        if (!is.logical(extend)) {
-            stop("extend must be TRUE or FALSE")
-        }
-
-        if (strand != 1 && strand != -1) {
-            stop("strand must be 1 or -1")
-        }
-
-        # Validate spatial parameters if provided
-        if (!is.null(spat_factor)) {
-            if (!is.numeric(spat_factor) || any(spat_factor <= 0)) {
-                stop("spat_factor must be a numeric vector with all positive values")
-            }
-            if (is.null(spat_bin)) {
-                spat_bin <- 1L
-            }
-            if (!is.numeric(spat_bin) || spat_bin <= 0) {
-                stop("spat_bin must be a positive integer")
-            }
-            spat_bin <- as.integer(spat_bin)
-        }
-
-        # Set params with processed values
-        params <- list(
-            pssm = pssm,
-            bidirect = bidirect,
-            prior = prior,
-            extend = extend,
-            strand = strand,
-            score.thresh = score.thresh
-        )
-
-        # Handle spat_min/spat_max coordinate conversion (independent of spatial factors)
-        # Prego always trims sequences when spat_min/spat_max are provided
-        # Misha uses scanning ranges, so we need to convert coordinates
-        if (!is.null(spat_min)) {
-            # Convert from 1-based R indexing to 0-based C++ indexing
-            params$spat_min <- as.integer(spat_min - 1)
-        }
-        if (!is.null(spat_max)) {
-            # Adjust spat_max to account for motif length and convert to 0-based indexing
-            # spat_max defines the last base of the scanning window (1-based), but we need
-            # the last valid start position for the motif (0-based)
-            motif_length <- nrow(pssm)
-            # First convert to 0-based, then adjust for motif length
-            adjusted_spat_max <- (spat_max - 1) - motif_length + 1
-            params$spat_max <- as.integer(adjusted_spat_max)
-        }
-
-        # Add spatial weighting parameters if provided
-        if (!is.null(spat_factor)) {
-            params$spat_factor <- spat_factor
-            params$spat_bin <- spat_bin
-        }
-    } else if (!is.null(func) && func %in% c("kmer.count", "kmer.frac")) {
-        # Check for kmer parameter
-        dots <- list(...)
-
-        if (!is.null(params)) {
-            # Handle as list or string parameter
-            if (is.list(params)) {
-                # params list
-                if (!is.list(params) || !("kmer" %in% names(params))) {
-                    stop("kmer function requires a list with at least 'kmer' parameter")
-                }
-                kmer_params <- params
-            }
-        } else if ("kmer" %in% names(dots)) {
-            # Use named parameters
-            kmer_params <- dots
-        } else {
-            stop("kmer functions require a 'kmer' parameter")
-        }
-
-        kmer_params$extend <- if (!is.null(kmer_params$extend)) kmer_params$extend else TRUE
-        kmer_params$strand <- if (!is.null(kmer_params$strand)) kmer_params$strand else 0
-
-        # Validate required kmer parameter
-        if (!("kmer" %in% names(kmer_params)) || !is.character(kmer_params$kmer) || length(kmer_params$kmer) != 1) {
-            stop("kmer parameter must be a single string")
-        }
-
-        if (nchar(kmer_params$kmer) == 0) {
-            stop("kmer sequence cannot be empty")
-        }
-
-        if (kmer_params$kmer == grevcomp(kmer_params$kmer) && kmer_params$strand == 0) {
-            warning(paste0("kmer sequence '", kmer_params$kmer, "' is palindromic, please set strand to 1 or -1 to avoid double counting"))
-        }
-
-        params <- kmer_params
-    } else if (!is.null(func) && func %in% c("masked.count", "masked.frac")) {
-        # Masked counting has no parameters - just validate function name
-        # Any additional parameters in ... will be ignored with a warning
-        dots <- list(...)
-        if (length(dots) > 0) {
-            warning("masked.count and masked.frac functions do not accept parameters; ignoring extra arguments")
-        }
-        params <- list()
-    } else if (!is.null(func) && func == "neighbor.count") {
-        if (is.null(params)) {
-            params <- 0
-        }
-
-        if (!is.numeric(params) || length(params) != 1 || is.na(params)) {
-            stop("neighbor.count requires 'params' to be a single numeric value")
-        }
-
-        params <- as.numeric(params)
-
-        if (params < 0) {
-            stop("neighbor.count requires 'params' to be non-negative")
-        }
+    # Process function-specific parameters using dispatch table
+    if (!is.null(func) && func %in% names(.VTRACK_PARAM_HANDLERS)) {
+        handler <- .VTRACK_PARAM_HANDLERS[[func]]
+        params <- handler(func, params, list(...))
     }
 
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())

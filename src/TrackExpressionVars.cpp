@@ -304,7 +304,11 @@ TrackExpressionVars::Track_n_imdf &TrackExpressionVars::add_track_n_imdf(const s
 	return track_n_imdf;
 }
 
-void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrack, Track_var &var)
+// Template implementation for attaching filter to any variable type with a 'filter' member
+// Works with Track_var, Interv_var, and Value_var which all have:
+//   std::shared_ptr<Genome1DFilter> filter
+template<typename VarType>
+void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrack, VarType &var)
 {
 	// Check for filter field in rvtrack
 	SEXP rfilter = get_rvector_col(rvtrack, "filter", vtrack.c_str(), false);
@@ -325,47 +329,10 @@ void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrac
 	}
 }
 
-void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrack, Interv_var &var)
-{
-	// Check for filter field in rvtrack
-	SEXP rfilter = get_rvector_col(rvtrack, "filter", vtrack.c_str(), false);
-
-	if (Rf_isNull(rfilter) || !Rf_isString(rfilter) || Rf_length(rfilter) != 1) {
-		var.filter = nullptr;
-		return;
-	}
-
-	// Get filter key
-	const char *filter_key = CHAR(STRING_ELT(rfilter, 0));
-
-	// Look up filter in registry
-	var.filter = FilterRegistry::instance().get(filter_key);
-
-	if (var.filter == nullptr) {
-		verror("Virtual track %s: filter with key '%s' not found in registry", vtrack.c_str(), filter_key);
-	}
-}
-
-void TrackExpressionVars::attach_filter_to_var(SEXP rvtrack, const string &vtrack, Value_var &var)
-{
-	// Check for filter field in rvtrack
-	SEXP rfilter = get_rvector_col(rvtrack, "filter", vtrack.c_str(), false);
-
-	if (Rf_isNull(rfilter) || !Rf_isString(rfilter) || Rf_length(rfilter) != 1) {
-		var.filter = nullptr;
-		return;
-	}
-
-	// Get filter key
-	const char *filter_key = CHAR(STRING_ELT(rfilter, 0));
-
-	// Look up filter in registry
-	var.filter = FilterRegistry::instance().get(filter_key);
-
-	if (var.filter == nullptr) {
-		verror("Virtual track %s: filter with key '%s' not found in registry", vtrack.c_str(), filter_key);
-	}
-}
+// Explicit template instantiations for the three variable types
+template void TrackExpressionVars::attach_filter_to_var<TrackExpressionVars::Track_var>(SEXP, const string &, Track_var &);
+template void TrackExpressionVars::attach_filter_to_var<TrackExpressionVars::Interv_var>(SEXP, const string &, Interv_var &);
+template void TrackExpressionVars::attach_filter_to_var<TrackExpressionVars::Value_var>(SEXP, const string &, Value_var &);
 
 void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 {

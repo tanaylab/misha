@@ -286,9 +286,9 @@ private:
 	Track_var           &add_vtrack_var_src_track(SEXP rvtrack, const string &vtrack, const string &track);
 	Interv_var          &add_vtrack_var_src_interv(SEXP rvtrack, const string &vtrack, GIntervals &intervs1d, GIntervals2D &intervs2d);
 	Value_var           &add_vtrack_var_src_value(SEXP rvtrack, const string &vtrack, GIntervals &intervs, vector<float> &vals);
-	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, Track_var &var);
-	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, Interv_var &var);
-	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, Value_var &var);
+	// Template function for attaching filter to any variable type with a 'filter' member
+	template<typename VarType>
+	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, VarType &var);
 	void                 register_track_functions();
 
 	void start_chrom(const GInterval &interval);
