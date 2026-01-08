@@ -78,11 +78,19 @@
 <url><loc>/reference/gsegment.html</loc></url>
 <url><loc>/reference/gseq.comp.html</loc></url>
 <url><loc>/reference/gseq.extract.html</loc></url>
+<url><loc>/reference/gseq.kmer.dist.html</loc></url>
 <url><loc>/reference/gseq.kmer.html</loc></url>
 <url><loc>/reference/gseq.pwm.html</loc></url>
 <url><loc>/reference/gseq.rev.html</loc></url>
 <url><loc>/reference/gseq.revcomp.html</loc></url>
 <url><loc>/reference/gsummary.html</loc></url>
+<url><loc>/reference/gsynth.bin_map.html</loc></url>
+<url><loc>/reference/gsynth.load.html</loc></url>
+<url><loc>/reference/gsynth.random.html</loc></url>
+<url><loc>/reference/gsynth.replace_kmer.html</loc></url>
+<url><loc>/reference/gsynth.sample.html</loc></url>
+<url><loc>/reference/gsynth.save.html</loc></url>
+<url><loc>/reference/gsynth.train.html</loc></url>
 <url><loc>/reference/gtrack.2d.create.html</loc></url>
 <url><loc>/reference/gtrack.2d.import.html</loc></url>
 <url><loc>/reference/gtrack.2d.import_contacts.html</loc></url>
@@ -130,5 +138,6 @@
 <url><loc>/reference/index.html</loc></url>
 <url><loc>/reference/misha-package.html</loc></url>
 <url><loc>/reference/pipe.html</loc></url>
+<url><loc>/reference/print.gsynth.model.html</loc></url>
 </urlset>
 
