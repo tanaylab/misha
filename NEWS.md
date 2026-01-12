@@ -12,6 +12,7 @@
     - `gdb.summary()`: Get summary information (track counts, writability) for each database
     - `gdb.create_user()`: Create a user database with symlinks to a parent database's seq/ and chrom_sizes.txt
     - `gtrack.db()`: Get the database path for a track (vectorized)
+    - `gtrack.dbs()`: List all databases containing a track (vectorized)
     - `gintervals.db()`: Get the database path for an intervals set (vectorized)
   - New `db` parameter for filtering by database:
     - `gtrack.ls(db = "path/to/db")`: List tracks from a specific database
@@ -19,6 +20,7 @@
   - Virtual tracks remain global (shared across all databases)
   - Write protection relies on OS filesystem permissions with clear error messages
   - All databases must have identical `chrom_sizes.txt` files
+  - Duplicate database paths are rejected to avoid ambiguous resolution
   - Backward compatible: single database usage works unchanged
 
 # misha 5.3.4

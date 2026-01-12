@@ -55,15 +55,9 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {
@@ -144,15 +138,11 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {
@@ -240,15 +230,9 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {
@@ -323,13 +307,6 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
 
     # Create a data frame from intervals and values
     if (length(values) != nrow(intervals)) {
@@ -344,6 +321,8 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
     )
 
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
 
     tryCatch(

@@ -25,6 +25,7 @@ gdb.reload <- function(rescan = TRUE) {
     assign("GINTERVS", NULL, envir = .misha)
     assign("GTRACK_DB", NULL, envir = .misha)
     assign("GINTERVALS_DB", NULL, envir = .misha)
+    assign("GTRACK_DBS", NULL, envir = .misha)
 
     gwd <- get("GWD", envir = .misha)
 
@@ -44,6 +45,7 @@ gdb.reload <- function(rescan = TRUE) {
     all_tracks <- character(0)
     all_intervals <- character(0)
     track_db <- list() # track_name -> db_path
+    track_dbs <- list() # track_name -> db_paths (connection order)
     intervals_db <- list() # intervals_name -> db_path
 
     if (!is_root_tracks) {
@@ -56,11 +58,12 @@ gdb.reload <- function(rescan = TRUE) {
             all_tracks <- res[[1]]
             all_intervals <- res[[2]]
             # Determine which database this GWD belongs to
-            groot_idx <- which(startsWith(gwd, root_tracks_dirs))[1]
+            groot_idx <- which(vapply(root_tracks_dirs, function(root) .gpath_is_within(gwd, root), logical(1)))[1]
             if (!is.na(groot_idx)) {
                 groot <- groots[groot_idx]
                 if (length(all_tracks)) {
                     track_db[all_tracks] <- rep(list(groot), length(all_tracks))
+                    track_dbs[all_tracks] <- rep(list(groot), length(all_tracks))
                 }
                 if (length(all_intervals)) {
                     intervals_db[all_intervals] <- rep(list(groot), length(all_intervals))
@@ -122,6 +125,9 @@ gdb.reload <- function(rescan = TRUE) {
                 # "Last wins": later dbs override earlier ones
                 if (length(db_tracks)) {
                     track_db[db_tracks] <- rep(list(groot), length(db_tracks))
+                    for (track in db_tracks) {
+                        track_dbs[[track]] <- c(track_dbs[[track]], groot)
+                    }
                     all_tracks <- c(all_tracks, db_tracks)
                 }
                 if (length(db_intervals)) {
@@ -144,6 +150,7 @@ gdb.reload <- function(rescan = TRUE) {
     assign("GINTERVS", intervals, envir = .misha)
     assign("GTRACK_DB", track_db, envir = .misha)
     assign("GINTERVALS_DB", intervals_db, envir = .misha)
+    assign("GTRACK_DBS", track_dbs, envir = .misha)
 }
 
 # Multi-database context switching helper.
@@ -199,9 +206,8 @@ gdb.reload <- function(rescan = TRUE) {
     groots <- get("GROOTS", envir = .misha)
     db_path <- NULL
     if (!is.null(groots)) {
-        normalized_path <- normalizePath(path, mustWork = FALSE)
         for (g in groots) {
-            if (startsWith(normalized_path, g)) {
+            if (.gpath_is_within(path, g)) {
                 db_path <- g
                 break
             }
@@ -256,8 +262,26 @@ gdb.reload <- function(rescan = TRUE) {
 
 
 .gconfirmtrackcreate <- function(track) {
-    if (!is.na(match(track, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", track), call. = FALSE)
+    tracks <- get("GTRACKS", envir = .misha)
+    if (!is.null(tracks) && track %in% tracks) {
+        gwd <- get("GWD", envir = .misha)
+        target_db <- .gdb.resolve_db_for_path(gwd)
+        if (is.null(target_db)) {
+            target_db <- get("GROOT", envir = .misha)
+        }
+
+        track_db <- get("GTRACK_DB", envir = .misha)
+        if (is.null(track_db) || !(track %in% names(track_db))) {
+            stop(sprintf("Track %s already exists", track), call. = FALSE)
+        }
+
+        existing_db <- track_db[[track]]
+        if (!is.null(existing_db) && identical(existing_db, target_db)) {
+            stop(sprintf("Track %s already exists", track), call. = FALSE)
+        }
+
+        track_db[[track]] <- NULL
+        assign("GTRACK_DB", track_db, envir = .misha)
     }
 
     path <- gsub(".", "/", track, fixed = TRUE)
