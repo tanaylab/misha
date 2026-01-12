@@ -1,4 +1,5 @@
-load_test_db()
+create_isolated_test_db()
+gdir.create("temp", showWarnings = FALSE)
 
 skip_if(getOption("gmulticontig.indexed_format", FALSE) || gdb.info(.misha$GROOT)$format == "indexed", "Indexed format enbaled, set gmulticontig.indexed_format = FALSE to run this test")
 # Tests for gtrack.convert_to_indexed() and indexed track format
