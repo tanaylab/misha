@@ -6,6 +6,7 @@
 \usage{
 gintervals.ls(
   pattern = "",
+  db = NULL,
   ignore.case = FALSE,
   perl = FALSE,
   fixed = FALSE,
@@ -14,6 +15,9 @@ gintervals.ls(
 }
 \arguments{
 \item{pattern, ignore.case, perl, fixed, useBytes}{see 'grep'}
+
+\item{db}{optional database path to filter intervals. If specified, only
+interval sets from that database are returned.}
 }
 \value{
 An array that contains the names of intervals sets.
@@ -25,6 +29,9 @@ Returns a list of named intervals sets in Genomic Database.
 This function returns a list of named intervals sets that match the pattern
 (see 'grep'). If called without any arguments all named intervals sets are
 returned.
+
+When multiple databases are connected, the 'db' parameter can be used to
+filter intervals to only those from a specific database.
 }
 \examples{
 \dontshow{
@@ -40,7 +47,7 @@ gintervals.ls(pattern = "annot*")
 \code{\link{grep}}, \code{\link{gintervals.exists}},
 \code{\link{gintervals.load}}, \code{\link{gintervals.save}},
 \code{\link{gintervals.rm}}, \code{\link{gintervals}},
-\code{\link{gintervals.2d}}
+\code{\link{gintervals.2d}}, \code{\link{gintervals.db}}
 }
 \keyword{~intervals}
 \keyword{~ls}

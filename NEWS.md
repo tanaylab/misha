@@ -1,3 +1,26 @@
+# misha 5.4.0
+
+* **Multi-database support**: Connect multiple misha databases in a single session
+  - `gsetroot()` now accepts a vector of database paths: `gsetroot(c("base_db", "user_db"))`
+  - "Last wins" semantics for track/interval resolution (later databases override earlier ones)
+  - **Cross-database track expressions**: Track expressions and operations now work correctly across databases
+    - `gextract("track1 + track2")` works when tracks are in different databases
+    - `gtrack.attr.get/set` works for tracks in any connected database
+    - Virtual tracks can reference source tracks from any database
+  - New helper functions:
+    - `gdb.ls()`: List all connected databases
+    - `gdb.summary()`: Get summary information (track counts, writability) for each database
+    - `gdb.create_user()`: Create a user database with symlinks to a parent database's seq/ and chrom_sizes.txt
+    - `gtrack.db()`: Get the database path for a track (vectorized)
+    - `gintervals.db()`: Get the database path for an intervals set (vectorized)
+  - New `db` parameter for filtering by database:
+    - `gtrack.ls(db = "path/to/db")`: List tracks from a specific database
+    - `gintervals.ls(db = "path/to/db")`: List intervals from a specific database
+  - Virtual tracks remain global (shared across all databases)
+  - Write protection relies on OS filesystem permissions with clear error messages
+  - All databases must have identical `chrom_sizes.txt` files
+  - Backward compatible: single database usage works unchanged
+
 # misha 5.3.4
 
 * Added `dataframe` and `names` parameters to `gdist` function that return a data frame instead of an N-dimensional vector.

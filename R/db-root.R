@@ -18,7 +18,20 @@
                 stop(sprintf("Directory %s belongs to track %s", dir, t), call. = FALSE)
             }
 
-            setwd(dir)
+            # Check if directory exists before trying to setwd
+            if (!dir.exists(dir)) {
+                stop(sprintf("Directory does not exist: %s", dir), call. = FALSE)
+            }
+
+            tryCatch(
+                {
+                    setwd(dir)
+                },
+                error = function(e) {
+                    stop(sprintf("Cannot change to directory '%s': %s", dir, e$message), call. = FALSE)
+                }
+            )
+
             newwd <- getwd()
 
             assign("GWD", newwd, envir = .misha)
@@ -41,19 +54,84 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         stop("Usage: gsetroot(groot, dir = NULL, rescan = FALSE)", call. = FALSE)
     }
 
-    groot <- normalizePath(groot)
+    # Support multiple database paths (multi-db feature)
+    # Validate paths exist before calling normalizePath
+    for (i in seq_along(groot)) {
+        if (!dir.exists(groot[i])) {
+            stop(sprintf("Database directory does not exist: %s", groot[i]), call. = FALSE)
+        }
 
+        # Check for required directories
+        tracks_dir <- file.path(groot[i], "tracks")
+        seq_dir <- file.path(groot[i], "seq")
+
+        if (!dir.exists(tracks_dir)) {
+            stop(sprintf("Database directory '%s' does not contain a 'tracks' subdirectory. This does not appear to be a valid misha database.", groot[i]), call. = FALSE)
+        }
+
+        if (!dir.exists(seq_dir)) {
+            stop(sprintf("Database directory '%s' does not contain a 'seq' subdirectory. This does not appear to be a valid misha database.", groot[i]), call. = FALSE)
+        }
+    }
+
+    groots <- normalizePath(groot, mustWork = TRUE)
+
+    # Clear all state
     assign("ALLGENOME", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)
+    assign("GROOTS", NULL, envir = .misha)
     assign("CHROM_ALIAS", NULL, envir = .misha)
+    assign("GTRACK_DB", NULL, envir = .misha)
+    assign("GINTERVALS_DB", NULL, envir = .misha)
 
-    chromsizes <- read.csv(
-        paste(groot, "chrom_sizes.txt", sep = "/"),
-        sep = "\t",
-        header = FALSE,
-        col.names = c("chrom", "size"),
-        colClasses = c("character", "numeric")
+    # Read and validate chrom_sizes from first database
+    chrom_sizes_path <- file.path(groots[1], "chrom_sizes.txt")
+    if (!file.exists(chrom_sizes_path)) {
+        stop(sprintf("Database directory '%s' does not contain a chrom_sizes.txt file. This does not appear to be a valid misha database.", groots[1]), call. = FALSE)
+    }
+
+    chromsizes <- tryCatch(
+        read.csv(
+            chrom_sizes_path,
+            sep = "\t",
+            header = FALSE,
+            col.names = c("chrom", "size"),
+            colClasses = c("character", "numeric")
+        ),
+        error = function(e) {
+            stop(sprintf("Failed to read chrom_sizes.txt from '%s': %s", groots[1], e$message), call. = FALSE)
+        }
     )
+
+    # Validate all databases have identical chrom_sizes.txt
+    if (length(groots) > 1) {
+        for (g in groots[-1]) {
+            cs_path <- file.path(g, "chrom_sizes.txt")
+            if (!file.exists(cs_path)) {
+                stop(sprintf("Database directory '%s' does not contain a chrom_sizes.txt file. This does not appear to be a valid misha database.", g), call. = FALSE)
+            }
+
+            cs <- tryCatch(
+                read.csv(
+                    cs_path,
+                    sep = "\t",
+                    header = FALSE,
+                    col.names = c("chrom", "size"),
+                    colClasses = c("character", "numeric")
+                ),
+                error = function(e) {
+                    stop(sprintf("Failed to read chrom_sizes.txt from '%s': %s", g, e$message), call. = FALSE)
+                }
+            )
+
+            if (!identical(chromsizes, cs)) {
+                stop(sprintf("All databases must have identical chrom_sizes.txt. Database '%s' has different chromosome sizes.", g), call. = FALSE)
+            }
+        }
+    }
+
+    # Use first database for shared resources (seq, chrom_sizes)
+    groot <- groots[1]
 
     is_per_chromosome <- .is_per_chromosome_db(groot, chromsizes)
     assign("DB_IS_PER_CHROMOSOME", is_per_chromosome, envir = .misha)
@@ -129,21 +207,42 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 
     assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
     assign("GROOT", groot, envir = .misha)
+    assign("GROOTS", groots, envir = .misha)
     assign("GWD", groot, envir = .misha)
     assign("CHROM_ALIAS", alias_map, envir = .misha)
 
-    if (.gdb.cache_is_dirty(groot)) {
-        rescan <- TRUE
+    # Check if any database cache is dirty
+    for (g in groots) {
+        if (.gdb.cache_is_dirty(g)) {
+            rescan <- TRUE
+            break
+        }
     }
 
     success <- FALSE
     tryCatch(
         {
             if (is.null(dir)) {
-                .gdir.cd(paste(groot, "tracks", sep = "/"), rescan)
+                # Default to last database's tracks (most likely writable for user)
+                .gdir.cd(file.path(groots[length(groots)], "tracks"), rescan)
             } else {
                 if (nchar(dir) < 1) {
-                    stop("dir argument is an empty string")
+                    stop("dir argument is an empty string", call. = FALSE)
+                }
+
+                # Check if user is trying to pass a second database path instead of a directory
+                # This is a common mistake when migrating from single-db to multi-db
+                if (dir.exists(dir)) {
+                    has_tracks <- dir.exists(file.path(dir, "tracks"))
+                    has_seq <- dir.exists(file.path(dir, "seq"))
+                    has_chrom_sizes <- file.exists(file.path(dir, "chrom_sizes.txt"))
+
+                    if ((has_tracks || has_seq) && has_chrom_sizes) {
+                        stop(sprintf(
+                            "The 'dir' parameter ('%s') looks like a misha database path.\nTo connect multiple databases, use: gsetroot(c(\"%s\", \"%s\"))",
+                            dir, groot[1], dir
+                        ), call. = FALSE)
+                    }
                 }
 
                 c <- substr(dir, 1, 1)
@@ -159,41 +258,174 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
             if (!success) {
                 assign("ALLGENOME", NULL, envir = .misha)
                 assign("GROOT", NULL, envir = .misha)
+                assign("GROOTS", NULL, envir = .misha)
                 assign("GWD", NULL, envir = .misha)
                 assign("CHROM_ALIAS", NULL, envir = .misha)
                 assign("DB_IS_PER_CHROMOSOME", NULL, envir = .misha)
+                assign("GTRACK_DB", NULL, envir = .misha)
+                assign("GINTERVALS_DB", NULL, envir = .misha)
             }
         }
     )
 }
 
-
-#' Changes current working directory in Genomic Database
+#' List connected databases
 #'
-#' Changes current working directory in Genomic Database.
+#' Returns a list of all database paths currently connected to the session.
 #'
-#' This function changes the current working directory in Genomic Database (not
-#' to be confused with shell's current working directory). The list of database
-#' objects - tracks, intervals, track variables - is rescanned recursively
-#' under 'dir'. Object names are updated with the respect to the new current
-#' working directory. Example: a track named 'subdir.dense' will be referred as
-#' 'dense' once current working directory is set to 'subdir'. All virtual
-#' tracks are removed.
+#' When multiple databases are connected using \code{gsetroot(c(db1, db2, ...))},
+#' this function returns all database paths in connection order. The first
+#' database is used for shared resources (seq, chrom_sizes), and later databases
+#' take precedence for track resolution ("last wins").
 #'
-#' @param dir directory path
-#' @return None.
-#' @seealso \code{\link{gdb.init}}, \code{\link{gdir.cwd}},
-#' \code{\link{gdir.create}}, \code{\link{gdir.rm}}
-#' @keywords ~db ~data ~database ~cd ~dir ~directory ~folder
+#' @return Character vector of database paths in connection order.
+#' @seealso \code{\link{gsetroot}}, \code{\link{gdb.info}}, \code{\link{gtrack.db}}
+#' @keywords ~db ~database
 #' @examples
 #' \dontshow{
 #' options(gmax.processes = 2)
 #' }
 #'
 #' gdb.init_examples()
-#' gdir.cd("subdir")
-#' gtrack.ls()
-#' gdir.cd("..")
-#' gtrack.ls()
+#' gdb.ls()
+#' @export
+gdb.ls <- function() {
+    .gcheckroot()
+    get("GROOTS", envir = .misha)
+}
+
+
+#' Get summary of connected databases
 #'
-#' @export gdir.cd
+#' Returns summary information about all connected databases.
+#'
+#' This function returns a data frame with information about each connected
+#' database, including the number of tracks, number of interval sets, and
+#' whether the database is writable. Use this when multiple databases are
+#' connected to get an overview of track distribution.
+#'
+#' Note: This is different from \code{\link{gdb.info}} which provides detailed
+#' information about a single database's format and structure.
+#'
+#' @return A data frame with columns:
+#' \describe{
+#'   \item{db}{Character: The database path}
+#'   \item{tracks}{Integer: Number of tracks from this database}
+#'   \item{intervals}{Integer: Number of interval sets from this database}
+#'   \item{writable}{Logical: Whether the database's tracks directory is writable}
+#' }
+#' @seealso \code{\link{gdb.ls}}, \code{\link{gsetroot}}, \code{\link{gtrack.db}}, \code{\link{gdb.info}}
+#' @keywords ~db ~database ~info
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gdb.summary()
+#'
+#' @export gdb.summary
+gdb.summary <- function() {
+    .gcheckroot()
+    groots <- get("GROOTS", envir = .misha)
+    track_db <- get("GTRACK_DB", envir = .misha)
+    intervals_db <- get("GINTERVALS_DB", envir = .misha)
+
+    # Count tracks and intervals per database
+    track_vals <- unlist(track_db, use.names = FALSE)
+    if (length(track_vals)) {
+        track_counts <- as.integer(table(factor(track_vals, levels = groots)))
+    } else {
+        track_counts <- rep(0L, length(groots))
+    }
+
+    interval_vals <- unlist(intervals_db, use.names = FALSE)
+    if (length(interval_vals)) {
+        interval_counts <- as.integer(table(factor(interval_vals, levels = groots)))
+    } else {
+        interval_counts <- rep(0L, length(groots))
+    }
+
+    # Check write permissions
+    writable <- vapply(groots, function(g) {
+        file.access(file.path(g, "tracks"), 2) == 0
+    }, logical(1))
+
+    data.frame(
+        db = groots,
+        tracks = track_counts,
+        intervals = interval_counts,
+        writable = writable,
+        stringsAsFactors = FALSE,
+        row.names = NULL
+    )
+}
+
+
+#' Create a linked database with symlinks to a parent database
+#'
+#' Creates a new database directory structure with symbolic links to the
+#' parent database's seq/ directory and chrom_sizes.txt file.
+#'
+#' This is useful for creating a writable database that shares sequence
+#' data with a read-only main database. The new database can then be used
+#' together with the parent database via \code{gsetroot(c(parent, linked_db))}.
+#'
+#' @param path Path for the new linked database
+#' @param parent Path to the parent database (with seq and chrom_sizes.txt)
+#' @return Invisible TRUE on success
+#' @seealso \code{\link{gsetroot}}, \code{\link{gdb.create}}, \code{\link{gdb.ls}}
+#' @keywords ~db ~database ~create
+#' @examples
+#' \dontrun{
+#' # Create linked database sharing sequence data with main database
+#' gdb.create_linked("~/my_tracks", parent = "/shared/genomics/hg38")
+#'
+#' # Connect to both databases
+#' gsetroot(c("/shared/genomics/hg38", "~/my_tracks"))
+#' }
+#'
+#' @export gdb.create_linked
+gdb.create_linked <- function(path, parent) {
+    if (missing(path) || missing(parent)) {
+        stop("Usage: gdb.create_linked(path, parent)", call. = FALSE)
+    }
+
+    parent <- normalizePath(parent, mustWork = TRUE)
+    path <- path.expand(path)
+
+    # Validate parent database
+    parent_chrom_sizes <- file.path(parent, "chrom_sizes.txt")
+    parent_seq <- file.path(parent, "seq")
+    if (!file.exists(parent_chrom_sizes)) {
+        stop("Parent database missing chrom_sizes.txt", call. = FALSE)
+    }
+    if (!dir.exists(parent_seq)) {
+        stop("Parent database missing seq/ directory", call. = FALSE)
+    }
+
+    if (dir.exists(path)) {
+        stop(sprintf("Directory '%s' already exists", path), call. = FALSE)
+    }
+
+    # Create user database structure
+    dir.create(path, recursive = TRUE, showWarnings = FALSE)
+    dir.create(file.path(path, "tracks"), showWarnings = FALSE)
+
+    # Create symlinks to parent database
+    chrom_link <- file.path(path, "chrom_sizes.txt")
+    seq_link <- file.path(path, "seq")
+
+    if (!file.symlink(parent_chrom_sizes, chrom_link)) {
+        unlink(path, recursive = TRUE)
+        stop("Failed to create symbolic link for chrom_sizes.txt", call. = FALSE)
+    }
+
+    if (!file.symlink(parent_seq, seq_link)) {
+        unlink(path, recursive = TRUE)
+        stop("Failed to create symbolic link for seq/", call. = FALSE)
+    }
+
+    message(sprintf("Created linked database at %s (linked to %s)", path, parent))
+    invisible(TRUE)
+}
