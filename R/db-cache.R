@@ -23,57 +23,117 @@ gdb.reload <- function(rescan = TRUE) {
 
     assign("GTRACKS", NULL, envir = .misha)
     assign("GINTERVS", NULL, envir = .misha)
+    assign("GTRACK_DB", NULL, envir = .misha)
+    assign("GINTERVALS_DB", NULL, envir = .misha)
 
-    dir <- get("GWD", envir = .misha)
+    gwd <- get("GWD", envir = .misha)
 
-    res <- ""
-
-    if (get("GWD", envir = .misha) != paste(get("GROOT", envir = .misha), "tracks", sep = "/")) {
-        rescan <- TRUE
+    # Get all connected databases
+    groots <- get("GROOTS", envir = .misha)
+    if (is.null(groots)) {
+        # Fallback for backward compatibility
+        groots <- get("GROOT", envir = .misha)
     }
 
-    db.filename <- paste(get("GROOT", envir = .misha), ".db.cache", sep = "/")
+    # Check if GWD is a root tracks directory of any database
+    # If GWD is a subdirectory within a database, we scan only from GWD
+    # (original single-db behavior - no multi-db aggregation)
+    root_tracks_dirs <- file.path(groots, "tracks")
+    is_root_tracks <- any(gwd == root_tracks_dirs)
 
-    suppressWarnings({ # disable warnings since dir() on non dir or non existing dir produces warnings
-        if (!rescan) {
-            retv <- try(
-                {
-                    f <- file(db.filename, "rb")
-                    res <- unserialize(f)
-                    close(f)
-                },
-                silent = TRUE
-            )
+    all_tracks <- character(0)
+    all_intervals <- character(0)
+    track_db <- list() # track_name -> db_path
+    intervals_db <- list() # intervals_name -> db_path
 
-            if (inherits(retv, "try-error")) {
-                rescan <- TRUE
+    if (!is_root_tracks) {
+        # GWD is a subdirectory - scan only from GWD (original behavior)
+        # Force rescan when in a subdirectory
+        rescan <- TRUE
+        res <- .gcall("gfind_tracks_n_intervals", gwd, .misha_env())
+
+        if (!is.null(res)) {
+            all_tracks <- res[[1]]
+            all_intervals <- res[[2]]
+            # Determine which database this GWD belongs to
+            groot_idx <- which(startsWith(gwd, root_tracks_dirs))[1]
+            if (!is.na(groot_idx)) {
+                groot <- groots[groot_idx]
+                if (length(all_tracks)) {
+                    track_db[all_tracks] <- rep(list(groot), length(all_tracks))
+                }
+                if (length(all_intervals)) {
+                    intervals_db[all_intervals] <- rep(list(groot), length(all_intervals))
+                }
             }
         }
+    } else {
+        # GWD is a root tracks directory - do multi-db aggregation
+        # Scan each database in order (later dbs override earlier ones - "last wins")
+        for (groot in groots) {
+            tracks_dir <- file.path(groot, "tracks")
+            if (!dir.exists(tracks_dir)) {
+                next
+            }
 
-        if (rescan) {
-            res <- .gcall("gfind_tracks_n_intervals", dir, .misha_env())
-            if (get("GWD", envir = .misha) == paste(get("GROOT", envir = .misha), "tracks", sep = "/")) {
-                try(
-                    {
-                        f <- file(db.filename, "wb")
-                        serialize(res, f)
-                        close(f)
-                        .gdb.cache_clear_dirty(get("GROOT", envir = .misha))
-                    },
-                    silent = TRUE
-                )
-            } else {
-                unlink(db.filename, recursive = TRUE)
-                .gdb.cache_clear_dirty(get("GROOT", envir = .misha))
+            db.filename <- file.path(groot, ".db.cache")
+            res <- NULL
+
+            # Check if we can use cache for this database
+            use_cache <- !rescan && !.gdb.cache_is_dirty(groot)
+
+            suppressWarnings({
+                if (use_cache) {
+                    retv <- try(
+                        {
+                            f <- file(db.filename, "rb")
+                            res <- unserialize(f)
+                            close(f)
+                        },
+                        silent = TRUE
+                    )
+
+                    if (inherits(retv, "try-error")) {
+                        res <- NULL
+                    }
+                }
+
+                if (is.null(res)) {
+                    # Scan this database
+                    res <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
+
+                    # Write cache for this db
+                    try(
+                        {
+                            f <- file(db.filename, "wb")
+                            serialize(res, f)
+                            close(f)
+                            .gdb.cache_clear_dirty(groot)
+                        },
+                        silent = TRUE
+                    )
+                }
+            })
+
+            if (!is.null(res)) {
+                db_tracks <- res[[1]]
+                db_intervals <- res[[2]]
+
+                # "Last wins": later dbs override earlier ones
+                if (length(db_tracks)) {
+                    track_db[db_tracks] <- rep(list(groot), length(db_tracks))
+                    all_tracks <- c(all_tracks, db_tracks)
+                }
+                if (length(db_intervals)) {
+                    intervals_db[db_intervals] <- rep(list(groot), length(db_intervals))
+                    all_intervals <- c(all_intervals, db_intervals)
+                }
             }
         }
-    })
+    }
 
-    tracks <- res[[1]]
-    intervals <- res[[2]]
-
-    tracks <- sort(tracks)
-    intervals <- sort(intervals)
+    tracks <- sort(unique(all_tracks))
+    intervals <- sort(unique(all_intervals))
 
     res <- intersect(tracks, intervals)
     if (length(res) > 0) {
@@ -82,6 +142,76 @@ gdb.reload <- function(rescan = TRUE) {
 
     assign("GTRACKS", tracks, envir = .misha)
     assign("GINTERVS", intervals, envir = .misha)
+    assign("GTRACK_DB", track_db, envir = .misha)
+    assign("GINTERVALS_DB", intervals_db, envir = .misha)
+}
+
+# Multi-database context switching helper.
+# Temporarily switches GWD to the correct database for a track operation,
+# restoring the original GWD on exit. This is necessary because C++ functions
+# use GWD to resolve track paths.
+.with_track_context <- function(trackname, fn) {
+    db_path <- .gtrack_db_path(trackname)
+    if (is.null(db_path)) {
+        return(fn())
+    }
+
+    correct_gwd <- file.path(db_path, "tracks")
+    current_gwd <- get("GWD", envir = .misha)
+    if (correct_gwd == current_gwd) {
+        return(fn())
+    }
+
+    assign("GWD", correct_gwd, envir = .misha)
+    on.exit(assign("GWD", current_gwd, envir = .misha), add = TRUE)
+    fn()
+}
+
+# Get the database path for a track (returns NULL if not found)
+.gtrack_db_path <- function(trackname) {
+    track_db <- get("GTRACK_DB", envir = .misha)
+    if (is.null(track_db) || !(trackname %in% names(track_db))) {
+        return(NULL)
+    }
+    track_db[[trackname]]
+}
+
+# Get the database path for an intervals set (returns NULL if not found)
+.gintervals_db_path <- function(intervalsname) {
+    intervals_db <- get("GINTERVALS_DB", envir = .misha)
+    if (is.null(intervals_db) || !(intervalsname %in% names(intervals_db))) {
+        return(NULL)
+    }
+    intervals_db[[intervalsname]]
+}
+
+# Check write permission for a path and provide clear error message.
+# Called before write operations to give user-friendly errors when trying
+# to write to read-only databases.
+.gcheck_write_permission <- function(path, operation = "write to") {
+    dir_path <- if (dir.exists(path)) path else dirname(path)
+
+    if (file.access(dir_path, 2) == 0) {
+        return(invisible(TRUE))
+    }
+
+    # Find which database this path belongs to for a better error message
+    groots <- get("GROOTS", envir = .misha)
+    db_path <- NULL
+    if (!is.null(groots)) {
+        normalized_path <- normalizePath(path, mustWork = FALSE)
+        for (g in groots) {
+            if (startsWith(normalized_path, g)) {
+                db_path <- g
+                break
+            }
+        }
+    }
+
+    if (!is.null(db_path)) {
+        stop(sprintf("Cannot %s read-only database: %s", operation, db_path), call. = FALSE)
+    }
+    stop(sprintf("Cannot %s read-only path: %s", operation, dir_path), call. = FALSE)
 }
 
 
@@ -156,8 +286,20 @@ gdb.reload <- function(rescan = TRUE) {
     }
 }
 
+# Get the directory path for a track, resolving to the correct database.
+# Falls back to current GWD for new tracks not yet in any database.
 .track_dir <- function(trackname) {
-    sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", trackname), sep = "/"))
+    db_path <- .gtrack_db_path(trackname)
+    base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
+    file.path(base, paste0(gsub("\\.", "/", trackname), ".track"))
+}
+
+# Get the directory path for an intervals set, resolving to the correct database.
+# Falls back to current GWD for new intervals not yet in any database.
+.intervals_dir <- function(intervalsname) {
+    db_path <- .gintervals_db_path(intervalsname)
+    base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
+    file.path(base, paste0(gsub("\\.", "/", intervalsname), ".interv"))
 }
 
 .gdb.cache_path <- function(groot = NULL) {
@@ -280,20 +422,42 @@ gdb.reload <- function(rescan = TRUE) {
     invisible(success)
 }
 
-.gdb.cache_update_lists <- function() {
+.gdb.cache_update_lists <- function(groot = NULL) {
     if (!exists("GROOT", envir = .misha, inherits = FALSE) ||
         !exists("GTRACKS", envir = .misha, inherits = FALSE) ||
         !exists("GINTERVS", envir = .misha, inherits = FALSE)) {
         return(invisible(FALSE))
     }
 
-    groot <- get("GROOT", envir = .misha)
+    groots <- get("GROOTS", envir = .misha)
+    if (is.null(groot)) {
+        groot <- get("GROOT", envir = .misha)
+    }
     if (is.null(groot) || groot == "") {
         return(invisible(FALSE))
     }
 
     tracks <- get("GTRACKS", envir = .misha)
     intervals <- get("GINTERVS", envir = .misha)
+
+    if (!is.null(groots) && length(groots) > 1) {
+        track_db <- get("GTRACK_DB", envir = .misha)
+        if (!is.null(track_db) && length(tracks)) {
+            track_db_vec <- unlist(track_db, use.names = TRUE)
+            if (length(track_db_vec)) {
+                tracks <- tracks[!is.na(track_db_vec[tracks]) & track_db_vec[tracks] == groot]
+            }
+        }
+
+        intervals_db <- get("GINTERVALS_DB", envir = .misha)
+        if (!is.null(intervals_db) && length(intervals)) {
+            intervals_db_vec <- unlist(intervals_db, use.names = TRUE)
+            if (length(intervals_db_vec)) {
+                intervals <- intervals[!is.na(intervals_db_vec[intervals]) & intervals_db_vec[intervals] == groot]
+            }
+        }
+    }
+
     .gdb.cache_write_lists(tracks, intervals, groot)
 }
 

@@ -830,6 +830,35 @@ const char *rdb::get_glib_dir(SEXP envir)
     return CHAR(STRING_ELT(glibdir, 0));
 }
 
+// Look up a name in a database mapping (named list: name -> db_path).
+// Returns db_path/tracks if found, empty string otherwise.
+static string lookup_db_path(SEXP db_mapping, const string &name)
+{
+    if (db_mapping == R_NilValue || Rf_isNull(db_mapping))
+        return "";
+
+    SEXP names = Rf_getAttrib(db_mapping, R_NamesSymbol);
+    if (names == R_NilValue)
+        return "";
+
+    SEXP name_sexp = PROTECT(Rf_mkString(name.c_str()));
+    SEXP idx = PROTECT(Rf_match(name_sexp, names, 0));
+    int pos = INTEGER(idx)[0] - 1;
+    UNPROTECT(2);
+
+    if (pos < 0 || pos >= Rf_length(db_mapping))
+        return "";
+
+    if (TYPEOF(db_mapping) == VECSXP) {
+        SEXP val = VECTOR_ELT(db_mapping, pos);
+        if (Rf_isString(val) && Rf_length(val) > 0)
+            return string(CHAR(STRING_ELT(val, 0))) + "/tracks";
+    } else if (TYPEOF(db_mapping) == STRSXP) {
+        return string(CHAR(STRING_ELT(db_mapping, pos))) + "/tracks";
+    }
+    return "";
+}
+
 string rdb::track2path(SEXP envir, const string &trackname)
 {
 	string path(trackname);
@@ -839,7 +868,13 @@ string rdb::track2path(SEXP envir, const string &trackname)
 		if (*i == '.')
 			*i = '/';
 	}
-	return string(get_gwd(envir)) + "/" + path + TRACK_FILE_EXT;
+
+	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GTRACK_DB"), trackname);
+	if (db_tracks_dir.empty()) {
+		db_tracks_dir = get_gwd(envir);
+	}
+
+	return db_tracks_dir + "/" + path + TRACK_FILE_EXT;
 }
 
 string rdb::interv2path(SEXP envir, const string &intervname)
@@ -851,7 +886,13 @@ string rdb::interv2path(SEXP envir, const string &intervname)
 		if (*i == '.')
 			*i = '/';
 	}
-	return string(get_gwd(envir)) + "/" + path + INTERV_FILE_EXT;
+
+	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GINTERVALS_DB"), intervname);
+	if (db_tracks_dir.empty()) {
+		db_tracks_dir = get_gwd(envir);
+	}
+
+	return db_tracks_dir + "/" + path + INTERV_FILE_EXT;
 }
 
 string rdb::create_track_dir(SEXP envir, const string &trackname)
