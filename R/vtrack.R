@@ -72,7 +72,16 @@
 
         envir <- .misha_env()
         assign("GVTRACKS", gvtracks, envir$.misha)
-        .gcall("gcheck_vtrack", vtrackstr, envir)
+
+        # For multi-db support: switch to source track's database context
+        # before calling gcheck_vtrack which needs to resolve the track path
+        if (is.character(var$src)) {
+            .with_track_context(var$src, function() {
+                .gcall("gcheck_vtrack", vtrackstr, envir)
+            })
+        } else {
+            .gcall("gcheck_vtrack", vtrackstr, envir)
+        }
     }
 
     success <- FALSE
