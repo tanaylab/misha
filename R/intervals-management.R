@@ -8,12 +8,17 @@
 #' (see 'grep'). If called without any arguments all named intervals sets are
 #' returned.
 #'
+#' When multiple databases are connected, the 'db' parameter can be used to
+#' filter intervals to only those from a specific database.
+#'
 #' @param pattern,ignore.case,perl,fixed,useBytes see 'grep'
+#' @param db optional database path to filter intervals. If specified, only
+#' interval sets from that database are returned.
 #' @return An array that contains the names of intervals sets.
 #' @seealso \code{\link{grep}}, \code{\link{gintervals.exists}},
 #' \code{\link{gintervals.load}}, \code{\link{gintervals.save}},
 #' \code{\link{gintervals.rm}}, \code{\link{gintervals}},
-#' \code{\link{gintervals.2d}}
+#' \code{\link{gintervals.2d}}, \code{\link{gintervals.db}}
 #' @keywords ~intervals ~ls
 #' @examples
 #' \dontshow{
@@ -25,9 +30,77 @@
 #' gintervals.ls(pattern = "annot*")
 #'
 #' @export gintervals.ls
-gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+gintervals.ls <- function(pattern = "", db = NULL, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     .gcheckroot()
-    grep(pattern, get("GINTERVS", envir = .misha), value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
+
+    intervals <- get("GINTERVS", envir = .misha)
+
+    # Filter by database if specified
+    if (!is.null(db)) {
+        db <- normalizePath(db, mustWork = FALSE)
+        intervals_db <- get("GINTERVALS_DB", envir = .misha)
+        if (is.null(intervals_db) || length(intervals) == 0) {
+            return(character(0))
+        }
+        intervals_db_vec <- unlist(intervals_db, use.names = TRUE)
+        if (is.null(intervals_db_vec) || length(intervals_db_vec) == 0) {
+            return(character(0))
+        }
+        db_by_intervals <- intervals_db_vec[intervals]
+        intervals <- intervals[!is.na(db_by_intervals) & db_by_intervals == db]
+        if (length(intervals) == 0) {
+            return(character(0))
+        }
+    }
+
+    grep(pattern, intervals, value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
+}
+
+#' Returns the database path(s) for interval set(s)
+#'
+#' Returns the database path where an interval set is stored.
+#'
+#' This function returns the database path(s) for one or more interval sets.
+#' When multiple databases are connected, each interval set is resolved to its
+#' source database using "last wins" semantics.
+#'
+#' @param intervals interval set name or a vector of interval set names
+#' @return A character vector containing the database paths for each interval set.
+#' Returns NA for interval sets that don't exist in any connected database.
+#' @seealso \code{\link{gintervals.exists}}, \code{\link{gintervals.ls}},
+#' \code{\link{gtrack.db}}, \code{\link{gdb.ls}}
+#' @keywords ~intervals ~path ~database
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gintervals.db("annotations1")
+#'
+#' @export gintervals.db
+gintervals.db <- function(intervals = NULL) {
+    if (is.null(substitute(intervals))) {
+        stop("Usage: gintervals.db(intervals)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    intervalsstr <- do.call(.gexpr2str, list(substitute(intervals)), envir = parent.frame())
+    if (length(intervalsstr) == 0) {
+        return(character(0))
+    }
+
+    intervals_db <- get("GINTERVALS_DB", envir = .misha)
+    if (is.null(intervals_db) || length(intervals_db) == 0) {
+        return(rep(NA_character_, length(intervalsstr)))
+    }
+
+    intervals_db_vec <- unlist(intervals_db, use.names = TRUE)
+    if (is.null(intervals_db_vec) || length(intervals_db_vec) == 0) {
+        return(rep(NA_character_, length(intervalsstr)))
+    }
+
+    unname(intervals_db_vec[intervalsstr])
 }
 
 

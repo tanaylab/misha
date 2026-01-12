@@ -36,6 +36,11 @@ determined by evaluation of 'expr' - a numeric track expression. The type of
 the new track is determined by the type of the iterator. 'Fixed bin',
 'Sparse' or 'Rectangles' track can be created accordingly. 'description' is
 added as a track attribute.
+
+When multiple databases are connected via \code{\link{gsetroot}}, the track
+is created in the current working directory (.misha$GWD), which defaults to the
+last connected database. Use \code{\link{gdir.cd}} with an absolute path to
+change where new tracks are created.
 }
 \examples{
 \dontshow{

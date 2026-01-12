@@ -10,6 +10,11 @@
 #' 'Sparse' or 'Rectangles' track can be created accordingly. 'description' is
 #' added as a track attribute.
 #'
+#' When multiple databases are connected via \code{\link{gsetroot}}, the track
+#' is created in the current working directory (.misha$GWD), which defaults to the
+#' last connected database. Use \code{\link{gdir.cd}} with an absolute path to
+#' change where new tracks are created.
+#'
 #' @param track track name
 #' @param description a character string description
 #' @param expr track expression
@@ -195,6 +200,11 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
 #'
 #' This function creates a new 'Sparse' track with values at given intervals.
 #' 'description' is added as a track attribute.
+#'
+#' When multiple databases are connected via \code{\link{gsetroot}}, the track
+#' is created in the current working directory (.misha$GWD), which defaults to the
+#' last connected database. Use \code{\link{gdir.cd}} with an absolute path to
+#' change where new tracks are created.
 #'
 #' @param track track name
 #' @param description a character string description

@@ -108,6 +108,38 @@ test_that("dirty cache flag forces rescan on gsetroot", {
     expect_false(file.exists(file.path(db1, ".db.cache.dirty")))
 })
 
+test_that("multi-db uses cache for current root when rescan is FALSE", {
+    gdb.init_examples()
+    withr::defer(gdb.init_examples())
+
+    seed_root <- get("GROOT", envir = .misha)
+    tmp_base <- withr::local_tempdir()
+
+    db1 <- file.path(tmp_base, "db1")
+    db2 <- file.path(tmp_base, "db2")
+    copy_seed_db(seed_root, db1)
+    copy_seed_db(seed_root, db2)
+
+    gsetroot(c(db1, db2), rescan = TRUE)
+    gtrack.create("tmp_track_db2_cache", "tmp", "dense_track")
+    expect_true(gtrack.exists("tmp_track_db2_cache"))
+
+    # Build caches for both databases
+    gsetroot(c(db1, db2), rescan = TRUE)
+
+    # Remove the track on disk without marking dirty
+    unlink(file.path(db2, "tracks", "tmp_track_db2_cache.track"), recursive = TRUE)
+
+    # Cache should still report the track for the current root
+    gsetroot(c(db1, db2), rescan = FALSE)
+    expect_true(gtrack.exists("tmp_track_db2_cache"))
+
+    # Dirtying db2 forces a rescan and removes the stale entry
+    misha:::.gdb.cache_mark_dirty(db2)
+    gsetroot(c(db1, db2), rescan = FALSE)
+    expect_false(gtrack.exists("tmp_track_db2_cache"))
+})
+
 test_that("mark cache dirty helps detect manual interval deletions", {
     gdb.init_examples()
     withr::defer(gdb.init_examples())

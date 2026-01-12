@@ -38,6 +38,161 @@ A valid Genomic Database should contain the following files and subdirectories:
 
 `pssms` and `seq` directories are optional and are required only by a subset of functions in the package.
 
+### Multi-Database Support
+
+The `misha` package supports connecting to multiple Genomic Databases simultaneously. This is useful when you want to combine a shared read-only reference database with a user-specific database for custom tracks, or when working with multiple data sources that share the same genome.
+
+#### Connecting to Multiple Databases
+
+To connect to multiple databases, pass a vector of paths to `gsetroot()`:
+
+```{r, eval=FALSE}
+# Connect to a shared database and a user-specific database
+gsetroot(c("/shared/reference_db", "~/my_tracks_db"))
+
+# List connected databases
+gdb.ls()
+
+# Get summary information about each database
+gdb.summary()
+```
+
+**Key Points:**
+- All databases must have identical `chrom_sizes.txt` files (same genome assembly)
+- The first database is used for `seq/` and `chrom_sizes.txt` access
+- Tracks and intervals are aggregated from all databases
+- New tracks are created in the last database by default (the current working directory)
+
+#### Track Resolution: "Last Wins"
+
+When the same track name exists in multiple databases, the version from the **last** database in the connection list takes precedence. This "last wins" semantics allows user databases to override tracks from shared reference databases:
+
+```{r, eval=FALSE}
+# shared_db has track "annotations"
+# user_db also has track "annotations"
+gsetroot(c("shared_db", "user_db"))
+
+# This uses the version from user_db (last wins)
+gextract("annotations", gintervals(1, 0, 1000))
+
+# Check which database a track comes from
+gtrack.db("annotations") # Returns path to user_db
+```
+
+#### Cross-Database Track Expressions
+
+Track expressions can seamlessly combine tracks from different databases:
+
+```{r, eval=FALSE}
+# Suppose db1 contains "signal" track and db2 contains "background" track
+gsetroot(c("db1", "db2"))
+
+# Extract tracks from different databases in a single call
+result <- gextract(c("signal", "background"), gintervals(1, 0, 10000), iterator = 100)
+
+# Use track expressions across databases
+normalized <- gextract("signal - background", gintervals(1, 0, 10000), iterator = 100)
+
+# Access track attributes from any database
+gtrack.attr.get("signal", "description") # From db1
+gtrack.attr.get("background", "description") # From db2
+```
+
+Virtual tracks can also reference source tracks from any connected database:
+
+```{r, eval=FALSE}
+# Create virtual tracks from different databases
+gvtrack.create("vt_signal", "signal", "avg") # signal is in db1
+gvtrack.create("vt_background", "background", "avg") # background is in db2
+
+# Combine them in expressions
+gextract("vt_signal / vt_background", gintervals(1, 0, 10000))
+```
+
+#### Querying Track and Interval Sources
+
+Use `gtrack.db()` and `gintervals.db()` to find which database contains a track or interval set:
+
+```{r, eval=FALSE}
+# Single track
+gtrack.db("my_track")
+
+# Multiple tracks (vectorized)
+gtrack.db(c("track1", "track2", "track3"))
+
+# Intervals
+gintervals.db("my_intervals")
+```
+
+Filter track and interval listings by database:
+
+```{r, eval=FALSE}
+# List tracks from a specific database only
+gtrack.ls(db = "/shared/reference_db")
+
+# List intervals from user database
+gintervals.ls(db = "~/my_tracks_db")
+```
+
+#### Creating a Linked Database
+
+Use `gdb.create_linked()` to create a lightweight database that links to a parent database's `seq/` directory and `chrom_sizes.txt` file:
+
+```{r, eval=FALSE}
+# Create linked database with symlinks to parent's seq and chrom_sizes
+gdb.create_linked("~/my_db", parent = "/shared/hg38")
+
+# Connect to both
+gsetroot(c("/shared/hg38", "~/my_db"))
+
+# Create tracks in the linked database
+gtrack.create("my_analysis", "Analysis results", "reference_track * 2")
+```
+
+This avoids duplicating large sequence files while allowing you to maintain your own tracks.
+
+#### Write Protection
+
+Write protection is handled at the OS filesystem level. When attempting to modify a read-only database, `misha` provides clear error messages:
+
+```{r, eval=FALSE}
+# If /shared/reference_db is read-only at the filesystem level:
+gtrack.rm("shared_track", force = TRUE)
+# Error: Cannot write to read-only database: /shared/reference_db
+```
+
+To protect a database, set appropriate filesystem permissions:
+```bash
+# Make the reference database read-only
+chmod -R a-w /shared/reference_db/tracks
+```
+
+#### Virtual Tracks in Multi-Database Mode
+
+Virtual tracks remain global and are not tied to any specific database. They can reference tracks from any connected database:
+
+```{r, eval=FALSE}
+gsetroot(c("db1", "db2"))
+
+# Create virtual track referencing track from db1
+gvtrack.create("vt1", "track_from_db1", "avg")
+
+# Create virtual track referencing track from db2
+gvtrack.create("vt2", "track_from_db2", "max")
+
+# Use both in same expression
+gextract("vt1 + vt2", gintervals(1, 0, 10000))
+```
+
+#### Backward Compatibility
+
+Single-database usage works exactly as before:
+
+```{r, eval=FALSE}
+gsetroot("single_database") # Works unchanged
+gdb.init("single_database") # Equivalent, also works
+```
+
 An example of a Genomic Database file structure:
 
 ```

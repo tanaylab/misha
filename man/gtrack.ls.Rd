@@ -6,6 +6,7 @@
 \usage{
 gtrack.ls(
   ...,
+  db = NULL,
   ignore.case = FALSE,
   perl = FALSE,
   fixed = FALSE,
@@ -15,6 +16,9 @@ gtrack.ls(
 \arguments{
 \item{...}{these arguments are of either form 'pattern' or 'attribute =
 pattern'}
+
+\item{db}{optional database path to filter tracks. If specified, only tracks
+from that database are returned.}
 
 \item{ignore.case, perl, fixed, useBytes}{see 'grep'}
 }
@@ -37,6 +41,9 @@ track attribute is matched against the pattern.
 
 Multiple patterns are applied one after another. The resulted list of tracks
 should match all the patterns.
+
+When multiple databases are connected, the 'db' parameter can be used to
+filter tracks to only those from a specific database.
 }
 \examples{
 \dontshow{
@@ -62,7 +69,7 @@ gtrack.ls("den*", created.by = "track")
 }
 \seealso{
 \code{\link{grep}}, \code{\link{gtrack.exists}},
-\code{\link{gtrack.create}}, \code{\link{gtrack.rm}}
+\code{\link{gtrack.create}}, \code{\link{gtrack.rm}}, \code{\link{gtrack.db}}
 }
 \keyword{~intervals}
 \keyword{~ls}

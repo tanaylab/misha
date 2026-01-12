@@ -4,12 +4,15 @@
 \alias{gtrack.rm}
 \title{Deletes a track}
 \usage{
-gtrack.rm(track = NULL, force = FALSE)
+gtrack.rm(track = NULL, force = FALSE, db = NULL)
 }
 \arguments{
 \item{track}{track name}
 
 \item{force}{if 'TRUE', suppresses user confirmation of a named track removal}
+
+\item{db}{optional database path to delete the track from when multiple
+databases are connected}
 }
 \value{
 None.
