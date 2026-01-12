@@ -121,6 +121,77 @@ gtrack.db <- function(track = NULL) {
     unname(track_db_vec[trackstr])
 }
 
+#' Returns the database paths that contain track(s)
+#'
+#' Returns all database paths that contain a version of a track.
+#'
+#' When multiple databases are connected, a track can exist in more than one
+#' database. This function returns all such database paths in connection order.
+#'
+#' @param track track name or a vector of track names
+#' @param dataframe return a data frame with columns \code{track} and \code{db}
+#' instead of a named character vector.
+#' @return A named character vector of database paths for each track. If
+#' \code{dataframe} is TRUE, returns a data frame with columns \code{track} and
+#' \code{db}, with multiple rows per track when it appears in multiple databases.
+#' @seealso \code{\link{gtrack.db}}, \code{\link{gtrack.exists}},
+#' \code{\link{gtrack.ls}}, \code{\link{gdb.ls}}
+#' @keywords ~track ~database ~path
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gtrack.dbs("dense_track")
+#' gtrack.dbs(gtrack.ls(), dataframe = TRUE)
+#'
+#' @export gtrack.dbs
+gtrack.dbs <- function(track = NULL, dataframe = FALSE) {
+    if (is.null(substitute(track))) {
+        stop("Usage: gtrack.dbs(track)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
+    if (length(trackstr) == 0) {
+        if (dataframe) {
+            return(data.frame(track = character(0), db = character(0), stringsAsFactors = FALSE))
+        }
+        return(character(0))
+    }
+
+    if (length(trackstr) > 1) {
+        if (!dataframe) {
+            return(unlist(lapply(trackstr, gtrack.dbs, dataframe = FALSE), use.names = TRUE))
+        }
+        res <- lapply(trackstr, function(t) gtrack.dbs(t, dataframe = TRUE))
+        return(do.call(rbind, res))
+    }
+
+    if (!(trackstr %in% get("GTRACKS", envir = .misha))) {
+        stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
+    }
+
+    track_dbs <- get("GTRACK_DBS", envir = .misha)
+    if (is.null(track_dbs) || !(trackstr %in% names(track_dbs))) {
+        dbs <- gtrack.db(trackstr)
+    } else {
+        dbs <- track_dbs[[trackstr]]
+    }
+
+    if (!dataframe) {
+        names(dbs) <- rep(trackstr, length(dbs))
+        return(dbs)
+    }
+
+    data.frame(
+        track = rep(trackstr, length(dbs)),
+        db = dbs,
+        stringsAsFactors = FALSE
+    )
+}
+
 #' Returns information about a track
 #'
 #' Returns information about a track.
@@ -445,7 +516,7 @@ gtrack.copy <- function(src = NULL, dest = NULL) {
     dest_db <- NULL
     groots <- get("GROOTS", envir = .misha)
     for (groot in groots) {
-        if (startsWith(gwd, file.path(groot, "tracks"))) {
+        if (.gpath_is_within(gwd, file.path(groot, "tracks"))) {
             dest_db <- groot
             break
         }

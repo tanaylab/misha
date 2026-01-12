@@ -229,15 +229,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     retv <- 0
     success <- FALSE
 
@@ -402,15 +396,9 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     retv <- 0
     success <- FALSE
     tryCatch(

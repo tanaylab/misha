@@ -1,5 +1,20 @@
 # Track and intervals set management functions
 
+.gpath_is_within <- function(path, root) {
+    if (is.null(path) || is.null(root)) {
+        return(FALSE)
+    }
+
+    path <- normalizePath(path, mustWork = FALSE)
+    root <- normalizePath(root, mustWork = FALSE)
+
+    if (path == root) {
+        return(TRUE)
+    }
+
+    startsWith(path, paste0(root, .Platform$file.sep))
+}
+
 .gdb.resolve_db_for_path <- function(path) {
     groots <- get("GROOTS", envir = .misha)
     if (is.null(groots)) {
@@ -10,8 +25,7 @@
     }
 
     root_tracks_dirs <- file.path(groots, "tracks")
-    normalized_path <- normalizePath(path, mustWork = FALSE)
-    idx <- which(startsWith(normalized_path, root_tracks_dirs))[1]
+    idx <- which(vapply(root_tracks_dirs, function(root) .gpath_is_within(path, root), logical(1)))[1]
     if (!is.na(idx)) {
         groots[idx]
     } else {
@@ -84,14 +98,34 @@
         track_db[[track]] <- db
         assign("GTRACK_DB", track_db, envir = .misha)
 
+        track_dbs <- get("GTRACK_DBS", envir = .misha)
+        if (is.null(track_dbs)) {
+            track_dbs <- list()
+        }
+        existing_dbs <- track_dbs[[track]]
+        if (is.null(existing_dbs)) {
+            existing_dbs <- character(0)
+        }
+        all_dbs <- unique(c(existing_dbs, db))
+        groots <- get("GROOTS", envir = .misha)
+        if (!is.null(groots)) {
+            all_dbs <- groots[groots %in% all_dbs]
+        }
+        track_dbs[[track]] <- all_dbs
+        assign("GTRACK_DBS", track_dbs, envir = .misha)
+
         .gdb.cache_update_lists(db)
     }
 }
 
 # Clean up empty directories after track operations
 .cleanup_empty_dirs <- function(dir) {
-    gwd <- get("GWD", envir = .misha)
-    tracks_dir <- gwd
+    db_root <- .gdb.resolve_db_for_path(dir)
+    if (!is.null(db_root)) {
+        tracks_dir <- file.path(db_root, "tracks")
+    } else {
+        tracks_dir <- get("GWD", envir = .misha)
+    }
 
     # Walk up from dir, removing empty directories until we hit tracks_dir
     current <- dir
@@ -160,6 +194,22 @@
 
         assign("GTRACKS", tracks, envir = .misha)
         assign("GTRACK_DB", track_db, envir = .misha)
+
+        track_dbs <- get("GTRACK_DBS", envir = .misha)
+        if (!is.null(track_dbs) && track %in% names(track_dbs)) {
+            if (!is.null(db)) {
+                track_dbs[[track]] <- setdiff(track_dbs[[track]], db)
+            }
+            if (length(track_dbs[[track]]) == 0) {
+                track_dbs[[track]] <- NULL
+            } else {
+                groots <- get("GROOTS", envir = .misha)
+                if (!is.null(groots)) {
+                    track_dbs[[track]] <- groots[groots %in% track_dbs[[track]]]
+                }
+            }
+            assign("GTRACK_DBS", track_dbs, envir = .misha)
+        }
 
         .gdb.cache_update_lists(db)
         if (!is.null(new_db) && new_db != db) {

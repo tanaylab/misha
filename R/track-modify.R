@@ -83,8 +83,6 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
 
     exprs <- c()
     breaks <- list()
@@ -96,11 +94,9 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
 
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {
@@ -265,15 +261,11 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {

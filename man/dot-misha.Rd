@@ -5,7 +5,7 @@
 \alias{.misha}
 \title{An environment for storing the package global variables}
 \format{
-An object of class \code{environment} of length 13.
+An object of class \code{environment} of length 14.
 }
 \usage{
 .misha
