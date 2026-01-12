@@ -19,6 +19,7 @@ reference:
       - gtrack.create_sparse
       - gtrack.create_dense
       - gtrack.create_dirs
+      - gtrack.dbs
       - gtrack.db
       - gtrack.exists
       - gtrack.import

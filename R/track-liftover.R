@@ -110,13 +110,6 @@ gtrack.liftover <- function(track = NULL,
     }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
 
     normalize_policy <- function(policy) {
         if (is.null(policy)) {
@@ -182,6 +175,8 @@ gtrack.liftover <- function(track = NULL,
     }
 
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {

@@ -75,6 +75,9 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     }
 
     groots <- normalizePath(groot, mustWork = TRUE)
+    if (any(duplicated(groots))) {
+        stop("Database directories should differ from one another", call. = FALSE)
+    }
 
     # Clear all state
     assign("ALLGENOME", NULL, envir = .misha)
@@ -83,6 +86,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("CHROM_ALIAS", NULL, envir = .misha)
     assign("GTRACK_DB", NULL, envir = .misha)
     assign("GINTERVALS_DB", NULL, envir = .misha)
+    assign("GTRACK_DBS", NULL, envir = .misha)
 
     # Read and validate chrom_sizes from first database
     chrom_sizes_path <- file.path(groots[1], "chrom_sizes.txt")
@@ -264,6 +268,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
                 assign("DB_IS_PER_CHROMOSOME", NULL, envir = .misha)
                 assign("GTRACK_DB", NULL, envir = .misha)
                 assign("GINTERVALS_DB", NULL, envir = .misha)
+                assign("GTRACK_DBS", NULL, envir = .misha)
             }
         }
     )

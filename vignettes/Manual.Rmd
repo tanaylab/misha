@@ -111,11 +111,14 @@ gextract("vt_signal / vt_background", gintervals(1, 0, 10000))
 
 #### Querying Track and Interval Sources
 
-Use `gtrack.db()` and `gintervals.db()` to find which database contains a track or interval set:
+Use `gtrack.db()`, `gtrack.dbs()`, and `gintervals.db()` to find which database contains a track or interval set:
 
 ```{r, eval=FALSE}
 # Single track
 gtrack.db("my_track")
+
+# All databases containing a track
+gtrack.dbs("my_track")
 
 # Multiple tracks (vectorized)
 gtrack.db(c("track1", "track2", "track3"))
@@ -901,4 +904,3 @@ It is worth to say a word about memory consumption. Deducting real memory usage 
 ### Other Considerations
 
 In multitasking mode the return value of `gquantiles` may vary depending on the number of CPU cores. For more details please refer the documentation of this function.
-

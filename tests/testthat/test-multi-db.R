@@ -339,6 +339,55 @@ test_that("database order affects track resolution (last wins)", {
     })
 })
 
+test_that("db path prefix matching does not misclassify db1 vs db10", {
+    withr::with_tempdir({
+        create_test_db("db1")
+        create_test_db("db10")
+
+        gsetroot("db1")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("base_db1", "db1", intervs, 1)
+
+        gsetroot(c("db1", "db10"))
+
+        # GWD is db10/tracks, so creation should target db10
+        gtrack.create_sparse("from_db10", "db10", intervs, 2)
+        expect_equal(gtrack.db("from_db10"), normalizePath("db10"))
+
+        # Switch to db1 tracks explicitly and create there
+        gdir.cd(file.path(normalizePath("db1"), "tracks"))
+        gtrack.create_sparse("from_db1", "db1", intervs, 3)
+        expect_equal(gtrack.db("from_db1"), normalizePath("db1"))
+    })
+})
+
+test_that("creating override in later db works and gtrack.dbs lists all dbs", {
+    withr::with_tempdir({
+        create_test_db("db1")
+        create_test_db("db2")
+
+        gsetroot("db1")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("shared", "db1 version", intervs, 1)
+
+        gsetroot(c("db1", "db2"))
+
+        # Override in the later database while connected
+        gtrack.create_sparse("shared", "db2 version", intervs, 2)
+
+        expect_equal(gtrack.db("shared"), normalizePath("db2"))
+        expect_equal(gextract("shared", gintervals(1, 0, 500))$shared[1], 2)
+
+        dbs <- gtrack.dbs("shared")
+        expect_equal(unname(dbs), c(normalizePath("db1"), normalizePath("db2")))
+        expect_equal(names(dbs), rep("shared", 2))
+
+        df <- gtrack.dbs("shared", dataframe = TRUE)
+        expect_equal(df$track, rep("shared", 2))
+        expect_equal(df$db, c(normalizePath("db1"), normalizePath("db2")))
+    })
+})
+
 test_that("gextract works with tracks from different databases", {
     withr::with_tempdir({
         create_test_db("db1")
@@ -633,10 +682,14 @@ test_that("read-only database gives clear error message", {
 
         # Deleting track from read-only db will fail silently (R cannot delete)
         # The track remains since the parent directory is read-only
-        suppressMessages(gtrack.rm("existing_track", force = TRUE))
+        suppressWarnings(suppressMessages(gtrack.rm("existing_track", force = TRUE)))
 
         # Verify the track still exists (because delete failed)
         expect_true(gtrack.exists("existing_track"))
+
+        # Reset permissions and clean up to avoid tempdir cleanup warnings
+        Sys.chmod("readonly_db/tracks", "755")
+        unlink(file.path("readonly_db", "tracks", "existing_track.track"), recursive = TRUE)
     })
 })
 
@@ -692,23 +745,14 @@ test_that("virtual track can reference track from any database", {
     })
 })
 
-test_that("connecting same database twice is handled gracefully", {
+test_that("connecting same database twice fails", {
     withr::with_tempdir({
         create_test_db("db1")
 
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("test_track", "test", intervs, 1)
-
-        # Connect same db twice
-        gsetroot(c("db1", "db1"))
-
-        # Should work without errors, track appears once
-        tracks <- gtrack.ls()
-        expect_equal(sum(tracks == "test_track"), 1)
-
-        # gdb.ls shows the path twice
-        expect_equal(length(gdb.ls()), 2)
+        expect_error(
+            gsetroot(c("db1", "db1")),
+            "directories should differ"
+        )
     })
 })
 
@@ -825,6 +869,30 @@ test_that("gtrack.mv works correctly in multi-db", {
 
         # Value should be preserved
         expect_equal(gextract("renamed", gintervals(1, 0, 500))$renamed[1], 42)
+    })
+})
+
+test_that("gtrack.mv cleans up empty dirs in non-current db", {
+    withr::with_tempdir({
+        create_test_db("db1")
+        create_test_db("db2")
+
+        gsetroot("db1")
+        intervs <- gintervals(1, 0, 1000)
+        gdir.create("subdir", showWarnings = FALSE)
+        gtrack.create_sparse("subdir.track1", "t1", intervs, 1)
+
+        subdir_path <- file.path("db1", "tracks", "subdir")
+        expect_true(dir.exists(subdir_path))
+
+        # Connect with db2 last so GWD is in db2
+        gsetroot(c("db1", "db2"))
+
+        gtrack.mv("subdir.track1", "track1")
+
+        # Subdir should be removed from db1 after move
+        expect_false(dir.exists(subdir_path))
+        expect_true(file.exists(file.path("db1", "tracks", "track1.track")))
     })
 })
 
@@ -1084,17 +1152,10 @@ test_that("connecting to non-unique databases fails gracefully", {
 
         abs_path <- normalizePath("db1")
 
-        # Connecting same db twice should work but deduplicate in track listing
-        gsetroot(c(abs_path, abs_path))
-
-        # Track count should not be doubled
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("test_track", "test", intervs, 1)
-
-        gsetroot(c(abs_path, abs_path))
-        track_count <- sum(gtrack.ls() == "test_track")
-        expect_equal(track_count, 1) # Track appears only once
+        expect_error(
+            gsetroot(c(abs_path, abs_path)),
+            "directories should differ"
+        )
     })
 })
 

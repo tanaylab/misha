@@ -5,15 +5,9 @@
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {
@@ -91,15 +85,9 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
     valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {
@@ -171,15 +159,9 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     retv <- 0
     success <- FALSE
 
@@ -285,15 +267,9 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     success <- FALSE
     tryCatch(
         {
