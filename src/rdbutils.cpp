@@ -859,8 +859,75 @@ static string lookup_db_path(SEXP db_mapping, const string &name)
     return "";
 }
 
+// Look up a prefix in GPREFIX_MAP.
+// Returns db_path/tracks if found, empty string otherwise.
+static string lookup_prefix_db(SEXP envir, const string &prefix)
+{
+    SEXP prefix_map = find_in_misha(envir, "GPREFIX_MAP");
+    if (prefix_map == R_NilValue || Rf_isNull(prefix_map))
+        return "";
+
+    SEXP names = Rf_getAttrib(prefix_map, R_NamesSymbol);
+    if (names == R_NilValue)
+        return "";
+
+    SEXP prefix_sexp = PROTECT(Rf_mkString(prefix.c_str()));
+    SEXP idx = PROTECT(Rf_match(prefix_sexp, names, 0));
+    int pos = INTEGER(idx)[0] - 1;
+    UNPROTECT(2);
+
+    if (pos < 0 || pos >= Rf_length(prefix_map))
+        return "";
+
+    if (TYPEOF(prefix_map) == VECSXP) {
+        SEXP val = VECTOR_ELT(prefix_map, pos);
+        if (Rf_isString(val) && Rf_length(val) > 0)
+            return string(CHAR(STRING_ELT(val, 0))) + "/tracks";
+    } else if (TYPEOF(prefix_map) == STRSXP) {
+        return string(CHAR(STRING_ELT(prefix_map, pos))) + "/tracks";
+    }
+    return "";
+}
+
+// Parse a prefixed name into prefix and base name.
+// Returns true if name contains '@', with prefix and base_name populated.
+// Returns false if no '@' found.
+static bool parse_prefixed_name(const string &name, string &prefix, string &base_name)
+{
+    size_t at_pos = name.find('@');
+    if (at_pos == string::npos)
+        return false;
+
+    prefix = name.substr(0, at_pos);
+    base_name = name.substr(at_pos + 1);
+    return true;
+}
+
 string rdb::track2path(SEXP envir, const string &trackname)
 {
+	string prefix, base_name;
+	string db_tracks_dir;
+
+	if (parse_prefixed_name(trackname, prefix, base_name)) {
+		// Prefixed name: look up prefix in GPREFIX_MAP
+		db_tracks_dir = lookup_prefix_db(envir, prefix);
+		if (db_tracks_dir.empty()) {
+			verror("Unknown database prefix '%s' in track name '%s'", prefix.c_str(), trackname.c_str());
+		}
+
+		// Validate and convert base_name
+		string path(base_name);
+		for (string::iterator i = path.begin(); i != path.end(); ++i) {
+			if (!is_R_var_char(*i))
+				verror("Invalid track name %s. Only alphanumeric characters and _ are allowed in the name.", base_name.c_str());
+			if (*i == '.')
+				*i = '/';
+		}
+
+		return db_tracks_dir + "/" + path + TRACK_FILE_EXT;
+	}
+
+	// Unprefixed name: use existing behavior
 	string path(trackname);
 	for (string::iterator i = path.begin(); i != path.end(); ++i) {
 		if (!is_R_var_char(*i))
@@ -869,7 +936,7 @@ string rdb::track2path(SEXP envir, const string &trackname)
 			*i = '/';
 	}
 
-	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GTRACK_DB"), trackname);
+	db_tracks_dir = lookup_db_path(find_in_misha(envir, "GTRACK_DB"), trackname);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
 	}
@@ -879,6 +946,29 @@ string rdb::track2path(SEXP envir, const string &trackname)
 
 string rdb::interv2path(SEXP envir, const string &intervname)
 {
+	string prefix, base_name;
+	string db_tracks_dir;
+
+	if (parse_prefixed_name(intervname, prefix, base_name)) {
+		// Prefixed name: look up prefix in GPREFIX_MAP
+		db_tracks_dir = lookup_prefix_db(envir, prefix);
+		if (db_tracks_dir.empty()) {
+			verror("Unknown database prefix '%s' in interval name '%s'", prefix.c_str(), intervname.c_str());
+		}
+
+		// Validate and convert base_name
+		string path(base_name);
+		for (string::iterator i = path.begin(); i != path.end(); ++i) {
+			if (!is_R_var_char(*i))
+				verror("Invalid interval name %s. Only alphanumeric characters and _ are allowed in the name.", base_name.c_str());
+			if (*i == '.')
+				*i = '/';
+		}
+
+		return db_tracks_dir + "/" + path + INTERV_FILE_EXT;
+	}
+
+	// Unprefixed name: use existing behavior
 	string path(intervname);
 	for (string::iterator i = path.begin(); i != path.end(); ++i) {
 		if (!is_R_var_char(*i))
@@ -887,7 +977,7 @@ string rdb::interv2path(SEXP envir, const string &intervname)
 			*i = '/';
 	}
 
-	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GINTERVALS_DB"), intervname);
+	db_tracks_dir = lookup_db_path(find_in_misha(envir, "GINTERVALS_DB"), intervname);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
 	}

@@ -9,11 +9,14 @@
 #' returned.
 #'
 #' When multiple databases are connected, the 'db' parameter can be used to
-#' filter intervals to only those from a specific database.
+#' filter intervals to only those from a specific database. For prefixed databases
+#' (those with a `.misha` config file containing a `prefix` field), interval set names
+#' are returned with their prefix (e.g., "at@my.intervals").
 #'
 #' @param pattern,ignore.case,perl,fixed,useBytes see 'grep'
-#' @param db optional database path to filter intervals. If specified, only
-#' interval sets from that database are returned.
+#' @param db optional database path or prefix string to filter intervals. If specified,
+#' only interval sets from that database are returned. Can be a path (e.g., "/path/to/db")
+#' or a prefix (e.g., "at" for intervals from the database with prefix "at").
 #' @return An array that contains the names of intervals sets.
 #' @seealso \code{\link{grep}}, \code{\link{gintervals.exists}},
 #' \code{\link{gintervals.load}}, \code{\link{gintervals.save}},
@@ -37,7 +40,16 @@ gintervals.ls <- function(pattern = "", db = NULL, ignore.case = FALSE, perl = F
 
     # Filter by database if specified
     if (!is.null(db)) {
-        db <- normalizePath(db, mustWork = FALSE)
+        # Try to resolve db argument as prefix first, then as path
+        db_path <- .gresolve_db_arg(db)
+        if (is.null(db_path)) {
+            # Fallback: try normalizing as path
+            db_path <- tryCatch(
+                normalizePath(db, mustWork = FALSE),
+                error = function(e) db
+            )
+        }
+
         intervals_db <- get("GINTERVALS_DB", envir = .misha)
         if (is.null(intervals_db) || length(intervals) == 0) {
             return(character(0))
@@ -47,7 +59,7 @@ gintervals.ls <- function(pattern = "", db = NULL, ignore.case = FALSE, perl = F
             return(character(0))
         }
         db_by_intervals <- intervals_db_vec[intervals]
-        intervals <- intervals[!is.na(db_by_intervals) & db_by_intervals == db]
+        intervals <- intervals[!is.na(db_by_intervals) & db_by_intervals == db_path]
         if (length(intervals) == 0) {
             return(character(0))
         }
@@ -263,7 +275,8 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+        # Use .intervals_dir which handles prefixes
+        fname <- .intervals_dir(intervals.set)
 
         # remove the intervals set
         unlink(fname, recursive = TRUE)
@@ -282,9 +295,13 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
 #'
 #' Saves intervals to a named intervals set.
 #'
-#' This function saves 'intervals' as a named intervals set.
+#' This function saves 'intervals' as a named intervals set. The destination
+#' database is determined by the prefix in the intervals set name. If the name
+#' has a prefix (e.g., "at@my.intervals"), the intervals are saved in that database.
+#' If no prefix is specified, the intervals are saved in the current working directory.
 #'
-#' @param intervals.set.out name of the new intervals set
+#' @param intervals.set.out name of the new intervals set, optionally with prefix
+#'   (e.g., "at@my.intervals" to save in database with prefix "at")
 #' @param intervals intervals to save
 #' @return None.
 #' @seealso \code{\link{gintervals.rm}}, \code{\link{gintervals.load}},

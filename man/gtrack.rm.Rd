@@ -7,12 +7,12 @@
 gtrack.rm(track = NULL, force = FALSE, db = NULL)
 }
 \arguments{
-\item{track}{track name}
+\item{track}{track name, optionally with a prefix (e.g., "at@my.track")}
 
 \item{force}{if 'TRUE', suppresses user confirmation of a named track removal}
 
-\item{db}{optional database path to delete the track from when multiple
-databases are connected}
+\item{db}{optional database path or prefix string to delete the track from when
+multiple databases are connected and the track name is not prefixed}
 }
 \value{
 None.
@@ -24,6 +24,9 @@ Deletes a track.
 This function deletes a track from the Genomic Database. By default
 'gtrack.rm' requires the user to interactively confirm the deletion. Set
 'force' to 'TRUE' to suppress the user prompt.
+
+For prefixed databases, you can specify the track with its prefix
+(e.g., "at@my.track") to delete from a specific database.
 }
 \examples{
 \dontshow{

@@ -55,43 +55,49 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
-    .gconfirmtrackcreate(trackstr)
+
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     success <- FALSE
-    tryCatch(
-        {
-            if (.ggetOption("gmultitasking")) {
-                .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env())
-            } else {
-                .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env())
-            }
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(
-                trackstr, "created.by",
-                sprintf("gtrack.create(%s, description, %s, iterator=%s)", trackstr, exprstr, deparse(substitute(iterator), width.cutoff = 500)[1]), TRUE
-            )
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
-            # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
-            if (.gdb.is_indexed()) {
-                track_info <- gtrack.info(trackstr)
-                if (track_info$type %in% c("dense", "sparse", "array")) {
-                    gtrack.convert_to_indexed(trackstr)
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                if (.ggetOption("gmultitasking")) {
+                    .gcall("gtrackcreate_multitask", ctx$base_name, exprstr, .iterator, band, .misha_env())
+                } else {
+                    .gcall("gtrackcreate", ctx$base_name, exprstr, .iterator, band, .misha_env())
+                }
+                .gdb.add_track(ctx$qualified_name)
+                .gtrack.attr.set(
+                    ctx$qualified_name, "created.by",
+                    sprintf("gtrack.create(%s, description, %s, iterator=%s)", trackstr, exprstr, deparse(substitute(iterator), width.cutoff = 500)[1]), TRUE
+                )
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "description", description, TRUE)
+                success <<- TRUE
+
+                # If database is indexed, automatically convert the track to indexed format
+                # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+                if (.gdb.is_indexed()) {
+                    track_info <- gtrack.info(ctx$qualified_name)
+                    if (track_info$type %in% c("dense", "sparse", "array")) {
+                        gtrack.convert_to_indexed(ctx$qualified_name)
+                    }
+                }
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
                 }
             }
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
-            }
-        }
-    )
+        )
+    })
     retv <- 0 # suppress return value
 }
 
@@ -140,46 +146,51 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
-    .gconfirmtrackcreate(trackstr)
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     success <- FALSE
-    tryCatch(
-        {
-            if (.ggetOption("gmultitasking")) {
-                .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
-            } else {
-                .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
-            }
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(
-                trackstr, "created.by",
-                sprintf(
-                    "gtrack.create_pwm_energy(%s, description, \"%s\", %g, %g, iterator=%s)",
-                    trackstr, pssmset, as.numeric(pssmid), as.numeric(prior), deparse(substitute(iterator), width.cutoff = 500)[1]
-                ), TRUE
-            )
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
-            # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
-            if (.gdb.is_indexed()) {
-                track_info <- gtrack.info(trackstr)
-                if (track_info$type %in% c("dense", "sparse", "array")) {
-                    gtrack.convert_to_indexed(trackstr)
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                if (.ggetOption("gmultitasking")) {
+                    .gcall("gcreate_pwm_energy_multitask", ctx$base_name, pssmset, pssmid, prior, .iterator, .misha_env())
+                } else {
+                    .gcall("gcreate_pwm_energy", ctx$base_name, pssmset, pssmid, prior, .iterator, .misha_env())
+                }
+                .gdb.add_track(ctx$qualified_name)
+                .gtrack.attr.set(
+                    ctx$qualified_name, "created.by",
+                    sprintf(
+                        "gtrack.create_pwm_energy(%s, description, \"%s\", %g, %g, iterator=%s)",
+                        trackstr, pssmset, as.numeric(pssmid), as.numeric(prior), deparse(substitute(iterator), width.cutoff = 500)[1]
+                    ), TRUE
+                )
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "description", description, TRUE)
+                success <<- TRUE
+
+                # If database is indexed, automatically convert the track to indexed format
+                # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+                if (.gdb.is_indexed()) {
+                    track_info <- gtrack.info(ctx$qualified_name)
+                    if (track_info$type %in% c("dense", "sparse", "array")) {
+                        gtrack.convert_to_indexed(ctx$qualified_name)
+                    }
+                }
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
                 }
             }
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
-            }
-        }
-    )
+        )
+    })
     retv <- 0 # suppress return value
 }
 
@@ -230,36 +241,42 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gconfirmtrackcreate(trackstr)
+
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     success <- FALSE
-    tryCatch(
-        {
-            .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env())
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, intervals, values)", trackstr), TRUE)
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
-            # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
-            if (.gdb.is_indexed()) {
-                track_info <- gtrack.info(trackstr)
-                if (track_info$type %in% c("dense", "sparse", "array")) {
-                    gtrack.convert_to_indexed(trackstr)
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                .gcall("gtrack_create_sparse", ctx$base_name, intervals, values, .misha_env())
+                .gdb.add_track(ctx$qualified_name)
+                .gtrack.attr.set(ctx$qualified_name, "created.by", sprintf("gtrack.create_sparse(%s, description, intervals, values)", trackstr), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "description", description, TRUE)
+                success <<- TRUE
+
+                # If database is indexed, automatically convert the track to indexed format
+                # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+                if (.gdb.is_indexed()) {
+                    track_info <- gtrack.info(ctx$qualified_name)
+                    if (track_info$type %in% c("dense", "sparse", "array")) {
+                        gtrack.convert_to_indexed(ctx$qualified_name)
+                    }
+                }
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
                 }
             }
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
-            }
-        }
-    )
+        )
+    })
     retv <- 0 # suppress return value
 }
 # Dense track creation function
@@ -320,52 +337,56 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
         value = as.numeric(values)
     )
 
-    .gconfirmtrackcreate(trackstr)
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     success <- FALSE
 
-    tryCatch(
-        {
-            # Call the C++ function with the data frame
-            .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                # Call the C++ function with the data frame
+                .gcall("gtrack_create_dense", ctx$base_name, intervalData, binsize, defval, .misha_env())
 
-            # Add the track to the database
-            .gdb.add_track(trackstr)
+                # Add the track to the database
+                .gdb.add_track(ctx$qualified_name)
 
-            # Set track attributes
-            .gtrack.attr.set(
-                trackstr, "created.by",
-                sprintf("gtrack.create_dense(%s, description, intervals, values, %d, %g)", trackstr, binsize, defval), TRUE
-            )
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
+                # Set track attributes
+                .gtrack.attr.set(
+                    ctx$qualified_name, "created.by",
+                    sprintf("gtrack.create_dense(%s, description, intervals, values, %d, %g)", trackstr, binsize, defval), TRUE
+                )
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "description", description, TRUE)
 
-            # Set the track type to "dense"
-            .gtrack.attr.set(trackstr, "type", "dense", TRUE)
+                # Set the track type to "dense"
+                .gtrack.attr.set(ctx$qualified_name, "type", "dense", TRUE)
 
-            # Set the binsize attribute which is required for the tests
-            .gtrack.attr.set(trackstr, "binsize", binsize, TRUE)
+                # Set the binsize attribute which is required for the tests
+                .gtrack.attr.set(ctx$qualified_name, "binsize", binsize, TRUE)
 
-            success <- TRUE
+                success <<- TRUE
 
-            # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
-            if (.gdb.is_indexed()) {
-                track_info <- gtrack.info(trackstr)
-                if (track_info$type %in% c("dense", "sparse", "array")) {
-                    gtrack.convert_to_indexed(trackstr)
+                # If database is indexed, automatically convert the track to indexed format
+                # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+                if (.gdb.is_indexed()) {
+                    track_info <- gtrack.info(ctx$qualified_name)
+                    if (track_info$type %in% c("dense", "sparse", "array")) {
+                        gtrack.convert_to_indexed(ctx$qualified_name)
+                    }
+                }
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
                 }
             }
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
-            }
-        }
-    )
+        )
+    })
 
     retv <- 0 # suppress return value
 }

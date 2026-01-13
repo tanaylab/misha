@@ -25,7 +25,8 @@ Imports:
     digest,
     ps,
     parallel,
-    utils
+    utils,
+    yaml
 Suggests:
     data.table,
     dplyr,

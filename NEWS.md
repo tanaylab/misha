@@ -23,6 +23,41 @@
   - Duplicate database paths are rejected to avoid ambiguous resolution
   - Backward compatible: single database usage works unchanged
 
+* **Database prefix namespacing**: Explicit prefixes for tracks and intervals in multi-database setups
+  - Databases can declare a prefix in `.misha` YAML config file (e.g., `prefix: at`)
+  - Prefixed tracks are accessed as `prefix@trackname` (e.g., `at@my.track`)
+  - **Benefits over implicit "last wins" resolution**:
+    - Unambiguous: Always clear which database a track comes from
+    - Predictable: Database order doesn't affect which track is resolved
+    - Self-documenting: Track expressions show data provenance (`at@x + al@y`)
+  - New `.misha` configuration file in database root (YAML format):
+    ```yaml
+    prefix: at          # Short identifier (2-8 chars recommended)
+    description: "ATAC-seq database"
+    author: "Lab Name"
+    version: "1.0"
+    ```
+  - Prefix requirements:
+    - Must start with a letter
+    - Only alphanumeric characters and underscores allowed
+    - 2-8 characters recommended (warning for longer)
+    - Must be unique across connected databases
+  - Track operations with prefixes:
+    - `gtrack.ls()`: Returns fully qualified names (e.g., `at@my.track`)
+    - `gtrack.ls(db = "at")`: Filter by prefix
+    - `gtrack.create_sparse("at@new.track", ...)`: Create in specific database
+    - `gtrack.copy("at@source", "al@dest")`: Copy between databases
+    - `gtrack.mv("at@old", "al@new")`: Move between databases
+  - Track expressions with mixed prefixes: `gextract("at@track1 + al@track2", ...)`
+  - Helpful error messages: If unprefixed track not found, suggests prefixed alternatives
+  - New functions:
+    - `gdb.prefixes()`: Returns named vector of prefix -> database path mappings
+    - `gdb.config()`: Returns database configuration (prefix, description, etc.)
+  - Backward compatible:
+    - Databases without `.misha` file work as global (unprefixed)
+    - Global databases can coexist with prefixed databases
+    - Unprefixed track names resolve using "last wins" among global databases
+
 # misha 5.3.4
 
 * Added `dataframe` and `names` parameters to `gdist` function that return a data frame instead of an N-dimensional vector.

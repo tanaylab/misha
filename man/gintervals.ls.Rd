@@ -16,8 +16,9 @@ gintervals.ls(
 \arguments{
 \item{pattern, ignore.case, perl, fixed, useBytes}{see 'grep'}
 
-\item{db}{optional database path to filter intervals. If specified, only
-interval sets from that database are returned.}
+\item{db}{optional database path or prefix string to filter intervals. If specified,
+only interval sets from that database are returned. Can be a path (e.g., "/path/to/db")
+or a prefix (e.g., "at" for intervals from the database with prefix "at").}
 }
 \value{
 An array that contains the names of intervals sets.
@@ -31,7 +32,9 @@ This function returns a list of named intervals sets that match the pattern
 returned.
 
 When multiple databases are connected, the 'db' parameter can be used to
-filter intervals to only those from a specific database.
+filter intervals to only those from a specific database. For prefixed databases
+(those with a `.misha` config file containing a `prefix` field), interval set names
+are returned with their prefix (e.g., "at@my.intervals").
 }
 \examples{
 \dontshow{

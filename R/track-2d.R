@@ -5,26 +5,32 @@
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gconfirmtrackcreate(trackstr)
+
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     success <- FALSE
-    tryCatch(
-        {
-            .gcall("gcreate_test_computer2d_track", trackstr, prob.skip.chrom, max.rect, max.rect.size, .misha_env())
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(trackstr, "created.by", sprintf(".gtrack.create_test_computer2d(%s, %g, %g, %g)", trackstr, prob.skip.chrom, max.rect, max.rect.size), TRUE)
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            success <- TRUE
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                .gcall("gcreate_test_computer2d_track", ctx$base_name, prob.skip.chrom, max.rect, max.rect.size, .misha_env())
+                .gdb.add_track(ctx$qualified_name)
+                .gtrack.attr.set(ctx$qualified_name, "created.by", sprintf(".gtrack.create_test_computer2d(%s, %g, %g, %g)", trackstr, prob.skip.chrom, max.rect, max.rect.size), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                success <<- TRUE
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
+                }
             }
-        }
-    )
+        )
+    })
     retv <- 0 # suppress return value
 }
 
@@ -85,27 +91,33 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
     valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
-    .gconfirmtrackcreate(trackstr)
+
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     success <- FALSE
-    tryCatch(
-        {
-            .gcall("gtrack_create_track2d", trackstr, intervals, values, .misha_env())
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.2d.create(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), TRUE)
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                .gcall("gtrack_create_track2d", ctx$base_name, intervals, values, .misha_env())
+                .gdb.add_track(ctx$qualified_name)
+                .gtrack.attr.set(ctx$qualified_name, "created.by", sprintf("gtrack.2d.create(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "description", description, TRUE)
+                success <<- TRUE
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
+                }
             }
-        }
-    )
+        )
+    })
     retv <- 0 # suppress return value
 }
 
@@ -159,32 +171,37 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gconfirmtrackcreate(trackstr)
+
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     retv <- 0
     success <- FALSE
 
-    tryCatch(
-        {
-            .gcall("gtrack_2d_import", trackstr, file, .misha_env())
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(
-                trackstr, "created.by",
-                sprintf("gtrack.2d.import(%s, description, c(\"%s\"))", trackstr, paste(file, collapse = "\", \"")), TRUE
-            )
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                .gcall("gtrack_2d_import", ctx$base_name, file, .misha_env())
+                .gdb.add_track(ctx$qualified_name)
+                .gtrack.attr.set(
+                    ctx$qualified_name, "created.by",
+                    sprintf("gtrack.2d.import(%s, description, c(\"%s\"))", trackstr, paste(file, collapse = "\", \"")), TRUE
+                )
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "description", description, TRUE)
+                success <<- TRUE
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
+                }
             }
-        }
-    )
+        )
+    })
     retv <- 0 # suppress return value
 }
 
@@ -267,33 +284,39 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gconfirmtrackcreate(trackstr)
+
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     success <- FALSE
-    tryCatch(
-        {
-            .gcall("gtrack_import_contacts", trackstr, contacts, fends, allow.duplicates, .misha_env())
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(
-                trackstr, "created.by",
-                sprintf(
-                    "gtrack.2d.import_contacts(\"%s\", description, c(\"%s\"), \"%s\", %s)",
-                    trackstr, paste(contacts, collapse = "\", \""), ifelse(is.null(fends), "NULL", fends), allow.duplicates
-                ),
-                TRUE
-            )
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                .gcall("gtrack_import_contacts", ctx$base_name, contacts, fends, allow.duplicates, .misha_env())
+                .gdb.add_track(ctx$qualified_name)
+                .gtrack.attr.set(
+                    ctx$qualified_name, "created.by",
+                    sprintf(
+                        "gtrack.2d.import_contacts(\"%s\", description, c(\"%s\"), \"%s\", %s)",
+                        trackstr, paste(contacts, collapse = "\", \""), ifelse(is.null(fends), "NULL", fends), allow.duplicates
+                    ),
+                    TRUE
+                )
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "description", description, TRUE)
+                success <<- TRUE
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
+                }
             }
-        }
-    )
+        )
+    })
     retv <- 0 # suppress return value
 }

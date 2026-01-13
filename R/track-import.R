@@ -229,7 +229,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gconfirmtrackcreate(trackstr)
+
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     retv <- 0
@@ -238,105 +240,108 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     tmp.dirname <- ""
     file.original <- file
 
-    tryCatch(
-        {
-            report.progress <- FALSE
-            is_bed_input <- .gtrack_is_bed_path(file)
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                report.progress <- FALSE
+                is_bed_input <- .gtrack_is_bed_path(file)
 
-            if (length(grep("^.+\\.gz$", file, perl = TRUE)) || length(grep("^.+\\.zip$", file, perl = TRUE))) {
-                message("Unzipping...\n")
-                report.progress <- TRUE
-                tmp.dirname <- tempfile()
-                if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
-                    stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
-                }
-
-                file.unzipped <- paste(tmp.dirname, "/", basename(gsub("\\.(gz|zip)$", "", file, perl = TRUE)), sep = "")
-                retv <- system(paste("/bin/sh -c \"gunzip -q -c", file, ">", file.unzipped, "\""), intern = FALSE)
-                if (retv != 0) {
-                    stop(sprintf("Failed to unzip file %s", file), call. = FALSE)
-                }
-                file <- file.unzipped
-            }
-
-            # BED files can be imported as sparse (binsize==0) or dense (binsize>0)
-            if (is_bed_input || length(grep("^.+\\.bed$", file, perl = TRUE))) {
-                message("Importing BED file...\n")
-                report.progress <- TRUE
-                bed_parsed <- .gtrack_read_bed(file)
-                if (!is.null(binsize) && !is.na(binsize) && binsize > 0) {
-                    intervalData <- data.frame(
-                        chrom = bed_parsed$intervals$chrom,
-                        start = bed_parsed$intervals$start,
-                        end = bed_parsed$intervals$end,
-                        value = as.numeric(bed_parsed$values)
-                    )
-                    .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
-                    .gdb.add_track(trackstr)
-                    .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
-                } else {
-                    .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
-                    .gdb.add_track(trackstr)
-                    .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
-                }
-
-                # If database is indexed, automatically convert the track to indexed format
-                if (.gdb.is_indexed()) {
-                    gtrack.convert_to_indexed(trackstr)
-                }
-
-                success <- TRUE
-            } else if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
-                # looks like all bigWig files start with "fc26" in their first two bytes
-                system(sprintf("od -x -N 2 \"%s\"", file), intern = TRUE)[1] == "0000000 fc26") {
-                message("Converting from BigWig to WIG...\n")
-                report.progress <- TRUE
-                if (tmp.dirname == "") {
-                    tmp.dirname <- tempfile()
+                if (length(grep("^.+\\.gz$", file, perl = TRUE)) || length(grep("^.+\\.zip$", file, perl = TRUE))) {
+                    message("Unzipping...\n")
+                    report.progress <- TRUE
+                    tmp.dirname <<- tempfile()
                     if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
                         stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
                     }
+
+                    file.unzipped <- paste(tmp.dirname, "/", basename(gsub("\\.(gz|zip)$", "", file, perl = TRUE)), sep = "")
+                    retv <- system(paste("/bin/sh -c \"gunzip -q -c", file, ">", file.unzipped, "\""), intern = FALSE)
+                    if (retv != 0) {
+                        stop(sprintf("Failed to unzip file %s", file), call. = FALSE)
+                    }
+                    file <- file.unzipped
                 }
 
-                file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
-                file.converted <- paste(tmp.dirname, "/", file.noext, ".wig", sep = "")
-                retv <- system(paste(get_bigWigToWig_bin(), file, file.converted), intern = FALSE)
-                if (retv != 0) {
-                    stop("BigWigToWig conversion failed", call. = FALSE)
+                # BED files can be imported as sparse (binsize==0) or dense (binsize>0)
+                if (is_bed_input || length(grep("^.+\\.bed$", file, perl = TRUE))) {
+                    message("Importing BED file...\n")
+                    report.progress <- TRUE
+                    bed_parsed <- .gtrack_read_bed(file)
+                    if (!is.null(binsize) && !is.na(binsize) && binsize > 0) {
+                        intervalData <- data.frame(
+                            chrom = bed_parsed$intervals$chrom,
+                            start = bed_parsed$intervals$start,
+                            end = bed_parsed$intervals$end,
+                            value = as.numeric(bed_parsed$values)
+                        )
+                        .gcall("gtrack_create_dense", ctx$base_name, intervalData, binsize, defval, .misha_env())
+                        .gdb.add_track(ctx$qualified_name)
+                        .gtrack_set_created_attrs(ctx$qualified_name, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
+                    } else {
+                        .gcall("gtrack_create_sparse", ctx$base_name, bed_parsed$intervals, bed_parsed$values, .misha_env())
+                        .gdb.add_track(ctx$qualified_name)
+                        .gtrack_set_created_attrs(ctx$qualified_name, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
+                    }
+
+                    # If database is indexed, automatically convert the track to indexed format
+                    if (.gdb.is_indexed()) {
+                        gtrack.convert_to_indexed(ctx$qualified_name)
+                    }
+
+                    success <<- TRUE
+                } else if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
+                    # looks like all bigWig files start with "fc26" in their first two bytes
+                    system(sprintf("od -x -N 2 \"%s\"", file), intern = TRUE)[1] == "0000000 fc26") {
+                    message("Converting from BigWig to WIG...\n")
+                    report.progress <- TRUE
+                    if (tmp.dirname == "") {
+                        tmp.dirname <<- tempfile()
+                        if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+                            stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
+                        }
+                    }
+
+                    file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
+                    file.converted <- paste(tmp.dirname, "/", file.noext, ".wig", sep = "")
+                    retv <- system(paste(get_bigWigToWig_bin(), file, file.converted), intern = FALSE)
+                    if (retv != 0) {
+                        stop("BigWigToWig conversion failed", call. = FALSE)
+                    }
+                    file <- file.converted
                 }
-                file <- file.converted
-            }
 
-            if (success) {
-                # BED path handled above; skip the generic wig importer
-            } else {
-                if (report.progress) {
-                    message("Converting to track...\n")
+                if (success) {
+                    # BED path handled above; skip the generic wig importer
+                } else {
+                    if (report.progress) {
+                        message("Converting to track...\n")
+                    }
+
+                    .gcall("gtrackimportwig", ctx$base_name, file, binsize, defval, .misha_env())
+                    .gdb.add_track(ctx$qualified_name)
+                    .gtrack_set_created_attrs(ctx$qualified_name, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
+
+                    # If database is indexed, automatically convert the track to indexed format
+                    if (.gdb.is_indexed()) {
+                        gtrack.convert_to_indexed(ctx$qualified_name)
+                    }
+
+                    success <<- TRUE
+                }
+            },
+            finally = {
+                if (tmp.dirname != "") {
+                    unlink(tmp.dirname, recursive = TRUE)
                 }
 
-                .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env())
-                .gdb.add_track(trackstr)
-                .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
-
-                # If database is indexed, automatically convert the track to indexed format
-                if (.gdb.is_indexed()) {
-                    gtrack.convert_to_indexed(trackstr)
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
                 }
-
-                success <- TRUE
             }
-        },
-        finally = {
-            if (tmp.dirname != "") {
-                unlink(tmp.dirname, recursive = TRUE)
-            }
-
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
-            }
-        }
-    )
+        )
+    })
     retv <- 0 # suppress return value
 }
 
@@ -396,31 +401,37 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    .gconfirmtrackcreate(trackstr)
+
+    # Get creation context (handles prefix resolution)
+    ctx <- .gconfirmtrackcreate(trackstr)
     trackdir <- .track_dir(trackstr)
     direxisted <- file.exists(trackdir)
     retv <- 0
     success <- FALSE
-    tryCatch(
-        {
-            retv <- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env())
-            .gdb.add_track(trackstr)
-            .gtrack.attr.set(
-                trackstr, "created.by",
-                sprintf("gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s)", trackstr, file, pileup, binsize, remove.dups), TRUE
-            )
-            .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
-            .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
-            .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
-        },
-        finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+
+    # Execute creation in the target database context
+    .gwith_db_context(ctx$db_path, function() {
+        tryCatch(
+            {
+                retv <<- .gcall("gtrackimport_mappedseq", ctx$base_name, file, pileup, binsize, cols.order, remove.dups, .misha_env())
+                .gdb.add_track(ctx$qualified_name)
+                .gtrack.attr.set(
+                    ctx$qualified_name, "created.by",
+                    sprintf("gtrack.import_mappedseq(%s, description, \"%s\", pileup=%d, binsize=%d, remove.dups=%s)", trackstr, file, pileup, binsize, remove.dups), TRUE
+                )
+                .gtrack.attr.set(ctx$qualified_name, "created.date", date(), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "created.user", Sys.getenv("USER"), TRUE)
+                .gtrack.attr.set(ctx$qualified_name, "description", description, TRUE)
+                success <<- TRUE
+            },
+            finally = {
+                if (!success && !direxisted) {
+                    unlink(trackdir, recursive = TRUE)
+                    .gdb.rm_track(ctx$qualified_name)
+                }
             }
-        }
-    )
+        )
+    })
     retv
 }
 

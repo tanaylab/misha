@@ -170,7 +170,7 @@ gtrack.dbs <- function(track = NULL, dataframe = FALSE) {
     }
 
     if (!(trackstr %in% get("GTRACKS", envir = .misha))) {
-        stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
+        .gstop_track_not_found(trackstr)
     }
 
     track_dbs <- get("GTRACK_DBS", envir = .misha)
@@ -244,12 +244,15 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 #' should match all the patterns.
 #'
 #' When multiple databases are connected, the 'db' parameter can be used to
-#' filter tracks to only those from a specific database.
+#' filter tracks to only those from a specific database. For prefixed databases
+#' (those with a `.misha` config file containing a `prefix` field), track names
+#' are returned with their prefix (e.g., "at@my.track").
 #'
 #' @param ... these arguments are of either form 'pattern' or 'attribute =
 #' pattern'
-#' @param db optional database path to filter tracks. If specified, only tracks
-#' from that database are returned.
+#' @param db optional database path or prefix string to filter tracks. If specified,
+#' only tracks from that database are returned. Can be a path (e.g., "/path/to/db")
+#' or a prefix (e.g., "at" for tracks from the database with prefix "at").
 #' @param ignore.case,perl,fixed,useBytes see 'grep'
 #' @return An array that contains the names of tracks that match the supplied
 #' patterns.
@@ -292,14 +295,23 @@ gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed =
 
     # Filter by database if specified
     if (!is.null(db)) {
-        db <- normalizePath(db, mustWork = FALSE)
+        # Try to resolve db argument as prefix first, then as path
+        db_path <- .gresolve_db_arg(db)
+        if (is.null(db_path)) {
+            # Fallback: try normalizing as path
+            db_path <- tryCatch(
+                normalizePath(db, mustWork = FALSE),
+                error = function(e) db
+            )
+        }
+
         track_db <- get("GTRACK_DB", envir = .misha)
         if (is.null(track_db)) {
             return(NULL)
         }
         track_db_vec <- unlist(track_db, use.names = TRUE)
         db_by_track <- track_db_vec[tracks]
-        tracks <- tracks[!is.na(db_by_track) & db_by_track == db]
+        tracks <- tracks[!is.na(db_by_track) & db_by_track == db_path]
         if (length(tracks) == 0) {
             return(NULL)
         }
@@ -346,15 +358,17 @@ gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed =
 
 #' Renames or moves a track
 #'
-#' Renames a track or moves it to a different namespace within the same database.
+#' Renames a track or moves it to a different namespace within the same database,
+#' or moves it between databases when using prefixed names.
 #'
-#' This function renames a track or moves it to a different namespace (directory)
-#' within the same database. The track cannot be moved to a different database.
-#' Use \code{\link{gtrack.copy}} followed by \code{\link{gtrack.rm}} if you need
-#' to move a track between databases.
+#' This function renames a track or moves it to a different namespace (directory).
+#' When both source and destination have the same prefix (or both are unprefixed),
+#' a simple file rename is performed. When different prefixes are used
+#' (e.g., "src@track" to "dst@track"), the track is copied to the destination
+#' database and then deleted from the source.
 #'
-#' @param src source track name
-#' @param dest destination track name
+#' @param src source track name, optionally with prefix (e.g., "at@my.track")
+#' @param dest destination track name, optionally with prefix (e.g., "al@my.track")
 #' @return None.
 #' @seealso \code{\link{gtrack.copy}}, \code{\link{gtrack.rm}},
 #' \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}}
@@ -386,7 +400,7 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
 
     # Check source exists
     if (!(srcname %in% get("GTRACKS", envir = .misha))) {
-        stop(sprintf("Track %s does not exist", srcname), call. = FALSE)
+        .gstop_track_not_found(srcname)
     }
 
     # Check destination doesn't exist
@@ -394,34 +408,75 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
         stop(sprintf("Track %s already exists", destname), call. = FALSE)
     }
 
+    # Parse source and destination prefixes
+    src_parsed <- .gparse_prefixed_name(srcname)
+    dest_parsed <- .gparse_prefixed_name(destname)
+
     src_dir <- .track_dir(srcname)
     src_db <- .gtrack_db_path(srcname)
 
-    # Destination must be in the same database
-    dest_base <- if (!is.null(src_db)) file.path(src_db, "tracks") else get("GWD", envir = .misha)
-    dest_dir <- file.path(dest_base, paste0(gsub("\\.", "/", destname), ".track"))
+    # Determine destination database
+    if (!is.null(dest_parsed$prefix)) {
+        dest_db <- .gprefix_to_db(dest_parsed$prefix)
+        if (is.null(dest_db)) {
+            .gstop_unknown_prefix(dest_parsed$prefix)
+        }
+    } else {
+        # Unprefixed dest - use source database for same-db rename, or GWD
+        dest_db <- if (!is.null(src_db)) src_db else .gdb.resolve_db_for_path(get("GWD", envir = .misha))
+    }
+
+    dest_base <- file.path(dest_db, "tracks")
+    dest_dir <- file.path(dest_base, paste0(gsub("\\.", "/", dest_parsed$name), ".track"))
+
+    # Check if cross-database move
+    same_db <- identical(src_db, dest_db)
 
     # Check write permission
-    .gcheck_write_permission(src_dir, "rename track from")
+    .gcheck_write_permission(src_dir, "move track from")
 
-    # Create destination parent directory if needed
-    dest_parent <- dirname(dest_dir)
-    if (!dir.exists(dest_parent)) {
-        dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
+    if (same_db) {
+        # Same database - use file rename
+        dest_parent <- dirname(dest_dir)
+        if (!dir.exists(dest_parent)) {
+            dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
+        }
+
+        success <- file.rename(src_dir, dest_dir)
+        if (!success) {
+            stop(sprintf("Failed to rename track %s to %s", srcname, destname), call. = FALSE)
+        }
+
+        # Clean up empty parent directories from source
+        .cleanup_empty_dirs(dirname(src_dir))
+    } else {
+        # Cross-database move - copy then delete
+        .gcheck_write_permission(dest_base, "create track in")
+
+        dest_parent <- dirname(dest_dir)
+        if (!dir.exists(dest_parent)) {
+            dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
+        }
+
+        # Copy directory
+        success <- .copy_dir_recursive(src_dir, dest_dir)
+        if (!success) {
+            stop(sprintf("Failed to copy track %s to %s", srcname, destname), call. = FALSE)
+        }
+
+        # Delete source
+        unlink(src_dir, recursive = TRUE)
+
+        # Clean up empty parent directories from source
+        .cleanup_empty_dirs(dirname(src_dir))
     }
 
-    # Move the track directory
-    success <- file.rename(src_dir, dest_dir)
-    if (!success) {
-        stop(sprintf("Failed to rename track %s to %s", srcname, destname), call. = FALSE)
-    }
-
-    # Clean up empty parent directories from source
-    .cleanup_empty_dirs(dirname(src_dir))
+    # Qualify the destination name
+    qualified_destname <- .gqualify_name(dest_parsed$name, dest_db)
 
     # Update cache
     .gdb.rm_track(srcname)
-    .gdb.add_track(destname, src_db)
+    .gdb.add_track(qualified_destname, dest_db)
 
     invisible()
 }
@@ -430,12 +485,17 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
 #'
 #' Creates a copy of an existing track.
 #'
-#' This function creates a copy of a track. The new track is created in the
-#' current working directory (.misha$GWD), which may be in a different database than
-#' the source track when multiple databases are connected.
+#' This function creates a copy of a track. The destination database is determined
+#' by the prefix in the destination name. If the destination has a prefix
+#' (e.g., "al@track"), the track is created in that database. If no prefix is
+#' specified, the track is created in the current working directory (.misha$GWD).
 #'
-#' @param src source track name
-#' @param dest destination track name
+#' This allows copying tracks between databases:
+#' \code{gtrack.copy("src@track", "dst@track")} copies from the "src" database
+#' to the "dst" database.
+#'
+#' @param src source track name, optionally with prefix (e.g., "at@my.track")
+#' @param dest destination track name, optionally with prefix (e.g., "al@my.track")
 #' @return None.
 #' @seealso \code{\link{gtrack.mv}}, \code{\link{gtrack.rm}},
 #' \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}}
@@ -466,7 +526,7 @@ gtrack.copy <- function(src = NULL, dest = NULL) {
 
     # Check source exists
     if (!(srcname %in% get("GTRACKS", envir = .misha))) {
-        stop(sprintf("Track %s does not exist", srcname), call. = FALSE)
+        .gstop_track_not_found(srcname)
     }
 
     # Check destination doesn't exist
@@ -476,53 +536,42 @@ gtrack.copy <- function(src = NULL, dest = NULL) {
 
     src_dir <- .track_dir(srcname)
 
-    # Destination is in current GWD (may be different database)
-    gwd <- get("GWD", envir = .misha)
-    dest_dir <- file.path(gwd, paste0(gsub("\\.", "/", destname), ".track"))
+    # Parse destination prefix
+    dest_parsed <- .gparse_prefixed_name(destname)
+
+    # Determine destination database
+    if (!is.null(dest_parsed$prefix)) {
+        dest_db <- .gprefix_to_db(dest_parsed$prefix)
+        if (is.null(dest_db)) {
+            .gstop_unknown_prefix(dest_parsed$prefix)
+        }
+        dest_gwd <- file.path(dest_db, "tracks")
+    } else {
+        dest_gwd <- get("GWD", envir = .misha)
+        dest_db <- .gdb.resolve_db_for_path(dest_gwd)
+    }
+
+    dest_dir <- file.path(dest_gwd, paste0(gsub("\\.", "/", dest_parsed$name), ".track"))
 
     # Check write permission for destination
-    .gcheck_write_permission(gwd, "copy track to")
+    .gcheck_write_permission(dest_gwd, "copy track to")
 
-    # Create destination directory
-    if (!dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)) {
-        if (!dir.exists(dest_dir)) {
-            stop(sprintf("Failed to create destination directory for track %s", destname), call. = FALSE)
-        }
+    # Create destination parent directory if needed
+    dest_parent <- dirname(dest_dir)
+    if (!dir.exists(dest_parent)) {
+        dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
     }
 
-    # Copy track contents
-    src_files <- list.files(src_dir, full.names = TRUE, recursive = FALSE, all.files = TRUE)
-    for (src_file in src_files) {
-        # Skip . and .. entries
-        if (basename(src_file) %in% c(".", "..")) next
-
-        dest_file <- file.path(dest_dir, basename(src_file))
-        if (dir.exists(src_file)) {
-            # Copy subdirectory
-            dir.create(dest_file, recursive = TRUE, showWarnings = FALSE)
-            sub_files <- list.files(src_file, full.names = TRUE, recursive = TRUE, all.files = TRUE)
-            for (sf in sub_files) {
-                rel_path <- sub(paste0("^", src_file, "/"), "", sf)
-                df <- file.path(dest_file, rel_path)
-                dir.create(dirname(df), recursive = TRUE, showWarnings = FALSE)
-                file.copy(sf, df, copy.mode = TRUE)
-            }
-        } else {
-            file.copy(src_file, dest_file, copy.mode = TRUE)
-        }
+    # Copy track contents using helper
+    if (!.copy_dir_recursive(src_dir, dest_dir)) {
+        stop(sprintf("Failed to copy track %s to %s", srcname, destname), call. = FALSE)
     }
 
-    # Update cache - determine which database the dest is in
-    dest_db <- NULL
-    groots <- get("GROOTS", envir = .misha)
-    for (groot in groots) {
-        if (.gpath_is_within(gwd, file.path(groot, "tracks"))) {
-            dest_db <- groot
-            break
-        }
-    }
+    # Qualify the destination name
+    qualified_destname <- .gqualify_name(dest_parsed$name, dest_db)
 
-    .gdb.add_track(destname, dest_db)
+    # Update cache
+    .gdb.add_track(qualified_destname, dest_db)
 
     invisible()
 }
@@ -535,10 +584,13 @@ gtrack.copy <- function(src = NULL, dest = NULL) {
 #' 'gtrack.rm' requires the user to interactively confirm the deletion. Set
 #' 'force' to 'TRUE' to suppress the user prompt.
 #'
-#' @param track track name
+#' For prefixed databases, you can specify the track with its prefix
+#' (e.g., "at@my.track") to delete from a specific database.
+#'
+#' @param track track name, optionally with a prefix (e.g., "at@my.track")
 #' @param force if 'TRUE', suppresses user confirmation of a named track removal
-#' @param db optional database path to delete the track from when multiple
-#' databases are connected
+#' @param db optional database path or prefix string to delete the track from when
+#' multiple databases are connected and the track name is not prefixed
 #' @return None.
 #' @seealso \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}},
 #' \code{\link{gtrack.create}}, \code{\link{gtrack.2d.create}},
@@ -563,16 +615,25 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
     .gcheckroot()
 
     trackname <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
+
+    # Parse prefix from track name if present
+    parsed <- .gparse_prefixed_name(trackname)
+    base_name <- parsed$name
+
     if (!is.null(db)) {
-        db <- normalizePath(db, mustWork = FALSE)
+        # db parameter can be a path or a prefix string
+        db_path <- .gresolve_db_arg(db)
+        if (is.null(db_path)) {
+            db_path <- tryCatch(normalizePath(db, mustWork = FALSE), error = function(e) db)
+        }
         groots <- get("GROOTS", envir = .misha)
         if (is.null(groots)) {
             groots <- get("GROOT", envir = .misha)
         }
-        if (!is.null(groots) && !(db %in% groots)) {
+        if (!is.null(groots) && !(db_path %in% groots)) {
             stop(sprintf("Database %s is not connected", db), call. = FALSE)
         }
-        dirname <- file.path(db, "tracks", paste0(gsub("\\.", "/", trackname), ".track"))
+        dirname <- file.path(db_path, "tracks", paste0(gsub("\\.", "/", base_name), ".track"))
     } else {
         dirname <- .track_dir(trackname)
     }
@@ -581,17 +642,17 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
     if (!(trackname %in% get("GTRACKS", envir = .misha))) {
         if (force) {
             unlink(dirname, recursive = TRUE)
-            .gdb.rm_track(trackname, trackdir = dirname, db = db)
+            .gdb.rm_track(trackname, trackdir = dirname, db = if (!is.null(db)) db_path else NULL)
             return(invisible())
         }
-        stop(sprintf("Track %s does not exist", trackname), call. = FALSE)
+        .gstop_track_not_found(trackname)
     }
 
     if (!is.null(db) && !file.exists(dirname)) {
         if (force) {
             return(invisible())
         }
-        stop(sprintf("Track %s does not exist in database %s", trackname, db), call. = FALSE)
+        .gstop_track_not_found(trackname, sprintf("Track %s does not exist in database %s", trackname, db))
     }
 
     # Check write permission before attempting to delete
@@ -614,7 +675,7 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
             message(sprintf("Failed to delete track %s", trackname))
         } else {
             # refresh the list of GTRACKS, etc.
-            .gdb.rm_track(trackname, trackdir = dirname, db = db)
+            .gdb.rm_track(trackname, trackdir = dirname, db = if (!is.null(db)) db_path else NULL)
         }
     }
 }
