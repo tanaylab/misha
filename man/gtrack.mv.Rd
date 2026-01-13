@@ -7,21 +7,23 @@
 gtrack.mv(src = NULL, dest = NULL)
 }
 \arguments{
-\item{src}{source track name}
+\item{src}{source track name, optionally with prefix (e.g., "at@my.track")}
 
-\item{dest}{destination track name}
+\item{dest}{destination track name, optionally with prefix (e.g., "al@my.track")}
 }
 \value{
 None.
 }
 \description{
-Renames a track or moves it to a different namespace within the same database.
+Renames a track or moves it to a different namespace within the same database,
+or moves it between databases when using prefixed names.
 }
 \details{
-This function renames a track or moves it to a different namespace (directory)
-within the same database. The track cannot be moved to a different database.
-Use \code{\link{gtrack.copy}} followed by \code{\link{gtrack.rm}} if you need
-to move a track between databases.
+This function renames a track or moves it to a different namespace (directory).
+When both source and destination have the same prefix (or both are unprefixed),
+a simple file rename is performed. When different prefixes are used
+(e.g., "src@track" to "dst@track"), the track is copied to the destination
+database and then deleted from the source.
 }
 \examples{
 \dontshow{

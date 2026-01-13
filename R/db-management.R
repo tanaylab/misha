@@ -54,9 +54,13 @@
 .gdb.add_track <- function(track, db = NULL) {
     .gcheckroot()
 
+    # Parse prefix from track name to get base name for path construction
+    parsed <- .gparse_prefixed_name(track)
+    base_name <- parsed$name
+
     # Get the track directory, using db if specified
     if (!is.null(db)) {
-        trackdir <- file.path(db, "tracks", paste0(gsub("\\.", "/", track), ".track"))
+        trackdir <- file.path(db, "tracks", paste0(gsub("\\.", "/", base_name), ".track"))
     } else {
         trackdir <- .track_dir(track)
     }
@@ -139,6 +143,35 @@
     }
 }
 
+# Recursively copy a directory
+.copy_dir_recursive <- function(from, to) {
+    if (!dir.exists(from)) {
+        return(FALSE)
+    }
+
+    if (!dir.create(to, recursive = TRUE, showWarnings = FALSE)) {
+        if (!dir.exists(to)) {
+            return(FALSE)
+        }
+    }
+
+    files <- list.files(from, all.files = TRUE, no.. = TRUE, full.names = TRUE)
+    for (f in files) {
+        dest <- file.path(to, basename(f))
+        if (dir.exists(f)) {
+            if (!.copy_dir_recursive(f, dest)) {
+                return(FALSE)
+            }
+        } else {
+            if (!file.copy(f, dest, overwrite = TRUE)) {
+                return(FALSE)
+            }
+        }
+    }
+
+    TRUE
+}
+
 .rm_track_dir <- function(trackname) {
     dirname <- .track_dir(trackname)
     unlink(dirname, recursive = TRUE)
@@ -218,10 +251,20 @@
     }
 }
 
-.gdb.add_intervals.set <- function(intervals.set) {
+.gdb.add_intervals.set <- function(intervals.set, db = NULL) {
     .gcheckroot()
 
-    fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+    # Parse prefix from intervals.set name to get base name for path construction
+    parsed <- .gparse_prefixed_name(intervals.set)
+    base_name <- parsed$name
+
+    # Construct file path using base name (without prefix)
+    if (!is.null(db)) {
+        fname <- file.path(db, "tracks", paste0(gsub("\\.", "/", base_name), ".interv"))
+    } else {
+        fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", base_name), sep = "/"))
+    }
+
     if (file.exists(fname)) {
         tracks <- get("GTRACKS", envir = .misha)
         intervals <- sort(c(get("GINTERVS", envir = .misha), intervals.set))
@@ -241,9 +284,11 @@
 
         assign("GINTERVS", intervals, envir = .misha)
 
-        db <- .gdb.resolve_db_for_path(fname)
         if (is.null(db)) {
-            db <- get("GROOT", envir = .misha)
+            db <- .gdb.resolve_db_for_path(fname)
+            if (is.null(db)) {
+                db <- get("GROOT", envir = .misha)
+            }
         }
 
         intervals_db <- get("GINTERVALS_DB", envir = .misha)

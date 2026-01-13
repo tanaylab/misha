@@ -1,8 +1,10 @@
 # Interval loading and saving infrastructure
 
 .gintervals.apply <- function(chroms, intervals, intervals.set.out, FUN, ...) {
+    ctx <- NULL
     if (!is.null(intervals.set.out)) {
         fullpath <- .gintervals.check_new_set(intervals.set.out)
+        ctx <- attr(fullpath, "ctx")
     }
 
     if (is.data.frame(intervals)) {
@@ -141,24 +143,46 @@
 
     # refresh the list of GINTERVS, etc.
     if (!is.null(intervals.set.out)) {
-        .gdb.add_intervals.set(intervals.set.out)
+        # Use qualified name for cache if available
+        intervals_name <- if (!is.null(ctx)) ctx$qualified_name else intervals.set.out
+        db_path <- if (!is.null(ctx)) ctx$db_path else NULL
+        .gdb.add_intervals.set(intervals_name, db_path)
     }
 }
 
 .gintervals.check_new_set <- function(intervals.set) {
-    if (!is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
-        stop(sprintf("Intervals set %s already exists", intervals.set), call. = FALSE)
+    # Parse prefix from intervals set name
+    parsed <- .gparse_prefixed_name(intervals.set)
+
+    # Determine target database and GWD
+    if (!is.null(parsed$prefix)) {
+        db_path <- .gprefix_to_db(parsed$prefix)
+        if (is.null(db_path)) {
+            stop(sprintf("Unknown database prefix '%s'", parsed$prefix), call. = FALSE)
+        }
+        target_gwd <- file.path(db_path, "tracks")
+        qualified_name <- intervals.set
+    } else {
+        target_gwd <- get("GWD", envir = .misha)
+        db_path <- .gdb.resolve_db_for_path(target_gwd)
+        qualified_name <- .gqualify_name(intervals.set, db_path)
     }
 
-    if (!length(grep("^[A-Za-z][\\w.]*$", intervals.set, perl = TRUE))) {
+    base_name <- parsed$name
+
+    if (!is.na(match(qualified_name, get("GINTERVS", envir = .misha)))) {
+        stop(sprintf("Intervals set %s already exists", qualified_name), call. = FALSE)
+    }
+
+    if (!length(grep("^[A-Za-z][\\w.]*$", base_name, perl = TRUE))) {
         stop("Invalid interval name %s. Only alphanumeric characters and _ are allowed in the name.")
     }
 
-    path <- gsub(".", "/", intervals.set, fixed = TRUE)
+    path <- gsub(".", "/", base_name, fixed = TRUE)
     path <- paste(path, ".interv", sep = "")
-    fullpath <- paste(get("GWD", envir = .misha), path, sep = "/")
+    fullpath <- paste(target_gwd, path, sep = "/")
     dir <- dirname(path)
-    fulldir <- paste(get("GWD", envir = .misha), dir, sep = "/")
+    fulldir <- paste(target_gwd, dir, sep = "/")
 
     if (!file.exists(fulldir)) {
         stop(sprintf("Directory %s does not exist", dir), call. = FALSE)
@@ -168,18 +192,25 @@
         stop(sprintf("File %s already exists", path), call. = FALSE)
     }
 
-    if (!is.na(match(intervals.set, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", intervals.set), call. = FALSE)
+    if (!is.na(match(qualified_name, get("GTRACKS", envir = .misha)))) {
+        stop(sprintf("Track %s already exists", qualified_name), call. = FALSE)
     }
 
-    if (!is.na(match(intervals.set, gvtrack.ls()))) {
-        stop(sprintf("Virtual track %s already exists", intervals.set), call. = FALSE)
+    if (!is.na(match(qualified_name, gvtrack.ls()))) {
+        stop(sprintf("Virtual track %s already exists", qualified_name), call. = FALSE)
     }
 
-    if (.ggetOption(".gautocompletion", FALSE) && exists(intervals.set, envir = .misha)) {
-        stop(sprintf("Variable \"%s\" shadows the name of the new intervals set.\nPlease remove this variable from the environment or switch off autocompletion mode.", intervals.set), call. = FALSE)
+    if (.ggetOption(".gautocompletion", FALSE) && exists(base_name, envir = .misha)) {
+        stop(sprintf("Variable \"%s\" shadows the name of the new intervals set.\nPlease remove this variable from the environment or switch off autocompletion mode.", base_name), call. = FALSE)
     }
 
+    # Return full path and context for the caller
+    attr(fullpath, "ctx") <- list(
+        base_name = base_name,
+        qualified_name = qualified_name,
+        db_path = db_path,
+        gwd = target_gwd
+    )
     fullpath
 }
 

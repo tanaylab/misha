@@ -358,6 +358,133 @@ gtrack.convert_to_indexed("track2")
 2. Migrate if beneficial (many contigs, large analyses)
 3. No rush - legacy format remains fully supported
 
+# Database Prefixes for Multi-Database Setups
+
+When working with multiple databases, you can assign a unique **prefix** to each database. This provides explicit namespacing for tracks and intervals, making it clear which database each track comes from.
+
+## Why Use Prefixes?
+
+Without prefixes, multiple databases use "last wins" semantics - if the same track name exists in multiple databases, the later database takes precedence. Prefixes solve this by:
+
+- **Unambiguous resolution**: Always clear which database a track comes from
+- **Predictable behavior**: Database order doesn't affect resolution
+- **Self-documenting code**: Track expressions show data provenance (`at@x + al@y`)
+
+## Setting Up Prefixed Databases
+
+Create a `.misha` file in the database root directory:
+```yaml
+prefix: at
+description: "ATAC-seq database"
+author: "Lab Name"
+version: "1.0"
+```
+
+Prefix requirements:
+- Must start with a letter
+- Only alphanumeric characters and underscores
+- 2-8 characters recommended (warning for longer)
+- Must be unique across connected databases
+
+## Using Prefixed Tracks
+
+```{r, eval = FALSE}
+# Connect databases (one global, two prefixed)
+gsetroot(c("/path/to/base_db", "/path/to/atac_db", "/path/to/rnaseq_db"))
+
+# List all prefixes
+gdb.prefixes()
+# Returns: c(at = "/path/to/atac_db", rna = "/path/to/rnaseq_db")
+
+# List tracks - prefixed names shown automatically
+gtrack.ls()
+# [1] "global.track1"  "at@chip.track"  "rna@expr.track"
+
+# Filter by prefix
+gtrack.ls(db = "at")
+# [1] "at@chip.track"
+
+# Access specific database's track explicitly
+gextract("at@chip.track", gintervals(1, 0, 1000))
+
+# Mix tracks from different databases in expressions
+gextract("at@signal + rna@expression", gintervals(1, 0, 1000))
+```
+
+## Creating Tracks with Prefixes
+
+The prefix in the track name determines where it's created:
+
+```{r, eval = FALSE}
+# Create in the 'at' database
+gtrack.create_sparse("at@new.track", "Description", intervals, values)
+
+# Create in the 'rna' database
+gtrack.create_sparse("rna@new.track", "Description", intervals, values)
+
+# Without prefix: creates in current working directory
+gtrack.create_sparse("local.track", "Description", intervals, values)
+```
+
+## Cross-Database Operations
+
+Copy and move tracks between databases:
+
+```{r, eval = FALSE}
+# Copy from one database to another
+gtrack.copy("at@source.track", "rna@dest.track")
+
+# Move track between databases
+gtrack.mv("at@old.track", "rna@new.track")
+```
+
+## Database Configuration
+
+Get information about a database's configuration:
+
+```{r, eval = FALSE}
+# Get config for a prefix
+gdb.config("at")
+# $prefix
+# [1] "at"
+# $description
+# [1] "ATAC-seq database"
+# $author
+# [1] "Lab Name"
+# ...
+
+# Get all prefix mappings
+gdb.prefixes()
+# at                       rna
+# "/path/to/atac_db"       "/path/to/rnaseq_db"
+```
+
+## Helpful Error Messages
+
+If you forget to prefix a track name, misha suggests alternatives:
+
+```{r, eval = FALSE}
+gtrack.info("chip.track")
+# Error: Track chip.track does not exist. Did you mean: at@chip.track?
+```
+
+## Mixing Prefixed and Global Databases
+
+You can combine databases with and without prefixes:
+
+```{r, eval = FALSE}
+gsetroot(c(
+    "/path/to/global_base", # No .misha file - global (unprefixed)
+    "/path/to/atac_db", # Has .misha with prefix: at
+    "/path/to/rnaseq_db" # Has .misha with prefix: rna
+))
+
+# Global tracks: accessible without prefix
+# Prefixed tracks: require prefix
+gtrack.ls()
+# [1] "global.track"  "at@atac.track"  "rna@expr.track"
+```
+
 # Summary
 
 - **Indexed format is the default and recommended** for new databases
@@ -365,6 +492,7 @@ gtrack.convert_to_indexed("track2")
 - **Automatic format detection** - users don't need to think about it
 - **Significant performance benefits** for large-scale analyses
 - **Easy migration** with `gdb.convert_to_indexed()`
+- **Database prefixes** provide explicit namespacing for multi-database setups
 - **Fully backward compatible** - existing code works unchanged
 
 

@@ -7,9 +7,9 @@
 gtrack.copy(src = NULL, dest = NULL)
 }
 \arguments{
-\item{src}{source track name}
+\item{src}{source track name, optionally with prefix (e.g., "at@my.track")}
 
-\item{dest}{destination track name}
+\item{dest}{destination track name, optionally with prefix (e.g., "al@my.track")}
 }
 \value{
 None.
@@ -18,9 +18,14 @@ None.
 Creates a copy of an existing track.
 }
 \details{
-This function creates a copy of a track. The new track is created in the
-current working directory (.misha$GWD), which may be in a different database than
-the source track when multiple databases are connected.
+This function creates a copy of a track. The destination database is determined
+by the prefix in the destination name. If the destination has a prefix
+(e.g., "al@track"), the track is created in that database. If no prefix is
+specified, the track is created in the current working directory (.misha$GWD).
+
+This allows copying tracks between databases:
+\code{gtrack.copy("src@track", "dst@track")} copies from the "src" database
+to the "dst" database.
 }
 \examples{
 \dontshow{

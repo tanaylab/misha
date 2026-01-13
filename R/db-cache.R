@@ -61,12 +61,29 @@ gdb.reload <- function(rescan = TRUE) {
             groot_idx <- which(vapply(root_tracks_dirs, function(root) .gpath_is_within(gwd, root), logical(1)))[1]
             if (!is.na(groot_idx)) {
                 groot <- groots[groot_idx]
+                # Check if this database has a prefix
+                db_prefix <- .gdb_to_prefix(groot)
+
                 if (length(all_tracks)) {
-                    track_db[all_tracks] <- rep(list(groot), length(all_tracks))
-                    track_dbs[all_tracks] <- rep(list(groot), length(all_tracks))
+                    # For prefixed databases, qualify track names
+                    if (!is.null(db_prefix)) {
+                        qualified_tracks <- paste0(db_prefix, .GPREFIX_SEP, all_tracks)
+                    } else {
+                        qualified_tracks <- all_tracks
+                    }
+                    track_db[qualified_tracks] <- rep(list(groot), length(qualified_tracks))
+                    track_dbs[qualified_tracks] <- rep(list(groot), length(qualified_tracks))
+                    all_tracks <- qualified_tracks
                 }
                 if (length(all_intervals)) {
-                    intervals_db[all_intervals] <- rep(list(groot), length(all_intervals))
+                    # For prefixed databases, qualify interval names
+                    if (!is.null(db_prefix)) {
+                        qualified_intervals <- paste0(db_prefix, .GPREFIX_SEP, all_intervals)
+                    } else {
+                        qualified_intervals <- all_intervals
+                    }
+                    intervals_db[qualified_intervals] <- rep(list(groot), length(qualified_intervals))
+                    all_intervals <- qualified_intervals
                 }
             }
         }
@@ -122,17 +139,34 @@ gdb.reload <- function(rescan = TRUE) {
                 db_tracks <- res[[1]]
                 db_intervals <- res[[2]]
 
+                # Check if this database has a prefix
+                db_prefix <- .gdb_to_prefix(groot)
+
                 # "Last wins": later dbs override earlier ones
                 if (length(db_tracks)) {
-                    track_db[db_tracks] <- rep(list(groot), length(db_tracks))
-                    for (track in db_tracks) {
-                        track_dbs[[track]] <- c(track_dbs[[track]], groot)
+                    # For prefixed databases, qualify track names
+                    if (!is.null(db_prefix)) {
+                        qualified_tracks <- paste0(db_prefix, .GPREFIX_SEP, db_tracks)
+                    } else {
+                        qualified_tracks <- db_tracks
                     }
-                    all_tracks <- c(all_tracks, db_tracks)
+
+                    track_db[qualified_tracks] <- rep(list(groot), length(qualified_tracks))
+                    for (i in seq_along(db_tracks)) {
+                        track_dbs[[qualified_tracks[i]]] <- c(track_dbs[[qualified_tracks[i]]], groot)
+                    }
+                    all_tracks <- c(all_tracks, qualified_tracks)
                 }
                 if (length(db_intervals)) {
-                    intervals_db[db_intervals] <- rep(list(groot), length(db_intervals))
-                    all_intervals <- c(all_intervals, db_intervals)
+                    # For prefixed databases, qualify interval names
+                    if (!is.null(db_prefix)) {
+                        qualified_intervals <- paste0(db_prefix, .GPREFIX_SEP, db_intervals)
+                    } else {
+                        qualified_intervals <- db_intervals
+                    }
+
+                    intervals_db[qualified_intervals] <- rep(list(groot), length(qualified_intervals))
+                    all_intervals <- c(all_intervals, qualified_intervals)
                 }
             }
         }
@@ -261,33 +295,69 @@ gdb.reload <- function(rescan = TRUE) {
 }
 
 
-.gconfirmtrackcreate <- function(track) {
-    tracks <- get("GTRACKS", envir = .misha)
-    if (!is.null(tracks) && track %in% tracks) {
+# Resolve track creation context, handling prefixed names
+#
+# @param track Track name (possibly prefixed)
+# @return List with:
+#   - base_name: track name without prefix
+#   - qualified_name: full track name with prefix if applicable
+#   - db_path: target database path
+#   - gwd: GWD path for creation
+.gresolve_track_creation_context <- function(track) {
+    parsed <- .gparse_prefixed_name(track)
+
+    if (!is.null(parsed$prefix)) {
+        db_path <- .gprefix_to_db(parsed$prefix)
+        if (is.null(db_path)) {
+            .gstop_unknown_prefix(parsed$prefix)
+        }
+        gwd <- file.path(db_path, "tracks")
+        qualified_name <- track
+    } else {
+        # Unprefixed name - create in current GWD database
         gwd <- get("GWD", envir = .misha)
-        target_db <- .gdb.resolve_db_for_path(gwd)
-        if (is.null(target_db)) {
-            target_db <- get("GROOT", envir = .misha)
+        db_path <- .gdb.resolve_db_for_path(gwd)
+        if (is.null(db_path)) {
+            db_path <- get("GROOT", envir = .misha)
         }
+        # Qualify name if database has prefix
+        qualified_name <- .gqualify_name(track, db_path)
+    }
 
+    list(
+        base_name = parsed$name,
+        qualified_name = qualified_name,
+        db_path = db_path,
+        gwd = gwd
+    )
+}
+
+.gconfirmtrackcreate <- function(track) {
+    # Handle prefixed track names
+    ctx <- .gresolve_track_creation_context(track)
+
+    tracks <- get("GTRACKS", envir = .misha)
+    if (!is.null(tracks) && ctx$qualified_name %in% tracks) {
         track_db <- get("GTRACK_DB", envir = .misha)
-        if (is.null(track_db) || !(track %in% names(track_db))) {
-            stop(sprintf("Track %s already exists", track), call. = FALSE)
+        if (is.null(track_db) || !(ctx$qualified_name %in% names(track_db))) {
+            stop(sprintf("Track %s already exists", ctx$qualified_name), call. = FALSE)
         }
 
-        existing_db <- track_db[[track]]
-        if (!is.null(existing_db) && identical(existing_db, target_db)) {
-            stop(sprintf("Track %s already exists", track), call. = FALSE)
+        existing_db <- track_db[[ctx$qualified_name]]
+        if (!is.null(existing_db) && identical(existing_db, ctx$db_path)) {
+            stop(sprintf("Track %s already exists", ctx$qualified_name), call. = FALSE)
         }
 
-        track_db[[track]] <- NULL
+        # Remove from cache so we can create override
+        track_db[[ctx$qualified_name]] <- NULL
         assign("GTRACK_DB", track_db, envir = .misha)
     }
 
-    path <- gsub(".", "/", track, fixed = TRUE)
+    # Use base name for path construction
+    path <- gsub(".", "/", ctx$base_name, fixed = TRUE)
     dir <- dirname(path)
-    fulldir <- paste(get("GWD", envir = .misha), dir, sep = "/")
-    fullpath <- sprintf("%s.track", paste(get("GWD", envir = .misha), path, sep = "/"))
+    fulldir <- paste(ctx$gwd, dir, sep = "/")
+    fullpath <- sprintf("%s.track", paste(ctx$gwd, path, sep = "/"))
 
     if (!file.exists(fulldir)) {
         stop(sprintf("Directory %s does not exist", dir), call. = FALSE)
@@ -297,33 +367,56 @@ gdb.reload <- function(rescan = TRUE) {
         stop(sprintf("File %s already exists", path), call. = FALSE)
     }
 
-    if (!is.na(match(track, get("GINTERVS", envir = .misha)))) {
-        stop(sprintf("Interval %s already exists", track), call. = FALSE)
+    if (!is.na(match(ctx$qualified_name, get("GINTERVS", envir = .misha)))) {
+        stop(sprintf("Interval %s already exists", ctx$qualified_name), call. = FALSE)
     }
 
-    if (!is.na(match(track, gvtrack.ls()))) {
-        stop(sprintf("Virtual track %s already exists", track), call. = FALSE)
+    if (!is.na(match(ctx$qualified_name, gvtrack.ls()))) {
+        stop(sprintf("Virtual track %s already exists", ctx$qualified_name), call. = FALSE)
     }
 
-    if (.ggetOption(".gautocompletion", FALSE) && exists(track)) {
-        stop(sprintf("Variable \"%s\" shadows the name of the new track.\nPlease remove this variable from the environment or switch off autocompletion mode.", track), call. = FALSE)
+    if (.ggetOption(".gautocompletion", FALSE) && exists(ctx$base_name)) {
+        stop(sprintf("Variable \"%s\" shadows the name of the new track.\nPlease remove this variable from the environment or switch off autocompletion mode.", ctx$base_name), call. = FALSE)
     }
+
+    # Return context for use by caller
+    ctx
 }
+
+# Internal helper to resolve item path, handling prefixed names.
+# Falls back to current GWD for new items not yet in any database.
+#
+# @param name Track or intervals name (possibly prefixed)
+# @param extension File extension (".track" or ".interv")
+# @param db_lookup_fn Function to look up database for unprefixed names
+# @return Full path to the item
+.gitem_path <- function(name, extension, db_lookup_fn) {
+    parsed <- .gparse_prefixed_name(name)
+    base_name <- parsed$name
+
+    if (!is.null(parsed$prefix)) {
+        db_path <- .gprefix_to_db(parsed$prefix)
+        if (is.null(db_path)) {
+            .gstop_unknown_prefix(parsed$prefix)
+        }
+        base <- file.path(db_path, "tracks")
+    } else {
+        db_path <- db_lookup_fn(name)
+        base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
+    }
+    file.path(base, paste0(gsub("\\.", "/", base_name), extension))
+}
+
 
 # Get the directory path for a track, resolving to the correct database.
-# Falls back to current GWD for new tracks not yet in any database.
 .track_dir <- function(trackname) {
-    db_path <- .gtrack_db_path(trackname)
-    base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
-    file.path(base, paste0(gsub("\\.", "/", trackname), ".track"))
+    .gitem_path(trackname, ".track", .gtrack_db_path)
 }
 
+
 # Get the directory path for an intervals set, resolving to the correct database.
-# Falls back to current GWD for new intervals not yet in any database.
 .intervals_dir <- function(intervalsname) {
-    db_path <- .gintervals_db_path(intervalsname)
-    base <- if (!is.null(db_path)) file.path(db_path, "tracks") else get("GWD", envir = .misha)
-    file.path(base, paste0(gsub("\\.", "/", intervalsname), ".interv"))
+    .gitem_path(intervalsname, ".interv", .gintervals_db_path)
 }
 
 .gdb.cache_path <- function(groot = NULL) {

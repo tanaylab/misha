@@ -87,6 +87,8 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GTRACK_DB", NULL, envir = .misha)
     assign("GINTERVALS_DB", NULL, envir = .misha)
     assign("GTRACK_DBS", NULL, envir = .misha)
+    assign("GPREFIX_MAP", NULL, envir = .misha)
+    assign("GDB_CONFIGS", NULL, envir = .misha)
 
     # Read and validate chrom_sizes from first database
     chrom_sizes_path <- file.path(groots[1], "chrom_sizes.txt")
@@ -215,6 +217,17 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GWD", groot, envir = .misha)
     assign("CHROM_ALIAS", alias_map, envir = .misha)
 
+    # Read .misha configs from each database and build prefix map
+    db_configs <- list()
+    for (g in groots) {
+        db_configs[[g]] <- .gdb.read_config(g)
+    }
+    assign("GDB_CONFIGS", db_configs, envir = .misha)
+
+    # Build prefix map (validates uniqueness)
+    prefix_map <- .gdb.build_prefix_map(groots, db_configs)
+    assign("GPREFIX_MAP", prefix_map, envir = .misha)
+
     # Check if any database cache is dirty
     for (g in groots) {
         if (.gdb.cache_is_dirty(g)) {
@@ -269,6 +282,8 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
                 assign("GTRACK_DB", NULL, envir = .misha)
                 assign("GINTERVALS_DB", NULL, envir = .misha)
                 assign("GTRACK_DBS", NULL, envir = .misha)
+                assign("GPREFIX_MAP", NULL, envir = .misha)
+                assign("GDB_CONFIGS", NULL, envir = .misha)
             }
         }
     )

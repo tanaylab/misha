@@ -7,7 +7,8 @@
 gintervals.save(intervals.set.out = NULL, intervals = NULL)
 }
 \arguments{
-\item{intervals.set.out}{name of the new intervals set}
+\item{intervals.set.out}{name of the new intervals set, optionally with prefix
+(e.g., "at@my.intervals" to save in database with prefix "at")}
 
 \item{intervals}{intervals to save}
 }
@@ -18,7 +19,10 @@ None.
 Saves intervals to a named intervals set.
 }
 \details{
-This function saves 'intervals' as a named intervals set.
+This function saves 'intervals' as a named intervals set. The destination
+database is determined by the prefix in the intervals set name. If the name
+has a prefix (e.g., "at@my.intervals"), the intervals are saved in that database.
+If no prefix is specified, the intervals are saved in the current working directory.
 }
 \examples{
 \dontshow{

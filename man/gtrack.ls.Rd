@@ -17,8 +17,9 @@ gtrack.ls(
 \item{...}{these arguments are of either form 'pattern' or 'attribute =
 pattern'}
 
-\item{db}{optional database path to filter tracks. If specified, only tracks
-from that database are returned.}
+\item{db}{optional database path or prefix string to filter tracks. If specified,
+only tracks from that database are returned. Can be a path (e.g., "/path/to/db")
+or a prefix (e.g., "at" for tracks from the database with prefix "at").}
 
 \item{ignore.case, perl, fixed, useBytes}{see 'grep'}
 }
@@ -43,7 +44,9 @@ Multiple patterns are applied one after another. The resulted list of tracks
 should match all the patterns.
 
 When multiple databases are connected, the 'db' parameter can be used to
-filter tracks to only those from a specific database.
+filter tracks to only those from a specific database. For prefixed databases
+(those with a `.misha` config file containing a `prefix` field), track names
+are returned with their prefix (e.g., "at@my.track").
 }
 \examples{
 \dontshow{
