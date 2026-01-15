@@ -15,6 +15,15 @@
 #'   \item{shadowed_tracks}{Number of tracks shadowed by collisions}
 #'   \item{shadowed_intervals}{Number of intervals shadowed by collisions}
 #'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' dataset_path <- gdataset.example_path()
+#' gdataset.load(dataset_path)
+#' gdataset.unload(dataset_path)
+#'
 #' @seealso \code{\link{gdataset.unload}}, \code{\link{gdataset.save}}, \code{\link{gdataset.ls}}
 #' @export
 gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
@@ -185,6 +194,15 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
 #'
 #' @return Invisible NULL
 #'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' dataset_path <- gdataset.example_path()
+#' gdataset.load(dataset_path)
+#' gdataset.unload(dataset_path, validate = TRUE)
+#'
 #' @seealso \code{\link{gdataset.load}}, \code{\link{gdataset.ls}}
 #' @export
 gdataset.unload <- function(path, validate = FALSE) {
@@ -224,6 +242,30 @@ gdataset.unload <- function(path, validate = FALSE) {
 #' @param copy_seq If TRUE, copy seq/ directory instead of symlinking
 #'
 #' @return Invisible path
+#'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' example_intervs <- gintervals(1, 0, 10000)
+#' gintervals.save("example_dataset_intervals", example_intervs)
+#' gtrack.create(
+#'     "example_dataset_track",
+#'     "Example dataset track",
+#'     "dense_track",
+#'     iterator = "example_dataset_intervals"
+#' )
+#' dataset_path <- tempfile("misha_dataset_")
+#' gdataset.save(
+#'     path = dataset_path,
+#'     description = "Example dataset",
+#'     tracks = "example_dataset_track",
+#'     intervals = "example_dataset_intervals"
+#' )
+#' gtrack.rm("example_dataset_track", force = TRUE)
+#' gintervals.rm("example_dataset_intervals", force = TRUE)
 #'
 #' @seealso \code{\link{gdataset.load}}, \code{\link{gdataset.info}}
 #' @export
@@ -324,7 +366,7 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
         author = Sys.info()["user"],
         created = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ"),
         original_db = groot,
-        misha_version = as.character(packageVersion("misha")),
+        misha_version = as.character(utils::packageVersion("misha")),
         track_count = length(tracks),
         interval_count = length(intervals),
         genome = as.character(tools::md5sum(file.path(groot, "chrom_sizes.txt")))
@@ -342,6 +384,16 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
 #' @param dataframe If FALSE, return character vector; if TRUE, return data frame
 #'
 #' @return Character vector of paths or data frame with detailed information
+#'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' dataset_path <- gdataset.example_path()
+#' gdataset.load(dataset_path)
+#' gdataset.ls()
+#' gdataset.unload(dataset_path)
 #'
 #' @seealso \code{\link{gdataset.load}}, \code{\link{gdataset.info}}
 #' @export
@@ -407,6 +459,14 @@ gdataset.ls <- function(dataframe = FALSE) {
 #'
 #' @return List with dataset information
 #'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' dataset_path <- gdataset.example_path()
+#' gdataset.info(dataset_path)
+#'
 #' @seealso \code{\link{gdataset.ls}}, \code{\link{gdataset.load}}
 #' @export
 gdataset.info <- function(path) {
@@ -443,6 +503,58 @@ gdataset.info <- function(path) {
         genome = genome_hash,
         is_loaded = is_loaded
     )
+}
+
+#' Create an example dataset on the fly
+#'
+#' Creates a small dataset in a temporary directory using the built-in
+#' example database. The working database is reset via
+#' \code{\link{gdb.init_examples}}.
+#' Temporary tracks and intervals are removed after saving to avoid
+#' name collisions.
+#'
+#' @return Path to the created dataset directory
+#'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' dataset_path <- gdataset.example_path()
+#' gdataset.load(dataset_path)
+#' gdataset.unload(dataset_path)
+#'
+#' @seealso \code{\link{gdataset.save}}, \code{\link{gdataset.load}},
+#'   \code{\link{gdb.init_examples}}
+#' @export
+gdataset.example_path <- function() {
+    gdb.init_examples()
+
+    gtrack.rm("example_dataset_track", force = TRUE)
+    gintervals.rm("example_dataset_intervals", force = TRUE)
+
+    example_intervs <- gintervals(1, 0, 10000)
+    gintervals.save("example_dataset_intervals", example_intervs)
+
+    gtrack.create(
+        "example_dataset_track",
+        "Example dataset track",
+        "dense_track",
+        iterator = "example_dataset_intervals"
+    )
+
+    dataset_path <- tempfile("misha_dataset_")
+    gdataset.save(
+        path = dataset_path,
+        description = "Example dataset created on the fly",
+        tracks = "example_dataset_track",
+        intervals = "example_dataset_intervals"
+    )
+
+    gtrack.rm("example_dataset_track", force = TRUE)
+    gintervals.rm("example_dataset_intervals", force = TRUE)
+
+    dataset_path
 }
 
 # Helper functions

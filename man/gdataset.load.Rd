@@ -24,6 +24,16 @@ Invisibly returns a list with:
 Loads tracks and intervals from a dataset directory, making them available
 for analysis alongside the working database.
 }
+\examples{
+\dontshow{
+options(gmax.processes = 2)
+}
+
+dataset_path <- gdataset.example_path()
+gdataset.load(dataset_path)
+gdataset.unload(dataset_path)
+
+}
 \seealso{
 \code{\link{gdataset.unload}}, \code{\link{gdataset.save}}, \code{\link{gdataset.ls}}
 }
