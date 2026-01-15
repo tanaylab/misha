@@ -860,7 +860,9 @@ gsynth.load <- function(file) {
 #' )
 #'
 #' # Sample with mask_copy to preserve repeats from original genome
-#' gsynth.sample(model, "synthetic_genome.fa",
+#' temp_dir <- tempdir()
+#' synthetic_genome_file <- file.path(temp_dir, "synthetic_genome.fa")
+#' gsynth.sample(model, synthetic_genome_file,
 #'     output_format = "fasta",
 #'     mask_copy = repeats,
 #'     seed = 60427,

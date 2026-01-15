@@ -15,6 +15,17 @@ Character vector of paths or data frame with detailed information
 \description{
 Returns a list of the working database and all loaded datasets.
 }
+\examples{
+\dontshow{
+options(gmax.processes = 2)
+}
+
+dataset_path <- gdataset.example_path()
+gdataset.load(dataset_path)
+gdataset.ls()
+gdataset.unload(dataset_path)
+
+}
 \seealso{
 \code{\link{gdataset.load}}, \code{\link{gdataset.info}}
 }

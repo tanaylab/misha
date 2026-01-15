@@ -18,6 +18,16 @@ Invisible NULL
 Removes all tracks and intervals from a previously loaded dataset.
 If a track was shadowing another, the shadowed track becomes visible again.
 }
+\examples{
+\dontshow{
+options(gmax.processes = 2)
+}
+
+dataset_path <- gdataset.example_path()
+gdataset.load(dataset_path)
+gdataset.unload(dataset_path, validate = TRUE)
+
+}
 \seealso{
 \code{\link{gdataset.load}}, \code{\link{gdataset.ls}}
 }

@@ -15,6 +15,15 @@ List with dataset information
 \description{
 Returns metadata and contents of a dataset.
 }
+\examples{
+\dontshow{
+options(gmax.processes = 2)
+}
+
+dataset_path <- gdataset.example_path()
+gdataset.info(dataset_path)
+
+}
 \seealso{
 \code{\link{gdataset.ls}}, \code{\link{gdataset.load}}
 }
