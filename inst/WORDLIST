@@ -5,11 +5,14 @@ BedGraph
 BigWig
 BinFinder
 Buf
+CCG
+CGC
 CMD
 CRC
 CTRL
 ChIP
 Contig
+CpG
 Ctrl
 DHT
 ECMA
@@ -34,6 +37,7 @@ GWD
 Gb
 GenomeTrack
 INTERVID
+Iteratively
 LTO
 NA's
 NxM
@@ -93,6 +97,7 @@ dat
 defunc
 defval
 df
+dinucleotide
 dir
 directionality
 dirs
@@ -113,7 +118,6 @@ gbins
 gbuf
 gcachemult
 gcachemultires
-gsynth
 gcc
 gcis
 gcluster
@@ -162,6 +166,7 @@ gsetroot
 gsmooth
 gstep
 gsummary
+gsynth
 gtraceback
 gtrack
 gtrackimport
@@ -184,6 +189,7 @@ intervs
 intervsets
 intevals
 intra
+iteratively
 kgID
 kmer
 kmers
@@ -222,6 +228,7 @@ neighbouring
 ng
 noRemap
 notfound
+nucleotides
 num
 numbins
 onexit
@@ -256,6 +263,7 @@ rescanning
 retv
 roxygen
 rv
+sampleN
 scalability
 sep
 sprintf
@@ -270,6 +278,8 @@ strandsrc
 subdir
 summarizer
 summarizers
+symlinking
+symlinks
 tEnd
 tName
 tStart
@@ -291,6 +301,7 @@ ucsc
 undefine
 unevaluated
 unprotect
+unstratified
 utr
 vals
 varname

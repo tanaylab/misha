@@ -161,6 +161,7 @@ reference:
       - gdataset.save
       - gdataset.ls
       - gdataset.info
+      - gdataset.example_path
   - title: Other functions
     desc: Other
     contents:

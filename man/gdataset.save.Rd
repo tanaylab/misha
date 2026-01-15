@@ -33,6 +33,31 @@ Invisible path
 Creates a new dataset directory containing selected tracks and/or intervals
 from the working database.
 }
+\examples{
+\dontshow{
+options(gmax.processes = 2)
+}
+
+gdb.init_examples()
+example_intervs <- gintervals(1, 0, 10000)
+gintervals.save("example_dataset_intervals", example_intervs)
+gtrack.create(
+    "example_dataset_track",
+    "Example dataset track",
+    "dense_track",
+    iterator = "example_dataset_intervals"
+)
+dataset_path <- tempfile("misha_dataset_")
+gdataset.save(
+    path = dataset_path,
+    description = "Example dataset",
+    tracks = "example_dataset_track",
+    intervals = "example_dataset_intervals"
+)
+gtrack.rm("example_dataset_track", force = TRUE)
+gintervals.rm("example_dataset_intervals", force = TRUE)
+
+}
 \seealso{
 \code{\link{gdataset.load}}, \code{\link{gdataset.info}}
 }
