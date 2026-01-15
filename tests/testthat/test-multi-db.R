@@ -1,4 +1,5 @@
-# Tests for multi-database support
+# Tests for multi-database support using the dataset API
+# These tests complement test-dataset.R by testing more advanced scenarios
 
 # Helper to create a minimal database
 create_test_db <- function(path, chrom_sizes = data.frame(chrom = c("chr1", "chr2"), size = c(10000, 10000))) {
@@ -19,929 +20,137 @@ create_test_db <- function(path, chrom_sizes = data.frame(chrom = c("chr1", "chr
     }
 }
 
-test_that("single database initialization works unchanged (backward compatibility)", {
+# ==============================================================================
+# Migration tests: verify old multi-db patterns migrate to new API
+# ==============================================================================
+
+test_that("gsetroot() with multiple paths errors with helpful message", {
     withr::with_tempdir({
-        create_test_db("single_db")
-
-        gsetroot("single_db")
-
-        expect_equal(length(gdb.ls()), 1)
-        expect_equal(gdb.ls(), normalizePath("single_db"))
-        expect_equal(.misha$GROOT, .misha$GROOTS[1])
-
-        # gdb.summary should work
-        info <- gdb.summary()
-        expect_equal(nrow(info), 1)
-        expect_true("tracks" %in% names(info))
-        expect_true("writable" %in% names(info))
-    })
-})
-
-test_that("multiple databases can be connected", {
-    withr::with_tempdir({
-        # Create two databases with same chrom_sizes
         create_test_db("db1")
         create_test_db("db2")
-
-        gsetroot(c("db1", "db2"))
-
-        expect_equal(length(gdb.ls()), 2)
-        expect_equal(gdb.ls()[1], normalizePath("db1"))
-        expect_equal(gdb.ls()[2], normalizePath("db2"))
-
-        # GROOT should be first db
-        expect_equal(.misha$GROOT, normalizePath("db1"))
-    })
-})
-
-test_that("connecting dbs with different chrom_sizes fails", {
-    withr::with_tempdir({
-        # Create db1 with one genome
-        create_test_db("db1", chrom_sizes = data.frame(chrom = "chr1", size = 1000))
-
-        # Create db2 with different genome
-        create_test_db("db2", chrom_sizes = data.frame(chrom = "chr1", size = 2000))
 
         expect_error(
             gsetroot(c("db1", "db2")),
-            "identical chrom_sizes"
+            "gsetroot\\(\\) accepts a single database path.*Use gdataset\\.load\\(\\) to load additional datasets"
         )
     })
 })
 
-test_that("last database wins for track resolution", {
+test_that("multi-db pattern: gsetroot(db1) + gdataset.load(db2)", {
     withr::with_tempdir({
-        # Setup: create same-named track in both dbs
         create_test_db("db1")
         gsetroot("db1")
         intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("shared_track", "from db1", intervs, 1)
+        gtrack.create_sparse("track1", "from db1", intervs, 1)
 
         create_test_db("db2")
         gsetroot("db2")
-        gtrack.create_sparse("shared_track", "from db2", intervs, 2)
+        gtrack.create_sparse("track2", "from db2", intervs, 2)
 
-        # Connect to both
-        gsetroot(c("db1", "db2"))
+        # New pattern: working db + loaded dataset
+        gsetroot("db1")
+        gdataset.load("db2")
 
-        # Track should come from db2 (last wins)
-        expect_equal(gtrack.db("shared_track"), normalizePath("db2"))
+        expect_equal(length(gdataset.ls()), 2)
+        expect_true("track1" %in% gtrack.ls())
+        expect_true("track2" %in% gtrack.ls())
     })
 })
 
-test_that("gtrack.db works on vectors", {
+# ==============================================================================
+# Track operations across databases
+# ==============================================================================
+
+test_that("gtrack.info works for tracks in different databases", {
     withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("track_a", "a", intervs, 1)
+        gtrack.create_sparse("working_track", "sparse track", intervs, 1)
 
-        create_test_db("db2")
-        gsetroot("db2")
-        gtrack.create_sparse("track_b", "b", intervs, 2)
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_track", "sparse track 2", intervs, 2)
 
-        gsetroot(c("db1", "db2"))
+        gsetroot("working_db")
+        gdataset.load("dataset1")
 
-        # Vectorized call
-        dbs <- gtrack.db(c("track_a", "track_b", "nonexistent"))
-        expect_equal(dbs[1], normalizePath("db1"))
-        expect_equal(dbs[2], normalizePath("db2"))
-        expect_true(is.na(dbs[3]))
+        # Info should work for both
+        info1 <- gtrack.info("working_track")
+        info2 <- gtrack.info("ds_track")
+
+        expect_equal(info1$type, "sparse")
+        expect_equal(info2$type, "sparse")
     })
 })
 
-test_that("gtrack.ls filters by database", {
+test_that("gtrack.exists works for tracks in loaded datasets", {
     withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("db1_track", "desc", intervs, 1)
+        gtrack.create_sparse("working_track", "working", intervs, 1)
 
-        create_test_db("db2")
-        gsetroot("db2")
-        gtrack.create_sparse("db2_track", "desc", intervs, 2)
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_track", "dataset", intervs, 2)
 
-        gsetroot(c("db1", "db2"))
+        gsetroot("working_db")
+        gdataset.load("dataset1")
 
-        # All tracks
-        all_tracks <- gtrack.ls()
-        expect_true("db1_track" %in% all_tracks)
-        expect_true("db2_track" %in% all_tracks)
-
-        # Filter by db1
-        db1_tracks <- gtrack.ls(db = "db1")
-        expect_true("db1_track" %in% db1_tracks)
-        expect_false("db2_track" %in% db1_tracks)
-
-        # Filter by db2
-        db2_tracks <- gtrack.ls(db = "db2")
-        expect_false("db1_track" %in% db2_tracks)
-        expect_true("db2_track" %in% db2_tracks)
-    })
-})
-
-test_that("gdb.summary returns correct database summary", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("track1", "desc", intervs, 1)
-        gtrack.create_sparse("track2", "desc", intervs, 2)
-
-        create_test_db("db2")
-        gsetroot("db2")
-        gtrack.create_sparse("track3", "desc", intervs, 3)
-
-        gsetroot(c("db1", "db2"))
-
-        info <- gdb.summary()
-        expect_equal(nrow(info), 2)
-        expect_equal(info$tracks[1], 2) # db1 has 2 tracks
-        expect_equal(info$tracks[2], 1) # db2 has 1 track
-        expect_true(all(info$writable)) # both writable in test
-    })
-})
-
-test_that("gdb.create_linked creates proper symlinks", {
-    withr::with_tempdir({
-        create_test_db("parent_db")
-
-        gdb.create_linked("linked_db", parent = "parent_db")
-
-        # Check symlinks exist
-        expect_true(file.exists("linked_db/chrom_sizes.txt"))
-        expect_true(file.exists("linked_db/seq"))
-        expect_true(Sys.readlink("linked_db/chrom_sizes.txt") != "")
-        expect_true(Sys.readlink("linked_db/seq") != "")
-
-        # Check tracks dir is real (not symlink)
-        expect_true(dir.exists("linked_db/tracks"))
-        expect_equal(Sys.readlink("linked_db/tracks"), "")
-
-        # Should be usable
-        gsetroot(c("parent_db", "linked_db"))
-        expect_equal(length(gdb.ls()), 2)
-    })
-})
-
-test_that("gdb.create_linked fails if directory exists", {
-    withr::with_tempdir({
-        create_test_db("parent_db")
-        dir.create("linked_db")
-
-        expect_error(
-            gdb.create_linked("linked_db", parent = "parent_db"),
-            "already exists"
-        )
-    })
-})
-
-test_that("gintervals.db and gintervals.ls with db filter work", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
-        intervs1 <- gintervals(1, 0, 1000)
-        gintervals.save("intervals1", intervs1)
-
-        create_test_db("db2")
-        gsetroot("db2")
-        intervs2 <- gintervals(1, 0, 2000)
-        gintervals.save("intervals2", intervs2)
-
-        gsetroot(c("db1", "db2"))
-
-        # gintervals.db
-        expect_equal(gintervals.db("intervals1"), normalizePath("db1"))
-        expect_equal(gintervals.db("intervals2"), normalizePath("db2"))
-
-        # gintervals.ls with db filter
-        db1_intervals <- gintervals.ls(db = "db1")
-        expect_true("intervals1" %in% db1_intervals)
-        expect_false("intervals2" %in% db1_intervals)
-    })
-})
-
-test_that("virtual tracks remain global across databases", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("base_track", "base", intervs, 1)
-
-        create_test_db("db2")
-        gsetroot(c("db1", "db2"))
-
-        # Create virtual track
-        gvtrack.create("vtrack", "base_track", "avg")
-        withr::defer(gvtrack.rm("vtrack"))
-
-        # Virtual track should be accessible regardless of which db we're working with
-        expect_true("vtrack" %in% gvtrack.ls())
-    })
-})
-
-test_that("track operations work correctly with multi-db", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("db1_track", "test track in db1", intervs, 5)
-
-        create_test_db("db2")
-        gsetroot(c("db1", "db2"))
-
-        # Track from db1 should still be accessible
-        expect_true(gtrack.exists("db1_track"))
-        info <- gtrack.info("db1_track")
-        expect_equal(info$type, "sparse")
-
-        # gtrack.path should return correct path in db1
-        path <- gtrack.path("db1_track")
-        expect_true(grepl("db1", path))
-    })
-})
-
-test_that("GWD defaults to last database's tracks", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot(c("db1", "db2"))
-
-        # GWD should be in db2 (last db)
-        expect_true(grepl("db2", .misha$GWD))
-    })
-})
-
-# =============================================================================
-# Advanced Multi-Database Tests
-# =============================================================================
-
-test_that("three or more databases work correctly", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-        create_test_db("db3")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("track_a", "from db1", intervs, 1)
-
-        gsetroot("db2")
-        gtrack.create_sparse("track_b", "from db2", intervs, 2)
-
-        gsetroot("db3")
-        gtrack.create_sparse("track_c", "from db3", intervs, 3)
-
-        # Connect all three
-        gsetroot(c("db1", "db2", "db3"))
-
-        expect_equal(length(gdb.ls()), 3)
-        expect_equal(length(gtrack.ls()), 3)
-
-        # Verify each track resolves to correct db
-        expect_equal(gtrack.db("track_a"), normalizePath("db1"))
-        expect_equal(gtrack.db("track_b"), normalizePath("db2"))
-        expect_equal(gtrack.db("track_c"), normalizePath("db3"))
-
-        # Summary should show 1 track per db
-        info <- gdb.summary()
-        expect_equal(sum(info$tracks), 3)
-    })
-})
-
-test_that("database order affects track resolution (last wins)", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        # Create same track with different values in both DBs
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("shared", "db1 version", intervs, 100)
-
-        gsetroot("db2")
-        gtrack.create_sparse("shared", "db2 version", intervs, 200)
-
-        # Order: db1, db2 -> db2 wins
-        gsetroot(c("db1", "db2"))
-        expect_equal(gtrack.db("shared"), normalizePath("db2"))
-        val1 <- gextract("shared", gintervals(1, 0, 500))$shared[1]
-
-        # Order: db2, db1 -> db1 wins
-        gsetroot(c("db2", "db1"))
-        expect_equal(gtrack.db("shared"), normalizePath("db1"))
-        val2 <- gextract("shared", gintervals(1, 0, 500))$shared[1]
-
-        # Values should differ based on which db "wins"
-        expect_equal(val1, 200)
-        expect_equal(val2, 100)
-    })
-})
-
-test_that("db path prefix matching does not misclassify db1 vs db10", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db10")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("base_db1", "db1", intervs, 1)
-
-        gsetroot(c("db1", "db10"))
-
-        # GWD is db10/tracks, so creation should target db10
-        gtrack.create_sparse("from_db10", "db10", intervs, 2)
-        expect_equal(gtrack.db("from_db10"), normalizePath("db10"))
-
-        # Switch to db1 tracks explicitly and create there
-        gdir.cd(file.path(normalizePath("db1"), "tracks"))
-        gtrack.create_sparse("from_db1", "db1", intervs, 3)
-        expect_equal(gtrack.db("from_db1"), normalizePath("db1"))
-    })
-})
-
-test_that("creating override in later db works and gtrack.dbs lists all dbs", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("shared", "db1 version", intervs, 1)
-
-        gsetroot(c("db1", "db2"))
-
-        # Override in the later database while connected
-        gtrack.create_sparse("shared", "db2 version", intervs, 2)
-
-        expect_equal(gtrack.db("shared"), normalizePath("db2"))
-        expect_equal(gextract("shared", gintervals(1, 0, 500))$shared[1], 2)
-
-        dbs <- gtrack.dbs("shared")
-        expect_equal(unname(dbs), c(normalizePath("db1"), normalizePath("db2")))
-        expect_equal(names(dbs), rep("shared", 2))
-
-        df <- gtrack.dbs("shared", dataframe = TRUE)
-        expect_equal(df$track, rep("shared", 2))
-        expect_equal(df$db, c(normalizePath("db1"), normalizePath("db2")))
-    })
-})
-
-test_that("gextract works with tracks from different databases", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 5000)
-        gtrack.create_sparse("track_from_db1", "db1", intervs, 10)
-
-        gsetroot("db2")
-        gtrack.create_sparse("track_from_db2", "db2", intervs, 20)
-
-        gsetroot(c("db1", "db2"))
-
-        # This should work - extract from both tracks in single call
-        # Use iterator since we have multiple sparse tracks
-        result <- gextract(c("track_from_db1", "track_from_db2"), gintervals(1, 0, 1000), iterator = 100)
-
-        expect_true("track_from_db1" %in% names(result))
-        expect_true("track_from_db2" %in% names(result))
-        expect_equal(result$track_from_db1[1], 10)
-        expect_equal(result$track_from_db2[1], 20)
-    })
-})
-
-test_that("track expressions work across databases", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 5000)
-        gtrack.create_sparse("x", "db1", intervs, 10)
-
-        gsetroot("db2")
-        gtrack.create_sparse("y", "db2", intervs, 3)
-
-        gsetroot(c("db1", "db2"))
-
-        # Expression using tracks from different databases
-        # Use iterator since we have multiple sparse tracks
-        result <- gextract("x + y", gintervals(1, 0, 1000), iterator = 100)
-        expect_equal(result[["x + y"]][1], 13)
-    })
-})
-
-test_that("new tracks are created in last (user) database", {
-    withr::with_tempdir({
-        create_test_db("shared_db")
-        create_test_db("user_db")
-
-        gsetroot("shared_db")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("shared_track", "shared", intervs, 1)
-
-        # Connect with user_db last
-        gsetroot(c("shared_db", "user_db"))
-
-        # Create new track - should go to user_db (last/GWD)
-        gtrack.create_sparse("new_track", "new", intervs, 2)
-
-        # After creating, reload to update GTRACK_DB
-        gdb.reload()
-
-        expect_equal(gtrack.db("new_track"), normalizePath("user_db"))
-        expect_equal(gtrack.db("shared_track"), normalizePath("shared_db"))
-
-        # Verify by reconnecting to just user_db
-        gsetroot("user_db")
-        expect_true(gtrack.exists("new_track"))
-
-        # And shared_db shouldn't have the new track
-        gsetroot("shared_db")
-        expect_false(gtrack.exists("new_track"))
-    })
-})
-
-test_that("gdir.cd works correctly in multi-db mode", {
-    # gdir.cd in multi-db mode changes to subdirectory in the last database
-    # and then only shows tracks from that subdirectory (original single-db behavior)
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        gdir.create("subdir", showWarnings = FALSE)
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("subdir.sub_track", "in subdir", intervs, 1)
-        gtrack.create_sparse("root_track", "in root", intervs, 2)
-
-        gsetroot("db2")
-        gdir.create("subdir", showWarnings = FALSE) # Create in db2 too for gdir.cd to work
-        gtrack.create_sparse("db2_track", "in db2", intervs, 3)
-
-        # Connect to both, then cd into subdir
-        gsetroot(c("db1", "db2"))
-
-        # At root, should see all tracks from both databases
-        all_tracks <- gtrack.ls()
-        expect_true("subdir.sub_track" %in% all_tracks)
-        expect_true("root_track" %in% all_tracks)
-        expect_true("db2_track" %in% all_tracks)
-
-        # Change to subdir - since GWD is in db2, we cd to db2's subdir
-        # This switches to single-db subdirectory mode (original behavior)
-        gdir.cd("subdir")
-        subdir_tracks <- gtrack.ls()
-        # Should now see only tracks from db2/tracks/subdir (which is empty)
-        expect_equal(length(subdir_tracks), 0)
-
-        # Go back to root
-        gdir.cd("..")
-        # Back at db2's root tracks dir, but this is still single-db context
-        # (see note in gdb.reload about subdirectory scanning)
-    })
-})
-
-test_that("empty database in multi-db chain works", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("empty_db")
-        create_test_db("db3")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("track1", "db1", intervs, 1)
-
-        gsetroot("db3")
-        gtrack.create_sparse("track3", "db3", intervs, 3)
-
-        # empty_db has no tracks
-        gsetroot(c("db1", "empty_db", "db3"))
-
-        expect_equal(length(gdb.ls()), 3)
-        tracks <- gtrack.ls()
-        expect_equal(length(tracks), 2)
-        expect_true("track1" %in% tracks)
-        expect_true("track3" %in% tracks)
-
-        # Summary should show 0 tracks for empty_db
-        info <- gdb.summary()
-        expect_equal(info$tracks[2], 0)
-    })
-})
-
-test_that("intervals override follows last-wins semantics", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs1 <- gintervals(1, 0, 1000)
-        gintervals.save("shared_intervals", intervs1)
-
-        gsetroot("db2")
-        intervs2 <- gintervals(1, 0, 5000) # Different range
-        gintervals.save("shared_intervals", intervs2)
-
-        # db2 should win
-        gsetroot(c("db1", "db2"))
-        loaded <- gintervals.load("shared_intervals")
-        expect_equal(loaded$end[1], 5000)
-        expect_equal(gintervals.db("shared_intervals"), normalizePath("db2"))
-
-        # Reverse order - db1 should win
-        gsetroot(c("db2", "db1"))
-        loaded2 <- gintervals.load("shared_intervals")
-        expect_equal(loaded2$end[1], 1000)
-        expect_equal(gintervals.db("shared_intervals"), normalizePath("db1"))
-    })
-})
-
-test_that("track attributes work across databases", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("db1_track", "track in db1", intervs, 1)
-        gtrack.attr.set("db1_track", "custom_attr", "db1_value")
-
-        gsetroot("db2")
-        gtrack.create_sparse("db2_track", "track in db2", intervs, 2)
-        gtrack.attr.set("db2_track", "custom_attr", "db2_value")
-
-        gsetroot(c("db1", "db2"))
-
-        # Should read attributes from both databases
-        expect_equal(gtrack.attr.get("db1_track", "custom_attr"), "db1_value")
-        expect_equal(gtrack.attr.get("db2_track", "custom_attr"), "db2_value")
+        expect_true(gtrack.exists("working_track"))
+        expect_true(gtrack.exists("ds_track"))
+        expect_false(gtrack.exists("nonexistent"))
     })
 })
 
 test_that("gtrack.rm only affects correct database", {
     withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 1000)
         gtrack.create_sparse("track_to_keep", "keep", intervs, 1)
-
-        gsetroot("db2")
         gtrack.create_sparse("track_to_delete", "delete", intervs, 2)
 
-        gsetroot(c("db1", "db2"))
-
-        # Delete track from db2
+        # Delete track from working db
         gtrack.rm("track_to_delete", force = TRUE)
 
         # Verify it's gone
         expect_false(gtrack.exists("track_to_delete"))
 
-        # Track in db1 should still exist
+        # Track to keep should still exist
         expect_true(gtrack.exists("track_to_keep"))
 
-        # Reconnect to verify persistence
-        gsetroot(c("db1", "db2"))
+        # Verify persistence after reload
+        gdb.reload()
         expect_false(gtrack.exists("track_to_delete"))
         expect_true(gtrack.exists("track_to_keep"))
     })
 })
 
-test_that("gtrack.rm can target a specific database", {
+test_that("gtrack.mv works in single db context", {
     withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("shared_track", "db1", intervs, 1)
-
-        gsetroot("db2")
-        gtrack.create_sparse("shared_track", "db2", intervs, 2)
-
-        gsetroot(c("db1", "db2"))
-        expect_equal(gtrack.db("shared_track"), normalizePath("db2"))
-
-        gtrack.rm("shared_track", force = TRUE, db = "db2")
-
-        expect_true(gtrack.exists("shared_track"))
-        expect_equal(gtrack.db("shared_track"), normalizePath("db1"))
-        expect_true(file.exists(file.path("db1", "tracks", "shared_track.track")))
-        expect_false(file.exists(file.path("db2", "tracks", "shared_track.track")))
-    })
-})
-
-test_that("reconnecting refreshes track list correctly", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("initial_track", "initial", intervs, 1)
-
-        gsetroot(c("db1", "db2"))
-        expect_equal(length(gtrack.ls()), 1)
-
-        # Add track to db2 while connected
-        gtrack.create_sparse("added_track", "added", intervs, 2)
-        expect_equal(length(gtrack.ls()), 2)
-
-        # Reconnect should still show both
-        gsetroot(c("db1", "db2"))
-        expect_equal(length(gtrack.ls()), 2)
-        expect_true("initial_track" %in% gtrack.ls())
-        expect_true("added_track" %in% gtrack.ls())
-    })
-})
-
-test_that("read-only database gives clear error message", {
-    skip_on_os("windows") # chmod not reliable on Windows
-
-    withr::with_tempdir({
-        create_test_db("readonly_db")
-        create_test_db("writable_db")
-
-        gsetroot("readonly_db")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("existing_track", "exists", intervs, 1)
-
-        # Make readonly_db's tracks directory read-only
-        Sys.chmod("readonly_db/tracks", "555")
-        withr::defer(Sys.chmod("readonly_db/tracks", "755"))
-
-        gsetroot(c("readonly_db", "writable_db"))
-
-        # Creating new track should work (goes to writable_db)
-        expect_silent(gtrack.create_sparse("new_track", "new", intervs, 2))
-
-        # Deleting track from read-only db will fail silently (R cannot delete)
-        # The track remains since the parent directory is read-only
-        suppressWarnings(suppressMessages(gtrack.rm("existing_track", force = TRUE)))
-
-        # Verify the track still exists (because delete failed)
-        expect_true(gtrack.exists("existing_track"))
-
-        # Reset permissions and clean up to avoid tempdir cleanup warnings
-        Sys.chmod("readonly_db/tracks", "755")
-        unlink(file.path("readonly_db", "tracks", "existing_track.track"), recursive = TRUE)
-    })
-})
-
-test_that("gdb.summary shows correct writable status", {
-    skip_on_os("windows")
-
-    withr::with_tempdir({
-        create_test_db("readonly_db")
-        create_test_db("writable_db")
-
-        # Make one db read-only
-        Sys.chmod("readonly_db/tracks", "555")
-        withr::defer(Sys.chmod("readonly_db/tracks", "755"))
-
-        gsetroot(c("readonly_db", "writable_db"))
-
-        info <- gdb.summary()
-        expect_equal(nrow(info), 2)
-
-        # First db should be read-only
-        expect_false(info$writable[1])
-        # Second db should be writable
-        expect_true(info$writable[2])
-    })
-})
-
-test_that("virtual track can reference track from any database", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 5000)
-        gtrack.create_sparse("base_in_db1", "base", intervs, 10)
-
-        gsetroot("db2")
-        gtrack.create_sparse("base_in_db2", "base", intervs, 20)
-
-        gsetroot(c("db1", "db2"))
-
-        gvtrack.create("vt1", "base_in_db1", "avg")
-        gvtrack.create("vt2", "base_in_db2", "avg")
-        withr::defer({
-            gvtrack.rm("vt1")
-            gvtrack.rm("vt2")
-        })
-
-        result1 <- gextract("vt1", gintervals(1, 0, 1000))
-        result2 <- gextract("vt2", gintervals(1, 0, 1000))
-
-        expect_equal(result1$vt1[1], 10)
-        expect_equal(result2$vt2[1], 20)
-    })
-})
-
-test_that("connecting same database twice fails", {
-    withr::with_tempdir({
-        create_test_db("db1")
-
-        expect_error(
-            gsetroot(c("db1", "db1")),
-            "directories should differ"
-        )
-    })
-})
-
-test_that("absolute and relative paths work for multi-db", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        abs_path1 <- normalizePath("db1")
-        rel_path2 <- "db2"
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("track1", "t1", intervs, 1)
-
-        gsetroot("db2")
-        gtrack.create_sparse("track2", "t2", intervs, 2)
-
-        # Mix absolute and relative paths
-        gsetroot(c(abs_path1, rel_path2))
-
-        expect_equal(length(gtrack.ls()), 2)
-        expect_true(gtrack.exists("track1"))
-        expect_true(gtrack.exists("track2"))
-    })
-})
-
-# =============================================================================
-# Additional Tests (inspired by naryn test patterns)
-# =============================================================================
-
-test_that("deletion of overriding track reveals underlying track", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-        create_test_db("db3")
-
-        # Create same track in all three databases with different values
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("shared", "from db1", intervs, 100)
-
-        gsetroot("db2")
-        gtrack.create_sparse("shared", "from db2", intervs, 200)
-
-        gsetroot("db3")
-        gtrack.create_sparse("shared", "from db3", intervs, 300)
-
-        # Connect all three - db3 wins
-        gsetroot(c("db1", "db2", "db3"))
-        expect_equal(gtrack.db("shared"), normalizePath("db3"))
-        expect_equal(gextract("shared", gintervals(1, 0, 500))$shared[1], 300)
-
-        # Delete from db3 - db2 should now win
-        gtrack.rm("shared", force = TRUE)
-        gdb.reload()
-        expect_equal(gtrack.db("shared"), normalizePath("db2"))
-        expect_equal(gextract("shared", gintervals(1, 0, 500))$shared[1], 200)
-
-        # Delete from db2 - db1 should now win
-        gtrack.rm("shared", force = TRUE)
-        gdb.reload()
-        expect_equal(gtrack.db("shared"), normalizePath("db1"))
-        expect_equal(gextract("shared", gintervals(1, 0, 500))$shared[1], 100)
-
-        # Delete from db1 - track should be gone
-        gtrack.rm("shared", force = TRUE)
-        gdb.reload()
-        expect_false(gtrack.exists("shared"))
-    })
-})
-
-test_that("gtrack.exists with db parameter works", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("only_in_db1", "db1 only", intervs, 1)
-
-        gsetroot("db2")
-        gtrack.create_sparse("only_in_db2", "db2 only", intervs, 2)
-
-        gsetroot(c("db1", "db2"))
-
-        # Both tracks exist overall
-        expect_true(gtrack.exists("only_in_db1"))
-        expect_true(gtrack.exists("only_in_db2"))
-
-        # But each only exists in its own database
-        expect_equal(gtrack.db("only_in_db1"), normalizePath("db1"))
-        expect_equal(gtrack.db("only_in_db2"), normalizePath("db2"))
-    })
-})
-
-test_that("gtrack.mv works correctly in multi-db", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 1000)
         gtrack.create_sparse("original", "original track", intervs, 42)
 
-        gsetroot(c("db1", "db2"))
-
-        # Rename track (stays in db1)
+        # Rename track
         gtrack.mv("original", "renamed")
 
         expect_false(gtrack.exists("original"))
         expect_true(gtrack.exists("renamed"))
-        expect_equal(gtrack.db("renamed"), normalizePath("db1"))
+        expect_equal(gtrack.dataset("renamed"), normalizePath("working_db"))
 
         # Value should be preserved
         expect_equal(gextract("renamed", gintervals(1, 0, 500))$renamed[1], 42)
     })
 })
 
-test_that("gtrack.mv cleans up empty dirs in non-current db", {
+test_that("gtrack.copy works in single db context", {
     withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gdir.create("subdir", showWarnings = FALSE)
-        gtrack.create_sparse("subdir.track1", "t1", intervs, 1)
-
-        subdir_path <- file.path("db1", "tracks", "subdir")
-        expect_true(dir.exists(subdir_path))
-
-        # Connect with db2 last so GWD is in db2
-        gsetroot(c("db1", "db2"))
-
-        gtrack.mv("subdir.track1", "track1")
-
-        # Subdir should be removed from db1 after move
-        expect_false(dir.exists(subdir_path))
-        expect_true(file.exists(file.path("db1", "tracks", "track1.track")))
-    })
-})
-
-test_that("gtrack.mv fails when source doesn't exist", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
-
-        expect_error(gtrack.mv("nonexistent", "new_name"), "does not exist")
-    })
-})
-
-test_that("gtrack.mv fails when destination already exists", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
-
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("track1", "t1", intervs, 1)
-        gtrack.create_sparse("track2", "t2", intervs, 2)
-
-        expect_error(gtrack.mv("track1", "track2"), "already exists")
-    })
-})
-
-test_that("gtrack.mv can move track to different namespace", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
-
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("track1", "t1", intervs, 55)
-
-        # Move to subdir namespace
-        gtrack.mv("track1", "subdir.track1")
-
-        expect_false(gtrack.exists("track1"))
-        expect_true(gtrack.exists("subdir.track1"))
-
-        # Value preserved
-        expect_equal(gextract("subdir.track1", gintervals(1, 0, 500))[["subdir.track1"]][1], 55)
-    })
-})
-
-test_that("gtrack.copy works correctly in single db", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
-
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 1000)
         gtrack.create_sparse("source", "src", intervs, 123)
 
@@ -958,290 +167,404 @@ test_that("gtrack.copy works correctly in single db", {
     })
 })
 
-test_that("gtrack.copy works across databases", {
+# ==============================================================================
+# Extract and compute operations across databases
+# ==============================================================================
+
+test_that("gextract works with tracks from working db and loaded datasets", {
     withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 5000)
+        gtrack.create_sparse("working_track", "working", intervs, 10)
 
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("source_track", "source", intervs, 99)
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_track", "dataset", intervs, 20)
 
-        # Connect to both, GWD defaults to db2 (last)
-        gsetroot(c("db1", "db2"))
+        gsetroot("working_db")
+        gdataset.load("dataset1")
 
-        # Copy track - new track should go to db2 (current GWD)
-        gtrack.copy("source_track", "copied_track")
+        # Extract from both tracks in single call
+        result <- gextract(c("working_track", "ds_track"), gintervals(1, 0, 1000), iterator = 100)
 
-        expect_true(gtrack.exists("source_track"))
-        expect_true(gtrack.exists("copied_track"))
-
-        # Source stays in db1, copy goes to db2
-        expect_equal(gtrack.db("source_track"), normalizePath("db1"))
-        expect_equal(gtrack.db("copied_track"), normalizePath("db2"))
-
-        # Values should match
-        expect_equal(
-            gextract("source_track", gintervals(1, 0, 500))$source_track[1],
-            gextract("copied_track", gintervals(1, 0, 500))$copied_track[1]
-        )
+        expect_true("working_track" %in% names(result))
+        expect_true("ds_track" %in% names(result))
+        expect_equal(result$working_track[1], 10)
+        expect_equal(result$ds_track[1], 20)
     })
 })
 
-test_that("gtrack.copy fails when source doesn't exist", {
+test_that("track expressions work across databases", {
     withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 5000)
+        gtrack.create_sparse("x", "working", intervs, 10)
 
-        expect_error(gtrack.copy("nonexistent", "copy"), "does not exist")
-    })
-})
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("y", "dataset", intervs, 3)
 
-test_that("gtrack.copy fails when destination already exists", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        gsetroot("db1")
+        gsetroot("working_db")
+        gdataset.load("dataset1")
 
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("track1", "t1", intervs, 1)
-        gtrack.create_sparse("track2", "t2", intervs, 2)
-
-        expect_error(gtrack.copy("track1", "track2"), "already exists")
-    })
-})
-
-test_that("creating track in multi-db goes to correct database", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("source_track", "source", intervs, 99)
-
-        # Connect to both, GWD defaults to db2 (last)
-        gsetroot(c("db1", "db2"))
-
-        # Create new track - should go to db2 (current GWD)
-        gtrack.create_sparse("new_track", "new", intervs, 77)
-        gdb.reload()
-
-        expect_true(gtrack.exists("source_track"))
-        expect_true(gtrack.exists("new_track"))
-
-        # Source stays in db1, new track goes to db2
-        expect_equal(gtrack.db("source_track"), normalizePath("db1"))
-        expect_equal(gtrack.db("new_track"), normalizePath("db2"))
-    })
-})
-
-test_that("gintervals operations work across databases", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
-        int1 <- gintervals(1, 0, 1000)
-        gintervals.save("db1_intervals", int1)
-
-        gsetroot("db2")
-        int2 <- gintervals(1, 500, 1500)
-        gintervals.save("db2_intervals", int2)
-
-        gsetroot(c("db1", "db2"))
-
-        # Both interval sets should be visible
-        all_intervals <- gintervals.ls()
-        expect_true("db1_intervals" %in% all_intervals)
-        expect_true("db2_intervals" %in% all_intervals)
-
-        # Load using gintervals (not gintervals.load which requires specific format)
-        # Verify the intervals exist and can be used
-        expect_equal(gintervals.db("db1_intervals"), normalizePath("db1"))
-        expect_equal(gintervals.db("db2_intervals"), normalizePath("db2"))
-
-        # Operations between intervals from different dbs using constructed intervals
-        union_result <- gintervals.union(int1, int2)
-        expect_equal(nrow(union_result), 1) # Should merge into one interval
-        expect_equal(union_result$start[1], 0)
-        expect_equal(union_result$end[1], 1500)
+        # Expression using tracks from different databases
+        result <- gextract("x + y", gintervals(1, 0, 1000), iterator = 100)
+        expect_equal(result[["x + y"]][1], 13)
     })
 })
 
 test_that("gscreen works with tracks from different databases", {
     withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 5000)
-        gtrack.create_sparse("db1_track", "db1", intervs, 10)
+        gtrack.create_sparse("working_track", "working", intervs, 10)
 
-        gsetroot("db2")
-        gtrack.create_sparse("db2_track", "db2", intervs, 5)
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_track", "dataset", intervs, 5)
 
-        gsetroot(c("db1", "db2"))
+        gsetroot("working_db")
+        gdataset.load("dataset1")
 
-        # Screen using track from db1
-        result1 <- gscreen("db1_track > 5", gintervals(1, 0, 1000))
+        # Screen using track from working db
+        result1 <- gscreen("working_track > 5", gintervals(1, 0, 1000))
         expect_true(nrow(result1) > 0)
 
-        # Screen using track from db2
-        result2 <- gscreen("db2_track > 3", gintervals(1, 0, 1000))
+        # Screen using track from dataset
+        result2 <- gscreen("ds_track > 3", gintervals(1, 0, 1000))
         expect_true(nrow(result2) > 0)
 
-        # Screen using expression combining both (with explicit iterator since multiple sparse tracks)
-        result3 <- gscreen("db1_track + db2_track > 10", gintervals(1, 0, 1000), iterator = 100)
+        # Screen using expression combining both
+        result3 <- gscreen("working_track + ds_track > 10", gintervals(1, 0, 1000), iterator = 100)
         expect_true(nrow(result3) > 0)
     })
 })
 
 test_that("gsummary works with tracks from different databases", {
     withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 5000)
-        gtrack.create_sparse("db1_track", "db1", intervs, 10)
+        gtrack.create_sparse("working_track", "working", intervs, 10)
 
-        gsetroot("db2")
-        gtrack.create_sparse("db2_track", "db2", intervs, 5)
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_track", "dataset", intervs, 5)
 
-        gsetroot(c("db1", "db2"))
+        gsetroot("working_db")
+        gdataset.load("dataset1")
 
-        # Summary of track from db1 (sparse track sums values, not value*length)
-        sum1 <- gsummary("db1_track", gintervals(1, 0, 1000))
-        expect_equal(sum1[["Sum"]], 10) # single sparse value
+        # Summary of track from working db
+        sum1 <- gsummary("working_track", gintervals(1, 0, 1000))
+        expect_equal(sum1[["Sum"]], 10)
 
-        # Summary of track from db2
-        sum2 <- gsummary("db2_track", gintervals(1, 0, 1000))
+        # Summary of track from dataset
+        sum2 <- gsummary("ds_track", gintervals(1, 0, 1000))
         expect_equal(sum2[["Sum"]], 5)
     })
 })
 
-test_that("gdb.reload correctly refreshes multi-db state", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
+# ==============================================================================
+# Virtual tracks across databases
+# ==============================================================================
 
-        gsetroot("db1")
+test_that("virtual tracks can reference tracks from any database", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 5000)
+        gtrack.create_sparse("working_track", "working", intervs, 10)
+
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_track", "dataset", intervs, 20)
+
+        gsetroot("working_db")
+        gdataset.load("dataset1")
+
+        gvtrack.create("vt_working", "working_track", "avg")
+        gvtrack.create("vt_ds", "ds_track", "avg")
+        withr::defer({
+            gvtrack.rm("vt_working")
+            gvtrack.rm("vt_ds")
+        })
+
+        result1 <- gextract("vt_working", gintervals(1, 0, 1000))
+        result2 <- gextract("vt_ds", gintervals(1, 0, 1000))
+
+        expect_equal(result1$vt_working[1], 10)
+        expect_equal(result2$vt_ds[1], 20)
+    })
+})
+
+test_that("virtual tracks remain global across database operations", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("base_track", "base", intervs, 1)
+
+        create_test_db("dataset1")
+
+        # Create virtual track
+        gvtrack.create("vtrack", "base_track", "avg")
+        withr::defer(gvtrack.rm("vtrack"))
+
+        # Load dataset
+        gdataset.load("dataset1")
+
+        # Virtual track should still be accessible
+        expect_true("vtrack" %in% gvtrack.ls())
+    })
+})
+
+# ==============================================================================
+# Interval operations across databases
+# ==============================================================================
+
+test_that("gintervals operations work across databases", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        int1 <- gintervals(1, 0, 1000)
+        gintervals.save("working_intervals", int1)
+
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        int2 <- gintervals(1, 500, 1500)
+        gintervals.save("ds_intervals", int2)
+
+        gsetroot("working_db")
+        gdataset.load("dataset1")
+
+        # Both interval sets should be visible
+        all_intervals <- gintervals.ls()
+        expect_true("working_intervals" %in% all_intervals)
+        expect_true("ds_intervals" %in% all_intervals)
+
+        # Verify the intervals exist and can be looked up
+        expect_equal(gintervals.dataset("working_intervals"), normalizePath("working_db"))
+        expect_equal(gintervals.dataset("ds_intervals"), normalizePath("dataset1"))
+    })
+})
+
+# ==============================================================================
+# Database reload behavior
+# ==============================================================================
+
+test_that("gdb.reload correctly refreshes state with loaded datasets", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 1000)
         gtrack.create_sparse("track1", "t1", intervs, 1)
 
-        gsetroot(c("db1", "db2"))
-        expect_equal(length(gtrack.ls()), 1)
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_track1", "ds1", intervs, 2)
 
-        # Manually create a track in db2 without using misha
-        dir.create(file.path("db2", "tracks", "manual_track.track"), recursive = TRUE)
-        writeLines("sparse", file.path("db2", "tracks", "manual_track.track", "type"))
+        gsetroot("working_db")
+        gdataset.load("dataset1")
 
-        # Before reload, track not visible
-        expect_false("manual_track" %in% gtrack.ls())
+        expect_equal(length(gtrack.ls()), 2)
 
-        # After reload with rescan, track should appear
+        # Reload should preserve loaded datasets
         gdb.reload(rescan = TRUE)
 
-        # Note: The manually created track may not be valid, but this tests the reload mechanism
+        expect_equal(length(gtrack.ls()), 2)
+        expect_true("track1" %in% gtrack.ls())
+        expect_true("ds_track1" %in% gtrack.ls())
     })
 })
 
-test_that("connecting to non-unique databases fails gracefully", {
+# ==============================================================================
+# Track attributes across databases
+# ==============================================================================
+
+test_that("track attributes work across databases", {
     withr::with_tempdir({
-        create_test_db("db1")
-
-        abs_path <- normalizePath("db1")
-
-        expect_error(
-            gsetroot(c(abs_path, abs_path)),
-            "directories should differ"
-        )
-    })
-})
-
-test_that("gtrack.info works correctly for tracks in different databases", {
-    withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("sparse_in_db1", "sparse track", intervs, 1)
+        gtrack.create_sparse("working_track", "track in working db", intervs, 1)
+        gtrack.attr.set("working_track", "custom_attr", "working_value")
 
-        gsetroot("db2")
-        # Create another sparse track in db2
-        gtrack.create_sparse("sparse_in_db2", "sparse track 2", intervs, 2)
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("ds_track", "track in dataset", intervs, 2)
+        gtrack.attr.set("ds_track", "custom_attr", "ds_value")
 
-        gsetroot(c("db1", "db2"))
+        gsetroot("working_db")
+        gdataset.load("dataset1")
 
-        # Info should work for both
-        info1 <- gtrack.info("sparse_in_db1")
-        info2 <- gtrack.info("sparse_in_db2")
-
-        expect_equal(info1$type, "sparse")
-        expect_equal(info2$type, "sparse")
+        # Should read attributes from both databases
+        expect_equal(gtrack.attr.get("working_track", "custom_attr"), "working_value")
+        expect_equal(gtrack.attr.get("ds_track", "custom_attr"), "ds_value")
     })
 })
 
-test_that("gdb.summary track counts are accurate with overlapping tracks", {
+# ==============================================================================
+# Multiple datasets
+# ==============================================================================
+
+test_that("three or more datasets can be loaded", {
     withr::with_tempdir({
-        create_test_db("db1")
-        create_test_db("db2")
-
-        gsetroot("db1")
+        create_test_db("working_db")
+        gsetroot("working_db")
         intervs <- gintervals(1, 0, 1000)
-        gtrack.create_sparse("unique_db1", "db1", intervs, 1)
-        gtrack.create_sparse("shared", "shared from db1", intervs, 10)
+        gtrack.create_sparse("track_a", "from working db", intervs, 1)
 
-        gsetroot("db2")
-        gtrack.create_sparse("unique_db2", "db2", intervs, 2)
-        gtrack.create_sparse("shared", "shared from db2", intervs, 20)
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("track_b", "from ds1", intervs, 2)
 
-        gsetroot(c("db1", "db2"))
+        create_test_db("dataset2")
+        gsetroot("dataset2")
+        gtrack.create_sparse("track_c", "from ds2", intervs, 3)
 
-        info <- gdb.summary()
+        create_test_db("dataset3")
+        gsetroot("dataset3")
+        gtrack.create_sparse("track_d", "from ds3", intervs, 4)
 
-        # db1 should have 1 track (unique_db1, shared is overridden)
-        expect_equal(info$tracks[1], 1)
-        # db2 should have 2 tracks (unique_db2 + shared)
-        expect_equal(info$tracks[2], 2)
+        # Connect working db + three datasets
+        gsetroot("working_db")
+        gdataset.load("dataset1")
+        gdataset.load("dataset2")
+        gdataset.load("dataset3")
+
+        expect_equal(length(gdataset.ls()), 4)
+        expect_equal(length(gtrack.ls()), 4)
+
+        # Verify each track resolves to correct db
+        expect_equal(gtrack.dataset("track_a"), normalizePath("working_db"))
+        expect_equal(gtrack.dataset("track_b"), normalizePath("dataset1"))
+        expect_equal(gtrack.dataset("track_c"), normalizePath("dataset2"))
+        expect_equal(gtrack.dataset("track_d"), normalizePath("dataset3"))
+    })
+})
+
+test_that("empty dataset in chain works", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("track1", "working", intervs, 1)
+
+        create_test_db("empty_dataset")
+        # empty_dataset has no tracks
+
+        create_test_db("dataset2")
+        gsetroot("dataset2")
+        gtrack.create_sparse("track2", "ds2", intervs, 2)
+
+        gsetroot("working_db")
+        gdataset.load("empty_dataset")
+        gdataset.load("dataset2")
+
+        expect_equal(length(gdataset.ls()), 3)
+        tracks <- gtrack.ls()
+        expect_equal(length(tracks), 2)
+        expect_true("track1" %in% tracks)
+        expect_true("track2" %in% tracks)
+    })
+})
+
+# ==============================================================================
+# Collision handling
+# ==============================================================================
+
+test_that("deletion of overriding track in working db still shows working db", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("shared", "from working db", intervs, 100)
+
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("shared", "from dataset", intervs, 200)
+
+        gsetroot("working_db")
+        gdataset.load("dataset1", force = TRUE)
+
+        # Working db wins, so value should be 100
+        expect_equal(gextract("shared", gintervals(1, 0, 500))$shared[1], 100)
+        expect_equal(gtrack.dataset("shared"), normalizePath("working_db"))
+
+        # Delete from working db
+        gtrack.rm("shared", force = TRUE)
+        gdb.reload()
+
+        # Now dataset1 should be visible
+        expect_true(gtrack.exists("shared"))
+        expect_equal(gtrack.dataset("shared"), normalizePath("dataset1"))
+        expect_equal(gextract("shared", gintervals(1, 0, 500))$shared[1], 200)
+    })
+})
+
+test_that("gdataset.ls(dataframe=TRUE) tracks counts are accurate with overlapping tracks", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("unique_working", "working", intervs, 1)
+        gtrack.create_sparse("shared", "shared from working", intervs, 10)
+
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("unique_ds", "ds", intervs, 2)
+        gtrack.create_sparse("shared", "shared from ds", intervs, 20)
+
+        gsetroot("working_db")
+        gdataset.load("dataset1", force = TRUE)
+
+        info <- gdataset.ls(dataframe = TRUE)
+
+        # Working db should have 2 visible tracks (unique_working + shared)
+        # because working db wins for collision
+        expect_equal(info$tracks_visible[1], 2)
+
+        # Dataset1 should have 1 visible track (unique_ds only, shared is shadowed)
+        expect_equal(info$tracks_visible[2], 1)
 
         # Total visible tracks should be 3
         expect_equal(length(gtrack.ls()), 3)
     })
 })
 
-test_that("connecting fails when seq directory is missing for indexed db", {
+# ==============================================================================
+# Path handling
+# ==============================================================================
+
+test_that("absolute and relative paths work correctly", {
     withr::with_tempdir({
-        # Create incomplete database (missing seq for indexed db)
-        # For per-chromosome dbs, seq is checked lazily, so we test indexed format
-        dir.create("incomplete_db/tracks", recursive = TRUE)
-        write.table(
-            data.frame(chrom = "chr1", size = 1000),
-            "incomplete_db/chrom_sizes.txt",
-            sep = "\t", row.names = FALSE, col.names = FALSE
-        )
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("track1", "t1", intervs, 1)
 
-        # Create seq dir with invalid genome.idx (indexed format requires validation)
-        dir.create("incomplete_db/seq", recursive = TRUE)
-        writeLines("invalid", "incomplete_db/seq/genome.idx")
+        create_test_db("dataset1")
+        gsetroot("dataset1")
+        gtrack.create_sparse("track2", "t2", intervs, 2)
 
-        expect_error(gsetroot("incomplete_db"))
+        gsetroot("working_db")
+
+        # Mix absolute and relative paths
+        abs_path <- normalizePath("dataset1")
+        gdataset.load(abs_path)
+
+        expect_equal(length(gtrack.ls()), 2)
+        expect_true(gtrack.exists("track1"))
+        expect_true(gtrack.exists("track2"))
     })
 })
 
-test_that("connecting fails when chrom_sizes.txt is missing", {
-    withr::with_tempdir({
-        # Create incomplete database (missing chrom_sizes.txt)
-        dir.create("incomplete_db/tracks", recursive = TRUE)
-        dir.create("incomplete_db/seq", recursive = TRUE)
-
-        expect_error(
-            gsetroot("incomplete_db"),
-            "does not contain a chrom_sizes.txt file"
-        )
-    })
-})
+# ==============================================================================
+# Error handling
+# ==============================================================================
 
 test_that("gsetroot gives clear error when directory doesn't exist", {
     expect_error(
@@ -1253,6 +576,9 @@ test_that("gsetroot gives clear error when directory doesn't exist", {
 test_that("gsetroot gives clear error when tracks/ subdirectory is missing", {
     withr::with_tempdir({
         dir.create("not_a_db/seq", recursive = TRUE)
+        write.table(data.frame(chrom = "chr1", size = 1000), "not_a_db/chrom_sizes.txt",
+            sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
+        )
 
         expect_error(
             gsetroot("not_a_db"),
@@ -1264,6 +590,9 @@ test_that("gsetroot gives clear error when tracks/ subdirectory is missing", {
 test_that("gsetroot gives clear error when seq/ subdirectory is missing", {
     withr::with_tempdir({
         dir.create("not_a_db/tracks", recursive = TRUE)
+        write.table(data.frame(chrom = "chr1", size = 1000), "not_a_db/chrom_sizes.txt",
+            sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
+        )
 
         expect_error(
             gsetroot("not_a_db"),
@@ -1272,17 +601,14 @@ test_that("gsetroot gives clear error when seq/ subdirectory is missing", {
     })
 })
 
-test_that("gsetroot validates all databases in multi-db setup", {
+test_that("gsetroot gives clear error when chrom_sizes.txt is missing", {
     withr::with_tempdir({
-        create_test_db("db1")
-
-        # Create incomplete second database
-        dir.create("db2/tracks", recursive = TRUE)
-        # Missing seq/
+        dir.create("not_a_db/tracks", recursive = TRUE)
+        dir.create("not_a_db/seq", recursive = TRUE)
 
         expect_error(
-            gsetroot(c("db1", "db2")),
-            "does not contain a 'seq' subdirectory"
+            gsetroot("not_a_db"),
+            "does not contain a chrom_sizes.txt file"
         )
     })
 })
@@ -1295,7 +621,7 @@ test_that("gsetroot detects when user passes database path as dir parameter", {
         # Common mistake: passing second database as 'dir' parameter
         expect_error(
             gsetroot("db1", "db2"),
-            "looks like a misha database path.*To connect multiple databases, use: gsetroot\\(c\\("
+            "looks like a misha database path.*To connect multiple databases, use.*gdataset\\.load"
         )
     })
 })

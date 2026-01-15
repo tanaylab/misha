@@ -16,11 +16,12 @@
 }
 
 .gdb.resolve_db_for_path <- function(path) {
-    groots <- get("GROOTS", envir = .misha)
-    if (is.null(groots)) {
-        groots <- get("GROOT", envir = .misha)
-    }
-    if (is.null(groots)) {
+    groot <- get("GROOT", envir = .misha)
+    gdatasets <- get("GDATASETS", envir = .misha)
+    if (is.null(gdatasets)) gdatasets <- character(0)
+    groots <- c(groot, gdatasets)
+
+    if (length(groots) == 0 || is.null(groot)) {
         return(NULL)
     }
 
@@ -34,21 +35,52 @@
 }
 
 .gdb.resolve_track_db <- function(track) {
-    groots <- get("GROOTS", envir = .misha)
-    if (is.null(groots)) {
-        groots <- get("GROOT", envir = .misha)
-    }
-    if (is.null(groots)) {
+    groot <- get("GROOT", envir = .misha)
+    gdatasets <- get("GDATASETS", envir = .misha)
+    if (is.null(gdatasets)) gdatasets <- character(0)
+    groots <- c(groot, gdatasets)
+
+    if (length(groots) == 0 || is.null(groot)) {
         return(NULL)
     }
 
     rel_path <- paste0(gsub("\\.", "/", track), ".track")
-    for (groot in rev(groots)) {
-        if (file.exists(file.path(groot, "tracks", rel_path))) {
-            return(groot)
+    # Working db first (wins), then datasets in load order
+    for (g in groots) {
+        if (file.exists(file.path(g, "tracks", rel_path))) {
+            return(g)
         }
     }
     NULL
+}
+
+.gdb.ensure_dataset_maps <- function() {
+    .gcheckroot()
+
+    groot <- get("GROOT", envir = .misha)
+    tracks <- get("GTRACKS", envir = .misha)
+    intervals <- get("GINTERVS", envir = .misha)
+
+    track_db <- get("GTRACK_DATASET", envir = .misha)
+    intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
+
+    if (is.null(track_db)) {
+        track_db <- character(0)
+        if (length(tracks)) {
+            track_db[tracks] <- groot
+        }
+        assign("GTRACK_DATASET", track_db, envir = .misha)
+    }
+
+    if (is.null(intervals_db)) {
+        intervals_db <- character(0)
+        if (length(intervals)) {
+            intervals_db[intervals] <- groot
+        }
+        assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
+    }
+
+    invisible(TRUE)
 }
 
 .gdb.add_track <- function(track, db = NULL) {
@@ -91,28 +123,12 @@
             }
         }
 
-        track_db <- get("GTRACK_DB", envir = .misha)
+        track_db <- get("GTRACK_DATASET", envir = .misha)
         if (is.null(track_db)) {
-            track_db <- list()
+            track_db <- character(0)
         }
         track_db[[track]] <- db
-        assign("GTRACK_DB", track_db, envir = .misha)
-
-        track_dbs <- get("GTRACK_DBS", envir = .misha)
-        if (is.null(track_dbs)) {
-            track_dbs <- list()
-        }
-        existing_dbs <- track_dbs[[track]]
-        if (is.null(existing_dbs)) {
-            existing_dbs <- character(0)
-        }
-        all_dbs <- unique(c(existing_dbs, db))
-        groots <- get("GROOTS", envir = .misha)
-        if (!is.null(groots)) {
-            all_dbs <- groots[groots %in% all_dbs]
-        }
-        track_dbs[[track]] <- all_dbs
-        assign("GTRACK_DBS", track_dbs, envir = .misha)
+        assign("GTRACK_DATASET", track_db, envir = .misha)
 
         .gdb.cache_update_lists(db)
     }
@@ -175,41 +191,25 @@
         new_db <- .gdb.resolve_track_db(track)
 
         tracks <- get("GTRACKS", envir = .misha)
-        track_db <- get("GTRACK_DB", envir = .misha)
+        track_db <- get("GTRACK_DATASET", envir = .misha)
 
         if (is.null(new_db)) {
             tracks <- tracks[tracks != track]
             if (!is.null(track_db) && track %in% names(track_db)) {
-                track_db[[track]] <- NULL
+                track_db <- track_db[names(track_db) != track]
             }
         } else {
             if (!(track %in% tracks)) {
                 tracks <- sort(c(tracks, track))
             }
             if (is.null(track_db)) {
-                track_db <- list()
+                track_db <- character(0)
             }
             track_db[[track]] <- new_db
         }
 
         assign("GTRACKS", tracks, envir = .misha)
-        assign("GTRACK_DB", track_db, envir = .misha)
-
-        track_dbs <- get("GTRACK_DBS", envir = .misha)
-        if (!is.null(track_dbs) && track %in% names(track_dbs)) {
-            if (!is.null(db)) {
-                track_dbs[[track]] <- setdiff(track_dbs[[track]], db)
-            }
-            if (length(track_dbs[[track]]) == 0) {
-                track_dbs[[track]] <- NULL
-            } else {
-                groots <- get("GROOTS", envir = .misha)
-                if (!is.null(groots)) {
-                    track_dbs[[track]] <- groots[groots %in% track_dbs[[track]]]
-                }
-            }
-            assign("GTRACK_DBS", track_dbs, envir = .misha)
-        }
+        assign("GTRACK_DATASET", track_db, envir = .misha)
 
         .gdb.cache_update_lists(db)
         if (!is.null(new_db) && new_db != db) {
@@ -246,12 +246,12 @@
             db <- get("GROOT", envir = .misha)
         }
 
-        intervals_db <- get("GINTERVALS_DB", envir = .misha)
+        intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
         if (is.null(intervals_db)) {
-            intervals_db <- list()
+            intervals_db <- character(0)
         }
         intervals_db[[intervals.set]] <- db
-        assign("GINTERVALS_DB", intervals_db, envir = .misha)
+        assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
 
         .gdb.cache_update_lists(db)
     }
@@ -279,10 +279,10 @@
         intervals <- intervals[intervals != intervals.set]
         assign("GINTERVS", intervals, envir = .misha)
 
-        intervals_db <- get("GINTERVALS_DB", envir = .misha)
+        intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
         if (!is.null(intervals_db) && intervals.set %in% names(intervals_db)) {
-            intervals_db[[intervals.set]] <- NULL
-            assign("GINTERVALS_DB", intervals_db, envir = .misha)
+            intervals_db <- intervals_db[names(intervals_db) != intervals.set]
+            assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
         }
 
         .gdb.cache_update_lists(db)

@@ -38,103 +38,149 @@ A valid Genomic Database should contain the following files and subdirectories:
 
 `pssms` and `seq` directories are optional and are required only by a subset of functions in the package.
 
-### Multi-Database Support
+### Dataset API
 
-The `misha` package supports connecting to multiple Genomic Databases simultaneously. This is useful when you want to combine a shared read-only reference database with a user-specific database for custom tracks, or when working with multiple data sources that share the same genome.
+The `misha` package supports working with multiple data sources through the Dataset API. This is useful when you want to combine a shared read-only reference database with a user-specific database for custom tracks, or when working with multiple data sources that share the same genome.
 
-#### Connecting to Multiple Databases
+#### Working Database vs Datasets
 
-To connect to multiple databases, pass a vector of paths to `gsetroot()`:
+The Dataset API distinguishes between:
+
+1. **Working Database**: Set via `gsetroot()`, this is your primary, writable database where new tracks and intervals are created.
+2. **Loaded Datasets**: Added via `gdataset.load()`, these are read-only data sources that provide additional tracks and intervals.
 
 ```{r, eval=FALSE}
-# Connect to a shared database and a user-specific database
-gsetroot(c("/shared/reference_db", "~/my_tracks_db"))
+# Set your working database
+gsetroot("/data/my_project")
 
-# List connected databases
-gdb.ls()
+# Load additional datasets
+gdataset.load("/shared/ucsc_annotations")
+gdataset.load("/shared/encode_chipseq")
 
-# Get summary information about each database
-gdb.summary()
+# List all sources (working db + loaded datasets)
+gdataset.ls()
+
+# Get detailed information
+gdataset.ls(dataframe = TRUE)
 ```
 
 **Key Points:**
-- All databases must have identical `chrom_sizes.txt` files (same genome assembly)
-- The first database is used for `seq/` and `chrom_sizes.txt` access
-- Tracks and intervals are aggregated from all databases
-- New tracks are created in the last database by default (the current working directory)
+- All sources must have identical `chrom_sizes.txt` files (same genome assembly)
+- The working database is used for `seq/` and `chrom_sizes.txt` access
+- Tracks and intervals are aggregated from all sources
+- New tracks are created in the working database only
 
-#### Track Resolution: "Last Wins"
+#### Track Resolution and Collision Handling
 
-When the same track name exists in multiple databases, the version from the **last** database in the connection list takes precedence. This "last wins" semantics allows user databases to override tracks from shared reference databases:
+By default, loading a dataset with tracks that already exist will error:
 
 ```{r, eval=FALSE}
-# shared_db has track "annotations"
-# user_db also has track "annotations"
-gsetroot(c("shared_db", "user_db"))
+# If working_db has "my_track" and dataset1 also has "my_track":
+gdataset.load("dataset1")
+# Error: Cannot load dataset 'dataset1': tracks 'my_track' already exist in working database.
+# Use force=TRUE to override (working db wins).
+```
 
-# This uses the version from user_db (last wins)
-gextract("annotations", gintervals(1, 0, 1000))
+Use `force=TRUE` to allow collisions, with clear precedence rules:
 
-# Check which database a track comes from
-gtrack.db("annotations") # Returns path to user_db
+```{r, eval=FALSE}
+# Working database always wins over datasets
+gdataset.load("dataset1", force = TRUE)
+
+# For dataset-to-dataset collisions, later-loaded wins
+gdataset.load("dataset2", force = TRUE)
+
+# Check which source provides a track
+gtrack.dataset("my_track")
+
+# See all sources where a track exists (for debugging)
+gtrack.dbs("my_track")
 ```
 
 #### Cross-Database Track Expressions
 
-Track expressions can seamlessly combine tracks from different databases:
+Track expressions seamlessly combine tracks from different sources:
 
 ```{r, eval=FALSE}
-# Suppose db1 contains "signal" track and db2 contains "background" track
-gsetroot(c("db1", "db2"))
+gsetroot("/data/my_project")
+gdataset.load("/shared/annotations")
 
-# Extract tracks from different databases in a single call
-result <- gextract(c("signal", "background"), gintervals(1, 0, 10000), iterator = 100)
+# Extract tracks from different sources in a single call
+result <- gextract(c("my_track", "annotation_track"), gintervals(1, 0, 10000), iterator = 100)
 
-# Use track expressions across databases
-normalized <- gextract("signal - background", gintervals(1, 0, 10000), iterator = 100)
+# Use track expressions across sources
+normalized <- gextract("my_track - annotation_track", gintervals(1, 0, 10000), iterator = 100)
 
-# Access track attributes from any database
-gtrack.attr.get("signal", "description") # From db1
-gtrack.attr.get("background", "description") # From db2
+# Access track attributes from any source
+gtrack.attr.get("my_track", "description")
+gtrack.attr.get("annotation_track", "description")
 ```
 
-Virtual tracks can also reference source tracks from any connected database:
+Virtual tracks can reference source tracks from any loaded source:
 
 ```{r, eval=FALSE}
-# Create virtual tracks from different databases
-gvtrack.create("vt_signal", "signal", "avg") # signal is in db1
-gvtrack.create("vt_background", "background", "avg") # background is in db2
+# Create virtual tracks from different sources
+gvtrack.create("vt_signal", "my_track", "avg")
+gvtrack.create("vt_annotation", "annotation_track", "avg")
 
 # Combine them in expressions
-gextract("vt_signal / vt_background", gintervals(1, 0, 10000))
+gextract("vt_signal / vt_annotation", gintervals(1, 0, 10000))
 ```
 
 #### Querying Track and Interval Sources
 
-Use `gtrack.db()`, `gtrack.dbs()`, and `gintervals.db()` to find which database contains a track or interval set:
+Use `gtrack.dataset()`, `gtrack.dbs()`, and `gintervals.dataset()` to find which source contains a track or interval set:
 
 ```{r, eval=FALSE}
-# Single track
-gtrack.db("my_track")
+# Single track - returns source path
+gtrack.dataset("my_track")
 
-# All databases containing a track
+# All sources containing a track (useful for debugging shadowed tracks)
 gtrack.dbs("my_track")
 
 # Multiple tracks (vectorized)
-gtrack.db(c("track1", "track2", "track3"))
+gtrack.dataset(c("track1", "track2", "track3"))
 
 # Intervals
-gintervals.db("my_intervals")
+gintervals.dataset("my_intervals")
+gintervals.dbs("my_intervals")
 ```
 
-Filter track and interval listings by database:
+Filter track and interval listings by source:
 
 ```{r, eval=FALSE}
-# List tracks from a specific database only
-gtrack.ls(db = "/shared/reference_db")
+# List tracks from a specific source only
+gtrack.ls(db = "/shared/annotations")
 
-# List intervals from user database
-gintervals.ls(db = "~/my_tracks_db")
+# List intervals from working database
+gintervals.ls(db = "/data/my_project")
+```
+
+#### Creating and Sharing Datasets
+
+Use `gdataset.save()` to create a dataset from selected tracks and intervals:
+
+```{r, eval=FALSE}
+gsetroot("/data/my_project")
+
+# Create a dataset with selected tracks and intervals
+gdataset.save(
+    path = "/shared/my_chipseq_dataset",
+    description = "ChIP-seq tracks for H3K4me3 and H3K27ac",
+    tracks = gtrack.ls("chip_"), # Pattern matching
+    intervals = c("peaks_h3k4me3", "peaks_h3k27ac")
+)
+
+# Options:
+# - symlinks = TRUE: Create symlinks instead of copying (saves space)
+# - copy_seq = TRUE: Copy seq/ directory instead of symlinking
+```
+
+Get information about a dataset:
+
+```{r, eval=FALSE}
+gdataset.info("/shared/my_chipseq_dataset")
+# Returns: description, author, created date, track/interval counts, genome hash
 ```
 
 #### Creating a Linked Database
@@ -145,43 +191,49 @@ Use `gdb.create_linked()` to create a lightweight database that links to a paren
 # Create linked database with symlinks to parent's seq and chrom_sizes
 gdb.create_linked("~/my_db", parent = "/shared/hg38")
 
-# Connect to both
-gsetroot(c("/shared/hg38", "~/my_db"))
+# Use as your working database
+gsetroot("~/my_db")
 
-# Create tracks in the linked database
+# Load datasets from the parent
+gdataset.load("/shared/hg38")
+
+# Create your own tracks
 gtrack.create("my_analysis", "Analysis results", "reference_track * 2")
 ```
 
 This avoids duplicating large sequence files while allowing you to maintain your own tracks.
 
-#### Write Protection
+#### Unloading Datasets
 
-Write protection is handled at the OS filesystem level. When attempting to modify a read-only database, `misha` provides clear error messages:
-
-```{r, eval=FALSE}
-# If /shared/reference_db is read-only at the filesystem level:
-gtrack.rm("shared_track", force = TRUE)
-# Error: Cannot write to read-only database: /shared/reference_db
-```
-
-To protect a database, set appropriate filesystem permissions:
-```bash
-# Make the reference database read-only
-chmod -R a-w /shared/reference_db/tracks
-```
-
-#### Virtual Tracks in Multi-Database Mode
-
-Virtual tracks remain global and are not tied to any specific database. They can reference tracks from any connected database:
+Remove loaded datasets from the namespace:
 
 ```{r, eval=FALSE}
-gsetroot(c("db1", "db2"))
+# Unload a dataset (tracks/intervals become unavailable)
+gdataset.unload("/shared/annotations")
 
-# Create virtual track referencing track from db1
-gvtrack.create("vt1", "track_from_db1", "avg")
+# Safe to call even if not loaded (no error by default)
+gdataset.unload("/nonexistent/path")
 
-# Create virtual track referencing track from db2
-gvtrack.create("vt2", "track_from_db2", "max")
+# Error if validate=TRUE and not loaded
+gdataset.unload("/nonexistent/path", validate = TRUE)
+# Error: Dataset '/nonexistent/path' is not loaded
+```
+
+When unloading datasets that had track collisions (loaded with `force=TRUE`), shadowed tracks are restored with proper precedence: working database first, then datasets in load order.
+
+#### Virtual Tracks Across Sources
+
+Virtual tracks remain global and are not tied to any specific source. They can reference tracks from any loaded source:
+
+```{r, eval=FALSE}
+gsetroot("/data/my_project")
+gdataset.load("/shared/annotations")
+
+# Create virtual track referencing track from working db
+gvtrack.create("vt1", "my_local_track", "avg")
+
+# Create virtual track referencing track from dataset
+gvtrack.create("vt2", "annotation_track", "max")
 
 # Use both in same expression
 gextract("vt1 + vt2", gintervals(1, 0, 10000))

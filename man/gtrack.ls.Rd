@@ -69,7 +69,7 @@ gtrack.ls("den*", created.by = "track")
 }
 \seealso{
 \code{\link{grep}}, \code{\link{gtrack.exists}},
-\code{\link{gtrack.create}}, \code{\link{gtrack.rm}}, \code{\link{gtrack.db}}
+\code{\link{gtrack.create}}, \code{\link{gtrack.rm}}, \code{\link{gtrack.dataset}}
 }
 \keyword{~intervals}
 \keyword{~ls}
