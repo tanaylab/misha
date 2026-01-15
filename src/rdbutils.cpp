@@ -830,24 +830,33 @@ const char *rdb::get_glib_dir(SEXP envir)
     return CHAR(STRING_ELT(glibdir, 0));
 }
 
-// Look up a name in a database mapping (named list: name -> db_path).
+// Look up a name in a database mapping (named character vector: name -> db_path).
 // Returns db_path/tracks if found, empty string otherwise.
 static string lookup_db_path(SEXP db_mapping, const string &name)
 {
-    if (db_mapping == R_NilValue || Rf_isNull(db_mapping))
+    if (db_mapping == R_NilValue || Rf_isNull(db_mapping) || db_mapping == R_UnboundValue) {
         return "";
+    }
 
     SEXP names = Rf_getAttrib(db_mapping, R_NamesSymbol);
-    if (names == R_NilValue)
+    if (names == R_NilValue) {
         return "";
+    }
 
-    SEXP name_sexp = PROTECT(Rf_mkString(name.c_str()));
-    SEXP idx = PROTECT(Rf_match(name_sexp, names, 0));
-    int pos = INTEGER(idx)[0] - 1;
-    UNPROTECT(2);
+    // Find the position of name in the names vector using simple loop
+    // This is O(n) but n is typically small (number of tracks in datasets)
+    int n = Rf_length(names);
+    int pos = -1;
+    for (int i = 0; i < n; i++) {
+        if (name == CHAR(STRING_ELT(names, i))) {
+            pos = i;
+            break;
+        }
+    }
 
-    if (pos < 0 || pos >= Rf_length(db_mapping))
+    if (pos < 0 || pos >= Rf_length(db_mapping)) {
         return "";
+    }
 
     if (TYPEOF(db_mapping) == VECSXP) {
         SEXP val = VECTOR_ELT(db_mapping, pos);
@@ -869,7 +878,7 @@ string rdb::track2path(SEXP envir, const string &trackname)
 			*i = '/';
 	}
 
-	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GTRACK_DB"), trackname);
+	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GTRACK_DATASET"), trackname);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
 	}
@@ -887,7 +896,7 @@ string rdb::interv2path(SEXP envir, const string &intervname)
 			*i = '/';
 	}
 
-	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GINTERVALS_DB"), intervname);
+	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GINTERVALS_DATASET"), intervname);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
 	}

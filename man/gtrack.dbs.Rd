@@ -21,8 +21,10 @@ A named character vector of database paths for each track. If
 Returns all database paths that contain a version of a track.
 }
 \details{
-When multiple databases are connected, a track can exist in more than one
-database. This function returns all such database paths in connection order.
+When datasets are loaded, a track may exist in multiple locations (working
+database and/or datasets). This function computes on-demand and returns all
+such paths, which is useful for debugging when using \code{force=TRUE} with
+\code{gdataset.load()}.
 }
 \examples{
 \dontshow{
@@ -35,8 +37,8 @@ gtrack.dbs(gtrack.ls(), dataframe = TRUE)
 
 }
 \seealso{
-\code{\link{gtrack.db}}, \code{\link{gtrack.exists}},
-\code{\link{gtrack.ls}}, \code{\link{gdb.ls}}
+\code{\link{gtrack.dataset}}, \code{\link{gtrack.exists}},
+\code{\link{gtrack.ls}}, \code{\link{gdataset.ls}}
 }
 \keyword{~database}
 \keyword{~path}

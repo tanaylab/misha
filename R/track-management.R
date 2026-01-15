@@ -72,34 +72,30 @@ gtrack.path <- function(track = NULL) {
     paths
 }
 
-#' Returns the database path(s) for track(s)
+#' Returns the database/dataset path for a track
 #'
-#' Returns the database path where a track is stored.
+#' Returns the path of the database or dataset containing a track.
 #'
-#' This function returns the database path(s) for one or more tracks. When
-#' multiple databases are connected, each track is resolved to its source
-#' database using "last wins" semantics - if the same track exists in multiple
-#' databases, the last connected database takes precedence.
+#' When datasets are loaded, tracks can come from either the working database
+#' or from loaded datasets. This function returns the source path for each track.
 #'
 #' @param track track name or a vector of track names
-#' @return A character vector containing the database paths for each track.
-#' Returns NA for tracks that don't exist in any connected database.
-#' @seealso \code{\link{gtrack.exists}}, \code{\link{gtrack.path}},
-#' \code{\link{gtrack.ls}}, \code{\link{gdb.ls}}
-#' @keywords ~track ~path ~database
+#' @return Character vector of database/dataset paths. Returns NA for non-existent tracks.
+#' @seealso \code{\link{gtrack.dbs}}, \code{\link{gtrack.exists}},
+#' \code{\link{gtrack.ls}}, \code{\link{gdataset.ls}}
+#' @keywords ~track ~database ~path
 #' @examples
 #' \dontshow{
 #' options(gmax.processes = 2)
 #' }
 #'
 #' gdb.init_examples()
-#' gtrack.db("dense_track")
-#' gtrack.db(c("dense_track", "sparse_track"))
+#' gtrack.dataset("dense_track")
 #'
-#' @export gtrack.db
-gtrack.db <- function(track = NULL) {
+#' @export gtrack.dataset
+gtrack.dataset <- function(track = NULL) {
     if (is.null(substitute(track))) {
-        stop("Usage: gtrack.db(track)", call. = FALSE)
+        stop("Usage: gtrack.dataset(track)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -108,25 +104,24 @@ gtrack.db <- function(track = NULL) {
         return(character(0))
     }
 
-    track_db <- get("GTRACK_DB", envir = .misha)
+    track_db <- get("GTRACK_DATASET", envir = .misha)
     if (is.null(track_db) || length(track_db) == 0) {
-        return(rep(NA_character_, length(trackstr)))
+        tracks <- get("GTRACKS", envir = .misha)
+        groot <- get("GROOT", envir = .misha)
+        return(ifelse(trackstr %in% tracks, groot, NA_character_))
     }
 
-    track_db_vec <- unlist(track_db, use.names = TRUE)
-    if (is.null(track_db_vec) || length(track_db_vec) == 0) {
-        return(rep(NA_character_, length(trackstr)))
-    }
-
-    unname(track_db_vec[trackstr])
+    unname(track_db[trackstr])
 }
 
 #' Returns the database paths that contain track(s)
 #'
 #' Returns all database paths that contain a version of a track.
 #'
-#' When multiple databases are connected, a track can exist in more than one
-#' database. This function returns all such database paths in connection order.
+#' When datasets are loaded, a track may exist in multiple locations (working
+#' database and/or datasets). This function computes on-demand and returns all
+#' such paths, which is useful for debugging when using \code{force=TRUE} with
+#' \code{gdataset.load()}.
 #'
 #' @param track track name or a vector of track names
 #' @param dataframe return a data frame with columns \code{track} and \code{db}
@@ -134,8 +129,8 @@ gtrack.db <- function(track = NULL) {
 #' @return A named character vector of database paths for each track. If
 #' \code{dataframe} is TRUE, returns a data frame with columns \code{track} and
 #' \code{db}, with multiple rows per track when it appears in multiple databases.
-#' @seealso \code{\link{gtrack.db}}, \code{\link{gtrack.exists}},
-#' \code{\link{gtrack.ls}}, \code{\link{gdb.ls}}
+#' @seealso \code{\link{gtrack.dataset}}, \code{\link{gtrack.exists}},
+#' \code{\link{gtrack.ls}}, \code{\link{gdataset.ls}}
 #' @keywords ~track ~database ~path
 #' @examples
 #' \dontshow{
@@ -169,15 +164,23 @@ gtrack.dbs <- function(track = NULL, dataframe = FALSE) {
         return(do.call(rbind, res))
     }
 
-    if (!(trackstr %in% get("GTRACKS", envir = .misha))) {
-        stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
+    # Compute on-demand: scan all databases for this track
+    groot <- get("GROOT", envir = .misha)
+    gdatasets <- get("GDATASETS", envir = .misha)
+    if (is.null(gdatasets)) gdatasets <- character(0)
+    all_dbs <- c(groot, gdatasets)
+
+    rel_path <- paste0(gsub("\\.", "/", trackstr), ".track")
+    dbs <- character(0)
+    for (db in all_dbs) {
+        track_path <- file.path(db, "tracks", rel_path)
+        if (file.exists(track_path)) {
+            dbs <- c(dbs, db)
+        }
     }
 
-    track_dbs <- get("GTRACK_DBS", envir = .misha)
-    if (is.null(track_dbs) || !(trackstr %in% names(track_dbs))) {
-        dbs <- gtrack.db(trackstr)
-    } else {
-        dbs <- track_dbs[[trackstr]]
+    if (length(dbs) == 0) {
+        dbs <- NA_character_
     }
 
     if (!dataframe) {
@@ -254,7 +257,7 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 #' @return An array that contains the names of tracks that match the supplied
 #' patterns.
 #' @seealso \code{\link{grep}}, \code{\link{gtrack.exists}},
-#' \code{\link{gtrack.create}}, \code{\link{gtrack.rm}}, \code{\link{gtrack.db}}
+#' \code{\link{gtrack.create}}, \code{\link{gtrack.rm}}, \code{\link{gtrack.dataset}}
 #' @keywords ~intervals ~ls
 #' @examples
 #' \dontshow{
@@ -293,12 +296,13 @@ gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed =
     # Filter by database if specified
     if (!is.null(db)) {
         db <- normalizePath(db, mustWork = FALSE)
-        track_db <- get("GTRACK_DB", envir = .misha)
+        track_db <- get("GTRACK_DATASET", envir = .misha)
         if (is.null(track_db)) {
-            return(NULL)
+            if (!identical(db, get("GROOT", envir = .misha))) {
+                return(NULL)
+            }
         }
-        track_db_vec <- unlist(track_db, use.names = TRUE)
-        db_by_track <- track_db_vec[tracks]
+        db_by_track <- track_db[tracks]
         tracks <- tracks[!is.na(db_by_track) & db_by_track == db]
         if (length(tracks) == 0) {
             return(NULL)
@@ -514,10 +518,13 @@ gtrack.copy <- function(src = NULL, dest = NULL) {
 
     # Update cache - determine which database the dest is in
     dest_db <- NULL
-    groots <- get("GROOTS", envir = .misha)
-    for (groot in groots) {
-        if (.gpath_is_within(gwd, file.path(groot, "tracks"))) {
-            dest_db <- groot
+    groot <- get("GROOT", envir = .misha)
+    gdatasets <- get("GDATASETS", envir = .misha)
+    if (is.null(gdatasets)) gdatasets <- character(0)
+    groots <- c(groot, gdatasets)
+    for (g in groots) {
+        if (.gpath_is_within(gwd, file.path(g, "tracks"))) {
+            dest_db <- g
             break
         }
     }
@@ -565,11 +572,11 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
     trackname <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     if (!is.null(db)) {
         db <- normalizePath(db, mustWork = FALSE)
-        groots <- get("GROOTS", envir = .misha)
-        if (is.null(groots)) {
-            groots <- get("GROOT", envir = .misha)
-        }
-        if (!is.null(groots) && !(db %in% groots)) {
+        groot <- get("GROOT", envir = .misha)
+        gdatasets <- get("GDATASETS", envir = .misha)
+        if (is.null(gdatasets)) gdatasets <- character(0)
+        groots <- c(groot, gdatasets)
+        if (!(db %in% groots)) {
             stop(sprintf("Database %s is not connected", db), call. = FALSE)
         }
         dirname <- file.path(db, "tracks", paste0(gsub("\\.", "/", trackname), ".track"))

@@ -34,7 +34,7 @@ gsetroot(c("/shared/genomics/hg38", "~/my_tracks"))
 
 }
 \seealso{
-\code{\link{gsetroot}}, \code{\link{gdb.create}}, \code{\link{gdb.ls}}
+\code{\link{gsetroot}}, \code{\link{gdb.create}}, \code{\link{gdataset.ls}}
 }
 \keyword{~create}
 \keyword{~database}
