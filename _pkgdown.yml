@@ -20,7 +20,7 @@ reference:
       - gtrack.create_dense
       - gtrack.create_dirs
       - gtrack.dbs
-      - gtrack.db
+      - gtrack.dataset
       - gtrack.exists
       - gtrack.import
       - gtrack.import_mappedseq
@@ -64,7 +64,8 @@ reference:
       - gintervals.chrom_sizes
       - gintervals.covered_bp
       - gintervals.coverage_fraction
-      - gintervals.db
+      - gintervals.dataset
+      - gintervals.dbs
       - gintervals.diff
       - gintervals.exists
       - gintervals.force_range
@@ -144,16 +145,22 @@ reference:
       - gdb.get_readonly_attrs
       - gdb.info
       - gdb.init
-      - gdb.ls
       - gdb.mark_cache_dirty
       - gdb.reload
       - gdb.set_readonly_attrs
-      - gdb.summary
       - gdb.convert_to_indexed
       - gdir.cd
       - gdir.create
       - gdir.cwd
       - gdir.rm
+  - title: Dataset functions
+    desc: Functions for managing datasets (multiple data sources)
+    contents:
+      - gdataset.load
+      - gdataset.unload
+      - gdataset.save
+      - gdataset.ls
+      - gdataset.info
   - title: Other functions
     desc: Other
     contents:

@@ -1,27 +1,26 @@
 # misha 5.4.0
 
-* **Multi-database support**: Connect multiple misha databases in a single session
-  - `gsetroot()` now accepts a vector of database paths: `gsetroot(c("base_db", "user_db"))`
-  - "Last wins" semantics for track/interval resolution (later databases override earlier ones)
-  - **Cross-database track expressions**: Track expressions and operations now work correctly across databases
-    - `gextract("track1 + track2")` works when tracks are in different databases
-    - `gtrack.attr.get/set` works for tracks in any connected database
-    - Virtual tracks can reference source tracks from any database
-  - New helper functions:
-    - `gdb.ls()`: List all connected databases
-    - `gdb.summary()`: Get summary information (track counts, writability) for each database
-    - `gdb.create_user()`: Create a user database with symlinks to a parent database's seq/ and chrom_sizes.txt
-    - `gtrack.db()`: Get the database path for a track (vectorized)
-    - `gtrack.dbs()`: List all databases containing a track (vectorized)
-    - `gintervals.db()`: Get the database path for an intervals set (vectorized)
-  - New `db` parameter for filtering by database:
-    - `gtrack.ls(db = "path/to/db")`: List tracks from a specific database
-    - `gintervals.ls(db = "path/to/db")`: List intervals from a specific database
-  - Virtual tracks remain global (shared across all databases)
-  - Write protection relies on OS filesystem permissions with clear error messages
-  - All databases must have identical `chrom_sizes.txt` files
-  - Duplicate database paths are rejected to avoid ambiguous resolution
-  - Backward compatible: single database usage works unchanged
+* **Dataset API**: New dataset-based workflow for combining multiple data sources
+  - **Working database + loaded datasets model**: Use `gsetroot()` for your primary writable database, then `gdataset.load()` to add read-only datasets
+  - **Collision handling**: By default, loading a dataset with tracks that already exist will error. Use `force=TRUE` to override (working db always wins)
+  - New dataset management functions:
+    - `gdataset.load()`: Load a dataset into the namespace (tracks and intervals become available)
+    - `gdataset.unload()`: Remove a dataset from the namespace
+    - `gdataset.save()`: Create a new dataset from selected tracks/intervals
+    - `gdataset.ls()`: List working database and all loaded datasets
+    - `gdataset.info()`: Show metadata and contents of a dataset
+  - New track/interval source query functions:
+    - `gtrack.dataset()`: Get the source path for a track (working db or dataset)
+    - `gtrack.dbs()`: Get all paths where a track exists (for debugging shadowed tracks)
+    - `gintervals.dataset()`: Get the source path for an interval set
+    - `gintervals.dbs()`: Get all paths where an interval set exists
+  - New `db` parameter for filtering by source:
+    - `gtrack.ls(db = "/path/to/dataset")`: List tracks from a specific source
+    - `gintervals.ls(db = "/path/to/dataset")`: List intervals from a specific source
+  - **Cross-database operations**: Track expressions work seamlessly with tracks from different sources
+  - All datasets must have identical `chrom_sizes.txt` files (same genome assembly)
+  - Virtual tracks remain global (shared across all loaded sources)
+  - Backward compatible: single database usage with `gsetroot()` works unchanged
 
 # misha 5.3.4
 

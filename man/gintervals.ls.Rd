@@ -47,7 +47,7 @@ gintervals.ls(pattern = "annot*")
 \code{\link{grep}}, \code{\link{gintervals.exists}},
 \code{\link{gintervals.load}}, \code{\link{gintervals.save}},
 \code{\link{gintervals.rm}}, \code{\link{gintervals}},
-\code{\link{gintervals.2d}}, \code{\link{gintervals.db}}
+\code{\link{gintervals.2d}}, \code{\link{gintervals.dataset}}
 }
 \keyword{~intervals}
 \keyword{~ls}

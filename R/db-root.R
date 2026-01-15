@@ -54,44 +54,42 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         stop("Usage: gsetroot(groot, dir = NULL, rescan = FALSE)", call. = FALSE)
     }
 
-    # Support multiple database paths (multi-db feature)
-    # Validate paths exist before calling normalizePath
-    for (i in seq_along(groot)) {
-        if (!dir.exists(groot[i])) {
-            stop(sprintf("Database directory does not exist: %s", groot[i]), call. = FALSE)
-        }
-
-        # Check for required directories
-        tracks_dir <- file.path(groot[i], "tracks")
-        seq_dir <- file.path(groot[i], "seq")
-
-        if (!dir.exists(tracks_dir)) {
-            stop(sprintf("Database directory '%s' does not contain a 'tracks' subdirectory. This does not appear to be a valid misha database.", groot[i]), call. = FALSE)
-        }
-
-        if (!dir.exists(seq_dir)) {
-            stop(sprintf("Database directory '%s' does not contain a 'seq' subdirectory. This does not appear to be a valid misha database.", groot[i]), call. = FALSE)
-        }
+    # Dataset API: only accept single database path
+    if (length(groot) > 1) {
+        stop("gsetroot() accepts a single database path. Use gdataset.load() to load additional datasets.", call. = FALSE)
     }
 
-    groots <- normalizePath(groot, mustWork = TRUE)
-    if (any(duplicated(groots))) {
-        stop("Database directories should differ from one another", call. = FALSE)
+    # Validate path exists before calling normalizePath
+    if (!dir.exists(groot)) {
+        stop(sprintf("Database directory does not exist: %s", groot), call. = FALSE)
     }
+
+    # Check for required directories
+    tracks_dir <- file.path(groot, "tracks")
+    seq_dir <- file.path(groot, "seq")
+
+    if (!dir.exists(tracks_dir)) {
+        stop(sprintf("Database directory '%s' does not contain a 'tracks' subdirectory. This does not appear to be a valid misha database.", groot), call. = FALSE)
+    }
+
+    if (!dir.exists(seq_dir)) {
+        stop(sprintf("Database directory '%s' does not contain a 'seq' subdirectory. This does not appear to be a valid misha database.", groot), call. = FALSE)
+    }
+
+    groot <- normalizePath(groot, mustWork = TRUE)
 
     # Clear all state
     assign("ALLGENOME", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)
-    assign("GROOTS", NULL, envir = .misha)
     assign("CHROM_ALIAS", NULL, envir = .misha)
-    assign("GTRACK_DB", NULL, envir = .misha)
-    assign("GINTERVALS_DB", NULL, envir = .misha)
-    assign("GTRACK_DBS", NULL, envir = .misha)
+    assign("GTRACK_DATASET", NULL, envir = .misha)
+    assign("GINTERVALS_DATASET", NULL, envir = .misha)
+    assign("GDATASETS", character(0), envir = .misha)
 
-    # Read and validate chrom_sizes from first database
-    chrom_sizes_path <- file.path(groots[1], "chrom_sizes.txt")
+    # Read and validate chrom_sizes
+    chrom_sizes_path <- file.path(groot, "chrom_sizes.txt")
     if (!file.exists(chrom_sizes_path)) {
-        stop(sprintf("Database directory '%s' does not contain a chrom_sizes.txt file. This does not appear to be a valid misha database.", groots[1]), call. = FALSE)
+        stop(sprintf("Database directory '%s' does not contain a chrom_sizes.txt file. This does not appear to be a valid misha database.", groot), call. = FALSE)
     }
 
     chromsizes <- tryCatch(
@@ -103,39 +101,9 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
             colClasses = c("character", "numeric")
         ),
         error = function(e) {
-            stop(sprintf("Failed to read chrom_sizes.txt from '%s': %s", groots[1], e$message), call. = FALSE)
+            stop(sprintf("Failed to read chrom_sizes.txt from '%s': %s", groot, e$message), call. = FALSE)
         }
     )
-
-    # Validate all databases have identical chrom_sizes.txt
-    if (length(groots) > 1) {
-        for (g in groots[-1]) {
-            cs_path <- file.path(g, "chrom_sizes.txt")
-            if (!file.exists(cs_path)) {
-                stop(sprintf("Database directory '%s' does not contain a chrom_sizes.txt file. This does not appear to be a valid misha database.", g), call. = FALSE)
-            }
-
-            cs <- tryCatch(
-                read.csv(
-                    cs_path,
-                    sep = "\t",
-                    header = FALSE,
-                    col.names = c("chrom", "size"),
-                    colClasses = c("character", "numeric")
-                ),
-                error = function(e) {
-                    stop(sprintf("Failed to read chrom_sizes.txt from '%s': %s", g, e$message), call. = FALSE)
-                }
-            )
-
-            if (!identical(chromsizes, cs)) {
-                stop(sprintf("All databases must have identical chrom_sizes.txt. Database '%s' has different chromosome sizes.", g), call. = FALSE)
-            }
-        }
-    }
-
-    # Use first database for shared resources (seq, chrom_sizes)
-    groot <- groots[1]
 
     is_per_chromosome <- .is_per_chromosome_db(groot, chromsizes)
     assign("DB_IS_PER_CHROMOSOME", is_per_chromosome, envir = .misha)
@@ -211,24 +179,20 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 
     assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
     assign("GROOT", groot, envir = .misha)
-    assign("GROOTS", groots, envir = .misha)
     assign("GWD", groot, envir = .misha)
     assign("CHROM_ALIAS", alias_map, envir = .misha)
 
-    # Check if any database cache is dirty
-    for (g in groots) {
-        if (.gdb.cache_is_dirty(g)) {
-            rescan <- TRUE
-            break
-        }
+    # Check if database cache is dirty
+    if (.gdb.cache_is_dirty(groot)) {
+        rescan <- TRUE
     }
 
     success <- FALSE
     tryCatch(
         {
             if (is.null(dir)) {
-                # Default to last database's tracks (most likely writable for user)
-                .gdir.cd(file.path(groots[length(groots)], "tracks"), rescan)
+                # Default to tracks directory
+                .gdir.cd(file.path(groot, "tracks"), rescan)
             } else {
                 if (nchar(dir) < 1) {
                     stop("dir argument is an empty string", call. = FALSE)
@@ -243,7 +207,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 
                     if ((has_tracks || has_seq) && has_chrom_sizes) {
                         stop(sprintf(
-                            "The 'dir' parameter ('%s') looks like a misha database path.\nTo connect multiple databases, use: gsetroot(c(\"%s\", \"%s\"))",
+                            "The 'dir' parameter ('%s') looks like a misha database path.\nTo connect multiple databases, use: gsetroot(\"%s\"); gdataset.load(\"%s\")",
                             dir, groot[1], dir
                         ), call. = FALSE)
                     }
@@ -262,110 +226,16 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
             if (!success) {
                 assign("ALLGENOME", NULL, envir = .misha)
                 assign("GROOT", NULL, envir = .misha)
-                assign("GROOTS", NULL, envir = .misha)
                 assign("GWD", NULL, envir = .misha)
                 assign("CHROM_ALIAS", NULL, envir = .misha)
                 assign("DB_IS_PER_CHROMOSOME", NULL, envir = .misha)
-                assign("GTRACK_DB", NULL, envir = .misha)
-                assign("GINTERVALS_DB", NULL, envir = .misha)
-                assign("GTRACK_DBS", NULL, envir = .misha)
+                assign("GTRACK_DATASET", NULL, envir = .misha)
+                assign("GINTERVALS_DATASET", NULL, envir = .misha)
+                assign("GDATASETS", character(0), envir = .misha)
             }
         }
     )
 }
-
-#' List connected databases
-#'
-#' Returns a list of all database paths currently connected to the session.
-#'
-#' When multiple databases are connected using \code{gsetroot(c(db1, db2, ...))},
-#' this function returns all database paths in connection order. The first
-#' database is used for shared resources (seq, chrom_sizes), and later databases
-#' take precedence for track resolution ("last wins").
-#'
-#' @return Character vector of database paths in connection order.
-#' @seealso \code{\link{gsetroot}}, \code{\link{gdb.info}}, \code{\link{gtrack.db}}
-#' @keywords ~db ~database
-#' @examples
-#' \dontshow{
-#' options(gmax.processes = 2)
-#' }
-#'
-#' gdb.init_examples()
-#' gdb.ls()
-#' @export
-gdb.ls <- function() {
-    .gcheckroot()
-    get("GROOTS", envir = .misha)
-}
-
-
-#' Get summary of connected databases
-#'
-#' Returns summary information about all connected databases.
-#'
-#' This function returns a data frame with information about each connected
-#' database, including the number of tracks, number of interval sets, and
-#' whether the database is writable. Use this when multiple databases are
-#' connected to get an overview of track distribution.
-#'
-#' Note: This is different from \code{\link{gdb.info}} which provides detailed
-#' information about a single database's format and structure.
-#'
-#' @return A data frame with columns:
-#' \describe{
-#'   \item{db}{Character: The database path}
-#'   \item{tracks}{Integer: Number of tracks from this database}
-#'   \item{intervals}{Integer: Number of interval sets from this database}
-#'   \item{writable}{Logical: Whether the database's tracks directory is writable}
-#' }
-#' @seealso \code{\link{gdb.ls}}, \code{\link{gsetroot}}, \code{\link{gtrack.db}}, \code{\link{gdb.info}}
-#' @keywords ~db ~database ~info
-#' @examples
-#' \dontshow{
-#' options(gmax.processes = 2)
-#' }
-#'
-#' gdb.init_examples()
-#' gdb.summary()
-#'
-#' @export gdb.summary
-gdb.summary <- function() {
-    .gcheckroot()
-    groots <- get("GROOTS", envir = .misha)
-    track_db <- get("GTRACK_DB", envir = .misha)
-    intervals_db <- get("GINTERVALS_DB", envir = .misha)
-
-    # Count tracks and intervals per database
-    track_vals <- unlist(track_db, use.names = FALSE)
-    if (length(track_vals)) {
-        track_counts <- as.integer(table(factor(track_vals, levels = groots)))
-    } else {
-        track_counts <- rep(0L, length(groots))
-    }
-
-    interval_vals <- unlist(intervals_db, use.names = FALSE)
-    if (length(interval_vals)) {
-        interval_counts <- as.integer(table(factor(interval_vals, levels = groots)))
-    } else {
-        interval_counts <- rep(0L, length(groots))
-    }
-
-    # Check write permissions
-    writable <- vapply(groots, function(g) {
-        file.access(file.path(g, "tracks"), 2) == 0
-    }, logical(1))
-
-    data.frame(
-        db = groots,
-        tracks = track_counts,
-        intervals = interval_counts,
-        writable = writable,
-        stringsAsFactors = FALSE,
-        row.names = NULL
-    )
-}
-
 
 #' Create a linked database with symlinks to a parent database
 #'
@@ -379,7 +249,7 @@ gdb.summary <- function() {
 #' @param path Path for the new linked database
 #' @param parent Path to the parent database (with seq and chrom_sizes.txt)
 #' @return Invisible TRUE on success
-#' @seealso \code{\link{gsetroot}}, \code{\link{gdb.create}}, \code{\link{gdb.ls}}
+#' @seealso \code{\link{gsetroot}}, \code{\link{gdb.create}}, \code{\link{gdataset.ls}}
 #' @keywords ~db ~database ~create
 #' @examples
 #' \dontrun{
