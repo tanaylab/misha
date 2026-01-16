@@ -149,50 +149,7 @@ gtrack.dbs <- function(track = NULL, dataframe = FALSE) {
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    if (length(trackstr) == 0) {
-        if (dataframe) {
-            return(data.frame(track = character(0), db = character(0), stringsAsFactors = FALSE))
-        }
-        return(character(0))
-    }
-
-    if (length(trackstr) > 1) {
-        if (!dataframe) {
-            return(unlist(lapply(trackstr, gtrack.dbs, dataframe = FALSE), use.names = TRUE))
-        }
-        res <- lapply(trackstr, function(t) gtrack.dbs(t, dataframe = TRUE))
-        return(do.call(rbind, res))
-    }
-
-    # Compute on-demand: scan all databases for this track
-    groot <- get("GROOT", envir = .misha)
-    gdatasets <- get("GDATASETS", envir = .misha)
-    if (is.null(gdatasets)) gdatasets <- character(0)
-    all_dbs <- c(groot, gdatasets)
-
-    rel_path <- paste0(gsub("\\.", "/", trackstr), ".track")
-    dbs <- character(0)
-    for (db in all_dbs) {
-        track_path <- file.path(db, "tracks", rel_path)
-        if (file.exists(track_path)) {
-            dbs <- c(dbs, db)
-        }
-    }
-
-    if (length(dbs) == 0) {
-        dbs <- NA_character_
-    }
-
-    if (!dataframe) {
-        names(dbs) <- rep(trackstr, length(dbs))
-        return(dbs)
-    }
-
-    data.frame(
-        track = rep(trackstr, length(dbs)),
-        db = dbs,
-        stringsAsFactors = FALSE
-    )
+    .gdb.resource_dbs_impl(trackstr, ".track", "track", dataframe, gtrack.dbs)
 }
 
 #' Returns information about a track
@@ -487,32 +444,25 @@ gtrack.copy <- function(src = NULL, dest = NULL) {
     # Check write permission for destination
     .gcheck_write_permission(gwd, "copy track to")
 
+    # Create destination parent directory if needed
+    dest_parent <- dirname(dest_dir)
+    if (!dir.exists(dest_parent)) {
+        dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
+    }
+
     # Create destination directory
-    if (!dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)) {
+    if (!dir.create(dest_dir, showWarnings = FALSE)) {
         if (!dir.exists(dest_dir)) {
             stop(sprintf("Failed to create destination directory for track %s", destname), call. = FALSE)
         }
     }
 
-    # Copy track contents
-    src_files <- list.files(src_dir, full.names = TRUE, recursive = FALSE, all.files = TRUE)
-    for (src_file in src_files) {
-        # Skip . and .. entries
-        if (basename(src_file) %in% c(".", "..")) next
-
-        dest_file <- file.path(dest_dir, basename(src_file))
-        if (dir.exists(src_file)) {
-            # Copy subdirectory
-            dir.create(dest_file, recursive = TRUE, showWarnings = FALSE)
-            sub_files <- list.files(src_file, full.names = TRUE, recursive = TRUE, all.files = TRUE)
-            for (sf in sub_files) {
-                rel_path <- sub(paste0("^", src_file, "/"), "", sf)
-                df <- file.path(dest_file, rel_path)
-                dir.create(dirname(df), recursive = TRUE, showWarnings = FALSE)
-                file.copy(sf, df, copy.mode = TRUE)
-            }
-        } else {
-            file.copy(src_file, dest_file, copy.mode = TRUE)
+    # Copy contents of source track to destination
+    src_contents <- list.files(src_dir, full.names = TRUE, all.files = TRUE, no.. = TRUE)
+    for (item in src_contents) {
+        if (!file.copy(item, dest_dir, recursive = TRUE, copy.mode = TRUE)) {
+            unlink(dest_dir, recursive = TRUE)
+            stop(sprintf("Failed to copy track %s to %s", srcname, destname), call. = FALSE)
         }
     }
 

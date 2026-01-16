@@ -21,6 +21,11 @@ gdb.reload <- function(rescan = TRUE) {
         stop("gdb.init() must be called beforehand.", call. = FALSE)
     }
 
+    # Clear session scan cache when rescanning
+    if (rescan && exists(".gdb.clear_scan_cache", mode = "function")) {
+        .gdb.clear_scan_cache()
+    }
+
     assign("GTRACKS", NULL, envir = .misha)
     assign("GINTERVS", NULL, envir = .misha)
     assign("GTRACK_DATASET", NULL, envir = .misha)
