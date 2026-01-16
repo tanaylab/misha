@@ -1,5 +1,94 @@
 # Track and intervals set management functions
 
+# Helper function to apply collision resolution for resources (tracks or intervals).
+# Returns a list with updated dataset_map, visible count, and shadowed count.
+.gdb.apply_collisions <- function(items, dataset_map, groot, new_path) {
+    shadowed <- 0
+    visible <- 0
+
+    existing_names <- names(dataset_map)
+    for (item in items) {
+        if (item %in% existing_names) {
+            # Collision - working db always wins
+            if (dataset_map[[item]] == groot) {
+                shadowed <- shadowed + 1
+            } else {
+                # Dataset collision - new dataset wins
+                dataset_map[[item]] <- new_path
+                visible <- visible + 1
+            }
+        } else {
+            # No collision - add item
+            dataset_map[[item]] <- new_path
+            visible <- visible + 1
+        }
+    }
+
+    list(map = dataset_map, visible = visible, shadowed = shadowed)
+}
+
+# Helper function to find all databases containing a resource.
+# Returns character vector of database paths, or NA_character_ if not found.
+.gdb.find_resource_dbs <- function(name, extension, all_dbs) {
+    rel_path <- paste0(gsub("\\.", "/", name), extension)
+    resource_paths <- file.path(all_dbs, "tracks", rel_path)
+    dbs <- all_dbs[file.exists(resource_paths)]
+    if (length(dbs) == 0) NA_character_ else dbs
+}
+
+# Helper to validate resources exist in dataset map
+.gdb.validate_resources <- function(names, available_names, resource_type) {
+    if (is.null(names) || length(names) == 0) {
+        return(invisible(TRUE))
+    }
+    missing <- setdiff(names, available_names)
+    if (length(missing) > 0) {
+        stop(sprintf(
+            "%s does not exist: %s", resource_type,
+            paste0("'", missing, "'", collapse = ", ")
+        ), call. = FALSE)
+    }
+    invisible(TRUE)
+}
+
+# Shared implementation for gtrack.dbs() and gintervals.dbs()
+# Handles single/multiple names, vector/dataframe output
+.gdb.resource_dbs_impl <- function(namestr, extension, col_name, dataframe, recurse_fn) {
+    if (length(namestr) == 0) {
+        if (dataframe) {
+            df <- data.frame(character(0), character(0), stringsAsFactors = FALSE)
+            names(df) <- c(col_name, "db")
+            return(df)
+        }
+        return(character(0))
+    }
+
+    if (length(namestr) > 1) {
+        if (!dataframe) {
+            return(unlist(lapply(namestr, recurse_fn, dataframe = FALSE), use.names = TRUE))
+        }
+        res <- lapply(namestr, function(n) recurse_fn(n, dataframe = TRUE))
+        return(do.call(rbind, res))
+    }
+
+    # Single name - find all databases containing this resource
+    groot <- get("GROOT", envir = .misha)
+    gdatasets <- get("GDATASETS", envir = .misha)
+    if (is.null(gdatasets)) gdatasets <- character(0)
+    all_dbs <- c(groot, gdatasets)
+
+    dbs <- .gdb.find_resource_dbs(namestr, extension, all_dbs)
+
+    if (!dataframe) {
+        names(dbs) <- rep(namestr, length(dbs))
+        return(dbs)
+    }
+
+    df <- data.frame(rep(namestr, length(dbs)), dbs, stringsAsFactors = FALSE)
+    names(df) <- c(col_name, "db")
+    df
+}
+
 .gpath_is_within <- function(path, root) {
     if (is.null(path) || is.null(root)) {
         return(FALSE)

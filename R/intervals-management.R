@@ -127,50 +127,7 @@ gintervals.dbs <- function(intervals = NULL, dataframe = FALSE) {
     .gcheckroot()
 
     intervalsstr <- do.call(.gexpr2str, list(substitute(intervals)), envir = parent.frame())
-    if (length(intervalsstr) == 0) {
-        if (dataframe) {
-            return(data.frame(intervals = character(0), db = character(0), stringsAsFactors = FALSE))
-        }
-        return(character(0))
-    }
-
-    if (length(intervalsstr) > 1) {
-        if (!dataframe) {
-            return(unlist(lapply(intervalsstr, gintervals.dbs, dataframe = FALSE), use.names = TRUE))
-        }
-        res <- lapply(intervalsstr, function(i) gintervals.dbs(i, dataframe = TRUE))
-        return(do.call(rbind, res))
-    }
-
-    # Compute on-demand: scan all databases for this interval set
-    groot <- get("GROOT", envir = .misha)
-    gdatasets <- get("GDATASETS", envir = .misha)
-    if (is.null(gdatasets)) gdatasets <- character(0)
-    all_dbs <- c(groot, gdatasets)
-
-    rel_path <- paste0(gsub("\\.", "/", intervalsstr), ".interv")
-    dbs <- character(0)
-    for (db in all_dbs) {
-        interv_path <- file.path(db, "tracks", rel_path)
-        if (file.exists(interv_path)) {
-            dbs <- c(dbs, db)
-        }
-    }
-
-    if (length(dbs) == 0) {
-        dbs <- NA_character_
-    }
-
-    if (!dataframe) {
-        names(dbs) <- rep(intervalsstr, length(dbs))
-        return(dbs)
-    }
-
-    data.frame(
-        intervals = rep(intervalsstr, length(dbs)),
-        db = dbs,
-        stringsAsFactors = FALSE
-    )
+    .gdb.resource_dbs_impl(intervalsstr, ".interv", "intervals", dataframe, gintervals.dbs)
 }
 
 

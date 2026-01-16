@@ -125,43 +125,16 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
         stop(error_msg, call. = FALSE)
     }
 
-    # Load tracks and intervals
-    shadowed_tracks <- 0
-    shadowed_intervals <- 0
-    visible_tracks <- 0
-    visible_intervals <- 0
+    # Load tracks and intervals using unified collision helper
+    track_result <- .gdb.apply_collisions(dataset_tracks, gtrack_dataset, groot, path_norm)
+    gtrack_dataset <- track_result$map
+    visible_tracks <- track_result$visible
+    shadowed_tracks <- track_result$shadowed
 
-    for (track in dataset_tracks) {
-        if (track %in% names(gtrack_dataset)) {
-            # Collision - skip if working db, otherwise shadow
-            if (gtrack_dataset[[track]] == groot) {
-                # Working db wins - skip dataset track
-                shadowed_tracks <- shadowed_tracks + 1
-            } else {
-                # Dataset collision - new dataset wins
-                gtrack_dataset[[track]] <- path_norm
-                visible_tracks <- visible_tracks + 1
-            }
-        } else {
-            # No collision - add track
-            gtrack_dataset[[track]] <- path_norm
-            visible_tracks <- visible_tracks + 1
-        }
-    }
-
-    for (interval in dataset_intervals) {
-        if (interval %in% names(gintervals_dataset)) {
-            if (gintervals_dataset[[interval]] == groot) {
-                shadowed_intervals <- shadowed_intervals + 1
-            } else {
-                gintervals_dataset[[interval]] <- path_norm
-                visible_intervals <- visible_intervals + 1
-            }
-        } else {
-            gintervals_dataset[[interval]] <- path_norm
-            visible_intervals <- visible_intervals + 1
-        }
-    }
+    interval_result <- .gdb.apply_collisions(dataset_intervals, gintervals_dataset, groot, path_norm)
+    gintervals_dataset <- interval_result$map
+    visible_intervals <- interval_result$visible
+    shadowed_intervals <- interval_result$shadowed
 
     # Add to loaded datasets first (needed for gdb.reload)
     gdatasets <- c(gdatasets, path_norm)
@@ -288,23 +261,9 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
     gtrack_dataset <- get("GTRACK_DATASET", envir = .misha)
     gintervals_dataset <- get("GINTERVALS_DATASET", envir = .misha)
 
-    # Validate tracks exist
-    if (!is.null(tracks)) {
-        for (track in tracks) {
-            if (!track %in% names(gtrack_dataset)) {
-                stop(sprintf("Track '%s' does not exist", track), call. = FALSE)
-            }
-        }
-    }
-
-    # Validate intervals exist
-    if (!is.null(intervals)) {
-        for (interval in intervals) {
-            if (!interval %in% names(gintervals_dataset)) {
-                stop(sprintf("Interval set '%s' does not exist", interval), call. = FALSE)
-            }
-        }
-    }
+    # Validate tracks and intervals exist using shared helper
+    .gdb.validate_resources(tracks, names(gtrack_dataset), "Track")
+    .gdb.validate_resources(intervals, names(gintervals_dataset), "Interval set")
 
     # Create directory structure
     dir.create(path, recursive = TRUE)
@@ -427,9 +386,33 @@ gdataset.ls <- function(dataframe = FALSE) {
     for (i in seq_along(all_paths)) {
         db <- all_paths[i]
 
-        # Scan filesystem
-        result$tracks_total[i] <- length(.gdb.scan_tracks(db))
-        result$intervals_total[i] <- length(.gdb.scan_intervals(db))
+        # Try to read from .db.cache first (faster than filesystem scan)
+        cache_path <- file.path(db, ".db.cache")
+        used_cache <- FALSE
+        if (file.exists(cache_path) && !.gdb.cache_is_dirty(db)) {
+            res <- tryCatch(
+                {
+                    f <- file(cache_path, "rb")
+                    on.exit(close(f), add = TRUE)
+                    data <- unserialize(f)
+                    close(f)
+                    on.exit(NULL)
+                    data
+                },
+                error = function(e) NULL
+            )
+            if (!is.null(res) && length(res) >= 2) {
+                result$tracks_total[i] <- length(res[[1]])
+                result$intervals_total[i] <- length(res[[2]])
+                used_cache <- TRUE
+            }
+        }
+
+        # Fallback to filesystem scan (with session cache)
+        if (!used_cache) {
+            result$tracks_total[i] <- length(.gdb.scan_tracks(db))
+            result$intervals_total[i] <- length(.gdb.scan_intervals(db))
+        }
 
         # Count visible
         if (is.null(gtrack_dataset)) {
@@ -559,10 +542,25 @@ gdataset.example_path <- function() {
 
 # Helper functions
 
-.gdb.scan_tracks <- function(db) {
+# Session cache for filesystem scans (cleared on gdb.reload with rescan=TRUE)
+.gdb.scan_cache <- new.env(parent = emptyenv())
+
+.gdb.clear_scan_cache <- function() {
+    rm(list = ls(envir = .gdb.scan_cache), envir = .gdb.scan_cache)
+}
+
+.gdb.scan_tracks <- function(db, use_cache = TRUE) {
+    cache_key <- paste0("tracks:", normalizePath(db, mustWork = FALSE))
+
+    if (use_cache && exists(cache_key, envir = .gdb.scan_cache)) {
+        return(get(cache_key, envir = .gdb.scan_cache))
+    }
+
     tracks_dir <- file.path(db, "tracks")
     if (!dir.exists(tracks_dir)) {
-        return(character(0))
+        result <- character(0)
+        if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
+        return(result)
     }
 
     # List all .track directories recursively
@@ -570,19 +568,30 @@ gdataset.example_path <- function() {
     track_dirs <- all_files[grepl("\\.track$", all_files) & dir.exists(all_files)]
 
     if (length(track_dirs) == 0) {
-        return(character(0))
+        result <- character(0)
+        if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
+        return(result)
     }
 
     # Extract track names (relative to tracks_dir, without .track extension)
     track_names <- sub("\\.track$", "", sub(paste0("^", tracks_dir, "/"), "", track_dirs))
 
+    if (use_cache) assign(cache_key, track_names, envir = .gdb.scan_cache)
     track_names
 }
 
-.gdb.scan_intervals <- function(db) {
+.gdb.scan_intervals <- function(db, use_cache = TRUE) {
+    cache_key <- paste0("intervals:", normalizePath(db, mustWork = FALSE))
+
+    if (use_cache && exists(cache_key, envir = .gdb.scan_cache)) {
+        return(get(cache_key, envir = .gdb.scan_cache))
+    }
+
     tracks_dir <- file.path(db, "tracks")
     if (!dir.exists(tracks_dir)) {
-        return(character(0))
+        result <- character(0)
+        if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
+        return(result)
     }
 
     # List all .interv files/directories
@@ -590,12 +599,16 @@ gdataset.example_path <- function() {
     interv_paths <- all_files[grepl("\\.interv$", all_files)]
 
     if (length(interv_paths) == 0) {
-        return(character(0))
+        result <- character(0)
+        if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
+        return(result)
     }
 
     # Extract interval names
     interval_names <- sub("\\.interv$", "", sub(paste0("^", tracks_dir, "/"), "", interv_paths))
 
     # Remove duplicates (in case both file and directory exist)
-    unique(interval_names)
+    result <- unique(interval_names)
+    if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
+    result
 }
