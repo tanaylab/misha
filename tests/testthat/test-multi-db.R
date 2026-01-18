@@ -1,24 +1,6 @@
 # Tests for multi-database support using the dataset API
 # These tests complement test-dataset.R by testing more advanced scenarios
-
-# Helper to create a minimal database
-create_test_db <- function(path, chrom_sizes = data.frame(chrom = c("chr1", "chr2"), size = c(10000, 10000))) {
-    dir.create(path, recursive = TRUE, showWarnings = FALSE)
-    dir.create(file.path(path, "tracks"), showWarnings = FALSE)
-    dir.create(file.path(path, "seq"), showWarnings = FALSE)
-
-    write.table(chrom_sizes, file.path(path, "chrom_sizes.txt"),
-        sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
-    )
-
-    # Create dummy sequence files
-    for (chr in chrom_sizes$chrom) {
-        writeLines(
-            paste0(rep("A", chrom_sizes$size[chrom_sizes$chrom == chr]), collapse = ""),
-            file.path(path, "seq", paste0(chr, ".seq"))
-        )
-    }
-}
+# Note: create_test_db() helper is defined in helper-test_db.R
 
 # ==============================================================================
 # Migration tests: verify old multi-db patterns migrate to new API

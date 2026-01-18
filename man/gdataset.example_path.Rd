@@ -7,14 +7,27 @@
 gdataset.example_path()
 }
 \value{
-Path to the created dataset directory
+Path to the created dataset directory (in a temporary location)
 }
 \description{
 Creates a small dataset in a temporary directory using the built-in
-example database. The working database is reset via
-\code{\link{gdb.init_examples}}.
-Temporary tracks and intervals are removed after saving to avoid
-name collisions.
+example database. This function has side effects: it calls
+\code{\link{gdb.init_examples}} which resets the working database, and
+it creates then deletes temporary tracks ('example_dataset_track') and
+intervals ('example_dataset_intervals') in that database.
+}
+\details{
+This function performs the following steps:
+\enumerate{
+  \item Calls \code{gdb.init_examples()} to set the working database
+  \item Removes any existing 'example_dataset_track' and 'example_dataset_intervals'
+  \item Creates temporary track and intervals in the example database
+  \item Saves them to a new dataset in a temporary directory
+  \item Removes the temporary track and intervals from the example database
+}
+
+This is primarily intended for use in examples and tests. Users should be
+aware that calling this function will change their current working database.
 }
 \examples{
 \dontshow{
