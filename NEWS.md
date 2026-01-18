@@ -21,6 +21,9 @@
   - All datasets must have identical `chrom_sizes.txt` files (same genome assembly)
   - Virtual tracks remain global (shared across all loaded sources)
   - Backward compatible: single database usage with `gsetroot()` works unchanged
+* New track management functions:
+  - `gtrack.mv()`: Rename or move a track within the same database
+  - `gtrack.copy()`: Copy a track (can copy between databases when multiple are loaded)
 
 # misha 5.3.4
 

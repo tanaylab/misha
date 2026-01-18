@@ -2,27 +2,49 @@
 
 # Helper function to apply collision resolution for resources (tracks or intervals).
 # Returns a list with updated dataset_map, visible count, and shadowed count.
+# Vectorized implementation for better performance with large datasets.
 .gdb.apply_collisions <- function(items, dataset_map, groot, new_path) {
-    shadowed <- 0
-    visible <- 0
+    if (length(items) == 0) {
+        return(list(map = dataset_map, visible = 0L, shadowed = 0L))
+    }
 
     existing_names <- names(dataset_map)
-    for (item in items) {
-        if (item %in% existing_names) {
-            # Collision - working db always wins
-            if (dataset_map[[item]] == groot) {
-                shadowed <- shadowed + 1
-            } else {
-                # Dataset collision - new dataset wins
-                dataset_map[[item]] <- new_path
-                visible <- visible + 1
-            }
-        } else {
-            # No collision - add item
-            dataset_map[[item]] <- new_path
-            visible <- visible + 1
+
+    # Vectorized collision detection
+    is_existing <- items %in% existing_names
+
+    # Items that don't exist - all become visible
+    new_items <- items[!is_existing]
+
+    # Items that exist - check if from working db
+    existing_items <- items[is_existing]
+    if (length(existing_items) > 0) {
+        existing_dbs <- dataset_map[existing_items]
+        is_from_groot <- existing_dbs == groot
+
+        # Working db wins - these are shadowed
+        shadowed <- sum(is_from_groot)
+
+        # Dataset collisions - new dataset wins, these become visible
+        overridable_items <- existing_items[!is_from_groot]
+        visible_from_override <- length(overridable_items)
+
+        # Update map for overridable items
+        if (length(overridable_items) > 0) {
+            dataset_map[overridable_items] <- new_path
         }
+    } else {
+        shadowed <- 0L
+        visible_from_override <- 0L
     }
+
+    # Add new items to map
+    if (length(new_items) > 0) {
+        new_entries <- setNames(rep(new_path, length(new_items)), new_items)
+        dataset_map <- c(dataset_map, new_entries)
+    }
+
+    visible <- length(new_items) + visible_from_override
 
     list(map = dataset_map, visible = visible, shadowed = shadowed)
 }
@@ -346,17 +368,22 @@
     }
 }
 
-.gdb.rm_intervals.set <- function(intervals.set) {
+.gdb.rm_intervals.set <- function(intervals.set, db = NULL) {
     .gcheckroot()
 
     fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
-    db <- .gintervals_db_path(intervals.set)
+
+    # If db was explicitly provided, use it; otherwise determine from existing info
     if (is.null(db)) {
-        db <- .gdb.resolve_db_for_path(fname)
+        db <- .gintervals_db_path(intervals.set)
         if (is.null(db)) {
-            db <- get("GROOT", envir = .misha)
+            db <- .gdb.resolve_db_for_path(fname)
+            if (is.null(db)) {
+                db <- get("GROOT", envir = .misha)
+            }
         }
     }
+
     if (!file.exists(fname)) {
         if (.ggetOption(".gautocompletion", FALSE)) {
             if (exists(intervals.set, envir = .misha)) {

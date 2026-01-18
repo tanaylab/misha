@@ -221,6 +221,32 @@ gdataset.unload("/nonexistent/path", validate = TRUE)
 
 When unloading datasets that had track collisions (loaded with `force=TRUE`), shadowed tracks are restored with proper precedence: working database first, then datasets in load order.
 
+#### Moving and Copying Tracks
+
+Use `gtrack.mv()` to rename a track or move it within the same database:
+
+```{r, eval=FALSE}
+# Rename a track
+gtrack.mv("old_name", "new_name")
+
+# Move to a different namespace (directory)
+gtrack.mv("analysis.track1", "results.track1")
+```
+
+Use `gtrack.copy()` to create a copy of a track. The copy is created in the current working directory (GWD), which may be in a different database when multiple databases are connected:
+
+```{r, eval=FALSE}
+# Copy a track within the same database
+gtrack.copy("source_track", "copy_track")
+
+# Copy from a loaded dataset to the working database
+gsetroot("/data/my_project")
+gdataset.load("/shared/annotations")
+gtrack.copy("annotation_track", "my_local_copy") # Copy to working db
+```
+
+Note: `gtrack.mv()` only works within the same database. To move a track between databases, use `gtrack.copy()` followed by `gtrack.rm()`.
+
 #### Virtual Tracks Across Sources
 
 Virtual tracks remain global and are not tied to any specific source. They can reference tracks from any loaded source:
