@@ -61,6 +61,11 @@ The values that were not defined in input file file are substituted by
 'defval' value.
 
 'description' is added as a track attribute.
+
+When multiple databases are connected via \code{\link{gsetroot}}, the track
+is created in the current working directory (.misha$GWD), which defaults to the
+last connected database. Use \code{\link{gdir.cd}} with an absolute path to
+change where new tracks are created.
 }
 \examples{
 \dontshow{

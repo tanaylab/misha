@@ -27,8 +27,7 @@
 #' gtrack.ls()
 #' gdir.cd("..")
 #' gtrack.ls()
-#'
-#' @export gdir.cd
+#' @export
 gdir.cd <- function(dir = NULL) {
     if (is.null(dir)) {
         stop("Usage: gdir.cd(dir)", call. = FALSE)

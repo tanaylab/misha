@@ -8,12 +8,17 @@
 #' (see 'grep'). If called without any arguments all named intervals sets are
 #' returned.
 #'
+#' When multiple databases are connected, the 'db' parameter can be used to
+#' filter intervals to only those from a specific database.
+#'
 #' @param pattern,ignore.case,perl,fixed,useBytes see 'grep'
+#' @param db optional database path to filter intervals. If specified, only
+#' interval sets from that database are returned.
 #' @return An array that contains the names of intervals sets.
 #' @seealso \code{\link{grep}}, \code{\link{gintervals.exists}},
 #' \code{\link{gintervals.load}}, \code{\link{gintervals.save}},
 #' \code{\link{gintervals.rm}}, \code{\link{gintervals}},
-#' \code{\link{gintervals.2d}}
+#' \code{\link{gintervals.2d}}, \code{\link{gintervals.dataset}}
 #' @keywords ~intervals ~ls
 #' @examples
 #' \dontshow{
@@ -25,9 +30,104 @@
 #' gintervals.ls(pattern = "annot*")
 #'
 #' @export gintervals.ls
-gintervals.ls <- function(pattern = "", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+gintervals.ls <- function(pattern = "", db = NULL, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     .gcheckroot()
-    grep(pattern, get("GINTERVS", envir = .misha), value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
+
+    intervals <- get("GINTERVS", envir = .misha)
+
+    # Filter by database if specified
+    if (!is.null(db)) {
+        db <- normalizePath(db, mustWork = FALSE)
+        intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
+        if (is.null(intervals_db) || length(intervals) == 0) {
+            if (!identical(db, get("GROOT", envir = .misha))) {
+                return(character(0))
+            }
+        }
+        db_by_intervals <- intervals_db[intervals]
+        intervals <- intervals[!is.na(db_by_intervals) & db_by_intervals == db]
+        if (length(intervals) == 0) {
+            return(character(0))
+        }
+    }
+
+    grep(pattern, intervals, value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
+}
+
+#' Returns the database/dataset path for interval sets
+#'
+#' Returns the path of the database or dataset containing an interval set.
+#'
+#' When datasets are loaded, interval sets can come from either the working database
+#' or from loaded datasets. This function returns the source path for each interval set.
+#'
+#' @param intervals interval set name or a vector of interval set names
+#' @return A character vector containing the database paths for each interval set.
+#' Returns NA for interval sets that don't exist in any connected database.
+#' @seealso \code{\link{gintervals.dbs}}, \code{\link{gintervals.exists}},
+#' \code{\link{gintervals.ls}}, \code{\link{gdataset.ls}}
+#' @keywords ~intervals ~path ~database
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gintervals.dataset("annotations1")
+#'
+#' @export gintervals.dataset
+gintervals.dataset <- function(intervals = NULL) {
+    if (is.null(substitute(intervals))) {
+        stop("Usage: gintervals.dataset(intervals)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    intervalsstr <- do.call(.gexpr2str, list(substitute(intervals)), envir = parent.frame())
+    if (length(intervalsstr) == 0) {
+        return(character(0))
+    }
+
+    intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
+    if (is.null(intervals_db) || length(intervals_db) == 0) {
+        intervals_all <- get("GINTERVS", envir = .misha)
+        groot <- get("GROOT", envir = .misha)
+        return(ifelse(intervalsstr %in% intervals_all, groot, NA_character_))
+    }
+
+    unname(intervals_db[intervalsstr])
+}
+
+#' Returns all database paths containing an interval set
+#'
+#' Returns all database paths that contain a version of an interval set.
+#'
+#' When datasets are loaded, an interval set may exist in multiple locations.
+#' This function computes on-demand and returns all such paths.
+#'
+#' @param intervals interval set name
+#' @param dataframe return a data frame with columns \code{intervals} and \code{db}
+#' @return A named character vector of database paths. If \code{dataframe} is TRUE,
+#' returns a data frame with columns \code{intervals} and \code{db}.
+#' @seealso \code{\link{gintervals.dataset}}, \code{\link{gintervals.ls}},
+#' \code{\link{gdataset.ls}}
+#' @keywords ~intervals ~path ~database
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gintervals.dbs("annotations1")
+#'
+#' @export gintervals.dbs
+gintervals.dbs <- function(intervals = NULL, dataframe = FALSE) {
+    if (is.null(substitute(intervals))) {
+        stop("Usage: gintervals.dbs(intervals)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    intervalsstr <- do.call(.gexpr2str, list(substitute(intervals)), envir = parent.frame())
+    .gdb.resource_dbs_impl(intervalsstr, ".interv", "intervals", dataframe, gintervals.dbs)
 }
 
 
@@ -146,10 +246,13 @@ gintervals.rbind <- function(..., intervals.set.out = NULL) {
 #' @param intervals.set name of an intervals set
 #' @param force if 'TRUE', suppresses user confirmation of a named intervals set
 #' removal
+#' @param db optional database path. When multiple databases are connected,
+#' this specifies which database to delete the intervals set from. If NULL (the
+#' default), the intervals set is deleted from the working database (GROOT).
 #' @return None.
 #' @seealso \code{\link{gintervals.save}}, \code{\link{gintervals.exists}},
 #' \code{\link{gintervals.ls}}, \code{\link{gintervals}},
-#' \code{\link{gintervals.2d}}
+#' \code{\link{gintervals.2d}}, \code{\link{gtrack.rm}}
 #' @keywords ~intervals
 #' @examples
 #' \dontshow{
@@ -164,20 +267,44 @@ gintervals.rbind <- function(..., intervals.set.out = NULL) {
 #' gintervals.ls()
 #'
 #' @export gintervals.rm
-gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
+gintervals.rm <- function(intervals.set = NULL, force = FALSE, db = NULL) {
     if (is.null(substitute(intervals.set))) {
-        stop("Usage: gintervals.rm(intervals.set, force = FALSE)", call. = FALSE)
+        stop("Usage: gintervals.rm(intervals.set, force = FALSE, db = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
     intervals.set <- do.call(.gexpr2str, list(substitute(intervals.set)), envir = parent.frame())
 
+    # Determine the file path based on db parameter
+    if (!is.null(db)) {
+        db <- normalizePath(db, mustWork = FALSE)
+        groot <- get("GROOT", envir = .misha)
+        gdatasets <- get("GDATASETS", envir = .misha)
+        if (is.null(gdatasets)) gdatasets <- character(0)
+        groots <- c(groot, gdatasets)
+        if (!(db %in% groots)) {
+            stop(sprintf("Database %s is not connected", db), call. = FALSE)
+        }
+        fname <- file.path(db, "tracks", paste0(gsub("\\.", "/", intervals.set), ".interv"))
+    } else {
+        fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+    }
+
     # check whether intervals.set appears among GINTERVS
-    if (is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
+    if (!(intervals.set %in% get("GINTERVS", envir = .misha))) {
         if (force) {
+            unlink(fname, recursive = TRUE)
+            .gdb.rm_intervals.set(intervals.set, db = db)
             return(invisible())
         }
         stop(sprintf("Intervals set %s does not exist", intervals.set), call. = FALSE)
+    }
+
+    if (!is.null(db) && !file.exists(fname)) {
+        if (force) {
+            return(invisible())
+        }
+        stop(sprintf("Intervals set %s does not exist in database %s", intervals.set, db), call. = FALSE)
     }
 
     answer <- "N"
@@ -190,8 +317,6 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        fname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
-
         # remove the intervals set
         unlink(fname, recursive = TRUE)
 
@@ -199,7 +324,7 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE) {
             message(sprintf("Failed to delete intervals set %s", intervals.set))
         } else {
             # refresh the list of GINTERVS, etc.
-            .gdb.rm_intervals.set(intervals.set)
+            .gdb.rm_intervals.set(intervals.set, db = db)
         }
     }
 }

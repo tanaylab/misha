@@ -161,6 +161,11 @@ get_bigWigToWig_bin <- function() {
 #'
 #' 'description' is added as a track attribute.
 #'
+#' When multiple databases are connected via \code{\link{gsetroot}}, the track
+#' is created in the current working directory (.misha$GWD), which defaults to the
+#' last connected database. Use \code{\link{gdir.cd}} with an absolute path to
+#' change where new tracks are created.
+#'
 #' @param track track name
 #' @param description a character string description
 #' @param file file path
@@ -224,15 +229,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     retv <- 0
     success <- FALSE
 
@@ -397,15 +396,9 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     .gcheckroot()
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    trackdir <- .track_dir(trackstr)
-
-    direxisted <- file.exists(trackdir)
-
-    if (!is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
-        stop(sprintf("Track %s already exists", trackstr), call. = FALSE)
-    }
-
     .gconfirmtrackcreate(trackstr)
+    trackdir <- .track_dir(trackstr)
+    direxisted <- file.exists(trackdir)
     retv <- 0
     success <- FALSE
     tryCatch(

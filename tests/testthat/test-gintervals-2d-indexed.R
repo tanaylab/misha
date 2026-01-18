@@ -10,6 +10,7 @@ test_that("gintervals.2d.convert_to_indexed round-trips data", {
         quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
     )
     dir.create(file.path(tmp_root, "tracks", "test"), recursive = TRUE, showWarnings = FALSE)
+    dir.create(file.path(tmp_root, "seq"), recursive = TRUE, showWarnings = FALSE)
     gdb.init(tmp_root)
     withr::defer(
         {
@@ -67,6 +68,7 @@ test_that("gintervals.2d.convert_to_indexed handles sparse chromosome pairs", {
         quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
     )
     dir.create(file.path(tmp_root, "tracks", "test"), recursive = TRUE, showWarnings = FALSE)
+    dir.create(file.path(tmp_root, "seq"), recursive = TRUE, showWarnings = FALSE)
     gdb.init(tmp_root)
     withr::defer(
         {

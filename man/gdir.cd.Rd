@@ -34,7 +34,6 @@ gdir.cd("subdir")
 gtrack.ls()
 gdir.cd("..")
 gtrack.ls()
-
 }
 \seealso{
 \code{\link{gdb.init}}, \code{\link{gdir.cwd}},
