@@ -4,13 +4,17 @@
 \alias{gintervals.rm}
 \title{Deletes a named intervals set}
 \usage{
-gintervals.rm(intervals.set = NULL, force = FALSE)
+gintervals.rm(intervals.set = NULL, force = FALSE, db = NULL)
 }
 \arguments{
 \item{intervals.set}{name of an intervals set}
 
 \item{force}{if 'TRUE', suppresses user confirmation of a named intervals set
 removal}
+
+\item{db}{optional database path. When multiple databases are connected,
+this specifies which database to delete the intervals set from. If NULL (the
+default), the intervals set is deleted from the working database (GROOT).}
 }
 \value{
 None.
@@ -39,6 +43,6 @@ gintervals.ls()
 \seealso{
 \code{\link{gintervals.save}}, \code{\link{gintervals.exists}},
 \code{\link{gintervals.ls}}, \code{\link{gintervals}},
-\code{\link{gintervals.2d}}
+\code{\link{gintervals.2d}}, \code{\link{gtrack.rm}}
 }
 \keyword{~intervals}

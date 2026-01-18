@@ -1,3 +1,31 @@
+#' Create a minimal test database for dataset/multi-db tests
+#'
+#' Creates a minimal misha database with the specified chromosome sizes.
+#' Useful for tests that need isolated databases without external dependencies.
+#'
+#' @param path Path where the database should be created
+#' @param chrom_sizes Data frame with chrom and size columns
+#' @return Invisible path to the created database
+create_test_db <- function(path, chrom_sizes = data.frame(chrom = c("chr1", "chr2"), size = c(10000, 10000))) {
+    dir.create(path, recursive = TRUE, showWarnings = FALSE)
+    dir.create(file.path(path, "tracks"), showWarnings = FALSE)
+    dir.create(file.path(path, "seq"), showWarnings = FALSE)
+
+    write.table(chrom_sizes, file.path(path, "chrom_sizes.txt"),
+        sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE
+    )
+
+    # Create dummy sequence files
+    for (chr in chrom_sizes$chrom) {
+        writeLines(
+            paste0(rep("A", chrom_sizes$size[chrom_sizes$chrom == chr]), collapse = ""),
+            file.path(path, "seq", paste0(chr, ".seq"))
+        )
+    }
+
+    invisible(path)
+}
+
 load_test_db <- function() {
     db_path <- if (getOption("gmulticontig.indexed_format", FALSE)) {
         "/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/misha_test_db_indexed/"
