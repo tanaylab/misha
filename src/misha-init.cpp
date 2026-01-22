@@ -69,6 +69,8 @@ extern "C" {
     extern SEXP gtrack_create_empty_indexed(SEXP, SEXP);
     extern SEXP ginterv_convert(SEXP, SEXP, SEXP);
     extern SEXP ginterv2d_convert(SEXP, SEXP, SEXP);
+    extern SEXP gtrackcor(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackcor_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackdist(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackdist_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_import_contacts(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -157,6 +159,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrack_create_empty_indexed", (DL_FUNC)&gtrack_create_empty_indexed, 2},
     {"ginterv_convert", (DL_FUNC)&ginterv_convert, 3},
     {"ginterv2d_convert", (DL_FUNC)&ginterv2d_convert, 3},
+    {"gtrackcor", (DL_FUNC)&gtrackcor, 5},
+    {"gtrackcor_multitask", (DL_FUNC)&gtrackcor_multitask, 5},
     {"gtrackdist", (DL_FUNC)&gtrackdist, 7},
     {"gtrackdist_multitask", (DL_FUNC)&gtrackdist_multitask, 7},
     {"gtrack_import_contacts", (DL_FUNC)&gtrack_import_contacts, 5},
