@@ -250,3 +250,117 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
     }
     res
 }
+
+#' Calculates Pearson correlation between track expressions
+#'
+#' Calculates Pearson correlation between track expressions over iterator bins
+#' inside the supplied genomic scope. Expressions are processed in pairs:
+#' (expr1, expr2), (expr3, expr4), etc. Only bins where both expressions are
+#' not NaN are used.
+#'
+#' @param expr1 first track expression
+#' @param expr2 second track expression
+#' @param ... additional track expressions, supplied as pairs (expr3, expr4, ...)
+#' @param intervals genomic scope for which the function is applied
+#' @param iterator track expression iterator. If 'NULL' iterator is determined
+#' implicitly based on track expression.
+#' @param band track expression band. If 'NULL' no band is used.
+#' @param details if 'TRUE' returns summary statistics for each pair, otherwise
+#' returns correlations only
+#' @param names optional names for the pairs. If supplied, length must match the
+#' number of pairs.
+#' @return If 'details' is 'FALSE', a numeric vector of correlations. If
+#' 'details' is 'TRUE', a data frame with summary statistics for each pair.
+#' @seealso \code{\link{gextract}}, \code{\link{gscreen}}, \code{\link{gsummary}}
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gcor("dense_track", "sparse_track", intervals = gintervals(1, 0, 10000), iterator = 1000)
+#'
+#' @export gcor
+gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = NULL, band = NULL, details = FALSE, names = NULL) {
+    if (is.null(substitute(expr1)) || is.null(substitute(expr2))) {
+        stop("Usage: gcor(expr1, expr2, ..., intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, details = FALSE, names = NULL)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
+    if (is.null(intervals)) {
+        intervals <- get("ALLGENOME", envir = .misha)
+    }
+
+    eval_env <- parent.frame()
+    args <- c(list(substitute(expr1)), list(substitute(expr2)), as.list(substitute(list(...)))[-1L])
+
+    is_intervals_candidate <- function(x) {
+        if (is.data.frame(x)) {
+            return(.gintervals.is1d(x) || .gintervals.is2d(x))
+        }
+        if (is.character(x) && length(x) == 1) {
+            gintervs <- get("GINTERVS", envir = .misha)
+            if (x %in% gintervs) {
+                return(TRUE)
+            }
+            if (.gintervals.is_bigset(x, FALSE)) {
+                return(TRUE)
+            }
+        }
+        FALSE
+    }
+
+    if (is.null(intervals) && length(args) %% 2 != 0) {
+        intervals_candidate <- eval(args[[length(args)]], eval_env)
+        if (is_intervals_candidate(intervals_candidate)) {
+            intervals <- intervals_candidate
+            args <- args[-length(args)]
+        } else {
+            stop("gcor expects an even number of track expressions (pairs).", call. = FALSE)
+        }
+    }
+
+    if (length(args) %% 2 != 0) {
+        stop("gcor expects an even number of track expressions (pairs).", call. = FALSE)
+    }
+
+    exprs <- vapply(args, function(arg) {
+        do.call(.gexpr2str, list(arg), envir = eval_env)
+    }, character(1))
+    .iterator <- do.call(.giterator, list(substitute(iterator)), envir = eval_env)
+    num_pairs <- length(exprs) / 2
+
+    if (!is.null(names) && length(names) != num_pairs) {
+        stop("names length must match the number of expression pairs.", call. = FALSE)
+    }
+
+    if (.ggetOption("gmultitasking")) {
+        res <- .gcall("gtrackcor_multitask", exprs, intervals, .iterator, band, .misha_env())
+    } else {
+        res <- .gcall("gtrackcor", exprs, intervals, .iterator, band, .misha_env())
+    }
+
+    if (is.null(dim(res))) {
+        stats_matrix <- matrix(res, nrow = 1, dimnames = list(NULL, names(res)))
+    } else {
+        stats_matrix <- res
+    }
+
+    pair_names <- if (is.null(names)) {
+        paste(exprs[seq(1, length(exprs), by = 2)], exprs[seq(2, length(exprs), by = 2)], sep = "~")
+    } else {
+        names
+    }
+
+    if (isTRUE(details)) {
+        stats_df <- as.data.frame(stats_matrix, stringsAsFactors = FALSE)
+        rownames(stats_df) <- pair_names
+        return(stats_df)
+    }
+
+    cor_vals <- stats_matrix[, "cor"]
+    names(cor_vals) <- pair_names
+    cor_vals
+}
