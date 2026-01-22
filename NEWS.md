@@ -24,6 +24,7 @@
 * New track management functions:
   - `gtrack.mv()`: Rename or move a track within the same database
   - `gtrack.copy()`: Copy a track (can copy between databases when multiple are loaded)
+* Added `gcor` function that computes the correlation between two tracks, or between multiple pairs of tracks. 
 
 # misha 5.3.4
 

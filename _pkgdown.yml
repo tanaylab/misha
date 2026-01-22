@@ -103,6 +103,7 @@ reference:
       - gdist
       - gbins.quantiles
       - gbins.summary
+      - gcor
       - gcis_decay
       - gcompute_strands_autocorr
       - gdist
