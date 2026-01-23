@@ -289,10 +289,6 @@ gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = N
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
-    if (is.null(intervals)) {
-        intervals <- get("ALLGENOME", envir = .misha)
-    }
-
     eval_env <- parent.frame()
     args <- c(list(substitute(expr1)), list(substitute(expr2)), as.list(substitute(list(...)))[-1L])
 
@@ -312,6 +308,7 @@ gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = N
         FALSE
     }
 
+    # Check for positional intervals (last argument) before defaulting to ALLGENOME
     if (is.null(intervals) && length(args) %% 2 != 0) {
         intervals_candidate <- eval(args[[length(args)]], eval_env)
         if (is_intervals_candidate(intervals_candidate)) {
@@ -324,6 +321,11 @@ gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = N
 
     if (length(args) %% 2 != 0) {
         stop("gcor expects an even number of track expressions (pairs).", call. = FALSE)
+    }
+
+    # Default to ALLGENOME after positional intervals check
+    if (is.null(intervals)) {
+        intervals <- get("ALLGENOME", envir = .misha)
     }
 
     exprs <- vapply(args, function(arg) {
