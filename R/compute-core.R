@@ -251,9 +251,9 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
     res
 }
 
-#' Calculates Pearson correlation between track expressions
+#' Calculates correlation between track expressions
 #'
-#' Calculates Pearson correlation between track expressions over iterator bins
+#' Calculates correlation between track expressions over iterator bins
 #' inside the supplied genomic scope. Expressions are processed in pairs:
 #' (expr1, expr2), (expr3, expr4), etc. Only bins where both expressions are
 #' not NaN are used.
@@ -265,8 +265,12 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 #' @param iterator track expression iterator. If 'NULL' iterator is determined
 #' implicitly based on track expression.
 #' @param band track expression band. If 'NULL' no band is used.
+#' @param method correlation method to use. One of 'pearson' (default),
+#' 'spearman' (approximate, memory-efficient), or 'spearman.exact' (exact,
+#' requires O(n) memory where n is number of non-NaN pairs).
 #' @param details if 'TRUE' returns summary statistics for each pair, otherwise
-#' returns correlations only
+#' returns correlations only. For Pearson, includes n, n.na, mean1, mean2, sd1,
+#' sd2, cov, cor. For Spearman methods, includes n, n.na, cor.
 #' @param names optional names for the pairs. If supplied, length must match the
 #' number of pairs.
 #' @return If 'details' is 'FALSE', a numeric vector of correlations. If
@@ -280,10 +284,22 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 #' gdb.init_examples()
 #' gcor("dense_track", "sparse_track", intervals = gintervals(1, 0, 10000), iterator = 1000)
 #'
+#' # Spearman correlation (approximate, memory-efficient)
+#' gcor("dense_track", "sparse_track",
+#'     intervals = gintervals(1, 0, 10000),
+#'     iterator = 1000, method = "spearman"
+#' )
+#'
+#' # Exact Spearman correlation
+#' gcor("dense_track", "sparse_track",
+#'     intervals = gintervals(1, 0, 10000),
+#'     iterator = 1000, method = "spearman.exact"
+#' )
+#'
 #' @export gcor
-gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = NULL, band = NULL, details = FALSE, names = NULL) {
+gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = NULL, band = NULL, method = c("pearson", "spearman", "spearman.exact"), details = FALSE, names = NULL) {
     if (is.null(substitute(expr1)) || is.null(substitute(expr2))) {
-        stop("Usage: gcor(expr1, expr2, ..., intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, details = FALSE, names = NULL)", call. = FALSE)
+        stop("Usage: gcor(expr1, expr2, ..., intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, method = 'pearson', details = FALSE, names = NULL)", call. = FALSE)
     }
     .gcheckroot()
 
@@ -338,10 +354,27 @@ gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = N
         stop("names length must match the number of expression pairs.", call. = FALSE)
     }
 
-    if (.ggetOption("gmultitasking")) {
-        res <- .gcall("gtrackcor_multitask", exprs, intervals, .iterator, band, .misha_env())
-    } else {
-        res <- .gcall("gtrackcor", exprs, intervals, .iterator, band, .misha_env())
+    method <- match.arg(method)
+
+    # Select C++ function based on method
+    if (method == "pearson") {
+        if (.ggetOption("gmultitasking")) {
+            res <- .gcall("gtrackcor_multitask", exprs, intervals, .iterator, band, .misha_env())
+        } else {
+            res <- .gcall("gtrackcor", exprs, intervals, .iterator, band, .misha_env())
+        }
+    } else if (method == "spearman") {
+        if (.ggetOption("gmultitasking")) {
+            res <- .gcall("gtrackcor_spearman_multitask", exprs, intervals, .iterator, band, .misha_env())
+        } else {
+            res <- .gcall("gtrackcor_spearman", exprs, intervals, .iterator, band, .misha_env())
+        }
+    } else if (method == "spearman.exact") {
+        if (.ggetOption("gmultitasking")) {
+            res <- .gcall("gtrackcor_spearman_exact_multitask", exprs, intervals, .iterator, band, .misha_env())
+        } else {
+            res <- .gcall("gtrackcor_spearman_exact", exprs, intervals, .iterator, band, .misha_env())
+        }
     }
 
     if (is.null(dim(res))) {

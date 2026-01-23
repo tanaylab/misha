@@ -91,6 +91,7 @@ columnID
 contig
 contigs
 coord
+cov
 ctrl
 cwd
 dat
@@ -234,6 +235,7 @@ numbins
 onexit
 parallelization
 params
+pearson
 pos
 pre
 probs
@@ -265,7 +267,9 @@ roxygen
 rv
 sampleN
 scalability
+sd
 sep
+spearman
 sprintf
 src
 sshift

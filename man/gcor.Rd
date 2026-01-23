@@ -2,7 +2,7 @@
 % Please edit documentation in R/compute-core.R
 \name{gcor}
 \alias{gcor}
-\title{Calculates Pearson correlation between track expressions}
+\title{Calculates correlation between track expressions}
 \usage{
 gcor(
   expr1 = NULL,
@@ -11,6 +11,7 @@ gcor(
   intervals = NULL,
   iterator = NULL,
   band = NULL,
+  method = c("pearson", "spearman", "spearman.exact"),
   details = FALSE,
   names = NULL
 )
@@ -29,8 +30,13 @@ implicitly based on track expression.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
 
+\item{method}{correlation method to use. One of 'pearson' (default),
+'spearman' (approximate, memory-efficient), or 'spearman.exact' (exact,
+requires O(n) memory where n is number of non-NaN pairs).}
+
 \item{details}{if 'TRUE' returns summary statistics for each pair, otherwise
-returns correlations only}
+returns correlations only. For Pearson, includes n, n.na, mean1, mean2, sd1,
+sd2, cov, cor. For Spearman methods, includes n, n.na, cor.}
 
 \item{names}{optional names for the pairs. If supplied, length must match the
 number of pairs.}
@@ -40,7 +46,7 @@ If 'details' is 'FALSE', a numeric vector of correlations. If
 'details' is 'TRUE', a data frame with summary statistics for each pair.
 }
 \description{
-Calculates Pearson correlation between track expressions over iterator bins
+Calculates correlation between track expressions over iterator bins
 inside the supplied genomic scope. Expressions are processed in pairs:
 (expr1, expr2), (expr3, expr4), etc. Only bins where both expressions are
 not NaN are used.
@@ -52,6 +58,18 @@ options(gmax.processes = 2)
 
 gdb.init_examples()
 gcor("dense_track", "sparse_track", intervals = gintervals(1, 0, 10000), iterator = 1000)
+
+# Spearman correlation (approximate, memory-efficient)
+gcor("dense_track", "sparse_track",
+    intervals = gintervals(1, 0, 10000),
+    iterator = 1000, method = "spearman"
+)
+
+# Exact Spearman correlation
+gcor("dense_track", "sparse_track",
+    intervals = gintervals(1, 0, 10000),
+    iterator = 1000, method = "spearman.exact"
+)
 
 }
 \seealso{
