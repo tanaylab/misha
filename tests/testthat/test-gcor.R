@@ -20,7 +20,8 @@ test_that("gcor supports positional intervals as last argument", {
     cor_multi_positional <- gcor(
         "dense_track", "sparse_track",
         "dense_track", "dense_track",
-        intervals, iterator = iterator
+        intervals,
+        iterator = iterator
     )
 
     expect_equal(cor_multi_positional, cor_multi_named)
