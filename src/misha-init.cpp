@@ -71,6 +71,10 @@ extern "C" {
     extern SEXP ginterv2d_convert(SEXP, SEXP, SEXP);
     extern SEXP gtrackcor(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackcor_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackcor_spearman(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackcor_spearman_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackcor_spearman_exact(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gtrackcor_spearman_exact_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackdist(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackdist_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_import_contacts(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -161,6 +165,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"ginterv2d_convert", (DL_FUNC)&ginterv2d_convert, 3},
     {"gtrackcor", (DL_FUNC)&gtrackcor, 5},
     {"gtrackcor_multitask", (DL_FUNC)&gtrackcor_multitask, 5},
+    {"gtrackcor_spearman", (DL_FUNC)&gtrackcor_spearman, 5},
+    {"gtrackcor_spearman_multitask", (DL_FUNC)&gtrackcor_spearman_multitask, 5},
+    {"gtrackcor_spearman_exact", (DL_FUNC)&gtrackcor_spearman_exact, 5},
+    {"gtrackcor_spearman_exact_multitask", (DL_FUNC)&gtrackcor_spearman_exact_multitask, 5},
     {"gtrackdist", (DL_FUNC)&gtrackdist, 7},
     {"gtrackdist_multitask", (DL_FUNC)&gtrackdist_multitask, 7},
     {"gtrack_import_contacts", (DL_FUNC)&gtrack_import_contacts, 5},
