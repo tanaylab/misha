@@ -278,7 +278,7 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 #' @seealso \code{\link{gextract}}, \code{\link{gscreen}}, \code{\link{gsummary}}
 #' @examples
 #' \dontshow{
-#' options(gmax.processes = 2)
+#' old <- options(gmax.processes = 2, gmultitasking = FALSE, gmax.data.size = 1e5)
 #' }
 #'
 #' gdb.init_examples()
@@ -295,6 +295,10 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
 #'     intervals = gintervals(1, 0, 10000),
 #'     iterator = 1000, method = "spearman.exact"
 #' )
+#'
+#' \dontshow{
+#' options(old)
+#' }
 #'
 #' @export gcor
 gcor <- function(expr1 = NULL, expr2 = NULL, ..., intervals = NULL, iterator = NULL, band = NULL, method = c("pearson", "spearman", "spearman.exact"), details = FALSE, names = NULL) {

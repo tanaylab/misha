@@ -53,7 +53,7 @@ not NaN are used.
 }
 \examples{
 \dontshow{
-options(gmax.processes = 2)
+old <- options(gmax.processes = 2, gmultitasking = FALSE, gmax.data.size = 1e5)
 }
 
 gdb.init_examples()
@@ -70,6 +70,10 @@ gcor("dense_track", "sparse_track",
     intervals = gintervals(1, 0, 10000),
     iterator = 1000, method = "spearman.exact"
 )
+
+\dontshow{
+options(old)
+}
 
 }
 \seealso{

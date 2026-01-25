@@ -21,9 +21,9 @@
 .gintervals.needs_bigset <- function(intervals = NULL, size = NULL) {
     if (!is.null(intervals)) {
         chromsizes <- gintervals.chrom_sizes(intervals)
-        nrow(chromsizes) && sum(chromsizes$size) > min(.ggetOption("gmax.data.size", 10000000), .ggetOption("gbig.intervals.size", 1000000))
+        nrow(chromsizes) && sum(chromsizes$size) > min(.ggetOption("gmax.data.size"), .ggetOption("gbig.intervals.size"))
     } else {
-        size > min(.ggetOption("gmax.data.size", 10000000), .ggetOption("gbig.intervals.size", 1000000))
+        size > min(.ggetOption("gmax.data.size"), .ggetOption("gbig.intervals.size"))
     }
 }
 
@@ -41,9 +41,9 @@
                 chromsizes <- chromsizes[chromsizes$chrom2 == chrom2, ]
             }
         }
-        !nrow(chromsizes) || sum(chromsizes$size) <= .ggetOption("gmax.data.size", 10000000)
+        !nrow(chromsizes) || sum(chromsizes$size) <= .ggetOption("gmax.data.size")
     } else {
-        size <= .ggetOption("gmax.data.size", 10000000)
+        size <= .ggetOption("gmax.data.size")
     }
 }
 

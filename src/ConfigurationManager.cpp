@@ -4,6 +4,7 @@
 #include <cstdio>
 
 #include "ConfigurationManager.h"
+#include "ConfigurationDefaults.h"
 #include "rdbutils.h"
 
 using namespace std;
@@ -32,9 +33,9 @@ uint64_t ConfigurationManager::get_max_processes() const
 		else if (Rf_isInteger(r_max_processes))
 			m_max_processes = INTEGER(r_max_processes)[0];
 		else
-			m_max_processes = 64;
-		if (m_max_processes < 1) 
-			m_max_processes = 64;
+			m_max_processes = misha::config::DEFAULT_MAX_PROCESSES;
+		if (m_max_processes < 1)
+			m_max_processes = misha::config::DEFAULT_MAX_PROCESSES;
 	}
 	return m_max_processes;
 }
@@ -49,9 +50,9 @@ uint64_t ConfigurationManager::get_max_processes2core() const
 		else if (Rf_isInteger(r_max_processes2core))
 			m_max_processes2core = INTEGER(r_max_processes2core)[0];
 		else
-			m_max_processes2core = 4;
-		if (m_max_processes2core < 1) 
-			m_max_processes2core = 4;
+			m_max_processes2core = misha::config::DEFAULT_MAX_PROCESSES2CORE;
+		if (m_max_processes2core < 1)
+			m_max_processes2core = misha::config::DEFAULT_MAX_PROCESSES2CORE;
 	}
 	return m_max_processes2core;
 }
@@ -66,7 +67,7 @@ uint64_t ConfigurationManager::get_min_scope4process() const
 		else if (Rf_isInteger(r_min_scope4process))
 			m_min_scope4process = INTEGER(r_min_scope4process)[0];
 		else
-			m_min_scope4process = 10000;
+			m_min_scope4process = misha::config::DEFAULT_MIN_SCOPE4PROCESS;
 	}
 	return m_min_scope4process;
 }
@@ -81,7 +82,7 @@ uint64_t ConfigurationManager::get_min_seqs_work4process() const
 		else if (Rf_isInteger(r_min_seqs_work4process))
 			m_min_seqs_work4process = INTEGER(r_min_seqs_work4process)[0];
 		else
-			m_min_seqs_work4process = 100000;
+			m_min_seqs_work4process = misha::config::DEFAULT_MIN_SEQS_WORK4PROCESS;
 	}
 	return m_min_seqs_work4process;
 }
@@ -96,7 +97,7 @@ uint64_t ConfigurationManager::get_max_data_size() const
 		else if (Rf_isInteger(r_max_data_size))
 			m_max_data_size = INTEGER(r_max_data_size)[0];
 		else
-			m_max_data_size = numeric_limits<uint64_t>::max();
+			m_max_data_size = misha::config::UNLIMITED;
 	}
 	return m_max_data_size;
 }
@@ -111,7 +112,7 @@ uint64_t ConfigurationManager::get_max_mem_usage() const
 		else if (Rf_isInteger(r_max_mem_usage))
 			m_max_mem_usage = INTEGER(r_max_mem_usage)[0] * 1000;
 		else
-			m_max_mem_usage = numeric_limits<uint64_t>::max();
+			m_max_mem_usage = misha::config::UNLIMITED;
 	}
 	return m_max_mem_usage;
 }
@@ -126,7 +127,7 @@ uint64_t ConfigurationManager::get_big_intervals_size() const
 		else if (Rf_isInteger(r_big_intervals_size))
 			m_big_intervals_size = INTEGER(r_big_intervals_size)[0];
 		else
-			m_big_intervals_size = numeric_limits<uint64_t>::max();
+			m_big_intervals_size = misha::config::UNLIMITED;
 		m_big_intervals_size = min(m_big_intervals_size, get_max_data_size());
 	}
 	return m_big_intervals_size;
@@ -157,7 +158,7 @@ uint64_t ConfigurationManager::get_track_chunk_size() const
 		else if (Rf_isInteger(r_track_chunk_size))
 			m_track_chunk_size = INTEGER(r_track_chunk_size)[0];
 		else
-			m_track_chunk_size = 100000;
+			m_track_chunk_size = misha::config::DEFAULT_TRACK_CHUNK_SIZE;
 	}
 	return m_track_chunk_size;
 }
@@ -172,7 +173,7 @@ uint64_t ConfigurationManager::get_track_num_chunks() const
 		else if (Rf_isInteger(r_track_num_chunks))
 			m_track_num_chunks = INTEGER(r_track_num_chunks)[0];
 		else
-			m_track_num_chunks = 0;
+			m_track_num_chunks = misha::config::DEFAULT_TRACK_NUM_CHUNKS;
 	}
 	return m_track_num_chunks;
 }
@@ -184,13 +185,8 @@ rdb::MultitaskingMode ConfigurationManager::select_multitasking_mode(bool is_det
 		return rdb::MT_MODE_SINGLE;
 
 	// Auto-disable multitasking for small datasets to avoid fork overhead
-	// Fork overhead scales with number of processes, and I/O-bound workloads
-	// show minimal parallel benefit even at large sizes.
-	// Dynamic threshold: 1000 records per process ensures overhead < 10% of runtime
-	// Examples: 2 procs -> 2K threshold, 89 procs -> 89K threshold
-	// Empirical testing: 89 procs was slower at 20K records, validating this approach
-	const uint64_t RECORDS_PER_PROCESS_THRESHOLD = 1000;
-	uint64_t min_size_for_multitasking = get_max_processes() * RECORDS_PER_PROCESS_THRESHOLD;
+	// See ConfigurationDefaults.h for rationale on MIN_RECORDS_PER_PROCESS threshold
+	uint64_t min_size_for_multitasking = get_max_processes() * misha::config::MIN_RECORDS_PER_PROCESS;
 	if (estimated_size < min_size_for_multitasking)
 		return rdb::MT_MODE_SINGLE;
 
@@ -206,8 +202,8 @@ rdb::MultitaskingMode ConfigurationManager::select_multitasking_mode(bool is_det
 void ConfigurationManager::verify_max_data_size(uint64_t data_size, const char *data_name, bool check_all_kids) const
 {
 	if (data_size > get_max_data_size()) {
-		// Calculate a suggested size (50% larger than needed)
-		uint64_t suggested_size = (uint64_t)(data_size * 1.5);
+		// Calculate a suggested size with headroom (see ConfigurationDefaults.h)
+		uint64_t suggested_size = (uint64_t)(data_size * misha::config::SUGGESTED_SIZE_MULTIPLIER);
 
 		// Format sizes as human-readable strings
 		char current_size_str[100], needed_size_str[100], suggested_size_str[100];

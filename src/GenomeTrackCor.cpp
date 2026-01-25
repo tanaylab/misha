@@ -560,7 +560,11 @@ SEXP gtrackcor_spearman_exact_multitask(SEXP _track_exprs, SEXP _intervals, SEXP
         // Each record is a ValuePair (two doubles)
         uint64_t record_size = sizeof(ValuePair);
 
-        if (iu.distribute_task(header_size, record_size)) {
+        uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+        // Multiply by num_pairs since each bin produces one value per pair
+        uint64_t estimated_records = estimated_bins > 0 ? estimated_bins * num_pairs : 0;
+
+        if (iu.distribute_task(header_size, record_size, rdb::MT_MODE_MMAP, estimated_records)) {
             // Child process: collect all pairs
             TrackExprScanner scanner(iu);
             vector<vector<ValuePair>> all_pairs(num_pairs);
@@ -686,6 +690,9 @@ SEXP gtrackcor_spearman(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_polic
         intervals2d->verify_no_overlaps(iu.get_chromkey());
 
         uint64_t sample_size = iu.get_max_data_size();
+        uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+        if (estimated_bins > 0 && estimated_bins < sample_size)
+            sample_size = estimated_bins;
 
         // For each pair: sample (x,y) pairs, and separately sample x and y for rank estimation
         vector<StreamSampler<ValuePair>> pair_samplers(num_pairs);
@@ -784,6 +791,9 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
             rreturn(R_NilValue);
 
         uint64_t sample_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
+        uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+        if (estimated_bins > 0 && estimated_bins < sample_size)
+            sample_size = estimated_bins;
 
         // Estimate result size: for each pair, we send:
         // - total_bins (uint64_t) + non_nan_counts (uint64_t)

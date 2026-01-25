@@ -138,7 +138,11 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
-		StreamPercentiler<double> sp(iu.get_max_data_size(), iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
+		uint64_t sampling_buf_size = iu.get_max_data_size();
+		uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+		if (estimated_bins > 0 && estimated_bins < sampling_buf_size)
+			sampling_buf_size = estimated_bins;
+		StreamPercentiler<double> sp(sampling_buf_size, iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
 
 		for (scanner.begin(_expr, intervals1d, intervals2d, _iterator_policy, _band); !scanner.isend(); scanner.next()) {
 			float val = scanner.last_real(0);
@@ -222,6 +226,9 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 		if (num_kids) {
 			uint64_t kid_rnd_sampling_buf_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
+			uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+			if (estimated_bins > 0 && estimated_bins < kid_rnd_sampling_buf_size)
+				kid_rnd_sampling_buf_size = estimated_bins;
 			uint64_t kid_lowest_vals_buf_size = iu.get_quantile_edge_data_size();
 			uint64_t kid_highest_vals_buf_size = iu.get_quantile_edge_data_size();
 
@@ -436,7 +443,11 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 			verror("The type of iterator is currently not supported by the function");
 
 		vector<double> medians;
-		StreamPercentiler<double> sp(iu.get_max_data_size(), iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
+		uint64_t sampling_buf_size = iu.get_max_data_size();
+		uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+		if (estimated_bins > 0 && estimated_bins < sampling_buf_size)
+			sampling_buf_size = estimated_bins;
+		StreamPercentiler<double> sp(sampling_buf_size, iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
 		bool generate_warning = false;
 		SEXP answer = R_NilValue;
 
@@ -662,6 +673,9 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 			rreturn(R_NilValue);
 
 		uint64_t kid_rnd_sampling_buf_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
+		uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+		if (estimated_bins > 0 && estimated_bins < kid_rnd_sampling_buf_size)
+			kid_rnd_sampling_buf_size = estimated_bins;
 		StreamPercentiler<double> sp(kid_rnd_sampling_buf_size, iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
 
 		if (do_big_intervset_out) {
@@ -983,8 +997,13 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
+		uint64_t sampling_buf_size = iu.get_max_data_size();
+		uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+		if (estimated_bins > 0 && estimated_bins < sampling_buf_size)
+			sampling_buf_size = estimated_bins;
+
 		for (vector< StreamPercentiler<double> >::iterator isp = sps.begin(); isp != sps.end(); ++isp)
-			isp->init(iu.get_max_data_size(), iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
+			isp->init(sampling_buf_size, iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
 
 		int64_t data_size = 0;
 

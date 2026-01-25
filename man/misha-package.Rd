@@ -17,11 +17,15 @@ to alter the value of the options.
 
 \tabular{lll}{ NAME \tab DEFAULT \tab DESCRIPTION \cr gmax.data.size \tab
 AUTO \tab Auto-configured based on system RAM and processes. \cr \tab \tab
-Formula: min((RAM * 0.7) / gmax.processes, 10GB). \cr \tab \tab Prevents
-excessive memory usage by 'gextract', 'gscreen', etc. \cr gbig.intervals.size
-\tab 1000000 \tab Minimal number of intervals in a big intervals set format
-\cr gmax.mem.usage \tab 10000000 \tab Maximal memory consumption of all child
-processes in KB before \cr \tab \tab the limiting algorithm is invoked. \cr
+Formula: min((RAM * 0.7) / gmax.processes, 10GB). \cr \tab \tab Controls
+max in-memory result buffer size for streaming/sampling. \cr \tab \tab
+Operations like gextract, gscreen use this as upper bound. \cr gbig.intervals.size
+\tab 1000000 \tab Threshold for converting interval sets to disk-based \cr \tab \tab
+"big" format. When interval count exceeds this, intervals \cr \tab \tab
+are stored per-chromosome instead of all in memory. \cr \tab \tab
+Note: Independent of gmax.data.size (different purposes). \cr gmax.mem.usage
+\tab 10000000 \tab Maximal memory consumption of all child \cr \tab \tab
+processes in KB before the limiting algorithm is invoked. \cr
 gmax.processes \tab AUTO \tab Auto-configured to 70\% of CPU cores. \cr \tab
 \tab Maximal number of processes for multitasking. \cr gmax.processes2core
 \tab 2 \tab Maximal number of processes per CPU core for multitasking \cr

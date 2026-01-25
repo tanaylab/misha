@@ -344,6 +344,10 @@ public:
 	// Returns the chunk size of 2D track
 	uint64_t get_track_num_chunks() const { return m_config.get_track_num_chunks(); }
 
+	// Estimates total number of iterator bins for simple numeric iterators.
+	// Returns 0 if the iterator type is not supported for fast estimation.
+	uint64_t estimate_num_bins(SEXP iterator_policy, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d) const;
+
 	// Returns true if iterator is 1D
 	bool is_1d_iterator(SEXP rtrack_expr, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP riterator);
 
@@ -381,6 +385,11 @@ public:
 	bool distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
 						 uint64_t res_record_size,   // size in bytes per datum in the result
 						 rdb::MultitaskingMode mode);
+	// Overload with explicit mode and max record count (caps shared memory allocation).
+	bool distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
+						 uint64_t res_record_size,   // size in bytes per datum in the result
+						 rdb::MultitaskingMode mode,
+						 uint64_t max_records);      // max number of result records (0 = use gmax.data.size)
 
 private:
 	GenomeChromKey                m_chrom_key;

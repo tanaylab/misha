@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cctype>
+#include <limits>
 #include <fstream>
 #include <time.h>
 #include <unistd.h>
@@ -393,6 +394,71 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 	return m_num_planned_kids;
 }
 
+static uint64_t estimate_fixed_bin_bins(GIntervalsFetcher1D *intervals1d, int64_t binsize)
+{
+	if (!intervals1d || binsize <= 0)
+		return 0;
+
+	uint64_t bins = 0;
+	intervals1d->begin_iter();
+	for (; !intervals1d->isend(); intervals1d->next()) {
+		const GInterval &interval = intervals1d->cur_interval();
+		int64_t start_bin = (int64_t)floor(interval.start / (double)binsize);
+		int64_t end_bin = (int64_t)ceil(interval.end / (double)binsize);
+		if (end_bin > start_bin)
+			bins += (uint64_t)(end_bin - start_bin);
+	}
+
+	return bins;
+}
+
+static uint64_t estimate_fixed_rect_bins(GIntervalsFetcher2D *intervals2d, int64_t width, int64_t height)
+{
+	if (!intervals2d || width <= 0 || height <= 0)
+		return 0;
+
+	uint64_t bins = 0;
+	intervals2d->begin_iter();
+	for (; !intervals2d->isend(); intervals2d->next()) {
+		const GInterval2D &interval = intervals2d->cur_interval();
+		int64_t start_x = (int64_t)floor(interval.start1() / (double)width);
+		int64_t end_x = (int64_t)ceil(interval.end1() / (double)width);
+		int64_t start_y = (int64_t)floor(interval.start2() / (double)height);
+		int64_t end_y = (int64_t)ceil(interval.end2() / (double)height);
+		if (end_x > start_x && end_y > start_y) {
+			uint64_t xbins = (uint64_t)(end_x - start_x);
+			uint64_t ybins = (uint64_t)(end_y - start_y);
+			if (xbins && ybins) {
+				uint64_t add = xbins * ybins;
+				if (add / xbins != ybins || bins > numeric_limits<uint64_t>::max() - add)
+					return numeric_limits<uint64_t>::max();
+				bins += add;
+			}
+		}
+	}
+
+	return bins;
+}
+
+uint64_t IntervUtils::estimate_num_bins(SEXP iterator_policy, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d) const
+{
+	if (!iterator_policy || Rf_isNull(iterator_policy))
+		return 0;
+
+	if ((Rf_isReal(iterator_policy) || Rf_isInteger(iterator_policy)) && Rf_length(iterator_policy) == 1) {
+		int64_t binsize = Rf_isReal(iterator_policy) ? (int64_t)REAL(iterator_policy)[0] : INTEGER(iterator_policy)[0];
+		return estimate_fixed_bin_bins(scope1d, binsize);
+	}
+
+	if ((Rf_isReal(iterator_policy) || Rf_isInteger(iterator_policy)) && Rf_length(iterator_policy) == 2) {
+		int64_t width = Rf_isReal(iterator_policy) ? (int64_t)REAL(iterator_policy)[0] : INTEGER(iterator_policy)[0];
+		int64_t height = Rf_isReal(iterator_policy) ? (int64_t)REAL(iterator_policy)[1] : INTEGER(iterator_policy)[1];
+		return estimate_fixed_rect_bins(scope2d, width, height);
+	}
+
+	return 0;
+}
+
 // Original 2-parameter version for backward compatibility
 bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
 								  uint64_t res_record_size)   // size in bytes per datum in the result
@@ -405,12 +471,24 @@ bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in by
 								  uint64_t res_record_size,   // size in bytes per datum in the result
 								  rdb::MultitaskingMode mode)
 {
+	return distribute_task(res_const_size, res_record_size, mode, 0);
+}
+
+bool IntervUtils::distribute_task(uint64_t res_const_size,    // data size in bytes for all the result
+								  uint64_t res_record_size,   // size in bytes per datum in the result
+								  rdb::MultitaskingMode mode,
+								  uint64_t max_records)
+{
 	// For now, we only support MMAP mode in this function
 	// MT_MODE_SINGLE should be handled by the caller (not calling distribute_task at all)
 	if (mode != rdb::MT_MODE_MMAP)
 		verror("distribute_task called with unsupported mode %d", mode);
 
-	uint64_t max_res_size = get_max_data_size() * res_record_size + m_num_planned_kids * res_const_size;
+	uint64_t max_records_limit = get_max_data_size();
+	if (max_records > 0 && max_records < max_records_limit)
+		max_records_limit = max_records;
+
+	uint64_t max_res_size = max_records_limit * res_record_size + m_num_planned_kids * res_const_size;
 
 	rdb::prepare4multitasking(res_const_size, res_record_size, max_res_size, get_max_mem_usage(), m_num_planned_kids);
 
