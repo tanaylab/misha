@@ -286,10 +286,14 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 				rreturn(R_NilValue);
 			}
 
+			uint64_t estimated_records = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+
 			if (iu.distribute_task(0,
 								   (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)) + // interval
 							       sizeof(unsigned) +                                           // interval id
-							       sizeof(double)))                                             // values
+							       sizeof(double),                                              // values
+								   rdb::MT_MODE_MMAP,
+								   estimated_records))
 			{  // child process
 				for (scanner.begin(_track_exprs, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band); !scanner.isend(); scanner.next()) {
 					if (scanner.get_iterator()->is_1d()) {

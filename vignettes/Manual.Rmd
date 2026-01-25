@@ -513,7 +513,9 @@ The `.misha$ALLGENOME` variable is frequently used as a default value for the in
 
 Interval sets can be saved in the Genomic Database. Use the `gintervals.save` and `gintervals.load` functions to save or load an interval set from the database, and `gintervals.update` to update/add/delete a certain chromosome from the set.
 
-Internally, interval sets can be stored in two different formats: **small interval set** or **big interval set**. The specific format is chosen depending on the size of the interval set. Big format is selected for interval sets that contain more than `gbig.intervals.size` intervals (`gbig.intervals.size` is set via `options`), while smaller sets are stored in the small format. Use `gintervals.is.bigset` to determine the format of the stored interval set.
+Internally, interval sets can be stored in two different formats: **small interval set** or **big interval set**. The specific format is chosen depending on the size of the interval set. Big format is selected for interval sets that contain more than `gbig.intervals.size` intervals (default: 1,000,000; set via `options`), while smaller sets are stored in the small format. Use `gintervals.is.bigset` to determine the format of the stored interval set.
+
+> **Note:** `gbig.intervals.size` controls *storage format* for interval sets (disk-based vs. in-memory), while `gmax.data.size` controls *buffer sizes* for streaming operations like `gextract` and `gquantiles`. These are independent thresholds serving different purposes.
 
 Saved interval sets in the small format can be seamlessly used in all functions and track expressions without the need to explicitly load them.
 
