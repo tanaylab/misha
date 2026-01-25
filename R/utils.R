@@ -33,7 +33,12 @@
 
 .ggetOption <- function(x, default = NULL) {
     if (missing(default)) {
-        return(options(x)[[1L]])
+        val <- options(x)[[1L]]
+        # If option not set, use centralized default from .misha_defaults
+        if (is.null(val) && exists(".misha_defaults") && x %in% names(.misha_defaults)) {
+            return(.misha_defaults[[x]])
+        }
+        return(val)
     }
     if (x %in% names(options())) {
         options(x)[[1L]]
@@ -87,7 +92,7 @@
 }
 
 .gverify_max_data_size <- function(size, data_name = "Result", arguments = NULL) {
-    max.data.size <- .ggetOption("gmax.data.size", 10000000)
+    max.data.size <- .ggetOption("gmax.data.size")
 
     if (size > max.data.size) {
         if (is.null(arguments)) {

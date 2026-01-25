@@ -212,7 +212,9 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 		if (!iu.prepare4multitasking(_track_exprs, &intervals1d, &intervals2d, _iterator_policy, _band))
 			rreturn(R_NilValue);
 
-		if (iu.distribute_task(0, sizeof(double))) {  // child process
+		uint64_t estimated_records = iu.estimate_num_bins(_iterator_policy, &intervals1d, &intervals2d);
+
+		if (iu.distribute_task(0, sizeof(double), rdb::MT_MODE_MMAP, estimated_records)) {  // child process
 			GIntervalsFetcher1D *kid_intervals1d = iu.get_kid_intervals1d();
 			GIntervalsFetcher2D *kid_intervals2d = iu.get_kid_intervals2d();
 			vector<SEXP> rvars(num_track_exprs, R_NilValue);
