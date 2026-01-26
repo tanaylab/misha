@@ -573,14 +573,14 @@ SEXP gtrackcor_spearman_exact_multitask(SEXP _track_exprs, SEXP _intervals, SEXP
             for (scanner.begin(_track_exprs, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band); !scanner.isend(); scanner.next()) {
                 for (unsigned i = 0; i < num_pairs; ++i) {
                     double x = scanner.last_real(2 * i);
-                double y = scanner.last_real(2 * i + 1);
-                ++total_bins[i];
-                if (!std::isnan(x) && !std::isnan(y)) {
-                    all_pairs[i].push_back({x, y});
-                    iu.verify_max_data_size(all_pairs[i].size(), "Result");
+                    double y = scanner.last_real(2 * i + 1);
+                    ++total_bins[i];
+                    if (!std::isnan(x) && !std::isnan(y)) {
+                        all_pairs[i].push_back({x, y});
+                        iu.verify_max_data_size(all_pairs[i].size(), "Result");
+                    }
                 }
             }
-        }
 
             // Pack results: for each pair, send total_bins, num_values, then values
             uint64_t total_values = 0;
