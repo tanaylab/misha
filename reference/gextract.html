@@ -162,22 +162,16 @@ expressions.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co">## get values of 'dense_track' for [0, 400), chrom 1</span></span></span>
 <span class="r-in"><span><span class="fu">gextract</span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">400</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start end dense_track intervalID</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1     0  50   0.1777778          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1    50 100   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1   100 150   0.1800000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1   150 200   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr1   200 250   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6  chr1   250 300   0.2000000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7  chr1   300 350   0.1600000          1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8  chr1   350 400   0.1600000          1</span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error:</span> Failed to allocate shared memory: Cannot allocate memory</span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> Memory usage of the library can be controlled via gmax.data.size option (see options, getOptions).</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co">## get values of 'rects_track' (a 2D track) for a 2D interval</span></span></span>
 <span class="r-in"><span><span class="fu">gextract</span><span class="op">(</span></span></span>
 <span class="r-in"><span>    <span class="st">"rects_track"</span>,</span></span>
 <span class="r-in"><span>    <span class="fu"><a href="gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="st">"chr1"</span>, <span class="fl">0</span>, <span class="fl">4000</span>, <span class="st">"chr2"</span>, <span class="fl">2000</span>, <span class="fl">5000</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> NULL</span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error:</span> Failed to allocate shared memory: Cannot allocate memory</span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> Memory usage of the library can be controlled via gmax.data.size option (see options, getOptions).</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
