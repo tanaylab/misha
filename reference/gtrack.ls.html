@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.4</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.0</span>
       </span>
     </div>
 
@@ -71,6 +71,7 @@
     <div id="ref-usage">
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gtrack.ls</span><span class="op">(</span></span>
 <span>  <span class="va">...</span>,</span>
+<span>  db <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  ignore.case <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  perl <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  fixed <span class="op">=</span> <span class="cn">FALSE</span>,</span>
@@ -85,6 +86,11 @@
 <dl><dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>these arguments are of either form 'pattern' or 'attribute =
 pattern'</p></dd>
+
+
+<dt id="arg-db">db<a class="anchor" aria-label="anchor" href="#arg-db"></a></dt>
+<dd><p>optional database path to filter tracks. If specified, only tracks
+from that database are returned.</p></dd>
 
 
 <dt id="arg-ignore-case-perl-fixed-usebytes">ignore.case, perl, fixed, useBytes<a class="anchor" aria-label="anchor" href="#arg-ignore-case-perl-fixed-usebytes"></a></dt>
@@ -107,11 +113,13 @@ supplied with a track attribute (i.e. in the form of 'name = pattern') then
 track attribute is matched against the pattern.</p>
 <p>Multiple patterns are applied one after another. The resulted list of tracks
 should match all the patterns.</p>
+<p>When multiple databases are connected, the 'db' parameter can be used to
+filter tracks to only those from a specific database.</p>
     </div>
     <div id="see-also">
     <h2>See also</h2>
     <div class="dont-index"><p><code><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></code>, <code><a href="gtrack.exists.html">gtrack.exists</a></code>,
-<code><a href="gtrack.create.html">gtrack.create</a></code>, <code><a href="gtrack.rm.html">gtrack.rm</a></code></p></div>
+<code><a href="gtrack.create.html">gtrack.create</a></code>, <code><a href="gtrack.rm.html">gtrack.rm</a></code>, <code><a href="gtrack.dataset.html">gtrack.dataset</a></code></p></div>
     </div>
 
     <div id="ref-examples">

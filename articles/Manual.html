@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.4</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.0</span>
       </span>
     </div>
 
@@ -139,6 +139,241 @@ sequences.</li>
 </ul>
 <p><code>pssms</code> and <code>seq</code> directories are optional and
 are required only by a subset of functions in the package.</p>
+<div class="section level4">
+<h4 id="dataset-api">Dataset API<a class="anchor" aria-label="anchor" href="#dataset-api"></a>
+</h4>
+<p>The <code>misha</code> package supports working with multiple data
+sources through the Dataset API. This is useful when you want to combine
+a shared read-only reference database with a user-specific database for
+custom tracks, or when working with multiple data sources that share the
+same genome.</p>
+<div class="section level5">
+<h5 id="working-database-vs-datasets">Working Database vs Datasets<a class="anchor" aria-label="anchor" href="#working-database-vs-datasets"></a>
+</h5>
+<p>The Dataset API distinguishes between:</p>
+<ol style="list-style-type: decimal">
+<li>
+<strong>Working Database</strong>: Set via <code><a href="../reference/gdb.init.html">gsetroot()</a></code>,
+this is your primary, writable database where new tracks and intervals
+are created.</li>
+<li>
+<strong>Loaded Datasets</strong>: Added via
+<code><a href="../reference/gdataset.load.html">gdataset.load()</a></code>, these are read-only data sources that
+provide additional tracks and intervals.</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Set your working database</span></span>
+<span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"/data/my_project"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Load additional datasets</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"/shared/ucsc_annotations"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"/shared/encode_chipseq"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># List all sources (working db + loaded datasets)</span></span>
+<span><span class="fu"><a href="../reference/gdataset.ls.html">gdataset.ls</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Get detailed information</span></span>
+<span><span class="fu"><a href="../reference/gdataset.ls.html">gdataset.ls</a></span><span class="op">(</span>dataframe <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<p><strong>Key Points:</strong> - All sources must have identical
+<code>chrom_sizes.txt</code> files (same genome assembly) - The working
+database is used for <code>seq/</code> and <code>chrom_sizes.txt</code>
+access - Tracks and intervals are aggregated from all sources - New
+tracks are created in the working database only</p>
+</div>
+<div class="section level5">
+<h5 id="track-resolution-and-collision-handling">Track Resolution and Collision Handling<a class="anchor" aria-label="anchor" href="#track-resolution-and-collision-handling"></a>
+</h5>
+<p>By default, loading a dataset with tracks that already exist will
+error:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># If working_db has "my_track" and dataset1 also has "my_track":</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"dataset1"</span><span class="op">)</span></span>
+<span><span class="co"># Error: Cannot load dataset 'dataset1': tracks 'my_track' already exist in working database.</span></span>
+<span><span class="co"># Use force=TRUE to override (working db wins).</span></span></code></pre></div>
+<p>Use <code>force=TRUE</code> to allow collisions, with clear
+precedence rules:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Working database always wins over datasets</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"dataset1"</span>, force <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># For dataset-to-dataset collisions, later-loaded wins</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"dataset2"</span>, force <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Check which source provides a track</span></span>
+<span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="st">"my_track"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># See all sources where a track exists (for debugging)</span></span>
+<span><span class="fu"><a href="../reference/gtrack.dbs.html">gtrack.dbs</a></span><span class="op">(</span><span class="st">"my_track"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="cross-database-track-expressions">Cross-Database Track Expressions<a class="anchor" aria-label="anchor" href="#cross-database-track-expressions"></a>
+</h5>
+<p>Track expressions seamlessly combine tracks from different
+sources:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"/data/my_project"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"/shared/annotations"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Extract tracks from different sources in a single call</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"my_track"</span>, <span class="st">"annotation_track"</span><span class="op">)</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">100</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Use track expressions across sources</span></span>
+<span><span class="va">normalized</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"my_track - annotation_track"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">100</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Access track attributes from any source</span></span>
+<span><span class="fu"><a href="../reference/gtrack.attr.get.html">gtrack.attr.get</a></span><span class="op">(</span><span class="st">"my_track"</span>, <span class="st">"description"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gtrack.attr.get.html">gtrack.attr.get</a></span><span class="op">(</span><span class="st">"annotation_track"</span>, <span class="st">"description"</span><span class="op">)</span></span></code></pre></div>
+<p>Virtual tracks can reference source tracks from any loaded
+source:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create virtual tracks from different sources</span></span>
+<span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"vt_signal"</span>, <span class="st">"my_track"</span>, <span class="st">"avg"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"vt_annotation"</span>, <span class="st">"annotation_track"</span>, <span class="st">"avg"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Combine them in expressions</span></span>
+<span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"vt_signal / vt_annotation"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="querying-track-and-interval-sources">Querying Track and Interval Sources<a class="anchor" aria-label="anchor" href="#querying-track-and-interval-sources"></a>
+</h5>
+<p>Use <code><a href="../reference/gtrack.dataset.html">gtrack.dataset()</a></code>, <code><a href="../reference/gtrack.dbs.html">gtrack.dbs()</a></code>, and
+<code><a href="../reference/gintervals.dataset.html">gintervals.dataset()</a></code> to find which source contains a track
+or interval set:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Single track - returns source path</span></span>
+<span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="st">"my_track"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># All sources containing a track (useful for debugging shadowed tracks)</span></span>
+<span><span class="fu"><a href="../reference/gtrack.dbs.html">gtrack.dbs</a></span><span class="op">(</span><span class="st">"my_track"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Multiple tracks (vectorized)</span></span>
+<span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"track1"</span>, <span class="st">"track2"</span>, <span class="st">"track3"</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Intervals</span></span>
+<span><span class="fu"><a href="../reference/gintervals.dataset.html">gintervals.dataset</a></span><span class="op">(</span><span class="st">"my_intervals"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gintervals.dbs.html">gintervals.dbs</a></span><span class="op">(</span><span class="st">"my_intervals"</span><span class="op">)</span></span></code></pre></div>
+<p>Filter track and interval listings by source:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># List tracks from a specific source only</span></span>
+<span><span class="fu"><a href="../reference/gtrack.ls.html">gtrack.ls</a></span><span class="op">(</span>db <span class="op">=</span> <span class="st">"/shared/annotations"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># List intervals from working database</span></span>
+<span><span class="fu"><a href="../reference/gintervals.ls.html">gintervals.ls</a></span><span class="op">(</span>db <span class="op">=</span> <span class="st">"/data/my_project"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="creating-and-sharing-datasets">Creating and Sharing Datasets<a class="anchor" aria-label="anchor" href="#creating-and-sharing-datasets"></a>
+</h5>
+<p>Use <code><a href="../reference/gdataset.save.html">gdataset.save()</a></code> to create a dataset from selected
+tracks and intervals:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"/data/my_project"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Create a dataset with selected tracks and intervals</span></span>
+<span><span class="fu"><a href="../reference/gdataset.save.html">gdataset.save</a></span><span class="op">(</span></span>
+<span>    path <span class="op">=</span> <span class="st">"/shared/my_chipseq_dataset"</span>,</span>
+<span>    description <span class="op">=</span> <span class="st">"ChIP-seq tracks for H3K4me3 and H3K27ac"</span>,</span>
+<span>    tracks <span class="op">=</span> <span class="fu"><a href="../reference/gtrack.ls.html">gtrack.ls</a></span><span class="op">(</span><span class="st">"chip_"</span><span class="op">)</span>, <span class="co"># Pattern matching</span></span>
+<span>    intervals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"peaks_h3k4me3"</span>, <span class="st">"peaks_h3k27ac"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Options:</span></span>
+<span><span class="co"># - symlinks = TRUE: Create symlinks instead of copying (saves space)</span></span>
+<span><span class="co"># - copy_seq = TRUE: Copy seq/ directory instead of symlinking</span></span></code></pre></div>
+<p>Get information about a dataset:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gdataset.info.html">gdataset.info</a></span><span class="op">(</span><span class="st">"/shared/my_chipseq_dataset"</span><span class="op">)</span></span>
+<span><span class="co"># Returns: description, author, created date, track/interval counts, genome hash</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="creating-a-linked-database">Creating a Linked Database<a class="anchor" aria-label="anchor" href="#creating-a-linked-database"></a>
+</h5>
+<p>Use <code><a href="../reference/gdb.create_linked.html">gdb.create_linked()</a></code> to create a lightweight database
+that links to a parent database’s <code>seq/</code> directory and
+<code>chrom_sizes.txt</code> file:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create linked database with symlinks to parent's seq and chrom_sizes</span></span>
+<span><span class="fu"><a href="../reference/gdb.create_linked.html">gdb.create_linked</a></span><span class="op">(</span><span class="st">"~/my_db"</span>, parent <span class="op">=</span> <span class="st">"/shared/hg38"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Use as your working database</span></span>
+<span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"~/my_db"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Load datasets from the parent</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"/shared/hg38"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Create your own tracks</span></span>
+<span><span class="fu"><a href="../reference/gtrack.create.html">gtrack.create</a></span><span class="op">(</span><span class="st">"my_analysis"</span>, <span class="st">"Analysis results"</span>, <span class="st">"reference_track * 2"</span><span class="op">)</span></span></code></pre></div>
+<p>This avoids duplicating large sequence files while allowing you to
+maintain your own tracks.</p>
+</div>
+<div class="section level5">
+<h5 id="unloading-datasets">Unloading Datasets<a class="anchor" aria-label="anchor" href="#unloading-datasets"></a>
+</h5>
+<p>Remove loaded datasets from the namespace:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Unload a dataset (tracks/intervals become unavailable)</span></span>
+<span><span class="fu"><a href="../reference/gdataset.unload.html">gdataset.unload</a></span><span class="op">(</span><span class="st">"/shared/annotations"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Safe to call even if not loaded (no error by default)</span></span>
+<span><span class="fu"><a href="../reference/gdataset.unload.html">gdataset.unload</a></span><span class="op">(</span><span class="st">"/nonexistent/path"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Error if validate=TRUE and not loaded</span></span>
+<span><span class="fu"><a href="../reference/gdataset.unload.html">gdataset.unload</a></span><span class="op">(</span><span class="st">"/nonexistent/path"</span>, validate <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co"># Error: Dataset '/nonexistent/path' is not loaded</span></span></code></pre></div>
+<p>When unloading datasets that had track collisions (loaded with
+<code>force=TRUE</code>), shadowed tracks are restored with proper
+precedence: working database first, then datasets in load order.</p>
+</div>
+<div class="section level5">
+<h5 id="moving-and-copying-tracks">Moving and Copying Tracks<a class="anchor" aria-label="anchor" href="#moving-and-copying-tracks"></a>
+</h5>
+<p>Use <code><a href="../reference/gtrack.mv.html">gtrack.mv()</a></code> to rename a track or move it within the
+same database:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Rename a track</span></span>
+<span><span class="fu"><a href="../reference/gtrack.mv.html">gtrack.mv</a></span><span class="op">(</span><span class="st">"old_name"</span>, <span class="st">"new_name"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Move to a different namespace (directory)</span></span>
+<span><span class="fu"><a href="../reference/gtrack.mv.html">gtrack.mv</a></span><span class="op">(</span><span class="st">"analysis.track1"</span>, <span class="st">"results.track1"</span><span class="op">)</span></span></code></pre></div>
+<p>Use <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> to create a copy of a track. The copy
+is created in the current working directory (GWD), which may be in a
+different database when multiple databases are connected:</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Copy a track within the same database</span></span>
+<span><span class="fu"><a href="../reference/gtrack.copy.html">gtrack.copy</a></span><span class="op">(</span><span class="st">"source_track"</span>, <span class="st">"copy_track"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Copy from a loaded dataset to the working database</span></span>
+<span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"/data/my_project"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"/shared/annotations"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gtrack.copy.html">gtrack.copy</a></span><span class="op">(</span><span class="st">"annotation_track"</span>, <span class="st">"my_local_copy"</span><span class="op">)</span> <span class="co"># Copy to working db</span></span></code></pre></div>
+<p>Note: <code><a href="../reference/gtrack.mv.html">gtrack.mv()</a></code> only works within the same database.
+To move a track between databases, use <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code>
+followed by <code><a href="../reference/gtrack.rm.html">gtrack.rm()</a></code>.</p>
+</div>
+<div class="section level5">
+<h5 id="virtual-tracks-across-sources">Virtual Tracks Across Sources<a class="anchor" aria-label="anchor" href="#virtual-tracks-across-sources"></a>
+</h5>
+<p>Virtual tracks remain global and are not tied to any specific source.
+They can reference tracks from any loaded source:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"/data/my_project"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="st">"/shared/annotations"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Create virtual track referencing track from working db</span></span>
+<span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"vt1"</span>, <span class="st">"my_local_track"</span>, <span class="st">"avg"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Create virtual track referencing track from dataset</span></span>
+<span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"vt2"</span>, <span class="st">"annotation_track"</span>, <span class="st">"max"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Use both in same expression</span></span>
+<span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"vt1 + vt2"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">10000</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level5">
+<h5 id="backward-compatibility">Backward Compatibility<a class="anchor" aria-label="anchor" href="#backward-compatibility"></a>
+</h5>
+<p>Single-database usage works exactly as before:</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="st">"single_database"</span><span class="op">)</span> <span class="co"># Works unchanged</span></span>
+<span><span class="fu"><a href="../reference/gdb.init.html">gdb.init</a></span><span class="op">(</span><span class="st">"single_database"</span><span class="op">)</span> <span class="co"># Equivalent, also works</span></span></code></pre></div>
 <p>An example of a Genomic Database file structure:</p>
 <pre><code>hg38/              &lt;- Genomic Database root directory
    chrom_sizes.txt
@@ -188,6 +423,8 @@ are required only by a subset of functions in the package.</p>
             chr1               &lt;- chrom files
             chr2               &lt;- ...
             chr3               &lt;- ...</code></pre>
+</div>
+</div>
 </div>
 <div class="section level3">
 <h3 id="file-formats">File Formats<a class="anchor" aria-label="anchor" href="#file-formats"></a>
@@ -305,7 +542,7 @@ little-endian - CRC64-ECMA checksum: <code>uint64_t</code> (8 bytes)</p>
 <p><strong>Converting to Indexed Format:</strong></p>
 <p>Existing per-chromosome tracks can be converted to indexed format
 using <code><a href="../reference/gtrack.convert_to_indexed.html">gtrack.convert_to_indexed()</a></code>:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Convert a track to indexed format</span></span>
 <span><span class="fu"><a href="../reference/gtrack.convert_to_indexed.html">gtrack.convert_to_indexed</a></span><span class="op">(</span><span class="st">"my_track"</span><span class="op">)</span></span>
 <span></span>
@@ -514,11 +751,18 @@ from the set.</p>
 <strong>small interval set</strong> or <strong>big interval
 set</strong>. The specific format is chosen depending on the size of the
 interval set. Big format is selected for interval sets that contain more
-than <code>gbig.intervals.size</code> intervals
-(<code>gbig.intervals.size</code> is set via <code>options</code>),
-while smaller sets are stored in the small format. Use
-<code>gintervals.is.bigset</code> to determine the format of the stored
-interval set.</p>
+than <code>gbig.intervals.size</code> intervals (default: 1,000,000; set
+via <code>options</code>), while smaller sets are stored in the small
+format. Use <code>gintervals.is.bigset</code> to determine the format of
+the stored interval set.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>gbig.intervals.size</code> controls
+<em>storage format</em> for interval sets (disk-based vs. in-memory),
+while <code>gmax.data.size</code> controls <em>buffer sizes</em> for
+streaming operations like <code>gextract</code> and
+<code>gquantiles</code>. These are independent thresholds serving
+different purposes.</p>
+</blockquote>
 <p>Saved interval sets in the small format can be seamlessly used in all
 functions and track expressions without the need to explicitly load
 them.</p>
@@ -584,7 +828,7 @@ bytes)</strong>: - Magic: <code>"MISHAI2D"</code> (8 bytes) - Version:
 <p><strong>Note:</strong> Only non-empty chromosome pairs are stored in
 the 2D index, avoiding O(N²) space overhead.</p>
 <p><strong>Converting to Indexed Format:</strong></p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Convert 1D interval set to indexed format</span></span>
 <span><span class="fu"><a href="../reference/gintervals.convert_to_indexed.html">gintervals.convert_to_indexed</a></span><span class="op">(</span><span class="st">"my_intervals"</span><span class="op">)</span></span>
 <span></span>
@@ -596,7 +840,7 @@ the 2D index, avoiding O(N²) space overhead.</p>
 <p>All multi-byte integers are stored in little-endian byte order. The
 indexed format is fully backward compatible with all misha
 functions.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># 'annotations' is an intervals set saved in Genomic Database</span></span>
 <span><span class="fu"><a href="../reference/gintervals.intersect.html">gintervals.intersect</a></span><span class="op">(</span><span class="st">"annotations"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>Likewise, big interval sets can be used in many but not all
@@ -981,7 +1225,7 @@ the fly? This is where virtual tracks become useful.</p>
 real track, intervals, or a value-based track) should be proceeded, and
 how the iterator interval should be modified. Virtual tracks are created
 with <code>gvtrack.create</code> function:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"dense_track"</span><span class="op">)</span></span></code></pre></div>
 <p>This call creates a new virtual track named <code>myvtrack</code>.
 This virtual track can be used in the track expression instead of a real
@@ -989,7 +1233,7 @@ track <code>dense_track</code>. In our example <code>myvtrack</code> is
 just an alias of <code>dense_track</code>. Yet we can go on and create a
 more complicated virtual track if we specify a “function”, i.e. instruct
 the virtual track of what should be its value in track expression.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"dense_track"</span>, <span class="st">"global.percentile"</span><span class="op">)</span></span></code></pre></div>
 <p>In this example when <code>myvtrack</code> is evaluated in the track
 expression it will return the percentile of
@@ -1004,7 +1248,7 @@ be the average of all non-NaN column values covered by an iterator
 interval. <code>gvtrack.array.slice</code> allows to select specific
 columns and to specify the function applied to the values of each track
 interval.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"array_track"</span>, <span class="st">"sum"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gvtrack.array.slice.html">gvtrack.array.slice</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"col2"</span>, <span class="st">"col5"</span><span class="op">)</span>, <span class="st">"max"</span><span class="op">)</span></span></code></pre></div>
 <p>In this example we create a virtual track based on
@@ -1024,7 +1268,7 @@ for interval
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>I</mi><mi>i</mi></msub><annotation encoding="application/x-tex">I_i</annotation></semantics></math>.</p>
 <p>Virtual tracks allow also to alter the iterator interval “on the
 fly”:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.iterator.html">gvtrack.iterator</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, sshift <span class="op">=</span> <span class="op">-</span><span class="fl">100</span>, eshift <span class="op">=</span> <span class="fl">200</span><span class="op">)</span></span></code></pre></div>
 <p>In this example we expand each iterator interval by adding -100 to
 its <code>start</code> coordinate and 200 to its <code>end</code>
@@ -1032,7 +1276,7 @@ coordinate.</p>
 <p>Similarly, iterator modifiers can be defined for 2D intervals.
 Moreover, an iterator modifier can create a 1D interval from a 2D
 iterator interval by projecting one of its axes.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"dense_track"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gvtrack.iterator.html">gvtrack.iterator</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, dim <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></code></pre></div>
 <p>It is important to remember that iterator modifiers transform the
@@ -1065,7 +1309,7 @@ accordingly as the iterator intervals.</p>
 a virtual track. We can also use intervals as a source. In this case,
 the value of the virtual track will be some function that takes into
 account the “source” intervals and the current iterator interval.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gvtrack.create.html">gvtrack.create</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="st">"annotations"</span>, <span class="st">"distance"</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gscreen.html">gscreen</a></span><span class="op">(</span><span class="st">"dense_track &gt; 0.45"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"myvtrack"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span>, iterator <span class="op">=</span> <span class="va">intervs</span><span class="op">)</span></span></code></pre></div>
@@ -1083,7 +1327,7 @@ without requiring track creation in the database.</p>
 <p>To create a value-based virtual track, provide a data frame with
 columns <code>chrom</code>, <code>start</code>, <code>end</code>, and
 one numeric value column (any column name is acceptable):</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a data frame with intervals and numeric values</span></span>
 <span><span class="va">intervals_with_values</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>    chrom <span class="op">=</span> <span class="st">"chr1"</span>,</span>
@@ -1176,7 +1420,7 @@ option. By default it equals to 1000. Altering this value (for instance
 setting it to 1) might significantly affect the run-time of various
 functions in the library. If you still wish to force the functions to
 define scalars rather than vectors, set <code>gbuf.size</code> to 1:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gbuf.size <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
 <p>One might wonder why should we care about the fact that
 <code>mytrack</code> is not a scalar but rather a vector? Indeed in many
@@ -1338,7 +1582,7 @@ reported.</td>
 accept an additional set of intervals that limit the scope of a
 function. This scope also limits the iterator intervals. For
 instance:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fu"><a href="../reference/gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">340</span>, <span class="fl">520</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>As one can notice the first and the last intervals in the result are
 truncated by the scope <code>[340, 520)</code>.</p>
@@ -1388,7 +1632,7 @@ the iterator interval is skipped as it lies outside of the band or the
 two chromosomes are not equal.</p>
 <p>The <code>gintervals.2d.band_intersect</code> function can help one
 better understand the concept:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">200</span>, <span class="fl">800</span>, <span class="fl">1</span>, <span class="fl">100</span>, <span class="fl">1000</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="va">intervs</span>, <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">900</span>, <span class="fl">950</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="va">intervs</span>, <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">100</span>, <span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">400</span><span class="op">)</span><span class="op">)</span></span>
@@ -1407,7 +1651,7 @@ different chromosomes and therefore is also filtered out.</p>
 <p>As said band filters out and alters 2D iterator intervals. Yet it
 also affects the result of 2D tracks. Let’s look at the following
 example:</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">intervs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gintervals.2d.html">gintervals.2d</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100</span>, <span class="fl">400</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">300</span>, <span class="fl">490</span><span class="op">)</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">120</span>, <span class="fl">180</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">200</span>, <span class="fl">500</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.2d.create.html">gtrack.2d.create</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="st">"test 2D track"</span>, <span class="va">intervs</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">20</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gextract.html">gextract</a></span><span class="op">(</span><span class="st">"test2d"</span>, <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span><span class="op">)</span></span>
@@ -1446,7 +1690,7 @@ use of pseudo-random number generator. Each time the function is invoked
 a unique series of random numbers is issued. Hence two identical calls
 might produce different results. To guarantee reproducible results call
 <code>set.seed</code> before invoking the function.</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">60427</span><span class="op">)</span></span>
 <span><span class="va">r1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gsample.html">gsample</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fl">10</span><span class="op">)</span></span>
 <span><span class="va">r2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gsample.html">gsample</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="fl">10</span><span class="op">)</span> <span class="co"># r2 differs from r1</span></span>
@@ -1512,12 +1756,12 @@ runtime. For larger datasets, multitasking is automatically enabled when
 beneficial.</p>
 <p><strong>Manual Override:</strong> You can still manually set these
 options if needed:</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gmax.processes <span class="op">=</span> <span class="fl">32</span><span class="op">)</span>        <span class="co"># Override process limit</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gmax.data.size <span class="op">=</span> <span class="fl">5e9</span><span class="op">)</span>       <span class="co"># Override buffer size (5GB)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>gmultitasking <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>      <span class="co"># Disable multitasking entirely</span></span></code></pre></div>
 <p>To check current auto-configured values:</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"gmax.processes"</span><span class="op">)</span>         <span class="co"># Current process limit</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"gmax.data.size"</span><span class="op">)</span> <span class="op">/</span> <span class="fl">1e9</span>   <span class="co"># Current buffer size in GB</span></span></code></pre></div>
 </div>
