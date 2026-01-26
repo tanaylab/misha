@@ -34,6 +34,9 @@ test_that("converted track with empty chromosomes works", {
 })
 
 test_that("converted track handles all chromosomes correctly", {
+    if (gtrack.exists("test.all_chr")) {
+        gtrack.rm("test.all_chr", force = TRUE)
+    }
     withr::defer(gtrack.rm("test.all_chr", force = TRUE))
 
     gtrack.create("test.all_chr", "", "test.fixedbin")

@@ -331,6 +331,9 @@ public:
 	// Returns the size of the buffer used to store highest/lowest values for high-precision computation of quantiles
 	uint64_t get_quantile_edge_data_size() const { return m_config.get_quantile_edge_data_size(); }
 
+	// Returns multiplier for inflating multitask max_records estimates
+	double get_multitask_max_records_factor() const { return m_config.get_multitask_max_records_factor(); }
+
 	// Selects the appropriate multitasking mode based on estimated result size
 	// is_deterministic: true if result size can be known precisely before running
 	// estimated_size: estimated number of result records (intervals, values, etc.)
