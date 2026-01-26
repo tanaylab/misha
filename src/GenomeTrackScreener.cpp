@@ -14,9 +14,59 @@
 #include "rdbinterval.h"
 #include "rdbutils.h"
 #include "TrackExpressionScanner.h"
+#include "TrackExpressionFixedBinIterator.h"
+#include "TrackExpressionFixedRectIterator.h"
+#include "TrackExpressionIntervals1DIterator.h"
 
 using namespace std;
 using namespace rdb;
+
+static uint64_t estimate_records_for_expr(
+	IntervUtils &iu,
+	SEXP expr,
+	GIntervalsFetcher1D *scope1d,
+	GIntervalsFetcher2D *scope2d,
+	SEXP iterator_policy,
+	SEXP band)
+{
+	uint64_t estimated = iu.estimate_num_bins(iterator_policy, scope1d, scope2d);
+	if (estimated)
+		return estimated;
+
+	TrackExprScanner scanner(iu);
+	TrackExpressionIteratorBase *expr_itr = scanner.create_expr_iterator(expr, scope1d, scope2d, iterator_policy, band, true);
+
+	if (auto *bin_itr = dynamic_cast<TrackExpressionFixedBinIterator *>(expr_itr)) {
+		int64_t binsize = bin_itr->get_bin_size();
+		if (binsize > 0) {
+			SEXP rbinsize = PROTECT(Rf_ScalarReal((double)binsize));
+			estimated = iu.estimate_num_bins(rbinsize, scope1d, scope2d);
+			UNPROTECT(1);
+			return estimated;
+		}
+	}
+
+	if (auto *rect_itr = dynamic_cast<TrackExpressionFixedRectIterator *>(expr_itr)) {
+		int64_t width = rect_itr->get_width();
+		int64_t height = rect_itr->get_height();
+		if (width > 0 && height > 0) {
+			SEXP rrect = PROTECT(Rf_allocVector(REALSXP, 2));
+			REAL(rrect)[0] = (double)width;
+			REAL(rrect)[1] = (double)height;
+			estimated = iu.estimate_num_bins(rrect, scope1d, scope2d);
+			UNPROTECT(1);
+			return estimated;
+		}
+	}
+
+	if (auto *intervals_itr = dynamic_cast<TrackExpressionIntervals1DIterator *>(expr_itr)) {
+		const GIntervals *intervals = intervals_itr->get_intervals();
+		if (intervals)
+			return intervals->size();
+	}
+
+	return 0;
+}
 
 #ifndef R_NO_REMAP
 #  define R_NO_REMAP
@@ -204,6 +254,8 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		bool is_1d_iterator = iu.is_1d_iterator(_expr, intervals1d, intervals2d, _iterator_policy);
 		vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
 		vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
+		// Estimate number of records to cap shared-memory allocation size
+		uint64_t estimated_records = estimate_records_for_expr(iu, _expr, intervals1d, intervals2d, _iterator_policy, _band);
 
 		if (!intervset_out.empty()) {
 			if (is_1d_iterator)
@@ -212,7 +264,15 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
 		}
 
-		if ((intervset_out.empty() && iu.distribute_task(0, (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)))) ||
+		if ((intervset_out.empty() &&
+			 ((estimated_records > 0 &&
+			   iu.distribute_task(0,
+								   (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)),
+								   rdb::MT_MODE_MMAP,
+								   estimated_records)) ||
+			  (estimated_records == 0 &&
+			   iu.distribute_task(0,
+								   (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)))))) ||
 			(!intervset_out.empty() && iu.distribute_task(is_1d_iterator ?
 														 sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() :
 														 sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size(), 0)) )
