@@ -26,7 +26,7 @@
 #' assigned to a process \cr \tab \tab in multitasking mode. \cr gbuf.size \tab
 #' 1000 \tab Size of track expression values buffer. \cr
 #' gmultitask.max.records.factor \tab 64 \tab Multiplier to inflate multitask
-#' \tab \tab max_records estimates to avoid under-allocation. \cr
+#' \cr \tab \tab max_records estimates to avoid under-allocation. \cr
 #' gtrack.chunk.size \tab
 #' 100000 \tab Chunk size in bytes of a 2D track. If '0' chunk size \cr \tab \tab
 #' is unlimited. \cr gtrack.num.chunks \tab 0 \tab Maximal number of 2D track
