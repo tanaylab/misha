@@ -1744,16 +1744,10 @@ laptop: <code>gmax.processes = 2</code>,
 allocations can fail even when system limits appear to allow them. This
 cap is rarely hit on multi-core systems due to the per-process
 division.</p>
-<p><strong>Automatic Small Dataset Detection:</strong> The package
-automatically detects small datasets and uses single-threaded mode to
-avoid fork overhead. The threshold scales with your system:
-<code>threshold = gmax.processes * 1000 records</code>. For example: -
-4-core laptop (2 procs): single-threaded below 2K records - 16-core
-workstation (11 procs): single-threaded below 11K records - 128-core
-server (89 procs): single-threaded below 89K records</p>
-<p>This dynamic threshold ensures fork overhead stays below 10% of
-runtime. For larger datasets, multitasking is automatically enabled when
-beneficial.</p>
+<p><strong>Small Workloads:</strong> Some functions may choose to run
+single-threaded for very small workloads to avoid fork overhead. This
+behavior can be function-specific. To disable multitasking entirely, set
+<code>options(gmultitasking = FALSE)</code>.</p>
 <p><strong>Manual Override:</strong> You can still manually set these
 options if needed:</p>
 <div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
