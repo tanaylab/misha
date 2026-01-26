@@ -17,6 +17,7 @@
 #include "TrackExpressionFixedBinIterator.h"
 #include "TrackExpressionFixedRectIterator.h"
 #include "TrackExpressionIntervals1DIterator.h"
+#include "TGLException.h"
 
 using namespace std;
 using namespace rdb;
@@ -264,18 +265,32 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
 		}
 
-		if ((intervset_out.empty() &&
-			 ((estimated_records > 0 &&
-			   iu.distribute_task(0,
-								   (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)),
-								   rdb::MT_MODE_MMAP,
-								   estimated_records)) ||
-			  (estimated_records == 0 &&
-			   iu.distribute_task(0,
-								   (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)))))) ||
-			(!intervset_out.empty() && iu.distribute_task(is_1d_iterator ?
-														 sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() :
-														 sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size(), 0)) )
+		bool do_child = false;
+		try {
+			if (intervset_out.empty()) {
+				if (estimated_records > 0) {
+					do_child = iu.distribute_task(0,
+												  (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)),
+												  rdb::MT_MODE_MMAP,
+												  estimated_records);
+				} else {
+					do_child = iu.distribute_task(0,
+												  (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)));
+				}
+			} else {
+				do_child = iu.distribute_task(is_1d_iterator ?
+											  sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() :
+											  sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size(),
+											  0);
+			}
+		} catch (TGLException &e) {
+			if (string(e.msg()).find("Failed to allocate shared memory") != string::npos) {
+				return C_gscreen(_expr, _intervals, _iterator_policy, _band, _intervals_set_out, _envir);
+			}
+			throw;
+		}
+
+		if (do_child)
 		{ // child process
 			TrackExprScanner scanner(iu);
 

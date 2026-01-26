@@ -22,6 +22,7 @@
 #include "TrackExpressionFixedBinIterator.h"
 #include "TrackExpressionFixedRectIterator.h"
 #include "TrackExpressionIntervals1DIterator.h"
+#include "TGLException.h"
 
 // Optional profiling for gextract_multitask hot path.
 // Enable by setting getOption("gextract.profile") to TRUE.
@@ -618,18 +619,29 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			rreturn(R_NilValue);
 		}
 
-		if ((estimated_records > 0 &&
-			 iu.distribute_task(0,
-								(is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)) + // interval
-								sizeof(unsigned) +                                                // interval id
-								sizeof(double) * num_exprs,                                      // values
-								rdb::MT_MODE_MMAP,
-								estimated_records)) ||
-			(estimated_records == 0 &&
-			 iu.distribute_task(0,
-								(is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)) + // interval
-								sizeof(unsigned) +                                                // interval id
-								sizeof(double) * num_exprs)))                                      // values
+		bool do_child = false;
+		try {
+			if (estimated_records > 0) {
+				do_child = iu.distribute_task(0,
+											  (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)) + // interval
+											  sizeof(unsigned) +                                                // interval id
+											  sizeof(double) * num_exprs,                                      // values
+											  rdb::MT_MODE_MMAP,
+											  estimated_records);
+			} else {
+				do_child = iu.distribute_task(0,
+											  (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)) + // interval
+											  sizeof(unsigned) +                                                // interval id
+											  sizeof(double) * num_exprs);                                     // values
+			}
+		} catch (TGLException &e) {
+			if (string(e.msg()).find("Failed to allocate shared memory") != string::npos) {
+				return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _envir);
+			}
+			throw;
+		}
+
+		if (do_child)
 		{  // child process
 			GIntervalsFetcher1D *kid_intervals1d = iu.get_kid_intervals1d();
 			GIntervalsFetcher2D *kid_intervals2d = iu.get_kid_intervals2d();
