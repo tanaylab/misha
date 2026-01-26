@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.4</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.0</span>
       </span>
     </div>
 
@@ -63,6 +63,56 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.4.0" id="misha-540">misha 5.4.0<a class="anchor" aria-label="anchor" href="#misha-540"></a></h2>
+<ul><li>
+<strong>Dataset API</strong>: New dataset-based workflow for combining multiple data sources
+<ul><li>
+<strong>Working database + loaded datasets model</strong>: Use <code><a href="../reference/gdb.init.html">gsetroot()</a></code> for your primary writable database, then <code><a href="../reference/gdataset.load.html">gdataset.load()</a></code> to add read-only datasets</li>
+<li>
+<strong>Collision handling</strong>: By default, loading a dataset with tracks that already exist will error. Use <code>force=TRUE</code> to override (working db always wins)</li>
+<li>New dataset management functions:
+<ul><li>
+<code><a href="../reference/gdataset.load.html">gdataset.load()</a></code>: Load a dataset into the namespace (tracks and intervals become available)</li>
+<li>
+<code><a href="../reference/gdataset.unload.html">gdataset.unload()</a></code>: Remove a dataset from the namespace</li>
+<li>
+<code><a href="../reference/gdataset.save.html">gdataset.save()</a></code>: Create a new dataset from selected tracks/intervals</li>
+<li>
+<code><a href="../reference/gdataset.ls.html">gdataset.ls()</a></code>: List working database and all loaded datasets</li>
+<li>
+<code><a href="../reference/gdataset.info.html">gdataset.info()</a></code>: Show metadata and contents of a dataset</li>
+</ul></li>
+<li>New track/interval source query functions:
+<ul><li>
+<code><a href="../reference/gtrack.dataset.html">gtrack.dataset()</a></code>: Get the source path for a track (working db or dataset)</li>
+<li>
+<code><a href="../reference/gtrack.dbs.html">gtrack.dbs()</a></code>: Get all paths where a track exists (for debugging shadowed tracks)</li>
+<li>
+<code><a href="../reference/gintervals.dataset.html">gintervals.dataset()</a></code>: Get the source path for an interval set</li>
+<li>
+<code><a href="../reference/gintervals.dbs.html">gintervals.dbs()</a></code>: Get all paths where an interval set exists</li>
+</ul></li>
+<li>New <code>db</code> parameter for filtering by source:
+<ul><li>
+<code>gtrack.ls(db = "/path/to/dataset")</code>: List tracks from a specific source</li>
+<li>
+<code>gintervals.ls(db = "/path/to/dataset")</code>: List intervals from a specific source</li>
+</ul></li>
+<li>
+<strong>Cross-database operations</strong>: Track expressions work seamlessly with tracks from different sources</li>
+<li>All datasets must have identical <code>chrom_sizes.txt</code> files (same genome assembly)</li>
+<li>Virtual tracks remain global (shared across all loaded sources)</li>
+<li>Backward compatible: single database usage with <code><a href="../reference/gdb.init.html">gsetroot()</a></code> works unchanged</li>
+</ul></li>
+<li>New track management functions:
+<ul><li>
+<code><a href="../reference/gtrack.mv.html">gtrack.mv()</a></code>: Rename or move a track within the same database</li>
+<li>
+<code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code>: Copy a track (can copy between databases when multiple are loaded)</li>
+</ul></li>
+<li>Added <code>gcor</code> function that computes correlation between two tracks, or between multiple pairs of tracks.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.3.4" id="misha-534">misha 5.3.4<a class="anchor" aria-label="anchor" href="#misha-534"></a></h2>
 <ul><li>Added <code>dataframe</code> and <code>names</code> parameters to <code>gdist</code> function that return a data frame instead of an N-dimensional vector.</li>

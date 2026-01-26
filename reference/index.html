@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.4</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.0</span>
       </span>
     </div>
 
@@ -135,6 +135,14 @@
         </td>
         <td><p>Create directories needed for track creation</p></td>
       </tr><tr><td>
+          <p><code><a href="gtrack.dbs.html">gtrack.dbs()</a></code> </p>
+        </td>
+        <td><p>Returns the database paths that contain track(s)</p></td>
+      </tr><tr><td>
+          <p><code><a href="gtrack.dataset.html">gtrack.dataset()</a></code> </p>
+        </td>
+        <td><p>Returns the database/dataset path for a track</p></td>
+      </tr><tr><td>
           <p><code><a href="gtrack.exists.html">gtrack.exists()</a></code> </p>
         </td>
         <td><p>Tests for a track existence</p></td>
@@ -174,6 +182,14 @@
           <p><code><a href="gtrack.modify.html">gtrack.modify()</a></code> </p>
         </td>
         <td><p>Modifies track contents</p></td>
+      </tr><tr><td>
+          <p><code><a href="gtrack.mv.html">gtrack.mv()</a></code> </p>
+        </td>
+        <td><p>Renames or moves a track</p></td>
+      </tr><tr><td>
+          <p><code><a href="gtrack.copy.html">gtrack.copy()</a></code> </p>
+        </td>
+        <td><p>Copies a track</p></td>
       </tr><tr><td>
           <p><code><a href="gtrack.rm.html">gtrack.rm()</a></code> </p>
         </td>
@@ -282,6 +298,14 @@
           <p><code><a href="gintervals.coverage_fraction.html">gintervals.coverage_fraction()</a></code> </p>
         </td>
         <td><p>Calculate fraction of genomic space covered by intervals</p></td>
+      </tr><tr><td>
+          <p><code><a href="gintervals.dataset.html">gintervals.dataset()</a></code> </p>
+        </td>
+        <td><p>Returns the database/dataset path for interval sets</p></td>
+      </tr><tr><td>
+          <p><code><a href="gintervals.dbs.html">gintervals.dbs()</a></code> </p>
+        </td>
+        <td><p>Returns all database paths containing an interval set</p></td>
       </tr><tr><td>
           <p><code><a href="gintervals.diff.html">gintervals.diff()</a></code> </p>
         </td>
@@ -415,6 +439,10 @@
         </td>
         <td><p>Calculates summary statistics of a track expression for bins</p></td>
       </tr><tr><td>
+          <p><code><a href="gcor.html">gcor()</a></code> </p>
+        </td>
+        <td><p>Calculates correlation between track expressions</p></td>
+      </tr><tr><td>
           <p><code><a href="gcis_decay.html">gcis_decay()</a></code> </p>
         </td>
         <td><p>Calculates distribution of contact distances</p></td>
@@ -531,21 +559,33 @@
           <p class="section-desc"></p><p>Database functions</p>
         </th>
       </tr></tbody><tbody><tr><td>
+          <p><code><a href="gdb.create.html">gdb.create()</a></code> </p>
+        </td>
+        <td><p>Creates a new Genomic Database</p></td>
+      </tr><tr><td>
           <p><code><a href="gdb.create_genome.html">gdb.create_genome()</a></code> </p>
         </td>
         <td><p>Create and Load a Genome Database</p></td>
       </tr><tr><td>
-          <p><code><a href="gdb.create.html">gdb.create()</a></code> </p>
+          <p><code><a href="gdb.create_linked.html">gdb.create_linked()</a></code> </p>
         </td>
-        <td><p>Creates a new Genomic Database</p></td>
+        <td><p>Create a linked database with symlinks to a parent database</p></td>
       </tr><tr><td>
           <p><code><a href="gdb.get_readonly_attrs.html">gdb.get_readonly_attrs()</a></code> </p>
         </td>
         <td><p>Returns a list of read-only track attributes</p></td>
       </tr><tr><td>
+          <p><code><a href="gdb.info.html">gdb.info()</a></code> </p>
+        </td>
+        <td><p>Get Database Information</p></td>
+      </tr><tr><td>
           <p><code><a href="gdb.init.html">gdb.init()</a></code> <code><a href="gdb.init.html">gdb.init_examples()</a></code> <code><a href="gdb.init.html">gsetroot()</a></code> </p>
         </td>
         <td><p>Initializes connection with Genomic Database</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdb.mark_cache_dirty.html">gdb.mark_cache_dirty()</a></code> </p>
+        </td>
+        <td><p>Mark cached track list as dirty</p></td>
       </tr><tr><td>
           <p><code><a href="gdb.reload.html">gdb.reload()</a></code> </p>
         </td>
@@ -558,14 +598,6 @@
           <p><code><a href="gdb.convert_to_indexed.html">gdb.convert_to_indexed()</a></code> </p>
         </td>
         <td><p>Change Database to Indexed Genome Format</p></td>
-      </tr><tr><td>
-          <p><code><a href="gdb.info.html">gdb.info()</a></code> </p>
-        </td>
-        <td><p>Get Database Information</p></td>
-      </tr><tr><td>
-          <p><code><a href="gdb.mark_cache_dirty.html">gdb.mark_cache_dirty()</a></code> </p>
-        </td>
-        <td><p>Mark cached track list as dirty</p></td>
       </tr><tr><td>
           <p><code><a href="gdir.cd.html">gdir.cd()</a></code> </p>
         </td>
@@ -582,6 +614,34 @@
           <p><code><a href="gdir.rm.html">gdir.rm()</a></code> </p>
         </td>
         <td><p>Deletes a directory from Genomic Database</p></td>
+      </tr></tbody><tbody><tr><th colspan="2">
+          <h2 id="dataset-functions">Dataset functions <a href="#dataset-functions" class="anchor" aria-hidden="true"></a></h2>
+          <p class="section-desc"></p><p>Functions for managing datasets (multiple data sources)</p>
+        </th>
+      </tr></tbody><tbody><tr><td>
+          <p><code><a href="gdataset.load.html">gdataset.load()</a></code> </p>
+        </td>
+        <td><p>Load a dataset into the namespace</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdataset.unload.html">gdataset.unload()</a></code> </p>
+        </td>
+        <td><p>Unload a dataset from the namespace</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdataset.save.html">gdataset.save()</a></code> </p>
+        </td>
+        <td><p>Save a dataset</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdataset.ls.html">gdataset.ls()</a></code> </p>
+        </td>
+        <td><p>List working database and loaded datasets</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdataset.info.html">gdataset.info()</a></code> </p>
+        </td>
+        <td><p>Get dataset information</p></td>
+      </tr><tr><td>
+          <p><code><a href="gdataset.example_path.html">gdataset.example_path()</a></code> </p>
+        </td>
+        <td><p>Create an example dataset on the fly</p></td>
       </tr></tbody><tbody><tr><th colspan="2">
           <h2 id="other-functions">Other functions <a href="#other-functions" class="anchor" aria-hidden="true"></a></h2>
           <p class="section-desc"></p><p>Other</p>

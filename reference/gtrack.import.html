@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.3.4</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.0</span>
       </span>
     </div>
 
@@ -136,6 +136,10 @@ Otherwise the 'Dense' format is chosen with a bin size equal to 'binsize'.
 The values that were not defined in input file file are substituted by
 'defval' value.</p>
 <p>'description' is added as a track attribute.</p>
+<p>When multiple databases are connected via <code><a href="gdb.init.html">gsetroot</a></code>, the track
+is created in the current working directory (.misha$GWD), which defaults to the
+last connected database. Use <code><a href="gdir.cd.html">gdir.cd</a></code> with an absolute path to
+change where new tracks are created.</p>
     </div>
     <div id="see-also">
     <h2>See also</h2>
