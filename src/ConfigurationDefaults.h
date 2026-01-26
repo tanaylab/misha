@@ -31,6 +31,9 @@ constexpr uint64_t DEFAULT_MAX_MEM_USAGE_KB = 10000000;
 // Evaluation buffer size for vectorized R expression evaluation
 constexpr uint64_t DEFAULT_BUF_SIZE = 1000;
 
+// Multiplier for inflating max_records estimates when preallocating shared memory
+constexpr double DEFAULT_MULTITASK_MAX_RECORDS_FACTOR = 64.0;
+
 // Min genomic scope per parallel process (base pairs)
 constexpr uint64_t DEFAULT_MIN_SCOPE4PROCESS = 10000;
 

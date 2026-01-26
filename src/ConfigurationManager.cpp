@@ -148,6 +148,27 @@ uint64_t ConfigurationManager::get_quantile_edge_data_size() const
 	return m_quantile_edge_data_size;
 }
 
+double ConfigurationManager::get_multitask_max_records_factor() const
+{
+	if (m_multitask_max_records_factor <= 0.0) {
+		SEXP r_factor = Rf_GetOption1(Rf_install("gmultitask.max.records.factor"));
+		double factor = 0.0;
+
+		if (Rf_isReal(r_factor))
+			factor = REAL(r_factor)[0];
+		else if (Rf_isInteger(r_factor))
+			factor = (double)INTEGER(r_factor)[0];
+		else
+			factor = misha::config::DEFAULT_MULTITASK_MAX_RECORDS_FACTOR;
+
+		if (!std::isfinite(factor) || factor < 1.0)
+			factor = 1.0;
+
+		m_multitask_max_records_factor = factor;
+	}
+	return m_multitask_max_records_factor;
+}
+
 uint64_t ConfigurationManager::get_track_chunk_size() const
 {
 	if (!m_track_chunk_size) {
@@ -249,4 +270,3 @@ void ConfigurationManager::update_res_data_size(uint64_t data_size) const
 	// It updates cumulative data size tracking for child processes
 	rdb::update_res_data_size(data_size);
 }
-

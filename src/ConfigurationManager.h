@@ -51,6 +51,9 @@ public:
 	// Returns the size of the buffer used to store highest/lowest values for high-precision computation of quantiles
 	uint64_t get_quantile_edge_data_size() const;
 
+	// Returns multiplier for inflating multitask max_records estimates
+	double get_multitask_max_records_factor() const;
+
 	// Returns the chunk size of 2D track
 	uint64_t get_track_chunk_size() const;
 
@@ -79,6 +82,7 @@ private:
 	mutable uint64_t              m_min_scope4process{0};
 	mutable uint64_t              m_min_seqs_work4process{0};
 	mutable uint64_t              m_quantile_edge_data_size{0};
+	mutable double                m_multitask_max_records_factor{0.0};
 	mutable uint64_t              m_track_chunk_size{0};
 	mutable uint64_t              m_track_num_chunks{0};
 
@@ -87,4 +91,3 @@ private:
 };
 
 #endif /* CONFIGURATIONMANAGER_H_ */
-
