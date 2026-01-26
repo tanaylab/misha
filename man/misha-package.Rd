@@ -35,8 +35,8 @@ assigned to a process \cr \tab \tab in multitasking mode. \cr gbuf.size \tab
 100000 \tab Chunk size in bytes of a 2D track. If '0' chunk size \cr \tab \tab
 is unlimited. \cr gtrack.num.chunks \tab 0 \tab Maximal number of 2D track
 chunks simultaneously stored \cr \tab \tab in memory. \cr gmultitasking \tab
-TRUE \tab Enable/disable automatic parallelization. Small datasets \cr \tab
-\tab (< gmax.processes * 1000 records) use single-threaded mode. \cr }
+TRUE \tab Enable/disable automatic parallelization. Some functions \cr \tab
+\tab may choose single-threaded mode for very small workloads. \cr }
 
 More information about the options can be found in 'User manual' of the
 package.

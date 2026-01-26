@@ -947,13 +947,8 @@ The package coordinates buffer size with process limits to ensure `gmax.processe
 
 The 10GB cap is empirically determined - larger shared memory allocations can fail even when system limits appear to allow them. This cap is rarely hit on multi-core systems due to the per-process division.
 
-**Automatic Small Dataset Detection:**
-The package automatically detects small datasets and uses single-threaded mode to avoid fork overhead. The threshold scales with your system: `threshold = gmax.processes * 1000 records`. For example:
-- 4-core laptop (2 procs): single-threaded below 2K records
-- 16-core workstation (11 procs): single-threaded below 11K records
-- 128-core server (89 procs): single-threaded below 89K records
-
-This dynamic threshold ensures fork overhead stays below 10% of runtime. For larger datasets, multitasking is automatically enabled when beneficial.
+**Small Workloads:**
+Some functions may choose to run single-threaded for very small workloads to avoid fork overhead. This behavior can be function-specific. To disable multitasking entirely, set `options(gmultitasking = FALSE)`.
 
 **Manual Override:**
 You can still manually set these options if needed:
