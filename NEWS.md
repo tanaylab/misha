@@ -25,6 +25,7 @@
   - `gtrack.mv()`: Rename or move a track within the same database
   - `gtrack.copy()`: Copy a track (can copy between databases when multiple are loaded)
 * Added `gcor` function that computes correlation between two tracks, or between multiple pairs of tracks. 
+* Fix: `gextract` and `gscreen` almost always did not enable multitasking mode due to incorrect gating. 
 
 # misha 5.3.4
 

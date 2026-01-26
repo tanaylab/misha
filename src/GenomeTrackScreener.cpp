@@ -205,18 +205,6 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
 		vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
 
-		// Estimate result size - gscreen is non-deterministic (depends on filter)
-		// Use conservative estimate: assume all bins/intervals might pass
-		uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
-		// For mode selection, use bin estimate if available, otherwise fall back to interval count
-		uint64_t estimated_records = estimated_bins ? estimated_bins : (is_1d_iterator ? intervals1d->size() : intervals2d->size());
-		rdb::MultitaskingMode mode = iu.select_multitasking_mode(false, estimated_records);
-
-		// If mode is SINGLE (size too large), fall back to non-multitasking version
-		if (mode == rdb::MT_MODE_SINGLE) {
-			return C_gscreen(_expr, _intervals, _iterator_policy, _band, _intervals_set_out, _envir);
-		}
-
 		if (!intervset_out.empty()) {
 			if (is_1d_iterator)
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
@@ -224,10 +212,7 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
 		}
 
-		if ((intervset_out.empty() && iu.distribute_task(0,
-													   (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)),
-													   mode,
-													   estimated_bins)) ||
+		if ((intervset_out.empty() && iu.distribute_task(0, (is_1d_iterator ? sizeof(GInterval) : sizeof(GInterval2D)))) ||
 			(!intervset_out.empty() && iu.distribute_task(is_1d_iterator ?
 														 sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() :
 														 sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size(), 0)) )
