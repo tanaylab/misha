@@ -142,6 +142,7 @@ gls
 gmax
 gmin
 gmulticontig
+gmultitask
 gmultitasking
 gparam
 gpartition
@@ -239,7 +240,6 @@ pearson
 pos
 pre
 probs
-procs
 proj
 ps
 pseudocount
