@@ -1,3 +1,7 @@
+# misha 5.4.1
+
+* Added "fast-path" for intervals operations on data.frames in order to avoid per-chromosome calls in multi-contig databases.
+
 # misha 5.4.0
 
 * **Dataset API**: New dataset-based workflow for combining multiple data sources

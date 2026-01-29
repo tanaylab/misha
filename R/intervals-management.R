@@ -364,6 +364,26 @@ gintervals.save <- function(intervals.set.out = NULL, intervals = NULL) {
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
+
+    # Fast path: for plain data frames that don't need bigset format, save directly
+    # This avoids per-chromosome iteration which is O(n*m) for n rows and m chromosomes
+    # We skip this fast path if the data needs bigset format (per-chromosome files)
+    if (is.data.frame(intervals) && !.gintervals.is_bigset(intervals) && !.gintervals.needs_bigset(intervals)) {
+        fullpath <- .gintervals.check_new_set(intervals.set.out)
+
+        # Sort by chromosome
+        if (.gintervals.is1d(intervals)) {
+            intervals <- intervals[order(intervals$chrom), ]
+        } else {
+            intervals <- intervals[order(intervals$chrom1, intervals$chrom2), ]
+        }
+
+        .gintervals.save_file(fullpath, intervals)
+        .gdb.add_intervals.set(intervals.set.out)
+        return(invisible(NULL))
+    }
+
+    # Original path: for bigsets, use per-chromosome iteration
     .gintervals.apply(gintervals.chrom_sizes(intervals), intervals, intervals.set.out, function(intervs, ...) {
         intervs[[1]]
     })
