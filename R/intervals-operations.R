@@ -402,6 +402,35 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
 
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
+    # Fast path: for plain data frames, process all at once (vectorized)
+    # This avoids per-chromosome iteration which is O(n*m) for n rows and m chromosomes
+    if (is.data.frame(intervals) && is.null(intervals.set.out)) {
+        all_intervs <- gintervals.all()
+        chrom_ends <- setNames(all_intervs$end, all_intervs$chrom)
+
+        if (.gintervals.is1d(intervals)) {
+            intervals$start <- pmax(intervals$start, 0)
+            intervals$end <- pmin(intervals$end, chrom_ends[as.character(intervals$chrom)])
+            intervals <- intervals[!is.na(intervals$end) & intervals$start < intervals$end, ]
+        } else {
+            intervals$start1 <- pmax(intervals$start1, 0)
+            intervals$end1 <- pmin(intervals$end1, chrom_ends[as.character(intervals$chrom1)])
+            intervals$start2 <- pmax(intervals$start2, 0)
+            intervals$end2 <- pmin(intervals$end2, chrom_ends[as.character(intervals$chrom2)])
+            intervals <- intervals[!is.na(intervals$end1) & !is.na(intervals$end2) & intervals$start1 < intervals$end1 & intervals$start2 < intervals$end2, ]
+        }
+
+        .gverify_max_data_size(nrow(intervals), arguments = "intervals.set.out")
+
+        if (nrow(intervals) > 0) {
+            rownames(intervals) <- seq_len(nrow(intervals))
+            return(intervals)
+        } else {
+            return(NULL)
+        }
+    }
+
+    # Original path: for bigsets or when intervals.set.out is specified
     res <- NULL
     FUN <- function(intervals, intervals.set.out, envir) {
         intervals <- intervals[[1]]
@@ -521,6 +550,55 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
         intervals$.normalize_size <- as.integer(size)
     }
 
+    # Fast path: for plain data frames without intervals.set.out, process all at once
+    # This avoids per-chromosome iteration which is O(n*m) for n rows and m chromosomes
+    if (is.data.frame(intervals) && is.null(intervals.set.out)) {
+        if (.gintervals.is2d(intervals)) {
+            stop("gintervals.normalize does not support 2D intervals", call. = FALSE)
+        }
+
+        # Get original column order and additional columns
+        original_cols <- names(intervals)
+        basic_cols <- c("chrom", "start", "end", "strand")
+        extra_cols <- setdiff(original_cols, basic_cols)
+
+        # Determine size parameter: vector or scalar
+        if (".normalize_size" %in% names(intervals)) {
+            size_param <- as.integer(intervals$.normalize_size)
+            extra_cols <- setdiff(extra_cols, ".normalize_size")
+        } else {
+            size_param <- as.integer(size)
+        }
+
+        normalized <- .gcall("gintervals_normalize", intervals, size_param, .misha_env())
+
+        # Preserve additional columns from original intervals
+        if (!is.null(normalized) && nrow(normalized) > 0 && length(extra_cols) > 0) {
+            if (nrow(normalized) == nrow(intervals)) {
+                for (col in extra_cols) {
+                    normalized[[col]] <- intervals[[col]]
+                }
+            }
+        }
+
+        # Ensure strand column exists if it was in original
+        if (!is.null(normalized) && nrow(normalized) > 0 && "strand" %in% names(intervals) && !"strand" %in% names(normalized)) {
+            normalized$strand <- intervals$strand
+        }
+
+        # Reorder columns to match original order
+        if (!is.null(normalized) && nrow(normalized) > 0) {
+            available_cols <- intersect(original_cols, names(normalized))
+            available_cols <- setdiff(available_cols, ".normalize_size")
+            normalized <- normalized[, available_cols, drop = FALSE]
+            .gverify_max_data_size(nrow(normalized), arguments = "intervals.set.out")
+            return(normalized)
+        } else {
+            return(NULL)
+        }
+    }
+
+    # Original path: for bigsets or when intervals.set.out is specified
     res <- NULL
     FUN <- function(intervals, intervals.set.out, envir) {
         intervals <- intervals[[1]]
