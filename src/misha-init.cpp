@@ -84,6 +84,14 @@ extern "C" {
     extern SEXP gtrack_intervals_load(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gbigintervs_load_chrom(SEXP, SEXP, SEXP);
     extern SEXP gbigintervs_load_chrom2d(SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gbigintervs_load_all(SEXP, SEXP);
+    extern SEXP gbigintervs_load_all_2d(SEXP, SEXP);
+    extern SEXP gbigintervs_is_indexed(SEXP, SEXP);
+    extern SEXP gbigintervs_indexed_create(SEXP, SEXP, SEXP);
+    extern SEXP gbigintervs_indexed_write_chrom(SEXP, SEXP, SEXP);
+    extern SEXP gbigintervs_indexed_finalize(SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gbigintervs_2d_indexed_create(SEXP, SEXP, SEXP);
+    extern SEXP gbigintervs_2d_indexed_finalize(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_liftover(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_modify(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtracksummary(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -178,6 +186,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrack_intervals_load", (DL_FUNC)&gtrack_intervals_load, 5},
     {"gbigintervs_load_chrom", (DL_FUNC)&gbigintervs_load_chrom, 3},
     {"gbigintervs_load_chrom2d", (DL_FUNC)&gbigintervs_load_chrom2d, 4},
+    {"gbigintervs_load_all", (DL_FUNC)&gbigintervs_load_all, 2},
+    {"gbigintervs_load_all_2d", (DL_FUNC)&gbigintervs_load_all_2d, 2},
+    {"gbigintervs_is_indexed", (DL_FUNC)&gbigintervs_is_indexed, 2},
+    {"gbigintervs_indexed_create", (DL_FUNC)&gbigintervs_indexed_create, 3},
+    {"gbigintervs_indexed_write_chrom", (DL_FUNC)&gbigintervs_indexed_write_chrom, 3},
+    {"gbigintervs_indexed_finalize", (DL_FUNC)&gbigintervs_indexed_finalize, 5},
+    {"gbigintervs_2d_indexed_create", (DL_FUNC)&gbigintervs_2d_indexed_create, 3},
+    {"gbigintervs_2d_indexed_finalize", (DL_FUNC)&gbigintervs_2d_indexed_finalize, 5},
     {"gtrack_liftover", (DL_FUNC)&gtrack_liftover, 11},
     {"gtrack_modify", (DL_FUNC)&gtrack_modify, 5},
     {"gtracksummary", (DL_FUNC)&gtracksummary, 5},

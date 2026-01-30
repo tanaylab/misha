@@ -18,6 +18,32 @@
     FALSE
 }
 
+# Check if a bigset is in indexed format (has intervals.idx or intervals2d.idx)
+# AND has no per-chromosome update files (which would override indexed data)
+.gintervals.is_indexed_bigset <- function(intervals.set) {
+    if (!is.character(intervals.set) || length(intervals.set) != 1) {
+        return(FALSE)
+    }
+
+    # First check if indexed files exist
+    if (!.gcall("gbigintervs_is_indexed", intervals.set, .misha_env())) {
+        return(FALSE)
+    }
+
+    # Check if there are per-chromosome files (from updates) that override the indexed data
+    # If per-chromosome files exist, we can't use the fast indexed path
+    intervfname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+    files <- list.files(intervfname)
+    # Filter out index files and .meta
+    chrom_files <- files[!files %in% c("intervals.idx", "intervals.dat", "intervals2d.idx", "intervals2d.dat", ".meta")]
+    if (length(chrom_files) > 0) {
+        # Per-chromosome update files exist - can't use fast indexed path
+        return(FALSE)
+    }
+
+    TRUE
+}
+
 .gintervals.needs_bigset <- function(intervals = NULL, size = NULL) {
     if (!is.null(intervals)) {
         chromsizes <- gintervals.chrom_sizes(intervals)

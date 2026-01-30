@@ -27,14 +27,44 @@
         success <- FALSE
         t <- Sys.time()
         progress.percentage <- -1
+
+        # Check if we should write directly to indexed format
+        use_indexed_format <- !is.null(intervals.set.out) && getOption("gmulticontig.indexed_format", FALSE)
+        indexed_state <- NULL
+        index_entries <- NULL
+
         tryCatch(
             {
                 # if any of the source intervals sets is big then create the output intervals set big too
                 if (!is.null(intervals.set.out)) {
                     dir.create(fullpath, recursive = TRUE, mode = "0777")
+
+                    # Initialize indexed format writing if enabled
+                    if (use_indexed_format) {
+                        if (.gintervals.is1d(intervals[[1]])) {
+                            indexed_state <- .gcall("gbigintervs_indexed_create", fullpath, nrow(chroms), .misha_env())
+                            index_entries <- data.frame(
+                                chrom_id = integer(0),
+                                offset = numeric(0),
+                                length = numeric(0)
+                            )
+                        } else {
+                            indexed_state <- .gcall("gbigintervs_2d_indexed_create", fullpath, nrow(chroms), .misha_env())
+                            index_entries <- data.frame(
+                                chrom_id1 = integer(0),
+                                chrom_id2 = integer(0),
+                                offset = numeric(0),
+                                length = numeric(0)
+                            )
+                        }
+                    }
                 }
 
                 if (.gintervals.is1d(intervals[[1]])) {
+                    # Get chromosome ID mapping
+                    all_chroms <- get("ALLGENOME", envir = .misha)[[1]]$chrom
+                    chrom_to_id <- setNames(seq_along(all_chroms) - 1L, as.character(all_chroms))
+
                     mapply(function(chrom) {
                         loaded_intervals <- lapply(intervals, function(intervals) {
                             .gintervals.load_ext(intervals, chrom = chrom)
@@ -42,9 +72,33 @@
                         res <- do.call(FUN, list(loaded_intervals, ...))
                         if (!is.null(intervals.set.out) && !is.null(res) && nrow(res) > 0) {
                             zeroline <<- res[0, ]
-                            .gintervals.big.save(fullpath, res, chrom = chrom)
+
+                            if (use_indexed_format) {
+                                # Write directly to indexed format
+                                write_result <- .gcall(
+                                    "gbigintervs_indexed_write_chrom",
+                                    indexed_state$dat_path, res, .misha_env()
+                                )
+                                chrom_id <- chrom_to_id[as.character(chrom)]
+                                index_entries <<- rbind(index_entries, data.frame(
+                                    chrom_id = chrom_id,
+                                    offset = write_result["offset"],
+                                    length = write_result["length"]
+                                ))
+                            } else {
+                                .gintervals.big.save(fullpath, res, chrom = chrom)
+                            }
+
                             stat <- .gcall("gintervals_stats", res, .misha_env())
                             stats <<- rbind(stats, data.frame(chrom = chrom, stat))
+                        } else if (use_indexed_format && !is.null(intervals.set.out)) {
+                            # Record empty entry for this chromosome
+                            chrom_id <- chrom_to_id[as.character(chrom)]
+                            index_entries <<- rbind(index_entries, data.frame(
+                                chrom_id = chrom_id,
+                                offset = 0,
+                                length = 0
+                            ))
                         }
                         if (as.integer(difftime(Sys.time(), t, units = "secs")) > 3) {
                             t <<- Sys.time()
@@ -56,6 +110,10 @@
                         }
                     }, chroms$chrom)
                 } else {
+                    # Get chromosome ID mapping for 2D
+                    all_chroms <- get("ALLGENOME", envir = .misha)[[1]]$chrom
+                    chrom_to_id <- setNames(seq_along(all_chroms) - 1L, as.character(all_chroms))
+
                     mapply(function(chrom1, chrom2) {
                         loaded_intervals <- lapply(intervals, function(intervals) {
                             .gintervals.load_ext(intervals, chrom1 = chrom1, chrom2 = chrom2)
@@ -63,9 +121,37 @@
                         res <- do.call(FUN, list(loaded_intervals, ...))
                         if (!is.null(intervals.set.out) && !is.null(res) && nrow(res) > 0) {
                             zeroline <<- res[0, ]
-                            .gintervals.big.save(fullpath, res, chrom1 = chrom1, chrom2 = chrom2)
+
+                            if (use_indexed_format) {
+                                # Write directly to indexed format
+                                write_result <- .gcall(
+                                    "gbigintervs_indexed_write_chrom",
+                                    indexed_state$dat_path, res, .misha_env()
+                                )
+                                chrom_id1 <- chrom_to_id[as.character(chrom1)]
+                                chrom_id2 <- chrom_to_id[as.character(chrom2)]
+                                index_entries <<- rbind(index_entries, data.frame(
+                                    chrom_id1 = chrom_id1,
+                                    chrom_id2 = chrom_id2,
+                                    offset = write_result["offset"],
+                                    length = write_result["length"]
+                                ))
+                            } else {
+                                .gintervals.big.save(fullpath, res, chrom1 = chrom1, chrom2 = chrom2)
+                            }
+
                             stat <- .gcall("gintervals_stats", res, .misha_env())
                             stats <<- rbind(stats, data.frame(chrom1 = chrom1, chrom2 = chrom2, stat))
+                        } else if (use_indexed_format && !is.null(intervals.set.out)) {
+                            # Record empty entry for this chromosome pair
+                            chrom_id1 <- chrom_to_id[as.character(chrom1)]
+                            chrom_id2 <- chrom_to_id[as.character(chrom2)]
+                            index_entries <<- rbind(index_entries, data.frame(
+                                chrom_id1 = chrom_id1,
+                                chrom_id2 = chrom_id2,
+                                offset = 0,
+                                length = 0
+                            ))
                         }
                         if (as.integer(difftime(Sys.time(), t, units = "secs")) > 3) {
                             t <<- Sys.time()
@@ -80,9 +166,31 @@
 
                 if (!is.null(intervals.set.out)) {
                     if (is.null(stats)) {
+                        # Clean up indexed format temp files if no data was written
+                        if (use_indexed_format) {
+                            unlink(indexed_state$dat_path)
+                            unlink(indexed_state$idx_path)
+                        }
                         return(retv <- NULL)
                     }
                     .gintervals.big.save_meta(fullpath, stats, zeroline)
+
+                    # Finalize indexed format
+                    if (use_indexed_format) {
+                        if (.gintervals.is1d(intervals[[1]])) {
+                            .gcall(
+                                "gbigintervs_indexed_finalize",
+                                indexed_state$idx_path, indexed_state$dat_path,
+                                indexed_state$intervset_path, index_entries, .misha_env()
+                            )
+                        } else {
+                            .gcall(
+                                "gbigintervs_2d_indexed_finalize",
+                                indexed_state$idx_path, indexed_state$dat_path,
+                                indexed_state$intervset_path, index_entries, .misha_env()
+                            )
+                        }
+                    }
                 }
 
                 if (progress.percentage >= 0) {
@@ -96,8 +204,9 @@
                     .gintervals.big2small(intervals.set.out)
                 }
 
-                # If indexed format is enabled and output is bigset, convert to indexed format
-                if (!is.null(intervals.set.out) && getOption("gmulticontig.indexed_format", FALSE) && .gintervals.is_bigset(intervals.set.out)) {
+                # If not using direct indexed format writing, convert after the fact
+                if (!is.null(intervals.set.out) && !use_indexed_format &&
+                    getOption("gmulticontig.indexed_format", FALSE) && .gintervals.is_bigset(intervals.set.out)) {
                     if (.gintervals.is1d(intervals.set.out)) {
                         gintervals.convert_to_indexed(intervals.set.out, remove.old = TRUE)
                     } else {
@@ -108,6 +217,11 @@
             finally = {
                 if (!success && !is.null(intervals.set.out)) {
                     unlink(fullpath, recursive = TRUE)
+                    # Clean up indexed format temp files on error
+                    if (use_indexed_format && !is.null(indexed_state)) {
+                        unlink(indexed_state$dat_path)
+                        unlink(indexed_state$idx_path)
+                    }
                 }
             }
         )
@@ -259,7 +373,16 @@
                     ), call. = FALSE)
                 }
             }
-            if (nrow(meta$stats) > 1) {
+
+            # Fast path: for indexed bigsets loading all chromosomes, use single C++ call
+            # This avoids O(m) R-to-C++ calls where m = number of chromosomes
+            # C++ returns a list of dataframes; we use R's rbind to combine them
+            # (which correctly merges factor levels, unlike C++ grbind)
+            if (is.null(chrom) && .gintervals.is_indexed_bigset(intervals.set)) {
+                df_list <- .gcall("gbigintervs_load_all", intervals.set, .misha_env())
+                res <- do.call(rbind, df_list)
+            } else if (nrow(meta$stats) > 1) {
+                # Slow path: per-chromosome iteration (for per-chromosome format or single-chrom load)
                 res <- list(zeroline)
                 lapply(
                     meta$stats$chrom,
@@ -326,7 +449,15 @@
                 }
             }
 
-            if (nrow(meta$stats) > 1) {
+            # Fast path: for indexed bigsets loading all chromosome pairs, use single C++ call
+            # This avoids O(m^2) R-to-C++ calls where m = number of chromosomes
+            # C++ returns a list of dataframes; we use R's rbind to combine them
+            # (which correctly merges factor levels, unlike C++ grbind)
+            if (is.null(chrom1) && is.null(chrom2) && .gintervals.is_indexed_bigset(intervals.set)) {
+                df_list <- .gcall("gbigintervs_load_all_2d", intervals.set, .misha_env())
+                res <- do.call(rbind, df_list)
+            } else if (nrow(meta$stats) > 1) {
+                # Slow path: per-chromosome-pair iteration (for per-chromosome format or filtered load)
                 res <- list(zeroline)
                 mapply(
                     function(chrom1, chrom2) {

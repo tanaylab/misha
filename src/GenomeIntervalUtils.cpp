@@ -1068,4 +1068,237 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 	return R_NilValue;
 }
 
+// Load entire indexed 1D big interval set at once (avoiding per-chromosome iteration)
+SEXP gbigintervs_load_all(SEXP _intervset, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_intervset) || Rf_length(_intervset) != 1)
+			verror("Intervals set argument is not a string");
+
+		const char *intervset_str = CHAR(STRING_ELT(_intervset, 0));
+		IntervUtils iu(_envir);
+		string intervset_path = interv2path(_envir, intervset_str);
+
+		string idx_path = intervset_path + "/intervals.idx";
+		string dat_path = intervset_path + "/intervals.dat";
+
+		// Check if indexed files exist
+		struct stat st;
+		if (stat(idx_path.c_str(), &st) != 0) {
+			verror("Indexed format not found: %s", idx_path.c_str());
+		}
+
+		// Load index
+		auto idx = std::make_shared<IntervalsIndex1D>();
+		if (!idx->load(idx_path)) {
+			verror("Failed to load intervals index from %s", idx_path.c_str());
+		}
+
+		const vector<IntervalsContigEntry>& entries = idx->get_all_entries();
+
+		// Count non-empty entries
+		size_t non_empty_count = 0;
+		for (const auto& entry : entries) {
+			if (entry.length > 0) {
+				non_empty_count++;
+			}
+		}
+
+		if (non_empty_count == 0) {
+			// Return empty data frame with proper structure
+			SEXP colnames;
+			PROTECT(colnames = Rf_allocVector(STRSXP, 3));
+			SET_STRING_ELT(colnames, 0, Rf_mkChar("chrom"));
+			SET_STRING_ELT(colnames, 1, Rf_mkChar("start"));
+			SET_STRING_ELT(colnames, 2, Rf_mkChar("end"));
+
+			SEXP df;
+			PROTECT(df = Rf_allocVector(VECSXP, 3));
+			SET_VECTOR_ELT(df, 0, Rf_allocVector(INTSXP, 0));
+			SET_VECTOR_ELT(df, 1, Rf_allocVector(INTSXP, 0));
+			SET_VECTOR_ELT(df, 2, Rf_allocVector(INTSXP, 0));
+
+			Rf_setAttrib(df, R_NamesSymbol, colnames);
+			Rf_setAttrib(df, R_ClassSymbol, Rf_mkString("data.frame"));
+			Rf_setAttrib(df, R_RowNamesSymbol, Rf_allocVector(INTSXP, 0));
+
+			UNPROTECT(2);
+			return df;
+		}
+
+		// Open dat file
+		FILE *fp = fopen(dat_path.c_str(), "rb");
+		if (!fp) {
+			verror("Cannot open indexed intervals file %s: %s",
+				   dat_path.c_str(), strerror(errno));
+		}
+
+		// Load all non-empty chromosome data frames into a list
+		// Return the list directly - R will combine them using rbind which handles
+		// factor level merging correctly (grbind doesn't merge factor levels)
+		SEXP obj_list;
+		PROTECT(obj_list = Rf_allocVector(VECSXP, non_empty_count));
+
+		size_t list_idx = 0;
+		for (const auto& entry : entries) {
+			if (entry.length == 0) continue;
+
+			if (fseek(fp, entry.offset, SEEK_SET) != 0) {
+				fclose(fp);
+				UNPROTECT(1);
+				verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
+			}
+
+			SEXP chrom_intervs = RSaneUnserialize(fp);
+			SET_VECTOR_ELT(obj_list, list_idx++, chrom_intervs);
+		}
+		fclose(fp);
+
+		UNPROTECT(1); // obj_list
+		return obj_list;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
+	return R_NilValue;
+}
+
+// Load entire indexed 2D big interval set at once (avoiding per-chromosome-pair iteration)
+SEXP gbigintervs_load_all_2d(SEXP _intervset, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_intervset) || Rf_length(_intervset) != 1)
+			verror("Intervals set argument is not a string");
+
+		const char *intervset_str = CHAR(STRING_ELT(_intervset, 0));
+		IntervUtils iu(_envir);
+		string intervset_path = interv2path(_envir, intervset_str);
+
+		string idx_path = intervset_path + "/intervals2d.idx";
+		string dat_path = intervset_path + "/intervals2d.dat";
+
+		// Check if indexed files exist
+		struct stat st;
+		if (stat(idx_path.c_str(), &st) != 0) {
+			verror("Indexed 2D format not found: %s", idx_path.c_str());
+		}
+
+		// Load index
+		auto idx = std::make_shared<IntervalsIndex2D>();
+		if (!idx->load(idx_path)) {
+			verror("Failed to load 2D intervals index from %s", idx_path.c_str());
+		}
+
+		const vector<IntervalsPairEntry>& entries = idx->get_all_entries();
+
+		// Count non-empty entries
+		size_t non_empty_count = 0;
+		for (const auto& entry : entries) {
+			if (entry.length > 0) {
+				non_empty_count++;
+			}
+		}
+
+		if (non_empty_count == 0) {
+			// Return empty data frame with proper structure for 2D
+			SEXP colnames;
+			PROTECT(colnames = Rf_allocVector(STRSXP, 6));
+			SET_STRING_ELT(colnames, 0, Rf_mkChar("chrom1"));
+			SET_STRING_ELT(colnames, 1, Rf_mkChar("start1"));
+			SET_STRING_ELT(colnames, 2, Rf_mkChar("end1"));
+			SET_STRING_ELT(colnames, 3, Rf_mkChar("chrom2"));
+			SET_STRING_ELT(colnames, 4, Rf_mkChar("start2"));
+			SET_STRING_ELT(colnames, 5, Rf_mkChar("end2"));
+
+			SEXP df;
+			PROTECT(df = Rf_allocVector(VECSXP, 6));
+			for (int i = 0; i < 6; i++) {
+				SET_VECTOR_ELT(df, i, Rf_allocVector(INTSXP, 0));
+			}
+
+			Rf_setAttrib(df, R_NamesSymbol, colnames);
+			Rf_setAttrib(df, R_ClassSymbol, Rf_mkString("data.frame"));
+			Rf_setAttrib(df, R_RowNamesSymbol, Rf_allocVector(INTSXP, 0));
+
+			UNPROTECT(2);
+			return df;
+		}
+
+		// Open dat file
+		FILE *fp = fopen(dat_path.c_str(), "rb");
+		if (!fp) {
+			verror("Cannot open indexed intervals2d file %s: %s",
+				   dat_path.c_str(), strerror(errno));
+		}
+
+		// Load all non-empty chromosome pair data frames into a list
+		// Return the list directly - R will combine them using rbind which handles
+		// factor level merging correctly (grbind doesn't merge factor levels)
+		SEXP obj_list;
+		PROTECT(obj_list = Rf_allocVector(VECSXP, non_empty_count));
+
+		size_t list_idx = 0;
+		for (const auto& entry : entries) {
+			if (entry.length == 0) continue;
+
+			if (fseek(fp, entry.offset, SEEK_SET) != 0) {
+				fclose(fp);
+				UNPROTECT(1);
+				verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
+			}
+
+			SEXP chrom_intervs = RSaneUnserialize(fp);
+			SET_VECTOR_ELT(obj_list, list_idx++, chrom_intervs);
+		}
+		fclose(fp);
+
+		UNPROTECT(1); // obj_list
+		return obj_list;
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
+	return R_NilValue;
+}
+
+// Check if a big interval set is in indexed format
+SEXP gbigintervs_is_indexed(SEXP _intervset, SEXP _envir)
+{
+	try {
+		RdbInitializer rdb_init;
+
+		if (!Rf_isString(_intervset) || Rf_length(_intervset) != 1)
+			verror("Intervals set argument is not a string");
+
+		const char *intervset_str = CHAR(STRING_ELT(_intervset, 0));
+		string intervset_path = interv2path(_envir, intervset_str);
+
+		// Check for 1D indexed format
+		string idx_path_1d = intervset_path + "/intervals.idx";
+		struct stat st;
+		if (stat(idx_path_1d.c_str(), &st) == 0) {
+			return Rf_ScalarLogical(TRUE);
+		}
+
+		// Check for 2D indexed format
+		string idx_path_2d = intervset_path + "/intervals2d.idx";
+		if (stat(idx_path_2d.c_str(), &st) == 0) {
+			return Rf_ScalarLogical(TRUE);
+		}
+
+		return Rf_ScalarLogical(FALSE);
+	} catch (TGLException &e) {
+		rerror("%s", e.msg());
+	} catch (const bad_alloc &e) {
+		rerror("Out of memory");
+	}
+	return R_NilValue;
+}
+
 }

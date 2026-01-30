@@ -574,4 +574,413 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
     return R_NilValue;
 }
 
+// Streaming write support for direct indexed format creation
+// These functions allow writing indexed format incrementally without creating per-chromosome files first
+
+// Create/open indexed format files for streaming writes (1D intervals)
+// Returns an external pointer containing the file handles and state
+SEXP gbigintervs_indexed_create(SEXP _intervset_path, SEXP _num_chroms, SEXP _envir) {
+    try {
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(_intervset_path) || Rf_length(_intervset_path) != 1)
+            verror("Interval set path must be a string");
+
+        if (!Rf_isInteger(_num_chroms) && !Rf_isReal(_num_chroms))
+            verror("Number of chromosomes must be numeric");
+
+        string intervset_path = CHAR(STRING_ELT(_intervset_path, 0));
+        int num_chroms = Rf_asInteger(_num_chroms);
+
+        // Create directory if it doesn't exist
+        mkdir(intervset_path.c_str(), 0777);
+
+        string dat_path = intervset_path + "/intervals.dat.tmp";
+        string idx_path = intervset_path + "/intervals.idx.tmp";
+
+        FILE *dat_fp = fopen(dat_path.c_str(), "wb");
+        if (!dat_fp) {
+            verror("Cannot create %s: %s", dat_path.c_str(), strerror(errno));
+        }
+
+        FILE *idx_fp = fopen(idx_path.c_str(), "wb");
+        if (!idx_fp) {
+            fclose(dat_fp);
+            verror("Cannot create %s: %s", idx_path.c_str(), strerror(errno));
+        }
+
+        // Write index header with placeholder checksum
+        write_1d_index_header(idx_fp, num_chroms, 0);
+
+        // Return a list with file paths and current offset
+        // We'll track state in R and pass it back to subsequent calls
+        SEXP result;
+        PROTECT(result = Rf_allocVector(VECSXP, 4));
+
+        SEXP names;
+        PROTECT(names = Rf_allocVector(STRSXP, 4));
+        SET_STRING_ELT(names, 0, Rf_mkChar("dat_path"));
+        SET_STRING_ELT(names, 1, Rf_mkChar("idx_path"));
+        SET_STRING_ELT(names, 2, Rf_mkChar("intervset_path"));
+        SET_STRING_ELT(names, 3, Rf_mkChar("num_chroms"));
+        Rf_setAttrib(result, R_NamesSymbol, names);
+
+        SET_VECTOR_ELT(result, 0, Rf_mkString(dat_path.c_str()));
+        SET_VECTOR_ELT(result, 1, Rf_mkString(idx_path.c_str()));
+        SET_VECTOR_ELT(result, 2, Rf_mkString(intervset_path.c_str()));
+        SET_VECTOR_ELT(result, 3, Rf_ScalarInteger(num_chroms));
+
+        fclose(dat_fp);
+        fclose(idx_fp);
+
+        UNPROTECT(2);
+        return result;
+    } catch (TGLException &e) {
+        rerror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
+    return R_NilValue;
+}
+
+// Write a chromosome's intervals to the indexed format (1D)
+// Returns offset and length for this chromosome
+SEXP gbigintervs_indexed_write_chrom(SEXP _dat_path, SEXP _intervals, SEXP _envir) {
+    try {
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(_dat_path) || Rf_length(_dat_path) != 1)
+            verror("dat_path must be a string");
+
+        string dat_path = CHAR(STRING_ELT(_dat_path, 0));
+
+        // Open dat file in append mode
+        FILE *dat_fp = fopen(dat_path.c_str(), "ab");
+        if (!dat_fp) {
+            verror("Cannot open %s for appending: %s", dat_path.c_str(), strerror(errno));
+        }
+
+        // Get current position (will be the offset for this chromosome)
+        long offset = ftell(dat_fp);
+        if (offset < 0) {
+            fclose(dat_fp);
+            verror("Failed to get file position: %s", strerror(errno));
+        }
+
+        // Serialize the intervals dataframe
+        RSaneSerialize(_intervals, dat_fp);
+
+        // Get new position to calculate length
+        long new_pos = ftell(dat_fp);
+        if (new_pos < 0) {
+            fclose(dat_fp);
+            verror("Failed to get file position after write: %s", strerror(errno));
+        }
+
+        fclose(dat_fp);
+
+        uint64_t length = new_pos - offset;
+
+        // Return offset and length
+        SEXP result;
+        PROTECT(result = Rf_allocVector(REALSXP, 2));
+        REAL(result)[0] = (double)offset;
+        REAL(result)[1] = (double)length;
+
+        SEXP names;
+        PROTECT(names = Rf_allocVector(STRSXP, 2));
+        SET_STRING_ELT(names, 0, Rf_mkChar("offset"));
+        SET_STRING_ELT(names, 1, Rf_mkChar("length"));
+        Rf_setAttrib(result, R_NamesSymbol, names);
+
+        UNPROTECT(2);
+        return result;
+    } catch (TGLException &e) {
+        rerror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
+    return R_NilValue;
+}
+
+// Finalize the indexed format (1D) - write index entries and compute checksum
+SEXP gbigintervs_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _intervset_path,
+                                   SEXP _entries, SEXP _envir) {
+    try {
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(_idx_path) || Rf_length(_idx_path) != 1)
+            verror("idx_path must be a string");
+        if (!Rf_isString(_dat_path) || Rf_length(_dat_path) != 1)
+            verror("dat_path must be a string");
+        if (!Rf_isString(_intervset_path) || Rf_length(_intervset_path) != 1)
+            verror("intervset_path must be a string");
+
+        string idx_path_tmp = CHAR(STRING_ELT(_idx_path, 0));
+        string dat_path_tmp = CHAR(STRING_ELT(_dat_path, 0));
+        string intervset_path = CHAR(STRING_ELT(_intervset_path, 0));
+
+        // _entries is a data.frame with columns: chrom_id, offset, length
+        if (!Rf_isNewList(_entries))
+            verror("entries must be a data.frame");
+
+        SEXP chrom_ids = VECTOR_ELT(_entries, 0);
+        SEXP offsets = VECTOR_ELT(_entries, 1);
+        SEXP lengths = VECTOR_ELT(_entries, 2);
+
+        int n_entries = Rf_length(chrom_ids);
+
+        // Open idx file for writing entries
+        FILE *idx_fp = fopen(idx_path_tmp.c_str(), "r+b");
+        if (!idx_fp) {
+            verror("Cannot open %s: %s", idx_path_tmp.c_str(), strerror(errno));
+        }
+
+        // Seek past header to write entries
+        // Header size: 8 (magic) + 4 (version) + 4 (num_entries) + 8 (flags) + 8 (checksum) + 4 (reserved) = 36 bytes
+        if (fseek(idx_fp, 36, SEEK_SET) != 0) {
+            fclose(idx_fp);
+            verror("Failed to seek in index file: %s", strerror(errno));
+        }
+
+        // Collect entries for checksum computation and write them
+        misha::CRC64 crc64;
+        uint64_t checksum = crc64.init_incremental();
+
+        for (int i = 0; i < n_entries; i++) {
+            IntervalsContigEntry entry;
+            entry.chrom_id = INTEGER(chrom_ids)[i];
+            entry.offset = (uint64_t)REAL(offsets)[i];
+            entry.length = (uint64_t)REAL(lengths)[i];
+            entry.reserved = 0;
+
+            // Write entry
+            if (fwrite(&entry.chrom_id, sizeof(entry.chrom_id), 1, idx_fp) != 1 ||
+                fwrite(&entry.offset, sizeof(entry.offset), 1, idx_fp) != 1 ||
+                fwrite(&entry.length, sizeof(entry.length), 1, idx_fp) != 1 ||
+                fwrite(&entry.reserved, sizeof(entry.reserved), 1, idx_fp) != 1) {
+                fclose(idx_fp);
+                verror("Failed to write index entry");
+            }
+
+            // Update checksum
+            checksum = crc64.compute_incremental(checksum,
+                (const unsigned char*)&entry.chrom_id, sizeof(entry.chrom_id));
+            checksum = crc64.compute_incremental(checksum,
+                (const unsigned char*)&entry.offset, sizeof(entry.offset));
+            checksum = crc64.compute_incremental(checksum,
+                (const unsigned char*)&entry.length, sizeof(entry.length));
+        }
+
+        checksum = crc64.finalize_incremental(checksum);
+
+        // Write checksum at correct position in header
+        if (fseek(idx_fp, IDX_1D_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
+            fclose(idx_fp);
+            verror("Failed to seek to checksum position");
+        }
+        if (fwrite(&checksum, sizeof(checksum), 1, idx_fp) != 1) {
+            fclose(idx_fp);
+            verror("Failed to write checksum");
+        }
+
+        fflush(idx_fp);
+        fsync(fileno(idx_fp));
+        fclose(idx_fp);
+
+        // Atomic rename
+        string dat_path_final = intervset_path + "/intervals.dat";
+        string idx_path_final = intervset_path + "/intervals.idx";
+
+        if (rename(dat_path_tmp.c_str(), dat_path_final.c_str()) != 0) {
+            verror("Failed to rename %s to %s: %s",
+                   dat_path_tmp.c_str(), dat_path_final.c_str(), strerror(errno));
+        }
+
+        if (rename(idx_path_tmp.c_str(), idx_path_final.c_str()) != 0) {
+            verror("Failed to rename %s to %s: %s",
+                   idx_path_tmp.c_str(), idx_path_final.c_str(), strerror(errno));
+        }
+
+        return R_NilValue;
+    } catch (TGLException &e) {
+        rerror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
+    return R_NilValue;
+}
+
+// Similar functions for 2D intervals
+SEXP gbigintervs_2d_indexed_create(SEXP _intervset_path, SEXP _num_pairs, SEXP _envir) {
+    try {
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(_intervset_path) || Rf_length(_intervset_path) != 1)
+            verror("Interval set path must be a string");
+
+        if (!Rf_isInteger(_num_pairs) && !Rf_isReal(_num_pairs))
+            verror("Number of pairs must be numeric");
+
+        string intervset_path = CHAR(STRING_ELT(_intervset_path, 0));
+        int num_pairs = Rf_asInteger(_num_pairs);
+
+        // Create directory if it doesn't exist
+        mkdir(intervset_path.c_str(), 0777);
+
+        string dat_path = intervset_path + "/intervals2d.dat.tmp";
+        string idx_path = intervset_path + "/intervals2d.idx.tmp";
+
+        FILE *dat_fp = fopen(dat_path.c_str(), "wb");
+        if (!dat_fp) {
+            verror("Cannot create %s: %s", dat_path.c_str(), strerror(errno));
+        }
+
+        FILE *idx_fp = fopen(idx_path.c_str(), "wb");
+        if (!idx_fp) {
+            fclose(dat_fp);
+            verror("Cannot create %s: %s", idx_path.c_str(), strerror(errno));
+        }
+
+        // Write index header with placeholder checksum
+        write_2d_index_header(idx_fp, num_pairs, 0);
+
+        fclose(dat_fp);
+        fclose(idx_fp);
+
+        // Return paths
+        SEXP result;
+        PROTECT(result = Rf_allocVector(VECSXP, 3));
+
+        SEXP names;
+        PROTECT(names = Rf_allocVector(STRSXP, 3));
+        SET_STRING_ELT(names, 0, Rf_mkChar("dat_path"));
+        SET_STRING_ELT(names, 1, Rf_mkChar("idx_path"));
+        SET_STRING_ELT(names, 2, Rf_mkChar("intervset_path"));
+        Rf_setAttrib(result, R_NamesSymbol, names);
+
+        SET_VECTOR_ELT(result, 0, Rf_mkString(dat_path.c_str()));
+        SET_VECTOR_ELT(result, 1, Rf_mkString(idx_path.c_str()));
+        SET_VECTOR_ELT(result, 2, Rf_mkString(intervset_path.c_str()));
+
+        UNPROTECT(2);
+        return result;
+    } catch (TGLException &e) {
+        rerror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
+    return R_NilValue;
+}
+
+// Finalize 2D indexed format
+SEXP gbigintervs_2d_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _intervset_path,
+                                      SEXP _entries, SEXP _envir) {
+    try {
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(_idx_path) || Rf_length(_idx_path) != 1)
+            verror("idx_path must be a string");
+        if (!Rf_isString(_dat_path) || Rf_length(_dat_path) != 1)
+            verror("dat_path must be a string");
+        if (!Rf_isString(_intervset_path) || Rf_length(_intervset_path) != 1)
+            verror("intervset_path must be a string");
+
+        string idx_path_tmp = CHAR(STRING_ELT(_idx_path, 0));
+        string dat_path_tmp = CHAR(STRING_ELT(_dat_path, 0));
+        string intervset_path = CHAR(STRING_ELT(_intervset_path, 0));
+
+        // _entries is a data.frame with columns: chrom_id1, chrom_id2, offset, length
+        if (!Rf_isNewList(_entries))
+            verror("entries must be a data.frame");
+
+        SEXP chrom_ids1 = VECTOR_ELT(_entries, 0);
+        SEXP chrom_ids2 = VECTOR_ELT(_entries, 1);
+        SEXP offsets = VECTOR_ELT(_entries, 2);
+        SEXP lengths = VECTOR_ELT(_entries, 3);
+
+        int n_entries = Rf_length(chrom_ids1);
+
+        // Open idx file for writing entries
+        FILE *idx_fp = fopen(idx_path_tmp.c_str(), "r+b");
+        if (!idx_fp) {
+            verror("Cannot open %s: %s", idx_path_tmp.c_str(), strerror(errno));
+        }
+
+        // Seek past header
+        if (fseek(idx_fp, 36, SEEK_SET) != 0) {
+            fclose(idx_fp);
+            verror("Failed to seek in index file: %s", strerror(errno));
+        }
+
+        // Collect entries for checksum computation
+        misha::CRC64 crc64;
+        uint64_t checksum = crc64.init_incremental();
+
+        for (int i = 0; i < n_entries; i++) {
+            IntervalsPairEntry entry;
+            entry.chrom1_id = INTEGER(chrom_ids1)[i];
+            entry.chrom2_id = INTEGER(chrom_ids2)[i];
+            entry.offset = (uint64_t)REAL(offsets)[i];
+            entry.length = (uint64_t)REAL(lengths)[i];
+
+            // Write entry
+            if (fwrite(&entry.chrom1_id, sizeof(entry.chrom1_id), 1, idx_fp) != 1 ||
+                fwrite(&entry.chrom2_id, sizeof(entry.chrom2_id), 1, idx_fp) != 1 ||
+                fwrite(&entry.offset, sizeof(entry.offset), 1, idx_fp) != 1 ||
+                fwrite(&entry.length, sizeof(entry.length), 1, idx_fp) != 1) {
+                fclose(idx_fp);
+                verror("Failed to write index entry");
+            }
+
+            // Update checksum
+            checksum = crc64.compute_incremental(checksum,
+                (const unsigned char*)&entry.chrom1_id, sizeof(entry.chrom1_id));
+            checksum = crc64.compute_incremental(checksum,
+                (const unsigned char*)&entry.chrom2_id, sizeof(entry.chrom2_id));
+            checksum = crc64.compute_incremental(checksum,
+                (const unsigned char*)&entry.offset, sizeof(entry.offset));
+            checksum = crc64.compute_incremental(checksum,
+                (const unsigned char*)&entry.length, sizeof(entry.length));
+        }
+
+        checksum = crc64.finalize_incremental(checksum);
+
+        // Write checksum
+        if (fseek(idx_fp, IDX_2D_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
+            fclose(idx_fp);
+            verror("Failed to seek to checksum position");
+        }
+        if (fwrite(&checksum, sizeof(checksum), 1, idx_fp) != 1) {
+            fclose(idx_fp);
+            verror("Failed to write checksum");
+        }
+
+        fflush(idx_fp);
+        fsync(fileno(idx_fp));
+        fclose(idx_fp);
+
+        // Atomic rename
+        string dat_path_final = intervset_path + "/intervals2d.dat";
+        string idx_path_final = intervset_path + "/intervals2d.idx";
+
+        if (rename(dat_path_tmp.c_str(), dat_path_final.c_str()) != 0) {
+            verror("Failed to rename %s to %s: %s",
+                   dat_path_tmp.c_str(), dat_path_final.c_str(), strerror(errno));
+        }
+
+        if (rename(idx_path_tmp.c_str(), idx_path_final.c_str()) != 0) {
+            verror("Failed to rename %s to %s: %s",
+                   idx_path_tmp.c_str(), idx_path_final.c_str(), strerror(errno));
+        }
+
+        return R_NilValue;
+    } catch (TGLException &e) {
+        rerror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    }
+    return R_NilValue;
+}
+
 } // extern "C"
