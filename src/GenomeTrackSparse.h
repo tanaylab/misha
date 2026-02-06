@@ -89,6 +89,8 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 		m_last_max_pos = numeric_limits<double>::quiet_NaN();
 	if (m_functions[MIN_POS])
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[LSE])
+		m_last_lse = -numeric_limits<float>::infinity();
 
 	for (GIntervals::const_iterator iinterv = m_icur_interval; iinterv != m_intervals.end(); ++iinterv) {
 		if (!iinterv->do_overlap(interval))
@@ -113,6 +115,9 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 
 			if (m_functions[STDDEV])
 				mean_square_sum += v * v;
+
+			if (m_functions[LSE])
+				lse_accumulate(m_last_lse, v);
 
 			if (m_use_quantile)
 				m_sp.add(v, s_rnd_func);
@@ -161,6 +166,8 @@ inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
 		m_last_avg = m_last_nearest = m_last_sum / num_vs;
 	else {
 		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
+		if (m_functions[LSE])
+			m_last_lse = numeric_limits<float>::quiet_NaN();
 		if (m_functions[MIN_POS])
 			m_last_min_pos = numeric_limits<double>::quiet_NaN();
 	}

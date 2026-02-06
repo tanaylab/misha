@@ -92,6 +92,9 @@ void TrackVarProcessor::process_single_track_var_1d(
 		case TrackExpressionVars::Track_var::SUM:
 			result = aggregate_sum_with_filter(track, unmasked_parts);
 			break;
+		case TrackExpressionVars::Track_var::LSE:
+			result = aggregate_lse_with_filter(track, unmasked_parts);
+			break;
 		case TrackExpressionVars::Track_var::REG_MIN:
 		case TrackExpressionVars::Track_var::PV_MIN:
 			result = aggregate_min_with_filter(track, unmasked_parts);
@@ -216,6 +219,9 @@ void TrackVarProcessor::process_single_track_var_1d(
 		case TrackExpressionVars::Track_var::SUM:
 			var.var[idx] = track.last_sum();
 			break;
+		case TrackExpressionVars::Track_var::LSE:
+			var.var[idx] = track.last_lse();
+			break;
 		case TrackExpressionVars::Track_var::QUANTILE:
 			var.var[idx] = track.last_quantile(var.percentile);
 			break;
@@ -296,6 +302,9 @@ void TrackVarProcessor::process_single_track_var_1d(
 			break;
 		case TrackExpressionVars::Track_var::SUM:
 			var.var[idx] = track.last_sum();
+			break;
+		case TrackExpressionVars::Track_var::LSE:
+			var.var[idx] = track.last_lse();
 			break;
 		case TrackExpressionVars::Track_var::QUANTILE:
 			var.var[idx] = track.last_quantile(var.percentile);
@@ -683,5 +692,22 @@ double TrackVarProcessor::aggregate_sample_pos_rel_with_filter(GenomeTrack1D &tr
 		return abs_pos;
 	}
 	return abs_pos - base_start;
+}
+
+double TrackVarProcessor::aggregate_lse_with_filter(GenomeTrack1D &track, const vector<GInterval> &parts)
+{
+	double lse = -numeric_limits<double>::infinity();
+	bool has_value = false;
+
+	for (const auto& part : parts) {
+		track.read_interval(part);
+		double part_lse = track.last_lse();
+		if (!std::isnan(part_lse)) {
+			lse_accumulate(lse, part_lse);
+			has_value = true;
+		}
+	}
+
+	return has_value ? lse : numeric_limits<double>::quiet_NaN();
 }
 

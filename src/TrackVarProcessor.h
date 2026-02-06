@@ -56,6 +56,7 @@ private:
 	double aggregate_sample_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 	double aggregate_sample_pos_abs_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 	double aggregate_sample_pos_rel_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts, int64_t base_start);
+	double aggregate_lse_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 };
 
 #endif /* TRACKVARPROCESSOR_H_ */

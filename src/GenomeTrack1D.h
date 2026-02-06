@@ -14,11 +14,32 @@
 #include "GInterval.h"
 #include "StreamPercentiler.h"
 
+// Numerically stable log-sum-exp helper: l1 = log(exp(l1) + exp(l2))
+inline void lse_accumulate(float &l1, float l2) {
+	if (l1 > l2) {
+		if (!std::isinf(l2))
+			l1 += std::log(1.0f + std::exp(l2 - l1));
+	} else {
+		if (std::isinf(l1))
+			l1 = l2;
+		else
+			l1 = l2 + std::log(1.0f + std::exp(l1 - l2));
+	}
+}
+
+inline void lse_accumulate(double &l1, double l2) {
+	if (l1 > l2) {
+		l1 += std::log(1.0 + std::exp(l2 - l1));
+	} else {
+		l1 = l2 + std::log(1.0 + std::exp(l1 - l2));
+	}
+}
+
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
 class GenomeTrack1D : public GenomeTrack {
 public:
-	enum Functions { AVG, MIN, MAX, NEAREST, STDDEV, SUM, MAX_POS, MIN_POS, EXISTS, SIZE, SAMPLE, SAMPLE_POS, FIRST, FIRST_POS, LAST, LAST_POS, NUM_FUNCS };
+	enum Functions { AVG, MIN, MAX, NEAREST, STDDEV, SUM, LSE, MAX_POS, MIN_POS, EXISTS, SIZE, SAMPLE, SAMPLE_POS, FIRST, FIRST_POS, LAST, LAST_POS, NUM_FUNCS };
 
 	virtual ~GenomeTrack1D() {}
 
@@ -37,6 +58,7 @@ public:
 	float last_nearest() const { return m_last_nearest; }
 	float last_stddev() const { return m_last_stddev; }
 	float last_sum() const { return m_last_sum; }
+	float last_lse() const { return m_last_lse; }
 	float last_quantile(double percentile);
 	float last_exists() const { return m_last_exists; }
 	float last_size() const { return m_last_size; }
@@ -65,6 +87,7 @@ protected:
 	float        m_last_nearest;
 	float        m_last_stddev;
 	float        m_last_sum;
+	float        m_last_lse;
 	float        m_last_exists;
 	float        m_last_size;
 	float        m_last_sample;
