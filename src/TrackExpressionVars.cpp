@@ -27,7 +27,7 @@
 #include "SequenceVarProcessor.h"
 
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
-	"avg", "min", "max", "nearest", "stddev", "sum", "quantile",
+	"avg", "min", "max", "nearest", "stddev", "sum", "lse", "quantile",
 	"global.percentile", "global.percentile.min", "global.percentile.max",
 	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac",
     "masked.count", "masked.frac",
@@ -38,7 +38,7 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "distance.edge", "coverage", "neighbor.count" };
 
 const char *TrackExpressionVars::Value_var::FUNC_NAMES[TrackExpressionVars::Value_var::NUM_FUNCS] = {
-	"avg", "min", "max", "stddev", "sum", "quantile",
+	"avg", "min", "max", "stddev", "sum", "lse", "quantile",
 	"nearest",
 	"exists", "size",
 	"first", "last", "sample",
@@ -695,7 +695,7 @@ TrackExpressionVars::Track_var &TrackExpressionVars::add_vtrack_var_src_track(SE
 	for (ifunc = 0; ifunc < Track_var::NUM_FUNCS; ++ifunc) {
 		if (!strcmp(func.c_str(), Track_var::FUNC_NAMES[ifunc])) {
 			if ((GenomeTrack::is_1d(track_type) && (ifunc == Track_var::WEIGHTED_SUM || ifunc == Track_var::OCCUPIED_AREA)) ||
-					(GenomeTrack::is_2d(track_type) && (ifunc == Track_var::REG_NEAREST || ifunc == Track_var::STDDEV || ifunc == Track_var::SUM || ifunc == Track_var::QUANTILE)) ||
+					(GenomeTrack::is_2d(track_type) && (ifunc == Track_var::REG_NEAREST || ifunc == Track_var::STDDEV || ifunc == Track_var::SUM || ifunc == Track_var::LSE || ifunc == Track_var::QUANTILE)) ||
 					(track_type != GenomeTrack::FIXED_BIN && (ifunc == Track_var::PV || ifunc == Track_var::PV_MIN || ifunc == Track_var::PV_MAX)))
 				verror("Virtual track %s: function %s is not supported by %s tracks", vtrack.c_str(), func.c_str(), GenomeTrack::TYPE_NAMES[track_type]);
 	
@@ -1059,6 +1059,9 @@ TrackExpressionVars::Value_var &TrackExpressionVars::add_vtrack_var_src_value(SE
 		case Value_var::SUM:
 			var.track->register_function(GenomeTrack1D::SUM);
 			break;
+		case Value_var::LSE:
+			var.track->register_function(GenomeTrack1D::LSE);
+			break;
 		case Value_var::STDDEV:
 			var.track->register_function(GenomeTrack1D::STDDEV);
 			var.track->register_function(GenomeTrack1D::SIZE);
@@ -1168,6 +1171,11 @@ void TrackExpressionVars::register_track_functions()
 			break;
 		case Track_var::SUM:
 			track1d->register_function(GenomeTrack1D::SUM);
+			break;
+		case Track_var::LSE:
+			if (!track1d)
+				verror("vtrack function 'lse' can only be used on 1D tracks");
+			track1d->register_function(GenomeTrack1D::LSE);
 			break;
 		case Track_var::QUANTILE:
 			track1d->register_quantile(m_iu.get_max_data_size(), m_iu.get_quantile_edge_data_size(), m_iu.get_quantile_edge_data_size());

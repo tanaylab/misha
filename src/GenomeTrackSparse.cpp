@@ -171,6 +171,8 @@ void GenomeTrackSparse::read_file_into_mem()
 void GenomeTrackSparse::read_interval(const GInterval &interval)
 {
 	m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
+	if (m_functions[LSE])
+		m_last_lse = numeric_limits<float>::quiet_NaN();
 	if (m_functions[MAX_POS])
 		m_last_max_pos = numeric_limits<double>::quiet_NaN();
 	if (m_functions[MIN_POS])
