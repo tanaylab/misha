@@ -66,15 +66,13 @@ void ValueVarProcessor::process_single_value_var(
 			bool has_value = false;
 
 			void add_interval(GenomeTrackInMemory &track) {
-				double part_size = track.last_size();
-				if (part_size <= 0 || std::isnan(part_size))
-					return;
-
 				double part_avg = track.last_avg();
 				double part_sum = track.last_sum();
-				double part_stddev = track.last_stddev();
 				if (std::isnan(part_avg) || std::isnan(part_sum))
 					return;
+
+				double part_size = track.last_size();
+				double part_stddev = track.last_stddev();
 				double part_min = track.last_min();
 				double part_max = track.last_max();
 				double part_first = track.last_first();
