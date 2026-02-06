@@ -42,6 +42,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
+			if (m_functions[LSE])
+				m_last_lse = m_last_avg;
 			if (m_functions[MAX_POS])
 				m_last_max_pos = interval.start;
 			if (m_functions[MIN_POS])
@@ -66,6 +68,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				m_sp.add(m_last_avg, s_rnd_func);
 		} else {
 			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
+			if (m_functions[LSE])
+				m_last_lse = numeric_limits<float>::quiet_NaN();
 			if (m_functions[MAX_POS])
 				m_last_max_pos = numeric_limits<double>::quiet_NaN();
 			if (m_functions[MIN_POS])
@@ -107,6 +111,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		if (have_value) {
 			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
+			if (m_functions[LSE])
+				m_last_lse = m_last_avg;
 			double overlap_start = std::max(static_cast<double>(sbin * m_bin_size), static_cast<double>(interval.start));
 			if (m_functions[MAX_POS])
 				m_last_max_pos = overlap_start;
@@ -132,6 +138,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				m_sp.add(m_last_avg, s_rnd_func);
 		} else {
 			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
+			if (m_functions[LSE])
+				m_last_lse = numeric_limits<float>::quiet_NaN();
 			if (m_functions[MAX_POS])
 				m_last_max_pos = numeric_limits<double>::quiet_NaN();
 			if (m_functions[MIN_POS])
@@ -156,6 +164,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			m_last_max_pos = numeric_limits<double>::quiet_NaN();
 		if (m_functions[MIN_POS])
 			m_last_min_pos = numeric_limits<double>::quiet_NaN();
+		if (m_functions[LSE])
+			m_last_lse = -numeric_limits<float>::infinity();
 
 		// Bulk read all bins at once instead of one-by-one
 		vector<float> bin_vals;
@@ -190,6 +200,9 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 				if (m_functions[STDDEV])
 					mean_square_sum += v * v;
+
+				if (m_functions[LSE])
+					lse_accumulate(m_last_lse, v);
 
 				if (m_use_quantile && !std::isnan(v))
 					m_sp.add(v, s_rnd_func);
@@ -238,6 +251,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			m_last_avg = m_last_nearest = m_last_sum / num_vs;
 		else {
 			m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
+			if (m_functions[LSE])
+				m_last_lse = numeric_limits<float>::quiet_NaN();
 			if (m_functions[MIN_POS])
 				m_last_min_pos = numeric_limits<double>::quiet_NaN();
 		}

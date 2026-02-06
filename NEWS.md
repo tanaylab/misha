@@ -1,3 +1,7 @@
+# misha 5.4.2
+
+* Added `lse` virtual track function that computes the log-sum-exp of the values in the iterator interval.
+
 # misha 5.4.1
 
 * Added "fast-path" for intervals operations on data.frames in order to avoid per-chromosome calls in multi-contig databases.

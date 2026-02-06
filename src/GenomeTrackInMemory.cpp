@@ -40,6 +40,8 @@ void GenomeTrackInMemory::read_interval(const GInterval &interval)
 	m_last_avg = m_last_nearest = m_last_min = m_last_max =
 		m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
 
+	if (m_functions[LSE])
+		m_last_lse = numeric_limits<float>::quiet_NaN();
 	if (m_functions[MAX_POS])
 		m_last_max_pos = numeric_limits<double>::quiet_NaN();
 	if (m_functions[MIN_POS])
@@ -153,6 +155,8 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 		m_last_max_pos = numeric_limits<double>::quiet_NaN();
 	if (m_functions[MIN_POS])
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[LSE])
+		m_last_lse = -numeric_limits<float>::infinity();
 
 	// Iterate through all overlapping intervals
 	for (GIntervals::const_iterator iinterv = m_icur_interval;
@@ -185,6 +189,9 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 
 			if (m_functions[STDDEV])
 				mean_square_sum += v * v;
+
+			if (m_functions[LSE])
+				lse_accumulate(m_last_lse, v);
 
 			if (m_use_quantile)
 				m_sp.add(v, s_rnd_func);
@@ -236,6 +243,8 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 		m_last_avg = m_last_nearest = m_last_sum / num_vs;
 	else {
 		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
+		if (m_functions[LSE])
+			m_last_lse = numeric_limits<float>::quiet_NaN();
 		if (m_functions[MIN_POS])
 			m_last_min_pos = numeric_limits<double>::quiet_NaN();
 	}

@@ -118,6 +118,7 @@ public:
             REG_NEAREST,
             STDDEV,
             SUM,
+            LSE,
             QUANTILE,
             PV,
             PV_MIN,
@@ -197,7 +198,7 @@ public:
 
     struct Value_var {
         enum Val_func {
-            AVG, MIN, MAX, STDDEV, SUM, QUANTILE,
+            AVG, MIN, MAX, STDDEV, SUM, LSE, QUANTILE,
             NEAREST,
             EXISTS, SIZE,
             FIRST, LAST, SAMPLE,

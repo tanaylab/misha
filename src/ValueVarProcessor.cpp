@@ -61,6 +61,7 @@ void ValueVarProcessor::process_single_value_var(
 			double last_pos = numeric_limits<double>::quiet_NaN();
 			double sample_pos = numeric_limits<double>::quiet_NaN();
 			double nearest_val = numeric_limits<double>::quiet_NaN();
+			double lse_val = -numeric_limits<double>::infinity();
 			bool exists = false;
 			bool has_value = false;
 
@@ -89,6 +90,10 @@ void ValueVarProcessor::process_single_value_var(
 
 				total_sum += part_sum;
 				total_size += static_cast<int64_t>(part_size);
+
+				double part_lse = track.last_lse();
+				if (!std::isnan(part_lse))
+					lse_accumulate(lse_val, part_lse);
 
 				if (part_size > 1 && !std::isnan(part_stddev)) {
 					double var_term = part_stddev * part_stddev * (part_size - 1);
@@ -160,6 +165,9 @@ void ValueVarProcessor::process_single_value_var(
 					break;
 				case TrackExpressionVars::Value_var::SUM:
 					var.var[idx] = agg.total_sum;
+					break;
+				case TrackExpressionVars::Value_var::LSE:
+					var.var[idx] = std::isfinite(agg.lse_val) ? agg.lse_val : numeric_limits<double>::quiet_NaN();
 					break;
 				case TrackExpressionVars::Value_var::MIN:
 					var.var[idx] = agg.min_val;
@@ -249,6 +257,9 @@ void ValueVarProcessor::process_single_value_var(
 				break;
 			case TrackExpressionVars::Value_var::SUM:
 				var.var[idx] = var.track->last_sum();
+				break;
+			case TrackExpressionVars::Value_var::LSE:
+				var.var[idx] = var.track->last_lse();
 				break;
 			case TrackExpressionVars::Value_var::STDDEV:
 				var.var[idx] = var.track->last_stddev();
