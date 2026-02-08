@@ -10,11 +10,13 @@
 
 #include <cstdint>
 #include <cmath>
+#include <deque>
 #include <limits>
 #include <string>
 #include <vector>
 
 #include "GenomeTrack1D.h"
+#include "utils/RunningLogSumExp.h"
 
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
 
@@ -61,6 +63,15 @@ protected:
 
 	// Helper to parse header at current file position
 	void read_header_at_current_pos_(BufferedFile &bf);
+
+	// Sliding window LSE state
+	RunningLogSumExp m_running_lse;
+	std::deque<float> m_lse_window_bins;
+	int64_t m_lse_prev_sbin{-1};
+	int64_t m_lse_prev_ebin{-1};
+	double m_sliding_sum{0.0};
+	int64_t m_sliding_num_vs{0};
+	bool m_lse_sliding_valid{false};
 };
 
 

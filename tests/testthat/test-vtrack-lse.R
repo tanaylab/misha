@@ -1130,3 +1130,123 @@ test_that("LSE of 20bp PWM values equals 200bp PWM directly", {
     # Step 5: Compare - should be equal (up to float precision)
     expect_equal(lse_200$value, coarse$vt_pwm_fine, tolerance = 1e-4)
 })
+
+# ============================================================
+# Sliding window optimization tests
+# ============================================================
+
+test_that("sliding window LSE on dense track with small iterator matches manual", {
+    gvtrack.create("vt_lse_slide", src = "test.fixedbin", func = "lse")
+    gvtrack.create("vt_lse_slide_ref", src = "test.fixedbin", func = "lse")
+    on.exit({
+        gvtrack.rm("vt_lse_slide")
+        gvtrack.rm("vt_lse_slide_ref")
+    }, add = TRUE)
+
+    # Use iterator=20 (= bin_size) with a 200bp window via shifts
+    # This creates multi-bin windows that slide by 1 bin per step
+    gvtrack.iterator("vt_lse_slide", sshift = -90, eshift = 90)
+    gvtrack.iterator("vt_lse_slide_ref", sshift = -90, eshift = 90)
+
+    region <- gintervals(1, 100, 500)
+    result <- gextract("vt_lse_slide", region, iterator = 20, colnames = "value")
+
+    # Compute expected by extracting each window individually (no sliding optimization)
+    expected <- vapply(seq_len(nrow(result)), function(i) {
+        w_start <- max(0, result$start[i] - 90)
+        w_end <- result$end[i] + 90
+        raw <- gextract("test.fixedbin", gintervals(1, w_start, w_end), iterator = "test.fixedbin")
+        r_lse(raw$test.fixedbin)
+    }, numeric(1))
+
+    both_valid <- !is.na(result$value) & !is.na(expected)
+    if (any(both_valid)) {
+        expect_equal(result$value[both_valid], expected[both_valid], tolerance = 1e-3)
+    }
+})
+
+test_that("sliding window LSE transitions correctly from sliding to non-sliding", {
+    gvtrack.create("vt_lse_transition", src = "test.fixedbin", func = "lse")
+    on.exit(gvtrack.rm("vt_lse_transition"), add = TRUE)
+
+    # First, use disjoint intervals (non-sliding pattern)
+    disjoint <- rbind(
+        gintervals(1, 0, 200),
+        gintervals(1, 500, 700)
+    )
+    res_disjoint <- gextract("vt_lse_transition", disjoint, iterator = disjoint, colnames = "value")
+
+    # Then use consecutive sliding intervals
+    sliding <- rbind(
+        gintervals(1, 0, 200),
+        gintervals(1, 20, 220),
+        gintervals(1, 40, 240)
+    )
+    res_sliding <- gextract("vt_lse_transition", sliding, iterator = sliding, colnames = "value")
+
+    # Verify each individually against manual computation
+    for (i in seq_len(nrow(res_sliding))) {
+        if (!is.na(res_sliding$value[i])) {
+            manual <- manual_lse("test.fixedbin", res_sliding[i, ])
+            expect_equal(res_sliding$value[i], manual, tolerance = 1e-3,
+                label = paste("sliding window", i))
+        }
+    }
+})
+
+test_that("sliding window LSE handles NaN-heavy tracks correctly", {
+    # Create a track where most bins are NaN
+    # Use sparse intervals that leave gaps (NaN bins in between)
+    src_df <- data.frame(
+        chrom = "chr1",
+        start = c(0, 100, 400, 500),
+        end = c(20, 120, 420, 520),
+        score = c(1.0, 2.0, 3.0, 4.0)
+    )
+
+    gvtrack.create("vt_lse_nan_slide", src = src_df, func = "lse")
+    on.exit(gvtrack.rm("vt_lse_nan_slide"), add = TRUE)
+
+    # Sliding 200bp windows with 20bp step
+    sliding_ints <- do.call(rbind, lapply(seq(0, 400, by = 20), function(s) {
+        gintervals("chr1", s, s + 200)
+    }))
+
+    result <- gextract("vt_lse_nan_slide", sliding_ints, iterator = sliding_ints, colnames = "value")
+
+    # Manually compute expected: for each window, find overlapping source intervals
+    expected <- vapply(seq_len(nrow(sliding_ints)), function(i) {
+        w_start <- sliding_ints$start[i]
+        w_end <- sliding_ints$end[i]
+        # Find overlapping source intervals
+        overlap <- src_df$start < w_end & src_df$end > w_start
+        if (any(overlap)) {
+            r_lse(src_df$score[overlap])
+        } else {
+            NA_real_
+        }
+    }, numeric(1))
+
+    expect_equal(is.na(result$value), is.na(expected))
+    both_valid <- !is.na(result$value) & !is.na(expected)
+    if (any(both_valid)) {
+        expect_equal(result$value[both_valid], expected[both_valid], tolerance = 1e-3)
+    }
+})
+
+test_that("sliding window LSE on dense track gives same result as non-sliding", {
+    # Compare LSE computed with sliding windows vs large non-overlapping intervals
+    gvtrack.create("vt_lse_slide_verify", src = "test.fixedbin", func = "lse")
+    on.exit(gvtrack.rm("vt_lse_slide_verify"), add = TRUE)
+
+    region <- gintervals(1, 0, 1000)
+
+    # Small iterator = many overlapping multi-bin windows = exercises sliding path
+    result_small <- gextract("vt_lse_slide_verify", region, iterator = 100, colnames = "value")
+    manual <- manual_lse_vec("test.fixedbin", result_small[, c("chrom", "start", "end")])
+
+    both_valid <- !is.na(result_small$value) & !is.na(manual)
+    if (any(both_valid)) {
+        expect_equal(result_small$value[both_valid], manual[both_valid], tolerance = 1e-3)
+    }
+})

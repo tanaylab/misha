@@ -75,6 +75,9 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			if (m_functions[MIN_POS])
 				m_last_min_pos = numeric_limits<double>::quiet_NaN();
 		}
+		m_lse_sliding_valid = false;
+		m_sliding_sum = 0;
+		m_sliding_num_vs = 0;
 		return;
 	}
 
@@ -145,9 +148,26 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			if (m_functions[MIN_POS])
 				m_last_min_pos = numeric_limits<double>::quiet_NaN();
 		}
+		m_lse_sliding_valid = false;
+		m_sliding_sum = 0;
+		m_sliding_num_vs = 0;
 	} else {
 		float num_vs = 0;
 		double mean_square_sum = 0;
+		const int64_t window_size = ebin - sbin;
+		const bool simple_sliding_compatible =
+			!m_use_quantile &&
+			!m_functions[MIN] &&
+			!m_functions[MAX] &&
+			!m_functions[MAX_POS] &&
+			!m_functions[MIN_POS] &&
+			!m_functions[STDDEV] &&
+			!m_functions[SAMPLE] &&
+			!m_functions[SAMPLE_POS] &&
+			!m_functions[FIRST] &&
+			!m_functions[FIRST_POS] &&
+			!m_functions[LAST] &&
+			!m_functions[LAST_POS];
 
 		// For sampling, collect all values/positions
 		vector<float> all_values;
@@ -167,100 +187,224 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		if (m_functions[LSE])
 			m_last_lse = -numeric_limits<float>::infinity();
 
-		// Bulk read all bins at once instead of one-by-one
-		vector<float> bin_vals;
-		int64_t bins_read = read_bins_bulk(sbin, ebin - sbin, bin_vals);
+		bool simple_sliding_used = false;
 
-		for (int64_t i = 0; i < bins_read; ++i) {
-			int64_t bin = sbin + i;
-			float v = bin_vals[i];
+		if (simple_sliding_compatible && m_lse_sliding_valid && window_size > 0) {
+			int64_t step = sbin - m_lse_prev_sbin;
+			int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
 
-			m_cached_bin_idx = bin;
-			m_cached_bin_val = v;
-			m_cache_valid = true;
+			if (step > 0 && step <= prev_window && window_size == prev_window &&
+				(int64_t)m_lse_window_bins.size() == prev_window) {
+				vector<float> new_vals;
+				int64_t appended = read_bins_bulk(m_lse_prev_ebin, step, new_vals);
+				if (appended == step) {
+					for (int64_t i = 0; i < step && !m_lse_window_bins.empty(); ++i) {
+						float old_val = m_lse_window_bins.front();
+						m_lse_window_bins.pop_front();
+						if (!std::isnan(old_val)) {
+							m_sliding_sum -= old_val;
+							--m_sliding_num_vs;
+							if (m_functions[LSE])
+								m_running_lse.pop_front();
+						}
+					}
+					for (int64_t i = 0; i < appended; ++i) {
+						float new_val = new_vals[i];
+						m_lse_window_bins.push_back(new_val);
+						if (!std::isnan(new_val)) {
+							m_sliding_sum += new_val;
+							++m_sliding_num_vs;
+							if (m_functions[LSE])
+								m_running_lse.push(new_val);
+						}
+					}
 
-			if (!std::isnan(v)) {
-				m_last_sum += v;
-				double bin_start = static_cast<double>(bin * m_bin_size);
-				double overlap_start = std::max(bin_start, static_cast<double>(interval.start));
-				if (v < m_last_min) {
-					m_last_min = v;
-					if (m_functions[MIN_POS])
-						m_last_min_pos = overlap_start;
-				} else if (m_functions[MIN_POS] && v == m_last_min) {
-					double candidate_pos = overlap_start;
-					if (std::isnan(m_last_min_pos) || candidate_pos < m_last_min_pos)
-						m_last_min_pos = candidate_pos;
+					if (!m_lse_window_bins.empty()) {
+						m_cached_bin_idx = ebin - 1;
+						m_cached_bin_val = m_lse_window_bins.back();
+						m_cache_valid = true;
+					}
+
+					if (m_sliding_num_vs > 0) {
+						m_last_sum = (float)m_sliding_sum;
+						if (m_functions[AVG] || m_functions[NEAREST])
+							m_last_avg = m_last_nearest = (float)(m_sliding_sum / m_sliding_num_vs);
+						if (m_functions[LSE])
+							m_last_lse = m_running_lse.window.empty()
+								? numeric_limits<float>::quiet_NaN()
+								: (float)m_running_lse.value();
+						if (m_functions[EXISTS])
+							m_last_exists = 1;
+					} else {
+						m_last_sum = numeric_limits<float>::quiet_NaN();
+						if (m_functions[AVG] || m_functions[NEAREST])
+							m_last_avg = m_last_nearest = numeric_limits<float>::quiet_NaN();
+						if (m_functions[LSE])
+							m_last_lse = numeric_limits<float>::quiet_NaN();
+						if (m_functions[EXISTS])
+							m_last_exists = 0;
+					}
+					if (m_functions[SIZE])
+						m_last_size = m_sliding_num_vs;
+
+					m_lse_prev_sbin = sbin;
+					m_lse_prev_ebin = ebin;
+					m_lse_sliding_valid = true;
+					simple_sliding_used = true;
 				}
-				if (v > m_last_max) {
-					m_last_max = v;
-					if (m_functions[MAX_POS])
-						m_last_max_pos = overlap_start;
-				}
-
-				if (m_functions[STDDEV])
-					mean_square_sum += v * v;
-
-				if (m_functions[LSE])
-					lse_accumulate(m_last_lse, v);
-
-				if (m_use_quantile && !std::isnan(v))
-					m_sp.add(v, s_rnd_func);
-
-				// New virtual track computations
-				if (m_functions[EXISTS])
-					m_last_exists = 1;
-
-				if (m_functions[FIRST] && std::isnan(m_last_first))
-					m_last_first = v;
-
-				if (m_functions[FIRST_POS] && std::isnan(m_last_first_pos))
-					m_last_first_pos = overlap_start;
-
-				if (m_functions[LAST])
-					m_last_last = v;
-
-				if (m_functions[LAST_POS])
-					m_last_last_pos = overlap_start;
-
-				if (m_functions[SAMPLE])
-					all_values.push_back(v);
-				if (m_functions[SAMPLE_POS])
-					all_positions.push_back(overlap_start);
-
-				++num_vs;
 			}
 		}
 
-		// Finalize size
-		if (m_functions[SIZE])
-			m_last_size = num_vs;
+		if (!simple_sliding_used) {
+			// Bulk read all bins at once instead of one-by-one
+			vector<float> bin_vals;
+			int64_t bins_read = read_bins_bulk(sbin, window_size, bin_vals);
+			bool lse_sliding_used = false;
 
-		// Sample from collected values
-		if (m_functions[SAMPLE] && !all_values.empty()) {
-			int idx = (int)(s_rnd_func() * all_values.size());
-			m_last_sample = all_values[idx];
+			if (m_functions[LSE] && m_lse_sliding_valid && bins_read > 0 && !simple_sliding_compatible) {
+				int64_t step = sbin - m_lse_prev_sbin;
+				int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
+
+				if (step > 0 && step <= prev_window && window_size == prev_window &&
+					bins_read == window_size) {
+					// Pop 'step' old bins from front
+					for (int64_t i = 0; i < step && !m_lse_window_bins.empty(); i++) {
+						float old_val = m_lse_window_bins.front();
+						m_lse_window_bins.pop_front();
+						if (!std::isnan(old_val))
+							m_running_lse.pop_front();
+					}
+					// Push 'step' new bins at back
+					for (int64_t i = bins_read - step; i < bins_read; i++) {
+						float new_val = bin_vals[i];
+						m_lse_window_bins.push_back(new_val);
+						if (!std::isnan(new_val))
+							m_running_lse.push(new_val);
+					}
+					// Extract result
+					m_last_lse = m_running_lse.window.empty()
+						? numeric_limits<float>::quiet_NaN()
+						: (float)m_running_lse.value();
+
+					lse_sliding_used = true;
+				}
+			}
+
+			for (int64_t i = 0; i < bins_read; ++i) {
+				int64_t bin = sbin + i;
+				float v = bin_vals[i];
+
+				m_cached_bin_idx = bin;
+				m_cached_bin_val = v;
+				m_cache_valid = true;
+
+				if (!std::isnan(v)) {
+					m_last_sum += v;
+					double bin_start = static_cast<double>(bin * m_bin_size);
+					double overlap_start = std::max(bin_start, static_cast<double>(interval.start));
+					if (v < m_last_min) {
+						m_last_min = v;
+						if (m_functions[MIN_POS])
+							m_last_min_pos = overlap_start;
+					} else if (m_functions[MIN_POS] && v == m_last_min) {
+						double candidate_pos = overlap_start;
+						if (std::isnan(m_last_min_pos) || candidate_pos < m_last_min_pos)
+							m_last_min_pos = candidate_pos;
+					}
+					if (v > m_last_max) {
+						m_last_max = v;
+						if (m_functions[MAX_POS])
+							m_last_max_pos = overlap_start;
+					}
+
+					if (m_functions[STDDEV])
+						mean_square_sum += v * v;
+
+					if (m_functions[LSE] && !lse_sliding_used)
+						lse_accumulate(m_last_lse, v);
+
+					if (m_use_quantile && !std::isnan(v))
+						m_sp.add(v, s_rnd_func);
+
+					// New virtual track computations
+					if (m_functions[EXISTS])
+						m_last_exists = 1;
+
+					if (m_functions[FIRST] && std::isnan(m_last_first))
+						m_last_first = v;
+
+					if (m_functions[FIRST_POS] && std::isnan(m_last_first_pos))
+						m_last_first_pos = overlap_start;
+
+					if (m_functions[LAST])
+						m_last_last = v;
+
+					if (m_functions[LAST_POS])
+						m_last_last_pos = overlap_start;
+
+					if (m_functions[SAMPLE])
+						all_values.push_back(v);
+					if (m_functions[SAMPLE_POS])
+						all_positions.push_back(overlap_start);
+
+					++num_vs;
+				}
+			}
+
+			// Finalize size
+			if (m_functions[SIZE])
+				m_last_size = num_vs;
+
+			// Sample from collected values
+			if (m_functions[SAMPLE] && !all_values.empty()) {
+				int idx = (int)(s_rnd_func() * all_values.size());
+				m_last_sample = all_values[idx];
+			}
+
+			if (m_functions[SAMPLE_POS] && !all_positions.empty()) {
+				int idx = (int)(s_rnd_func() * all_positions.size());
+				m_last_sample_pos = all_positions[idx];
+			}
+
+			if (num_vs > 0)
+				m_last_avg = m_last_nearest = m_last_sum / num_vs;
+			else {
+				m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
+				if (m_functions[LSE])
+					m_last_lse = numeric_limits<float>::quiet_NaN();
+				if (m_functions[MIN_POS])
+					m_last_min_pos = numeric_limits<double>::quiet_NaN();
+			}
+
+			// we are calaculating unbiased standard deviation:
+			// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
+			if (m_functions[STDDEV])
+				m_last_stddev = num_vs > 1 ? sqrt(mean_square_sum / (num_vs - 1) - (m_last_avg * (double)m_last_avg) * (num_vs / (num_vs - 1))) : numeric_limits<float>::quiet_NaN();
+
+			if (m_functions[LSE] || simple_sliding_compatible) {
+				if (!lse_sliding_used) {
+					// Full computation was done; initialize sliding state from bin_vals
+					m_running_lse.clear();
+					m_lse_window_bins.clear();
+					m_sliding_sum = 0;
+					m_sliding_num_vs = 0;
+					for (int64_t i = 0; i < bins_read; i++) {
+						m_lse_window_bins.push_back(bin_vals[i]);
+						if (!std::isnan(bin_vals[i])) {
+							m_sliding_sum += bin_vals[i];
+							++m_sliding_num_vs;
+							if (m_functions[LSE])
+								m_running_lse.push(bin_vals[i]);
+						}
+					}
+				}
+				m_lse_prev_sbin = sbin;
+				m_lse_prev_ebin = ebin;
+				m_lse_sliding_valid = bins_read == window_size && window_size > 0;
+			} else {
+				m_lse_sliding_valid = false;
+			}
 		}
-
-		if (m_functions[SAMPLE_POS] && !all_positions.empty()) {
-			int idx = (int)(s_rnd_func() * all_positions.size());
-			m_last_sample_pos = all_positions[idx];
-		}
-
-		if (num_vs > 0)
-			m_last_avg = m_last_nearest = m_last_sum / num_vs;
-		else {
-			m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
-			if (m_functions[LSE])
-				m_last_lse = numeric_limits<float>::quiet_NaN();
-			if (m_functions[MIN_POS])
-				m_last_min_pos = numeric_limits<double>::quiet_NaN();
-		}
-
-		// we are calaculating unbiased standard deviation:
-		// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
-		if (m_functions[STDDEV])
-			m_last_stddev = num_vs > 1 ? sqrt(mean_square_sum / (num_vs - 1) - (m_last_avg * (double)m_last_avg) * (num_vs / (num_vs - 1))) : numeric_limits<float>::quiet_NaN();
 	}
 }
 
@@ -334,6 +478,9 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 	m_cached_bin_idx = -1;
 	m_cached_bin_val = numeric_limits<float>::quiet_NaN();
 	m_cache_valid = false;
+	m_sliding_sum = 0;
+	m_sliding_num_vs = 0;
+	m_lse_sliding_valid = false;
 
 	// Check for indexed format FIRST
 	const std::string track_dir = GenomeTrack::get_track_dir(filename);
