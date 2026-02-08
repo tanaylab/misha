@@ -20,6 +20,7 @@
 #include "rdbinterval.h"
 #include "rdbutils.h"
 #include "TrackExpressionScanner.h"
+#include "TrackExpressionFixedBinIterator.h"
 #include "GIntervalsBigSet1D.h"
 #include "GIntervalsBigSet2D.h"
 #include "GTrackIntervalsFetcher1D.h"
@@ -178,11 +179,105 @@ bool IntervUtils::is_1d_iterator(SEXP rtrack_exprs, GIntervalsFetcher1D *scope1d
 	return itr->is_1d();
 }
 
+static void split_intervals_1d_by_range(const GIntervals &intervals, int desired_kids, int64_t split_align_1d, vector<GIntervalsFetcher1D *> &out_kids)
+{
+	out_kids.clear();
+	if (intervals.empty())
+		return;
+
+	int64_t total_range = 0;
+	for (GIntervals::const_iterator iinterv = intervals.begin(); iinterv != intervals.end(); ++iinterv)
+		total_range += iinterv->range();
+
+	if (total_range <= 0)
+		return;
+
+	desired_kids = max(1, desired_kids);
+	if ((int64_t)desired_kids > total_range)
+		desired_kids = (int)total_range;
+
+	int kids_left = desired_kids;
+	int64_t range_left = total_range;
+	int64_t kid_range = 0;
+
+	GIntervals *kid_intervals = new GIntervals();
+	out_kids.push_back(kid_intervals);
+
+	for (GIntervals::const_iterator iinterv = intervals.begin(); iinterv != intervals.end(); ++iinterv) {
+		int64_t seg_start = iinterv->start;
+		const int64_t seg_end_total = iinterv->end;
+
+		while (seg_start < seg_end_total) {
+			if (kids_left <= 1) {
+				GInterval seg(iinterv->chromid, seg_start, seg_end_total, iinterv->strand, iinterv->udata);
+				kid_intervals->push_back(seg);
+				int64_t seg_range = seg_end_total - seg_start;
+				kid_range += seg_range;
+				range_left -= seg_range;
+				seg_start = seg_end_total;
+				continue;
+			}
+
+			int64_t target_kid_range = (range_left + kids_left - 1) / kids_left;
+			int64_t need = target_kid_range - kid_range;
+
+			if (need <= 0 && !kid_intervals->empty()) {
+				--kids_left;
+				kid_intervals = new GIntervals();
+				out_kids.push_back(kid_intervals);
+				kid_range = 0;
+				continue;
+			}
+
+			int64_t chunk_end = seg_end_total;
+			if (need > 0 && seg_start + need < seg_end_total)
+				chunk_end = seg_start + need;
+
+			if (split_align_1d > 0 && chunk_end < seg_end_total) {
+				int64_t aligned_end = (chunk_end / split_align_1d) * split_align_1d;
+				if (aligned_end <= seg_start)
+					aligned_end = ((seg_start / split_align_1d) + 1) * split_align_1d;
+				if (aligned_end < seg_end_total)
+					chunk_end = aligned_end;
+			}
+
+			if (chunk_end <= seg_start)
+				chunk_end = seg_start + 1;
+
+			GInterval seg(iinterv->chromid, seg_start, chunk_end, iinterv->strand, iinterv->udata);
+			kid_intervals->push_back(seg);
+
+			int64_t seg_range = chunk_end - seg_start;
+			kid_range += seg_range;
+			range_left -= seg_range;
+			seg_start = chunk_end;
+
+			if (kid_range >= target_kid_range && kids_left > 1) {
+				--kids_left;
+				kid_intervals = new GIntervals();
+				out_kids.push_back(kid_intervals);
+				kid_range = 0;
+			}
+		}
+	}
+
+	while (!out_kids.empty() && ((GIntervals *)out_kids.back())->empty()) {
+		delete out_kids.back();
+		out_kids.pop_back();
+	}
+}
+
 int IntervUtils::prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band)
 {
 	TrackExprScanner scanner(*this);
+	int64_t split_align_1d = 0;
 
 	scanner.check(track_exprs, scope1d, scope2d, iterator_policy, band);
+	if (scanner.get_iterator()->is_1d()) {
+		const TrackExpressionFixedBinIterator *fixed_bin_itr = dynamic_cast<const TrackExpressionFixedBinIterator *>(scanner.get_iterator());
+		if (fixed_bin_itr)
+			split_align_1d = fixed_bin_itr->get_bin_size();
+	}
 	if (scanner.get_iterator()->is_1d()) {
 		if (scope2d && dynamic_cast<GIntervals2D *>(scope2d))
 			((GIntervals2D *)scope2d)->clear();
@@ -191,10 +286,10 @@ int IntervUtils::prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *sco
 			((GIntervals *)scope1d)->clear();
 	}
 
-	return prepare4multitasking(scope1d, scope2d);
+	return prepare4multitasking(scope1d, scope2d, split_align_1d);
 }
 
-int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d)
+int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, int64_t split_align_1d)
 {
 	if (scope1d && !scope1d->size() && scope2d && !scope2d->size()) 
 		return 0;
@@ -215,70 +310,99 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 		int num_avail_kids = min(max_num_pids, num_chroms) - 1;
 		int num_remaining_chroms = num_chroms - 1;
 
-		// GIntervals::range(chromid) and GIntervals::create_masked_copy() have complexity of O(n) (and only O(1) for GIntervalsBigSet).
-		// Calling these functions for each chromosome might be painful - O(m x n) (m = num chromosomes)
-		// So we are forced to write a designated code for GIntervals for the sake of efficiency. The total complexity for GIntervals is O(n).
-		if (dynamic_cast<GIntervals *>(scope1d)) {
-			GIntervals *intervals = (GIntervals *)scope1d;
-
-			m_kids_intervals1d.push_back(new GIntervals());
-
-			for (GIntervals::const_iterator iinterv = intervals->begin(); iinterv != intervals->end(); ++iinterv) {
-				if (iinterv != intervals->begin() && iinterv->chromid != (iinterv - 1)->chromid && num_avail_kids) {
-					int64_t chrom_range = 0;
-					for (GIntervals::const_iterator iinterv2 = iinterv; iinterv2 != intervals->end(); ++iinterv2) {
-						if (iinterv->chromid != iinterv2->chromid) 
-							break;
-						chrom_range += iinterv2->range();
-					}
-
-					// should we allocate a new process?
-					if ((uint64_t)kid_range > get_min_scope4process() && (uint64_t)range > get_min_scope4process() && (uint64_t)(kid_range + chrom_range) >= (uint64_t)(range / num_avail_kids)) {
-						--num_avail_kids;
-						kid_range = 0;
-						m_kids_intervals1d.push_back(new GIntervals());
-					}
-
-					--num_remaining_chroms;
-					num_avail_kids = min(num_avail_kids, num_remaining_chroms);
-				}
-
-				int64_t interv_range = iinterv->range();
-				kid_range += interv_range;
-				range -= interv_range;
-				((GIntervals *)m_kids_intervals1d.back())->push_back(*iinterv);
+		if (num_chroms == 1 && split_align_1d > 0) {
+			GIntervals intervals;
+			if (dynamic_cast<GIntervals *>(scope1d))
+				intervals = *(GIntervals *)scope1d;
+			else {
+				scope1d->begin_iter();
+				for (; !scope1d->isend(); scope1d->next())
+					intervals.push_back(scope1d->cur_interval());
+				intervals.sort();
 			}
+
+			int desired_kids = 1;
+			uint64_t min_scope = get_min_scope4process();
+			uint64_t total_bins = (uint64_t)((range + split_align_1d - 1) / split_align_1d);
+			const uint64_t min_bins_per_kid = 200000;
+			uint64_t by_bins = max<uint64_t>(1, (total_bins + min_bins_per_kid - 1) / min_bins_per_kid);
+
+			if (min_scope > 0 && (uint64_t)range > min_scope) {
+				uint64_t by_scope = (uint64_t)((range + (int64_t)min_scope - 1) / (int64_t)min_scope);
+				desired_kids = (int)min<uint64_t>(max_num_pids, min(by_scope, by_bins));
+			} else if (min_scope == 0) {
+				desired_kids = (int)min<uint64_t>(max_num_pids, by_bins);
+			}
+			desired_kids = max(desired_kids, 1);
+
+			split_intervals_1d_by_range(intervals, desired_kids, split_align_1d, m_kids_intervals1d);
 		} else {
-			set<int> chromids_mask;
-			GIntervals all_genome;
-			get_all_genome_intervs(all_genome);
 
-			for (GIntervals::const_iterator iinterv = all_genome.begin(); iinterv != all_genome.end(); ++iinterv) {
-				int64_t chrom_range = scope1d->range(iinterv->chromid);
+			// GIntervals::range(chromid) and GIntervals::create_masked_copy() have complexity of O(n) (and only O(1) for GIntervalsBigSet).
+			// Calling these functions for each chromosome might be painful - O(m x n) (m = num chromosomes)
+			// So we are forced to write a designated code for GIntervals for the sake of efficiency. The total complexity for GIntervals is O(n).
+			if (dynamic_cast<GIntervals *>(scope1d)) {
+				GIntervals *intervals = (GIntervals *)scope1d;
 
-				if (!chrom_range) 
-					continue;
+				m_kids_intervals1d.push_back(new GIntervals());
 
-				if (kid_range && num_avail_kids) {
-					// should we allocate a new process?
-					if ((uint64_t)kid_range > get_min_scope4process() && (uint64_t)range > get_min_scope4process() && kid_range + chrom_range >= range / num_avail_kids) {
-						--num_avail_kids;
-						kid_range = 0;
-						m_kids_intervals1d.push_back(scope1d->create_masked_copy(chromids_mask));
-						chromids_mask.clear();
+				for (GIntervals::const_iterator iinterv = intervals->begin(); iinterv != intervals->end(); ++iinterv) {
+					if (iinterv != intervals->begin() && iinterv->chromid != (iinterv - 1)->chromid && num_avail_kids) {
+						int64_t chrom_range = 0;
+						for (GIntervals::const_iterator iinterv2 = iinterv; iinterv2 != intervals->end(); ++iinterv2) {
+							if (iinterv->chromid != iinterv2->chromid) 
+								break;
+							chrom_range += iinterv2->range();
+						}
+
+						// should we allocate a new process?
+						if ((uint64_t)kid_range > get_min_scope4process() && (uint64_t)range > get_min_scope4process() && (uint64_t)(kid_range + chrom_range) >= (uint64_t)(range / num_avail_kids)) {
+							--num_avail_kids;
+							kid_range = 0;
+							m_kids_intervals1d.push_back(new GIntervals());
+						}
+
+						--num_remaining_chroms;
+						num_avail_kids = min(num_avail_kids, num_remaining_chroms);
 					}
 
-					--num_remaining_chroms;
-					num_avail_kids = min(num_avail_kids, num_remaining_chroms);
+					int64_t interv_range = iinterv->range();
+					kid_range += interv_range;
+					range -= interv_range;
+					((GIntervals *)m_kids_intervals1d.back())->push_back(*iinterv);
+				}
+			} else {
+				set<int> chromids_mask;
+				GIntervals all_genome;
+				get_all_genome_intervs(all_genome);
+
+				for (GIntervals::const_iterator iinterv = all_genome.begin(); iinterv != all_genome.end(); ++iinterv) {
+					int64_t chrom_range = scope1d->range(iinterv->chromid);
+
+					if (!chrom_range) 
+						continue;
+
+					if (kid_range && num_avail_kids) {
+						// should we allocate a new process?
+						if ((uint64_t)kid_range > get_min_scope4process() && (uint64_t)range > get_min_scope4process() && kid_range + chrom_range >= range / num_avail_kids) {
+							--num_avail_kids;
+							kid_range = 0;
+							m_kids_intervals1d.push_back(scope1d->create_masked_copy(chromids_mask));
+							chromids_mask.clear();
+						}
+
+						--num_remaining_chroms;
+						num_avail_kids = min(num_avail_kids, num_remaining_chroms);
+					}
+
+					kid_range += chrom_range;
+					range -= chrom_range;
+					chromids_mask.insert(iinterv->chromid);
 				}
 
-				kid_range += chrom_range;
-				range -= chrom_range;
-				chromids_mask.insert(iinterv->chromid);
+				if (!chromids_mask.empty()) 
+					m_kids_intervals1d.push_back(scope1d->create_masked_copy(chromids_mask));
 			}
-
-			if (!chromids_mask.empty()) 
-				m_kids_intervals1d.push_back(scope1d->create_masked_copy(chromids_mask));
 		}
 
 //int idx = 0;
