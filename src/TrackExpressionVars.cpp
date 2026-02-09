@@ -81,7 +81,7 @@ bool is_shared_1d_backend_enabled()
 {
 	SEXP opt = Rf_GetOption1(Rf_install("gshared.track.backend"));
 	if (Rf_isNull(opt))
-		return true;
+		return false;
 	return Rf_asLogical(opt) == 1;
 }
 
