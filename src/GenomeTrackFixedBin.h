@@ -82,6 +82,10 @@ protected:
 	void read_interval_avg_nearest_only(const GInterval &interval);
 	void sync_master_state_from_dependent();
 	void copy_state_from_master();
+	void classify_fast_path_mode();
+	void assign_single_bin_value(float value, double overlap_start);
+	void assign_single_bin_missing();
+	void reset_sliding_window_state();
 };
 
 
