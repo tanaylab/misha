@@ -110,6 +110,11 @@ shared_ptr<GenomeTrack> create_dependent_1d_track(GenomeTrack::Type type, const 
 	return shared_ptr<GenomeTrack>();
 }
 
+string shared_1d_backend_key(GenomeTrack::Type type, const string &filename, int chromid)
+{
+	return to_string((int)type) + ":" + to_string(chromid) + ":" + filename;
+}
+
 }  // namespace
 
 
@@ -1510,7 +1515,7 @@ shared_ptr<GenomeTrack> TrackExpressionVars::init_1d_track_with_shared_backend(c
 	if (!is_shared_1d_backend_enabled() || !supports_shared_1d_backend(type))
 		return create_and_init_1d_track(filename, chromid, type);
 
-	const string backend_key = to_string((int)type) + ":" + filename;
+	const string backend_key = shared_1d_backend_key(type, filename, chromid);
 
 	shared_ptr<GenomeTrack> master_track;
 	unordered_map<string, shared_ptr<GenomeTrack> >::iterator imaster = m_shared_1d_track_masters.find(backend_key);
@@ -1564,7 +1569,9 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 
 void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 {
-	reset_shared_1d_track_masters();
+	unordered_map<string, shared_ptr<GenomeTrack> > prev_shared_1d_track_masters;
+	prev_shared_1d_track_masters.swap(m_shared_1d_track_masters);
+	const bool shared_1d_backend_enabled = is_shared_1d_backend_enabled();
 
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf) {
 		try {
@@ -1578,17 +1585,48 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 				else
 					verror("Internal error: no 2D to 1D conversion for track %s", itrack_n_imdf->name.c_str());
 
-				if (chromid != itrack_n_imdf->imdf1d->interval.chromid) {
-					string track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
-					string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, chromid);
-					string filename(track_dir + "/" + resolved);
+				const bool track_supports_shared_backend = supports_shared_1d_backend(itrack_n_imdf->type);
+				const bool should_manage_shared_masters = track_supports_shared_backend &&
+					(shared_1d_backend_enabled || !prev_shared_1d_track_masters.empty() || !m_shared_1d_track_masters.empty());
 
+				string track_dir;
+				string resolved;
+				string filename;
+				if (chromid != itrack_n_imdf->imdf1d->interval.chromid || should_manage_shared_masters) {
+					track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
+					resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, chromid);
+					filename = track_dir + "/" + resolved;
+				}
+
+				if (chromid != itrack_n_imdf->imdf1d->interval.chromid) {
 					shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, chromid, itrack_n_imdf->type);
 					if (!new_track) {
 						verror("Internal error: track %s of type %s is not supported by 1D iterators (projected from 2D)",
 							   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
 					}
 					itrack_n_imdf->track = new_track;
+				} else if (should_manage_shared_masters) {
+					const string backend_key = shared_1d_backend_key(itrack_n_imdf->type, filename, chromid);
+					unordered_map<string, shared_ptr<GenomeTrack> >::iterator imaster =
+						m_shared_1d_track_masters.find(backend_key);
+
+					if (imaster != m_shared_1d_track_masters.end()) {
+						shared_ptr<GenomeTrack> new_track = create_dependent_1d_track(itrack_n_imdf->type, imaster->second);
+						itrack_n_imdf->track = new_track ? new_track : imaster->second;
+					} else {
+						unordered_map<string, shared_ptr<GenomeTrack> >::iterator iprev_master =
+							prev_shared_1d_track_masters.find(backend_key);
+						if (iprev_master != prev_shared_1d_track_masters.end()) {
+							m_shared_1d_track_masters.insert(make_pair(backend_key, iprev_master->second));
+						} else {
+							shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, chromid, itrack_n_imdf->type);
+							if (!new_track) {
+								verror("Internal error: track %s of type %s is not supported by 1D iterators (projected from 2D)",
+									   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
+							}
+							itrack_n_imdf->track = new_track;
+						}
+					}
 				}
 			} else if (!m_interval2d.is_same_chrom(interval)) {
 				string filename(track2path(m_iu.get_env(), itrack_n_imdf->name) + "/" + GenomeTrack::get_2d_filename(m_iu.get_chromkey(), interval.chromid1(), interval.chromid2()));
