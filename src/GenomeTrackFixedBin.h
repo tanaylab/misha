@@ -72,9 +72,10 @@ protected:
 	double m_sliding_sum{0.0};
 	int64_t m_sliding_num_vs{0};
 	bool m_lse_sliding_valid{false};
-	int m_fast_path_mode{0}; // 0=unknown, 1=sum-only fast path, -1=generic path
+	int m_fast_path_mode{0}; // 0=unknown, 1=reducer-only fast path, -1=generic path
+	uint32_t m_fast_reducer_bits{0};
 
-	void read_interval_sum_only(const GInterval &interval);
+	void read_interval_reducers_only(const GInterval &interval);
 };
 
 
