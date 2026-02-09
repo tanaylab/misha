@@ -267,7 +267,8 @@ static void split_intervals_1d_by_range(const GIntervals &intervals, int desired
 	}
 }
 
-int IntervUtils::prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band)
+int IntervUtils::prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band,
+									  bool allow_multichrom_1d_range_split)
 {
 	TrackExprScanner scanner(*this);
 	int64_t split_align_1d = 0;
@@ -286,10 +287,11 @@ int IntervUtils::prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *sco
 			((GIntervals *)scope1d)->clear();
 	}
 
-	return prepare4multitasking(scope1d, scope2d, split_align_1d);
+	return prepare4multitasking(scope1d, scope2d, split_align_1d, allow_multichrom_1d_range_split);
 }
 
-int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, int64_t split_align_1d)
+int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, int64_t split_align_1d,
+									  bool allow_multichrom_1d_range_split)
 {
 	if (scope1d && !scope1d->size() && scope2d && !scope2d->size()) 
 		return 0;
@@ -310,7 +312,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 		int num_avail_kids = min(max_num_pids, num_chroms) - 1;
 		int num_remaining_chroms = num_chroms - 1;
 
-			if (num_chroms == 1 && split_align_1d > 0) {
+			if (split_align_1d > 0 && (num_chroms == 1 || (allow_multichrom_1d_range_split && dynamic_cast<GIntervals *>(scope1d)))) {
 				GIntervals intervals;
 				if (dynamic_cast<GIntervals *>(scope1d))
 					intervals = *(GIntervals *)scope1d;
