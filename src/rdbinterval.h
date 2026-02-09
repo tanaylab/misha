@@ -374,11 +374,13 @@ public:
 	bool track_exists(const char *track_name);
 
 	// returns the number of parallel processes that would be open by distribute_task or 0 if scope is empty
-	int prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band = R_NilValue);
+	int prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band = R_NilValue,
+							 bool allow_multichrom_1d_range_split = false);
 
 	// same as the previous function but designated for cases when there's no track expression.
 	// split_align_1d controls optional intra-chrom sharding alignment (0 disables intra-chrom splitting).
-	int prepare4multitasking(GIntervalsFetcher1D *scope1D, GIntervalsFetcher2D *scope2d, int64_t split_align_1d = 0);
+	int prepare4multitasking(GIntervalsFetcher1D *scope1D, GIntervalsFetcher2D *scope2d, int64_t split_align_1d = 0,
+							 bool allow_multichrom_1d_range_split = false);
 
 	// multi-tasking: divides intervals and forks child processes each with its own kid_intervals.
 	// Returns true if a child, false if a parent.
