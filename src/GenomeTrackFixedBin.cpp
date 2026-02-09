@@ -18,6 +18,75 @@ enum ReducerBits : uint32_t {
 };
 }
 
+void GenomeTrackFixedBin::sync_master_state_from_dependent()
+{
+	if (!m_master_obj)
+		return;
+
+	bool changed = false;
+	for (size_t i = 0; i < m_functions.size(); ++i) {
+		if (m_functions[i] && !m_master_obj->m_functions[i]) {
+			m_master_obj->m_functions[i] = true;
+			changed = true;
+		}
+	}
+
+	if (m_use_quantile && !m_master_obj->m_use_quantile) {
+		m_master_obj->m_use_quantile = true;
+		m_master_obj->m_sp = m_sp;
+		changed = true;
+	}
+
+	if (changed) {
+		// Recompute path classification on the next call with the merged function set.
+		m_master_obj->m_fast_path_mode = 0;
+		m_master_obj->m_fast_reducer_bits = 0;
+	}
+}
+
+void GenomeTrackFixedBin::copy_state_from_master()
+{
+	if (!m_master_obj)
+		return;
+
+	if (m_functions[AVG])
+		m_last_avg = m_master_obj->m_last_avg;
+	if (m_functions[MIN])
+		m_last_min = m_master_obj->m_last_min;
+	if (m_functions[MAX])
+		m_last_max = m_master_obj->m_last_max;
+	if (m_functions[MAX_POS])
+		m_last_max_pos = m_master_obj->m_last_max_pos;
+	if (m_functions[MIN_POS])
+		m_last_min_pos = m_master_obj->m_last_min_pos;
+	if (m_functions[NEAREST])
+		m_last_nearest = m_master_obj->m_last_nearest;
+	if (m_functions[STDDEV])
+		m_last_stddev = m_master_obj->m_last_stddev;
+	if (m_functions[SUM])
+		m_last_sum = m_master_obj->m_last_sum;
+	if (m_functions[LSE])
+		m_last_lse = m_master_obj->m_last_lse;
+	if (m_functions[EXISTS])
+		m_last_exists = m_master_obj->m_last_exists;
+	if (m_functions[SIZE])
+		m_last_size = m_master_obj->m_last_size;
+	if (m_functions[SAMPLE])
+		m_last_sample = m_master_obj->m_last_sample;
+	if (m_functions[SAMPLE_POS])
+		m_last_sample_pos = m_master_obj->m_last_sample_pos;
+	if (m_functions[FIRST])
+		m_last_first = m_master_obj->m_last_first;
+	if (m_functions[FIRST_POS])
+		m_last_first_pos = m_master_obj->m_last_first_pos;
+	if (m_functions[LAST])
+		m_last_last = m_master_obj->m_last_last;
+	if (m_functions[LAST_POS])
+		m_last_last_pos = m_master_obj->m_last_last_pos;
+	if (m_use_quantile)
+		m_sp = m_master_obj->m_sp;
+}
+
 void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 {
 	const bool need_sum = (m_fast_reducer_bits & RBIT_SUM) != 0;
@@ -232,6 +301,16 @@ void GenomeTrackFixedBin::read_interval_avg_nearest_only(const GInterval &interv
 
 void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 {
+	if (m_master_obj) {
+		if (!m_master_synced) {
+			sync_master_state_from_dependent();
+			m_master_synced = true;
+		}
+		m_master_obj->read_interval(interval);
+		copy_state_from_master();
+		return;
+	}
+
 	if (m_fast_path_mode == 0) {
 		bool reducer_only = !m_use_quantile;
 		bool avg_nearest_only = !m_use_quantile;
