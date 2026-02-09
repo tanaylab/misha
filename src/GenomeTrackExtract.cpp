@@ -528,7 +528,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			return R_NilValue;
 		}
 
-		if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band))
+		if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, true))
 			rreturn(R_NilValue);
 
 		bool is_1d_iterator = iu.is_1d_iterator(_exprs, intervals1d, intervals2d, _iterator_policy);
