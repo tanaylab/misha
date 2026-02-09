@@ -59,3 +59,35 @@ test_that("single-chrom shifted vtrack extraction matches serial output", {
     expect_equal(parallel[, c("chrom", "start", "end", "intervalID")], serial[, c("chrom", "start", "end", "intervalID")])
     expect_equal(parallel[[track_name]], serial[[track_name]], tolerance = 1e-6)
 })
+
+test_that("small multi-chrom extraction still enters multitask path when enabled", {
+    skip_if(parallel::detectCores() < 2L, "Multitasking test needs at least 2 cores")
+
+    intervals <- gintervals(c(1, 2), 0, 1000)
+
+    withr::local_options(list(
+        gmax.processes = 8L,
+        gmax.processes2core = 4L,
+        gmax.data.size = 1e9,
+        gmin.scope4process = 1L,
+        gextract.profile = TRUE
+    ))
+
+    withr::local_options(list(gmultitasking = FALSE))
+    serial_out <- capture.output(
+        serial <- gextract("1", intervals = intervals, iterator = 20, colnames = "value")
+    )
+
+    withr::local_options(list(gmultitasking = TRUE))
+    parallel_out <- capture.output(
+        parallel <- gextract("1", intervals = intervals, iterator = 20, colnames = "value")
+    )
+
+    # Guard against accidental estimate-based multitask auto-disable regressions.
+    expect_false(any(grepl("parent_gather_ms", serial_out, fixed = TRUE)))
+    expect_true(any(grepl("parent_gather_ms", parallel_out, fixed = TRUE)))
+
+    ord_serial <- order(serial$chrom, serial$start, serial$end, serial$intervalID)
+    ord_parallel <- order(parallel$chrom, parallel$start, parallel$end, parallel$intervalID)
+    expect_equal(parallel[ord_parallel, ], serial[ord_serial, ])
+})

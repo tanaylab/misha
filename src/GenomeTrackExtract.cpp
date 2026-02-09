@@ -582,9 +582,12 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			return R_NilValue;
 		}
 
-		bool allow_multichrom_1d_range_split = allow_multichrom_range_split_for_gextract(_iterator_policy, intervset_out);
-		if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_multichrom_1d_range_split))
-			rreturn(R_NilValue);
+			// IMPORTANT: do not add estimated-size mode gating here.
+			// We intentionally rely on prepare4multitasking() + runtime allocation guards,
+			// because estimate-based auto-disabling previously regressed gextract throughput.
+			bool allow_multichrom_1d_range_split = allow_multichrom_range_split_for_gextract(_iterator_policy, intervset_out);
+			if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_multichrom_1d_range_split))
+				rreturn(R_NilValue);
 
 		bool is_1d_iterator = iu.is_1d_iterator(_exprs, intervals1d, intervals2d, _iterator_policy);
 		// Estimate number of records to cap shared-memory allocation size
@@ -719,14 +722,16 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 												  sizeof(double) * num_exprs);                                     // values
 				}
 				break;
-			} catch (TGLException &e) {
-				string msg(e.msg());
-				if (msg.find("Failed to allocate shared memory") != string::npos) {
-					if (base_estimated_records > 0 && max_records_factor > 1.0) {
-						max_records_factor = max(1.0, max_records_factor / 2.0);
-						estimated_records = inflate_estimated_records(iu, base_estimated_records, max_records_factor);
-						continue;
-					}
+				} catch (TGLException &e) {
+					string msg(e.msg());
+					if (msg.find("Failed to allocate shared memory") != string::npos) {
+						// Fallback policy: keep multitasking unless shared-memory allocation fails.
+						// We first back off the inflation factor; only then fall back to serial.
+						if (base_estimated_records > 0 && max_records_factor > 1.0) {
+							max_records_factor = max(1.0, max_records_factor / 2.0);
+							estimated_records = inflate_estimated_records(iu, base_estimated_records, max_records_factor);
+							continue;
+						}
 					return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _envir);
 				}
 				throw;
