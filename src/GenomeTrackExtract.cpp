@@ -734,26 +734,29 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				log_gextract_timing("child_scan_pack_ms", scan_ms);
 			}
 			
-		} else {  // parent process
-			auto t_gather_start = std::chrono::steady_clock::now();
+			} else {  // parent process
+				auto t_gather_start = std::chrono::steady_clock::now();
 
-			// collect results from kids
-			// First pass: compute total sizes to pre-reserve and avoid repeated reallocations.
-			uint64_t total_intervals = 0;
-			for (int i = 0; i < get_num_kids(); ++i) {
-				total_intervals += get_kid_res_size(i);
-			}
-			if (is_1d_iterator)
-				out_intervals1d.reserve(total_intervals);
-			else
-				out_intervals2d.reserve(total_intervals);
-			interv_ids.reserve(total_intervals);
-			for (unsigned i = 0; i < num_exprs; ++i)
-				values[i].reserve(total_intervals);
+				// collect results from kids
+				// First pass: compute total sizes to pre-reserve and avoid repeated reallocations.
+				uint64_t total_intervals = 0;
+				for (int i = 0; i < get_num_kids(); ++i) {
+					total_intervals += get_kid_res_size(i);
+				}
+				if (is_1d_iterator)
+					out_intervals1d.reserve(total_intervals);
+				else
+					out_intervals2d.reserve(total_intervals);
 
-			for (int i = 0; i < get_num_kids(); ++i) {
-				void *ptr = get_kid_res(i);
-				num_intervals = get_kid_res_size(i);
+				vector<SEXP> r_expr_vals(num_exprs, R_NilValue);
+				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+					r_expr_vals[iexpr] = rprotect_ptr(RSaneAllocVector(REALSXP, total_intervals));
+				SEXP ids = rprotect_ptr(RSaneAllocVector(INTSXP, total_intervals));
+				uint64_t values_offset = 0;
+
+				for (int i = 0; i < get_num_kids(); ++i) {
+					void *ptr = get_kid_res(i);
+					num_intervals = get_kid_res_size(i);
 
 				if (!num_intervals)
 					continue;
@@ -764,19 +767,23 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				} else {
 					out_intervals2d.insert(out_intervals2d.end(), (GInterval2D *)ptr, (GInterval2D *)ptr + num_intervals);
 					ptr = (GInterval2D *)ptr + num_intervals;
+					}
+
+					unsigned *kid_ids = (unsigned *)ptr;
+					for (uint64_t iid = 0; iid < num_intervals; ++iid)
+						INTEGER(ids)[values_offset + iid] = kid_ids[iid];
+					ptr = kid_ids + num_intervals;
+
+					for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+						double *kid_vals = (double *)ptr;
+						memcpy(REAL(r_expr_vals[iexpr]) + values_offset, kid_vals, sizeof(double) * num_intervals);
+						ptr = kid_vals + num_intervals;
+					}
+					values_offset += num_intervals;
 				}
 
-				interv_ids.insert(interv_ids.end(), (unsigned *)ptr, (unsigned *)ptr + num_intervals);
-				ptr = (unsigned *)ptr + num_intervals;
-
-				for (unsigned i = 0; i < num_exprs; ++i) {
-					values[i].insert(values[i].end(), (double *)ptr, (double *)ptr + num_intervals);
-					ptr = (double *)ptr + num_intervals;
-				}
-			}
-
-			if (out_intervals1d.empty() && out_intervals2d.empty()) 
-				rreturn(R_NilValue);
+				if (out_intervals1d.empty() && out_intervals2d.empty()) 
+					rreturn(R_NilValue);
 
 			auto t_assemble_start = std::chrono::steady_clock::now();
 
@@ -787,23 +794,14 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			if (!out_intervals1d.empty()) {
 				answer = iu.convert_intervs(&out_intervals1d, GInterval::NUM_COLS + num_exprs + 1);
 				num_interv_cols = GInterval::NUM_COLS;
-			} else {
-				answer = iu.convert_intervs(&out_intervals2d, GInterval2D::NUM_COLS + num_exprs + 1);
-				num_interv_cols = GInterval2D::NUM_COLS;
-			}
+				} else {
+					answer = iu.convert_intervs(&out_intervals2d, GInterval2D::NUM_COLS + num_exprs + 1);
+					num_interv_cols = GInterval2D::NUM_COLS;
+				}
 
-            for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-                SEXP expr_vals = rprotect_ptr(RSaneAllocVector(REALSXP, values[iexpr].size()));
-				// values[iexpr] is contiguous; copy in one shot
-				if (!values[iexpr].empty())
-					memcpy(REAL(expr_vals), &values[iexpr][0], sizeof(double) * values[iexpr].size());
-                SET_VECTOR_ELT(answer, num_interv_cols + iexpr, expr_vals);
-			}
-
-            SEXP ids = rprotect_ptr(RSaneAllocVector(INTSXP, interv_ids.size()));
-			if (!interv_ids.empty())
-				memcpy(INTEGER(ids), &interv_ids[0], sizeof(int) * interv_ids.size());
-			SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
+				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+	                SET_VECTOR_ELT(answer, num_interv_cols + iexpr, r_expr_vals[iexpr]);
+				SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
 
             SEXP col_names = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {

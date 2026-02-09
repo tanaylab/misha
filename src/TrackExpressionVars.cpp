@@ -51,6 +51,36 @@ const char *TrackExpressionVars::Value_var::FUNC_NAMES[TrackExpressionVars::Valu
 
 using namespace rdb;
 
+namespace {
+
+string make_1d_track_cache_key(const string &track_name, GenomeTrack::Type type, int chromid)
+{
+	return track_name + "\t" + to_string(static_cast<int>(type)) + "\t" + to_string(chromid);
+}
+
+shared_ptr<GenomeTrack> create_and_init_1d_track(const string &filename, int chromid, GenomeTrack::Type type)
+{
+	shared_ptr<GenomeTrack> track;
+
+	if (type == GenomeTrack::FIXED_BIN) {
+		auto t = make_shared<GenomeTrackFixedBin>();
+		t->init_read(filename.c_str(), chromid);
+		track = t;
+	} else if (type == GenomeTrack::SPARSE) {
+		auto t = make_shared<GenomeTrackSparse>();
+		t->init_read(filename.c_str(), chromid);
+		track = t;
+	} else if (type == GenomeTrack::ARRAYS) {
+		auto t = make_shared<GenomeTrackArrays>();
+		t->init_read(filename.c_str(), chromid);
+		track = t;
+	}
+
+	return track;
+}
+
+}  // namespace
+
 
 TrackExpressionVars::TrackExpressionVars(rdb::IntervUtils &iu) :
 	m_iu(iu)
@@ -74,8 +104,6 @@ TrackExpressionVars::~TrackExpressionVars()
 		runprotect(ivar->rvar);
 	for (Value_vars::iterator ivar = m_value_vars.begin(); ivar != m_value_vars.end(); ivar++)
 		runprotect(ivar->rvar);
-	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
-		delete itrack_n_imdf->track;
 }
 
 void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
@@ -294,7 +322,7 @@ TrackExpressionVars::Track_n_imdf &TrackExpressionVars::add_track_n_imdf(const s
 	m_track_n_imdfs.push_back(Track_n_imdf());
 	Track_n_imdf &track_n_imdf = m_track_n_imdfs.back();
 	track_n_imdf.name = track;
-	track_n_imdf.track = NULL;
+	track_n_imdf.track.reset();
 	track_n_imdf.type = track_type;
 	track_n_imdf.slice = slice;
 	track_n_imdf.slice_func = slice_func;
@@ -1126,8 +1154,8 @@ void TrackExpressionVars::register_track_functions()
         if (TrackExpressionVars::is_sequence_based_function(ivar->val_func)) {
             continue;
         }
-		GenomeTrack1D *track1d = GenomeTrack::is_1d(ivar->track_n_imdf->type) ? (GenomeTrack1D *)ivar->track_n_imdf->track : NULL;
-		GenomeTrack2D *track2d = GenomeTrack::is_2d(ivar->track_n_imdf->type) ? (GenomeTrack2D *)ivar->track_n_imdf->track : NULL;
+		GenomeTrack1D *track1d = GenomeTrack::is_1d(ivar->track_n_imdf->type) ? (GenomeTrack1D *)ivar->track_n_imdf->track.get() : NULL;
+		GenomeTrack2D *track2d = GenomeTrack::is_2d(ivar->track_n_imdf->type) ? (GenomeTrack2D *)ivar->track_n_imdf->track.get() : NULL;
 
 		switch (ivar->val_func) {
 		case Track_var::REG:
@@ -1236,11 +1264,11 @@ void TrackExpressionVars::register_track_functions()
 			break;
 		}
 
-		if (ivar->track_n_imdf->type == GenomeTrack::ARRAYS) {
-			GenomeTrackArrays *track = (GenomeTrackArrays *)ivar->track_n_imdf->track;
-			if (ivar->track_n_imdf->slice_func == GenomeTrackArrays::S_QUANTILE) 
-				track->set_slice_quantile(ivar->track_n_imdf->slice_percentile, m_iu.get_max_data_size(), m_iu.get_quantile_edge_data_size(), m_iu.get_quantile_edge_data_size(),
-										  ivar->track_n_imdf->slice);
+			if (ivar->track_n_imdf->type == GenomeTrack::ARRAYS) {
+				GenomeTrackArrays *track = (GenomeTrackArrays *)ivar->track_n_imdf->track.get();
+				if (ivar->track_n_imdf->slice_func == GenomeTrackArrays::S_QUANTILE) 
+					track->set_slice_quantile(ivar->track_n_imdf->slice_percentile, m_iu.get_max_data_size(), m_iu.get_quantile_edge_data_size(), m_iu.get_quantile_edge_data_size(),
+											  ivar->track_n_imdf->slice);
 			else 
 				track->set_slice_function(ivar->track_n_imdf->slice_func, ivar->track_n_imdf->slice);
 		}
@@ -1432,6 +1460,8 @@ void TrackExpressionVars::define_r_vars(unsigned size)
 
 void TrackExpressionVars::start_chrom(const GInterval &interval)
 {
+	unordered_map<string, shared_ptr<GenomeTrack>> shared_1d_tracks;
+
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 	{
 		// Skip track initialization for sequence-based tracks
@@ -1453,27 +1483,17 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 			string track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
 			string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
 			string filename(track_dir + "/" + resolved);
-
-			delete itrack_n_imdf->track;
-			if (itrack_n_imdf->type == GenomeTrack::FIXED_BIN)
-			{
-				itrack_n_imdf->track = new GenomeTrackFixedBin;
-				((GenomeTrackFixedBin *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid);
+			string cache_key = make_1d_track_cache_key(itrack_n_imdf->name, itrack_n_imdf->type, interval.chromid);
+			auto i_shared_track = shared_1d_tracks.find(cache_key);
+			if (i_shared_track == shared_1d_tracks.end()) {
+				shared_ptr<GenomeTrack> new_track = create_and_init_1d_track(filename, interval.chromid, itrack_n_imdf->type);
+				if (!new_track) {
+					verror("Internal error: track %s of type %s is not supported by 1D iterators",
+						   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
+				}
+				i_shared_track = shared_1d_tracks.emplace(cache_key, std::move(new_track)).first;
 			}
-			else if (itrack_n_imdf->type == GenomeTrack::SPARSE)
-			{
-				itrack_n_imdf->track = new GenomeTrackSparse;
-				((GenomeTrackSparse *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid);
-			}
-			else if (itrack_n_imdf->type == GenomeTrack::ARRAYS)
-			{
-				itrack_n_imdf->track = new GenomeTrackArrays;
-				((GenomeTrackArrays *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid);
-			}
-			else
-			{
-				verror("Internal error: track %s of type %s is not supported by 1D iterators", itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
-			}
+			itrack_n_imdf->track = i_shared_track->second;
 		}
 		catch (TGLException &e)
 		{
@@ -1492,6 +1512,8 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 
 void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 {
+	unordered_map<string, shared_ptr<GenomeTrack>> shared_1d_tracks;
+
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf) {
 		try {
 			if (GenomeTrack::is_1d(itrack_n_imdf->type)) {
@@ -1509,32 +1531,32 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 					string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, chromid);
 					string filename(track_dir + "/" + resolved);
 
-					delete itrack_n_imdf->track;
-					if (itrack_n_imdf->type == GenomeTrack::FIXED_BIN) {
-						itrack_n_imdf->track = new GenomeTrackFixedBin;
-						((GenomeTrackFixedBin *)itrack_n_imdf->track)->init_read(filename.c_str(), chromid);
-					} else if (itrack_n_imdf->type == GenomeTrack::SPARSE) {
-						itrack_n_imdf->track = new GenomeTrackSparse;
-						((GenomeTrackSparse *)itrack_n_imdf->track)->init_read(filename.c_str(), chromid);
-					} else if (itrack_n_imdf->type == GenomeTrack::ARRAYS) {
-						itrack_n_imdf->track = new GenomeTrackArrays;
-						((GenomeTrackArrays *)itrack_n_imdf->track)->init_read(filename.c_str(), chromid);
-					} else
-						verror("Internal error: track %s of type %s is not supported by 1D iterators (projected from 2D)", itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
+					string cache_key = make_1d_track_cache_key(itrack_n_imdf->name, itrack_n_imdf->type, chromid);
+					auto i_shared_track = shared_1d_tracks.find(cache_key);
+					if (i_shared_track == shared_1d_tracks.end()) {
+						shared_ptr<GenomeTrack> new_track = create_and_init_1d_track(filename, chromid, itrack_n_imdf->type);
+						if (!new_track) {
+							verror("Internal error: track %s of type %s is not supported by 1D iterators (projected from 2D)",
+								   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
+						}
+						i_shared_track = shared_1d_tracks.emplace(cache_key, std::move(new_track)).first;
+					}
+					itrack_n_imdf->track = i_shared_track->second;
 				}
 			} else if (!m_interval2d.is_same_chrom(interval)) {
 				string filename(track2path(m_iu.get_env(), itrack_n_imdf->name) + "/" + GenomeTrack::get_2d_filename(m_iu.get_chromkey(), interval.chromid1(), interval.chromid2()));
-
-				delete itrack_n_imdf->track;
 				if (itrack_n_imdf->type == GenomeTrack::RECTS) {
-					itrack_n_imdf->track = new GenomeTrackRectsRects(m_iu.get_track_chunk_size(), m_iu.get_track_num_chunks());
-					((GenomeTrackRectsRects *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid1(), interval.chromid2());
+					auto t = make_shared<GenomeTrackRectsRects>(m_iu.get_track_chunk_size(), m_iu.get_track_num_chunks());
+					t->init_read(filename.c_str(), interval.chromid1(), interval.chromid2());
+					itrack_n_imdf->track = t;
 				} else if (itrack_n_imdf->type == GenomeTrack::POINTS) {
-					itrack_n_imdf->track = new GenomeTrackRectsPoints(m_iu.get_track_chunk_size(), m_iu.get_track_num_chunks());
-					((GenomeTrackRectsPoints *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid1(), interval.chromid2());
+					auto t = make_shared<GenomeTrackRectsPoints>(m_iu.get_track_chunk_size(), m_iu.get_track_num_chunks());
+					t->init_read(filename.c_str(), interval.chromid1(), interval.chromid2());
+					itrack_n_imdf->track = t;
 				} else if (itrack_n_imdf->type == GenomeTrack::COMPUTED) {
-					itrack_n_imdf->track = new GenomeTrackComputed(m_groot, m_iu.get_track_chunk_size(), m_iu.get_track_num_chunks());
-					((GenomeTrackComputed *)itrack_n_imdf->track)->init_read(filename.c_str(), interval.chromid1(), interval.chromid2());
+					auto t = make_shared<GenomeTrackComputed>(m_groot, m_iu.get_track_chunk_size(), m_iu.get_track_num_chunks());
+					t->init_read(filename.c_str(), interval.chromid1(), interval.chromid2());
+					itrack_n_imdf->track = t;
 				} else
 					verror("Internal error: track %s of type %s is not supported by 2D iterators", itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
 			}
@@ -1601,19 +1623,19 @@ void TrackExpressionVars::set_vars(unsigned idx)
 		if (seq_var != m_track_vars.end())
 			continue;
 		try {
-			if (GenomeTrack::is_2d(itrack_n_imdf->type)) {
-				if (itrack_n_imdf->imdf2d) {
-					if (!itrack_n_imdf->imdf2d->out_of_range)
-						((GenomeTrack2D *)itrack_n_imdf->track)->read_interval(itrack_n_imdf->imdf2d->interval, m_band);
-				} else
-					((GenomeTrack2D *)itrack_n_imdf->track)->read_interval(m_interval2d, m_band);
-			} else {
-				if (itrack_n_imdf->imdf1d) {
-					if (!itrack_n_imdf->imdf1d->out_of_range)
-						((GenomeTrack1D *)itrack_n_imdf->track)->read_interval(itrack_n_imdf->imdf1d->interval);
-				} else
-					((GenomeTrack1D *)itrack_n_imdf->track)->read_interval(m_interval1d);
-			}
+				if (GenomeTrack::is_2d(itrack_n_imdf->type)) {
+					if (itrack_n_imdf->imdf2d) {
+						if (!itrack_n_imdf->imdf2d->out_of_range)
+							((GenomeTrack2D *)itrack_n_imdf->track.get())->read_interval(itrack_n_imdf->imdf2d->interval, m_band);
+					} else
+						((GenomeTrack2D *)itrack_n_imdf->track.get())->read_interval(m_interval2d, m_band);
+				} else {
+					if (itrack_n_imdf->imdf1d) {
+						if (!itrack_n_imdf->imdf1d->out_of_range)
+							((GenomeTrack1D *)itrack_n_imdf->track.get())->read_interval(itrack_n_imdf->imdf1d->interval);
+					} else
+						((GenomeTrack1D *)itrack_n_imdf->track.get())->read_interval(m_interval1d);
+				}
 		} catch (TGLException &e) {
 			verror("%s", e.msg());
 		}
