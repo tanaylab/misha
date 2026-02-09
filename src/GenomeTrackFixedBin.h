@@ -73,6 +73,7 @@ protected:
 	double m_sliding_sum{0.0};
 	int64_t m_sliding_num_vs{0};
 	bool m_lse_sliding_valid{false};
+	bool m_running_lse_initialized{false};
 	int m_fast_path_mode{0}; // 0=unknown, 1=reducer-only fast path, 2=avg/nearest-only fast path, -1=generic path
 	uint32_t m_fast_reducer_bits{0};
 	GenomeTrackFixedBin *m_master_obj{NULL};
