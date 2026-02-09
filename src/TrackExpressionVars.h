@@ -98,7 +98,7 @@ public:
 
     struct Track_n_imdf {
         string               name;
-        GenomeTrack         *track{NULL};
+        std::shared_ptr<GenomeTrack> track;
         GenomeTrack::Type    type;
         vector<unsigned>     slice;
         GenomeTrackArrays::SliceFunctions slice_func;

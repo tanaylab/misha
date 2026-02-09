@@ -47,7 +47,7 @@ void TrackVarProcessor::process_single_track_var_1d(
 	const GInterval &interval,
 	unsigned idx)
 {
-	GenomeTrack1D &track = *(GenomeTrack1D *)var.track_n_imdf->track;
+	GenomeTrack1D &track = *(GenomeTrack1D *)var.track_n_imdf->track.get();
 	const GInterval &base_interval = var.track_n_imdf->imdf1d ?
 		var.track_n_imdf->imdf1d->interval : interval;
 	const int64_t base_start = base_interval.start;
@@ -371,7 +371,7 @@ void TrackVarProcessor::process_single_track_var_2d(
 	const DiagonalBand &band,
 	unsigned idx)
 {
-	GenomeTrack2D &track = *(GenomeTrack2D *)var.track_n_imdf->track;
+	GenomeTrack2D &track = *(GenomeTrack2D *)var.track_n_imdf->track.get();
 
 	if (var.track_n_imdf->imdf2d && var.track_n_imdf->imdf2d->out_of_range) {
 		var.var[idx] = numeric_limits<double>::quiet_NaN();
@@ -710,4 +710,3 @@ double TrackVarProcessor::aggregate_lse_with_filter(GenomeTrack1D &track, const 
 
 	return has_value ? lse : numeric_limits<double>::quiet_NaN();
 }
-
