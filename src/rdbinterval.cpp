@@ -316,10 +316,10 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 					intervals = *(GIntervals *)scope1d;
 				else {
 					scope1d->begin_iter();
-				for (; !scope1d->isend(); scope1d->next())
-					intervals.push_back(scope1d->cur_interval());
-				intervals.sort();
-			}
+					for (; !scope1d->isend(); scope1d->next())
+						intervals.push_back(scope1d->cur_interval());
+					intervals.sort();
+				}
 
 			int desired_kids = 1;
 			uint64_t min_scope = get_min_scope4process();
