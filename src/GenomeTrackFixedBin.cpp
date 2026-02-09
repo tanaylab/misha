@@ -12,18 +12,15 @@
 namespace {
 enum ReducerBits : uint32_t {
 	RBIT_SUM = 1u << 0,
-	RBIT_AVG = 1u << 1,
-	RBIT_NEAREST = 1u << 2,
-	RBIT_LSE = 1u << 3,
-	RBIT_EXISTS = 1u << 4,
-	RBIT_SIZE = 1u << 5
+	RBIT_LSE = 1u << 1,
+	RBIT_EXISTS = 1u << 2,
+	RBIT_SIZE = 1u << 3
 };
 }
 
 void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 {
 	const bool need_sum = (m_fast_reducer_bits & RBIT_SUM) != 0;
-	const bool need_avg_like = (m_fast_reducer_bits & (RBIT_AVG | RBIT_NEAREST)) != 0;
 	const bool need_lse = (m_fast_reducer_bits & RBIT_LSE) != 0;
 	const bool need_exists = (m_fast_reducer_bits & RBIT_EXISTS) != 0;
 	const bool need_size = (m_fast_reducer_bits & RBIT_SIZE) != 0;
@@ -32,8 +29,6 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 		if (m_sliding_num_vs > 0) {
 			if (need_sum)
 				m_last_sum = (float)m_sliding_sum;
-			if (need_avg_like)
-				m_last_avg = m_last_nearest = (float)(m_sliding_sum / m_sliding_num_vs);
 			if (need_lse)
 				m_last_lse = m_running_lse.window.empty() ? numeric_limits<float>::quiet_NaN() : (float)m_running_lse.value();
 			if (need_exists)
@@ -41,8 +36,6 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 		} else {
 			if (need_sum)
 				m_last_sum = numeric_limits<float>::quiet_NaN();
-			if (need_avg_like)
-				m_last_avg = m_last_nearest = numeric_limits<float>::quiet_NaN();
 			if (need_lse)
 				m_last_lse = numeric_limits<float>::quiet_NaN();
 			if (need_exists)
@@ -56,8 +49,6 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 		bool has_num = have_value && !std::isnan(v);
 		if (need_sum)
 			m_last_sum = has_num ? v : numeric_limits<float>::quiet_NaN();
-		if (need_avg_like)
-			m_last_avg = m_last_nearest = has_num ? v : numeric_limits<float>::quiet_NaN();
 		if (need_lse)
 			m_last_lse = has_num ? v : numeric_limits<float>::quiet_NaN();
 		if (need_exists)
@@ -186,32 +177,105 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 	m_lse_sliding_valid = bins_read == window_size && window_size > 0;
 }
 
+void GenomeTrackFixedBin::read_interval_avg_nearest_only(const GInterval &interval)
+{
+	if (interval.start == m_cur_coord && interval.end == m_cur_coord + m_bin_size) {
+		if (read_next_bin(m_last_avg)) {
+			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
+			m_last_stddev = numeric_limits<float>::quiet_NaN();
+		} else {
+			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
+		}
+		return;
+	}
+
+	int64_t sbin = (int64_t)(interval.start / m_bin_size);
+	int64_t ebin = (int64_t)ceil(interval.end / (double)m_bin_size);
+
+	if (ebin == sbin + 1) {
+		goto_bin(sbin);
+		if (read_next_bin(m_last_avg)) {
+			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
+			m_last_stddev = numeric_limits<float>::quiet_NaN();
+		} else {
+			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
+		}
+	} else {
+		float num_vs = 0;
+		double mean_square_sum = 0;
+		float v;
+
+		m_last_sum = 0;
+		m_last_min = numeric_limits<float>::max();
+		m_last_max = -numeric_limits<float>::max();
+
+		goto_bin(sbin);
+		for (int64_t bin = sbin; bin < ebin; ++bin) {
+			if (read_next_bin(v) && !std::isnan(v)) {
+				m_last_sum += v;
+				m_last_min = min(m_last_min, v);
+				m_last_max = max(m_last_max, v);
+				mean_square_sum += v * v;
+				++num_vs;
+			}
+		}
+
+		if (num_vs > 0) {
+			m_last_avg = m_last_nearest = m_last_sum / num_vs;
+			m_last_stddev = num_vs > 1 ? sqrt(mean_square_sum / (num_vs - 1) - (m_last_avg * (double)m_last_avg) * (num_vs / (num_vs - 1))) : numeric_limits<float>::quiet_NaN();
+		} else {
+			m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
+			m_last_stddev = numeric_limits<float>::quiet_NaN();
+		}
+	}
+}
+
 void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 {
 	if (m_fast_path_mode == 0) {
 		bool reducer_only = !m_use_quantile;
+		bool avg_nearest_only = !m_use_quantile;
+		bool has_avg_nearest = false;
 		uint32_t bits = 0;
-		for (size_t i = 0; i < m_functions.size() && reducer_only; ++i) {
+		for (size_t i = 0; i < m_functions.size(); ++i) {
 			if (!m_functions[i])
 				continue;
-			switch ((int)i) {
-			case SUM: bits |= RBIT_SUM; break;
-			case AVG: bits |= RBIT_AVG; break;
-			case NEAREST: bits |= RBIT_NEAREST; break;
-			case LSE: bits |= RBIT_LSE; break;
-			case EXISTS: bits |= RBIT_EXISTS; break;
-			case SIZE: bits |= RBIT_SIZE; break;
-			default:
-				reducer_only = false;
-				break;
+
+			const int func = (int)i;
+			if (func == AVG || func == NEAREST)
+				has_avg_nearest = true;
+			else
+				avg_nearest_only = false;
+
+			if (!reducer_only)
+				continue;
+
+			switch (func) {
+				case SUM: bits |= RBIT_SUM; break;
+				case LSE: bits |= RBIT_LSE; break;
+				case EXISTS: bits |= RBIT_EXISTS; break;
+				case SIZE: bits |= RBIT_SIZE; break;
+				default:
+					reducer_only = false;
+					break;
 			}
 		}
-		m_fast_path_mode = (reducer_only && bits != 0) ? 1 : -1;
+		if (reducer_only && bits != 0)
+			m_fast_path_mode = 1;
+		else if (avg_nearest_only && has_avg_nearest)
+			m_fast_path_mode = 2;
+		else
+			m_fast_path_mode = -1;
 		m_fast_reducer_bits = bits;
 	}
 
 	if (m_fast_path_mode == 1) {
 		read_interval_reducers_only(interval);
+		return;
+	}
+
+	if (m_fast_path_mode == 2) {
+		read_interval_avg_nearest_only(interval);
 		return;
 	}
 
