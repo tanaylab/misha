@@ -175,6 +175,7 @@ void GenomeTrackFixedBin::reset_sliding_window_state()
 	m_lse_sliding_valid = false;
 	m_sliding_sum = 0;
 	m_sliding_num_vs = 0;
+	m_running_lse_initialized = false;
 }
 
 void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
@@ -183,6 +184,8 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 	const bool need_lse = (m_fast_reducer_bits & RBIT_LSE) != 0;
 	const bool need_exists = (m_fast_reducer_bits & RBIT_EXISTS) != 0;
 	const bool need_size = (m_fast_reducer_bits & RBIT_SIZE) != 0;
+	if (!need_lse)
+		m_running_lse_initialized = false;
 
 	auto assign_from_state = [&]() {
 		if (m_sliding_num_vs > 0) {
@@ -229,6 +232,7 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 		m_lse_sliding_valid = false;
 		m_sliding_sum = 0;
 		m_sliding_num_vs = 0;
+		m_running_lse_initialized = false;
 		return;
 	}
 
@@ -258,13 +262,14 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 		m_lse_sliding_valid = false;
 		m_sliding_sum = 0;
 		m_sliding_num_vs = 0;
+		m_running_lse_initialized = false;
 		return;
 	}
 
 	const int64_t window_size = ebin - sbin;
 
 	// Sliding sum update for one-bin steps.
-	if (m_lse_sliding_valid && window_size > 0) {
+	if (m_lse_sliding_valid && window_size > 0 && (!need_lse || m_running_lse_initialized)) {
 		int64_t step = sbin - m_lse_prev_sbin;
 		int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
 			if (step > 0 && step <= prev_window && window_size == prev_window &&
@@ -323,6 +328,7 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 				m_running_lse.push(v);
 		}
 	}
+	m_running_lse_initialized = need_lse;
 
 	if (bins_read > 0) {
 		m_cached_bin_idx = sbin + bins_read - 1;
@@ -416,6 +422,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 	if (m_use_quantile)
 		m_sp.reset();
+	if (!m_functions[LSE])
+		m_running_lse_initialized = false;
 
 	if (m_functions[MIN_POS])
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
@@ -525,7 +533,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 		bool simple_sliding_used = false;
 
-		if (simple_sliding_compatible && m_lse_sliding_valid && window_size > 0) {
+		if (simple_sliding_compatible && m_lse_sliding_valid && window_size > 0 &&
+			(!m_functions[LSE] || m_running_lse_initialized)) {
 			int64_t step = sbin - m_lse_prev_sbin;
 			int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
 
@@ -625,7 +634,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			int64_t bins_read = read_bins_bulk(sbin, window_size, bin_vals);
 			bool lse_sliding_used = false;
 
-			if (m_functions[LSE] && m_lse_sliding_valid && bins_read > 0 && !simple_sliding_compatible) {
+			if (m_functions[LSE] && m_lse_sliding_valid && bins_read > 0 &&
+				m_running_lse_initialized && !simple_sliding_compatible) {
 				int64_t step = sbin - m_lse_prev_sbin;
 				int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
 
@@ -761,16 +771,18 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 								m_running_lse.push(bin_vals[i]);
 						}
 					}
+					m_running_lse_initialized = m_functions[LSE];
 				}
 				m_lse_prev_sbin = sbin;
 				m_lse_prev_ebin = ebin;
 				m_lse_sliding_valid = bins_read == window_size && window_size > 0;
-			} else {
-				m_lse_sliding_valid = false;
+				} else {
+					m_lse_sliding_valid = false;
+					m_running_lse_initialized = false;
+				}
 			}
 		}
 	}
-}
 
 double GenomeTrackFixedBin::last_max_pos() const
 {
@@ -846,6 +858,7 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 	m_sliding_sum = 0;
 	m_sliding_num_vs = 0;
 	m_lse_sliding_valid = false;
+	m_running_lse_initialized = false;
 
 	// Check for indexed format FIRST
 	const std::string track_dir = GenomeTrack::get_track_dir(filename);
