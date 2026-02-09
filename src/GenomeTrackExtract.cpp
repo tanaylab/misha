@@ -162,8 +162,55 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
 		SET_STRING_ELT(col_names, num_interv_cols + num_exprs, Rf_mkChar("intervalID"));
 	}
     
-    runprotect(1); // col_names
-    return answer;
+	    runprotect(1); // col_names
+	    return answer;
+}
+
+static void unpack_kid_extract_result(
+	void *ptr,
+	uint64_t num_intervals,
+	bool is_1d_iterator,
+	unsigned num_exprs,
+	GIntervals &out_intervals1d,
+	GIntervals2D &out_intervals2d,
+	SEXP ids,
+	const vector<SEXP> &r_expr_vals,
+	uint64_t values_offset)
+{
+	if (!num_intervals)
+		return;
+
+	if (is_1d_iterator) {
+		out_intervals1d.insert(out_intervals1d.end(), (GInterval *)ptr, (GInterval *)ptr + num_intervals);
+		ptr = (GInterval *)ptr + num_intervals;
+	} else {
+		out_intervals2d.insert(out_intervals2d.end(), (GInterval2D *)ptr, (GInterval2D *)ptr + num_intervals);
+		ptr = (GInterval2D *)ptr + num_intervals;
+	}
+
+	unsigned *kid_ids = (unsigned *)ptr;
+	for (uint64_t iid = 0; iid < num_intervals; ++iid)
+		INTEGER(ids)[values_offset + iid] = kid_ids[iid];
+	ptr = kid_ids + num_intervals;
+
+	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+		double *kid_vals = (double *)ptr;
+		memcpy(REAL(r_expr_vals[iexpr]) + values_offset, kid_vals, sizeof(double) * num_intervals);
+		ptr = kid_vals + num_intervals;
+	}
+}
+
+static void set_extract_value_column_names(SEXP answer, unsigned num_interv_cols, unsigned num_exprs, SEXP _exprs, SEXP _colnames)
+{
+	SEXP col_names = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
+	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+		if (Rf_isNull(_colnames))
+			SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
+		else
+			SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
+	}
+	SET_STRING_ELT(col_names, num_interv_cols + num_exprs, Rf_mkChar("intervalID"));
+	runprotect(1); // col_names
 }
 
 
@@ -766,27 +813,8 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 					void *ptr = get_kid_res(i);
 					num_intervals = get_kid_res_size(i);
 
-				if (!num_intervals)
-					continue;
-
-				if (is_1d_iterator) {
-					out_intervals1d.insert(out_intervals1d.end(), (GInterval *)ptr, (GInterval *)ptr + num_intervals);
-					ptr = (GInterval *)ptr + num_intervals;
-				} else {
-					out_intervals2d.insert(out_intervals2d.end(), (GInterval2D *)ptr, (GInterval2D *)ptr + num_intervals);
-					ptr = (GInterval2D *)ptr + num_intervals;
-					}
-
-					unsigned *kid_ids = (unsigned *)ptr;
-					for (uint64_t iid = 0; iid < num_intervals; ++iid)
-						INTEGER(ids)[values_offset + iid] = kid_ids[iid];
-					ptr = kid_ids + num_intervals;
-
-					for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-						double *kid_vals = (double *)ptr;
-						memcpy(REAL(r_expr_vals[iexpr]) + values_offset, kid_vals, sizeof(double) * num_intervals);
-						ptr = kid_vals + num_intervals;
-					}
+					unpack_kid_extract_result(ptr, num_intervals, is_1d_iterator, num_exprs,
+						out_intervals1d, out_intervals2d, ids, r_expr_vals, values_offset);
 					values_offset += num_intervals;
 				}
 
@@ -811,16 +839,8 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 	                SET_VECTOR_ELT(answer, num_interv_cols + iexpr, r_expr_vals[iexpr]);
 				SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
 
-            SEXP col_names = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
-			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-				if (Rf_isNull(_colnames))
-					SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
-				else
-					SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
-			}
-			SET_STRING_ELT(col_names, num_interv_cols + num_exprs, Rf_mkChar("intervalID"));
-
-            runprotect(2); // col_names, ids
+				set_extract_value_column_names(answer, num_interv_cols, num_exprs, _exprs, _colnames);
+	            runprotect(1); // ids
 
 			if (profile) {
 				auto t_end = std::chrono::steady_clock::now();
