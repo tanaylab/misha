@@ -13,6 +13,7 @@
 #include <string>
 #include <string.h>
 #include <memory>
+#include <unordered_map>
 
 #ifndef R_NO_REMAP
 #  define R_NO_REMAP
@@ -266,6 +267,7 @@ private:
 	GInterval               m_interval1d;
 	GInterval2D             m_interval2d;
 	DiagonalBand            m_band;
+	std::unordered_map<std::string, std::shared_ptr<GenomeTrack> > m_shared_1d_track_masters;
 
 	// Shared sequence fetcher for all sequence-based vtracks to enable caching
 	GenomeSeqFetch          m_shared_seqfetch;
@@ -291,6 +293,9 @@ private:
 	template<typename VarType>
 	void                 attach_filter_to_var(SEXP rvtrack, const string &vtrack, VarType &var);
 	void                 register_track_functions();
+	bool                 is_sequence_track_n_imdf(const Track_n_imdf &track_n_imdf) const;
+	void                 reset_shared_1d_track_masters();
+	std::shared_ptr<GenomeTrack> init_1d_track_with_shared_backend(const std::string &filename, int chromid, GenomeTrack::Type type);
 
 	void start_chrom(const GInterval &interval);
 	void start_chrom(const GInterval2D &interval);
