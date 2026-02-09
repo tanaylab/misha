@@ -72,6 +72,44 @@ shared_ptr<GenomeTrack> create_and_init_1d_track(const string &filename, int chr
 	return track;
 }
 
+bool supports_shared_1d_backend(GenomeTrack::Type type)
+{
+	return type == GenomeTrack::FIXED_BIN || type == GenomeTrack::SPARSE;
+}
+
+bool is_shared_1d_backend_enabled()
+{
+	SEXP opt = Rf_GetOption1(Rf_install("gshared.track.backend"));
+	if (Rf_isNull(opt))
+		return true;
+	return Rf_asLogical(opt) == 1;
+}
+
+shared_ptr<GenomeTrack> create_dependent_1d_track(GenomeTrack::Type type, const shared_ptr<GenomeTrack> &master_track)
+{
+	if (type == GenomeTrack::FIXED_BIN) {
+		GenomeTrackFixedBin *master = dynamic_cast<GenomeTrackFixedBin *>(master_track.get());
+		if (!master)
+			return shared_ptr<GenomeTrack>();
+
+		auto dependent = make_shared<GenomeTrackFixedBin>();
+		dependent->set_master_obj(master);
+		return dependent;
+	}
+
+	if (type == GenomeTrack::SPARSE) {
+		GenomeTrackSparse *master = dynamic_cast<GenomeTrackSparse *>(master_track.get());
+		if (!master)
+			return shared_ptr<GenomeTrack>();
+
+		auto dependent = make_shared<GenomeTrackSparse>();
+		dependent->set_master_obj(master);
+		return dependent;
+	}
+
+	return shared_ptr<GenomeTrack>();
+}
+
 }  // namespace
 
 
@@ -1451,22 +1489,50 @@ void TrackExpressionVars::define_r_vars(unsigned size)
 	}
 }
 
+bool TrackExpressionVars::is_sequence_track_n_imdf(const Track_n_imdf &track_n_imdf) const
+{
+	for (Track_vars::const_iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar) {
+		if (ivar->track_n_imdf == &track_n_imdf &&
+			TrackExpressionVars::is_sequence_based_function(ivar->val_func))
+			return true;
+	}
+
+	return false;
+}
+
+void TrackExpressionVars::reset_shared_1d_track_masters()
+{
+	m_shared_1d_track_masters.clear();
+}
+
+shared_ptr<GenomeTrack> TrackExpressionVars::init_1d_track_with_shared_backend(const string &filename, int chromid, GenomeTrack::Type type)
+{
+	if (!is_shared_1d_backend_enabled() || !supports_shared_1d_backend(type))
+		return create_and_init_1d_track(filename, chromid, type);
+
+	const string backend_key = to_string((int)type) + ":" + filename;
+
+	shared_ptr<GenomeTrack> master_track;
+	unordered_map<string, shared_ptr<GenomeTrack> >::iterator imaster = m_shared_1d_track_masters.find(backend_key);
+	if (imaster == m_shared_1d_track_masters.end()) {
+		master_track = create_and_init_1d_track(filename, chromid, type);
+		if (!master_track)
+			return shared_ptr<GenomeTrack>();
+		m_shared_1d_track_masters.insert(make_pair(backend_key, master_track));
+	} else
+		master_track = imaster->second;
+
+	shared_ptr<GenomeTrack> dependent_track = create_dependent_1d_track(type, master_track);
+	return dependent_track ? dependent_track : master_track;
+}
+
 void TrackExpressionVars::start_chrom(const GInterval &interval)
 {
+	reset_shared_1d_track_masters();
+
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 	{
-		// Skip track initialization for sequence-based tracks
-		bool is_sequence_track = false;
-		for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
-		{
-			if (ivar->track_n_imdf == &(*itrack_n_imdf) &&
-				TrackExpressionVars::is_sequence_based_function(ivar->val_func))
-			{
-				is_sequence_track = true;
-				break;
-			}
-		}
-		if (is_sequence_track)
+		if (is_sequence_track_n_imdf(*itrack_n_imdf))
 			continue;
 
 		try
@@ -1474,7 +1540,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 			string track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
 			string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
 			string filename(track_dir + "/" + resolved);
-			shared_ptr<GenomeTrack> new_track = create_and_init_1d_track(filename, interval.chromid, itrack_n_imdf->type);
+			shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, interval.chromid, itrack_n_imdf->type);
 			if (!new_track) {
 				verror("Internal error: track %s of type %s is not supported by 1D iterators",
 					   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
@@ -1498,6 +1564,8 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 
 void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 {
+	reset_shared_1d_track_masters();
+
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf) {
 		try {
 			if (GenomeTrack::is_1d(itrack_n_imdf->type)) {
@@ -1515,7 +1583,7 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 					string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, chromid);
 					string filename(track_dir + "/" + resolved);
 
-					shared_ptr<GenomeTrack> new_track = create_and_init_1d_track(filename, chromid, itrack_n_imdf->type);
+					shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, chromid, itrack_n_imdf->type);
 					if (!new_track) {
 						verror("Internal error: track %s of type %s is not supported by 1D iterators (projected from 2D)",
 							   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);

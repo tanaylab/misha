@@ -16,6 +16,65 @@ GenomeTrackSparse::GenomeTrackSparse() :
 	m_last_min_pos(numeric_limits<double>::quiet_NaN())
 {}
 
+void GenomeTrackSparse::sync_master_state_from_dependent()
+{
+	if (!m_master_obj)
+		return;
+
+	for (size_t i = 0; i < m_functions.size(); ++i) {
+		if (m_functions[i] && !m_master_obj->m_functions[i])
+			m_master_obj->m_functions[i] = true;
+	}
+
+	if (m_use_quantile && !m_master_obj->m_use_quantile) {
+		m_master_obj->m_use_quantile = true;
+		m_master_obj->m_sp = m_sp;
+	}
+}
+
+void GenomeTrackSparse::copy_state_from_master()
+{
+	if (!m_master_obj)
+		return;
+
+	if (m_functions[AVG])
+		m_last_avg = m_master_obj->m_last_avg;
+	if (m_functions[MIN])
+		m_last_min = m_master_obj->m_last_min;
+	if (m_functions[MAX])
+		m_last_max = m_master_obj->m_last_max;
+	if (m_functions[MAX_POS])
+		m_last_max_pos = m_master_obj->m_last_max_pos;
+	if (m_functions[MIN_POS])
+		m_last_min_pos = m_master_obj->m_last_min_pos;
+	if (m_functions[NEAREST])
+		m_last_nearest = m_master_obj->m_last_nearest;
+	if (m_functions[STDDEV])
+		m_last_stddev = m_master_obj->m_last_stddev;
+	if (m_functions[SUM])
+		m_last_sum = m_master_obj->m_last_sum;
+	if (m_functions[LSE])
+		m_last_lse = m_master_obj->m_last_lse;
+	if (m_functions[EXISTS])
+		m_last_exists = m_master_obj->m_last_exists;
+	if (m_functions[SIZE])
+		m_last_size = m_master_obj->m_last_size;
+	if (m_functions[SAMPLE])
+		m_last_sample = m_master_obj->m_last_sample;
+	if (m_functions[SAMPLE_POS])
+		m_last_sample_pos = m_master_obj->m_last_sample_pos;
+	if (m_functions[FIRST])
+		m_last_first = m_master_obj->m_last_first;
+	if (m_functions[FIRST_POS])
+		m_last_first_pos = m_master_obj->m_last_first_pos;
+	if (m_functions[LAST])
+		m_last_last = m_master_obj->m_last_last;
+	if (m_functions[LAST_POS])
+		m_last_last_pos = m_master_obj->m_last_last_pos;
+	if (m_use_quantile)
+		m_sp = m_master_obj->m_sp;
+}
+
 void GenomeTrackSparse::read_header_at_current_pos_(BufferedFile &bf)
 {
 	int32_t format_signature = 0;
@@ -170,6 +229,16 @@ void GenomeTrackSparse::read_file_into_mem()
 
 void GenomeTrackSparse::read_interval(const GInterval &interval)
 {
+	if (m_master_obj) {
+		if (!m_master_synced) {
+			sync_master_state_from_dependent();
+			m_master_synced = true;
+		}
+		m_master_obj->read_interval(interval);
+		copy_state_from_master();
+		return;
+	}
+
 	m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
 	if (m_functions[LSE])
 		m_last_lse = numeric_limits<float>::quiet_NaN();
@@ -275,12 +344,16 @@ void GenomeTrackSparse::write_next_interval(const GInterval &interval, float val
 
 const GIntervals &GenomeTrackSparse::get_intervals()
 {
+	if (m_master_obj)
+		return m_master_obj->get_intervals();
 	read_file_into_mem();
 	return m_intervals;
 }
 
 const vector<float> &GenomeTrackSparse::get_vals()
 {
+	if (m_master_obj)
+		return m_master_obj->get_vals();
 	read_file_into_mem();
 	return m_vals;
 }

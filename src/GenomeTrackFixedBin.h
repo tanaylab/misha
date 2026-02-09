@@ -27,6 +27,7 @@ public:
 	void read_interval(const GInterval &interval) override;
 	double last_max_pos() const override;
 	double last_min_pos() const override;
+	void set_master_obj(GenomeTrackFixedBin *master_obj) { m_master_obj = master_obj; m_master_synced = false; }
 
 	void init_read(const char *filename, int chromid) { init_read(filename, "rb", chromid); }
 	void init_write(const char *filename, unsigned bin_size, int chromid);
@@ -74,9 +75,13 @@ protected:
 	bool m_lse_sliding_valid{false};
 	int m_fast_path_mode{0}; // 0=unknown, 1=reducer-only fast path, 2=avg/nearest-only fast path, -1=generic path
 	uint32_t m_fast_reducer_bits{0};
+	GenomeTrackFixedBin *m_master_obj{NULL};
+	bool m_master_synced{false};
 
 	void read_interval_reducers_only(const GInterval &interval);
 	void read_interval_avg_nearest_only(const GInterval &interval);
+	void sync_master_state_from_dependent();
+	void copy_state_from_master();
 };
 
 

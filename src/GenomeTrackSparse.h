@@ -25,6 +25,7 @@ public:
 	virtual void read_interval(const GInterval &interval);
 	virtual double last_max_pos() const;
 	virtual double last_min_pos() const;
+	void set_master_obj(GenomeTrackSparse *master_obj) { m_master_obj = master_obj; m_master_synced = false; }
 
 	void init_read(const char *filename, int chromid);
 	void init_write(const char *filename, int chromid);
@@ -43,6 +44,8 @@ protected:
 	int64_t       m_num_records;
 	GIntervals::const_iterator m_icur_interval;
 	double        m_last_min_pos;
+	GenomeTrackSparse *m_master_obj{NULL};
+	bool          m_master_synced{false};
 
 	// State for indexed "smart handle"
 	std::string m_dat_path;
@@ -52,6 +55,8 @@ protected:
 	void read_file_into_mem();
 	void calc_vals(const GInterval &interval);
 	bool check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2);
+	void sync_master_state_from_dependent();
+	void copy_state_from_master();
 
 	// Helper to parse header at current file position
 	void read_header_at_current_pos_(BufferedFile &bf);
