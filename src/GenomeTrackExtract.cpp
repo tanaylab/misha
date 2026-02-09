@@ -112,6 +112,13 @@ static uint64_t inflate_estimated_records(IntervUtils &iu, uint64_t estimated, d
 	return (uint64_t)inflated;
 }
 
+static bool allow_multichrom_range_split_for_gextract(SEXP iterator_policy, const string &intervset_out)
+{
+	// Keep legacy semantics for implicit iterators: splitting scope intervals across kids can
+	// change row geometry for iterator modes that depend on original interval boundaries.
+	return !Rf_isNull(iterator_policy) && intervset_out.empty();
+}
+
 static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GIntervalsFetcher2D *out_intervals2d, const vector< vector<double> > &values,
 									 vector<unsigned> *interv_ids, SEXP _exprs, SEXP _colnames, IntervUtils &iu)
 {
@@ -528,7 +535,8 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			return R_NilValue;
 		}
 
-		if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, true))
+		bool allow_multichrom_1d_range_split = allow_multichrom_range_split_for_gextract(_iterator_policy, intervset_out);
+		if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_multichrom_1d_range_split))
 			rreturn(R_NilValue);
 
 		bool is_1d_iterator = iu.is_1d_iterator(_exprs, intervals1d, intervals2d, _iterator_policy);
