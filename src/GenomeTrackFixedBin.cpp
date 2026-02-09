@@ -87,6 +87,96 @@ void GenomeTrackFixedBin::copy_state_from_master()
 		m_sp = m_master_obj->m_sp;
 }
 
+void GenomeTrackFixedBin::classify_fast_path_mode()
+{
+	bool reducer_only = !m_use_quantile;
+	bool avg_nearest_only = !m_use_quantile;
+	bool has_avg_nearest = false;
+	uint32_t bits = 0;
+
+	for (size_t i = 0; i < m_functions.size(); ++i) {
+		if (!m_functions[i])
+			continue;
+
+		const int func = (int)i;
+		if (func == AVG || func == NEAREST)
+			has_avg_nearest = true;
+		else
+			avg_nearest_only = false;
+
+		if (!reducer_only)
+			continue;
+
+		switch (func) {
+			case SUM: bits |= RBIT_SUM; break;
+			case LSE: bits |= RBIT_LSE; break;
+			case EXISTS: bits |= RBIT_EXISTS; break;
+			case SIZE: bits |= RBIT_SIZE; break;
+			default:
+				reducer_only = false;
+				break;
+		}
+	}
+
+	if (reducer_only && bits != 0)
+		m_fast_path_mode = 1;
+	else if (avg_nearest_only && has_avg_nearest)
+		m_fast_path_mode = 2;
+	else
+		m_fast_path_mode = -1;
+	m_fast_reducer_bits = bits;
+}
+
+void GenomeTrackFixedBin::assign_single_bin_value(float value, double overlap_start)
+{
+	m_last_avg = value;
+	m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
+	m_last_stddev = numeric_limits<float>::quiet_NaN();
+
+	if (m_functions[LSE])
+		m_last_lse = m_last_avg;
+	if (m_functions[MAX_POS])
+		m_last_max_pos = overlap_start;
+	if (m_functions[MIN_POS])
+		m_last_min_pos = overlap_start;
+	if (m_functions[EXISTS])
+		m_last_exists = 1;
+	if (m_functions[SIZE])
+		m_last_size = 1;
+	if (m_functions[SAMPLE])
+		m_last_sample = m_last_avg;
+	if (m_functions[SAMPLE_POS])
+		m_last_sample_pos = overlap_start;
+	if (m_functions[FIRST])
+		m_last_first = m_last_avg;
+	if (m_functions[FIRST_POS])
+		m_last_first_pos = overlap_start;
+	if (m_functions[LAST])
+		m_last_last = m_last_avg;
+	if (m_functions[LAST_POS])
+		m_last_last_pos = overlap_start;
+	if (m_use_quantile && !std::isnan(m_last_avg))
+		m_sp.add(m_last_avg, s_rnd_func);
+}
+
+void GenomeTrackFixedBin::assign_single_bin_missing()
+{
+	m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
+	if (m_functions[LSE])
+		m_last_lse = numeric_limits<float>::quiet_NaN();
+	if (m_functions[MAX_POS])
+		m_last_max_pos = numeric_limits<double>::quiet_NaN();
+	if (m_functions[MIN_POS])
+		m_last_min_pos = numeric_limits<double>::quiet_NaN();
+}
+
+void GenomeTrackFixedBin::reset_sliding_window_state()
+{
+	m_lse_sliding_valid = false;
+	m_sliding_sum = 0;
+	m_sliding_num_vs = 0;
+}
+
 void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 {
 	const bool need_sum = (m_fast_reducer_bits & RBIT_SUM) != 0;
@@ -311,42 +401,8 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		return;
 	}
 
-	if (m_fast_path_mode == 0) {
-		bool reducer_only = !m_use_quantile;
-		bool avg_nearest_only = !m_use_quantile;
-		bool has_avg_nearest = false;
-		uint32_t bits = 0;
-		for (size_t i = 0; i < m_functions.size(); ++i) {
-			if (!m_functions[i])
-				continue;
-
-			const int func = (int)i;
-			if (func == AVG || func == NEAREST)
-				has_avg_nearest = true;
-			else
-				avg_nearest_only = false;
-
-			if (!reducer_only)
-				continue;
-
-			switch (func) {
-				case SUM: bits |= RBIT_SUM; break;
-				case LSE: bits |= RBIT_LSE; break;
-				case EXISTS: bits |= RBIT_EXISTS; break;
-				case SIZE: bits |= RBIT_SIZE; break;
-				default:
-					reducer_only = false;
-					break;
-			}
-		}
-		if (reducer_only && bits != 0)
-			m_fast_path_mode = 1;
-		else if (avg_nearest_only && has_avg_nearest)
-			m_fast_path_mode = 2;
-		else
-			m_fast_path_mode = -1;
-		m_fast_reducer_bits = bits;
-	}
+	if (m_fast_path_mode == 0)
+		classify_fast_path_mode();
 
 	if (m_fast_path_mode == 1) {
 		read_interval_reducers_only(interval);
@@ -386,45 +442,11 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			m_cached_bin_idx = (int64_t)(interval.start / m_bin_size);
 			m_cached_bin_val = m_last_avg;
 			m_cache_valid = true;
-
-			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
-			m_last_stddev = numeric_limits<float>::quiet_NaN();
-			if (m_functions[LSE])
-				m_last_lse = m_last_avg;
-			if (m_functions[MAX_POS])
-				m_last_max_pos = interval.start;
-			if (m_functions[MIN_POS])
-				m_last_min_pos = interval.start;
-			if (m_functions[EXISTS])
-				m_last_exists = 1;
-			if (m_functions[SIZE])
-				m_last_size = 1;
-			if (m_functions[SAMPLE])
-				m_last_sample = m_last_avg;
-			if (m_functions[SAMPLE_POS])
-				m_last_sample_pos = interval.start;
-			if (m_functions[FIRST])
-				m_last_first = m_last_avg;
-			if (m_functions[FIRST_POS])
-				m_last_first_pos = interval.start;
-			if (m_functions[LAST])
-				m_last_last = m_last_avg;
-			if (m_functions[LAST_POS])
-				m_last_last_pos = interval.start;
-			if (m_use_quantile && !std::isnan(m_last_avg))
-				m_sp.add(m_last_avg, s_rnd_func);
+			assign_single_bin_value(m_last_avg, interval.start);
 		} else {
-			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
-			if (m_functions[LSE])
-				m_last_lse = numeric_limits<float>::quiet_NaN();
-			if (m_functions[MAX_POS])
-				m_last_max_pos = numeric_limits<double>::quiet_NaN();
-			if (m_functions[MIN_POS])
-				m_last_min_pos = numeric_limits<double>::quiet_NaN();
+			assign_single_bin_missing();
 		}
-		m_lse_sliding_valid = false;
-		m_sliding_sum = 0;
-		m_sliding_num_vs = 0;
+		reset_sliding_window_state();
 		return;
 	}
 
@@ -458,47 +480,14 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			m_cur_coord = (sbin + 1) * m_bin_size;
 		}
 
-		if (have_value) {
-			m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
-			m_last_stddev = numeric_limits<float>::quiet_NaN();
-			if (m_functions[LSE])
-				m_last_lse = m_last_avg;
-			double overlap_start = std::max(static_cast<double>(sbin * m_bin_size), static_cast<double>(interval.start));
-			if (m_functions[MAX_POS])
-				m_last_max_pos = overlap_start;
-			if (m_functions[MIN_POS])
-				m_last_min_pos = overlap_start;
-			if (m_functions[EXISTS])
-				m_last_exists = 1;
-			if (m_functions[SIZE])
-				m_last_size = 1;
-			if (m_functions[SAMPLE])
-				m_last_sample = m_last_avg;
-			if (m_functions[SAMPLE_POS])
-				m_last_sample_pos = overlap_start;
-			if (m_functions[FIRST])
-				m_last_first = m_last_avg;
-			if (m_functions[FIRST_POS])
-				m_last_first_pos = overlap_start;
-			if (m_functions[LAST])
-				m_last_last = m_last_avg;
-			if (m_functions[LAST_POS])
-				m_last_last_pos = overlap_start;
-			if (m_use_quantile && !std::isnan(m_last_avg))
-				m_sp.add(m_last_avg, s_rnd_func);
+			if (have_value) {
+				double overlap_start = std::max(static_cast<double>(sbin * m_bin_size), static_cast<double>(interval.start));
+				assign_single_bin_value(m_last_avg, overlap_start);
+			} else {
+				assign_single_bin_missing();
+			}
+			reset_sliding_window_state();
 		} else {
-			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
-			if (m_functions[LSE])
-				m_last_lse = numeric_limits<float>::quiet_NaN();
-			if (m_functions[MAX_POS])
-				m_last_max_pos = numeric_limits<double>::quiet_NaN();
-			if (m_functions[MIN_POS])
-				m_last_min_pos = numeric_limits<double>::quiet_NaN();
-		}
-		m_lse_sliding_valid = false;
-		m_sliding_sum = 0;
-		m_sliding_num_vs = 0;
-	} else {
 		float num_vs = 0;
 		double mean_square_sum = 0;
 		const int64_t window_size = ebin - sbin;
