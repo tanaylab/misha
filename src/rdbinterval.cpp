@@ -312,17 +312,10 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 		int num_avail_kids = min(max_num_pids, num_chroms) - 1;
 		int num_remaining_chroms = num_chroms - 1;
 
-				if (split_align_1d > 0 && allow_multichrom_1d_range_split &&
-					(num_chroms == 1 || dynamic_cast<GIntervals *>(scope1d))) {
-				GIntervals intervals;
-				if (dynamic_cast<GIntervals *>(scope1d))
-					intervals = *(GIntervals *)scope1d;
-				else {
-					scope1d->begin_iter();
-					for (; !scope1d->isend(); scope1d->next())
-						intervals.push_back(scope1d->cur_interval());
-					intervals.sort();
-				}
+		GIntervals *intervals_fetcher = dynamic_cast<GIntervals *>(scope1d);
+		// Keep range-based sharding on in-memory intervals only; non-GIntervals fetchers must stay masked/streaming.
+		if (split_align_1d > 0 && allow_multichrom_1d_range_split && intervals_fetcher) {
+			GIntervals intervals = *intervals_fetcher;
 
 			int desired_kids = 1;
 			uint64_t min_scope = get_min_scope4process();
@@ -344,8 +337,8 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 			// GIntervals::range(chromid) and GIntervals::create_masked_copy() have complexity of O(n) (and only O(1) for GIntervalsBigSet).
 			// Calling these functions for each chromosome might be painful - O(m x n) (m = num chromosomes)
 			// So we are forced to write a designated code for GIntervals for the sake of efficiency. The total complexity for GIntervals is O(n).
-			if (dynamic_cast<GIntervals *>(scope1d)) {
-				GIntervals *intervals = (GIntervals *)scope1d;
+			if (intervals_fetcher) {
+				GIntervals *intervals = intervals_fetcher;
 
 				m_kids_intervals1d.push_back(new GIntervals());
 
@@ -407,7 +400,6 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 					m_kids_intervals1d.push_back(scope1d->create_masked_copy(chromids_mask));
 			}
 		}
-
 //int idx = 0;
 //for (vector<GIntervalsFetcher1D *>::iterator i = m_kids_intervals1d.begin(); i != m_kids_intervals1d.end(); ++i){
 //GIntervalsFetcher1D *fetcher = *i;
