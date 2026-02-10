@@ -488,14 +488,14 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			m_cur_coord = (sbin + 1) * m_bin_size;
 		}
 
-			if (have_value) {
-				double overlap_start = std::max(static_cast<double>(sbin * m_bin_size), static_cast<double>(interval.start));
-				assign_single_bin_value(m_last_avg, overlap_start);
-			} else {
-				assign_single_bin_missing();
-			}
-			reset_sliding_window_state();
+		if (have_value) {
+			double overlap_start = std::max(static_cast<double>(sbin * m_bin_size), static_cast<double>(interval.start));
+			assign_single_bin_value(m_last_avg, overlap_start);
 		} else {
+			assign_single_bin_missing();
+		}
+		reset_sliding_window_state();
+	} else {
 		float num_vs = 0;
 		double mean_square_sum = 0;
 		const int64_t window_size = ebin - sbin;
@@ -776,10 +776,10 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				m_lse_prev_sbin = sbin;
 				m_lse_prev_ebin = ebin;
 				m_lse_sliding_valid = bins_read == window_size && window_size > 0;
-				} else {
-					m_lse_sliding_valid = false;
-					m_running_lse_initialized = false;
-				}
+			} else {
+				m_lse_sliding_valid = false;
+				m_running_lse_initialized = false;
+			}
 			}
 		}
 	}

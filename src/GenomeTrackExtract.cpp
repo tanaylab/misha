@@ -582,12 +582,12 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			return R_NilValue;
 		}
 
-			// IMPORTANT: do not add estimated-size mode gating here.
-			// We intentionally rely on prepare4multitasking() + runtime allocation guards,
-			// because estimate-based auto-disabling previously regressed gextract throughput.
-			bool allow_multichrom_1d_range_split = allow_multichrom_range_split_for_gextract(_iterator_policy, intervset_out);
-			if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_multichrom_1d_range_split))
-				rreturn(R_NilValue);
+		// IMPORTANT: do not add estimated-size mode gating here.
+		// We intentionally rely on prepare4multitasking() + runtime allocation guards,
+		// because estimate-based auto-disabling previously regressed gextract throughput.
+		bool allow_multichrom_1d_range_split = allow_multichrom_range_split_for_gextract(_iterator_policy, intervset_out);
+		if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_multichrom_1d_range_split))
+			rreturn(R_NilValue);
 
 		bool is_1d_iterator = iu.is_1d_iterator(_exprs, intervals1d, intervals2d, _iterator_policy);
 		// Estimate number of records to cap shared-memory allocation size
@@ -835,17 +835,17 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			if (!out_intervals1d.empty()) {
 				answer = iu.convert_intervs(&out_intervals1d, GInterval::NUM_COLS + num_exprs + 1);
 				num_interv_cols = GInterval::NUM_COLS;
-				} else {
-					answer = iu.convert_intervs(&out_intervals2d, GInterval2D::NUM_COLS + num_exprs + 1);
-					num_interv_cols = GInterval2D::NUM_COLS;
-				}
+			} else {
+				answer = iu.convert_intervs(&out_intervals2d, GInterval2D::NUM_COLS + num_exprs + 1);
+				num_interv_cols = GInterval2D::NUM_COLS;
+			}
 
-				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
-	                SET_VECTOR_ELT(answer, num_interv_cols + iexpr, r_expr_vals[iexpr]);
-				SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
+			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+				SET_VECTOR_ELT(answer, num_interv_cols + iexpr, r_expr_vals[iexpr]);
+			SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, ids);
 
-				set_extract_value_column_names(answer, num_interv_cols, num_exprs, _exprs, _colnames);
-	            runprotect(1); // ids
+			set_extract_value_column_names(answer, num_interv_cols, num_exprs, _exprs, _colnames);
+			runprotect(1); // ids
 
 			if (profile) {
 				auto t_end = std::chrono::steady_clock::now();
