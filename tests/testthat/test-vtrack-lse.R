@@ -1138,10 +1138,13 @@ test_that("LSE of 20bp PWM values equals 200bp PWM directly", {
 test_that("sliding window LSE on dense track with small iterator matches manual", {
     gvtrack.create("vt_lse_slide", src = "test.fixedbin", func = "lse")
     gvtrack.create("vt_lse_slide_ref", src = "test.fixedbin", func = "lse")
-    on.exit({
-        gvtrack.rm("vt_lse_slide")
-        gvtrack.rm("vt_lse_slide_ref")
-    }, add = TRUE)
+    on.exit(
+        {
+            gvtrack.rm("vt_lse_slide")
+            gvtrack.rm("vt_lse_slide_ref")
+        },
+        add = TRUE
+    )
 
     # Use iterator=20 (= bin_size) with a 200bp window via shifts
     # This creates multi-bin windows that slide by 1 bin per step
@@ -1188,8 +1191,10 @@ test_that("sliding window LSE transitions correctly from sliding to non-sliding"
     for (i in seq_len(nrow(res_sliding))) {
         if (!is.na(res_sliding$value[i])) {
             manual <- manual_lse("test.fixedbin", res_sliding[i, ])
-            expect_equal(res_sliding$value[i], manual, tolerance = 1e-3,
-                label = paste("sliding window", i))
+            expect_equal(res_sliding$value[i], manual,
+                tolerance = 1e-3,
+                label = paste("sliding window", i)
+            )
         }
     }
 })
