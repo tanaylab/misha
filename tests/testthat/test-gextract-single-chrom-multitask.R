@@ -60,6 +60,34 @@ test_that("single-chrom shifted vtrack extraction matches serial output", {
     expect_equal(parallel[[track_name]], serial[[track_name]], tolerance = 1e-6)
 })
 
+test_that("single-chrom fixed-bin intervals.set.out matches serial output", {
+    intervals <- gintervals("chr1", 0, 5000000)
+    intervals_set <- paste0("test_tmp_single_chrom_", sample.int(1e9, 1))
+
+    gintervals.rm(intervals_set, force = TRUE)
+    withr::defer(gintervals.rm(intervals_set, force = TRUE))
+
+    withr::local_options(list(
+        gmax.processes = 8L,
+        gmax.processes2core = 4L,
+        gmax.data.size = 1e9,
+        gmin.scope4process = 1L
+    ))
+
+    withr::local_options(list(gmultitasking = FALSE))
+    serial <- gextract("1", intervals = intervals, iterator = 20, colnames = "value")
+
+    withr::local_options(list(gmultitasking = TRUE))
+    gextract("1", intervals = intervals, iterator = 20, colnames = "value", intervals.set.out = intervals_set)
+    parallel <- gintervals.load(intervals_set)
+
+    ord_serial <- order(serial$chrom, serial$start, serial$end)
+    ord_parallel <- order(parallel$chrom, parallel$start, parallel$end)
+    common_cols <- intersect(colnames(parallel), colnames(serial))
+
+    expect_equal(parallel[ord_parallel, common_cols], serial[ord_serial, common_cols])
+})
+
 test_that("small multi-chrom extraction still enters multitask path when enabled", {
     skip_if(parallel::detectCores() < 2L, "Multitasking test needs at least 2 cores")
 
