@@ -312,7 +312,8 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 		int num_avail_kids = min(max_num_pids, num_chroms) - 1;
 		int num_remaining_chroms = num_chroms - 1;
 
-			if (split_align_1d > 0 && (num_chroms == 1 || (allow_multichrom_1d_range_split && dynamic_cast<GIntervals *>(scope1d)))) {
+				if (split_align_1d > 0 && allow_multichrom_1d_range_split &&
+					(num_chroms == 1 || dynamic_cast<GIntervals *>(scope1d))) {
 				GIntervals intervals;
 				if (dynamic_cast<GIntervals *>(scope1d))
 					intervals = *(GIntervals *)scope1d;
