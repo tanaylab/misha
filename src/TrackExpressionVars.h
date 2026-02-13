@@ -106,6 +106,7 @@ public:
         double               slice_percentile;
         Iterator_modifier1D *imdf1d{NULL};
         Iterator_modifier2D *imdf2d{NULL};
+        bool                 has_only_sequence_functions{false};
     };
 
     typedef vector<Track_n_imdf> Track_n_imdfs;

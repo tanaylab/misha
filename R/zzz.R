@@ -27,7 +27,10 @@
     optimal_size <- calculate_optimal_gmax_data_size(sys_mem)
     options(gmax.data.size = optimal_size)
 
-    options(gmax.mem.usage = 10000000) # in KB
+    # Auto-configure gmax.mem.usage based on system memory
+    # Use 80% of RAM to avoid memory throttling with many parallel kids
+    optimal_mem_usage_kb <- max(10000000, floor(sys_mem * 0.8 / 1024))
+    options(gmax.mem.usage = optimal_mem_usage_kb)
     options(gbig.intervals.size = 1000000)
     options(gbuf.size = 1000)
     options(gmin.scope4process = 10000)
