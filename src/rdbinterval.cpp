@@ -320,7 +320,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 			int desired_kids = 1;
 			uint64_t min_scope = get_min_scope4process();
 			uint64_t total_bins = (uint64_t)((range + split_align_1d - 1) / split_align_1d);
-			const uint64_t min_bins_per_kid = 200000;
+			const uint64_t min_bins_per_kid = 50000;
 			uint64_t by_bins = max<uint64_t>(1, (total_bins + min_bins_per_kid - 1) / min_bins_per_kid);
 
 			if (min_scope > 0 && (uint64_t)range > min_scope) {

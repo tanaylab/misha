@@ -83,7 +83,7 @@ using namespace rdb;
 const string rdb::TRACK_FILE_EXT = ".track";
 const string rdb::INTERV_FILE_EXT = ".interv";
 
-const int64_t        RdbInitializer::LAUNCH_DELAY = 50; // in msec
+const int64_t        RdbInitializer::LAUNCH_DELAY = 10; // in msec
 const int64_t        RdbInitializer::MEM_SYNC_DELAY = 100;
 const int64_t        RdbInitializer::REPORT_INTERVAL_DELAY = 3000;
 uint64_t               RdbInitializer::s_shm_size;

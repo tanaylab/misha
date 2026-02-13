@@ -17,7 +17,7 @@
     # Memory and buffer sizes
     gmax.data.size = NULL, # Auto-calculated at load time based on system RAM
     gbig.intervals.size = 1000000, # Threshold for converting to disk-based "big" format
-    gmax.mem.usage = 10000000, # Max memory for child processes (in KB = 10 GB)
+    gmax.mem.usage = NULL, # Auto-calculated: 80% of system RAM (min 10 GB)
     gbuf.size = 1000, # Evaluation buffer size for vectorized R expression evaluation
     gmultitask.max.records.factor = 64, # Inflate multitask max_records estimates to avoid under-allocation
 

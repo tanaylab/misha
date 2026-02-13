@@ -1535,9 +1535,13 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 {
 	reset_shared_1d_track_masters();
 
+	// Precompute sequence-only flags (avoids O(N*M) scan in set_vars hot loop)
+	for (Track_n_imdfs::iterator itn = m_track_n_imdfs.begin(); itn != m_track_n_imdfs.end(); ++itn)
+		itn->has_only_sequence_functions = is_sequence_track_n_imdf(*itn);
+
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 	{
-		if (is_sequence_track_n_imdf(*itrack_n_imdf))
+		if (itrack_n_imdf->has_only_sequence_functions)
 			continue;
 
 		try
@@ -1697,15 +1701,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 	// Setup tracks (read intervals for non-sequence-based tracks)
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 	{
-		// Skip track setup for sequence-based tracks
-		Track_vars::iterator seq_var = m_track_vars.begin();
-		for (; seq_var != m_track_vars.end(); ++seq_var)
-		{
-			if (seq_var->track_n_imdf == &(*itrack_n_imdf) &&
-				TrackExpressionVars::is_sequence_based_function(seq_var->val_func))
-				break;
-		}
-		if (seq_var != m_track_vars.end())
+		if (itrack_n_imdf->has_only_sequence_functions)
 			continue;
 		try {
 				if (GenomeTrack::is_2d(itrack_n_imdf->type)) {
