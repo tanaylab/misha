@@ -19,7 +19,7 @@
 
 class BufferedFile {
 public:
-	BufferedFile() { init(2097152); }  // 2MB default buffer for genomic data
+	BufferedFile() { init(131072); }  // 128KB default buffer — reduced from 2MB to cut per-kid memory (390 tracks x 128KB = 49MB vs 780MB)
 	BufferedFile(unsigned bufsize) { init(bufsize); }
 	~BufferedFile();
 
