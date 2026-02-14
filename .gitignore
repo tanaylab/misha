@@ -20,3 +20,4 @@ ADAPTIVE_MEMORY_PLAN.md
 dev
 tests/testthat/tmpresfile
 *.fa
+.a5c/
