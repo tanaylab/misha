@@ -19,6 +19,7 @@ requirements:
   build:
     - {{ compiler('cxx') }}
     - make
+    - {{ cdt('glibc-devel') }}  # [linux]
   host:
     - r-base >=4.1
     - r-magrittr
