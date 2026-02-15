@@ -20,14 +20,14 @@ requirements:
     - {{ compiler('cxx') }}
     - make
   host:
-    - r-base
+    - r-base >=4.1
     - r-magrittr
     - r-curl
     - r-digest
     - r-ps
     - r-yaml
   run:
-    - r-base
+    - r-base >=4.1
     - r-magrittr
     - r-curl
     - r-digest
