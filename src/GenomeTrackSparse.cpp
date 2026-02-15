@@ -22,13 +22,16 @@ void GenomeTrackSparse::sync_master_state_from_dependent()
 		return;
 
 	for (size_t i = 0; i < m_functions.size(); ++i) {
-		if (m_functions[i] && !m_master_obj->m_functions[i])
+		if (m_functions[i] && !m_master_obj->m_functions[i]) {
 			m_master_obj->m_functions[i] = true;
+			m_master_obj->m_fast_path_mode = 0;
+		}
 	}
 
 	if (m_use_quantile && !m_master_obj->m_use_quantile) {
 		m_master_obj->m_use_quantile = true;
 		m_master_obj->m_sp = m_sp;
+		m_master_obj->m_fast_path_mode = 0;
 	}
 }
 
@@ -87,6 +90,7 @@ void GenomeTrackSparse::read_header_at_current_pos_(BufferedFile &bf)
 void GenomeTrackSparse::init_read(const char *filename, int chromid)
 {
 	m_loaded = false; // Critical for read_file_into_mem()
+	m_fast_path_mode = 0;
 	uint64_t header_start = 0;
 	uint64_t total_bytes = 0;
 
@@ -154,6 +158,7 @@ void GenomeTrackSparse::init_write(const char *filename, int chromid)
 {
 	m_bfile.close();
 	m_loaded = false;
+	m_fast_path_mode = 0;
 	write_type(filename);
 	m_chromid = chromid;
 }
@@ -172,54 +177,53 @@ void GenomeTrackSparse::read_file_into_mem()
 		return;
 	}
 
-	// Bulk read 
-	const size_t total_bytes = m_num_records * kSparseRecBytes;
-	std::vector<char> buffer(total_bytes);
+	static const int64_t CHUNK_RECORDS = 32768;
+	const size_t chunk_capacity_bytes = (size_t)CHUNK_RECORDS * kSparseRecBytes;
+	if (m_read_chunk.size() < chunk_capacity_bytes)
+		m_read_chunk.resize(chunk_capacity_bytes);
 
-	uint64_t bytes_read = m_bfile.read(buffer.data(), total_bytes);
-	if (bytes_read != total_bytes) {
-		if (m_bfile.error())
-			TGLError<GenomeTrackSparse>("Failed to read sparse track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
-		TGLError<GenomeTrackSparse>("Truncated sparse track file %s: expected %zu bytes of data, but only read %llu bytes",
-			m_bfile.file_name().c_str(), total_bytes, (unsigned long long)bytes_read);
-	}
+	int64_t out_idx = 0;
+	while (out_idx < m_num_records) {
+		int64_t chunk_records = std::min<int64_t>(CHUNK_RECORDS, m_num_records - out_idx);
+		size_t bytes_to_read = (size_t)chunk_records * kSparseRecBytes;
 
-	// Parse buffer into intervals and values
-	const char *ptr = buffer.data();
-	for (int64_t i = 0; i < m_num_records; ++i) {
-		GInterval &interval = m_intervals[i];
-
-		// Read start (int64_t)
-		memcpy(&interval.start, ptr, sizeof(int64_t));
-		ptr += sizeof(int64_t);
-
-		// Read end (int64_t)
-		memcpy(&interval.end, ptr, sizeof(int64_t));
-		ptr += sizeof(int64_t);
-
-		// Read val (float)
-		memcpy(&m_vals[i], ptr, sizeof(float));
-		ptr += sizeof(float);
-
-		if (isinf(m_vals[i])) {
-			m_vals[i] = numeric_limits<float>::quiet_NaN();
+		uint64_t bytes_read = m_bfile.read(m_read_chunk.data(), bytes_to_read);
+		if (bytes_read != bytes_to_read) {
+			if (m_bfile.error())
+				TGLError<GenomeTrackSparse>("Failed to read sparse track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+			TGLError<GenomeTrackSparse>("Truncated sparse track file %s: expected %zu bytes in chunk, but only read %llu bytes",
+				m_bfile.file_name().c_str(), bytes_to_read, (unsigned long long)bytes_read);
 		}
 
-		interval.chromid = m_chromid;
+		const char *ptr = m_read_chunk.data();
+		for (int64_t i = 0; i < chunk_records; ++i, ++out_idx) {
+			GInterval &interval = m_intervals[out_idx];
+			memcpy(&interval.start, ptr, sizeof(int64_t));
+			ptr += sizeof(int64_t);
+			memcpy(&interval.end, ptr, sizeof(int64_t));
+			ptr += sizeof(int64_t);
+			memcpy(&m_vals[out_idx], ptr, sizeof(float));
+			ptr += sizeof(float);
 
-		if (interval.start < 0) {
-			TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld has negative start (%lld)",
-				m_bfile.file_name().c_str(), (long long)i, (long long)interval.start);
-		}
-		if (interval.start >= interval.end) {
-			TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld has start (%lld) >= end (%lld)",
-				m_bfile.file_name().c_str(), (long long)i, (long long)interval.start, (long long)interval.end);
-		}
-		if (i && interval.start < m_intervals[i - 1].end) {
-			TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld [%lld, %lld) overlaps with previous interval [%lld, %lld)",
-				m_bfile.file_name().c_str(), (long long)i,
-				(long long)interval.start, (long long)interval.end,
-				(long long)m_intervals[i - 1].start, (long long)m_intervals[i - 1].end);
+			if (isinf(m_vals[out_idx]))
+				m_vals[out_idx] = numeric_limits<float>::quiet_NaN();
+
+			interval.chromid = m_chromid;
+
+			if (interval.start < 0) {
+				TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld has negative start (%lld)",
+					m_bfile.file_name().c_str(), (long long)out_idx, (long long)interval.start);
+			}
+			if (interval.start >= interval.end) {
+				TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld has start (%lld) >= end (%lld)",
+					m_bfile.file_name().c_str(), (long long)out_idx, (long long)interval.start, (long long)interval.end);
+			}
+			if (out_idx && interval.start < m_intervals[out_idx - 1].end) {
+				TGLError<GenomeTrackSparse>("Invalid sparse track file %s: interval %lld [%lld, %lld) overlaps with previous interval [%lld, %lld)",
+					m_bfile.file_name().c_str(), (long long)out_idx,
+					(long long)interval.start, (long long)interval.end,
+					(long long)m_intervals[out_idx - 1].start, (long long)m_intervals[out_idx - 1].end);
+			}
 		}
 	}
 
@@ -281,11 +285,19 @@ void GenomeTrackSparse::read_interval(const GInterval &interval)
 		return;
 	}
 
+	const bool avg_nearest_only = uses_avg_nearest_fast_path();
+
 	if (check_first_overlap(m_icur_interval, interval)) {
-		calc_vals(interval);
+		if (avg_nearest_only)
+			calc_vals_avg_nearest_only(interval);
+		else
+			calc_vals(interval);
 	} else if (m_icur_interval + 1 < m_intervals.end() && check_first_overlap(m_icur_interval + 1, interval)) {
 		++m_icur_interval;
-		calc_vals(interval);
+		if (avg_nearest_only)
+			calc_vals_avg_nearest_only(interval);
+		else
+			calc_vals(interval);
 	} else {
 		// run the binary search
 		GIntervals::const_iterator istart_interval = m_intervals.begin();
@@ -296,7 +308,10 @@ void GenomeTrackSparse::read_interval(const GInterval &interval)
 
 			if (check_first_overlap(imid_interval, interval)) {
 				m_icur_interval = imid_interval;
-				calc_vals(interval);
+				if (avg_nearest_only)
+					calc_vals_avg_nearest_only(interval);
+				else
+					calc_vals(interval);
 				break;
 			}
 
@@ -309,7 +324,10 @@ void GenomeTrackSparse::read_interval(const GInterval &interval)
 
 		if (iend_interval - istart_interval == 1 && check_first_overlap(istart_interval, interval)) {
 			m_icur_interval = istart_interval;
-			calc_vals(interval);
+			if (avg_nearest_only)
+				calc_vals_avg_nearest_only(interval);
+			else
+				calc_vals(interval);
 		}
 
 		if (iend_interval - istart_interval == 1)
