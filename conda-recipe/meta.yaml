@@ -1,0 +1,56 @@
+{% set name = "misha" %}
+{% set version = environ.get("PACKAGE_VERSION", "5.4.2") %}
+
+package:
+  name: r-{{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  number: 0
+  skip: true  # [win]
+  rpaths:
+    - lib/R/lib/
+    - lib/
+
+requirements:
+  build:
+    - {{ compiler('cxx') }}
+    - make
+  host:
+    - r-base
+    - r-magrittr
+    - r-curl
+    - r-digest
+    - r-ps
+    - r-yaml
+  run:
+    - r-base
+    - r-magrittr
+    - r-curl
+    - r-digest
+    - r-ps
+    - r-yaml
+
+test:
+  commands:
+    - $R -e "library('misha')"
+
+about:
+  home: https://github.com/tanaylab/misha
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  summary: Toolkit for analysis of genomic data
+  description: |
+    A toolkit for analysis of genomic data. The misha package implements
+    an efficient data structure for storing genomic data, and provides
+    a set of functions for data extraction, manipulation and analysis.
+  dev_url: https://github.com/tanaylab/misha
+  doc_url: https://tanaylab.github.io/misha/
+
+extra:
+  recipe-maintainers:
+    - aviezerl
