@@ -46,6 +46,8 @@ protected:
 	double        m_last_min_pos;
 	GenomeTrackSparse *m_master_obj{NULL};
 	bool          m_master_synced{false};
+	std::vector<char> m_read_chunk;
+	int           m_fast_path_mode{0}; // 0=unknown, 1=avg/nearest-only fast path, -1=generic path
 
 	// State for indexed "smart handle"
 	std::string m_dat_path;
@@ -54,7 +56,9 @@ protected:
 
 	void read_file_into_mem();
 	void calc_vals(const GInterval &interval);
+	void calc_vals_avg_nearest_only(const GInterval &interval);
 	bool check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2);
+	bool uses_avg_nearest_fast_path();
 	void sync_master_state_from_dependent();
 	void copy_state_from_master();
 
@@ -71,6 +75,55 @@ protected:
 inline bool GenomeTrackSparse::check_first_overlap(const GIntervals::const_iterator &iinterval1, const GInterval &interval2)
 {
 	return iinterval1->do_overlap(interval2) && (iinterval1 == m_intervals.begin() || !(iinterval1 - 1)->do_overlap(interval2));
+}
+
+inline bool GenomeTrackSparse::uses_avg_nearest_fast_path()
+{
+	if (m_fast_path_mode == 1)
+		return true;
+	if (m_fast_path_mode == -1)
+		return false;
+
+	if (m_use_quantile)
+		return (m_fast_path_mode = -1), false;
+
+	bool has_avg_or_nearest = false;
+	for (size_t i = 0; i < m_functions.size(); ++i) {
+		if (!m_functions[i])
+			continue;
+
+		if (i == AVG || i == NEAREST)
+			has_avg_or_nearest = true;
+		else
+			return (m_fast_path_mode = -1), false;
+	}
+
+	m_fast_path_mode = has_avg_or_nearest ? 1 : -1;
+	return has_avg_or_nearest;
+}
+
+inline void GenomeTrackSparse::calc_vals_avg_nearest_only(const GInterval &interval)
+{
+	float num_vs = 0;
+	m_last_sum = 0;
+
+	size_t idx = (size_t)(m_icur_interval - m_intervals.begin());
+	for (; idx < m_intervals.size(); ++idx) {
+		const GInterval &cur = m_intervals[idx];
+		if (!cur.do_overlap(interval))
+			break;
+
+		float v = m_vals[idx];
+		if (!std::isnan(v)) {
+			m_last_sum += v;
+			++num_vs;
+		}
+	}
+
+	if (num_vs > 0)
+		m_last_avg = m_last_nearest = m_last_sum / num_vs;
+	else
+		m_last_avg = m_last_nearest = m_last_sum = numeric_limits<float>::quiet_NaN();
 }
 
 inline void GenomeTrackSparse::calc_vals(const GInterval &interval)
