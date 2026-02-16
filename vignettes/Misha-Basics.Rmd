@@ -9,8 +9,8 @@ vignette: >
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
+    collapse = TRUE,
+    comment = "#>"
 )
 ```
 
@@ -50,8 +50,8 @@ A **track** is genomic signal organized over coordinates.
 Useful starter commands:
 
 ```{r, eval = FALSE}
-gtrack.ls()                    # list tracks in the examples DB
-gtrack.info("dense_track")     # inspect type/metadata
+gtrack.ls() # list tracks in the examples DB
+gtrack.info("dense_track") # inspect type/metadata
 gtrack.info("sparse_track")
 ```
 
@@ -152,10 +152,10 @@ regions <- gintervals(1, c(1000, 2000), c(1020, 2020))
 seqs <- gseq.extract(regions)
 
 pssm <- matrix(c(
-  0.80, 0.05, 0.10, 0.05,
-  0.10, 0.10, 0.70, 0.10,
-  0.05, 0.80, 0.05, 0.10,
-  0.10, 0.10, 0.10, 0.70
+    0.80, 0.05, 0.10, 0.05,
+    0.10, 0.10, 0.70, 0.10,
+    0.05, 0.80, 0.05, 0.10,
+    0.10, 0.10, 0.10, 0.70
 ), ncol = 4, byrow = TRUE)
 colnames(pssm) <- c("A", "C", "G", "T")
 
