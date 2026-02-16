@@ -1,3 +1,7 @@
+# misha 5.4.3
+
+* Multiple performance optimizations for `gscreen` and `gextract` with dense iterators.
+
 # misha 5.4.2
 
 * Added `lse` virtual track function that computes the log-sum-exp of the values in the iterator interval.
