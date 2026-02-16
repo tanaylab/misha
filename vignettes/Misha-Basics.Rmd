@@ -1,0 +1,165 @@
+---
+title: "Misha Basics (Short Guide)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Misha Basics (Short Guide)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+This page gives a compact mental model for misha.
+Use it as the first quick read before the full `Manual` vignette.
+
+## The Core Idea
+
+Most analyses follow the same pattern:
+
+1. Choose **where** to look (intervals / scope).
+2. Choose **how** to walk through it (iterator).
+3. Evaluate a **track expression** over those iterator intervals.
+
+In misha this is usually one call to `gextract`, `gscreen`, or `gsummary`.
+
+You are not limited to raw track names. You can pass full expressions, for example
+`log(dense_track + 1)`, `dense_track / (chip.sum + 1e-6)`, or `pmin(dense_track, 2)`.
+
+All examples below assume the bundled examples database:
+
+```{r, eval = FALSE}
+library(misha)
+gdb.init_examples()
+```
+
+## Four Concepts You Need First
+
+### 1) Track
+
+A **track** is genomic signal organized over coordinates.
+
+- Dense track: value for each fixed-size bin (for example `dense_track` in the examples DB).
+- Sparse track: values on intervals (for example peaks).
+- 2D track: values on genomic rectangles (for example contact matrices).
+
+Useful starter commands:
+
+```{r, eval = FALSE}
+gtrack.ls()                    # list tracks in the examples DB
+gtrack.info("dense_track")     # inspect type/metadata
+gtrack.info("sparse_track")
+```
+
+For intuition, you can think of `dense_track` as a ChIP-seq-like coverage signal.
+
+### 2) Intervals
+
+An **interval set** defines genomic regions (`chrom`, `start`, `end`) where you want to work.
+
+- Intervals can come from files, annotations, peak calls, or be generated in code.
+- Intervals often act as a **scope**: "analyze only here."
+
+```{r, eval = FALSE}
+regions <- gintervals(1, c(0, 250000), c(100000, 260000))
+```
+
+### 3) Iterator
+
+The **iterator** is the stepping policy inside the scope.
+
+- `iterator = 100` -> fixed 100 bp bins
+- `iterator = "some_sparse_track"` -> iterate over that track's intervals
+- `iterator = some_intervals_df` -> iterate over explicit regions
+- `iterator = "my_intervals_set"` -> iterate directly over an intervals set
+
+Think of it as: scope says *where*, iterator says *in what chunks*.
+
+```{r, eval = FALSE}
+out <- gextract("dense_track", regions, iterator = 100)
+log_out <- gextract("log(dense_track + 1)", regions, iterator = 100)
+```
+
+Create and use an intervals set as an iterator:
+
+```{r, eval = FALSE}
+gintervals.save(regions, "my_intervals_set")
+out2 <- gextract("dense_track", gintervals.all(), iterator = "my_intervals_set")
+```
+
+### 4) Virtual Track
+
+A **virtual track** is a named on-the-fly transformation, not stored as a physical track file.
+
+Examples:
+
+- Local sum of a source track
+- Distance to nearest annotation interval
+- Quantile-like or nearest-neighbor summaries
+
+```{r, eval = FALSE}
+gvtrack.create("chip.sum", "dense_track", "sum")
+out <- gextract("chip.sum", regions, iterator = 200)
+```
+
+You can also shift the iterator window used by the virtual track:
+
+```{r, eval = FALSE}
+gvtrack.create("chip.shifted", "dense_track", "sum")
+gvtrack.iterator("chip.shifted", sshift = -100, eshift = 100)
+out <- gextract("chip.shifted", regions, iterator = 200)
+```
+
+Here, each iterator interval is expanded by 100 bp on both sides before evaluating `dense_track`.
+
+Virtual tracks are session objects (easy to list with `gvtrack.ls` and delete with `gvtrack.rm`).
+
+## Minimal Workflow
+
+```{r, eval = FALSE}
+library(misha)
+gdb.init_examples()
+
+# 1) pick scope
+regions <- gintervals(1, 0, 50000)
+
+# 2) inspect available tracks
+print(gtrack.ls())
+
+# 3) extract signal with a chosen iterator
+chip <- gextract("dense_track", regions, iterator = 100)
+
+# 4) screen high-signal bins (as a simple peak-like filter)
+hi_chip <- gscreen("dense_track > 0.6", regions, iterator = 100)
+
+# 5) summarize distribution/coverage
+stats <- gsummary("dense_track", regions, iterator = 100)
+```
+
+## PWM in One Minute
+
+A PWM/PSSM is a motif model over A/C/G/T. In misha, a common pattern is:
+
+1. Extract sequence from intervals.
+2. Score those sequences with a PWM.
+
+```{r, eval = FALSE}
+regions <- gintervals(1, c(1000, 2000), c(1020, 2020))
+seqs <- gseq.extract(regions)
+
+pssm <- matrix(c(
+  0.80, 0.05, 0.10, 0.05,
+  0.10, 0.10, 0.70, 0.10,
+  0.05, 0.80, 0.05, 0.10,
+  0.10, 0.10, 0.10, 0.70
+), ncol = 4, byrow = TRUE)
+colnames(pssm) <- c("A", "C", "G", "T")
+
+scores <- gseq.pwm(seqs, pssm, mode = "lse")
+```
+
+If your database has motif files under `pssms/`, you can create a genome-wide PWM-energy track with `gtrack.create_pwm_energy(...)`.
