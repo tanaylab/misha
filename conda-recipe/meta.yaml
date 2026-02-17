@@ -21,14 +21,14 @@ requirements:
     - sysroot_linux-64 2.17  # [linux64]
     - make
   host:
-    - r-base >=4.1
+    - r-base {{ r_base }}.*
     - r-magrittr
     - r-curl
     - r-digest
     - r-ps
     - r-yaml
   run:
-    - r-base >=4.1
+    - r-base {{ r_base }}.*
     - r-magrittr
     - r-curl
     - r-digest

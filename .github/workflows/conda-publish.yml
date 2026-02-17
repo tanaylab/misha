@@ -55,6 +55,7 @@ jobs:
           conda build conda-recipe/ \
             --no-anaconda-upload \
             --output-folder conda-output/ \
+            --keep-going \
             -c conda-forge
 
       - name: Upload to anaconda.org
