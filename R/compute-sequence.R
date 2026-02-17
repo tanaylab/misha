@@ -183,6 +183,175 @@ gseq.extract <- function(intervals = NULL) {
     res
 }
 
+#' Export a database genome as FASTA
+#'
+#' Writes all contigs from a misha database to a multi-FASTA file.
+#'
+#' By default, the currently active database is used. You can also provide
+#' \code{groot} to export another database without changing the caller's active
+#' database.
+#'
+#' @param file Output FASTA file path
+#' @param groot Optional database root path. If NULL, uses current database.
+#' @param line_width Number of bases per FASTA line. Default: 80.
+#' @param chunk_size Number of bases to extract per chunk while writing.
+#'   Default: 1000000.
+#' @param overwrite Logical. If TRUE, overwrite existing output file.
+#'   Default: FALSE.
+#' @param verbose Logical. If TRUE, prints progress messages. Default: FALSE.
+#'
+#' @return Invisibly returns \code{file}.
+#' @seealso \code{\link{gdb.init}}, \code{\link{gseq.extract}}
+#' @examples
+#' \dontrun{
+#' gdb.init_examples()
+#' out <- tempfile(fileext = ".fa")
+#' gdb.export_fasta(out)
+#' head(readLines(out))
+#' }
+#' @export
+gdb.export_fasta <- function(file = NULL,
+                             groot = NULL,
+                             line_width = 80L,
+                             chunk_size = 1000000L,
+                             overwrite = FALSE,
+                             verbose = FALSE) {
+    if (is.null(file) || !is.character(file) || length(file) != 1 || nchar(file) == 0) {
+        stop("Usage: gdb.export_fasta(file, groot = NULL, line_width = 80, chunk_size = 1000000, overwrite = FALSE, verbose = FALSE)", call. = FALSE)
+    }
+
+    line_width <- suppressWarnings(as.integer(line_width))
+    if (is.na(line_width) || line_width < 1) {
+        stop("line_width must be a positive integer", call. = FALSE)
+    }
+
+    chunk_size <- suppressWarnings(as.integer(chunk_size))
+    if (is.na(chunk_size) || chunk_size < 1) {
+        stop("chunk_size must be a positive integer", call. = FALSE)
+    }
+
+    out_dir <- dirname(file)
+    if (!dir.exists(out_dir)) {
+        stop(sprintf("Output directory does not exist: %s", out_dir), call. = FALSE)
+    }
+
+    if (file.exists(file) && !overwrite) {
+        stop(sprintf("Output file already exists: %s. Use overwrite = TRUE to replace it.", file), call. = FALSE)
+    }
+
+    old_groot <- NULL
+    if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+        old_groot <- get("GROOT", envir = .misha)
+    }
+
+    switched_root <- FALSE
+    if (is.null(groot)) {
+        .gcheckroot()
+    } else {
+        if (!dir.exists(groot)) {
+            stop(sprintf("Database directory does not exist: %s", groot), call. = FALSE)
+        }
+        groot <- normalizePath(groot, mustWork = TRUE)
+
+        needs_switch <- is.null(old_groot) || old_groot == ""
+        if (!needs_switch) {
+            needs_switch <- normalizePath(old_groot, mustWork = TRUE) != groot
+        }
+
+        if (needs_switch) {
+            suppressMessages(gdb.init(groot))
+            switched_root <- TRUE
+        }
+    }
+
+    temp_file <- tempfile(pattern = "misha_export_", fileext = ".fasta", tmpdir = out_dir)
+    con <- NULL
+
+    on.exit(
+        {
+            if (!is.null(con) && isOpen(con)) {
+                close(con)
+            }
+            if (file.exists(temp_file)) {
+                unlink(temp_file)
+            }
+            if (switched_root && !is.null(old_groot) && old_groot != "") {
+                suppressMessages(gdb.init(old_groot))
+            }
+        },
+        add = TRUE
+    )
+
+    all_genome <- gintervals.all()
+    if (is.null(all_genome) || nrow(all_genome) == 0) {
+        stop("No chromosomes found in the database", call. = FALSE)
+    }
+
+    chroms <- as.character(all_genome$chrom)
+    starts <- as.numeric(all_genome$start)
+    ends <- as.numeric(all_genome$end)
+
+    con <- file(temp_file, open = "wt")
+
+    for (i in seq_along(chroms)) {
+        chrom <- chroms[i]
+        start_pos <- starts[i]
+        end_pos <- ends[i]
+
+        if (verbose) {
+            message(sprintf("Exporting %s (%d bp)", chrom, as.integer(end_pos - start_pos)))
+        }
+
+        writeLines(sprintf(">%s", chrom), con)
+
+        line_buffer <- ""
+        while (start_pos < end_pos) {
+            next_end <- min(start_pos + chunk_size, end_pos)
+            seq_chunk <- gseq.extract(gintervals(chrom, start_pos, next_end))
+
+            if (length(seq_chunk) != 1 || is.na(seq_chunk[1])) {
+                stop(sprintf("Failed reading sequence for chromosome %s [%d,%d)", chrom, as.integer(start_pos), as.integer(next_end)), call. = FALSE)
+            }
+
+            chunk <- paste0(line_buffer, seq_chunk[1])
+            chunk_len <- nchar(chunk, type = "chars")
+
+            if (chunk_len >= line_width) {
+                line_starts <- seq.int(1L, chunk_len - line_width + 1L, by = line_width)
+                line_ends <- line_starts + line_width - 1L
+                writeLines(substring(chunk, line_starts, line_ends), con)
+
+                next_pos <- max(line_ends) + 1L
+                if (next_pos <= chunk_len) {
+                    line_buffer <- substr(chunk, next_pos, chunk_len)
+                } else {
+                    line_buffer <- ""
+                }
+            } else {
+                line_buffer <- chunk
+            }
+
+            start_pos <- next_end
+        }
+
+        if (nchar(line_buffer, type = "chars") > 0) {
+            writeLines(line_buffer, con)
+        }
+    }
+
+    close(con)
+    con <- NULL
+
+    if (file.exists(file)) {
+        unlink(file)
+    }
+    if (!file.rename(temp_file, file)) {
+        stop(sprintf("Failed to move temporary FASTA to output path: %s", file), call. = FALSE)
+    }
+
+    invisible(file)
+}
+
 
 #' Computes auto-correlation between the strands for a file of mapped sequences
 #'
