@@ -150,6 +150,7 @@ reference:
       - gdb.reload
       - gdb.set_readonly_attrs
       - gdb.convert_to_indexed
+      - gdb.export_fasta
       - gdir.cd
       - gdir.create
       - gdir.cwd
