@@ -1,3 +1,7 @@
+# misha 5.4.4
+
+* Added `gdb.export_fasta()` to export all contigs from a database to a multi-FASTA file, defaulting to the current gdb with optional `groot` override.
+
 # misha 5.4.3
 
 * Multiple performance optimizations for `gscreen` and `gextract` with dense iterators.
