@@ -14,6 +14,11 @@
 
 #include "TGLException.h"
 
+// Out-of-line definitions required for ODR-use in C++14 (taking address
+// in ofs.write).  Harmless but redundant in C++17.
+constexpr uint32_t StratifiedMarkovModel::FILE_MAGIC;
+constexpr uint32_t StratifiedMarkovModel::FILE_VERSION;
+
 StratifiedMarkovModel::StratifiedMarkovModel()
     : m_num_bins(0), m_total_kmers(0) {}
 
