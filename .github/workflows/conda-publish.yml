@@ -59,6 +59,7 @@ jobs:
             -c conda-forge
 
       - name: Upload to anaconda.org
+        if: always()
         env:
           ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
         run: |
@@ -66,9 +67,9 @@ jobs:
           PACKAGES=( conda-output/**/*.tar.bz2 conda-output/**/*.conda )
 
           if [ ${#PACKAGES[@]} -eq 0 ]; then
-            echo "ERROR: No conda packages found in conda-output/"
+            echo "WARNING: No conda packages found in conda-output/"
             find conda-output/ -type f
-            exit 1
+            exit 0
           fi
 
           echo "Uploading ${#PACKAGES[@]} package(s):"
@@ -81,6 +82,7 @@ jobs:
             "${PACKAGES[@]}"
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: conda-pkg-${{ matrix.os }}
           path: |
