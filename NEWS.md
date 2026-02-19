@@ -1,3 +1,7 @@
+# misha 5.4.5
+
+* Fixed devel compiler warnings in `GenomeTrackBinnedTransform.cpp` by avoiding arithmetic between distinct anonymous enum types.
+
 # misha 5.4.4
 
 * Added `gdb.export_fasta()` to export all contigs from a database to a multi-FASTA file, defaulting to the current gdb with optional `groot` override.
