@@ -64,13 +64,20 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 
 	SEXP answer;
 	unsigned num_interv_cols;
+	unsigned num_cols;
 
 	if (out_intervals1d) {
-		answer = iu.convert_intervs(out_intervals1d, interv_ids ? GInterval::NUM_COLS + NUM_COLS : GInterval::NUM_COLS + NUM_COLS - 1, false);
 		num_interv_cols = GInterval::NUM_COLS;
 	} else {
-		answer = iu.convert_intervs(out_intervals2d, interv_ids ? GInterval2D::NUM_COLS + NUM_COLS : GInterval2D::NUM_COLS + NUM_COLS - 1, false);
 		num_interv_cols = GInterval2D::NUM_COLS;
+	}
+
+	num_cols = num_interv_cols + (interv_ids ? NUM_COLS : NUM_COLS - 1);
+
+	if (out_intervals1d) {
+		answer = iu.convert_intervs(out_intervals1d, num_cols, false);
+	} else {
+		answer = iu.convert_intervs(out_intervals2d, num_cols, false);
 	}
 
     SEXP rvals;
