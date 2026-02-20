@@ -28,3 +28,4 @@
 ^dev$
 ^conda-recipe$
 ^.+.fa$
+^.a5c$
