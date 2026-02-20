@@ -26,4 +26,5 @@
 ^CLAUDE\.md$
 ^AGENTS\.md$
 ^dev$
+^conda-recipe$
 ^.+.fa$
