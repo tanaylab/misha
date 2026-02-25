@@ -1,3 +1,7 @@
+# misha 5.4.6
+
+* Fixed `distance` and `distance.edge` virtual track functions returning incorrect values when `gextract` is called with overlapping input intervals. The sequential scanner could miss closer source intervals when processing bins that go backward in position between overlapping regions.
+
 # misha 5.4.5
 
 * Fixed devel compiler warnings in `GenomeTrackBinnedTransform.cpp` by avoiding arithmetic between distinct anonymous enum types.

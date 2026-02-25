@@ -100,6 +100,19 @@ void IntervVarProcessor::process_distance(
 				dist[i] = numeric_limits<double>::quiet_NaN();
 			else {
 				int64_t coord = (interval.start + interval.end) / 2;
+
+				// Scan backward to handle non-monotone access (overlapping regions)
+				while (iinterv != intervs.begin()) {
+					GIntervals::const_iterator prev = iinterv - 1;
+					if (prev->chromid != interval.chromid)
+						break;
+					double curr_dist = iinterv->dist2coord(coord, var.dist_margin);
+					double prev_dist = prev->dist2coord(coord, var.dist_margin);
+					if (fabs(curr_dist) <= fabs(prev_dist))
+						break;
+					--iinterv;
+				}
+
 				dist[i] = (double)iinterv->dist2coord(coord, var.dist_margin);
 				GIntervals::const_iterator iinterv_next = iinterv + 1;
 
@@ -235,6 +248,18 @@ void IntervVarProcessor::process_distance_edge(
 				// No intervals on this chromosome
 				dist[i] = numeric_limits<int64_t>::max();
 			} else {
+				// Scan backward to handle non-monotone access (overlapping regions)
+				while (iinterv != intervs.begin()) {
+					GIntervals::const_iterator prev = iinterv - 1;
+					if (prev->chromid != interval.chromid)
+						break;
+					int64_t curr_dist = interval.dist2interv(*iinterv);
+					int64_t prev_dist = interval.dist2interv(*prev);
+					if (llabs(curr_dist) <= llabs(prev_dist))
+						break;
+					--iinterv;
+				}
+
 				// Calculate edge-to-edge distance using dist2interv
 				// Use default touch_is_at_dist_one = false to match gintervals.neighbors
 				dist[i] = interval.dist2interv(*iinterv);
