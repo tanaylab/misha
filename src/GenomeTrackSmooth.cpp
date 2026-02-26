@@ -290,7 +290,7 @@ void Mean_smoother::set_next_sample(double sample)
 	if (m_counter % m_num_samples_aside == 0) {
 		m_vals_sum = 0;
 		for (vector<double>::iterator i = m_vals.begin(); i != m_vals.end(); ++i) {
-			if (!std::isnan(m_vals_sum))
+			if (!std::isnan(*i))
 				m_vals_sum += *i;
 		}
 	}

@@ -348,7 +348,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 				if (was_highest_vals_buf_used) {
 					partial_sort(highest_vals.begin(), highest_vals.begin() + kid_highest_vals_buf_size, highest_vals.end(), greater<double>());
-					highest_vals.resize(kid_lowest_vals_buf_size);
+					highest_vals.resize(kid_highest_vals_buf_size);
 				}
 
 				StreamPercentiler<double> sp;

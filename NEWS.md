@@ -1,3 +1,27 @@
+# misha 5.4.8
+
+* Fixed NaN comparison bug in `distance.center` virtual track with iterator modifiers — used `!=` instead of `std::isnan()`, causing the guard condition to always be true under IEEE 754 semantics.
+
+* Fixed `distance` virtual track returning NaN instead of a valid distance when one side of the sorted interval array has no intervals on the current chromosome (NaN-unsafe `min` in sequential path).
+
+* Fixed `gtrack.smooth` MEAN algorithm producing spurious NaN values during periodic recalculation when NaN values are present in the smoothing window. The recalculation checked `isnan` on the accumulator instead of the incoming value, permanently poisoning the sum.
+
+* Fixed incorrect standard deviation/variance computation in virtual tracks with filter/mask — the parallel variance formula used the already-incremented weight instead of the pre-increment value.
+
+* Fixed `min.pos`/`max.pos` virtual track aggregation comparing genomic positions instead of signal values when combining sub-intervals, returning the leftmost/rightmost sub-interval position instead of the position of the actual min/max value.
+
+* Fixed missing `out_of_range` check in `distance.center` virtual track with iterator modifiers, causing undefined behavior when all source intervals lie upstream of the query coordinate.
+
+* Fixed copy-paste error in quantile track computation where `highest_vals` buffer was resized using `kid_lowest_vals_buf_size` instead of `kid_highest_vals_buf_size`.
+
+* Fixed `int32` truncation of `int64_t` genomic coordinates in `gintervals.normalize` — could silently produce wrong results for chromosomes longer than ~2.1 Gbp.
+
+* Fixed p-value transformation (`pv` function) being skipped when virtual track has both a filter and a p-value function active.
+
+* Fixed `lse_accumulate` double overload producing NaN when both inputs are `-infinity` (missing `isinf` guards that the float overload had).
+
+* Fixed `GInterval::dist2coord` treating `coord == end` as inside the interval, inconsistent with the half-open `[start, end)` convention used throughout the codebase.
+
 # misha 5.4.7
 
 * Fixed `distance.center` virtual track function returning incorrect values when `gextract` is called with overlapping input intervals. The sequential scanner could miss containing source intervals when processing bins that go backward in position between overlapping regions.

@@ -129,7 +129,14 @@ void IntervVarProcessor::process_distance(
 			}
 		}
 
-		var.var[idx] = fabs(dist[0]) < fabs(dist[1]) ? dist[0] : dist[1];
+		if (std::isnan(dist[0]) && std::isnan(dist[1]))
+			var.var[idx] = numeric_limits<double>::quiet_NaN();
+		else if (std::isnan(dist[0]))
+			var.var[idx] = dist[1];
+		else if (std::isnan(dist[1]))
+			var.var[idx] = dist[0];
+		else
+			var.var[idx] = fabs(dist[0]) < fabs(dist[1]) ? dist[0] : dist[1];
 	}
 }
 
@@ -140,6 +147,11 @@ void IntervVarProcessor::process_distance_center(
 {
 	// if iterator modifier exists, iterator intervals might not come sorted => perform a binary search
 	if (var.imdf1d) {
+		if (var.imdf1d->out_of_range) {
+			var.var[idx] = numeric_limits<double>::quiet_NaN();
+			return;
+		}
+
 		int64_t coord = (var.imdf1d->interval.start + var.imdf1d->interval.end) / 2;
 		GInterval eval_interval(var.imdf1d->interval.chromid, coord, coord + 1, 0);
 		GIntervals::const_iterator iinterv = lower_bound(var.sintervs.begin(), var.sintervs.end(), eval_interval, GIntervals::compare_by_start_coord);
@@ -150,7 +162,7 @@ void IntervVarProcessor::process_distance_center(
 		if (iinterv != var.sintervs.end() && iinterv->chromid == eval_interval.chromid)
 			dist = iinterv->dist2center(coord);
 
-		if (dist != numeric_limits<double>::quiet_NaN() && iinterv != var.sintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid)
+		if (std::isnan(dist) && iinterv != var.sintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid)
 			dist = (iinterv - 1)->dist2center(coord);
 
 		var.var[idx] = dist;
