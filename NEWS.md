@@ -1,3 +1,9 @@
+# misha 5.4.7
+
+* Fixed `distance.center` virtual track function returning incorrect values when `gextract` is called with overlapping input intervals. The sequential scanner could miss containing source intervals when processing bins that go backward in position between overlapping regions.
+
+* Fixed `neighbor.count` virtual track function undercounting neighbors when `gextract` is called with overlapping input intervals. Same root cause as the `distance`/`distance.edge` fix in 5.4.6.
+
 # misha 5.4.6
 
 * Fixed `distance` and `distance.edge` virtual track functions returning incorrect values when `gextract` is called with overlapping input intervals. The sequential scanner could miss closer source intervals when processing bins that go backward in position between overlapping regions.

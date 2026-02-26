@@ -540,3 +540,35 @@ test_that("neighbor.count matches gintervals.neighbors for multiple queries with
 
     expect_equal(vtrack_res$near_multi, expected_counts)
 })
+
+test_that("neighbor.count works with overlapping input intervals", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Source intervals
+    src <- rbind(
+        gintervals(1, 100, 120),
+        gintervals(1, 300, 330),
+        gintervals(1, 500, 520)
+    )
+    gvtrack.create("nc_overlap", src, "neighbor.count", 10)
+
+    # Overlapping input regions - cause backward access in the iterator
+    regions <- rbind(
+        gintervals(1, 50, 200),
+        gintervals(1, 150, 400),
+        gintervals(1, 280, 600)
+    )
+
+    # Extract with small iterator so bins go backward between overlapping regions
+    res_overlap <- gextract("nc_overlap", regions, iterator = 20)
+
+    # Extract one region at a time (no backward access possible)
+    res_individual <- do.call(rbind, lapply(1:nrow(regions), function(i) {
+        gextract("nc_overlap", regions[i, , drop = FALSE], iterator = 20)
+    }))
+
+    # Results should be identical
+    merged <- merge(res_overlap, res_individual, by = c("chrom", "start", "end"), suffixes = c(".overlap", ".individual"))
+    expect_equal(merged$nc_overlap.overlap, merged$nc_overlap.individual)
+})
