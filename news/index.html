@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.6</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.7</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.4.7" id="misha-547">misha 5.4.7<a class="anchor" aria-label="anchor" href="#misha-547"></a></h2>
+<ul><li><p>Fixed <code>distance.center</code> virtual track function returning incorrect values when <code>gextract</code> is called with overlapping input intervals. The sequential scanner could miss containing source intervals when processing bins that go backward in position between overlapping regions.</p></li>
+<li><p>Fixed <code>neighbor.count</code> virtual track function undercounting neighbors when <code>gextract</code> is called with overlapping input intervals. Same root cause as the <code>distance</code>/<code>distance.edge</code> fix in 5.4.6.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.4.6" id="misha-546">misha 5.4.6<a class="anchor" aria-label="anchor" href="#misha-546"></a></h2>
 <ul><li>Fixed <code>distance</code> and <code>distance.edge</code> virtual track functions returning incorrect values when <code>gextract</code> is called with overlapping input intervals. The sequential scanner could miss closer source intervals when processing bins that go backward in position between overlapping regions.</li>
