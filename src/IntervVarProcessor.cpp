@@ -162,6 +162,17 @@ void IntervVarProcessor::process_distance_center(
 		while (iinterv != var.sintervs.end() && var.siinterv->chromid < interval.chromid)
 			++iinterv;
 
+		// Scan backward to handle non-monotone access (overlapping regions)
+		while (iinterv != var.sintervs.begin()) {
+			GIntervals::const_iterator prev = iinterv - 1;
+			if (prev->chromid != interval.chromid)
+				break;
+			if (prev->end > coord)
+				--iinterv;
+			else
+				break;
+		}
+
 		while (iinterv != var.sintervs.end() && iinterv->chromid == interval.chromid && iinterv->start <= coord) {
 			if (iinterv->end > coord)
 				dist = iinterv->dist2center(coord);
@@ -320,6 +331,17 @@ void IntervVarProcessor::process_neighbor_count(
 	if (!var.imdf1d && !var.filter) {
 		GIntervals::const_iterator &eiter = var.eiinterv;
 		const GIntervals &expanded = var.eintervs;
+
+		// Scan backward to handle non-monotone access (overlapping regions)
+		while (eiter != expanded.begin()) {
+			GIntervals::const_iterator prev = eiter - 1;
+			if (prev->chromid != eval_interval.chromid)
+				break;
+			if (prev->end > eval_interval.start)
+				--eiter;
+			else
+				break;
+		}
 
 		while (eiter != expanded.end() && (eiter->chromid < eval_interval.chromid ||
 			   (eiter->chromid == eval_interval.chromid && eiter->end <= eval_interval.start)))
