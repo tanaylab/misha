@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.7</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.8</span>
       </span>
     </div>
 
@@ -66,6 +66,20 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.4.8" id="misha-548">misha 5.4.8<a class="anchor" aria-label="anchor" href="#misha-548"></a></h2>
+<ul><li><p>Fixed NaN comparison bug in <code>distance.center</code> virtual track with iterator modifiers — used <code>!=</code> instead of <code>std::isnan()</code>, causing the guard condition to always be true under IEEE 754 semantics.</p></li>
+<li><p>Fixed <code>distance</code> virtual track returning NaN instead of a valid distance when one side of the sorted interval array has no intervals on the current chromosome (NaN-unsafe <code>min</code> in sequential path).</p></li>
+<li><p>Fixed <code>gtrack.smooth</code> MEAN algorithm producing spurious NaN values during periodic recalculation when NaN values are present in the smoothing window. The recalculation checked <code>isnan</code> on the accumulator instead of the incoming value, permanently poisoning the sum.</p></li>
+<li><p>Fixed incorrect standard deviation/variance computation in virtual tracks with filter/mask — the parallel variance formula used the already-incremented weight instead of the pre-increment value.</p></li>
+<li><p>Fixed <code>min.pos</code>/<code>max.pos</code> virtual track aggregation comparing genomic positions instead of signal values when combining sub-intervals, returning the leftmost/rightmost sub-interval position instead of the position of the actual min/max value.</p></li>
+<li><p>Fixed missing <code>out_of_range</code> check in <code>distance.center</code> virtual track with iterator modifiers, causing undefined behavior when all source intervals lie upstream of the query coordinate.</p></li>
+<li><p>Fixed copy-paste error in quantile track computation where <code>highest_vals</code> buffer was resized using <code>kid_lowest_vals_buf_size</code> instead of <code>kid_highest_vals_buf_size</code>.</p></li>
+<li><p>Fixed <code>int32</code> truncation of <code>int64_t</code> genomic coordinates in <code>gintervals.normalize</code> — could silently produce wrong results for chromosomes longer than ~2.1 Gbp.</p></li>
+<li><p>Fixed p-value transformation (<code>pv</code> function) being skipped when virtual track has both a filter and a p-value function active.</p></li>
+<li><p>Fixed <code>lse_accumulate</code> double overload producing NaN when both inputs are <code>-infinity</code> (missing <code>isinf</code> guards that the float overload had).</p></li>
+<li><p>Fixed <code>GInterval::dist2coord</code> treating <code>coord == end</code> as inside the interval, inconsistent with the half-open <code>[start, end)</code> convention used throughout the codebase.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.4.7" id="misha-547">misha 5.4.7<a class="anchor" aria-label="anchor" href="#misha-547"></a></h2>
 <ul><li><p>Fixed <code>distance.center</code> virtual track function returning incorrect values when <code>gextract</code> is called with overlapping input intervals. The sequential scanner could miss containing source intervals when processing bins that go backward in position between overlapping regions.</p></li>
