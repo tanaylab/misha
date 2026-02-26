@@ -739,19 +739,19 @@ SEXP gintervals_normalize(SEXP _intervals, SEXP _size, SEXP _envir)
 			const GInterval &interv = intervals[i];
 
 			// Get size: per-interval (vector mode) or same for all (scalar mode)
-			int current_size = is_vector_mode ? size_values[i] : size_values[0];
+			int64_t current_size = is_vector_mode ? size_values[i] : size_values[0];
 
 			// Calculate center
-			int center = (interv.start + interv.end) / 2;
+			int64_t center = (interv.start + interv.end) / 2;
 
 			// Create normalized interval ensuring exact size
 			// For even sizes: center is exactly in the middle
 			// For odd sizes: extra bp goes to the right side
-			int new_start = center - (current_size / 2);
-			int new_end = new_start + current_size;
+			int64_t new_start = center - (current_size / 2);
+			int64_t new_end = new_start + current_size;
 
 			// Ensure we don't cross chromosome boundaries
-			int chrom_size = iu.get_chromkey().get_chrom_size(interv.chromid);
+			int64_t chrom_size = iu.get_chromkey().get_chrom_size(interv.chromid);
 			if (new_start < 0)
 				new_start = 0;
 			if (new_end > chrom_size)

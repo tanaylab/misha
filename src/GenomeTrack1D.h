@@ -29,9 +29,13 @@ inline void lse_accumulate(float &l1, float l2) {
 
 inline void lse_accumulate(double &l1, double l2) {
 	if (l1 > l2) {
-		l1 += std::log(1.0 + std::exp(l2 - l1));
+		if (!std::isinf(l2))
+			l1 += std::log(1.0 + std::exp(l2 - l1));
 	} else {
-		l1 = l2 + std::log(1.0 + std::exp(l1 - l2));
+		if (std::isinf(l1))
+			l1 = l2;
+		else
+			l1 = l2 + std::log(1.0 + std::exp(l1 - l2));
 	}
 }
 

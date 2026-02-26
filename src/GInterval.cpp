@@ -14,13 +14,13 @@ double GInterval::dist2coord(int64_t coord, double margin) const
 
 	if (!margin) {
 		// is coord inside interv?
-		if (coord >= start && coord <= end)
+		if (coord >= start && coord < end)
 			return 0;
 
 		res = fabs(left_dist) <= fabs(right_dist) ? left_dist : right_dist;
 	} else {
 		// is coord inside interv?
-		if (coord >= start && coord <= end)
+		if (coord >= start && coord < end)
 			res = (margin * (left_dist + right_dist)) / (double)(end - start);
 		else {
 			double offset = strand == 1 ? margin : -margin;

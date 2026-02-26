@@ -349,18 +349,19 @@ void TrackVarProcessor::process_single_track_var_1d(
 			break;
 		}
 
-		if (var.requires_pv) {
-			double val = var.var[idx];
-			if (!std::isnan(val)) {
-				int bin = var.pv_binned.binfinder.val2bin(val);
-				if (bin < 0) {
-					if (val <= var.pv_binned.binfinder.get_breaks().front())
-						var.var[idx] = var.pv_binned.bins[0];
-					else
-						var.var[idx] = 1.;
-				} else
-					var.var[idx] = var.pv_binned.bins[bin];
-			}
+	}
+
+	if (var.requires_pv) {
+		double val = var.var[idx];
+		if (!std::isnan(val)) {
+			int bin = var.pv_binned.binfinder.val2bin(val);
+			if (bin < 0) {
+				if (val <= var.pv_binned.binfinder.get_breaks().front())
+					var.var[idx] = var.pv_binned.bins[0];
+				else
+					var.var[idx] = 1.;
+			} else
+				var.var[idx] = var.pv_binned.bins[bin];
 		}
 	}
 }
@@ -562,9 +563,10 @@ double TrackVarProcessor::aggregate_stddev_with_filter(GenomeTrack1D &track, con
 		if (!std::isnan(part_avg) && !std::isnan(part_stddev)) {
 			// Welford online algorithm for combining variances
 			double delta = part_avg - (total_weight > 0 ? total_weighted_sum / total_weight : 0);
+			double old_weight = total_weight;
 			total_weight += part_len;
 			total_weighted_sum += part_avg * part_len;
-			M2 += part_stddev * part_stddev * part_len + part_len * total_weight / (total_weight + part_len) * delta * delta;
+			M2 += part_stddev * part_stddev * part_len + old_weight * part_len / total_weight * delta * delta;
 		}
 	}
 

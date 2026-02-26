@@ -100,12 +100,16 @@ void ValueVarProcessor::process_single_value_var(
 					total_sum_sq += part_avg * part_avg * part_size;
 
 				if (!std::isnan(part_min)) {
-					if (std::isnan(min_val) || part_min < min_val)
+					if (std::isnan(min_val) || part_min < min_val) {
 						min_val = part_min;
+						min_pos = part_min_pos;
+					}
 				}
 				if (!std::isnan(part_max)) {
-					if (std::isnan(max_val) || part_max > max_val)
+					if (std::isnan(max_val) || part_max > max_val) {
 						max_val = part_max;
+						max_pos = part_max_pos;
+					}
 				}
 
 				if (!std::isnan(part_first) && std::isnan(first_val))
@@ -115,15 +119,6 @@ void ValueVarProcessor::process_single_value_var(
 
 				if (!std::isnan(part_sample) && std::isnan(sample_val))
 					sample_val = part_sample;
-
-				if (!std::isnan(part_min_pos)) {
-					if (std::isnan(min_pos) || part_min_pos < min_pos)
-						min_pos = part_min_pos;
-				}
-				if (!std::isnan(part_max_pos)) {
-					if (std::isnan(max_pos) || part_max_pos > max_pos)
-						max_pos = part_max_pos;
-				}
 				if (!std::isnan(part_first_pos) && std::isnan(first_pos))
 					first_pos = part_first_pos;
 				if (!std::isnan(part_last_pos))
