@@ -14,6 +14,7 @@
 
 #include "GenomeTrack.h"
 #include "TrackIndex.h"
+#include "TrackIndex2D.h"
 #include "TGLException.h"
 #include "rdbutils.h"
 
@@ -113,6 +114,7 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 	std::string idx_path = std::string(track_dir) + "/track.idx";
 	struct stat st;
 	if (stat(idx_path.c_str(), &st) == 0) {
+		// Try 1D index first
 		try {
 			auto idx = get_track_index(track_dir);
 			if (idx) {
@@ -122,8 +124,21 @@ GenomeTrack::Type GenomeTrack::get_type(const char *track_dir, const GenomeChrom
 					case MishaTrackType::SPARSE: return SPARSE;
 					case MishaTrackType::ARRAY:  return ARRAYS;
 					default:
-						// Unknown type, fall through to per-chromosome probing
+						// Unknown type, fall through
 						break;
+				}
+			}
+		} catch (...) {
+			// 1D index failed (likely wrong magic header) -- try 2D index
+		}
+
+		// Try 2D index
+		try {
+			auto idx2d = TrackIndex2D::get_track_index_2d(track_dir);
+			if (idx2d && idx2d->is_loaded()) {
+				switch (idx2d->get_track_type()) {
+					case MishaTrack2DType::RECTS:  return RECTS;
+					case MishaTrack2DType::POINTS: return POINTS;
 				}
 			}
 		} catch (...) {

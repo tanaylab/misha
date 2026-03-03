@@ -56,8 +56,8 @@ public:
 	typedef typename StatQuadTree<T, Size>::Stat Stat;
 
 	// chunk size 0 means there's no caching at all
-	StatQuadTreeCached() : m_chunk_size(0), m_max_num_chunks(0), m_num_chunks(0), m_bfile(NULL), m_local2global_id(NULL), m_uptr(NULL) {}
-	StatQuadTreeCached(int64_t chunk_size, int64_t max_num_chunks) : m_uptr(NULL) { init(chunk_size, max_num_chunks); }
+	StatQuadTreeCached() : m_chunk_size(0), m_max_num_chunks(0), m_num_chunks(0), m_bfile(NULL), m_local2global_id(NULL), m_uptr(NULL), m_base_offset(0) {}
+	StatQuadTreeCached(int64_t chunk_size, int64_t max_num_chunks) : m_uptr(NULL), m_base_offset(0) { init(chunk_size, max_num_chunks); }
 
 	~StatQuadTreeCached() { clear(); }
 
@@ -98,6 +98,14 @@ public:
 	int64_t get_max_num_chunks() const { return m_max_num_chunks; }
 
 	void set_uptr(void *uptr) { m_uptr = uptr; }
+
+	// Set the base offset for indexed format support.
+	// When a quad tree is embedded inside a concatenated track.dat file,
+	// all stored file positions (fpos) are relative to the start of the
+	// pair's data, not the start of track.dat. The base_offset shifts
+	// all seek operations to compensate.
+	// Must be called BEFORE unserialize().
+	void set_base_offset(int64_t offset) { m_base_offset = offset; }
 
 	void debug_print_tree();
 
@@ -192,6 +200,7 @@ private:
 	// get_stat() can be invoked meanwhile, it's not enough to save a list of chunks in the stack. We must keep a reference count too.
 	Stacked_chunks_fpos m_stacked_chunks_fpos;
 	void               *m_uptr;
+	int64_t             m_base_offset;  // offset into concatenated track.dat for indexed format
 
 	Obj *get_objs(NodeBase *node_base) { return (Obj *)((char *)node_base + sizeof(Leaf)); }
 
@@ -658,7 +667,7 @@ const typename StatQuadTreeCached<T, Size>::Chunk &StatQuadTreeCached<T, Size>::
 	int64_t size;
 	Chunk chunk;
 
-	m_bfile->seek(-fpos, SEEK_SET);   // chunk fpos is always a negative number to distinguish it from memory offset
+	m_bfile->seek(-fpos + m_base_offset, SEEK_SET);   // chunk fpos is always a negative number to distinguish it from memory offset; base_offset shifts into concatenated track.dat
 
 	if (m_bfile->read(&size, sizeof(size)) != sizeof(size)) {
 		if (m_bfile->error())

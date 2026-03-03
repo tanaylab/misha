@@ -66,13 +66,13 @@ The conversion process:
   \item Creates genome.idx with CRC64 checksum
   \item Optionally validates the conversion
   \item Optionally removes old .seq files
-  \item If convert_tracks=TRUE, converts all eligible 1D tracks (dense, sparse, array)
+  \item If convert_tracks=TRUE, converts all eligible tracks (1D: dense, sparse, array; 2D: rectangles, points)
   \item If convert_intervals=TRUE, converts all eligible interval sets (1D and 2D)
 }
 
 Tracks and intervals that cannot be converted (and are skipped):
 \itemize{
-  \item Tracks: 2D tracks, virtual tracks, single-file tracks, already converted tracks
+  \item Tracks: virtual tracks, single-file tracks, already converted tracks
   \item Intervals: Single-file interval sets, already converted interval sets
 }
 }

@@ -98,6 +98,11 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the 2D track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -177,6 +182,11 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the 2D track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
+            }
         },
         finally = {
             if (!success && !direxisted) {
@@ -287,6 +297,11 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
             success <- TRUE
+
+            # If database is indexed, automatically convert the 2D track to indexed format
+            if (.gdb.is_indexed()) {
+                gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
+            }
         },
         finally = {
             if (!success && !direxisted) {

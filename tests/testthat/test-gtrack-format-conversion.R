@@ -38,11 +38,12 @@ test_that("gtrack.convert_to_indexed fails for non-existent track", {
     )
 })
 
-test_that("gtrack.convert_to_indexed fails for 2D tracks", {
-    expect_error(
-        gtrack.convert_to_indexed("test.rects"),
-        "only 1D tracks.*can be converted"
-    )
+test_that("gtrack.convert_to_indexed dispatches to 2D conversion for 2D tracks", {
+    withr::defer(gtrack.rm("temp.converted_rects", force = TRUE))
+    gtrack.2d.create("temp.converted_rects", "", gintervals.2d(1, 100, 200, 1, 300, 400), 1.0)
+
+    # Should not error - dispatches to gtrack.2d.convert_to_indexed
+    expect_no_error(gtrack.convert_to_indexed("temp.converted_rects"))
 })
 
 test_that("gtrack.convert_to_indexed works for dense tracks", {
