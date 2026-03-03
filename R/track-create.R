@@ -77,11 +77,12 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
                 track_info <- gtrack.info(trackstr)
                 if (track_info$type %in% c("dense", "sparse", "array")) {
                     gtrack.convert_to_indexed(trackstr)
+                } else if (track_info$type %in% c("rectangles", "points")) {
+                    gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
                 }
             }
         },
@@ -165,7 +166,6 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
                 track_info <- gtrack.info(trackstr)
                 if (track_info$type %in% c("dense", "sparse", "array")) {
@@ -245,7 +245,6 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
                 track_info <- gtrack.info(trackstr)
                 if (track_info$type %in% c("dense", "sparse", "array")) {
@@ -351,7 +350,6 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
             if (.gdb.is_indexed()) {
                 track_info <- gtrack.info(trackstr)
                 if (track_info$type %in% c("dense", "sparse", "array")) {

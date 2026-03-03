@@ -40,6 +40,7 @@ reference:
       - gtrack.var.rm
       - gtrack.var.set
       - gtrack.convert_to_indexed
+      - gtrack.2d.convert_to_indexed
   - title: Virtual track functions
     desc:  Functions to manipulate and create virtual tracks
     contents:

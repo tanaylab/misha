@@ -76,8 +76,7 @@ bool TrackExpressionTrackRectsIterator::next()
 
 		string track_filename = m_track_dir + "/" + GenomeTrack::get_2d_filename(*m_chromkey, m_chromid1, m_chromid2);
 
-		if ((m_band.is_non_empty_area() && m_chromid1 != m_chromid2) || !m_scope->size(m_chromid1, m_chromid2) ||
-			(access(track_filename.c_str(), R_OK) < 0 && errno == ENOENT))
+		if ((m_band.is_non_empty_area() && m_chromid1 != m_chromid2) || !m_scope->size(m_chromid1, m_chromid2))
 		{
 			m_track = NULL;
 			continue;
@@ -94,6 +93,13 @@ bool TrackExpressionTrackRectsIterator::next()
 			m_track = &m_track_computed;
 		} else
 			verror("Invalid track type %d used in TrackExpressionTrackRectsIterator", (int)m_track_type);
+
+		// In indexed format, per-pair files don't exist, so we can't use access().
+		// init_read() sets has_data_for_pair() for both indexed and per-pair paths.
+		if (!m_track->has_data_for_pair()) {
+			m_track = NULL;
+			continue;
+		}
 
 		if (m_track->begin_interval()) {
 			m_scope->begin_chrom_iter(m_chromid1, m_chromid2);

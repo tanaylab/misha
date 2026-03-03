@@ -60,13 +60,13 @@
 #'   \item Creates genome.idx with CRC64 checksum
 #'   \item Optionally validates the conversion
 #'   \item Optionally removes old .seq files
-#'   \item If convert_tracks=TRUE, converts all eligible 1D tracks (dense, sparse, array)
+#'   \item If convert_tracks=TRUE, converts all eligible tracks (1D: dense, sparse, array; 2D: rectangles, points)
 #'   \item If convert_intervals=TRUE, converts all eligible interval sets (1D and 2D)
 #' }
 #'
 #' Tracks and intervals that cannot be converted (and are skipped):
 #' \itemize{
-#'   \item Tracks: 2D tracks, virtual tracks, single-file tracks, already converted tracks
+#'   \item Tracks: virtual tracks, single-file tracks, already converted tracks
 #'   \item Intervals: Single-file interval sets, already converted interval sets
 #' }
 #'
@@ -522,8 +522,9 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
         } else {
             if (verbose) message(sprintf("Found %d tracks in database", length(all_tracks)))
 
-            # Filter to only 1D tracks that can be converted
-            convertible_tracks <- c()
+            # Filter to convertible tracks (1D and 2D)
+            convertible_1d_tracks <- c()
+            convertible_2d_tracks <- c()
             skipped_tracks <- list()
 
             for (track in all_tracks) {
@@ -535,8 +536,11 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                     next
                 }
 
-                # Only 1D tracks (dense, sparse, array) can be converted
-                if (!info$type %in% c("dense", "sparse", "array")) {
+                # Check for supported track types
+                is_1d <- info$type %in% c("dense", "sparse", "array")
+                is_2d <- info$type %in% c("rectangles", "points")
+
+                if (!is_1d && !is_2d) {
                     skipped_tracks[[track]] <- sprintf("unsupported type (%s)", info$type)
                     next
                 }
@@ -557,12 +561,23 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                     next
                 }
 
-                convertible_tracks <- c(convertible_tracks, track)
+                if (is_1d) {
+                    convertible_1d_tracks <- c(convertible_1d_tracks, track)
+                } else {
+                    convertible_2d_tracks <- c(convertible_2d_tracks, track)
+                }
             }
 
+            total_convertible <- length(convertible_1d_tracks) + length(convertible_2d_tracks)
+
             # Report what we found
-            if (length(convertible_tracks) > 0) {
-                if (verbose) message(sprintf("  Convertible: %d tracks", length(convertible_tracks)))
+            if (total_convertible > 0) {
+                if (verbose) {
+                    message(sprintf(
+                        "  Convertible: %d tracks (%d 1D, %d 2D)",
+                        total_convertible, length(convertible_1d_tracks), length(convertible_2d_tracks)
+                    ))
+                }
             } else {
                 if (verbose) message("  No tracks need conversion")
             }
@@ -574,13 +589,13 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 }
             }
 
-            # Convert tracks
-            if (length(convertible_tracks) > 0) {
-                converted_count <- 0
-                failed_tracks <- c()
+            # Convert 1D tracks
+            converted_count <- 0
+            failed_tracks <- c()
 
-                for (track in convertible_tracks) {
-                    if (verbose) message(sprintf("  Converting track: %s", track))
+            if (length(convertible_1d_tracks) > 0) {
+                for (track in convertible_1d_tracks) {
+                    if (verbose) message(sprintf("  Converting 1D track: %s", track))
 
                     tryCatch(
                         {
@@ -593,8 +608,28 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                         }
                     )
                 }
+            }
 
-                if (verbose) message(sprintf("Successfully converted %d/%d tracks", converted_count, length(convertible_tracks)))
+            # Convert 2D tracks
+            if (length(convertible_2d_tracks) > 0) {
+                for (track in convertible_2d_tracks) {
+                    if (verbose) message(sprintf("  Converting 2D track: %s", track))
+
+                    tryCatch(
+                        {
+                            gtrack.2d.convert_to_indexed(track, remove.old = TRUE)
+                            converted_count <- converted_count + 1
+                        },
+                        error = function(e) {
+                            warning(sprintf("Failed to convert 2D track %s: %s", track, conditionMessage(e)))
+                            failed_tracks <<- c(failed_tracks, track)
+                        }
+                    )
+                }
+            }
+
+            if (total_convertible > 0) {
+                if (verbose) message(sprintf("Successfully converted %d/%d tracks", converted_count, total_convertible))
 
                 if (length(failed_tracks) > 0) {
                     warning(sprintf(
@@ -923,9 +958,15 @@ gtrack.convert_to_indexed <- function(track = NULL) {
     info <- gtrack.info(track)
     track_type <- info$type
 
-    # Only 1D tracks can be converted
+    # Dispatch based on track type
+    if (track_type %in% c("rectangles", "points")) {
+        # 2D tracks: delegate to gtrack.2d.convert_to_indexed
+        gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
+        return(invisible(0))
+    }
+
     if (!track_type %in% c("dense", "sparse", "array")) {
-        stop(sprintf("Cannot convert track %s: only 1D tracks (dense, sparse, array) can be converted", trackstr), call. = FALSE)
+        stop(sprintf("Cannot convert track %s: unsupported type '%s'", trackstr, track_type), call. = FALSE)
     }
 
     # Call C++ function to perform the conversion (always remove old files)
@@ -1035,6 +1076,83 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
     )
 
     invisible(NULL)
+}
+
+#' Convert 2D track to indexed format
+#'
+#' Converts a per-chromosome-pair 2D track (rectangles or points) to indexed format
+#' (track.dat + track.idx). This reduces file descriptor usage from O(N^2) to O(1),
+#' which is especially beneficial for genomes with many contigs.
+#'
+#' @param track track name to convert
+#' @param remove.old Logical. If TRUE, removes old per-chromosome-pair files after
+#' successful conversion. Default: FALSE.
+#' @param force Logical. If TRUE, re-converts even if already in indexed format.
+#' Default: FALSE.
+#' @return None.
+#' @seealso \code{\link{gtrack.2d.create}}, \code{\link{gtrack.2d.import}},
+#' \code{\link{gtrack.2d.import_contacts}}, \code{\link{gtrack.convert_to_indexed}},
+#' \code{\link{gdb.convert_to_indexed}}
+#' @examples
+#' \dontrun{
+#' # Convert a 2D track to indexed format
+#' gtrack.2d.convert_to_indexed("my_2d_track")
+#'
+#' # Convert and remove old per-pair files
+#' gtrack.2d.convert_to_indexed("my_2d_track", remove.old = TRUE)
+#'
+#' # Force re-conversion
+#' gtrack.2d.convert_to_indexed("my_2d_track", force = TRUE)
+#' }
+#' @export gtrack.2d.convert_to_indexed
+gtrack.2d.convert_to_indexed <- function(track = NULL, remove.old = FALSE, force = FALSE) {
+    if (is.null(substitute(track))) {
+        stop("Usage: gtrack.2d.convert_to_indexed(track, remove.old = FALSE, force = FALSE)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
+    if (is.na(match(trackstr, get("GTRACKS", envir = .misha)))) {
+        stop(sprintf("Track %s does not exist", trackstr), call. = FALSE)
+    }
+
+    trackdir <- .track_dir(trackstr)
+    idx_path <- file.path(trackdir, "track.idx")
+    dat_path <- file.path(trackdir, "track.dat")
+
+    # Check if already converted
+    if (file.exists(idx_path) && !force) {
+        message(sprintf("Track %s is already in indexed format.", trackstr))
+        return(invisible(0))
+    }
+
+    # Get track info to determine type
+    info <- gtrack.info(track)
+    track_type <- info$type
+
+    # Only 2D tracks can be converted with this function
+    if (!track_type %in% c("rectangles", "points")) {
+        stop(sprintf("Cannot convert track %s: only 2D tracks (rectangles, points) can be converted with this function", trackstr), call. = FALSE)
+    }
+
+    # Call C++ function to perform the conversion
+    tryCatch(
+        {
+            .gcall("gtrack2d_convert_to_indexed", trackstr, remove.old, .misha_env())
+        },
+        error = function(e) {
+            # Clean up temporary files on error
+            if (file.exists(paste0(dat_path, ".tmp"))) {
+                unlink(paste0(dat_path, ".tmp"))
+            }
+            if (file.exists(paste0(idx_path, ".tmp"))) {
+                unlink(paste0(idx_path, ".tmp"))
+            }
+            stop(sprintf("Failed to convert 2D track %s: %s", trackstr, e$message), call. = FALSE)
+        }
+    )
+
+    invisible(0)
 }
 
 #' Convert 2D interval set to indexed format

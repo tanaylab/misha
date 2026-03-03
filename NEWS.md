@@ -1,3 +1,15 @@
+# misha 5.5.0
+
+* Added indexed format support for 2D tracks (rectangles and points). Per-chromosome-pair files can now be consolidated into a single `track.dat` + `track.idx`, matching the indexed format already available for 1D tracks.
+
+* New function `gtrack.2d.convert_to_indexed()` converts existing 2D tracks to indexed format with optional removal of old per-pair files.
+
+* `gtrack.convert_to_indexed()` now dispatches to 2D conversion automatically when given a rectangles or points track.
+
+* `gdb.convert_to_indexed()` with `convert_tracks = TRUE` now includes 2D tracks in batch conversion.
+
+* 2D tracks created via `gtrack.2d.create()`, `gtrack.2d.import()`, and `gtrack.2d.import_contacts()` are automatically converted to indexed format when the database is in indexed mode.
+
 # misha 5.4.8
 
 * Fixed NaN comparison bug in `distance.center` virtual track with iterator modifiers — used `!=` instead of `std::isnan()`, causing the guard condition to always be true under IEEE 754 semantics.

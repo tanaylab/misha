@@ -793,7 +793,7 @@ SEXP gtrack_liftover(SEXP _track,
 					try {
 						snprintf(filename, sizeof(filename), "%s/%s-%s", src_track_dir, ichrom1->c_str(), ichrom2->c_str());
 						src_track->init_read(filename, chromid1, chromid2);
-						if (!src_track->opened()) {
+						if (!src_track->has_data_for_pair()) {
 							progress.report(1);
 							continue;
 						}
