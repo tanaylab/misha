@@ -433,7 +433,7 @@ info <- gtrack.info("my_track")
 print(info$format) # "indexed" or "per-chromosome"
 ```
 
-**Supported Track Types:** Dense (fixed-bin), Sparse, and Array tracks (1D only) can use indexed format. 2D tracks and virtual tracks are not supported for indexed format.
+**Supported Track Types:** Dense (fixed-bin), Sparse, and Array tracks (1D) and Rectangles and Points tracks (2D) can use indexed format. Virtual tracks and Computed 2D tracks are not supported for indexed format.
 
 **Backward Compatibility:** The indexed format is fully transparent to all misha functions. Both formats can coexist in the same database and are used identically in track expressions and analysis functions.
 

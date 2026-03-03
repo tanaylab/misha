@@ -38,6 +38,7 @@
 #include "TrackExpressionTrackRectsIterator.h"
 #include "TrackExpressionVars.h"
 #include "rdbutils.h"
+#include "TrackIndex2D.h"
 
 const int TrackExprScanner::INIT_REPORT_STEP = 10000;
 const int TrackExprScanner::REPORT_INTERVAL = 3000;
@@ -612,10 +613,22 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 			// read the list of chrom files
 			get_chrom_files(trackpath.c_str(), filenames);
 
-			// If filenames is empty, this is an indexed track - populate with all chromosome names
+			// If filenames is empty, this is an indexed track - populate with synthetic names
 			if (filenames.empty() && GenomeTrack::is_1d(track_type)) {
 				for (unsigned i = 0; i < m_iu.get_chromkey().get_num_chroms(); ++i) {
 					filenames.push_back(m_iu.get_chromkey().id2chrom(i));
+				}
+			} else if (filenames.empty() && GenomeTrack::is_2d(track_type)) {
+				// For indexed 2D tracks, populate filenames from the index entries
+				try {
+					auto idx2d = TrackIndex2D::get_track_index_2d(trackpath);
+					if (idx2d && idx2d->is_loaded()) {
+						for (const auto &entry : idx2d->entries()) {
+							filenames.push_back(GenomeTrack::get_2d_filename(m_iu.get_chromkey(), entry.chrom1_id, entry.chrom2_id));
+						}
+					}
+				} catch (...) {
+					// Fall through - filenames stays empty
 				}
 			}
 

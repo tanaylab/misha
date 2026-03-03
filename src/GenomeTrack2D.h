@@ -8,6 +8,8 @@
 #ifndef GENOMETRACK2D_H_
 #define GENOMETRACK2D_H_
 
+#include <cstdint>
+#include <string>
 #include <utility>
 
 #include "BufferedFile.h"
@@ -51,6 +53,11 @@ public:
 
 	const std::string &file_name() const { return m_bfile.file_name(); }
 
+	// Returns true if the current chromosome pair has data available.
+	// In indexed mode, m_bfile may stay open even for empty pairs,
+	// so opened() alone is not sufficient.
+	bool has_data_for_pair() const { return m_pair_has_data; }
+
 protected:
 	vector<bool> m_functions;
 	int          m_chromid1;
@@ -64,7 +71,13 @@ protected:
 
 	GInterval2D  m_interval;
 
-	GenomeTrack2D(Type type) : GenomeTrack(type), m_loaded(false) { m_functions.resize(NUM_FUNCS, false); }
+	// State for indexed "smart handle"
+	std::string m_dat_path;
+	bool        m_dat_open{false};
+	bool        m_pair_has_data{false};  // true if current pair has data (replaces opened() check for 2D)
+	int64_t     m_base_offset_2d{0};     // base offset for quad tree in indexed format
+
+	GenomeTrack2D(Type type) : GenomeTrack(type), m_loaded(false), m_dat_open(false), m_pair_has_data(false), m_base_offset_2d(0) { m_functions.resize(NUM_FUNCS, false); }
 };
 
 #endif /* GENOMETRACK2D_H_ */

@@ -145,10 +145,12 @@ This will:
 Convert specific tracks while keeping others in legacy format:
 
 ```{r, eval = FALSE}
+# 1D tracks
 gtrack.convert_to_indexed("mytrack")
-```
 
-Note that 2D tracks cannot be converted to indexed format yet.
+# 2D tracks (rectangles and points)
+gtrack.2d.convert_to_indexed("my2dtrack")
+```
 
 ## Convert Intervals
 

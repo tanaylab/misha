@@ -59,7 +59,7 @@ typedef GenomeTrackRects< Point_val<float> >     GenomeTrackRectsPoints;
 template <class T>
 void GenomeTrackRects<T>::read_interval(const Rectangle &interval, const DiagonalBand &band)
 {
-	if (m_bfile.opened()) {
+	if (m_bfile.opened() && m_pair_has_data) {
 		typename QTree::Stat result;
 
 		load();
@@ -88,6 +88,8 @@ void GenomeTrackRects<T>::init_serializer(QTree_serializer &qtree_serializer, in
 template <class T>
 bool GenomeTrackRects<T>::begin_interval()
 {
+	if (!m_pair_has_data)
+		return false;
 	load();
 	m_interval.chromid1() = m_chromid1;
 	m_interval.chromid2() = m_chromid2;
@@ -120,6 +122,9 @@ template <class T>
 void GenomeTrackRects<T>::load()
 {
 	if (!m_loaded) {
+		// For indexed format, set base_offset so the quad tree adjusts
+		// its internal absolute fpos values. For per-pair files, base_offset is 0.
+		m_qtree.set_base_offset(m_base_offset_2d);
 		m_qtree.unserialize(m_bfile);
 		m_loaded = true;
 	}

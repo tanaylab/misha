@@ -114,7 +114,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+            # These functions only create 1D tracks, so only convert 1D types
             if (.gdb.is_indexed()) {
                 track_info <- gtrack.info(trackstr)
                 if (track_info$type %in% c("dense", "sparse", "array")) {
@@ -281,7 +281,7 @@ gtrack.smooth <- function(track = NULL, description = NULL, expr = NULL, winsize
             success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
-            # Only convert 1D tracks (dense, sparse, array) - 2D tracks cannot be converted
+            # These functions only create 1D tracks, so only convert 1D types
             if (.gdb.is_indexed()) {
                 track_info <- gtrack.info(trackstr)
                 if (track_info$type %in% c("dense", "sparse", "array")) {
