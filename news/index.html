@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.4.8</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.5.0</span>
       </span>
     </div>
 
@@ -63,9 +63,17 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.4.8/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.5.0" id="misha-550">misha 5.5.0<a class="anchor" aria-label="anchor" href="#misha-550"></a></h2>
+<ul><li><p>Added indexed format support for 2D tracks (rectangles and points). Per-chromosome-pair files can now be consolidated into a single <code>track.dat</code> + <code>track.idx</code>, matching the indexed format already available for 1D tracks.</p></li>
+<li><p>New function <code><a href="../reference/gtrack.2d.convert_to_indexed.html">gtrack.2d.convert_to_indexed()</a></code> converts existing 2D tracks to indexed format with optional removal of old per-pair files.</p></li>
+<li><p><code><a href="../reference/gtrack.convert_to_indexed.html">gtrack.convert_to_indexed()</a></code> now dispatches to 2D conversion automatically when given a rectangles or points track.</p></li>
+<li><p><code><a href="../reference/gdb.convert_to_indexed.html">gdb.convert_to_indexed()</a></code> with <code>convert_tracks = TRUE</code> now includes 2D tracks in batch conversion.</p></li>
+<li><p>2D tracks created via <code><a href="../reference/gtrack.2d.create.html">gtrack.2d.create()</a></code>, <code><a href="../reference/gtrack.2d.import.html">gtrack.2d.import()</a></code>, and <code><a href="../reference/gtrack.2d.import_contacts.html">gtrack.2d.import_contacts()</a></code> are automatically converted to indexed format when the database is in indexed mode.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.4.8" id="misha-548">misha 5.4.8<a class="anchor" aria-label="anchor" href="#misha-548"></a></h2>
 <ul><li><p>Fixed NaN comparison bug in <code>distance.center</code> virtual track with iterator modifiers — used <code>!=</code> instead of <code>std::isnan()</code>, causing the guard condition to always be true under IEEE 754 semantics.</p></li>
