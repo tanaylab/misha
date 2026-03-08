@@ -71,6 +71,7 @@ protected:
 	int64_t m_lse_prev_sbin{-1};
 	int64_t m_lse_prev_ebin{-1};
 	double m_sliding_sum{0.0};
+	double m_sliding_sum_comp{0.0};
 	int64_t m_sliding_num_vs{0};
 	bool m_lse_sliding_valid{false};
 	bool m_running_lse_initialized{false};
@@ -87,6 +88,17 @@ protected:
 	void assign_single_bin_value(float value, double overlap_start);
 	void assign_single_bin_missing();
 	void reset_sliding_window_state();
+
+	// Kahan compensated summation helpers for m_sliding_sum
+	inline void kahan_add_to_sliding_sum(double value) {
+		double y = value - m_sliding_sum_comp;
+		double t = m_sliding_sum + y;
+		m_sliding_sum_comp = (t - m_sliding_sum) - y;
+		m_sliding_sum = t;
+	}
+	inline void kahan_sub_from_sliding_sum(double value) {
+		kahan_add_to_sliding_sum(-value);
+	}
 };
 
 

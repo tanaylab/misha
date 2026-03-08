@@ -1,3 +1,7 @@
+# misha 5.5.1
+
+* Fixed floating-point precision drift in sliding window sum for fixed-bin virtual tracks. The incremental add/subtract pattern accumulated rounding errors (~1e-7 per step) that compounded to noticeable differences at genome-wide scale. Now uses Kahan compensated summation for bit-accurate results. The bug was introduced in version 5.4.3 (commit 7337ff30, 2026-02-09) as part of the fixed-bin sum optimization.
+
 # misha 5.5.0
 
 * Added indexed format support for 2D tracks (rectangles and points). Per-chromosome-pair files can now be consolidated into a single `track.dat` + `track.idx`, matching the indexed format already available for 1D tracks.

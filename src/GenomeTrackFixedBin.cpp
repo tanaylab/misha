@@ -174,6 +174,7 @@ void GenomeTrackFixedBin::reset_sliding_window_state()
 {
 	m_lse_sliding_valid = false;
 	m_sliding_sum = 0;
+	m_sliding_sum_comp = 0;
 	m_sliding_num_vs = 0;
 	m_running_lse_initialized = false;
 }
@@ -231,6 +232,7 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 		assign_single_value(have_value, v);
 		m_lse_sliding_valid = false;
 		m_sliding_sum = 0;
+		m_sliding_sum_comp = 0;
 		m_sliding_num_vs = 0;
 		m_running_lse_initialized = false;
 		return;
@@ -261,6 +263,7 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 		assign_single_value(have_value, v);
 		m_lse_sliding_valid = false;
 		m_sliding_sum = 0;
+		m_sliding_sum_comp = 0;
 		m_sliding_num_vs = 0;
 		m_running_lse_initialized = false;
 		return;
@@ -284,7 +287,7 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 					float old_val = m_lse_window_bins.front();
 					m_lse_window_bins.pop_front();
 					if (!std::isnan(old_val)) {
-						m_sliding_sum -= old_val;
+						kahan_sub_from_sliding_sum(old_val);
 						--m_sliding_num_vs;
 						if (need_lse)
 							m_running_lse.pop_front();
@@ -292,7 +295,7 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 
 					m_lse_window_bins.push_back(new_val);
 					if (!std::isnan(new_val)) {
-						m_sliding_sum += new_val;
+						kahan_add_to_sliding_sum(new_val);
 						++m_sliding_num_vs;
 						if (need_lse)
 							m_running_lse.push(new_val);
@@ -307,7 +310,7 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 						float old_val = m_lse_window_bins.front();
 						m_lse_window_bins.pop_front();
 						if (!std::isnan(old_val)) {
-							m_sliding_sum -= old_val;
+							kahan_sub_from_sliding_sum(old_val);
 							--m_sliding_num_vs;
 							if (need_lse)
 								m_running_lse.pop_front();
@@ -318,7 +321,7 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 						float new_val = new_vals[i];
 						m_lse_window_bins.push_back(new_val);
 						if (!std::isnan(new_val)) {
-							m_sliding_sum += new_val;
+							kahan_add_to_sliding_sum(new_val);
 							++m_sliding_num_vs;
 							if (need_lse)
 								m_running_lse.push(new_val);
@@ -347,13 +350,14 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 	if (need_lse)
 		m_running_lse.clear();
 	m_sliding_sum = 0;
+	m_sliding_sum_comp = 0;
 	m_sliding_num_vs = 0;
 	m_lse_window_bins.clear();
 	for (int64_t i = 0; i < bins_read; ++i) {
 		float v = bin_vals[i];
 		m_lse_window_bins.push_back(v);
 		if (!std::isnan(v)) {
-			m_sliding_sum += v;
+			kahan_add_to_sliding_sum(v);
 			++m_sliding_num_vs;
 			if (need_lse)
 				m_running_lse.push(v);
@@ -583,7 +587,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 						float old_val = m_lse_window_bins.front();
 						m_lse_window_bins.pop_front();
 						if (!std::isnan(old_val)) {
-							m_sliding_sum -= old_val;
+							kahan_sub_from_sliding_sum(old_val);
 							--m_sliding_num_vs;
 							if (m_functions[LSE])
 								m_running_lse.pop_front();
@@ -591,7 +595,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 						m_lse_window_bins.push_back(new_val);
 							if (!std::isnan(new_val)) {
-								m_sliding_sum += new_val;
+								kahan_add_to_sliding_sum(new_val);
 								++m_sliding_num_vs;
 								if (m_functions[LSE])
 									m_running_lse.push(new_val);
@@ -605,7 +609,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 								float old_val = m_lse_window_bins.front();
 								m_lse_window_bins.pop_front();
 								if (!std::isnan(old_val)) {
-									m_sliding_sum -= old_val;
+									kahan_sub_from_sliding_sum(old_val);
 									--m_sliding_num_vs;
 									if (m_functions[LSE])
 										m_running_lse.pop_front();
@@ -615,7 +619,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 								float new_val = new_vals[i];
 								m_lse_window_bins.push_back(new_val);
 							if (!std::isnan(new_val)) {
-								m_sliding_sum += new_val;
+								kahan_add_to_sliding_sum(new_val);
 								++m_sliding_num_vs;
 								if (m_functions[LSE])
 									m_running_lse.push(new_val);
@@ -802,11 +806,12 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 					m_running_lse.clear();
 					m_lse_window_bins.clear();
 					m_sliding_sum = 0;
+					m_sliding_sum_comp = 0;
 					m_sliding_num_vs = 0;
 					for (int64_t i = 0; i < bins_read; i++) {
 						m_lse_window_bins.push_back(bin_vals[i]);
 						if (!std::isnan(bin_vals[i])) {
-							m_sliding_sum += bin_vals[i];
+							kahan_add_to_sliding_sum(bin_vals[i]);
 							++m_sliding_num_vs;
 							if (m_functions[LSE])
 								m_running_lse.push(bin_vals[i]);
@@ -897,6 +902,7 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 	m_cached_bin_val = numeric_limits<float>::quiet_NaN();
 	m_cache_valid = false;
 	m_sliding_sum = 0;
+	m_sliding_sum_comp = 0;
 	m_sliding_num_vs = 0;
 	m_lse_sliding_valid = false;
 	m_running_lse_initialized = false;
