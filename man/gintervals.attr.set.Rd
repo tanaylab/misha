@@ -31,9 +31,9 @@ options(gmax.processes = 2)
 }
 
 gdb.init_examples()
-gintervals.attr.set("annotations1", "test_attr", "value")
-gintervals.attr.get("annotations1", "test_attr")
-gintervals.attr.set("annotations1", "test_attr", "")
+gintervals.attr.set("annotations", "test_attr", "value")
+gintervals.attr.get("annotations", "test_attr")
+gintervals.attr.set("annotations", "test_attr", "")
 
 }
 \seealso{
