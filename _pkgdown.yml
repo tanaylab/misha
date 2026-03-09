@@ -60,6 +60,10 @@ reference:
       - gintervals.2d.all
       - gintervals.2d.band_intersect
       - gintervals.all
+      - gintervals.attr.export
+      - gintervals.attr.get
+      - gintervals.attr.import
+      - gintervals.attr.set
       - gintervals.canonic
       - gintervals.mark_overlaps
       - gintervals.chrom_sizes
