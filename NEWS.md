@@ -1,3 +1,17 @@
+# misha 5.5.2
+
+* Replaced the naive variance formula (E[X²]-E[X]²) with Welford's numerically stable online algorithm for standard deviation computation in all track types (GenomeTrackFixedBin, GenomeTrackSparse, GenomeTrackInMemory, GenomeTrackArrays). The naive formula is prone to catastrophic cancellation when values are large or have small variance relative to their mean.
+
+* Improved sum accumulation precision by using double-precision intermediate accumulators in all non-sliding sum paths. The `m_last_sum` member remains float for API compatibility, but per-interval accumulation now happens in double, eliminating float→float rounding errors for large sums.
+
+* Fixed potential out-of-bounds access in SAMPLE/SAMPLE_POS functions when the random number generator returns exactly 1.0. Added bounds clamping (ported from pymisha).
+
+* Fixed umask leak in `GenomeTrack::write_type()` and `GenomeTrackFixedBin::init_write()` — the old umask is now saved and restored on error, preventing permanent process-wide umask changes on exceptions.
+
+* Improved header validation in `GenomeTrackFixedBin::init_read()` to use integer modulo instead of floating-point division, with an additional underflow guard.
+
+* Added reusable scratch buffers (`m_scratch_all_values`, `m_scratch_all_positions`) to GenomeTrackFixedBin, avoiding per-call heap allocation for SAMPLE/SAMPLE_POS operations (ported from pymisha).
+
 # misha 5.5.1
 
 * Fixed floating-point precision drift in sliding window sum for fixed-bin virtual tracks. The incremental add/subtract pattern accumulated rounding errors (~1e-7 per step) that compounded to noticeable differences at genome-wide scale. Now uses Kahan compensated summation for bit-accurate results. The bug was introduced in version 5.4.3 (commit 7337ff30, 2026-02-09) as part of the fixed-bin sum optimization.

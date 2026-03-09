@@ -401,28 +401,33 @@ void GenomeTrackFixedBin::read_interval_avg_nearest_only(const GInterval &interv
 			m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
 		}
 	} else {
-		float num_vs = 0;
-		double mean_square_sum = 0;
+		uint64_t num_vs = 0;
+		double stddev_mean = 0;
+		double stddev_m2 = 0;
 		float v;
 
-		m_last_sum = 0;
+		double sum_accum = 0;
 		m_last_min = numeric_limits<float>::max();
 		m_last_max = -numeric_limits<float>::max();
 
 		goto_bin(sbin);
 		for (int64_t bin = sbin; bin < ebin; ++bin) {
 			if (read_next_bin(v) && !std::isnan(v)) {
-				m_last_sum += v;
+				sum_accum += v;
 				m_last_min = min(m_last_min, v);
 				m_last_max = max(m_last_max, v);
-				mean_square_sum += v * v;
 				++num_vs;
+				const double delta = v - stddev_mean;
+				stddev_mean += delta / static_cast<double>(num_vs);
+				const double delta2 = v - stddev_mean;
+				stddev_m2 += delta * delta2;
 			}
 		}
 
+		m_last_sum = (float)sum_accum;
 		if (num_vs > 0) {
-			m_last_avg = m_last_nearest = m_last_sum / num_vs;
-			m_last_stddev = num_vs > 1 ? sqrt(mean_square_sum / (num_vs - 1) - (m_last_avg * (double)m_last_avg) * (num_vs / (num_vs - 1))) : numeric_limits<float>::quiet_NaN();
+			m_last_avg = m_last_nearest = (float)(sum_accum / num_vs);
+			m_last_stddev = num_vs > 1 ? sqrt(stddev_m2 / static_cast<double>(num_vs - 1)) : numeric_limits<float>::quiet_NaN();
 		} else {
 			m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
 			m_last_stddev = numeric_limits<float>::quiet_NaN();
@@ -531,8 +536,10 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		}
 		reset_sliding_window_state();
 	} else {
-		float num_vs = 0;
-		double mean_square_sum = 0;
+		uint64_t num_vs = 0;
+		double stddev_mean = 0;
+		double stddev_m2 = 0;
+		double sum_accum = 0;
 		const int64_t window_size = ebin - sbin;
 		const bool simple_sliding_compatible =
 			!m_use_quantile &&
@@ -548,17 +555,12 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			!m_functions[LAST] &&
 			!m_functions[LAST_POS];
 
-		// For sampling, collect all values/positions
-		vector<float> all_values;
-		vector<double> all_positions;
-		if (m_functions[SAMPLE] || m_functions[SAMPLE_POS])
-			all_values.reserve(100);
-		if (m_functions[SAMPLE_POS])
-			all_positions.reserve(100);
+		// Reuse scratch buffers for sampling (avoids per-call allocation)
+		m_scratch_all_values.clear();
+		m_scratch_all_positions.clear();
 
 		const bool need_min = m_functions[MIN] || m_functions[MIN_POS];
 		const bool need_max = m_functions[MAX] || m_functions[MAX_POS];
-		m_last_sum = 0;
 		m_last_min = need_min ? numeric_limits<float>::max() : numeric_limits<float>::quiet_NaN();
 		m_last_max = need_max ? -numeric_limits<float>::max() : numeric_limits<float>::quiet_NaN();
 		if (m_functions[MAX_POS])
@@ -710,7 +712,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				m_cache_valid = true;
 
 				if (!std::isnan(v)) {
-					m_last_sum += v;
+					sum_accum += v;
 					double bin_start = static_cast<double>(bin * m_bin_size);
 					double overlap_start = std::max(bin_start, static_cast<double>(interval.start));
 					if (need_min) {
@@ -732,8 +734,12 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 						}
 					}
 
-					if (m_functions[STDDEV])
-						mean_square_sum += v * v;
+					if (m_functions[STDDEV]) {
+						const double delta = v - stddev_mean;
+						stddev_mean += delta / static_cast<double>(num_vs + 1);
+						const double delta2 = v - stddev_mean;
+						stddev_m2 += delta * delta2;
+					}
 
 					if (m_functions[LSE] && !lse_sliding_used)
 						lse_accumulate(m_last_lse, v);
@@ -758,9 +764,9 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 						m_last_last_pos = overlap_start;
 
 					if (m_functions[SAMPLE])
-						all_values.push_back(v);
+						m_scratch_all_values.push_back(v);
 					if (m_functions[SAMPLE_POS])
-						all_positions.push_back(overlap_start);
+						m_scratch_all_positions.push_back(overlap_start);
 
 					++num_vs;
 				}
@@ -771,18 +777,23 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 				m_last_size = num_vs;
 
 			// Sample from collected values
-			if (m_functions[SAMPLE] && !all_values.empty()) {
-				int idx = (int)(s_rnd_func() * all_values.size());
-				m_last_sample = all_values[idx];
+			if (m_functions[SAMPLE] && !m_scratch_all_values.empty()) {
+				int idx = (int)(s_rnd_func() * m_scratch_all_values.size());
+				if (idx >= (int)m_scratch_all_values.size()) idx = (int)m_scratch_all_values.size() - 1;
+				if (idx < 0) idx = 0;
+				m_last_sample = m_scratch_all_values[idx];
 			}
 
-			if (m_functions[SAMPLE_POS] && !all_positions.empty()) {
-				int idx = (int)(s_rnd_func() * all_positions.size());
-				m_last_sample_pos = all_positions[idx];
+			if (m_functions[SAMPLE_POS] && !m_scratch_all_positions.empty()) {
+				int idx = (int)(s_rnd_func() * m_scratch_all_positions.size());
+				if (idx >= (int)m_scratch_all_positions.size()) idx = (int)m_scratch_all_positions.size() - 1;
+				if (idx < 0) idx = 0;
+				m_last_sample_pos = m_scratch_all_positions[idx];
 			}
 
+			m_last_sum = (float)sum_accum;
 			if (num_vs > 0)
-				m_last_avg = m_last_nearest = m_last_sum / num_vs;
+				m_last_avg = m_last_nearest = (float)(sum_accum / num_vs);
 			else {
 				m_last_avg = m_last_nearest = m_last_sum = numeric_limits<float>::quiet_NaN();
 				if (need_min)
@@ -795,10 +806,9 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 					m_last_min_pos = numeric_limits<double>::quiet_NaN();
 			}
 
-			// we are calaculating unbiased standard deviation:
-			// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
+			// Unbiased sample standard deviation via Welford's stable algorithm.
 			if (m_functions[STDDEV])
-				m_last_stddev = num_vs > 1 ? sqrt(mean_square_sum / (num_vs - 1) - (m_last_avg * (double)m_last_avg) * (num_vs / (num_vs - 1))) : numeric_limits<float>::quiet_NaN();
+				m_last_stddev = num_vs > 1 ? sqrt(stddev_m2 / static_cast<double>(num_vs - 1)) : numeric_limits<float>::quiet_NaN();
 
 			if (m_functions[LSE] || simple_sliding_compatible) {
 				if (!lse_sliding_used) {
@@ -970,12 +980,14 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 
 	// --- COMMON LOGIC ---
 	const uint64_t header_size = m_bfile.tell() - header_start;
-	double num_samples = (total_bytes - header_size) / (double)sizeof(float);
+	if (total_bytes < header_size)
+		TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
+	const uint64_t data_bytes = total_bytes - header_size;
 
-	if (m_bin_size <= 0 || num_samples != (int64_t)num_samples)
+	if (m_bin_size <= 0 || (data_bytes % sizeof(float)) != 0)
 		TGLError<GenomeTrackFixedBin>("Invalid format of a dense track file %s", filename);
 
-	m_num_samples = (int64_t)num_samples;
+	m_num_samples = (int64_t)(data_bytes / sizeof(float));
 	m_chromid = chromid;
 }
 
@@ -984,10 +996,12 @@ void GenomeTrackFixedBin::init_write(const char *filename, unsigned bin_size, in
 	m_num_samples = 0;
 	m_cur_coord = 0;
 
-	umask(07);
+	mode_t old_umask = umask(07);
 
-	if (m_bfile.open(filename, "wb"))
+	if (m_bfile.open(filename, "wb")) {
+		umask(old_umask);
 		TGLError<GenomeTrackFixedBin>("Opening a dense track file %s: %s", filename, strerror(errno));
+	}
 
 	m_bin_size = bin_size;
 	if (m_bfile.write(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size)) {

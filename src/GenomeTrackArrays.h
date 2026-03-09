@@ -87,8 +87,10 @@ protected:
 	StreamPercentiler<float>    m_slice_sp;
 	ArrayVals                   m_array_vals;
 
-	float                       m_num_vs;
-	double                      m_mean_square_sum;
+	uint64_t                    m_num_vs;
+	double                      m_stddev_mean;
+	double                      m_stddev_m2;
+	double                      m_sum_accum;
 
 	void read_intervals_map();
 	void finish_writing();
@@ -134,8 +136,9 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 
 	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 		(*itrack)->m_num_vs = 0;
-		(*itrack)->m_mean_square_sum = 0;
-		(*itrack)->m_last_sum = 0;
+		(*itrack)->m_stddev_mean = 0;
+		(*itrack)->m_stddev_m2 = 0;
+		(*itrack)->m_sum_accum = 0;
 		(*itrack)->m_last_min = numeric_limits<float>::max();
 		(*itrack)->m_last_max = -numeric_limits<float>::max();
 		if ((*itrack)->m_functions[MAX_POS])
@@ -151,7 +154,7 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 		for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 			v = (*itrack)->get_sliced_val(iinterv - m_intervals.begin());
 			if (!std::isnan(v)) {
-				(*itrack)->m_last_sum += v;
+				(*itrack)->m_sum_accum += v;
 				(*itrack)->m_last_min = min((*itrack)->m_last_min, v);
 				if (v > (*itrack)->m_last_max) {
 					(*itrack)->m_last_max = v;
@@ -164,31 +167,34 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 						(*itrack)->m_last_min_pos = iinterv->start;
 				}
 
-				if ((*itrack)->m_functions[STDDEV])
-					(*itrack)->m_mean_square_sum += v * v;
+				++(*itrack)->m_num_vs;
+				if ((*itrack)->m_functions[STDDEV]) {
+					const double delta = v - (*itrack)->m_stddev_mean;
+					(*itrack)->m_stddev_mean += delta / static_cast<double>((*itrack)->m_num_vs);
+					const double delta2 = v - (*itrack)->m_stddev_mean;
+					(*itrack)->m_stddev_m2 += delta * delta2;
+				}
 
 				if ((*itrack)->m_use_quantile)
 					(*itrack)->m_sp.add(v, s_rnd_func);
-
-				++(*itrack)->m_num_vs;
 			}
 		}
 	}
 
 	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
+		(*itrack)->m_last_sum = (float)(*itrack)->m_sum_accum;
 		if ((*itrack)->m_num_vs > 0)
-			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_sum / (*itrack)->m_num_vs;
+			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (float)((*itrack)->m_sum_accum / (*itrack)->m_num_vs);
 		else {
 			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_min = (*itrack)->m_last_max = (*itrack)->m_last_sum = numeric_limits<float>::quiet_NaN();
 			if ((*itrack)->m_functions[MIN_POS])
 				(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
 		}
 
-		// we are calaculating unbiased standard deviation:
-		// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
+		// Unbiased sample standard deviation via Welford's stable algorithm.
 		if ((*itrack)->m_functions[STDDEV])
 			(*itrack)->m_last_stddev = (*itrack)->m_num_vs > 1 ?
-				sqrt((*itrack)->m_mean_square_sum / ((*itrack)->m_num_vs - 1) - ((*itrack)->m_last_avg * (double)(*itrack)->m_last_avg) * ((*itrack)->m_num_vs / ((*itrack)->m_num_vs - 1))) :
+				sqrt((*itrack)->m_stddev_m2 / static_cast<double>((*itrack)->m_num_vs - 1)) :
 				numeric_limits<float>::quiet_NaN();
 	}
 }
