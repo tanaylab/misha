@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.5.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.0</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.0" id="misha-560">misha 5.6.0<a class="anchor" aria-label="anchor" href="#misha-560"></a></h2>
+<ul><li><p>Added <code><a href="../reference/gintervals.attr.get.html">gintervals.attr.get()</a></code>, <code><a href="../reference/gintervals.attr.set.html">gintervals.attr.set()</a></code>, <code><a href="../reference/gintervals.attr.export.html">gintervals.attr.export()</a></code>, and <code><a href="../reference/gintervals.attr.import.html">gintervals.attr.import()</a></code> for managing interval set attributes. Attributes are stored as <code>.iattr</code> binary files (null-separated key/value pairs) next to <code>.interv</code> files for small interval sets, or inside the directory for big interval sets.</p></li>
+<li><p><code><a href="../reference/gintervals.rm.html">gintervals.rm()</a></code> now cleans up companion <code>.iattr</code> attribute files when deleting interval sets.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.5.2" id="misha-552">misha 5.5.2<a class="anchor" aria-label="anchor" href="#misha-552"></a></h2>
 <ul><li><p>Replaced the naive variance formula (E[X²]-E[X]²) with Welford’s numerically stable online algorithm for standard deviation computation in all track types (GenomeTrackFixedBin, GenomeTrackSparse, GenomeTrackInMemory, GenomeTrackArrays). The naive formula is prone to catastrophic cancellation when values are large or have small variance relative to their mean.</p></li>
