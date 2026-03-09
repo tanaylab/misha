@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.5.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.5.2</span>
       </span>
     </div>
 
@@ -63,9 +63,18 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.5.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.5.2" id="misha-552">misha 5.5.2<a class="anchor" aria-label="anchor" href="#misha-552"></a></h2>
+<ul><li><p>Replaced the naive variance formula (E[X²]-E[X]²) with Welford’s numerically stable online algorithm for standard deviation computation in all track types (GenomeTrackFixedBin, GenomeTrackSparse, GenomeTrackInMemory, GenomeTrackArrays). The naive formula is prone to catastrophic cancellation when values are large or have small variance relative to their mean.</p></li>
+<li><p>Improved sum accumulation precision by using double-precision intermediate accumulators in all non-sliding sum paths. The <code>m_last_sum</code> member remains float for API compatibility, but per-interval accumulation now happens in double, eliminating float→float rounding errors for large sums.</p></li>
+<li><p>Fixed potential out-of-bounds access in SAMPLE/SAMPLE_POS functions when the random number generator returns exactly 1.0. Added bounds clamping (ported from pymisha).</p></li>
+<li><p>Fixed umask leak in <code>GenomeTrack::write_type()</code> and <code>GenomeTrackFixedBin::init_write()</code> — the old umask is now saved and restored on error, preventing permanent process-wide umask changes on exceptions.</p></li>
+<li><p>Improved header validation in <code>GenomeTrackFixedBin::init_read()</code> to use integer modulo instead of floating-point division, with an additional underflow guard.</p></li>
+<li><p>Added reusable scratch buffers (<code>m_scratch_all_values</code>, <code>m_scratch_all_positions</code>) to GenomeTrackFixedBin, avoiding per-call heap allocation for SAMPLE/SAMPLE_POS operations (ported from pymisha).</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.5.1" id="misha-551">misha 5.5.1<a class="anchor" aria-label="anchor" href="#misha-551"></a></h2>
 <ul><li>Fixed floating-point precision drift in sliding window sum for fixed-bin virtual tracks. The incremental add/subtract pattern accumulated rounding errors (~1e-7 per step) that compounded to noticeable differences at genome-wide scale. Now uses Kahan compensated summation for bit-accurate results. The bug was introduced in version 5.4.3 (commit 7337ff30, 2026-02-09) as part of the fixed-bin sum optimization.</li>
