@@ -6,7 +6,7 @@
 
 * Fixed potential out-of-bounds access in SAMPLE/SAMPLE_POS functions when the random number generator returns exactly 1.0. Added bounds clamping (ported from pymisha).
 
-* Fixed umask leak in `GenomeTrack::write_type()` and `GenomeTrackFixedBin::init_write()` — the old umask is now saved and restored on error, preventing permanent process-wide umask changes on exceptions.
+* Fixed umask leak in `GenomeTrack::write_type()` and `GenomeTrackFixedBin::init_write()` — the old umask is now saved and restored immediately after `open()`, preventing permanent process-wide umask changes.
 
 * Improved header validation in `GenomeTrackFixedBin::init_read()` to use integer modulo instead of floating-point division, with an additional underflow guard.
 
