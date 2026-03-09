@@ -48,6 +48,10 @@
 <url><loc>/reference/gintervals.all.html</loc></url>
 <url><loc>/reference/gintervals.annotate.html</loc></url>
 <url><loc>/reference/gintervals.as_chain.html</loc></url>
+<url><loc>/reference/gintervals.attr.export.html</loc></url>
+<url><loc>/reference/gintervals.attr.get.html</loc></url>
+<url><loc>/reference/gintervals.attr.import.html</loc></url>
+<url><loc>/reference/gintervals.attr.set.html</loc></url>
 <url><loc>/reference/gintervals.canonic.html</loc></url>
 <url><loc>/reference/gintervals.chrom_sizes.html</loc></url>
 <url><loc>/reference/gintervals.convert_to_indexed.html</loc></url>
