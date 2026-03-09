@@ -1,3 +1,9 @@
+# misha 5.6.0
+
+* Added `gintervals.attr.get()`, `gintervals.attr.set()`, `gintervals.attr.export()`, and `gintervals.attr.import()` for managing interval set attributes. Attributes are stored as `.iattr` binary files (null-separated key/value pairs) next to `.interv` files for small interval sets, or inside the directory for big interval sets.
+
+* `gintervals.rm()` now cleans up companion `.iattr` attribute files when deleting interval sets.
+
 # misha 5.5.2
 
 * Replaced the naive variance formula (E[X²]-E[X]²) with Welford's numerically stable online algorithm for standard deviation computation in all track types (GenomeTrackFixedBin, GenomeTrackSparse, GenomeTrackInMemory, GenomeTrackArrays). The naive formula is prone to catastrophic cancellation when values are large or have small variance relative to their mean.
