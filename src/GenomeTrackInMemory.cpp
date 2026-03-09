@@ -135,8 +135,10 @@ double GenomeTrackInMemory::last_min_pos() const
 void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 {
 	// Use count-based statistics (exactly like GenomeTrackSparse), NOT coverage-weighted
-	float num_vs = 0;
-	double mean_square_sum = 0;
+	uint64_t num_vs = 0;
+	double stddev_mean = 0;
+	double stddev_m2 = 0;
+	double sum_accum = 0;
 	float v;
 
 	// For sampling
@@ -147,7 +149,6 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 	if (m_functions[SAMPLE_POS])
 		all_positions.reserve(100);
 
-	m_last_sum = 0;
 	m_last_min = numeric_limits<float>::max();
 	m_last_max = -numeric_limits<float>::max();
 
@@ -169,7 +170,7 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 		v = m_vals[iinterv - m_intervals.begin()];
 
 		if (!std::isnan(v)) {
-			m_last_sum += v;
+			sum_accum += v;
 
 			// Min/Max tracking
 			if (v < m_last_min) {
@@ -187,8 +188,13 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 					m_last_max_pos = iinterv->start;
 			}
 
-			if (m_functions[STDDEV])
-				mean_square_sum += v * v;
+			++num_vs;
+			if (m_functions[STDDEV]) {
+				const double delta = v - stddev_mean;
+				stddev_mean += delta / static_cast<double>(num_vs);
+				const double delta2 = v - stddev_mean;
+				stddev_m2 += delta * delta2;
+			}
 
 			if (m_functions[LSE])
 				lse_accumulate(m_last_lse, v);
@@ -219,8 +225,6 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 				all_values.push_back(v);
 			if (m_functions[SAMPLE_POS])
 				all_positions.push_back(iinterv->start);
-
-			++num_vs;
 		}
 	}
 
@@ -231,16 +235,21 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 	// Sample from collected values
 	if (m_functions[SAMPLE] && !all_values.empty()) {
 		int idx = (int)(s_rnd_func() * all_values.size());
+		if (idx >= (int)all_values.size()) idx = (int)all_values.size() - 1;
+		if (idx < 0) idx = 0;
 		m_last_sample = all_values[idx];
 	}
 
 	if (m_functions[SAMPLE_POS] && !all_positions.empty()) {
 		int idx = (int)(s_rnd_func() * all_positions.size());
+		if (idx >= (int)all_positions.size()) idx = (int)all_positions.size() - 1;
+		if (idx < 0) idx = 0;
 		m_last_sample_pos = all_positions[idx];
 	}
 
+	m_last_sum = (float)sum_accum;
 	if (num_vs > 0)
-		m_last_avg = m_last_nearest = m_last_sum / num_vs;
+		m_last_avg = m_last_nearest = (float)(sum_accum / num_vs);
 	else {
 		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
 		if (m_functions[LSE])
@@ -255,8 +264,7 @@ void GenomeTrackInMemory::calc_vals_coverage_weighted(const GInterval &interval)
 	if (m_last_max == -numeric_limits<float>::max())
 		m_last_max = numeric_limits<float>::quiet_NaN();
 
-	// Calculate unbiased standard deviation (exactly like GenomeTrackSparse)
-	// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
+	// Unbiased sample standard deviation via Welford's stable algorithm.
 	if (m_functions[STDDEV])
-		m_last_stddev = num_vs > 1 ? sqrt(mean_square_sum / (num_vs - 1) - (m_last_avg * (double)m_last_avg) * (num_vs / (num_vs - 1))) : numeric_limits<float>::quiet_NaN();
+		m_last_stddev = num_vs > 1 ? sqrt(stddev_m2 / static_cast<double>(num_vs - 1)) : numeric_limits<float>::quiet_NaN();
 }

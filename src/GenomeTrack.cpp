@@ -232,10 +232,12 @@ GenomeTrack::Type GenomeTrack::s_read_type(BufferedFile &bfile, const char *file
 
 void GenomeTrack::write_type(const char *filename, const char *mode)
 {
-	umask(07);
+	mode_t old_umask = umask(07);
 
-	if (m_bfile.open(filename, mode))
+	if (m_bfile.open(filename, mode)) {
+		umask(old_umask);
 		TGLError<GenomeTrack>(FILE_ERROR, "Opening a track file %s: %s", filename, strerror(errno));
+	}
 
 	if (m_bfile.write(&FORMAT_SIGNATURES[m_type], sizeof(FORMAT_SIGNATURES[m_type])) != sizeof(FORMAT_SIGNATURES[m_type])) {
 		if (m_bfile.error())
