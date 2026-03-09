@@ -294,6 +294,9 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE, db = NULL) {
     if (!(intervals.set %in% get("GINTERVS", envir = .misha))) {
         if (force) {
             unlink(fname, recursive = TRUE)
+            # Also remove companion .iattr file for small interval sets
+            iattr_path <- sub("\\.interv$", ".iattr", fname)
+            if (file.exists(iattr_path)) unlink(iattr_path)
             .gdb.rm_intervals.set(intervals.set, db = db)
             return(invisible())
         }
@@ -319,6 +322,9 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE, db = NULL) {
     if (answer == "Y" || answer == "YES") {
         # remove the intervals set
         unlink(fname, recursive = TRUE)
+        # Also remove companion .iattr file for small interval sets
+        iattr_path <- sub("\\.interv$", ".iattr", fname)
+        if (file.exists(iattr_path)) unlink(iattr_path)
 
         if (file.exists(fname)) {
             message(sprintf("Failed to delete intervals set %s", intervals.set))
