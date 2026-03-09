@@ -136,9 +136,9 @@
 #' }
 #'
 #' gdb.init_examples()
-#' gintervals.attr.set("annotations1", "test_attr", "value")
-#' gintervals.attr.get("annotations1", "test_attr")
-#' gintervals.attr.set("annotations1", "test_attr", "")
+#' gintervals.attr.set("annotations", "test_attr", "value")
+#' gintervals.attr.get("annotations", "test_attr")
+#' gintervals.attr.set("annotations", "test_attr", "")
 #'
 #' @export gintervals.attr.get
 gintervals.attr.get <- function(intervals.set = NULL, attr = NULL) {
@@ -174,9 +174,9 @@ gintervals.attr.get <- function(intervals.set = NULL, attr = NULL) {
 #' }
 #'
 #' gdb.init_examples()
-#' gintervals.attr.set("annotations1", "test_attr", "value")
-#' gintervals.attr.get("annotations1", "test_attr")
-#' gintervals.attr.set("annotations1", "test_attr", "")
+#' gintervals.attr.set("annotations", "test_attr", "value")
+#' gintervals.attr.get("annotations", "test_attr")
+#' gintervals.attr.set("annotations", "test_attr", "")
 #'
 #' @export gintervals.attr.set
 gintervals.attr.set <- function(intervals.set = NULL, attr = NULL, value = NULL) {
@@ -226,11 +226,11 @@ gintervals.attr.set <- function(intervals.set = NULL, attr = NULL, value = NULL)
 #' }
 #'
 #' gdb.init_examples()
-#' gintervals.attr.set("annotations1", "test_attr", "value1")
+#' gintervals.attr.set("annotations", "test_attr", "value1")
 #' gintervals.attr.export()
-#' gintervals.attr.export(intervals.set = "annotations1")
+#' gintervals.attr.export(intervals.set = "annotations")
 #' gintervals.attr.export(attrs = "test_attr")
-#' gintervals.attr.set("annotations1", "test_attr", "")
+#' gintervals.attr.set("annotations", "test_attr", "")
 #'
 #' @export gintervals.attr.export
 gintervals.attr.export <- function(intervals.set = NULL, attrs = NULL) {
@@ -331,7 +331,7 @@ gintervals.attr.export <- function(intervals.set = NULL, attrs = NULL) {
 #'
 #' gdb.init_examples()
 #' t <- data.frame(
-#'     myattr = "val1", row.names = "annotations1",
+#'     myattr = "val1", row.names = "annotations",
 #'     stringsAsFactors = FALSE
 #' )
 #' gintervals.attr.import(t)

@@ -39,7 +39,7 @@ options(gmax.processes = 2)
 
 gdb.init_examples()
 t <- data.frame(
-    myattr = "val1", row.names = "annotations1",
+    myattr = "val1", row.names = "annotations",
     stringsAsFactors = FALSE
 )
 gintervals.attr.import(t)
