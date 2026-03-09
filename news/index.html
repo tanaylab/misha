@@ -63,7 +63,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.5.2/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
     <div class="section level2">
@@ -71,7 +71,7 @@
 <ul><li><p>Replaced the naive variance formula (E[X²]-E[X]²) with Welford’s numerically stable online algorithm for standard deviation computation in all track types (GenomeTrackFixedBin, GenomeTrackSparse, GenomeTrackInMemory, GenomeTrackArrays). The naive formula is prone to catastrophic cancellation when values are large or have small variance relative to their mean.</p></li>
 <li><p>Improved sum accumulation precision by using double-precision intermediate accumulators in all non-sliding sum paths. The <code>m_last_sum</code> member remains float for API compatibility, but per-interval accumulation now happens in double, eliminating float→float rounding errors for large sums.</p></li>
 <li><p>Fixed potential out-of-bounds access in SAMPLE/SAMPLE_POS functions when the random number generator returns exactly 1.0. Added bounds clamping (ported from pymisha).</p></li>
-<li><p>Fixed umask leak in <code>GenomeTrack::write_type()</code> and <code>GenomeTrackFixedBin::init_write()</code> — the old umask is now saved and restored on error, preventing permanent process-wide umask changes on exceptions.</p></li>
+<li><p>Fixed umask leak in <code>GenomeTrack::write_type()</code> and <code>GenomeTrackFixedBin::init_write()</code> — the old umask is now saved and restored immediately after <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">open()</a></code>, preventing permanent process-wide umask changes.</p></li>
 <li><p>Improved header validation in <code>GenomeTrackFixedBin::init_read()</code> to use integer modulo instead of floating-point division, with an additional underflow guard.</p></li>
 <li><p>Added reusable scratch buffers (<code>m_scratch_all_values</code>, <code>m_scratch_all_positions</code>) to GenomeTrackFixedBin, avoiding per-call heap allocation for SAMPLE/SAMPLE_POS operations (ported from pymisha).</p></li>
 </ul></div>
