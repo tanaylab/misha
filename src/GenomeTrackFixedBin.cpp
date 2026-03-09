@@ -1003,6 +1003,8 @@ void GenomeTrackFixedBin::init_write(const char *filename, unsigned bin_size, in
 		TGLError<GenomeTrackFixedBin>("Opening a dense track file %s: %s", filename, strerror(errno));
 	}
 
+	umask(old_umask);
+
 	m_bin_size = bin_size;
 	if (m_bfile.write(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size)) {
 		if (m_bfile.error())
