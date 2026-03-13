@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.1</span>
       </span>
     </div>
 
@@ -63,7 +63,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Create and Load a Genome Database</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.6.0/R/db-create.R" class="external-link"><code>R/db-create.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/db-create.R" class="external-link"><code>R/db-create.R</code></a></small>
     <div class="hidden name"><code>gdb.create_genome.Rd</code></div>
     </div>
 
@@ -103,21 +103,13 @@ extracts it to the specified directory, and loads the genome database using <cod
 
     <div id="ref-examples">
     <h2>Examples</h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span><span class="va">mm10_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">gdb.create_genome</span><span class="op">(</span><span class="st">"mm10"</span>, path <span class="op">=</span> <span class="va">mm10_dir</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Downloading mm10 genome...</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Extracting mm10 genome...</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Loading misha root...</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> mm10 genome has been successfully downloaded and extracted to /tmp/Rtmp81nh2E/mm10</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/list.files.html" class="external-link">list.files</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">mm10_dir</span>, <span class="st">"mm10"</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "chrom_sizes.txt" "downloads"       "pssms"           "seq"            </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [5] "tracks"         </span>
 <span class="r-in"><span><span class="fu"><a href="gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">mm10_dir</span>, <span class="st">"mm10"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="gintervals.ls.html">gintervals.ls</a></span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "intervs.global.exons" "intervs.global.tss"   "intervs.global.utr3" </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [4] "intervs.global.utr5" </span>
-<span class="r-in"><span><span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
