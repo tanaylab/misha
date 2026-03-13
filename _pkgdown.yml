@@ -139,7 +139,8 @@ reference:
       - gsynth.random
       - gsynth.replace_kmer
       - gsynth.save
-      - gsynth.load 
+      - gsynth.load
+      - gsynth.convert
       - gsynth.bin_map
       - print.gsynth.model
   - title: Database functions
