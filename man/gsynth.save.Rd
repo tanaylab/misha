@@ -2,18 +2,27 @@
 % Please edit documentation in R/synth.R
 \name{gsynth.save}
 \alias{gsynth.save}
-\title{Save a gsynth.model to disk}
+\title{Save a gsynth.model to disk in .gsm format}
 \usage{
-gsynth.save(model, file)
+gsynth.save(model, file, compress = FALSE)
 }
 \arguments{
 \item{model}{A gsynth.model object from \code{\link{gsynth.train}}}
 
-\item{file}{Path to save the model}
+\item{file}{Path to save the model (directory or .zip file)}
+
+\item{compress}{Logical. If \code{TRUE}, save as a ZIP archive. If
+\code{FALSE} (default), save as a directory.}
+}
+\value{
+Invisibly returns the file path.
 }
 \description{
-Saves a trained Markov model to an RDS file for later use.
+Saves a trained Markov model in the cross-platform .gsm format, which
+consists of a metadata YAML file and raw binary arrays for counts and CDFs.
+The .gsm format can be stored as a directory (default) or a ZIP archive.
 }
 \seealso{
-\code{\link{gsynth.load}}, \code{\link{gsynth.train}}
+\code{\link{gsynth.load}}, \code{\link{gsynth.train}},
+         \code{\link{gsynth.convert}}
 }
