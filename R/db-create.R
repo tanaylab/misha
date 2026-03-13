@@ -246,7 +246,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 #' @return None.
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' mm10_dir <- tempdir()
 #' gdb.create_genome("mm10", path = mm10_dir)
 #' list.files(file.path(mm10_dir, "mm10"))
