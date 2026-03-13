@@ -737,41 +737,316 @@ print.gsynth.model <- function(x, ...) {
     invisible(x)
 }
 
-#' Save a gsynth.model to disk
+#' Save a gsynth.model to disk in .gsm format
 #'
-#' Saves a trained Markov model to an RDS file for later use.
+#' Saves a trained Markov model in the cross-platform .gsm format, which
+#' consists of a metadata YAML file and raw binary arrays for counts and CDFs.
+#' The .gsm format can be stored as a directory (default) or a ZIP archive.
 #'
 #' @param model A gsynth.model object from \code{\link{gsynth.train}}
-#' @param file Path to save the model
+#' @param file Path to save the model (directory or .zip file)
+#' @param compress Logical. If \code{TRUE}, save as a ZIP archive. If
+#'        \code{FALSE} (default), save as a directory.
 #'
-#' @seealso \code{\link{gsynth.load}}, \code{\link{gsynth.train}}
+#' @return Invisibly returns the file path.
+#'
+#' @seealso \code{\link{gsynth.load}}, \code{\link{gsynth.train}},
+#'          \code{\link{gsynth.convert}}
 #' @export
-gsynth.save <- function(model, file) {
+gsynth.save <- function(model, file, compress = FALSE) {
     if (!inherits(model, "gsynth.model")) {
         stop("model must be a gsynth.model object", call. = FALSE)
     }
-    saveRDS(model, file)
+
+    total_bins <- model$total_bins
+    n_dims <- if (is.null(model$n_dims)) 0L else model$n_dims
+
+    # Build dim_specs for YAML
+    yaml_dim_specs <- list()
+    if (n_dims > 0) {
+        for (d in seq_len(n_dims)) {
+            spec <- model$dim_specs[[d]]
+            bin_map_val <- spec$bin_map
+            # Check if bin_map is identity (1:num_bins) — store as null
+            if (!is.null(bin_map_val) && length(bin_map_val) == spec$num_bins &&
+                all(bin_map_val == seq_len(spec$num_bins))) {
+                bin_map_val <- NULL
+            }
+            yaml_dim_specs[[d]] <- list(
+                expr = spec$expr,
+                breaks = as.numeric(spec$breaks),
+                num_bins = as.integer(spec$num_bins),
+                bin_map = if (is.null(bin_map_val)) NULL else as.integer(bin_map_val)
+            )
+        }
+    }
+
+    # Build metadata
+    metadata <- list(
+        format = "gsynth_model",
+        version = 1L,
+        markov_order = 5L,
+        n_dims = as.integer(n_dims),
+        dim_sizes = if (n_dims > 0) as.integer(model$dim_sizes) else list(),
+        total_bins = as.integer(total_bins),
+        pseudocount = if (!is.null(model$pseudocount)) as.numeric(model$pseudocount) else 1.0,
+        min_obs = as.integer(if (!is.null(model$min_obs)) model$min_obs else 0L),
+        total_kmers = as.numeric(model$total_kmers),
+        total_masked = as.numeric(model$total_masked),
+        total_n = as.numeric(model$total_n),
+        per_bin_kmers = as.numeric(model$per_bin_kmers),
+        dim_specs = if (n_dims > 0) yaml_dim_specs else list(),
+        data = list(
+            counts = list(
+                dtype = "float64",
+                shape = list(as.integer(total_bins), 1024L, 4L),
+                order = "C",
+                file = "counts.bin"
+            ),
+            cdf = list(
+                dtype = "float64",
+                shape = list(as.integer(total_bins), 1024L, 4L),
+                order = "C",
+                file = "cdf.bin"
+            )
+        )
+    )
+
+    # Helper to write binary data for a list of 1024x4 matrices in row-major order
+    .write_bin_matrices <- function(mat_list, filepath) {
+        con <- file(filepath, "wb")
+        on.exit(close(con))
+        for (i in seq_along(mat_list)) {
+            mat <- mat_list[[i]]
+            # mat is 1024x4 column-major in R
+            # Writing t(mat) column-major = writing mat row-major (C order)
+            writeBin(as.double(t(mat)), con, size = 8L, endian = "little")
+        }
+    }
+
+    if (compress) {
+        # Write to temp dir, then zip
+        tmp_dir <- tempfile("gsm_")
+        dir.create(tmp_dir, recursive = TRUE)
+        on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+        yaml::write_yaml(metadata, file.path(tmp_dir, "metadata.yaml"), precision = 15)
+        .write_bin_matrices(model$model_data$counts, file.path(tmp_dir, "counts.bin"))
+        .write_bin_matrices(model$model_data$cdf, file.path(tmp_dir, "cdf.bin"))
+
+        # Create zip — use setwd to avoid directory hierarchy in archive
+        zip_path <- normalizePath(file, mustWork = FALSE)
+        old_wd <- setwd(tmp_dir)
+        on.exit(setwd(old_wd), add = TRUE)
+        utils::zip(zip_path,
+            files = c("metadata.yaml", "counts.bin", "cdf.bin"),
+            flags = "-q"
+        )
+    } else {
+        # Write directly to directory
+        if (file.exists(file) && !dir.exists(file)) {
+            stop(sprintf("'%s' exists and is not a directory", file), call. = FALSE)
+        }
+        dir.create(file, recursive = TRUE, showWarnings = FALSE)
+
+        yaml::write_yaml(metadata, file.path(file, "metadata.yaml"), precision = 15)
+        .write_bin_matrices(model$model_data$counts, file.path(file, "counts.bin"))
+        .write_bin_matrices(model$model_data$cdf, file.path(file, "cdf.bin"))
+    }
+
     invisible(file)
 }
 
 #' Load a gsynth.model from disk
 #'
-#' Loads a previously saved Markov model from an RDS file.
+#' Loads a previously saved Markov model. Auto-detects the format:
+#' \itemize{
+#'   \item If \code{file} is a directory, reads the .gsm directory format
+#'   \item If \code{file} is a file, tries ZIP .gsm format first, then
+#'         falls back to legacy RDS format
+#' }
 #'
-#' @param file Path to the saved model file
+#' @param file Path to the saved model (directory, .gsm zip, or legacy .rds)
 #'
 #' @return A gsynth.model object
 #'
-#' @seealso \code{\link{gsynth.save}}, \code{\link{gsynth.train}}
+#' @seealso \code{\link{gsynth.save}}, \code{\link{gsynth.train}},
+#'          \code{\link{gsynth.convert}}
 #' @export
 gsynth.load <- function(file) {
     if (!file.exists(file)) {
         stop(sprintf("File not found: %s", file), call. = FALSE)
     }
+
+    if (dir.exists(file)) {
+        # Directory .gsm format
+        return(.load_gsm_dir(file))
+    }
+
+    # File: try ZIP first, then legacy RDS
+    result <- tryCatch(.load_gsm_zip(file), error = function(e) NULL)
+    if (!is.null(result)) {
+        return(result)
+    }
+
+    # Legacy RDS fallback
     model <- readRDS(file)
     if (!inherits(model, "gsynth.model")) {
         stop("File does not contain a valid gsynth.model", call. = FALSE)
     }
+    model
+}
+
+#' Convert a legacy RDS gsynth model to .gsm format
+#'
+#' Reads a gsynth.model from a legacy RDS file and saves it in the
+#' cross-platform .gsm format.
+#'
+#' @param input_file Path to the legacy RDS model file
+#' @param output_file Path for the output .gsm model (directory or zip)
+#' @param compress Logical. If \code{TRUE}, save as a ZIP archive. If
+#'        \code{FALSE} (default), save as a directory.
+#'
+#' @return Invisibly returns the output file path.
+#'
+#' @seealso \code{\link{gsynth.save}}, \code{\link{gsynth.load}}
+#' @export
+gsynth.convert <- function(input_file, output_file, compress = FALSE) {
+    model <- readRDS(input_file)
+    if (!inherits(model, "gsynth.model")) {
+        stop("Input file does not contain a valid gsynth.model", call. = FALSE)
+    }
+    gsynth.save(model, output_file, compress = compress)
+}
+
+# Internal: load .gsm from a directory
+.load_gsm_dir <- function(dir_path) {
+    meta_path <- file.path(dir_path, "metadata.yaml")
+    if (!file.exists(meta_path)) {
+        stop(sprintf("metadata.yaml not found in '%s'", dir_path), call. = FALSE)
+    }
+    metadata <- yaml::read_yaml(meta_path)
+    .build_model_from_gsm(metadata, dir_path)
+}
+
+# Internal: load .gsm from a ZIP file
+.load_gsm_zip <- function(zip_path) {
+    # Quick check: ZIP files start with PK (0x50 0x4B)
+    sig <- readBin(zip_path, "raw", n = 2L)
+    if (length(sig) < 2L || sig[1] != as.raw(0x50) || sig[2] != as.raw(0x4B)) {
+        stop("Not a ZIP file", call. = FALSE)
+    }
+
+    tmp_dir <- tempfile("gsm_unzip_")
+    dir.create(tmp_dir, recursive = TRUE)
+    on.exit(unlink(tmp_dir, recursive = TRUE))
+
+    utils::unzip(zip_path, exdir = tmp_dir)
+
+    meta_path <- file.path(tmp_dir, "metadata.yaml")
+    if (!file.exists(meta_path)) {
+        stop("Not a valid .gsm ZIP file (no metadata.yaml)", call. = FALSE)
+    }
+    metadata <- yaml::read_yaml(meta_path)
+    .build_model_from_gsm(metadata, tmp_dir)
+}
+
+# Internal: reconstruct gsynth.model from metadata + binary files
+.build_model_from_gsm <- function(metadata, dir_path) {
+    if (is.null(metadata$format) || metadata$format != "gsynth_model") {
+        stop("Invalid .gsm metadata: missing or wrong format field", call. = FALSE)
+    }
+
+    total_bins <- as.integer(metadata$total_bins)
+    n_dims <- as.integer(metadata$n_dims)
+
+    # Read binary data
+    counts_path <- file.path(dir_path, "counts.bin")
+    cdf_path <- file.path(dir_path, "cdf.bin")
+
+    if (!file.exists(counts_path) || !file.exists(cdf_path)) {
+        stop("Binary data files (counts.bin, cdf.bin) not found", call. = FALSE)
+    }
+
+    expected_n <- total_bins * 1024L * 4L
+
+    counts_flat <- readBin(counts_path, "double", n = expected_n, size = 8L, endian = "little")
+    cdf_flat <- readBin(cdf_path, "double", n = expected_n, size = 8L, endian = "little")
+
+    if (length(counts_flat) != expected_n || length(cdf_flat) != expected_n) {
+        stop(sprintf(
+            "Binary data size mismatch: expected %d doubles, got counts=%d, cdf=%d",
+            expected_n, length(counts_flat), length(cdf_flat)
+        ), call. = FALSE)
+    }
+
+    # Reshape: row-major flat -> list of 1024x4 column-major R matrices
+    chunk <- 1024L * 4L
+    counts_list <- vector("list", total_bins)
+    cdf_list <- vector("list", total_bins)
+
+    for (i in seq_len(total_bins)) {
+        offset <- (i - 1L) * chunk
+        # Data was written as t(mat) in column-major = row-major
+        # Read as 4x1024 matrix (column-major), then transpose to 1024x4
+        counts_list[[i]] <- t(matrix(counts_flat[(offset + 1L):(offset + chunk)],
+            nrow = 4L, ncol = 1024L
+        ))
+        cdf_list[[i]] <- t(matrix(cdf_flat[(offset + 1L):(offset + chunk)],
+            nrow = 4L, ncol = 1024L
+        ))
+    }
+
+    model_data <- list(counts = counts_list, cdf = cdf_list)
+
+    # Reconstruct dim_specs
+    dim_specs <- list()
+    if (n_dims > 0 && length(metadata$dim_specs) > 0) {
+        for (d in seq_len(n_dims)) {
+            raw_spec <- metadata$dim_specs[[d]]
+            bm <- raw_spec$bin_map
+            if (is.null(bm)) {
+                bm <- seq_len(as.integer(raw_spec$num_bins))
+            } else {
+                bm <- as.integer(unlist(bm))
+            }
+            dim_specs[[d]] <- list(
+                expr = raw_spec$expr,
+                breaks = as.numeric(unlist(raw_spec$breaks)),
+                num_bins = as.integer(raw_spec$num_bins),
+                bin_map = bm
+            )
+        }
+    }
+
+    dim_sizes <- if (n_dims > 0) as.integer(unlist(metadata$dim_sizes)) else integer(0)
+
+    # Reconstruct sparse_bins from CDF data
+    min_obs <- as.integer(if (!is.null(metadata$min_obs)) metadata$min_obs else 0L)
+    per_bin_kmers <- as.numeric(unlist(metadata$per_bin_kmers))
+    sparse_bins <- which(per_bin_kmers < min_obs)
+
+    # Build the model object
+    pseudocount <- if (!is.null(metadata$pseudocount)) as.numeric(metadata$pseudocount) else 1.0
+    model <- list(
+        num_bins = total_bins,
+        breaks = NULL,
+        total_kmers = as.numeric(metadata$total_kmers),
+        per_bin_kmers = per_bin_kmers,
+        total_masked = as.numeric(metadata$total_masked),
+        total_n = as.numeric(metadata$total_n),
+        model_data = model_data,
+        n_dims = n_dims,
+        dim_specs = dim_specs,
+        dim_sizes = dim_sizes,
+        total_bins = total_bins,
+        pseudocount = pseudocount,
+        iterator = NULL,
+        min_obs = min_obs,
+        sparse_bins = sparse_bins
+    )
+
+    class(model) <- "gsynth.model"
     model
 }
 

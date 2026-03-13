@@ -1,3 +1,11 @@
+# misha 5.6.1
+
+* `gsynth.save()` and `gsynth.load()` now use the cross-platform `.gsm` format (YAML metadata + binary arrays) instead of R-specific RDS. Models saved with pymisha can now be loaded in R and vice versa. Legacy RDS files are still supported for backward compatibility.
+
+* Added `compress` parameter to `gsynth.save()` to optionally save as a ZIP archive.
+
+* Added `gsynth.convert()` to convert legacy RDS model files to the new `.gsm` format.
+
 # misha 5.6.0
 
 * Added `gintervals.attr.get()`, `gintervals.attr.set()`, `gintervals.attr.export()`, and `gintervals.attr.import()` for managing interval set attributes. Attributes are stored as `.iattr` binary files (null-separated key/value pairs) next to `.interv` files for small interval sets, or inside the directory for big interval sets.
