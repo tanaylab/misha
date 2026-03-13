@@ -24,7 +24,7 @@ The function checks if the specified genome is available. If tmpdir, it construc
 extracts it to the specified directory, and loads the genome database using \code{gsetroot}. The function also calls \code{gdb.reload} to reload the genome database.
 }
 \examples{
-\donttest{
+\dontrun{
 mm10_dir <- tempdir()
 gdb.create_genome("mm10", path = mm10_dir)
 list.files(file.path(mm10_dir, "mm10"))
