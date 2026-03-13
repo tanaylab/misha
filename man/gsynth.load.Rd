@@ -7,14 +7,20 @@
 gsynth.load(file)
 }
 \arguments{
-\item{file}{Path to the saved model file}
+\item{file}{Path to the saved model (directory, .gsm zip, or legacy .rds)}
 }
 \value{
 A gsynth.model object
 }
 \description{
-Loads a previously saved Markov model from an RDS file.
+Loads a previously saved Markov model. Auto-detects the format:
+\itemize{
+  \item If \code{file} is a directory, reads the .gsm directory format
+  \item If \code{file} is a file, tries ZIP .gsm format first, then
+        falls back to legacy RDS format
+}
 }
 \seealso{
-\code{\link{gsynth.save}}, \code{\link{gsynth.train}}
+\code{\link{gsynth.save}}, \code{\link{gsynth.train}},
+         \code{\link{gsynth.convert}}
 }
