@@ -98,8 +98,10 @@
 <p>You can install the released version of misha from <a href="https://CRAN.R-project.org" class="external-link">CRAN</a> with:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"misha"</span><span class="op">)</span></span></code></pre></div>
+<p>Or from conda:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="ex">conda</span> install <span class="at">-c</span> aviezerl misha</span></code></pre></div>
 <p>And the development version from GitHub with:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"tanaylab/misha"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
@@ -111,7 +113,7 @@
 <h4 id="running-scripts-from-old-versions-of-misha--420">Running scripts from old versions of misha (&lt; 4.2.0)<a class="anchor" aria-label="anchor" href="#running-scripts-from-old-versions-of-misha--420"></a>
 </h4>
 <p>Starting in <code>misha</code> 4.2.0, the package no longer stores global variables such as <code>ALLGENOME</code> or <code>GROOT</code>. Instead, these variables are stored in a special environment called <code>.misha</code>. This means that scripts written for older versions of <code>misha</code> will no longer work. To run such scripts, either add a prefix of <code>.misha$</code> to all those variables (<code>.misha$ALLGENOME</code> instead of <code>ALLGENOME</code>), or run the following command before running the script:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ALLGENOME</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span></span>
 <span><span class="va">GROOT</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GROOT</span></span>
 <span><span class="va">ALLGENOME</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span></span>
