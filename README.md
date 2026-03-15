@@ -24,6 +24,12 @@ You can install the released version of misha from
 install.packages("misha")
 ```
 
+Or from conda:
+
+``` bash
+conda install -c aviezerl misha
+```
+
 And the development version from GitHub with:
 
 ``` r
