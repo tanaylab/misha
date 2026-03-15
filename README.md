@@ -27,7 +27,7 @@ install.packages("misha")
 Or from conda:
 
 ``` bash
-conda install -c aviezerl misha
+conda install -c aviezerl r-misha
 ```
 
 And the development version from GitHub with:
