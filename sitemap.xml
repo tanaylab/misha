@@ -97,6 +97,9 @@
 <url><loc>/reference/gseq.kmer.dist.html</loc></url>
 <url><loc>/reference/gseq.kmer.html</loc></url>
 <url><loc>/reference/gseq.pwm.html</loc></url>
+<url><loc>/reference/gseq.read_homer.html</loc></url>
+<url><loc>/reference/gseq.read_jaspar.html</loc></url>
+<url><loc>/reference/gseq.read_meme.html</loc></url>
 <url><loc>/reference/gseq.rev.html</loc></url>
 <url><loc>/reference/gseq.revcomp.html</loc></url>
 <url><loc>/reference/gsummary.html</loc></url>
@@ -131,6 +134,8 @@
 <url><loc>/reference/gtrack.dataset.html</loc></url>
 <url><loc>/reference/gtrack.dbs.html</loc></url>
 <url><loc>/reference/gtrack.exists.html</loc></url>
+<url><loc>/reference/gtrack.export_bedgraph.html</loc></url>
+<url><loc>/reference/gtrack.export_bigwig.html</loc></url>
 <url><loc>/reference/gtrack.import.html</loc></url>
 <url><loc>/reference/gtrack.import_mappedseq.html</loc></url>
 <url><loc>/reference/gtrack.import_set.html</loc></url>
