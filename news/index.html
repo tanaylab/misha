@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.2</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.2" id="misha-562">misha 5.6.2<a class="anchor" aria-label="anchor" href="#misha-562"></a></h2>
+<ul><li><p>Added motif format import functions: <code><a href="../reference/gseq.read_meme.html">gseq.read_meme()</a></code>, <code><a href="../reference/gseq.read_jaspar.html">gseq.read_jaspar()</a></code>, and <code><a href="../reference/gseq.read_homer.html">gseq.read_homer()</a></code> for reading MEME, JASPAR PFM, and HOMER motif formats. Returns named lists of position probability matrices directly usable with <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code>. All parsers are native with no new dependencies.</p></li>
+<li><p>Added track export functions: <code><a href="../reference/gtrack.export_bedgraph.html">gtrack.export_bedgraph()</a></code> and <code><a href="../reference/gtrack.export_bigwig.html">gtrack.export_bigwig()</a></code> for exporting tracks and track expressions to standard bedGraph and BigWig formats. Supports gzip compression, virtual tracks, track expressions, and custom iterators.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.1" id="misha-561">misha 5.6.1<a class="anchor" aria-label="anchor" href="#misha-561"></a></h2>
 <ul><li><p><code><a href="../reference/gsynth.save.html">gsynth.save()</a></code> and <code><a href="../reference/gsynth.load.html">gsynth.load()</a></code> now use the cross-platform <code>.gsm</code> format (YAML metadata + binary arrays) instead of R-specific RDS. Models saved with pymisha can now be loaded in R and vice versa. Legacy RDS files are still supported for backward compatibility.</p></li>
