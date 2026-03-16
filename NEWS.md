@@ -1,3 +1,9 @@
+# misha 5.6.3
+
+* Fixed `gdataset.load()` performance: loading a large database as a dataset is now fast regardless of call order. Previously, `gsetroot(small_db); gdataset.load(large_db)` was extremely slow because the dataset scan used R's `list.files(recursive=TRUE)`, which lists every file in the tree. Replaced with a fast path that reads `.db.cache` or falls back to C++ `fts`-based scanning. Also changed `gdb.reload()` calls in `gdataset.load()`/`gdataset.unload()` to use `rescan=FALSE`, so existing databases use their cache instead of being rescanned.
+
+* Fixed collision detection for hierarchical tracks in `gdataset.load()`: the R-level scan returned `/`-separated names while the dataset map uses `.`-separated names, causing collision detection to silently fail for tracks in subdirectories.
+
 # misha 5.6.2
 
 * Added motif format import functions: `gseq.read_meme()`, `gseq.read_jaspar()`, and `gseq.read_homer()` for reading MEME, JASPAR PFM, and HOMER motif formats. Returns named lists of position probability matrices directly usable with `gseq.pwm()`. All parsers are native with no new dependencies.

@@ -73,9 +73,11 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
         stop(sprintf("Cannot load dataset '%s': genome does not match working database", path), call. = FALSE)
     }
 
-    # Scan for tracks and intervals
-    dataset_tracks <- .gdb.scan_tracks(path_norm)
-    dataset_intervals <- .gdb.scan_intervals(path_norm)
+    # Scan for tracks and intervals using fast path (.db.cache or C++ fts)
+    # Avoids slow R-level list.files(recursive=TRUE) on large databases
+    dataset_contents <- .gdb.scan_db_fast(path_norm)
+    dataset_tracks <- dataset_contents$tracks
+    dataset_intervals <- dataset_contents$intervals
 
     # Get current state
     .gdb.ensure_dataset_maps()
@@ -140,8 +142,11 @@ gdataset.load <- function(path, force = FALSE, verbose = FALSE) {
     gdatasets <- c(gdatasets, path_norm)
     assign("GDATASETS", gdatasets, envir = .misha)
 
-    # Reload the database to properly scan all tracks/intervals
-    gdb.reload(rescan = TRUE)
+    # Reload the database to aggregate all tracks/intervals.
+    # Use rescan=FALSE so existing databases use their .db.cache (much faster
+    # for large databases). New datasets without a cache will be C++ scanned
+    # and cached automatically by gdb.reload.
+    gdb.reload(rescan = FALSE)
 
     if (verbose) {
         message(sprintf("Loaded dataset '%s':", path))
@@ -196,8 +201,9 @@ gdataset.unload <- function(path, validate = FALSE) {
     gdatasets <- setdiff(gdatasets, path_norm)
     assign("GDATASETS", gdatasets, envir = .misha)
 
-    # Reload the database to properly rescan all tracks/intervals
-    gdb.reload(rescan = TRUE)
+    # Reload the database to aggregate remaining tracks/intervals.
+    # Use rescan=FALSE so databases use their .db.cache (no files changed).
+    gdb.reload(rescan = FALSE)
 
     invisible(NULL)
 }
@@ -560,6 +566,59 @@ gdataset.example_path <- function() {
 
 .gdb.clear_scan_cache <- function() {
     rm(list = ls(envir = .gdb.scan_cache), envir = .gdb.scan_cache)
+}
+
+# Fast database content scan using .db.cache or C++ fts fallback.
+# Returns list(tracks, intervals) with dot-separated names matching gdb.reload format.
+# Much faster than R-level list.files(recursive=TRUE) for large databases because:
+#   1. .db.cache avoids filesystem traversal entirely
+#   2. C++ fts uses FTS_SKIP to avoid descending into .track/.interv directories
+.gdb.scan_db_fast <- function(db) {
+    # Try to read .db.cache first (fastest path)
+    cache_path <- file.path(db, ".db.cache")
+    if (file.exists(cache_path) && !.gdb.cache_is_dirty(db)) {
+        res <- tryCatch(
+            {
+                f <- file(cache_path, "rb")
+                on.exit(close(f))
+                data <- unserialize(f)
+                close(f)
+                on.exit(NULL)
+                data
+            },
+            error = function(e) NULL
+        )
+        if (!is.null(res) && length(res) >= 2) {
+            return(list(tracks = res[[1]], intervals = res[[2]]))
+        }
+    }
+
+    # Fall back to C++ scan
+    tracks_dir <- file.path(db, "tracks")
+    if (!dir.exists(tracks_dir)) {
+        return(list(tracks = character(0), intervals = character(0)))
+    }
+
+    res <- .gcall("gfind_tracks_n_intervals", tracks_dir, .misha_env())
+    if (is.null(res)) {
+        return(list(tracks = character(0), intervals = character(0)))
+    }
+
+    tracks <- .gdb.normalize_cache_list(res[[1]])
+    intervals <- .gdb.normalize_cache_list(res[[2]])
+
+    # Write cache for future use (silently fail if no write permission)
+    try(
+        {
+            f <- file(cache_path, "wb")
+            serialize(list(tracks, intervals), f)
+            close(f)
+            .gdb.cache_clear_dirty(db)
+        },
+        silent = TRUE
+    )
+
+    list(tracks = tracks, intervals = intervals)
 }
 
 .gdb.scan_tracks <- function(db, use_cache = TRUE) {
