@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.3</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.3" id="misha-563">misha 5.6.3<a class="anchor" aria-label="anchor" href="#misha-563"></a></h2>
+<ul><li><p>Fixed <code><a href="../reference/gdataset.load.html">gdataset.load()</a></code> performance: loading a large database as a dataset is now fast regardless of call order. Previously, <code>gsetroot(small_db); gdataset.load(large_db)</code> was extremely slow because the dataset scan used R’s <code>list.files(recursive=TRUE)</code>, which lists every file in the tree. Replaced with a fast path that reads <code>.db.cache</code> or falls back to C++ <code>fts</code>-based scanning. Also changed <code><a href="../reference/gdb.reload.html">gdb.reload()</a></code> calls in <code><a href="../reference/gdataset.load.html">gdataset.load()</a></code>/<code><a href="../reference/gdataset.unload.html">gdataset.unload()</a></code> to use <code>rescan=FALSE</code>, so existing databases use their cache instead of being rescanned.</p></li>
+<li><p>Fixed collision detection for hierarchical tracks in <code><a href="../reference/gdataset.load.html">gdataset.load()</a></code>: the R-level scan returned <code>/</code>-separated names while the dataset map uses <code>.</code>-separated names, causing collision detection to silently fail for tracks in subdirectories.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.2" id="misha-562">misha 5.6.2<a class="anchor" aria-label="anchor" href="#misha-562"></a></h2>
 <ul><li><p>Added motif format import functions: <code><a href="../reference/gseq.read_meme.html">gseq.read_meme()</a></code>, <code><a href="../reference/gseq.read_jaspar.html">gseq.read_jaspar()</a></code>, and <code><a href="../reference/gseq.read_homer.html">gseq.read_homer()</a></code> for reading MEME, JASPAR PFM, and HOMER motif formats. Returns named lists of position probability matrices directly usable with <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code>. All parsers are native with no new dependencies.</p></li>
