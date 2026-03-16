@@ -1,3 +1,9 @@
+# misha 5.6.2
+
+* Added motif format import functions: `gseq.read_meme()`, `gseq.read_jaspar()`, and `gseq.read_homer()` for reading MEME, JASPAR PFM, and HOMER motif formats. Returns named lists of position probability matrices directly usable with `gseq.pwm()`. All parsers are native with no new dependencies.
+
+* Added track export functions: `gtrack.export_bedgraph()` and `gtrack.export_bigwig()` for exporting tracks and track expressions to standard bedGraph and BigWig formats. Supports gzip compression, virtual tracks, track expressions, and custom iterators.
+
 # misha 5.6.1
 
 * `gsynth.save()` and `gsynth.load()` now use the cross-platform `.gsm` format (YAML metadata + binary arrays) instead of R-specific RDS. Models saved with pymisha can now be loaded in R and vice versa. Legacy RDS files are still supported for backward compatibility.

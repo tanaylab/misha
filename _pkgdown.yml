@@ -131,6 +131,17 @@ reference:
       - grevcomp
       - gseq.rev
       - gseq.comp
+  - title: Track export
+    desc: Functions to export tracks to standard genomic file formats
+    contents:
+      - gtrack.export_bedgraph
+      - gtrack.export_bigwig
+  - title: Motif import
+    desc: Functions to import motifs from standard motif format files
+    contents:
+      - gseq.read_meme
+      - gseq.read_jaspar
+      - gseq.read_homer
   - title: Synthetic genome functions
     desc: Generate synthetic genomes using stratified Markov models
     contents:
