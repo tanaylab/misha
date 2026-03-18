@@ -1035,9 +1035,8 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
     }
     .gcheckroot()
 
-    # Get interval set path - mimic C++ interv2path logic
-    path <- gsub("\\.", "/", set.name)
-    intervset_path <- paste0(get("GWD", envir = .misha), "/", path, ".interv")
+    # Get interval set path using database-aware resolution
+    intervset_path <- .intervals_dir(set.name)
 
     # Check if it's a Big Set (directory) or single-file format
     if (!file.exists(intervset_path)) {
@@ -1202,9 +1201,8 @@ gintervals.2d.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE
     }
     .gcheckroot()
 
-    # Get interval set path - mimic C++ interv2path logic
-    path <- gsub("\\.", "/", set.name)
-    intervset_path <- paste0(get("GWD", envir = .misha), "/", path, ".interv")
+    # Get interval set path using database-aware resolution
+    intervset_path <- .intervals_dir(set.name)
 
     # Check if it's a Big Set (directory) or single-file format
     if (!file.exists(intervset_path)) {
