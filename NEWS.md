@@ -1,3 +1,7 @@
+# misha 5.6.4
+
+* Fixed `gintervals.load()` failing with "Intervals set does not exist" for intervals from databases loaded via `gdataset.load()`.
+
 # misha 5.6.3
 
 * Fixed `gdataset.load()` performance: loading a large database as a dataset is now fast regardless of call order. Previously, `gsetroot(small_db); gdataset.load(large_db)` was extremely slow because the dataset scan used R's `list.files(recursive=TRUE)`, which lists every file in the tree. Replaced with a fast path that reads `.db.cache` or falls back to C++ `fts`-based scanning. Also changed `gdb.reload()` calls in `gdataset.load()`/`gdataset.unload()` to use `rescan=FALSE`, so existing databases use their cache instead of being rescanned.

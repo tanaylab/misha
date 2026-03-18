@@ -532,7 +532,7 @@
 }
 
 .gintervals.load_file <- function(intervals.set, chrom = NULL, chrom1 = NULL, chrom2 = NULL) {
-    intervfname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+    intervfname <- .intervals_dir(intervals.set)
     if (!is.null(chrom)) {
         chrom <- .gchroms(chrom)
         intervfname <- sprintf("%s/%s", intervfname, chrom)
