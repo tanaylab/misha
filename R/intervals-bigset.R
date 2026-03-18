@@ -3,9 +3,9 @@
 .gintervals.is_bigset <- function(intervals.set, err_if_non_exist = TRUE) {
     if (is.character(intervals.set) & length(intervals.set) == 1) {
         if (intervals.set %in% get("GTRACKS", envir = .misha)) {
-            intervfname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+            intervfname <- .track_dir(intervals.set)
         } else {
-            intervfname <- sprintf("%s.interv", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+            intervfname <- .intervals_dir(intervals.set)
         }
         if (file.exists(intervfname)) {
             if (file.info(intervfname)$isdir) {
@@ -149,12 +149,12 @@
 .gintervals.big.meta <- function(intervals.set) {
     metafname <- ""
     if (intervals.set %in% get("GTRACKS", envir = .misha)) {
-        metafname <- sprintf("%s.track/.meta", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+        metafname <- file.path(.track_dir(intervals.set), ".meta")
         if (!file.exists(metafname)) {
             .gcall("gtrack_create_meta", intervals.set, .misha_env())
         }
     } else {
-        metafname <- sprintf("%s.interv/.meta", paste(get("GWD", envir = .misha), gsub("\\.", "/", intervals.set), sep = "/"))
+        metafname <- file.path(.intervals_dir(intervals.set), ".meta")
     }
     f <- file(metafname, "rb")
     res <- unserialize(f)

@@ -1146,3 +1146,104 @@ test_that("dataset workflow: save, load, use", {
         expect_equal(result$analysis_track[1], 42)
     })
 })
+
+# ==============================================================================
+# Regression: gintervals.load() from outer database (GH bug report)
+# Prior to fix, gintervals.load() / .gintervals.is_bigset() / .gintervals.big.meta()
+# hardcoded GWD instead of resolving via GINTERVALS_DATASET, so intervals
+# visible via gintervals.ls() could not be loaded.
+# ==============================================================================
+
+test_that("gintervals.load() works for small intervals from loaded dataset", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+
+        # Create dataset with a small (single-file) intervals set
+        create_test_db("outer_db")
+        gsetroot("outer_db")
+        intervs <- gintervals(1, 0, 1000)
+        gintervals.save("outer_intervals", intervs)
+
+        # Switch to working db and load dataset
+        gsetroot("working_db")
+        gdataset.load("outer_db")
+
+        # gintervals.ls() should find it
+        expect_true("outer_intervals" %in% gintervals.ls())
+
+        # gintervals.load() must also work (this was the reported bug)
+        loaded <- gintervals.load("outer_intervals")
+        expect_equal(nrow(loaded), 1)
+        expect_equal(as.character(loaded$chrom[1]), "chr1")
+        expect_equal(loaded$start[1], 0)
+        expect_equal(loaded$end[1], 1000)
+    })
+})
+
+test_that("gintervals.load() works for hierarchical intervals from loaded dataset", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+
+        # Create dataset with a hierarchically-named intervals set (dots → subdirs)
+        create_test_db("outer_db")
+        gsetroot("outer_db")
+        # Create parent directory structure for hierarchical name
+        dir.create(file.path("outer_db", "tracks", "intervs", "global"), recursive = TRUE)
+        intervs <- gintervals(1, 100, 500)
+        gintervals.save("intervs.global.test_set", intervs)
+
+        gsetroot("working_db")
+        gdataset.load("outer_db")
+
+        expect_true("intervs.global.test_set" %in% gintervals.ls())
+
+        loaded <- gintervals.load("intervs.global.test_set")
+        expect_equal(nrow(loaded), 1)
+        expect_equal(loaded$start[1], 100)
+        expect_equal(loaded$end[1], 500)
+    })
+})
+
+test_that("gintervals.load() works for big intervals from loaded dataset", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+
+        # Create dataset with a big (directory-based) intervals set
+        create_test_db("outer_db")
+        gsetroot("outer_db")
+        # Create intervals spanning multiple chroms to trigger big-set storage
+        intervs <- gintervals(c(1, 2), c(0, 0), c(1000, 2000))
+        gintervals.save("big_outer", intervs)
+
+        gsetroot("working_db")
+        gdataset.load("outer_db")
+
+        expect_true("big_outer" %in% gintervals.ls())
+
+        loaded <- gintervals.load("big_outer")
+        expect_equal(nrow(loaded), 2)
+    })
+})
+
+test_that("gintervals.load() with chrom filter works for dataset intervals", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+
+        create_test_db("outer_db")
+        gsetroot("outer_db")
+        intervs <- gintervals(c(1, 2), c(0, 0), c(1000, 2000))
+        gintervals.save("outer_multi", intervs)
+
+        gsetroot("working_db")
+        gdataset.load("outer_db")
+
+        # Load only chr1
+        loaded <- gintervals.load("outer_multi", chrom = "chr1")
+        expect_equal(nrow(loaded), 1)
+        expect_equal(as.character(loaded$chrom[1]), "chr1")
+    })
+})
