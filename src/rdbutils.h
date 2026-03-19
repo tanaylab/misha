@@ -210,12 +210,19 @@ SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 
-// Backward-compatible shim for R < 4.5.0
+// Backward-compatible shims for R < 4.5.0
 #if R_VERSION < R_Version(4, 5, 0)
 static inline SEXP R_getVar(SEXP sym, SEXP rho, Rboolean inherits) {
     SEXP val = inherits ? Rf_findVar(sym, rho) : Rf_findVarInFrame(sym, rho);
     if (val == R_UnboundValue)
         Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
+    MARK_NOT_MUTABLE(val);
+    return val;
+}
+static inline SEXP R_getVarEx(SEXP sym, SEXP rho, Rboolean inherits, SEXP ifnotfound) {
+    SEXP val = inherits ? Rf_findVar(sym, rho) : Rf_findVarInFrame(sym, rho);
+    if (val == R_UnboundValue)
+        return ifnotfound;
     MARK_NOT_MUTABLE(val);
     return val;
 }
@@ -227,7 +234,7 @@ static inline SEXP R_getVar(SEXP sym, SEXP rho, Rboolean inherits) {
 static inline SEXP find_in_misha(SEXP envir, const char *name) {
     SEXP misha_env = R_NilValue;
     misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, (Rboolean)TRUE));
-    SEXP val = R_getVar(Rf_install(name), misha_env, (Rboolean)TRUE);
+    SEXP val = R_getVarEx(Rf_install(name), misha_env, (Rboolean)TRUE, R_UnboundValue);
     runprotect(1);
     return val;
 }
