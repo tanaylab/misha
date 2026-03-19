@@ -1,3 +1,8 @@
+# misha 5.6.6
+
+* Fixed CRAN check NOTE about non-standard top-level files.
+* Fixed CRAN check WARNING about `pipe.Rd` documenting `%>%` with a `\usage` section.
+
 # misha 5.6.5
 
 * Replaced non-API C entry point `Rf_findVar` with `R_getVar` for R 4.6.0 compatibility.
