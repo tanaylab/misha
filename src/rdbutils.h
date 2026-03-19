@@ -209,13 +209,32 @@ SEXP RSaneUnserialize(const char *fname);
 SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
+
+// Backward-compatible shims for R < 4.5.0
+#if R_VERSION < R_Version(4, 5, 0)
+static inline SEXP R_getVar(SEXP sym, SEXP rho, Rboolean inherits) {
+    SEXP val = inherits ? Rf_findVar(sym, rho) : Rf_findVarInFrame(sym, rho);
+    if (val == R_UnboundValue)
+        Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
+    MARK_NOT_MUTABLE(val);
+    return val;
+}
+static inline SEXP R_getVarEx(SEXP sym, SEXP rho, Rboolean inherits, SEXP ifnotfound) {
+    SEXP val = inherits ? Rf_findVar(sym, rho) : Rf_findVarInFrame(sym, rho);
+    if (val == R_UnboundValue)
+        return ifnotfound;
+    MARK_NOT_MUTABLE(val);
+    return val;
+}
+#endif
+
 // Helper: safely find a symbol in the package's .misha environment.
 // Note: the returned SEXP is not protected. PROTECT it if you will perform
 // any allocations before you are done using it.
 static inline SEXP find_in_misha(SEXP envir, const char *name) {
     SEXP misha_env = R_NilValue;
-    misha_env = rprotect_ptr(Rf_findVar(Rf_install(".misha"), envir));
-    SEXP val = Rf_findVar(Rf_install(name), misha_env);
+    misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, (Rboolean)TRUE));
+    SEXP val = R_getVarEx(Rf_install(name), misha_env, (Rboolean)TRUE, R_UnboundValue);
     runprotect(1);
     return val;
 }
@@ -225,7 +244,7 @@ static inline SEXP find_in_misha(SEXP envir, const char *name) {
 // during the Rf_defineVar call.
 static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
     SEXP misha_env = R_NilValue;
-    misha_env = rprotect_ptr(Rf_findVar(Rf_install(".misha"), envir));
+    misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, (Rboolean)TRUE));
     SEXP tmp = value;
     tmp = rprotect_ptr(tmp);
     Rf_defineVar(Rf_install(name), tmp, misha_env);

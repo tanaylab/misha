@@ -29,3 +29,4 @@
 ^conda-recipe$
 ^.+.fa$
 ^.a5c$
+^README\.html$
