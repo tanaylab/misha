@@ -227,8 +227,8 @@ static inline SEXP R_getVar(SEXP sym, SEXP rho, Rboolean inherits) {
 // any allocations before you are done using it.
 static inline SEXP find_in_misha(SEXP envir, const char *name) {
     SEXP misha_env = R_NilValue;
-    misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, TRUE));
-    SEXP val = R_getVar(Rf_install(name), misha_env, TRUE);
+    misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, (Rboolean)TRUE));
+    SEXP val = R_getVar(Rf_install(name), misha_env, (Rboolean)TRUE);
     runprotect(1);
     return val;
 }
@@ -238,7 +238,7 @@ static inline SEXP find_in_misha(SEXP envir, const char *name) {
 // during the Rf_defineVar call.
 static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
     SEXP misha_env = R_NilValue;
-    misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, TRUE));
+    misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, (Rboolean)TRUE));
     SEXP tmp = value;
     tmp = rprotect_ptr(tmp);
     Rf_defineVar(Rf_install(name), tmp, misha_env);
