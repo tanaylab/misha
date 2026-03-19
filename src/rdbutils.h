@@ -211,7 +211,6 @@ SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 
 // Backward-compatible shim for R < 4.5.0
-#include <Rversion.h>
 #if R_VERSION < R_Version(4, 5, 0)
 static inline SEXP R_getVar(SEXP sym, SEXP rho, Rboolean inherits) {
     SEXP val = inherits ? Rf_findVar(sym, rho) : Rf_findVarInFrame(sym, rho);
