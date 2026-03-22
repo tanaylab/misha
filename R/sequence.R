@@ -516,6 +516,11 @@ gseq.pwm_edits <- function(seqs,
 
     strand_mode <- if (bidirect) 0L else as.integer(strand)
 
+    # When intervals were used, extension was already done in R — pass FALSE to C++
+    # to avoid double-extension of the ROI window search range.
+    # For bare sequences, pass the user's extend value.
+    c_extend <- if (is_intervals) FALSE else extend
+
     # Call C++
     result <- .Call(
         "C_gseq_pwm_edits",
@@ -528,7 +533,7 @@ gseq.pwm_edits <- function(seqs,
         as.numeric(prior),
         if (!is.null(roi_start)) as.integer(roi_start) else NULL,
         if (!is.null(roi_end)) as.integer(roi_end) else NULL,
-        as.logical(extend),
+        as.logical(c_extend),
         if (!is.null(score.min)) as.numeric(score.min) else NULL,
         if (!is.null(score.max)) as.numeric(score.max) else NULL
     )
