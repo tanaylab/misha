@@ -532,7 +532,7 @@ gseq.pwm_edits <- function(seqs,
         as.numeric(prior),
         if (!is.null(roi_start)) as.integer(roi_start) else NULL,
         if (!is.null(roi_end)) as.integer(roi_end) else NULL,
-        as.logical(c_extend),
+        if (is.logical(c_extend)) as.logical(c_extend) else as.integer(c_extend),
         if (!is.null(score.min)) as.numeric(score.min) else NULL,
         if (!is.null(score.max)) as.numeric(score.max) else NULL
     )

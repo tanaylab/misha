@@ -122,7 +122,8 @@ WindowResult compute_window_edits_detailed(
 
     std::vector<PosInfo> positions(L);
     int mandatory_edits = 0;
-    double adjusted_score = 0.0;
+    double true_score = 0.0;      // actual PWM score of the original sequence
+    double adjusted_score = 0.0;  // score assuming mandatory edits already applied
 
     // Pass 1: compute scores and gains for each position
     for (int i = 0; i < L; i++) {
@@ -150,29 +151,37 @@ WindowResult compute_window_edits_detailed(
 
         if (p.ref_idx == 4) {
             // Unknown base: mandatory edit
+            // Use mean log-probability for the true score (consistent with PWMScorer)
+            float mean_logp = 0.0f;
+            for (int b = 0; b < 4; b++) mean_logp += pssm[i].get_log_prob_from_code(b);
+            mean_logp /= 4.0f;
+
             p.mandatory = true;
-            p.base_score = col_max_scores[i];  // assume best after edit
-            p.gain = 0.0f;  // already counted as mandatory
+            p.base_score = mean_logp;
+            p.gain = col_max_scores[i] - mean_logp;
             mandatory_edits++;
+            true_score += static_cast<double>(mean_logp);
             adjusted_score += static_cast<double>(col_max_scores[i]);
         } else {
             float score = pssm[i].get_log_prob_from_code(p.ref_idx);
             if (score <= kLogZeroThreshold || !std::isfinite(score)) {
                 p.mandatory = true;
-                p.base_score = col_max_scores[i];
-                p.gain = 0.0f;
+                p.base_score = score;
+                p.gain = col_max_scores[i] - (std::isfinite(score) ? score : 0.0f);
                 mandatory_edits++;
+                true_score += static_cast<double>(std::isfinite(score) ? score : 0.0);
                 adjusted_score += static_cast<double>(col_max_scores[i]);
             } else {
                 p.mandatory = false;
                 p.base_score = score;
                 p.gain = col_max_scores[i] - score;
+                true_score += static_cast<double>(score);
                 adjusted_score += static_cast<double>(score);
             }
         }
     }
 
-    result.score_before = static_cast<float>(adjusted_score);
+    result.score_before = static_cast<float>(true_score);
 
     // Build window_seq (sequence as seen by PSSM, i.e., reverse-complemented if reverse)
     result.window_seq.resize(L);
