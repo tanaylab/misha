@@ -167,9 +167,9 @@ WindowResult compute_window_edits_detailed(
             if (score <= kLogZeroThreshold || !std::isfinite(score)) {
                 p.mandatory = true;
                 p.base_score = score;
-                p.gain = col_max_scores[i] - (std::isfinite(score) ? score : 0.0f);
+                p.gain = col_max_scores[i] - score;  // gain can be +inf, that's fine
                 mandatory_edits++;
-                true_score += static_cast<double>(std::isfinite(score) ? score : 0.0);
+                true_score += static_cast<double>(score);  // keep true -inf in score_before
                 adjusted_score += static_cast<double>(col_max_scores[i]);
             } else {
                 p.mandatory = false;
@@ -191,10 +191,11 @@ WindowResult compute_window_edits_detailed(
 
     double deficit = static_cast<double>(threshold) - adjusted_score;
 
-    // Already above threshold?
+    // Already above threshold (after accounting for mandatory edits)?
     if (deficit <= 0.0) {
         result.n_edits = mandatory_edits;
-        result.score_after = result.score_before;
+        // score_after = adjusted_score (which has mandatory edits applied)
+        result.score_after = static_cast<float>(adjusted_score);
         result.mutated_seq = result.window_seq;
         // Add mandatory edits if any
         for (int i = 0; i < L; i++) {
@@ -203,7 +204,7 @@ WindowResult compute_window_edits_detailed(
                 edit.motif_col = i + 1;  // 1-based
                 edit.ref_base = positions[i].ref_base;
                 edit.alt_base = index_to_base(positions[i].best_base_idx);
-                edit.gain = 0.0f;
+                edit.gain = positions[i].gain;
                 result.edits.push_back(edit);
                 result.mutated_seq[i] = edit.alt_base;
             }
