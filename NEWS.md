@@ -1,7 +1,10 @@
-# misha 5.6.6
+# misha 5.6.7
 
 * Added PWM edit distance virtual track functions: `pwm.edit_distance`, `pwm.edit_distance.pos`, `pwm.max.edit_distance`, `pwm.edit_distance.lse`, and `pwm.edit_distance.lse.pos`. Compute minimum edit distance (substitutions and indels) to reach a PWM score threshold, with per-window (max) and aggregate (LSE) scoring modes.
 * Added `gseq.pwm_edits()` for retrieving detailed per-edit information (positions and replacement bases) from PWM edit distance computation.
+
+# misha 5.6.6
+
 * Fixed CRAN check NOTE about non-standard top-level files.
 * Fixed CRAN check WARNING about `pipe.Rd` documenting `%>%` with a `\usage` section.
 
