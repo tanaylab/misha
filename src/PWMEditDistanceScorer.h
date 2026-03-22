@@ -23,12 +23,12 @@
  * (max_edits < 0). When max_edits >= 1, a fast heuristic is used that only
  * considers the top-k gains.
  *
- * score.min filtering: when m_score_min is not NaN, windows whose PWM score
- * is below m_score_min are skipped (edit distance returns NA for that window).
- * For MIN_EDITS/MIN_EDITS_POSITION modes, only windows passing score.min are
- * considered. For PWM_MAX_EDITS mode, the best-PWM window is found first
- * (regardless of score.min), then its edit distance is only computed if
- * its score >= score.min.
+ * score.min/score.max filtering: when m_score_min (m_score_max) is not NaN,
+ * windows whose PWM score is below m_score_min (above m_score_max) are
+ * skipped (edit distance returns NA for that window).
+ * For MIN_EDITS/MIN_EDITS_POSITION modes, only windows passing both filters
+ * are considered. For PWM_MAX_EDITS mode, the best-PWM window is found first,
+ * then its edit distance is only computed if its score passes both filters.
  */
 class PWMEditDistanceScorer : public GenomeSeqScorer
 {
@@ -50,6 +50,7 @@ public:
      * @param mode Return mode
      * @param score_min Minimum PWM score filter (NaN = no filter)
      * @param max_indels Maximum number of insertions+deletions allowed (0 = substitutions only)
+     * @param score_max Maximum PWM score filter (NaN = no filter)
      */
     PWMEditDistanceScorer(const DnaPSSM& pssm,
                           GenomeSeqFetch* shared_seqfetch,
@@ -59,7 +60,8 @@ public:
                           char strand = 0,
                           Mode mode = Mode::MIN_EDITS,
                           float score_min = std::numeric_limits<float>::quiet_NaN(),
-                          int max_indels = 0);
+                          int max_indels = 0,
+                          float score_max = std::numeric_limits<float>::quiet_NaN());
 
     /**
      * Score a genomic interval - returns minimum edits needed
@@ -94,6 +96,7 @@ private:
     int m_max_indels; // 0 = substitutions only, >=1 = allow insertions/deletions via banded NW DP
     Mode m_mode;
     float m_score_min; // NaN = no filter; otherwise skip windows with PWM score < this
+    float m_score_max; // NaN = no filter; otherwise skip windows with PWM score > this
     ScanMetrics m_last_metrics;
 
     // Precomputed tables for exact mode

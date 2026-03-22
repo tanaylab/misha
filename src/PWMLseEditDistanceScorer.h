@@ -42,6 +42,7 @@ public:
      * @param strand Strand mode (0=both, 1=forward, -1=reverse)
      * @param mode Return mode
      * @param score_min Minimum LSE score filter (NaN = no filter)
+     * @param score_max Maximum LSE score filter (NaN = no filter)
      */
     PWMLseEditDistanceScorer(const DnaPSSM& pssm,
                              GenomeSeqFetch* shared_seqfetch,
@@ -50,7 +51,8 @@ public:
                              bool extend = true,
                              char strand = 0,
                              Mode mode = Mode::LSE_EDIT_DISTANCE,
-                             float score_min = std::numeric_limits<float>::quiet_NaN());
+                             float score_min = std::numeric_limits<float>::quiet_NaN(),
+                             float score_max = std::numeric_limits<float>::quiet_NaN());
 
     /**
      * Score a genomic interval - returns minimum edits or position
@@ -65,6 +67,7 @@ private:
     int m_max_edits;
     Mode m_mode;
     float m_score_min;
+    float m_score_max;
     float m_last_min_edits;
 
     // Precomputed tables
