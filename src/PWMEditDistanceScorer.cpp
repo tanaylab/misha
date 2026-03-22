@@ -16,7 +16,8 @@ PWMEditDistanceScorer::PWMEditDistanceScorer(const DnaPSSM& pssm,
                                              char strand,
                                              Mode mode,
                                              float score_min,
-                                             int max_indels)
+                                             int max_indels,
+                                             float score_max)
     : GenomeSeqScorer(shared_seqfetch, extend, strand),
       m_pssm(pssm),
       m_threshold(threshold),
@@ -24,6 +25,7 @@ PWMEditDistanceScorer::PWMEditDistanceScorer(const DnaPSSM& pssm,
       m_max_indels(max_indels),
       m_mode(mode),
       m_score_min(score_min),
+      m_score_max(score_max),
       m_S_max(0.0f)
 {
     precompute_tables();
@@ -449,6 +451,8 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     const bool need_min_pos = (m_mode == Mode::MIN_EDITS_POSITION);
     const bool need_pwm = (m_mode == Mode::PWM_MAX_EDITS);
     const bool has_score_min = !std::isnan(m_score_min);
+    const bool has_score_max = !std::isnan(m_score_max);
+    const bool has_score_filter = has_score_min || has_score_max;
 
     const size_t max_start = std::min(interval_length, target_length - motif_length + 1);
     if (max_start == 0 || (!scan_forward && !scan_reverse)) {
@@ -494,14 +498,15 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
         if (scan_forward) {
             if (need_min) {
-                // score.min filtering: skip edit distance if PWM score is below threshold
-                bool pass_score_min = true;
-                if (has_score_min) {
+                // score.min/score.max filtering: skip edit distance if PWM score is out of range
+                bool pass_score_filter = true;
+                if (has_score_filter) {
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
-                    pass_score_min = (logp >= m_score_min);
+                    if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                    if (has_score_max && logp > m_score_max) pass_score_filter = false;
                 }
 
-                if (pass_score_min) {
+                if (pass_score_filter) {
                     float edits = compute_window_edits(window_start, seq_avail, /*reverse=*/false);
                     maybe_update_min(edits, offset, +1);
                 }
@@ -516,14 +521,15 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
         if (scan_reverse) {
             if (need_min) {
-                // score.min filtering: skip edit distance if PWM score is below threshold
-                bool pass_score_min = true;
-                if (has_score_min) {
+                // score.min/score.max filtering: skip edit distance if PWM score is out of range
+                bool pass_score_filter = true;
+                if (has_score_filter) {
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
-                    pass_score_min = (logp >= m_score_min);
+                    if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                    if (has_score_max && logp > m_score_max) pass_score_filter = false;
                 }
 
-                if (pass_score_min) {
+                if (pass_score_filter) {
                     float edits = compute_window_edits(window_start, seq_avail, /*reverse=*/true);
                     maybe_update_min(edits, offset, -1);
                 }
@@ -539,8 +545,9 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
     if (need_pwm && pwm_found) {
         // For PWM_MAX_EDITS mode: compute edit distance at the best PWM window
-        // Apply score.min filter: if best PWM score < score.min, return NaN
-        if (has_score_min && metrics.best_pwm_logp < m_score_min) {
+        // Apply score.min/score.max filter
+        if ((has_score_min && metrics.best_pwm_logp < m_score_min) ||
+            (has_score_max && metrics.best_pwm_logp > m_score_max)) {
             metrics.best_pwm_edits = std::numeric_limits<float>::quiet_NaN();
         } else {
             const char* window_start = seq_data + metrics.best_pwm_index;

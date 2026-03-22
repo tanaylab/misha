@@ -13,13 +13,15 @@ PWMLseEditDistanceScorer::PWMLseEditDistanceScorer(const DnaPSSM& pssm,
                                                      bool extend,
                                                      char strand,
                                                      Mode mode,
-                                                     float score_min)
+                                                     float score_min,
+                                                     float score_max)
     : GenomeSeqScorer(shared_seqfetch, extend, strand),
       m_pssm(pssm),
       m_threshold(threshold),
       m_max_edits(max_edits),
       m_mode(mode),
       m_score_min(score_min),
+      m_score_max(score_max),
       m_last_min_edits(std::numeric_limits<float>::quiet_NaN()),
       m_S_max(0.0f)
 {
@@ -636,8 +638,11 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
     double Z, m, F;
     init_partition(seq_bases, N, L, S_p, A_p, Z, m, F);
 
-    // score.min filter: if current LSE score is below score.min, skip
+    // score.min/score.max filter: if current LSE score is out of range, skip
     if (!std::isnan(m_score_min) && F < static_cast<double>(m_score_min)) {
+        return result;
+    }
+    if (!std::isnan(m_score_max) && F > static_cast<double>(m_score_max)) {
         return result;
     }
 

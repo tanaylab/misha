@@ -608,6 +608,24 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 }
             }
 
+            // Extract score.max parameter (optional, default NaN = no filter)
+            float score_max = std::numeric_limits<float>::quiet_NaN();
+            if (Rf_isNewList(rparams)) {
+                int smx_idx = findListElementIndex(rparams, "score.max");
+                if (smx_idx >= 0) {
+                    SEXP rscore_max = VECTOR_ELT(rparams, smx_idx);
+                    if (!Rf_isNull(rscore_max)) {
+                        if (Rf_isReal(rscore_max) && Rf_length(rscore_max) == 1) {
+                            score_max = static_cast<float>(REAL(rscore_max)[0]);
+                        } else if (Rf_isInteger(rscore_max) && Rf_length(rscore_max) == 1) {
+                            score_max = static_cast<float>(INTEGER(rscore_max)[0]);
+                        } else {
+                            verror("score.max parameter must be NULL or a single numeric value for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
             PWMEditDistanceScorer::Mode mode = PWMEditDistanceScorer::Mode::MIN_EDITS;
             if (var.val_func == Track_var::PWM_EDIT_DISTANCE_POS) {
                 mode = PWMEditDistanceScorer::Mode::MIN_EDITS_POSITION;
@@ -625,7 +643,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 static_cast<char>(pwm_params.core.strand_mode),
                 mode,
                 score_min,
-                max_indels
+                max_indels,
+                score_max
             );
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
@@ -697,6 +716,24 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 }
             }
 
+            // Extract score.max parameter (optional, default NaN = no filter)
+            float score_max = std::numeric_limits<float>::quiet_NaN();
+            if (Rf_isNewList(rparams)) {
+                int smx_idx = findListElementIndex(rparams, "score.max");
+                if (smx_idx >= 0) {
+                    SEXP rscore_max = VECTOR_ELT(rparams, smx_idx);
+                    if (!Rf_isNull(rscore_max)) {
+                        if (Rf_isReal(rscore_max) && Rf_length(rscore_max) == 1) {
+                            score_max = static_cast<float>(REAL(rscore_max)[0]);
+                        } else if (Rf_isInteger(rscore_max) && Rf_length(rscore_max) == 1) {
+                            score_max = static_cast<float>(INTEGER(rscore_max)[0]);
+                        } else {
+                            verror("score.max parameter must be NULL or a single numeric value for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
             PWMLseEditDistanceScorer::Mode lse_mode = PWMLseEditDistanceScorer::Mode::LSE_EDIT_DISTANCE;
             if (var.val_func == Track_var::PWM_EDIT_DISTANCE_LSE_POS) {
                 lse_mode = PWMLseEditDistanceScorer::Mode::LSE_EDIT_DISTANCE_POS;
@@ -711,7 +748,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 pwm_params.extend_flag,
                 static_cast<char>(pwm_params.core.strand_mode),
                 lse_mode,
-                score_min
+                score_min,
+                score_max
             );
 
             // Parse optional iterator modifier
