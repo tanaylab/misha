@@ -409,12 +409,7 @@ inline bool TrackExpressionVars::is_sequence_based_function(Track_var::Val_func 
 
 inline bool TrackExpressionVars::is_pwm_function(Track_var::Val_func func) {
     return func == Track_var::PWM || func == Track_var::PWM_MAX ||
-           func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT ||
-           func == Track_var::PWM_EDIT_DISTANCE ||
-           func == Track_var::PWM_EDIT_DISTANCE_POS ||
-           func == Track_var::PWM_MAX_EDIT_DISTANCE ||
-           func == Track_var::PWM_EDIT_DISTANCE_LSE ||
-           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
+           func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT;
 }
 
 inline bool TrackExpressionVars::is_pwm_edit_distance_function(Track_var::Val_func func) {

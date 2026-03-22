@@ -743,7 +743,7 @@ float PWMEditDistanceScorer::compute_with_indels(const char* seq_ptr, int seq_le
 
                     double prev = dp[idx3(ti - 1, tj - 1, tk)];
                     if (prev > -std::numeric_limits<double>::infinity() * 0.5 &&
-                        std::fabs((prev + static_cast<double>(bs)) - cur) < 1e-9) {
+                        std::fabs((prev + static_cast<double>(bs)) - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
                         float gain = m_col_max_scores[ti - 1] - bs;
                         if (gain > 1e-12f) {
                             aligned_gains.push_back(gain);
@@ -757,7 +757,7 @@ float PWMEditDistanceScorer::compute_with_indels(const char* seq_ptr, int seq_le
                     // Try insertion
                     double prev = dp[idx3(ti - 1, tj, tk - 1)];
                     if (prev > -std::numeric_limits<double>::infinity() * 0.5 &&
-                        std::fabs(prev - cur) < 1e-9) {
+                        std::fabs(prev - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
                         ti--; tk--;
                         found = true;
                     }
@@ -767,7 +767,7 @@ float PWMEditDistanceScorer::compute_with_indels(const char* seq_ptr, int seq_le
                     // Try deletion
                     double prev = dp[idx3(ti, tj - 1, tk - 1)];
                     if (prev > -std::numeric_limits<double>::infinity() * 0.5 &&
-                        std::fabs(prev - cur) < 1e-9) {
+                        std::fabs(prev - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
                         tj--; tk--;
                         found = true;
                     }

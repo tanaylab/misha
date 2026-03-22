@@ -2125,3 +2125,140 @@ test_that("LSE edit distance on larger interval (iterator=500)", {
         info = "At least some windows should have non-NA LSE edit distances"
     )
 })
+
+# --------------------------------------------------------------------------
+# Integer extend validation tests
+# --------------------------------------------------------------------------
+
+test_that("pwm.edit_distance accepts integer extend values in vtrack", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    threshold <- -5.0
+    test_interval <- gintervals(1, 200, 240)
+
+    # extend = 5L should work (integer)
+    expect_no_error(
+        gvtrack.create("edist_int_ext", NULL,
+            func = "pwm.edit_distance",
+            pssm = pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = 5L, prior = 0
+        )
+    )
+
+    result <- gextract("edist_int_ext", test_interval, iterator = test_interval)
+    expect_true(nrow(result) > 0)
+})
+
+test_that("pwm.edit_distance rejects invalid extend values in vtrack", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    threshold <- -5.0
+
+    # Negative integer should error
+    expect_error(
+        gvtrack.create("edist_bad_ext", NULL,
+            func = "pwm.edit_distance",
+            pssm = pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = -1L, prior = 0
+        ),
+        "extend"
+    )
+
+    # String should error
+    expect_error(
+        gvtrack.create("edist_bad_ext2", NULL,
+            func = "pwm.edit_distance",
+            pssm = pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = "yes", prior = 0
+        ),
+        "extend"
+    )
+
+    # Non-integer numeric should error
+    expect_error(
+        gvtrack.create("edist_bad_ext3", NULL,
+            func = "pwm.edit_distance",
+            pssm = pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = 2.5, prior = 0
+        ),
+        "extend"
+    )
+})
+
+test_that("pwm.edit_distance.lse accepts integer extend values in vtrack", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    threshold <- -5.0
+    test_interval <- gintervals(1, 200, 240)
+
+    # extend = 5L should work (integer)
+    expect_no_error(
+        gvtrack.create("lse_int_ext", NULL,
+            func = "pwm.edit_distance.lse",
+            pssm = pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = 5L, prior = 0
+        )
+    )
+
+    result <- gextract("lse_int_ext", test_interval, iterator = test_interval)
+    expect_true(nrow(result) > 0)
+})
+
+test_that("pwm.edit_distance.lse rejects invalid extend values in vtrack", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    threshold <- -5.0
+
+    # Negative integer should error
+    expect_error(
+        gvtrack.create("lse_bad_ext", NULL,
+            func = "pwm.edit_distance.lse",
+            pssm = pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = -1L, prior = 0
+        ),
+        "extend"
+    )
+
+    # Non-integer numeric should error
+    expect_error(
+        gvtrack.create("lse_bad_ext2", NULL,
+            func = "pwm.edit_distance.lse",
+            pssm = pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = 2.5, prior = 0
+        ),
+        "extend"
+    )
+})
+
+test_that("pwm.edit_distance extend=0L behaves like extend=FALSE", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+    threshold <- -5.0
+    test_interval <- gintervals(1, 200, 240)
+
+    gvtrack.create("edist_ext0", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        bidirect = FALSE, extend = 0L, prior = 0
+    )
+
+    gvtrack.create("edist_extF", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    res_0 <- gextract("edist_ext0", test_interval, iterator = test_interval)
+    res_f <- gextract("edist_extF", test_interval, iterator = test_interval)
+
+    if (is.na(res_0$edist_ext0[1])) {
+        expect_true(is.na(res_f$edist_extF[1]))
+    } else {
+        expect_equal(res_0$edist_ext0[1], res_f$edist_extF[1], tolerance = 1e-6)
+    }
+})
