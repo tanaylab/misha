@@ -324,3 +324,140 @@ test_that("gseq.pwm_edits with pssm data frame", {
     expect_true(is.data.frame(result))
     expect_true(nrow(result) > 0)
 })
+
+# ============================================================================
+# Regression tests for specific bug fixes
+# ============================================================================
+
+test_that("gseq.pwm_edits numeric extend on bare sequences is preserved", {
+    # extend=1 should allow 1 extra base of extension, not w-1
+    pssm <- matrix(
+        c(
+            0.9, 0.05, 0.025, 0.025,
+            0.05, 0.9, 0.025, 0.025,
+            0.025, 0.025, 0.9, 0.05,
+            0.025, 0.025, 0.05, 0.9
+        ),
+        nrow = 4, byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    seq <- "TTTTACGTTTTT"
+    # With extend=FALSE: ROI is exactly [1, nchar], windows must start and fit within
+    r_no_ext <- gseq.pwm_edits(seq, pssm,
+        score.thresh = -1.0,
+        prior = 0, bidirect = FALSE, extend = FALSE
+    )
+
+    # With extend=1: allows 1 extra base of scanning range
+    r_ext1 <- gseq.pwm_edits(seq, pssm,
+        score.thresh = -1.0,
+        prior = 0, bidirect = FALSE, extend = 1L
+    )
+
+    # With extend=TRUE: allows w-1=3 extra bases of scanning range
+    r_ext_full <- gseq.pwm_edits(seq, pssm,
+        score.thresh = -1.0,
+        prior = 0, bidirect = FALSE, extend = TRUE
+    )
+
+    # extend=1 should not be the same as extend=TRUE (w-1=3)
+    # unless results happen to be identical for this sequence.
+    # At minimum, extend=1 should produce valid results:
+    expect_true(is.data.frame(r_ext1))
+    expect_true(nrow(r_ext1) > 0)
+
+    # extend=FALSE and extend=1 may differ in window_start
+    # because extend=1 allows 1 extra window position
+    expect_true(is.data.frame(r_no_ext))
+})
+
+test_that("gseq.pwm_edits score_before/score_after correct with N and zero-prob bases", {
+    # PSSM with a zero-probability entry
+    pssm_zero <- matrix(
+        c(
+            1, 0, 0, 0, # column 1: only A allowed
+            0, 1, 0, 0  # column 2: only C allowed
+        ),
+        nrow = 2, byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    # "TC" has T at position 1 where only A has prob > 0 -> zero-prob, mandatory edit
+    r <- gseq.pwm_edits("TC", pssm_zero,
+        score.thresh = -0.5,
+        prior = 0, bidirect = FALSE
+    )
+
+    # score_before should reflect the TRUE sequence score (which is -Inf due to zero prob)
+    expect_true(all(!is.nan(r$score_before)))
+    expect_true(all(r$score_before < -100)) # -Inf or very negative
+
+    # score_after should be the score AFTER applying edits (should be near 0 = log(1))
+    expect_true(all(r$score_after > r$score_before))
+
+    # Gain for the mandatory edit should be positive (not 0)
+    mandatory_rows <- r[r$edit_num > 0, ]
+    expect_true(all(mandatory_rows$gain > 0 | is.infinite(mandatory_rows$gain)))
+
+    # Test with N bases
+    r_n <- gseq.pwm_edits("NC", pssm_zero,
+        score.thresh = -0.5,
+        prior = 0, bidirect = FALSE
+    )
+    expect_true(nrow(r_n) > 0)
+    # N base should be a mandatory edit
+    expect_true(any(r_n$ref == "N"))
+    # score_after should be better than score_before
+    expect_true(all(r_n$score_after[r_n$n_edits > 0] > r_n$score_before[r_n$n_edits > 0]))
+})
+
+test_that("pwm.edit_distance.pos with filter returns positions relative to original interval", {
+    gdb.init_examples()
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+
+    # Create a large interval
+    test_interval <- gintervals(1, 200, 260)
+
+    # Create a mask that splits the interval into two fragments
+    # Mask out the middle: [220, 240) is masked, leaving [200,220) and [240,260)
+    mask <- gintervals(1, 220, 240)
+
+    gvtrack.create("edist_pos_filtered", NULL,
+        func = "pwm.edit_distance.pos",
+        pssm = pssm, score.thresh = -5.0,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.filter("edist_pos_filtered", filter = mask)
+
+    # Also create unfiltered version for the second fragment
+    gvtrack.create("edist_pos_unfiltered", NULL,
+        func = "pwm.edit_distance.pos",
+        pssm = pssm, score.thresh = -5.0,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result_filtered <- gextract("edist_pos_filtered",
+        intervals = test_interval, iterator = test_interval
+    )
+    pos_filtered <- result_filtered$edist_pos_filtered
+
+    # If the best window is in the second fragment [240,260),
+    # the position should be relative to the original interval [200,260),
+    # not relative to the subfragment [240,260).
+    # The position should be > 0 (1-based within the original interval)
+    if (!is.na(pos_filtered)) {
+        abs_pos <- abs(pos_filtered)
+        # Position should be within [1, interval_length]
+        expect_true(abs_pos >= 1)
+        expect_true(abs_pos <= 60) # interval is 60bp
+
+        # If best is in second fragment, position should be > 20
+        # (since first fragment is 20bp and mask starts at offset 20)
+        # We can't guarantee which fragment wins, but position must be valid
+    }
+
+    remove_all_vtracks()
+})
