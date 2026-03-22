@@ -766,11 +766,11 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
         }
 	}
 
-	// Only check source if not a PWM function
+	// Only check source if not a sequence-based function
 	SEXP rsrc = get_rvector_col(rvtrack, "src", vtrack.c_str(), false);
 	if (Rf_isNull(rsrc))
 	{
-		verror("Source must be specified for non-PWM virtual tracks");
+		verror("Source must be specified for non-sequence-based virtual tracks");
 	}
 
     if (Rf_isString(rsrc) && Rf_length(rsrc) == 1)

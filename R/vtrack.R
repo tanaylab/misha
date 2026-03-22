@@ -289,8 +289,8 @@
         stop("bidirect must be TRUE or FALSE")
     }
 
-    if (!is.logical(extend)) {
-        stop("extend must be TRUE or FALSE")
+    if (!is.logical(extend) && !(is.numeric(extend) && length(extend) == 1 && extend == as.integer(extend) && extend >= 0)) {
+        stop("extend must be TRUE, FALSE, or a non-negative integer")
     }
 
     if (strand != 1 && strand != -1) {
@@ -384,8 +384,8 @@
         stop("bidirect must be TRUE or FALSE")
     }
 
-    if (!is.logical(extend)) {
-        stop("extend must be TRUE or FALSE")
+    if (!is.logical(extend) && !(is.numeric(extend) && length(extend) == 1 && extend == as.integer(extend) && extend >= 0)) {
+        stop("extend must be TRUE, FALSE, or a non-negative integer")
     }
 
     if (strand != 1 && strand != -1) {
@@ -621,9 +621,9 @@
 #'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Ties resolve to the most 5' anchor; the forward strand wins ties at the same coordinate. Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse).
 #'   \item \code{score.thresh}: For edit distance functions, this is the PWM log-likelihood target that the algorithm tries to reach via substitutions. The edit distance is the minimum number of single-base changes needed for the window to achieve this score.
 #'   \item \code{max_edits}: For edit distance functions only. Optional positive integer setting the maximum search depth. If reaching the threshold requires more than \code{max_edits} substitutions, NA is returned. When NULL (default), exact computation is used.
-#'   \item \code{max_indels}: For edit distance functions only. Optional non-negative integer specifying the maximum number of insertions and deletions allowed (default 0, substitutions only). When > 0, a banded Needleman-Wunsch DP is used to find the minimum total edits (substitutions + indels) to reach the score threshold. Typical values are 1-2.
-#'   \item \code{score.min}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is below \code{score.min} are skipped (edit distance returns NA). Improves performance by avoiding expensive computation on low-scoring windows. Default NULL (no filter).
-#'   \item \code{score.max}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is above \code{score.max} are skipped (edit distance returns NA). Combined with \code{score.min}, enables efficient regime-specific queries (e.g., only positions with score in [\code{score.min}, \code{score.max}]). Default NULL (no filter).
+#'   \item \code{max_indels}: For \code{pwm.edit_distance}, \code{pwm.edit_distance.pos}, and \code{pwm.max.edit_distance} only. Not supported by LSE variants. Optional non-negative integer specifying the maximum number of insertions and deletions allowed (default 0, substitutions only). When > 0, a banded Needleman-Wunsch DP is used to find the minimum total edits (substitutions + indels) to reach the score threshold. Typical values are 1-2.
+#'   \item \code{score.min}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is below \code{score.min} are skipped (edit distance returns NA). Improves performance by avoiding expensive computation on low-scoring windows. For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter).
+#'   \item \code{score.max}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is above \code{score.max} are skipped (edit distance returns NA). Combined with \code{score.min}, enables efficient regime-specific queries (e.g., only positions with score in [\code{score.min}, \code{score.max}]). For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter).
 #' }
 #'
 #' \strong{Spatial weighting}

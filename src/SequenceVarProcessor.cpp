@@ -19,6 +19,89 @@
 using namespace rdb;
 using namespace std;
 
+namespace {
+
+// Aggregation modes for edit distance multi-part scoring
+enum class EditDistAggMode {
+	MIN_EDITS,     // PWM_EDIT_DISTANCE, PWM_EDIT_DISTANCE_LSE
+	MIN_EDITS_POS, // PWM_EDIT_DISTANCE_POS, PWM_EDIT_DISTANCE_LSE_POS
+	MAX_EDITS      // PWM_MAX_EDIT_DISTANCE
+};
+
+// Per-part scoring result for edit distance aggregation
+struct EditDistPartResult {
+	double score;        // return value of score_interval (edits or position depending on mode)
+	double min_edits;    // from get_last_min_edits() (used by POS modes)
+	double pwm_max_logp; // from get_last_pwm_max_logp() (used by MAX_EDITS mode)
+	int64_t part_start;  // start coordinate of the scored part
+};
+
+// Map val_func to aggregation mode
+EditDistAggMode get_agg_mode(TrackExpressionVars::Track_var::Val_func func) {
+	switch (func) {
+		case TrackExpressionVars::Track_var::PWM_EDIT_DISTANCE_POS:
+		case TrackExpressionVars::Track_var::PWM_EDIT_DISTANCE_LSE_POS:
+			return EditDistAggMode::MIN_EDITS_POS;
+		case TrackExpressionVars::Track_var::PWM_MAX_EDIT_DISTANCE:
+			return EditDistAggMode::MAX_EDITS;
+		default:
+			return EditDistAggMode::MIN_EDITS;
+	}
+}
+
+// Aggregate edit distance results from multiple unmasked parts.
+// seq_interval_start: start of the original (pre-filter) interval, for position offset correction.
+double aggregate_edit_distance_parts(
+	const vector<EditDistPartResult> &parts,
+	EditDistAggMode mode,
+	int64_t seq_interval_start)
+{
+	switch (mode) {
+		case EditDistAggMode::MIN_EDITS: {
+			double min_edits = numeric_limits<double>::quiet_NaN();
+			for (const auto &r : parts) {
+				if (std::isnan(min_edits) || (!std::isnan(r.score) && r.score < min_edits)) {
+					min_edits = r.score;
+				}
+			}
+			return min_edits;
+		}
+		case EditDistAggMode::MIN_EDITS_POS: {
+			double best_edits = numeric_limits<double>::quiet_NaN();
+			double best_pos = numeric_limits<double>::quiet_NaN();
+			for (const auto &r : parts) {
+				if (std::isnan(r.min_edits)) continue;
+				if (std::isnan(best_edits) || r.min_edits < best_edits) {
+					best_edits = r.min_edits;
+					// Offset position: score is relative to the sub-interval,
+					// adjust to be relative to the original seq_interval.
+					// score is signed (positive=fwd, negative=rev for bidirect).
+					double offset = static_cast<double>(r.part_start - seq_interval_start);
+					best_pos = (r.score > 0) ? r.score + offset :
+					           (r.score < 0) ? r.score - offset : r.score;
+				}
+			}
+			return best_pos;
+		}
+		case EditDistAggMode::MAX_EDITS: {
+			bool found = false;
+			double best_logp = -numeric_limits<double>::infinity();
+			double best_edits = numeric_limits<double>::quiet_NaN();
+			for (const auto &r : parts) {
+				if (!found || r.pwm_max_logp > best_logp) {
+					best_logp = r.pwm_max_logp;
+					best_edits = r.score;
+					found = true;
+				}
+			}
+			return found ? best_edits : numeric_limits<double>::quiet_NaN();
+		}
+	}
+	return numeric_limits<double>::quiet_NaN(); // unreachable
+}
+
+} // anonymous namespace
+
 void SequenceVarProcessor::process_sequence_vars(
 	TrackExpressionVars::Track_vars &track_vars,
 	const GInterval &interval,
@@ -102,49 +185,20 @@ void SequenceVarProcessor::process_sequence_vars(
 					continue;
 				}
 
-				// Multiple unmasked parts - aggregate based on mode
-				if (ivar->val_func == TrackExpressionVars::Track_var::PWM_EDIT_DISTANCE) {
-					double min_edits = numeric_limits<double>::quiet_NaN();
-					for (const auto& part : unmasked_parts) {
-						double part_edits = ivar->pwm_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
-						if (std::isnan(min_edits) || (!std::isnan(part_edits) && part_edits < min_edits)) {
-							min_edits = part_edits;
-						}
-					}
-					ivar->var[idx] = min_edits;
-				} else if (ivar->val_func == TrackExpressionVars::Track_var::PWM_EDIT_DISTANCE_POS) {
-					double best_edits = numeric_limits<double>::quiet_NaN();
-					double best_pos = numeric_limits<double>::quiet_NaN();
-					for (const auto& part : unmasked_parts) {
-						double part_pos = ivar->pwm_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
-						double part_edits = ivar->pwm_edit_distance_scorer->get_last_min_edits();
-						if (std::isnan(part_edits)) continue;
-						if (std::isnan(best_edits) || part_edits < best_edits) {
-							best_edits = part_edits;
-							// Offset position: part_pos is relative to the sub-interval,
-							// adjust to be relative to the original seq_interval
-							double offset = static_cast<double>(part.start - seq_interval.start);
-							// part_pos is signed (positive=fwd, negative=rev for bidirect)
-							best_pos = (part_pos > 0) ? part_pos + offset :
-							           (part_pos < 0) ? part_pos - offset : part_pos;
-						}
-					}
-					ivar->var[idx] = best_pos;
-				} else { // PWM_MAX_EDIT_DISTANCE
-					bool found = false;
-					double best_logp = -numeric_limits<double>::infinity();
-					double best_edits = numeric_limits<double>::quiet_NaN();
-					for (const auto& part : unmasked_parts) {
-						double part_edits = ivar->pwm_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
-						double part_logp = ivar->pwm_edit_distance_scorer->get_last_pwm_max_logp();
-						if (!found || part_logp > best_logp) {
-							best_logp = part_logp;
-							best_edits = part_edits;
-							found = true;
-						}
-					}
-					ivar->var[idx] = found ? best_edits : numeric_limits<double>::quiet_NaN();
+				// Multiple unmasked parts - score each and aggregate
+				EditDistAggMode mode = get_agg_mode(ivar->val_func);
+				vector<EditDistPartResult> part_results;
+				part_results.reserve(unmasked_parts.size());
+				for (const auto& part : unmasked_parts) {
+					double score = ivar->pwm_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
+					part_results.push_back({
+						score,
+						ivar->pwm_edit_distance_scorer->get_last_min_edits(),
+						ivar->pwm_edit_distance_scorer->get_last_pwm_max_logp(),
+						part.start
+					});
 				}
+				ivar->var[idx] = aggregate_edit_distance_parts(part_results, mode, seq_interval.start);
 			} else {
 				ivar->var[idx] = ivar->pwm_edit_distance_scorer->score_interval(seq_interval, m_iu.get_chromkey());
 			}
@@ -172,33 +226,20 @@ void SequenceVarProcessor::process_sequence_vars(
 					continue;
 				}
 
-				// Multiple unmasked parts - aggregate: take minimum edits
-				if (ivar->val_func == TrackExpressionVars::Track_var::PWM_EDIT_DISTANCE_LSE) {
-					double min_edits = numeric_limits<double>::quiet_NaN();
-					for (const auto& part : unmasked_parts) {
-						double part_edits = ivar->pwm_lse_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
-						if (std::isnan(min_edits) || (!std::isnan(part_edits) && part_edits < min_edits)) {
-							min_edits = part_edits;
-						}
-					}
-					ivar->var[idx] = min_edits;
-				} else { // PWM_EDIT_DISTANCE_LSE_POS
-					double best_edits = numeric_limits<double>::quiet_NaN();
-					double best_pos = numeric_limits<double>::quiet_NaN();
-					for (const auto& part : unmasked_parts) {
-						double part_pos = ivar->pwm_lse_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
-						double part_edits = ivar->pwm_lse_edit_distance_scorer->get_last_min_edits();
-						if (std::isnan(part_edits)) continue;
-						if (std::isnan(best_edits) || part_edits < best_edits) {
-							best_edits = part_edits;
-							// Offset position relative to original seq_interval
-							double offset = static_cast<double>(part.start - seq_interval.start);
-							best_pos = (part_pos > 0) ? part_pos + offset :
-							           (part_pos < 0) ? part_pos - offset : part_pos;
-						}
-					}
-					ivar->var[idx] = best_pos;
+				// Multiple unmasked parts - score each and aggregate
+				EditDistAggMode mode = get_agg_mode(ivar->val_func);
+				vector<EditDistPartResult> part_results;
+				part_results.reserve(unmasked_parts.size());
+				for (const auto& part : unmasked_parts) {
+					double score = ivar->pwm_lse_edit_distance_scorer->score_interval(part, m_iu.get_chromkey());
+					part_results.push_back({
+						score,
+						ivar->pwm_lse_edit_distance_scorer->get_last_min_edits(),
+						0.0, // LSE does not use pwm_max_logp
+						part.start
+					});
 				}
+				ivar->var[idx] = aggregate_edit_distance_parts(part_results, mode, seq_interval.start);
 			} else {
 				ivar->var[idx] = ivar->pwm_lse_edit_distance_scorer->score_interval(seq_interval, m_iu.get_chromkey());
 			}
@@ -505,45 +546,20 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 				continue;
 			}
 
-			if (ivar->val_func == TrackExpressionVars::Track_var::PWM_EDIT_DISTANCE) {
-				double min_edits = numeric_limits<double>::quiet_NaN();
-				for (const auto& part : unmasked_parts) {
-					double part_edits = evaluate_interval(part);
-					if (std::isnan(min_edits) || (!std::isnan(part_edits) && part_edits < min_edits)) {
-						min_edits = part_edits;
-					}
-				}
-				ivar->var[idx] = min_edits;
-			} else if (ivar->val_func == TrackExpressionVars::Track_var::PWM_EDIT_DISTANCE_POS) {
-				double best_edits = numeric_limits<double>::quiet_NaN();
-				double best_pos = numeric_limits<double>::quiet_NaN();
-				for (const auto& part : unmasked_parts) {
-					double part_pos = evaluate_interval(part);
-					double part_edits = ivar->pwm_edit_distance_scorer->get_last_min_edits();
-					if (std::isnan(part_edits)) continue;
-					if (std::isnan(best_edits) || part_edits < best_edits) {
-						best_edits = part_edits;
-						double offset = static_cast<double>(part.start - seq_interval.start);
-						best_pos = (part_pos > 0) ? part_pos + offset :
-						           (part_pos < 0) ? part_pos - offset : part_pos;
-					}
-				}
-				ivar->var[idx] = best_pos;
-			} else { // PWM_MAX_EDIT_DISTANCE
-				bool found = false;
-				double best_logp = -numeric_limits<double>::infinity();
-				double best_edits = numeric_limits<double>::quiet_NaN();
-				for (const auto& part : unmasked_parts) {
-					double part_edits = evaluate_interval(part);
-					double part_logp = ivar->pwm_edit_distance_scorer->get_last_pwm_max_logp();
-					if (!found || part_logp > best_logp) {
-						best_logp = part_logp;
-						best_edits = part_edits;
-						found = true;
-					}
-				}
-				ivar->var[idx] = found ? best_edits : numeric_limits<double>::quiet_NaN();
+			// Multiple unmasked parts - score each and aggregate
+			EditDistAggMode mode = get_agg_mode(ivar->val_func);
+			vector<EditDistPartResult> part_results;
+			part_results.reserve(unmasked_parts.size());
+			for (const auto& part : unmasked_parts) {
+				double score = evaluate_interval(part);
+				part_results.push_back({
+					score,
+					ivar->pwm_edit_distance_scorer->get_last_min_edits(),
+					ivar->pwm_edit_distance_scorer->get_last_pwm_max_logp(),
+					part.start
+				});
 			}
+			ivar->var[idx] = aggregate_edit_distance_parts(part_results, mode, seq_interval.start);
 		} else {
 			ivar->var[idx] = evaluate_interval(seq_interval);
 		}
@@ -576,31 +592,20 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 				continue;
 			}
 
-			if (ivar->val_func == TrackExpressionVars::Track_var::PWM_EDIT_DISTANCE_LSE) {
-				double min_edits = numeric_limits<double>::quiet_NaN();
-				for (const auto& part : unmasked_parts) {
-					double part_edits = evaluate_interval(part);
-					if (std::isnan(min_edits) || (!std::isnan(part_edits) && part_edits < min_edits)) {
-						min_edits = part_edits;
-					}
-				}
-				ivar->var[idx] = min_edits;
-			} else { // PWM_EDIT_DISTANCE_LSE_POS
-				double best_edits = numeric_limits<double>::quiet_NaN();
-				double best_pos = numeric_limits<double>::quiet_NaN();
-				for (const auto& part : unmasked_parts) {
-					double part_pos = evaluate_interval(part);
-					double part_edits = ivar->pwm_lse_edit_distance_scorer->get_last_min_edits();
-					if (std::isnan(part_edits)) continue;
-					if (std::isnan(best_edits) || part_edits < best_edits) {
-						best_edits = part_edits;
-						double offset = static_cast<double>(part.start - seq_interval.start);
-						best_pos = (part_pos > 0) ? part_pos + offset :
-						           (part_pos < 0) ? part_pos - offset : part_pos;
-					}
-				}
-				ivar->var[idx] = best_pos;
+			// Multiple unmasked parts - score each and aggregate
+			EditDistAggMode mode = get_agg_mode(ivar->val_func);
+			vector<EditDistPartResult> part_results;
+			part_results.reserve(unmasked_parts.size());
+			for (const auto& part : unmasked_parts) {
+				double score = evaluate_interval(part);
+				part_results.push_back({
+					score,
+					ivar->pwm_lse_edit_distance_scorer->get_last_min_edits(),
+					0.0, // LSE does not use pwm_max_logp
+					part.start
+				});
 			}
+			ivar->var[idx] = aggregate_edit_distance_parts(part_results, mode, seq_interval.start);
 		} else {
 			ivar->var[idx] = evaluate_interval(seq_interval);
 		}

@@ -5,8 +5,9 @@
  * changes (edits) needed to reach the threshold. Returns a long-format
  * data frame with one row per edit.
  *
- * Reuses the O(L) histogram algorithm from PWMEditDistanceScorer but
- * additionally tracks which motif positions and replacement bases are selected.
+ * Re-implements the O(L) histogram algorithm from PWMEditDistanceScorer
+ * as a standalone version that additionally tracks which motif positions
+ * and replacement bases are selected.
  */
 
 #ifndef R_NO_REMAP

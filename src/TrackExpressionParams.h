@@ -113,9 +113,15 @@ struct PWMParams {
             if (extend_idx >= 0) {
                 SEXP rextend = VECTOR_ELT(rparams, extend_idx);
                 if (rextend != R_NilValue) {
-                    if (!Rf_isLogical(rextend))
-                        rdb::verror("Virtual track %s: extend parameter must be logical", vtrack.c_str());
-                    params.extend_flag = LOGICAL(rextend)[0];
+                    if (Rf_isLogical(rextend)) {
+                        params.extend_flag = LOGICAL(rextend)[0];
+                    } else if (Rf_isInteger(rextend) && Rf_length(rextend) == 1) {
+                        params.extend_flag = INTEGER(rextend)[0] > 0;
+                    } else if (Rf_isReal(rextend) && Rf_length(rextend) == 1 && REAL(rextend)[0] == (int)REAL(rextend)[0] && REAL(rextend)[0] >= 0) {
+                        params.extend_flag = (int)REAL(rextend)[0] > 0;
+                    } else {
+                        rdb::verror("Virtual track %s: extend parameter must be logical or a non-negative integer", vtrack.c_str());
+                    }
                 }
             }
         }
