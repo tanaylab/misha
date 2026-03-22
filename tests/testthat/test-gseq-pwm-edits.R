@@ -377,7 +377,7 @@ test_that("gseq.pwm_edits score_before/score_after correct with N and zero-prob 
     pssm_zero <- matrix(
         c(
             1, 0, 0, 0, # column 1: only A allowed
-            0, 1, 0, 0  # column 2: only C allowed
+            0, 1, 0, 0 # column 2: only C allowed
         ),
         nrow = 2, byrow = TRUE,
         dimnames = list(NULL, c("A", "C", "G", "T"))
