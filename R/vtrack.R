@@ -246,6 +246,173 @@
     kmer_params
 }
 
+#' Validate and process PWM edit distance function parameters
+#' @noRd
+.vtrack_params_pwm_edit_distance <- function(func, params, dots) {
+    if (!is.null(params)) {
+        if (!is.list(params) || !("pssm" %in% names(params))) {
+            stop("pwm edit distance functions require a list with at least 'pssm' matrix parameter")
+        }
+        dots <- params
+    }
+
+    if (!("pssm" %in% names(dots))) {
+        stop("pwm edit distance functions require a 'pssm' matrix parameter")
+    }
+    if (!("score.thresh" %in% names(dots))) {
+        stop("pwm edit distance functions require a 'score.thresh' parameter")
+    }
+
+    pssm <- dots$pssm
+    score.thresh <- dots$score.thresh
+    max_edits <- dots$max_edits # Optional, can be NULL
+    max_indels <- dots$max_indels # Optional, can be NULL
+    score.min <- dots$score.min # Optional, can be NULL
+    bidirect <- if (!is.null(dots$bidirect)) dots$bidirect else TRUE
+    prior <- if (!is.null(dots$prior)) dots$prior else 0.01
+    extend <- if (!is.null(dots$extend)) dots$extend else TRUE
+    strand <- if (!is.null(dots$strand)) dots$strand else 1
+
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "PSSM must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "PSSM must have columns named A, C, G, T",
+        colnames_msg = "PSSM must have columns named A, C, G, T"
+    )
+
+    if (!is.numeric(prior) || prior < 0 || prior > 1) {
+        stop("prior must be a number between 0 and 1")
+    }
+
+    if (!is.logical(bidirect)) {
+        stop("bidirect must be TRUE or FALSE")
+    }
+
+    if (!is.logical(extend)) {
+        stop("extend must be TRUE or FALSE")
+    }
+
+    if (strand != 1 && strand != -1) {
+        stop("strand must be 1 or -1")
+    }
+
+    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
+        stop("score.thresh must be a single numeric value")
+    }
+
+    if (!is.null(max_edits)) {
+        if (!is.numeric(max_edits) || length(max_edits) != 1 || max_edits < 1) {
+            stop("max_edits must be NULL or a positive integer")
+        }
+        max_edits <- as.integer(max_edits)
+    }
+
+    if (!is.null(max_indels)) {
+        if (!is.numeric(max_indels) || length(max_indels) != 1 || max_indels < 0) {
+            stop("max_indels must be NULL or a non-negative integer")
+        }
+        max_indels <- as.integer(max_indels)
+    }
+
+    if (!is.null(score.min)) {
+        if (!is.numeric(score.min) || length(score.min) != 1) {
+            stop("score.min must be NULL or a single numeric value")
+        }
+    }
+
+    # Set params with processed values
+    list(
+        pssm = pssm,
+        score.thresh = score.thresh,
+        max_edits = max_edits,
+        max_indels = max_indels,
+        score.min = score.min,
+        bidirect = bidirect,
+        prior = prior,
+        extend = extend,
+        strand = strand
+    )
+}
+
+#' Validate and process PWM LSE edit distance function parameters
+#' @noRd
+.vtrack_params_pwm_edit_distance_lse <- function(func, params, dots) {
+    if (!is.null(params)) {
+        if (!is.list(params) || !("pssm" %in% names(params))) {
+            stop("pwm LSE edit distance functions require a list with at least 'pssm' matrix parameter")
+        }
+        dots <- params
+    }
+
+    if (!("pssm" %in% names(dots))) {
+        stop("pwm LSE edit distance functions require a 'pssm' matrix parameter")
+    }
+    if (!("score.thresh" %in% names(dots))) {
+        stop("pwm LSE edit distance functions require a 'score.thresh' parameter")
+    }
+
+    pssm <- dots$pssm
+    score.thresh <- dots$score.thresh
+    max_edits <- dots$max_edits # Optional, can be NULL
+    score.min <- dots$score.min # Optional, can be NULL
+    bidirect <- if (!is.null(dots$bidirect)) dots$bidirect else TRUE
+    prior <- if (!is.null(dots$prior)) dots$prior else 0.01
+    extend <- if (!is.null(dots$extend)) dots$extend else TRUE
+    strand <- if (!is.null(dots$strand)) dots$strand else 1
+
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "PSSM must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "PSSM must have columns named A, C, G, T",
+        colnames_msg = "PSSM must have columns named A, C, G, T"
+    )
+
+    if (!is.numeric(prior) || prior < 0 || prior > 1) {
+        stop("prior must be a number between 0 and 1")
+    }
+
+    if (!is.logical(bidirect)) {
+        stop("bidirect must be TRUE or FALSE")
+    }
+
+    if (!is.logical(extend)) {
+        stop("extend must be TRUE or FALSE")
+    }
+
+    if (strand != 1 && strand != -1) {
+        stop("strand must be 1 or -1")
+    }
+
+    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
+        stop("score.thresh must be a single numeric value")
+    }
+
+    if (!is.null(max_edits)) {
+        if (!is.numeric(max_edits) || length(max_edits) != 1 || max_edits < 1) {
+            stop("max_edits must be NULL or a positive integer")
+        }
+        max_edits <- as.integer(max_edits)
+    }
+
+    if (!is.null(score.min)) {
+        if (!is.numeric(score.min) || length(score.min) != 1) {
+            stop("score.min must be NULL or a single numeric value")
+        }
+    }
+
+    # Set params with processed values
+    list(
+        pssm = pssm,
+        score.thresh = score.thresh,
+        max_edits = max_edits,
+        score.min = score.min,
+        bidirect = bidirect,
+        prior = prior,
+        extend = extend,
+        strand = strand
+    )
+}
+
 #' Validate and process masked function parameters
 #' @noRd
 .vtrack_params_masked <- function(func, params, dots) {
@@ -286,6 +453,11 @@
     kmer.frac = .vtrack_params_kmer,
     masked.count = .vtrack_params_masked,
     masked.frac = .vtrack_params_masked,
+    pwm.edit_distance = .vtrack_params_pwm_edit_distance,
+    pwm.edit_distance.pos = .vtrack_params_pwm_edit_distance,
+    pwm.max.edit_distance = .vtrack_params_pwm_edit_distance,
+    pwm.edit_distance.lse = .vtrack_params_pwm_edit_distance_lse,
+    pwm.edit_distance.lse.pos = .vtrack_params_pwm_edit_distance_lse,
     neighbor.count = .vtrack_params_neighbor_count
 )
 
@@ -293,7 +465,9 @@
 .VTRACK_SOURCELESS_FUNCS <- c(
     "pwm", "pwm.max", "pwm.max.pos", "pwm.count",
     "kmer.count", "kmer.frac",
-    "masked.count", "masked.frac"
+    "masked.count", "masked.frac",
+    "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
+    "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos"
 )
 
 #' Creates a new virtual track
@@ -387,6 +561,21 @@
 #'   NULL (sequence) \tab pwm.count \tab pssm, score.thresh, bidirect, prior, extend, strand, spat_* \tab Count of anchors whose score exceeds \code{score.thresh} (per-position union). \cr
 #' }
 #'
+#' \strong{Edit distance summarizers}
+#' \tabular{llll}{
+#'   Source \tab func \tab Key params \tab Description \cr
+#'   NULL (sequence) \tab pwm.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, bidirect, prior, extend, strand \tab Minimum number of edits (substitutions + indels) needed to reach \code{score.thresh} across all windows. \cr
+#'   NULL (sequence) \tab pwm.edit_distance.pos \tab pssm, score.thresh, max_edits, max_indels, score.min, bidirect, prior, extend, strand \tab 1-based position of the window achieving minimum edit distance (signed by strand when bidirect). \cr
+#'   NULL (sequence) \tab pwm.max.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, bidirect, prior, extend, strand \tab Edit distance at the best-scoring PWM window (same location as pwm.max/pwm.max.pos). \cr
+#' }
+#'
+#' \strong{LSE edit distance summarizers}
+#' \tabular{llll}{
+#'   Source \tab func \tab Key params \tab Description \cr
+#'   NULL (sequence) \tab pwm.edit_distance.lse \tab pssm, score.thresh, max_edits, score.min, bidirect, prior, extend, strand \tab Minimum number of substitution edits needed to raise the LSE score (log-sum-exp of per-window PWM scores) above \code{score.thresh}. Exhaustive for k<=2, greedy heuristic for k>=3. \cr
+#'   NULL (sequence) \tab pwm.edit_distance.lse.pos \tab pssm, score.thresh, max_edits, score.min, bidirect, prior, extend, strand \tab 1-based position of the most impactful single edit for raising the LSE score. \cr
+#' }
+#'
 #' \strong{K-mer summarizers}
 #' \tabular{llll}{
 #'   Source \tab func \tab Key params \tab Description \cr
@@ -414,6 +603,10 @@
 #'   \item \code{score.thresh}: Threshold for \code{pwm.count}. Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
 #'   \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
 #'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Ties resolve to the most 5' anchor; the forward strand wins ties at the same coordinate. Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse).
+#'   \item \code{score.thresh}: For edit distance functions, this is the PWM log-likelihood target that the algorithm tries to reach via substitutions. The edit distance is the minimum number of single-base changes needed for the window to achieve this score.
+#'   \item \code{max_edits}: For edit distance functions only. Optional positive integer setting the maximum search depth. If reaching the threshold requires more than \code{max_edits} substitutions, NA is returned. When NULL (default), exact computation is used.
+#'   \item \code{max_indels}: For edit distance functions only. Optional non-negative integer specifying the maximum number of insertions and deletions allowed (default 0, substitutions only). When > 0, a banded Needleman-Wunsch DP is used to find the minimum total edits (substitutions + indels) to reach the score threshold. Typical values are 1-2.
+#'   \item \code{score.min}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is below \code{score.min} are skipped (edit distance returns NA). This enables regime-specific queries and can improve performance by avoiding expensive edit distance computation on low-scoring windows. Default NULL (no filter).
 #' }
 #'
 #' \strong{Spatial weighting}

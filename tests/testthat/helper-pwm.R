@@ -93,3 +93,100 @@ create_test_pssm <- function() {
     colnames(pssm) <- c("A", "C", "G", "T")
     return(pssm)
 }
+
+# Helper function to compute PWM edit distance manually (for testing)
+# When scan_all = TRUE, returns the minimum edits across every start position in seq.
+# When scan_all = FALSE, seq is treated as a single motif-length window.
+manual_pwm_edit_distance <- function(seq, pssm, threshold, max_edits = NULL, scan_all = TRUE) {
+    motif_len <- nrow(pssm)
+
+    if (nchar(seq) < motif_len) {
+        return(NA_real_)
+    }
+
+    log_pssm <- log(pssm)
+    col_max <- apply(log_pssm, 1, max)
+
+    score_window <- function(window_seq) {
+        adjusted_score <- 0
+        mandatory_edits <- 0
+        gains <- numeric(0)
+
+        for (i in seq_len(motif_len)) {
+            base <- substr(window_seq, i, i)
+            base_idx <- switch(base,
+                "A" = 1,
+                "C" = 2,
+                "G" = 3,
+                "T" = 4,
+                NA
+            )
+
+            if (is.na(base_idx)) {
+                base_score <- min(log_pssm[i, ])
+            } else {
+                base_score <- log_pssm[i, base_idx]
+            }
+
+            if (!is.finite(base_score)) {
+                mandatory_edits <- mandatory_edits + 1
+                adjusted_score <- adjusted_score + col_max[i]
+            } else {
+                adjusted_score <- adjusted_score + base_score
+                gains <- c(gains, col_max[i] - base_score)
+            }
+        }
+
+        deficit <- threshold - adjusted_score
+        if (deficit <= 0) {
+            if (!is.null(max_edits) && mandatory_edits > max_edits) {
+                return(NA_real_)
+            }
+            return(mandatory_edits)
+        }
+
+        total_max_gain <- sum(col_max) - adjusted_score
+        if (total_max_gain < deficit - 1e-12) {
+            return(NA_real_)
+        }
+
+        gains_sorted <- sort(gains, decreasing = TRUE)
+
+        if (!is.null(max_edits)) {
+            remaining_budget <- max_edits - mandatory_edits
+            if (remaining_budget < 0) {
+                return(NA_real_)
+            }
+            if (remaining_budget < length(gains_sorted)) {
+                gains_sorted <- gains_sorted[seq_len(remaining_budget)]
+            }
+        }
+
+        acc <- 0
+        edits <- mandatory_edits
+        for (gain in gains_sorted) {
+            edits <- edits + 1
+            acc <- acc + gain
+            if (acc >= deficit) {
+                return(edits)
+            }
+        }
+
+        return(NA_real_)
+    }
+
+    if (!scan_all) {
+        return(score_window(seq))
+    }
+
+    seq_len_total <- nchar(seq)
+    best <- NA_real_
+    for (start_idx in seq_len(seq_len_total - motif_len + 1)) {
+        window_seq <- substr(seq, start_idx, start_idx + motif_len - 1)
+        cand <- score_window(window_seq)
+        if (is.na(best) || (!is.na(cand) && cand < best)) {
+            best <- cand
+        }
+    }
+    best
+}

@@ -33,6 +33,8 @@ private:
 		std::vector<TrackExpressionVars::Track_var*> &kmer_vtracks,
 		std::vector<TrackExpressionVars::Track_var*> &pwm_vtracks,
 		std::vector<TrackExpressionVars::Track_var*> &masked_vtracks,
+		std::vector<TrackExpressionVars::Track_var*> &pwm_edit_distance_vtracks,
+		std::vector<TrackExpressionVars::Track_var*> &pwm_lse_edit_distance_vtracks,
 		const GInterval &interval,
 		unsigned idx
 	);
