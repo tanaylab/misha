@@ -32,7 +32,9 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
     "masked.count", "masked.frac",
     "max.pos.abs", "max.pos.relative", "min.pos.abs", "min.pos.relative",
     "exists", "size", "sample", "sample.pos.abs", "sample.pos.relative",
-    "first", "first.pos.abs", "first.pos.relative", "last", "last.pos.abs", "last.pos.relative"};
+    "first", "first.pos.abs", "first.pos.relative", "last", "last.pos.abs", "last.pos.relative",
+    "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
+    "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos"};
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "distance.edge", "coverage", "neighbor.count" };
 
@@ -524,7 +526,206 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			// Attach filter if present
 			attach_filter_to_var(rvtrack, vtrack, var);
 			return;
-		}
+		} else if (func == "pwm.edit_distance" ||
+		           func == "pwm.edit_distance.pos" ||
+		           func == "pwm.max.edit_distance") {
+            // Create the Track_var without a Track_n_imdf
+            m_track_vars.push_back(Track_var());
+            Track_var &var = m_track_vars.back();
+            var.var_name = vtrack;
+            if (func == "pwm.edit_distance") {
+                var.val_func = Track_var::PWM_EDIT_DISTANCE;
+            } else if (func == "pwm.edit_distance.pos") {
+                var.val_func = Track_var::PWM_EDIT_DISTANCE_POS;
+            } else {
+                var.val_func = Track_var::PWM_MAX_EDIT_DISTANCE;
+            }
+            var.track_n_imdf = nullptr;  // No track needed for PWM edit distance
+            var.seq_imdf1d = nullptr;
+
+            SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
+
+            // Parse PWM parameters using helper struct
+            TrackExprParams::PWMParams pwm_params = TrackExprParams::PWMParams::parse(rparams, vtrack);
+
+            // Extract max_edits parameter (optional, default -1 for exact computation)
+            int max_edits = -1;
+            if (Rf_isNewList(rparams)) {
+                int me_idx = findListElementIndex(rparams, "max_edits");
+                if (me_idx >= 0) {
+                    SEXP rmax_edits = VECTOR_ELT(rparams, me_idx);
+                    if (!Rf_isNull(rmax_edits)) {
+                        if (Rf_isInteger(rmax_edits)) {
+                            max_edits = INTEGER(rmax_edits)[0];
+                        } else if (Rf_isReal(rmax_edits)) {
+                            max_edits = static_cast<int>(REAL(rmax_edits)[0]);
+                        } else {
+                            verror("max_edits parameter must be NULL or a positive integer for vtrack %s", vtrack.c_str());
+                        }
+                        if (max_edits < 1) {
+                            verror("max_edits must be a positive integer or NULL for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
+            // Extract max_indels parameter (optional, default 0 = substitutions only)
+            int max_indels = 0;
+            if (Rf_isNewList(rparams)) {
+                int mi_idx = findListElementIndex(rparams, "max_indels");
+                if (mi_idx >= 0) {
+                    SEXP rmax_indels = VECTOR_ELT(rparams, mi_idx);
+                    if (!Rf_isNull(rmax_indels)) {
+                        if (Rf_isInteger(rmax_indels)) {
+                            max_indels = INTEGER(rmax_indels)[0];
+                        } else if (Rf_isReal(rmax_indels)) {
+                            max_indels = static_cast<int>(REAL(rmax_indels)[0]);
+                        } else {
+                            verror("max_indels parameter must be NULL or a non-negative integer for vtrack %s", vtrack.c_str());
+                        }
+                        if (max_indels < 0) {
+                            verror("max_indels must be a non-negative integer or NULL for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
+            // Extract score.min parameter (optional, default NaN = no filter)
+            float score_min = std::numeric_limits<float>::quiet_NaN();
+            if (Rf_isNewList(rparams)) {
+                int sm_idx = findListElementIndex(rparams, "score.min");
+                if (sm_idx >= 0) {
+                    SEXP rscore_min = VECTOR_ELT(rparams, sm_idx);
+                    if (!Rf_isNull(rscore_min)) {
+                        if (Rf_isReal(rscore_min) && Rf_length(rscore_min) == 1) {
+                            score_min = static_cast<float>(REAL(rscore_min)[0]);
+                        } else if (Rf_isInteger(rscore_min) && Rf_length(rscore_min) == 1) {
+                            score_min = static_cast<float>(INTEGER(rscore_min)[0]);
+                        } else {
+                            verror("score.min parameter must be NULL or a single numeric value for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
+            PWMEditDistanceScorer::Mode mode = PWMEditDistanceScorer::Mode::MIN_EDITS;
+            if (var.val_func == Track_var::PWM_EDIT_DISTANCE_POS) {
+                mode = PWMEditDistanceScorer::Mode::MIN_EDITS_POSITION;
+            } else if (var.val_func == Track_var::PWM_MAX_EDIT_DISTANCE) {
+                mode = PWMEditDistanceScorer::Mode::PWM_MAX_EDITS;
+            }
+
+            // Construct scorer with shared sequence fetcher for caching
+            var.pwm_edit_distance_scorer = std::make_unique<PWMEditDistanceScorer>(
+                pwm_params.core.pssm,
+                &m_shared_seqfetch,
+                static_cast<float>(pwm_params.core.score_thresh),
+                max_edits,
+                pwm_params.extend_flag,
+                static_cast<char>(pwm_params.core.strand_mode),
+                mode,
+                score_min,
+                max_indels
+            );
+
+            // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
+            Iterator_modifier1D imdf1d;
+            parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+            var.seq_imdf1d = add_imdf(imdf1d);
+
+            var.percentile = numeric_limits<double>::quiet_NaN();
+            var.requires_pv = false;
+
+            // Attach filter if present
+            attach_filter_to_var(rvtrack, vtrack, var);
+            return;
+        } else if (func == "pwm.edit_distance.lse" ||
+                   func == "pwm.edit_distance.lse.pos") {
+            // LSE-mode edit distance: minimum edits to raise LSE score above threshold
+            m_track_vars.push_back(Track_var());
+            Track_var &var = m_track_vars.back();
+            var.var_name = vtrack;
+            if (func == "pwm.edit_distance.lse") {
+                var.val_func = Track_var::PWM_EDIT_DISTANCE_LSE;
+            } else {
+                var.val_func = Track_var::PWM_EDIT_DISTANCE_LSE_POS;
+            }
+            var.track_n_imdf = nullptr;
+            var.seq_imdf1d = nullptr;
+
+            SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
+
+            // Parse PWM parameters using helper struct
+            TrackExprParams::PWMParams pwm_params = TrackExprParams::PWMParams::parse(rparams, vtrack);
+
+            // Extract max_edits parameter (optional, default -1 for unlimited)
+            int max_edits = -1;
+            if (Rf_isNewList(rparams)) {
+                int me_idx = findListElementIndex(rparams, "max_edits");
+                if (me_idx >= 0) {
+                    SEXP rmax_edits = VECTOR_ELT(rparams, me_idx);
+                    if (!Rf_isNull(rmax_edits)) {
+                        if (Rf_isInteger(rmax_edits)) {
+                            max_edits = INTEGER(rmax_edits)[0];
+                        } else if (Rf_isReal(rmax_edits)) {
+                            max_edits = static_cast<int>(REAL(rmax_edits)[0]);
+                        } else {
+                            verror("max_edits parameter must be NULL or a positive integer for vtrack %s", vtrack.c_str());
+                        }
+                        if (max_edits < 1) {
+                            verror("max_edits must be a positive integer or NULL for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
+            // Extract score.min parameter (optional, default NaN = no filter)
+            float score_min = std::numeric_limits<float>::quiet_NaN();
+            if (Rf_isNewList(rparams)) {
+                int sm_idx = findListElementIndex(rparams, "score.min");
+                if (sm_idx >= 0) {
+                    SEXP rscore_min = VECTOR_ELT(rparams, sm_idx);
+                    if (!Rf_isNull(rscore_min)) {
+                        if (Rf_isReal(rscore_min) && Rf_length(rscore_min) == 1) {
+                            score_min = static_cast<float>(REAL(rscore_min)[0]);
+                        } else if (Rf_isInteger(rscore_min) && Rf_length(rscore_min) == 1) {
+                            score_min = static_cast<float>(INTEGER(rscore_min)[0]);
+                        } else {
+                            verror("score.min parameter must be NULL or a single numeric value for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
+            PWMLseEditDistanceScorer::Mode lse_mode = PWMLseEditDistanceScorer::Mode::LSE_EDIT_DISTANCE;
+            if (var.val_func == Track_var::PWM_EDIT_DISTANCE_LSE_POS) {
+                lse_mode = PWMLseEditDistanceScorer::Mode::LSE_EDIT_DISTANCE_POS;
+            }
+
+            // Construct LSE scorer with shared sequence fetcher
+            var.pwm_lse_edit_distance_scorer = std::make_unique<PWMLseEditDistanceScorer>(
+                pwm_params.core.pssm,
+                &m_shared_seqfetch,
+                static_cast<float>(pwm_params.core.score_thresh),
+                max_edits,
+                pwm_params.extend_flag,
+                static_cast<char>(pwm_params.core.strand_mode),
+                lse_mode,
+                score_min
+            );
+
+            // Parse optional iterator modifier
+            Iterator_modifier1D imdf1d;
+            parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+            var.seq_imdf1d = add_imdf(imdf1d);
+
+            var.percentile = numeric_limits<double>::quiet_NaN();
+            var.requires_pv = false;
+
+            // Attach filter if present
+            attach_filter_to_var(rvtrack, vtrack, var);
+            return;
+        }
 	}
 
 	// Only check source if not a PWM function

@@ -42,6 +42,8 @@
 #include "GInterval2D.h"
 #include "TrackExpressionIteratorBase.h"
 #include "PWMScorer.h"
+#include "PWMEditDistanceScorer.h"
+#include "PWMLseEditDistanceScorer.h"
 #include "KmerCounter.h"
 #include "MaskedBpCounter.h"
 #include "GenomeSeqFetch.h"
@@ -150,6 +152,11 @@ public:
             LAST,
             LAST_POS_ABS,
             LAST_POS_REL,
+            PWM_EDIT_DISTANCE,
+            PWM_EDIT_DISTANCE_POS,
+            PWM_MAX_EDIT_DISTANCE,
+            PWM_EDIT_DISTANCE_LSE,
+            PWM_EDIT_DISTANCE_LSE_POS,
             NUM_FUNCS
         };
 
@@ -164,6 +171,8 @@ public:
         Binned_pv           pv_binned;
         Track_n_imdf       *track_n_imdf;
         std::unique_ptr<PWMScorer> pwm_scorer;
+        std::unique_ptr<PWMEditDistanceScorer> pwm_edit_distance_scorer;
+        std::unique_ptr<PWMLseEditDistanceScorer> pwm_lse_edit_distance_scorer;
         std::unique_ptr<KmerCounter> kmer_counter;
         std::unique_ptr<MaskedBpCounter> masked_counter;
         char strand;
@@ -252,6 +261,8 @@ public:
     static bool is_pwm_function(Track_var::Val_func func);
     static bool is_kmer_function(Track_var::Val_func func);
     static bool is_masked_function(Track_var::Val_func func);
+    static bool is_pwm_edit_distance_function(Track_var::Val_func func);
+    static bool is_pwm_lse_edit_distance_function(Track_var::Val_func func);
 
 	void set_vars(const GInterval &interval, unsigned idx);
 	void set_vars(const GInterval2D &interval, const DiagonalBand &band, unsigned idx);
@@ -375,7 +386,12 @@ inline bool TrackExpressionVars::is_seq_variable(unsigned ivar) const {
            m_track_vars[ivar].val_func == Track_var::KMER_COUNT ||
            m_track_vars[ivar].val_func == Track_var::KMER_FRAC ||
            m_track_vars[ivar].val_func == Track_var::MASKED_COUNT ||
-           m_track_vars[ivar].val_func == Track_var::MASKED_FRAC;
+           m_track_vars[ivar].val_func == Track_var::MASKED_FRAC ||
+           m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE ||
+           m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_POS ||
+           m_track_vars[ivar].val_func == Track_var::PWM_MAX_EDIT_DISTANCE ||
+           m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_LSE ||
+           m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
 }
 
 // Helper methods to check variable function types
@@ -383,12 +399,35 @@ inline bool TrackExpressionVars::is_sequence_based_function(Track_var::Val_func 
     return func == Track_var::PWM || func == Track_var::PWM_MAX ||
            func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT ||
            func == Track_var::KMER_COUNT || func == Track_var::KMER_FRAC ||
-           func == Track_var::MASKED_COUNT || func == Track_var::MASKED_FRAC;
+           func == Track_var::MASKED_COUNT || func == Track_var::MASKED_FRAC ||
+           func == Track_var::PWM_EDIT_DISTANCE ||
+           func == Track_var::PWM_EDIT_DISTANCE_POS ||
+           func == Track_var::PWM_MAX_EDIT_DISTANCE ||
+           func == Track_var::PWM_EDIT_DISTANCE_LSE ||
+           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
 }
 
 inline bool TrackExpressionVars::is_pwm_function(Track_var::Val_func func) {
     return func == Track_var::PWM || func == Track_var::PWM_MAX ||
-           func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT;
+           func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT ||
+           func == Track_var::PWM_EDIT_DISTANCE ||
+           func == Track_var::PWM_EDIT_DISTANCE_POS ||
+           func == Track_var::PWM_MAX_EDIT_DISTANCE ||
+           func == Track_var::PWM_EDIT_DISTANCE_LSE ||
+           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
+}
+
+inline bool TrackExpressionVars::is_pwm_edit_distance_function(Track_var::Val_func func) {
+    return func == Track_var::PWM_EDIT_DISTANCE ||
+           func == Track_var::PWM_EDIT_DISTANCE_POS ||
+           func == Track_var::PWM_MAX_EDIT_DISTANCE ||
+           func == Track_var::PWM_EDIT_DISTANCE_LSE ||
+           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
+}
+
+inline bool TrackExpressionVars::is_pwm_lse_edit_distance_function(Track_var::Val_func func) {
+    return func == Track_var::PWM_EDIT_DISTANCE_LSE ||
+           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
 }
 
 inline bool TrackExpressionVars::is_kmer_function(Track_var::Val_func func) {
