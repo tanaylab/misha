@@ -60,6 +60,8 @@ A data frame (long format) with one row per edit, containing columns:
   \item{ref}{Current base at this position}
   \item{alt}{Suggested replacement base}
   \item{gain}{Score improvement from this individual edit}
+  \item{window_seq}{Motif-length sequence at the optimal window (as seen by PSSM, reverse-complemented if on reverse strand)}
+  \item{mutated_seq}{Same sequence with all edits applied}
 }
 
 When intervals are provided, additional columns \code{chrom}, \code{start},

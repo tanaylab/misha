@@ -417,6 +417,8 @@ gseq.pwm <- function(seqs,
 #'   \item{ref}{Current base at this position}
 #'   \item{alt}{Suggested replacement base}
 #'   \item{gain}{Score improvement from this individual edit}
+#'   \item{window_seq}{Motif-length sequence at the optimal window (as seen by PSSM, reverse-complemented if on reverse strand)}
+#'   \item{mutated_seq}{Same sequence with all edits applied}
 #' }
 #'
 #' When intervals are provided, additional columns \code{chrom}, \code{start},
@@ -541,7 +543,8 @@ gseq.pwm_edits <- function(seqs,
             "seq_idx", "chrom", "start", "end",
             "strand", "window_start",
             "score_before", "score_after", "n_edits",
-            "edit_num", "motif_col", "ref", "alt", "gain"
+            "edit_num", "motif_col", "ref", "alt", "gain",
+            "window_seq", "mutated_seq"
         )]
     }
 
