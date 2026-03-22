@@ -377,6 +377,177 @@ gseq.pwm <- function(seqs,
     return(out)
 }
 
+#' Show optimal edits to reach a PWM score threshold
+#'
+#' For each input sequence (or genomic interval), finds the optimal motif window
+#' and the specific base changes needed to reach \code{score.thresh}. Returns a
+#' long-format data frame with one row per edit.
+#'
+#' This is an investigation tool: use it on a small set of positions (e.g., from
+#' \code{gscreen}) to see what mutations would activate latent binding sites.
+#'
+#' @param seqs character vector of DNA sequences, OR a data frame of genomic
+#'   intervals (with columns chrom, start, end). When intervals are provided,
+#'   sequences are extracted automatically via \code{gseq.extract}.
+#' @param pssm numeric matrix or data frame with columns A, C, G, T. Each row
+#'   is a motif position.
+#' @param score.thresh numeric; target PWM log-likelihood score to reach.
+#' @param max_edits integer or NULL; maximum number of edits to search. NULL
+#'   means no cap. Default NULL.
+#' @param bidirect logical; scan both strands? Default TRUE.
+#' @param prior numeric; pseudocount for PSSM frequencies. Default 0.01.
+#' @param score.min numeric or NULL; skip windows with PWM score below this.
+#'   Default NULL (no filter).
+#' @param score.max numeric or NULL; skip windows with PWM score above this.
+#'   Default NULL (no filter).
+#' @param extend logical or integer; extend sequence for boundary motifs.
+#'   Default TRUE.
+#' @param strand integer; which strand to scan when \code{bidirect=FALSE}.
+#'   1=forward, -1=reverse. Default 1.
+#' @return A data frame (long format) with one row per edit, containing columns:
+#' \describe{
+#'   \item{seq_idx}{Index into input sequences/intervals (1-based)}
+#'   \item{strand}{+1 (forward) or -1 (reverse strand)}
+#'   \item{window_start}{1-based position of optimal window within sequence}
+#'   \item{score_before}{PWM score before edits}
+#'   \item{score_after}{PWM score after all edits}
+#'   \item{n_edits}{Total number of edits needed}
+#'   \item{edit_num}{Which edit this row represents (1, 2, ...)}
+#'   \item{motif_col}{1-based position within the motif where the edit occurs}
+#'   \item{ref}{Current base at this position}
+#'   \item{alt}{Suggested replacement base}
+#'   \item{gain}{Score improvement from this individual edit}
+#' }
+#'
+#' When intervals are provided, additional columns \code{chrom}, \code{start},
+#' \code{end} are included.
+#'
+#' Sequences already above the threshold produce a single row with
+#' \code{n_edits = 0}. Unreachable sequences are omitted from the output.
+#'
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#'
+#' # Simple PSSM
+#' pssm <- matrix(c(1, 0, 0, 0, 0, 1, 0, 0),
+#'     nrow = 2,
+#'     dimnames = list(NULL, c("A", "C", "G", "T"))
+#' )
+#'
+#' # What edits are needed?
+#' gseq.pwm_edits("CCGTACGT", pssm, score.thresh = -0.5, prior = 0)
+#'
+#' @export
+#' @seealso \code{\link{gseq.pwm}}, \code{\link{gvtrack.create}}
+gseq.pwm_edits <- function(seqs,
+                           pssm,
+                           score.thresh,
+                           max_edits = NULL,
+                           bidirect = TRUE,
+                           prior = 0.01,
+                           score.min = NULL,
+                           score.max = NULL,
+                           extend = TRUE,
+                           strand = 1L) {
+    # Handle interval input: extract sequences
+    is_intervals <- is.data.frame(seqs) &&
+        all(c("chrom", "start", "end") %in% colnames(seqs))
+
+    intervals_df <- NULL
+    if (is_intervals) {
+        intervals_df <- seqs
+        # Extend intervals for boundary motifs
+        w <- nrow(pssm)
+        if (is.data.frame(pssm)) {
+            w <- nrow(pssm)
+        } else if (is.matrix(pssm)) {
+            w <- nrow(pssm)
+        }
+        ext <- if (isTRUE(extend)) w - 1L else if (isFALSE(extend)) 0L else as.integer(extend)
+        extended_intervals <- intervals_df
+        extended_intervals$start <- extended_intervals$start - ext
+        extended_intervals$end <- extended_intervals$end + ext
+        # Clamp to chromosome boundaries
+        chrom_sizes <- gintervals.all()
+        for (i in seq_len(nrow(extended_intervals))) {
+            chr <- as.character(extended_intervals$chrom[i])
+            chr_row <- chrom_sizes[chrom_sizes$chrom == chr, , drop = FALSE]
+            if (nrow(chr_row) > 0) {
+                extended_intervals$start[i] <- max(extended_intervals$start[i], chr_row$start[1])
+                extended_intervals$end[i] <- min(extended_intervals$end[i], chr_row$end[1])
+            }
+        }
+        seqs <- gseq.extract(extended_intervals)
+
+        # Adjust ROI: the original interval within the extended sequence
+        roi_start <- ext + 1L
+        roi_end <- nchar(seqs) - ext
+    } else {
+        seqs <- as.character(seqs)
+        roi_start <- NULL
+        roi_end <- NULL
+    }
+
+    # Validate PSSM
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "pssm must have columns named A, C, G, T",
+        colnames_msg = "pssm must have columns named A, C, G, T"
+    )
+
+    # Validate parameters
+    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
+        stop("score.thresh must be a single numeric value")
+    }
+    if (!is.null(max_edits)) {
+        max_edits <- as.integer(max_edits)
+        if (max_edits < 1) stop("max_edits must be NULL or a positive integer")
+    }
+    if (!is.logical(bidirect)) stop("bidirect must be TRUE or FALSE")
+    if (!is.numeric(prior) || prior < 0 || prior > 1) stop("prior must be between 0 and 1")
+    if (strand != 1 && strand != -1) stop("strand must be 1 or -1")
+
+    strand_mode <- if (bidirect) 0L else as.integer(strand)
+
+    # Call C++
+    result <- .Call(
+        "C_gseq_pwm_edits",
+        seqs,
+        pssm,
+        as.numeric(score.thresh),
+        max_edits,
+        as.logical(bidirect),
+        strand_mode,
+        as.numeric(prior),
+        if (!is.null(roi_start)) as.integer(roi_start) else NULL,
+        if (!is.null(roi_end)) as.integer(roi_end) else NULL,
+        as.logical(extend),
+        if (!is.null(score.min)) as.numeric(score.min) else NULL,
+        if (!is.null(score.max)) as.numeric(score.max) else NULL
+    )
+
+    # Add interval columns if input was intervals
+    if (is_intervals && nrow(result) > 0) {
+        result$chrom <- intervals_df$chrom[result$seq_idx]
+        result$start <- intervals_df$start[result$seq_idx]
+        result$end <- intervals_df$end[result$seq_idx]
+        # Reorder columns
+        result <- result[, c(
+            "seq_idx", "chrom", "start", "end",
+            "strand", "window_start",
+            "score_before", "score_after", "n_edits",
+            "edit_num", "motif_col", "ref", "alt", "gain"
+        )]
+    }
+
+    return(result)
+}
+
 #' Score DNA sequences with a k-mer over a region of interest
 #'
 #' Counts exact matches of a k-mer in DNA sequences over a specified region of interest
