@@ -454,7 +454,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     const bool has_score_max = !std::isnan(m_score_max);
     const bool has_score_filter = has_score_min || has_score_max;
 
-    const size_t max_start = target_length - motif_length + 1;
+    const size_t max_start = std::min(interval_length, target_length - motif_length + 1);
     if (max_start == 0 || (!scan_forward && !scan_reverse)) {
         return metrics;
     }

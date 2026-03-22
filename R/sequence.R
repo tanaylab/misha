@@ -462,16 +462,15 @@ gseq.pwm_edits <- function(seqs,
     intervals_df <- NULL
     if (is_intervals) {
         intervals_df <- seqs
-        # Extend intervals for boundary motifs
+        # Extend END only — matching vtrack's calculate_expanded_interval.
+        # The motif window starts within the interval and extends rightward,
+        # so we need extra sequence after the interval end.
+        # With this extension, the valid window starts are exactly
+        # offsets 0..(interval_length-1) in the extracted sequence.
         w <- nrow(pssm)
-        if (is.data.frame(pssm)) {
-            w <- nrow(pssm)
-        } else if (is.matrix(pssm)) {
-            w <- nrow(pssm)
-        }
+        if (is.data.frame(pssm)) w <- nrow(pssm)
         ext <- if (isTRUE(extend)) w - 1L else if (isFALSE(extend)) 0L else as.integer(extend)
         extended_intervals <- intervals_df
-        extended_intervals$start <- extended_intervals$start - ext
         extended_intervals$end <- extended_intervals$end + ext
         # Clamp to chromosome boundaries
         chrom_sizes <- gintervals.all()
@@ -479,15 +478,15 @@ gseq.pwm_edits <- function(seqs,
             chr <- as.character(extended_intervals$chrom[i])
             chr_row <- chrom_sizes[chrom_sizes$chrom == chr, , drop = FALSE]
             if (nrow(chr_row) > 0) {
-                extended_intervals$start[i] <- max(extended_intervals$start[i], chr_row$start[1])
                 extended_intervals$end[i] <- min(extended_intervals$end[i], chr_row$end[1])
             }
         }
         seqs <- gseq.extract(extended_intervals)
-
-        # Adjust ROI: the original interval within the extended sequence
-        roi_start <- ext + 1L
-        roi_end <- nchar(seqs) - ext
+        # No ROI constraints needed — C++ will scan all valid windows
+        # in the extended sequence (0 to seqlen-w), which equals
+        # interval_length windows, matching the vtrack behavior.
+        roi_start <- NULL
+        roi_end <- NULL
     } else {
         seqs <- as.character(seqs)
         roi_start <- NULL
