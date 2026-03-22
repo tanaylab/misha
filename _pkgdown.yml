@@ -125,6 +125,7 @@ reference:
     contents:
       - gseq.extract
       - gseq.pwm
+      - gseq.pwm_edits
       - gseq.kmer
       - gseq.kmer.dist
       - gseq.revcomp

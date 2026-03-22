@@ -57,6 +57,8 @@ struct WindowResult {
     float score_after;
     int n_edits;           // total edits needed (0 if already above threshold, -1 if unreachable)
     std::vector<EditInfo> edits;
+    std::string window_seq;   // motif-length sequence at the window (as seen by PSSM)
+    std::string mutated_seq;  // window_seq with edits applied
 };
 
 inline int base_to_index(char base) {
@@ -172,12 +174,19 @@ WindowResult compute_window_edits_detailed(
 
     result.score_before = static_cast<float>(adjusted_score);
 
+    // Build window_seq (sequence as seen by PSSM, i.e., reverse-complemented if reverse)
+    result.window_seq.resize(L);
+    for (int i = 0; i < L; i++) {
+        result.window_seq[i] = positions[i].ref_base;
+    }
+
     double deficit = static_cast<double>(threshold) - adjusted_score;
 
     // Already above threshold?
     if (deficit <= 0.0) {
         result.n_edits = mandatory_edits;
         result.score_after = result.score_before;
+        result.mutated_seq = result.window_seq;
         // Add mandatory edits if any
         for (int i = 0; i < L; i++) {
             if (positions[i].mandatory) {
@@ -187,6 +196,7 @@ WindowResult compute_window_edits_detailed(
                 edit.alt_base = index_to_base(positions[i].best_base_idx);
                 edit.gain = 0.0f;
                 result.edits.push_back(edit);
+                result.mutated_seq[i] = edit.alt_base;
             }
         }
         return result;
@@ -250,6 +260,11 @@ WindowResult compute_window_edits_detailed(
             result.n_edits = edits;
             result.score_after = static_cast<float>(adjusted_score + acc);
             result.edits = edit_list;
+            // Build mutated_seq
+            result.mutated_seq = result.window_seq;
+            for (const auto& e : result.edits) {
+                result.mutated_seq[e.motif_col - 1] = e.alt_base;
+            }
             return result;
         }
     }
@@ -369,15 +384,18 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         int n_seqs = Rf_length(r_seqs);
         if (n_seqs == 0) {
             // Return empty data frame
-            SEXP result = PROTECT(Rf_allocVector(VECSXP, 11));
-            SEXP names = PROTECT(Rf_allocVector(STRSXP, 11));
+            const int ncols = 13;
+            SEXP result = PROTECT(Rf_allocVector(VECSXP, ncols));
+            SEXP names = PROTECT(Rf_allocVector(STRSXP, ncols));
             const char* colnames[] = {"seq_idx", "strand", "window_start",
                                        "score_before", "score_after", "n_edits",
-                                       "edit_num", "motif_col", "ref", "alt", "gain"};
-            for (int i = 0; i < 11; i++) {
+                                       "edit_num", "motif_col", "ref", "alt", "gain",
+                                       "window_seq", "mutated_seq"};
+            for (int i = 0; i < ncols; i++) {
                 SET_STRING_ELT(names, i, Rf_mkChar(colnames[i]));
-                SET_VECTOR_ELT(result, i, Rf_allocVector(i < 3 || i == 5 || i == 6 || i == 7 ? INTSXP :
-                                                          (i == 8 || i == 9 ? STRSXP : REALSXP), 0));
+                SEXPTYPE tp = (i < 3 || i == 5 || i == 6 || i == 7) ? INTSXP :
+                              (i == 8 || i == 9 || i == 11 || i == 12) ? STRSXP : REALSXP;
+                SET_VECTOR_ELT(result, i, Rf_allocVector(tp, 0));
             }
             Rf_setAttrib(result, R_NamesSymbol, names);
 
@@ -491,6 +509,8 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
             char ref;
             char alt;
             float gain;
+            std::string window_seq;
+            std::string mutated_seq;
         };
 
         std::vector<EditRow> all_rows;
@@ -540,6 +560,8 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
                 row.ref = 0;
                 row.alt = 0;
                 row.gain = 0.0f;
+                row.window_seq = wr.window_seq;
+                row.mutated_seq = wr.mutated_seq;
                 all_rows.push_back(row);
             } else if (wr.n_edits > 0 && !wr.edits.empty()) {
                 for (size_t e = 0; e < wr.edits.size(); e++) {
@@ -555,6 +577,8 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
                     row.ref = wr.edits[e].ref_base;
                     row.alt = wr.edits[e].alt_base;
                     row.gain = wr.edits[e].gain;
+                    row.window_seq = wr.window_seq;
+                    row.mutated_seq = wr.mutated_seq;
                     all_rows.push_back(row);
                 }
             }
@@ -575,6 +599,8 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         SEXP r_ref = PROTECT(Rf_allocVector(STRSXP, n_rows));
         SEXP r_alt = PROTECT(Rf_allocVector(STRSXP, n_rows));
         SEXP r_gain = PROTECT(Rf_allocVector(REALSXP, n_rows));
+        SEXP r_wseq = PROTECT(Rf_allocVector(STRSXP, n_rows));
+        SEXP r_mseq = PROTECT(Rf_allocVector(STRSXP, n_rows));
 
         for (int i = 0; i < n_rows; i++) {
             const EditRow& row = all_rows[i];
@@ -596,10 +622,13 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
                 SET_STRING_ELT(r_alt, i, Rf_mkChar(buf));
             }
             REAL(r_gain)[i] = row.gain;
+            SET_STRING_ELT(r_wseq, i, Rf_mkChar(row.window_seq.c_str()));
+            SET_STRING_ELT(r_mseq, i, Rf_mkChar(row.mutated_seq.c_str()));
         }
 
         // Assemble data frame
-        SEXP result_df = PROTECT(Rf_allocVector(VECSXP, 11));
+        const int ncols = 13;
+        SEXP result_df = PROTECT(Rf_allocVector(VECSXP, ncols));
         SET_VECTOR_ELT(result_df, 0, r_seq_idx);
         SET_VECTOR_ELT(result_df, 1, r_strand_out);
         SET_VECTOR_ELT(result_df, 2, r_wstart);
@@ -611,12 +640,15 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         SET_VECTOR_ELT(result_df, 8, r_ref);
         SET_VECTOR_ELT(result_df, 9, r_alt);
         SET_VECTOR_ELT(result_df, 10, r_gain);
+        SET_VECTOR_ELT(result_df, 11, r_wseq);
+        SET_VECTOR_ELT(result_df, 12, r_mseq);
 
-        SEXP names = PROTECT(Rf_allocVector(STRSXP, 11));
+        SEXP names = PROTECT(Rf_allocVector(STRSXP, ncols));
         const char* colnames[] = {"seq_idx", "strand", "window_start",
                                    "score_before", "score_after", "n_edits",
-                                   "edit_num", "motif_col", "ref", "alt", "gain"};
-        for (int i = 0; i < 11; i++) {
+                                   "edit_num", "motif_col", "ref", "alt", "gain",
+                                   "window_seq", "mutated_seq"};
+        for (int i = 0; i < ncols; i++) {
             SET_STRING_ELT(names, i, Rf_mkChar(colnames[i]));
         }
         Rf_setAttrib(result_df, R_NamesSymbol, names);
@@ -629,7 +661,7 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         SEXP cls = PROTECT(Rf_mkString("data.frame"));
         Rf_setAttrib(result_df, R_ClassSymbol, cls);
 
-        UNPROTECT(15);
+        UNPROTECT(17);
         return result_df;
 
     } catch (std::exception& e) {
