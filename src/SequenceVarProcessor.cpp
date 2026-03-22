@@ -523,7 +523,9 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 					if (std::isnan(part_edits)) continue;
 					if (std::isnan(best_edits) || part_edits < best_edits) {
 						best_edits = part_edits;
-						best_pos = part_pos;
+						double offset = static_cast<double>(part.start - seq_interval.start);
+						best_pos = (part_pos > 0) ? part_pos + offset :
+						           (part_pos < 0) ? part_pos - offset : part_pos;
 					}
 				}
 				ivar->var[idx] = best_pos;
@@ -592,7 +594,9 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 					if (std::isnan(part_edits)) continue;
 					if (std::isnan(best_edits) || part_edits < best_edits) {
 						best_edits = part_edits;
-						best_pos = part_pos;
+						double offset = static_cast<double>(part.start - seq_interval.start);
+						best_pos = (part_pos > 0) ? part_pos + offset :
+						           (part_pos < 0) ? part_pos - offset : part_pos;
 					}
 				}
 				ivar->var[idx] = best_pos;
