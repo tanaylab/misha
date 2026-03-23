@@ -472,7 +472,7 @@ test_that("gseq.pwm_edits detects deletion with max_indels=1", {
         1, 0, 0, 0, # A
         0, 1, 0, 0, # C
         0, 0, 1, 0, # G
-        0, 0, 0, 1  # T
+        0, 0, 0, 1 # T
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -497,7 +497,7 @@ test_that("gseq.pwm_edits detects insertion with max_indels=1", {
         1, 0, 0, 0, # A
         0, 1, 0, 0, # C
         0, 0, 1, 0, # G
-        0, 0, 0, 1  # T
+        0, 0, 0, 1 # T
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -836,7 +836,8 @@ test_that("gseq.pwm_edits score_after = score_before + sum(gains) for pure subst
 
     # For pure substitutions: score_after = score_before + sum(gains)
     total_gain <- sum(sub_rows$gain)
-    expect_equal(result$score_after[1], result$score_before[1] + total_gain, tolerance = 1e-3,
+    expect_equal(result$score_after[1], result$score_before[1] + total_gain,
+        tolerance = 1e-3,
         info = "score_after must equal score_before + sum(gains) for substitutions"
     )
 
