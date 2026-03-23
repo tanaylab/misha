@@ -102,7 +102,7 @@ extern "C" {
     extern SEXP C_grandom_genome(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_pwm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_pwm_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP C_gseq_pwm_edits(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gseq_pwm_edits(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_train(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -206,7 +206,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_grandom_genome", (DL_FUNC)&C_grandom_genome, 5},
     {"C_gseq_pwm", (DL_FUNC)&C_gseq_pwm, 16},
     {"C_gseq_pwm_multitask", (DL_FUNC)&C_gseq_pwm_multitask, 17},
-    {"C_gseq_pwm_edits", (DL_FUNC)&C_gseq_pwm_edits, 12},
+    {"C_gseq_pwm_edits", (DL_FUNC)&C_gseq_pwm_edits, 13},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
     {"C_gsynth_train", (DL_FUNC)&C_gsynth_train, 11},
     {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 11},

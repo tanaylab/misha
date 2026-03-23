@@ -449,6 +449,7 @@ gseq.pwm_edits <- function(seqs,
                            pssm,
                            score.thresh,
                            max_edits = NULL,
+                           max_indels = NULL,
                            bidirect = TRUE,
                            prior = 0.01,
                            score.min = NULL,
@@ -509,6 +510,10 @@ gseq.pwm_edits <- function(seqs,
         max_edits <- as.integer(max_edits)
         if (max_edits < 1) stop("max_edits must be NULL or a positive integer")
     }
+    if (!is.null(max_indels)) {
+        max_indels <- as.integer(max_indels)
+        if (max_indels < 0) stop("max_indels must be NULL or a non-negative integer")
+    }
     if (!is.logical(bidirect)) stop("bidirect must be TRUE or FALSE")
     if (!is.numeric(prior) || prior < 0 || prior > 1) stop("prior must be between 0 and 1")
     if (strand != 1 && strand != -1) stop("strand must be 1 or -1")
@@ -527,6 +532,7 @@ gseq.pwm_edits <- function(seqs,
         pssm,
         as.numeric(score.thresh),
         max_edits,
+        max_indels,
         as.logical(bidirect),
         strand_mode,
         as.numeric(prior),
@@ -548,7 +554,7 @@ gseq.pwm_edits <- function(seqs,
             "strand", "window_start",
             "score_before", "score_after", "n_edits",
             "edit_num", "motif_col", "ref", "alt", "gain",
-            "window_seq", "mutated_seq"
+            "edit_type", "window_seq", "mutated_seq"
         )]
     }
 
