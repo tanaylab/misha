@@ -105,6 +105,9 @@ private:
     std::vector<std::vector<uint8_t>> m_bin_index;  // bin[i][b] - lookup table
     float m_S_max;                           // sum of column maxima
 
+    // Precomputed tables for reachability pre-filter (indel solvers)
+    std::vector<float> m_sorted_col_max_asc; // m_col_max_scores sorted ascending (for insertion-family bound)
+
     // Reusable count vector for compute_exact (PERF-1: touched-list cleanup)
     std::vector<int> m_exact_count;
     std::vector<size_t> m_exact_touched;
@@ -120,6 +123,34 @@ private:
     inline bool should_scan_reverse() const;
     inline char complement_base(char base) const;
     inline float compute_window_edits(const char* window_start, int seq_avail, bool reverse);
+
+    /**
+     * Get the effective PSSM score and gain for a motif position aligned with a sequence base.
+     * Handles reverse complement and unknown bases (index==4 -> minimum score).
+     * @param seq_ptr Pointer to sequence data
+     * @param reverse Whether to reverse complement
+     * @param motif_pos Motif column index
+     * @param raw_seq_idx Index into seq_ptr for the aligned base
+     * @param out_score Output: PSSM score at this alignment
+     * @param out_gain Output: col_max - out_score (substitution gain)
+     */
+    inline void get_aligned_base_score(const char* seq_ptr, bool reverse,
+                                       int motif_pos, int raw_seq_idx,
+                                       float& out_score, float& out_gain) const;
+
+    /**
+     * Compute minimum total edits (indels + substitutions) to reach threshold.
+     * Given an aligned score and a vector of per-column substitution gains, greedily
+     * picks top gains to cover the deficit.
+     * NOTE: Mutates gains via partial sort — caller must not reuse gains after this call.
+     * @param aligned_score Sum of PSSM scores for the aligned columns
+     * @param gains Per-column substitution gains (will be partially sorted in-place)
+     * @param indels Number of indels used in this alignment family
+     * @param best_edits_so_far Current best total edits (for pruning); NaN if none found yet
+     * @return Total edits (indels + subs), or NaN if unreachable or pruned
+     */
+    float compute_min_edits_from_gains(double aligned_score, std::vector<float>& gains,
+                                       int indels, float best_edits_so_far) const;
 
     /**
      * Compute PWM log-likelihood for a window (used for score.min filtering)
@@ -154,6 +185,41 @@ private:
      * @return Minimum edits needed (substitutions + indels) to reach threshold, or NaN if unreachable
      */
     float compute_with_indels(const char* seq_ptr, int seq_len, bool reverse);
+
+    /**
+     * Specialized exact solver for max_indels == 1.
+     * Enumerates three alignment families (no-indel, one deletion, one insertion)
+     * instead of the generic 3D banded DP, for better performance.
+     * Produces identical results to compute_with_indels() when max_indels == 1.
+     * @param seq_ptr Pointer to start of sequence window
+     * @param seq_len Total number of sequence bases available from seq_ptr
+     * @param reverse Whether to reverse complement the sequence
+     * @return Minimum edits needed to reach threshold, or NaN if unreachable
+     */
+    float compute_with_one_indel(const char* seq_ptr, int seq_len, bool reverse);
+
+    /**
+     * Specialized exact solver for max_indels == 2.
+     * Enumerates six alignment families (no-indel, 1 del, 1 ins, 2 dels, 2 ins, 1 del + 1 ins)
+     * instead of the generic 3D banded DP, for better performance.
+     * Produces identical results to compute_with_indels() when max_indels == 2.
+     * @param seq_ptr Pointer to start of sequence window
+     * @param seq_len Total number of sequence bases available from seq_ptr
+     * @param reverse Whether to reverse complement the sequence
+     * @return Minimum edits needed to reach threshold, or NaN if unreachable
+     */
+    float compute_with_two_indels(const char* seq_ptr, int seq_len, bool reverse);
+
+    /**
+     * Compute a lower bound on minimum edits for a window when indels are allowed.
+     * Uses the no-indel raw score and precomputed column maxima to determine if
+     * any alignment family can possibly produce a result within the m_max_edits budget.
+     * @param window_start Pointer to the window start
+     * @param seq_avail Number of sequence bases available
+     * @param reverse Whether to reverse complement
+     * @return Lower bound on minimum edits, or INT_MAX if provably unreachable
+     */
+    int compute_indel_lower_bound(const char* window_start, int seq_avail, bool reverse);
 
     /**
      * Convert base character to index (A=0, C=1, G=2, T=3)
