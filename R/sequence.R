@@ -394,6 +394,10 @@ gseq.pwm <- function(seqs,
 #' @param score.thresh numeric; target PWM log-likelihood score to reach.
 #' @param max_edits integer or NULL; maximum number of edits to search. NULL
 #'   means no cap. Default NULL.
+#' @param max_indels integer or NULL; maximum number of insertions and deletions
+#'   allowed (default NULL, substitutions only). When > 0, a banded
+#'   Needleman-Wunsch DP is used. Edits are reported with \code{edit_type}
+#'   "sub", "ins", or "del".
 #' @param bidirect logical; scan both strands? Default TRUE.
 #' @param prior numeric; pseudocount for PSSM frequencies. Default 0.01.
 #' @param score.min numeric or NULL; skip windows with PWM score below this.
