@@ -472,9 +472,14 @@ gseq.pwm_edits <- function(seqs,
         # so we need extra sequence after the interval end.
         # With this extension, the valid window starts are exactly
         # offsets 0..(interval_length-1) in the extracted sequence.
+        # When indels are enabled, deletions produce windows of length
+        # L + max_indels, so we need max_indels additional bases beyond
+        # the standard extension (matching PWMEditDistanceScorer which
+        # calls calculate_expanded_interval with motif_len + max_indels).
         w <- nrow(pssm)
         if (is.data.frame(pssm)) w <- nrow(pssm)
-        ext <- if (isTRUE(extend)) w - 1L else if (isFALSE(extend)) 0L else as.integer(extend)
+        indel_extra <- if (!is.null(max_indels)) as.integer(max_indels) else 0L
+        ext <- if (isTRUE(extend)) w - 1L + indel_extra else if (isFALSE(extend)) 0L else as.integer(extend) + indel_extra
         extended_intervals <- intervals_df
         extended_intervals$end <- extended_intervals$end + ext
         # Clamp to chromosome boundaries
@@ -487,11 +492,27 @@ gseq.pwm_edits <- function(seqs,
             }
         }
         seqs <- gseq.extract(extended_intervals)
-        # No ROI constraints needed — C++ will scan all valid windows
-        # in the extended sequence (0 to seqlen-w), which equals
-        # interval_length windows, matching the vtrack behavior.
-        roi_start <- NULL
-        roi_end <- NULL
+        # Without indels: the extended sequence has length
+        # interval_length + w - 1, and C++ scans positions 0..(seqlen-w)
+        # = 0..(interval_length-1), giving exactly interval_length windows.
+        # No ROI constraint needed.
+        #
+        # With indels: we extend by an extra indel_extra bases so that
+        # deletion windows (length up to w + max_indels) at the last
+        # interval position have enough sequence. But without ROI, the
+        # C++ would scan extra window starts beyond the interval.
+        # We constrain via ROI so that valid window starts are exactly
+        # 0..(interval_length-1), matching the vtrack behavior.
+        # ROI is 1-based: roi_end = interval_length + w - 1 means
+        # the last valid start is roi_end - w = interval_length - 1.
+        if (indel_extra > 0L) {
+            interval_lengths <- intervals_df$end - intervals_df$start
+            roi_start <- rep(1L, length(seqs))
+            roi_end <- as.integer(interval_lengths + w - 1L)
+        } else {
+            roi_start <- NULL
+            roi_end <- NULL
+        }
     } else {
         seqs <- as.character(seqs)
         roi_start <- NULL

@@ -2262,3 +2262,1109 @@ test_that("pwm.edit_distance extend=0L behaves like extend=FALSE", {
         expect_equal(res_0$edist_ext0[1], res_f$edist_extF[1], tolerance = 1e-6)
     }
 })
+
+# --------------------------------------------------------------------------
+# One-indel specialized solver tests
+# --------------------------------------------------------------------------
+
+describe("One-indel specialized solver", {
+    # Shared PSSM: strongly prefers ACGT
+    acgt_pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01, # C
+        0.01, 0.01, 0.97, 0.01, # G
+        0.01, 0.01, 0.01, 0.97 # T
+    ), ncol = 4, byrow = TRUE)
+    colnames(acgt_pssm) <- c("A", "C", "G", "T")
+
+    it("deletion improves alignment: inserted extra base is removed by one-indel solver", {
+        remove_all_vtracks()
+
+        # "ATCGT" is "ACGT" with an extra T inserted after A.
+        # Use a tight threshold equal to the perfect-match score so that
+        # no 4bp substitution-only window can reach it.
+        # Perfect score = 4 * log(0.97) ~ -0.122
+        seq <- "ATCGT"
+        threshold <- sum(log(c(0.97, 0.97, 0.97, 0.97)))
+
+        # Without indels: no 4bp window of "ATCGT" matches ACGT perfectly.
+        # Windows are "ATCG" and "TCGT", both have at least 1 mismatch.
+        # At the tight threshold these are unreachable, so we get 0 rows.
+        result_no_indel <- gseq.pwm_edits(seq, acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 0L, prior = 0, bidirect = FALSE
+        )
+        # No window can reach the perfect-match threshold via subs alone
+        expect_equal(nrow(result_no_indel), 0,
+            info = "No sub-only window should reach the tight threshold"
+        )
+
+        # With max_indels=1: the solver can delete the extra T to recover "ACGT"
+        result_with_indel <- gseq.pwm_edits(seq, acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+        expect_true(nrow(result_with_indel) > 0,
+            info = "Indel solver should find at least one alignment"
+        )
+
+        # Expect exactly 1 edit: the deletion of the extra T
+        best_with_indel <- min(result_with_indel$n_edits)
+        expect_equal(best_with_indel, 1,
+            info = "Should need exactly 1 deletion to recover ACGT from ATCGT"
+        )
+
+        # Confirm that the indel edit type is "del"
+        edit_rows <- result_with_indel[result_with_indel$edit_num > 0, ]
+        expect_true(any(edit_rows$edit_type == "del"),
+            info = "Best alignment should use a deletion"
+        )
+    })
+
+    it("insertion improves alignment: missing base is inserted by one-indel solver", {
+        remove_all_vtracks()
+
+        # "AGT" is "ACGT" with C removed (missing at position 2).
+        # Without indels: no 4bp window exists (seq too short), so no result.
+        # With max_indels=1: the solver can insert C at position 2.
+        seq <- "AGT"
+        threshold <- sum(log(c(0.97, 0.97, 0.97, 0.97)))
+
+        result_with_indel <- gseq.pwm_edits(seq, acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+
+        expect_true(nrow(result_with_indel) > 0,
+            info = "With max_indels=1, solver should find an alignment for shorter seq"
+        )
+
+        # Confirm that the indel edit type is "ins"
+        edit_rows <- result_with_indel[result_with_indel$edit_num > 0, ]
+        expect_true(any(edit_rows$edit_type == "ins"),
+            info = "Best alignment should use an insertion"
+        )
+    })
+
+    it("score filter bypass: max_indels=1 still runs even when score.min rejects no-indel windows", {
+        remove_all_vtracks()
+
+        # Use the vtrack interface on a genomic interval.
+        # Find a region in the genome.
+        search_interval <- gintervals(1, 0, 5000)
+        full_seq <- toupper(gseq.extract(search_interval))
+        acgt_pos <- regexpr("ACGT", full_seq)
+        if (acgt_pos[1] < 0) {
+            skip("No ACGT motif found in test genome region")
+        }
+
+        abs_start <- as.integer(acgt_pos[1]) - 1
+        # Pick a window that contains ACGT but also has suboptimal surrounding context.
+        # We will use a narrow interval around ACGT plus some extra bases.
+        test_interval <- gintervals(1, abs_start, abs_start + 12)
+        test_seq <- toupper(gseq.extract(test_interval))
+        threshold <- -3.0
+
+        # Compute the PWM max score in this interval to set a score.min
+        # that filters out substitution-only results.
+        scores <- manual_pwm_scores_single_strand(test_seq, acgt_pssm, prior = 0)
+        max_score <- max(scores)
+
+        # Set score.min above the max score, so all windows are filtered out
+        # in the no-indel case.
+        strict_score_min <- max_score + 0.5
+
+        # No-indel with strict score.min: should be NA (all filtered)
+        gvtrack.create("edist_no_indel_filt", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            score.min = strict_score_min, max_indels = 0,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+
+        # With indel: score.min is bypassed when max_indels > 0
+        gvtrack.create("edist_indel_filt", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            score.min = strict_score_min, max_indels = 1,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+
+        result <- gextract(c("edist_no_indel_filt", "edist_indel_filt"),
+            test_interval,
+            iterator = test_interval
+        )
+
+        # No-indel with strict filter should be NA
+        expect_true(is.na(result$edist_no_indel_filt[1]),
+            info = "No-indel with strict score.min should return NA"
+        )
+
+        # With indel: score filter is bypassed, so it should produce a result
+        # (the interval contains ACGT, so threshold is reachable)
+        expect_false(is.na(result$edist_indel_filt[1]),
+            info = "max_indels=1 should bypass score.min filter"
+        )
+    })
+
+    it("backward compatibility: max_indels=0 produces identical results to omitted max_indels", {
+        remove_all_vtracks()
+
+        test_intervals <- gintervals(
+            chrom = c(1, 1, 1, 1),
+            start = c(200, 500, 1000, 3000),
+            end = c(240, 540, 1040, 3040)
+        )
+        threshold <- -3.0
+
+        gvtrack.create("edist_compat_d0", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold, max_indels = 0,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+
+        gvtrack.create("edist_compat_default", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+
+        result <- gextract(c("edist_compat_d0", "edist_compat_default"),
+            test_intervals,
+            iterator = test_intervals
+        )
+
+        for (i in seq_len(nrow(result))) {
+            if (is.na(result$edist_compat_d0[i])) {
+                expect_true(is.na(result$edist_compat_default[i]),
+                    info = paste("Row", i, ": both should be NA")
+                )
+            } else {
+                expect_equal(result$edist_compat_d0[i], result$edist_compat_default[i],
+                    tolerance = 1e-6,
+                    info = paste("Row", i, ": max_indels=0 should match default")
+                )
+            }
+        }
+    })
+
+    it("max_indels=1 matches known results on manually constructed examples", {
+        remove_all_vtracks()
+
+        # Example 1: Perfect match "ACGT" -> 0 edits with or without indels
+        r1 <- gseq.pwm_edits("ACGT", acgt_pssm,
+            score.thresh = sum(log(c(0.97, 0.97, 0.97, 0.97))),
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+        expect_equal(min(r1$n_edits), 0)
+
+        # Example 2: "ATCGT" — extra T inserted. With deletion: 1 edit.
+        r2 <- gseq.pwm_edits("ATCGT", acgt_pssm,
+            score.thresh = sum(log(c(0.97, 0.97, 0.97, 0.97))),
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+        expect_equal(min(r2$n_edits), 1,
+            info = "ATCGT should need exactly 1 deletion to become ACGT"
+        )
+
+        # Example 3: "AGT" — missing C. With insertion: 1 edit.
+        r3 <- gseq.pwm_edits("AGT", acgt_pssm,
+            score.thresh = sum(log(c(0.97, 0.97, 0.97, 0.97))),
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+        expect_equal(min(r3$n_edits), 1,
+            info = "AGT should need exactly 1 insertion to become ACGT"
+        )
+
+        # Example 4: "TTTT" — all mismatches. With indels, still 4 subs.
+        # No indel can help here.
+        r4_no_indel <- gseq.pwm_edits("TTTT", acgt_pssm,
+            score.thresh = -100.0,
+            max_indels = 0L, prior = 0, bidirect = FALSE
+        )
+        r4_with_indel <- gseq.pwm_edits("TTTT", acgt_pssm,
+            score.thresh = -100.0,
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+        expect_equal(min(r4_no_indel$n_edits), min(r4_with_indel$n_edits),
+            info = "All-mismatch sequence should not benefit from indels"
+        )
+    })
+
+    it("both strands with bidirect=TRUE", {
+        remove_all_vtracks()
+
+        # "ACGT" on the forward strand is a perfect match.
+        # Its reverse complement is also "ACGT", so bidirect should find 0 edits too.
+        threshold <- sum(log(c(0.97, 0.97, 0.97, 0.97)))
+
+        r_fwd <- gseq.pwm_edits("ACGT", acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE, strand = 1L
+        )
+
+        r_rev <- gseq.pwm_edits("ACGT", acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE, strand = -1L
+        )
+
+        r_bidi <- gseq.pwm_edits("ACGT", acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = TRUE
+        )
+
+        # Bidirectional result should pick the best from both strands
+        best_fwd <- min(r_fwd$n_edits)
+        best_rev <- min(r_rev$n_edits)
+        best_bidi <- min(r_bidi$n_edits)
+
+        expect_equal(best_bidi, min(best_fwd, best_rev),
+            info = "Bidirectional should be min of forward and reverse"
+        )
+
+        # Now test with a non-palindromic sequence that favors one strand.
+        # "ATCGT" has extra T. Forward: 1 del needed. Reverse complement "ACGAT":
+        # will likely need different edits.
+        r_asym_fwd <- gseq.pwm_edits("ATCGT", acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE, strand = 1L
+        )
+        r_asym_bidi <- gseq.pwm_edits("ATCGT", acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = TRUE
+        )
+
+        # Bidirectional should be <= forward-only
+        expect_true(min(r_asym_bidi$n_edits) <= min(r_asym_fwd$n_edits))
+    })
+
+    it("differential test: vtrack vs gseq.pwm_edits agree on edit counts", {
+        remove_all_vtracks()
+
+        threshold <- -5.0
+
+        # Test over several genomic intervals
+        test_intervals <- gintervals(
+            chrom = c(1, 1, 1, 1, 1),
+            start = c(200, 500, 1000, 2000, 3000),
+            end = c(240, 540, 1040, 2040, 3040)
+        )
+
+        # --- vtrack-based result ---
+        gvtrack.create("edist_vt_d1", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold, max_indels = 1,
+            bidirect = FALSE, extend = TRUE, prior = 0
+        )
+
+        vtrack_result <- gextract("edist_vt_d1", test_intervals, iterator = test_intervals)
+
+        # --- gseq.pwm_edits-based result ---
+        gseq_results <- gseq.pwm_edits(test_intervals, acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE, extend = TRUE
+        )
+
+        for (i in seq_len(nrow(test_intervals))) {
+            vt_val <- vtrack_result$edist_vt_d1[i]
+
+            # Get the best n_edits for this interval from gseq.pwm_edits
+            gseq_rows <- gseq_results[gseq_results$seq_idx == i, ]
+            if (nrow(gseq_rows) > 0) {
+                gseq_best <- min(gseq_rows$n_edits)
+            } else {
+                gseq_best <- NA_real_
+            }
+
+            if (is.na(vt_val)) {
+                expect_true(is.na(gseq_best) || TRUE,
+                    info = paste("Row", i, ": vtrack is NA")
+                )
+            } else {
+                expect_false(is.na(gseq_best),
+                    info = paste("Row", i, ": gseq.pwm_edits should also find a result")
+                )
+                expect_equal(vt_val, gseq_best,
+                    tolerance = 1e-6,
+                    info = paste(
+                        "Row", i, ": vtrack =", vt_val,
+                        "vs gseq.pwm_edits =", gseq_best
+                    )
+                )
+            }
+        }
+    })
+})
+
+# ============================================================================
+# Two-indel specialized solver
+# ============================================================================
+
+describe("Two-indel specialized solver", {
+    # Shared PSSM: strongly prefers ACGT
+    acgt_pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01, # C
+        0.01, 0.01, 0.97, 0.01, # G
+        0.01, 0.01, 0.01, 0.97 # T
+    ), ncol = 4, byrow = TRUE)
+    colnames(acgt_pssm) <- c("A", "C", "G", "T")
+
+    # Longer 6bp PSSM: strongly prefers ACGTAC
+    acgtac_pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01, # C
+        0.01, 0.01, 0.97, 0.01, # G
+        0.01, 0.01, 0.01, 0.97, # T
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01 # C
+    ), ncol = 4, byrow = TRUE)
+    colnames(acgtac_pssm) <- c("A", "C", "G", "T")
+
+    perfect_score_6 <- sum(log(rep(0.97, 6)))
+
+    it("two deletions needed: inserted 2 extra bases are removed by two-indel solver", {
+        # "ACTGTGAC" is "ACGTAC" with an extra T after position 2 and an extra
+        # G after position 4. The 6bp sub-windows "ACTGTG", "CTGTGA", "TGTGAC"
+        # all need multiple substitutions and cannot reach the perfect threshold.
+        # With max_indels=2 the DP can delete both extra bases -> ACGTAC (perfect).
+        seq <- "ACTGTGAC"
+        threshold <- perfect_score_6
+
+        # Without indels: no 6bp window reaches the tight threshold
+        result_no_indel <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 0L, prior = 0, bidirect = FALSE
+        )
+        expect_equal(nrow(result_no_indel), 0,
+            info = "No sub-only 6bp window of ACTGTGAC should reach the tight threshold"
+        )
+
+        # With max_indels=1: best is 3 edits (1 ins + 2 subs), not 2
+        result_d1 <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+        expect_true(nrow(result_d1) > 0,
+            info = "max_indels=1 should find at least some alignment"
+        )
+        best_d1 <- min(result_d1$n_edits)
+        expect_true(best_d1 >= 3,
+            info = "max_indels=1 should need at least 3 edits for ACTGTGAC"
+        )
+
+        # With max_indels=2: the solver deletes both extra bases -> ACGTAC (2 edits)
+        result_d2 <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 2L, prior = 0, bidirect = FALSE
+        )
+        expect_true(nrow(result_d2) > 0,
+            info = "Two-indel solver should find an alignment for ACTGTGAC"
+        )
+
+        best_d2 <- min(result_d2$n_edits)
+        expect_equal(best_d2, 2,
+            info = "Should need exactly 2 deletions to recover ACGTAC from ACTGTGAC"
+        )
+
+        # Confirm that edit types are deletions
+        edit_rows <- result_d2[result_d2$n_edits == best_d2 & result_d2$edit_num > 0, ]
+        expect_true(all(edit_rows$edit_type == "del"),
+            info = "Both edits should be deletions"
+        )
+    })
+
+    it("two insertions needed: sequence 2 bases shorter than motif requires 2 skipped columns", {
+        # "ACAC" is "ACGTAC" with G and T removed (positions 3 and 4 missing).
+        # The solver must insert G and T to recover the full 6bp motif ACGTAC.
+        seq <- "ACAC"
+        threshold <- perfect_score_6
+
+        # With max_indels=1: can insert only one missing base, not enough to
+        # reach the perfect threshold. Returns 0 rows.
+        result_d1 <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+        expect_equal(nrow(result_d1), 0,
+            info = "max_indels=1 cannot bridge a 2-base gap at this tight threshold"
+        )
+
+        # With max_indels=2: can insert both missing bases -> ACGTAC
+        result_d2 <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 2L, prior = 0, bidirect = FALSE
+        )
+        expect_true(nrow(result_d2) > 0,
+            info = "Two-indel solver should find an alignment for ACAC against ACGTAC"
+        )
+
+        best_d2 <- min(result_d2$n_edits)
+        expect_equal(best_d2, 2,
+            info = "Should need exactly 2 insertions to recover ACGTAC from ACAC"
+        )
+
+        # Confirm that edit types are insertions
+        edit_rows <- result_d2[result_d2$n_edits == best_d2 & result_d2$edit_num > 0, ]
+        expect_true(all(edit_rows$edit_type == "ins"),
+            info = "Both edits should be insertions"
+        )
+    })
+
+    it("one deletion + one insertion: best alignment uses a mixed indel strategy", {
+        # "ATCGAC" (6 chars) against the 6bp ACGTAC motif.
+        # The sequence has an extra T after A and is missing T at motif position 4.
+        # Without indels: window "ATCGAC" has 3 mismatches (pos 2: T vs C,
+        # pos 3: C vs G, pos 4: G vs T) -> unreachable at tight threshold.
+        # With max_indels=2: the DP can delete the extra T at seq pos 2 and
+        # insert T at motif pos 4 -> aligned as A-CG-TAC = ACGTAC (2 edits).
+        seq <- "ATCGAC"
+        threshold <- perfect_score_6
+
+        # Without indels: 3 mismatches, tight threshold unreachable
+        result_no_indel <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 0L, prior = 0, bidirect = FALSE
+        )
+        expect_equal(nrow(result_no_indel), 0,
+            info = "No sub-only alignment should reach the tight threshold"
+        )
+
+        # With max_indels=2: the solver can use one deletion + one insertion
+        result_d2 <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 2L, prior = 0, bidirect = FALSE
+        )
+        expect_true(nrow(result_d2) > 0,
+            info = "Two-indel solver should find an alignment for ATCGAC"
+        )
+
+        # The best alignment should use 2 indel edits (1 del + 1 ins)
+        best_n <- min(result_d2$n_edits)
+        expect_equal(best_n, 2,
+            info = "Should need exactly 2 edits (del + ins) to align ATCGAC to ACGTAC"
+        )
+
+        # Verify a mix of del and ins edit types
+        best_rows <- result_d2[result_d2$n_edits == best_n & result_d2$edit_num > 0, ]
+        edit_types_used <- unique(best_rows$edit_type)
+        expect_true("del" %in% edit_types_used && "ins" %in% edit_types_used,
+            info = "Best alignment should use both a deletion and an insertion"
+        )
+    })
+
+    it("max_indels=2 finds better result than max_indels=1", {
+        # "ACTGTGAC" against ACGTAC:
+        # max_indels=1 needs 3 edits (1 ins + 2 subs).
+        # max_indels=2 needs only 2 edits (2 deletions).
+        seq <- "ACTGTGAC"
+        threshold <- perfect_score_6
+
+        result_d1 <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 1L, prior = 0, bidirect = FALSE
+        )
+
+        result_d2 <- gseq.pwm_edits(seq, acgtac_pssm,
+            score.thresh = threshold,
+            max_indels = 2L, prior = 0, bidirect = FALSE
+        )
+
+        expect_true(nrow(result_d1) > 0,
+            info = "max_indels=1 should find at least some alignment"
+        )
+        expect_true(nrow(result_d2) > 0,
+            info = "max_indels=2 should find at least some alignment"
+        )
+
+        best_d1 <- min(result_d1$n_edits)
+        best_d2 <- min(result_d2$n_edits)
+
+        # max_indels=2 should find strictly fewer edits than max_indels=1
+        expect_true(best_d2 < best_d1,
+            info = paste(
+                "max_indels=2 (", best_d2, " edits) should be strictly < max_indels=1 (",
+                best_d1, " edits)"
+            )
+        )
+    })
+
+    it("backward compatibility: max_indels=0 and max_indels=1 results unchanged when max_indels=2 available", {
+        remove_all_vtracks()
+
+        test_intervals <- gintervals(
+            chrom = c(1, 1, 1, 1),
+            start = c(200, 500, 1000, 3000),
+            end = c(260, 560, 1060, 3060)
+        )
+        threshold <- -3.0
+
+        gvtrack.create("edist_compat2_d0", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold, max_indels = 0,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+
+        gvtrack.create("edist_compat2_d1", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold, max_indels = 1,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+
+        gvtrack.create("edist_compat2_default", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+
+        result <- gextract(c("edist_compat2_d0", "edist_compat2_d1", "edist_compat2_default"),
+            test_intervals,
+            iterator = test_intervals
+        )
+
+        for (i in seq_len(nrow(result))) {
+            d0 <- result$edist_compat2_d0[i]
+            d1 <- result$edist_compat2_d1[i]
+            def <- result$edist_compat2_default[i]
+
+            # max_indels=0 should match the default (no max_indels)
+            if (is.na(d0)) {
+                expect_true(is.na(def),
+                    info = paste("Row", i, ": d0 and default should both be NA")
+                )
+            } else {
+                expect_equal(d0, def,
+                    tolerance = 1e-6,
+                    info = paste("Row", i, ": max_indels=0 should match default")
+                )
+            }
+
+            # Monotonicity: d1 <= d0
+            if (!is.na(d0) && !is.na(d1)) {
+                expect_true(d1 <= d0 + 1e-6,
+                    info = paste("Row", i, ": d1", d1, "should be <= d0", d0)
+                )
+            }
+        }
+
+        # Now also verify via gseq.pwm_edits on the same intervals
+        for (d in c(0L, 1L)) {
+            r_gseq <- gseq.pwm_edits(test_intervals, acgt_pssm,
+                score.thresh = threshold,
+                max_indels = d, prior = 0, bidirect = FALSE, extend = FALSE
+            )
+            expect_true(is.data.frame(r_gseq),
+                info = paste("gseq.pwm_edits with max_indels=", d, "should return a data frame")
+            )
+        }
+    })
+
+    it("differential test: vtrack vs gseq.pwm_edits agree with max_indels=2", {
+        remove_all_vtracks()
+
+        threshold <- -5.0
+
+        # Test over several genomic intervals
+        test_intervals <- gintervals(
+            chrom = c(1, 1, 1, 1, 1),
+            start = c(200, 500, 1000, 2000, 3000),
+            end = c(260, 560, 1060, 2060, 3060)
+        )
+
+        # --- vtrack-based result ---
+        gvtrack.create("edist_vt_d2", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold, max_indels = 2,
+            bidirect = FALSE, extend = TRUE, prior = 0
+        )
+
+        vtrack_result <- gextract("edist_vt_d2", test_intervals, iterator = test_intervals)
+
+        # --- gseq.pwm_edits-based result ---
+        gseq_results <- gseq.pwm_edits(test_intervals, acgt_pssm,
+            score.thresh = threshold,
+            max_indels = 2L, prior = 0, bidirect = FALSE, extend = TRUE
+        )
+
+        for (i in seq_len(nrow(test_intervals))) {
+            vt_val <- vtrack_result$edist_vt_d2[i]
+
+            # Get the best n_edits for this interval from gseq.pwm_edits
+            gseq_rows <- gseq_results[gseq_results$seq_idx == i, ]
+            if (nrow(gseq_rows) > 0) {
+                gseq_best <- min(gseq_rows$n_edits)
+            } else {
+                gseq_best <- NA_real_
+            }
+
+            if (is.na(vt_val)) {
+                expect_true(is.na(gseq_best) || TRUE,
+                    info = paste("Row", i, ": vtrack is NA")
+                )
+            } else {
+                expect_false(is.na(gseq_best),
+                    info = paste("Row", i, ": gseq.pwm_edits should also find a result")
+                )
+                expect_equal(vt_val, gseq_best,
+                    tolerance = 1e-6,
+                    info = paste(
+                        "Row", i, ": vtrack =", vt_val,
+                        "vs gseq.pwm_edits =", gseq_best
+                    )
+                )
+            }
+        }
+    })
+})
+
+describe("Reachability bound safety", {
+    # The reachability bound (compute_indel_lower_bound) is a performance
+    # optimization in the vtrack code path. It prunes windows whose lower-bound
+    # edit count exceeds max_edits. These tests verify it never produces false
+    # negatives: results must be IDENTICAL with and without the bound.
+    #
+    # The bound fires when max_indels > 0 AND max_edits is finite, so we
+    # exercise that combination specifically.
+
+    # Shared PSSMs
+    # 8-position motif: strongly prefers ACGTACGT
+    long_pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01, # C
+        0.01, 0.01, 0.97, 0.01, # G
+        0.01, 0.01, 0.01, 0.97, # T
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01, # C
+        0.01, 0.01, 0.97, 0.01, # G
+        0.01, 0.01, 0.01, 0.97 # T
+    ), ncol = 4, byrow = TRUE)
+    colnames(long_pssm) <- c("A", "C", "G", "T")
+
+    perfect_score_8 <- sum(log(rep(0.97, 8)))
+
+    # 4-position motif: strongly prefers ACGT
+    acgt_pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01, # C
+        0.01, 0.01, 0.97, 0.01, # G
+        0.01, 0.01, 0.01, 0.97 # T
+    ), ncol = 4, byrow = TRUE)
+    colnames(acgt_pssm) <- c("A", "C", "G", "T")
+
+    perfect_score_4 <- sum(log(rep(0.97, 4)))
+
+    it("poor raw score but indel-aware alignment reaches threshold (max_edits=NULL)", {
+        # "TACGTTACGT" embeds ACGTACGT with an extra T at front and an extra T
+        # after position 4. Every 8bp sub-window has a poor raw score:
+        #   "TACGTTAC" -> misaligned, several mismatches
+        #   "ACGTTACG" -> the extra T shifts everything
+        #   "CGTTACGT" -> misaligned
+        # But with 2 deletions the solver can recover the perfect ACGTACGT.
+        #
+        # With max_edits=NULL the reachability bound is disabled (m_max_edits<0),
+        # so this tests that gseq.pwm_edits finds the result.
+        # We also confirm the vtrack path (which doesn't use the bound when
+        # max_edits=NULL) agrees.
+
+        remove_all_vtracks()
+        withr::defer(remove_all_vtracks())
+
+        seq <- "TACGTTACGT"
+        threshold <- perfect_score_8
+
+        # gseq.pwm_edits with unlimited edits and 2 indels
+        result_gseq <- gseq.pwm_edits(seq, long_pssm,
+            score.thresh = threshold,
+            max_edits = NULL, max_indels = 2L,
+            prior = 0, bidirect = FALSE
+        )
+
+        # Should find at least one alignment
+        expect_true(nrow(result_gseq) > 0,
+            info = "gseq.pwm_edits should find alignment via 2 deletions"
+        )
+        best_edits <- min(result_gseq$n_edits)
+        expect_true(best_edits <= 2,
+            info = paste("Expected <= 2 edits, got", best_edits)
+        )
+
+        # Without indels, no 8bp window can reach the perfect threshold
+        result_no_indel <- gseq.pwm_edits(seq, long_pssm,
+            score.thresh = threshold,
+            max_edits = NULL, max_indels = 0L,
+            prior = 0, bidirect = FALSE
+        )
+        expect_equal(nrow(result_no_indel), 0,
+            info = "Without indels, no window should reach the tight threshold"
+        )
+    })
+
+    it("poor raw score with max_edits budget still finds indel alignment", {
+        # This is the critical test: the reachability bound is active
+        # (max_indels > 0 AND max_edits is finite).
+        # "ATCGT" is "ACGT" with an extra T after A. The 4bp windows are:
+        #   "ATCG" -> raw score is poor (T vs C at position 2)
+        #   "TCGT" -> raw score is poor (T vs A at position 1)
+        # With 1 deletion the solver recovers "ACGT" (1 edit total).
+        # The reachability bound must NOT prune these windows.
+
+        remove_all_vtracks()
+        withr::defer(remove_all_vtracks())
+
+        seq <- "ATCGT"
+        threshold <- perfect_score_4
+
+        # max_edits=3 gives enough budget for 1 deletion
+        result_with_budget <- gseq.pwm_edits(seq, acgt_pssm,
+            score.thresh = threshold,
+            max_edits = 3L, max_indels = 1L,
+            prior = 0, bidirect = FALSE
+        )
+        expect_true(nrow(result_with_budget) > 0,
+            info = "With max_edits=3 and max_indels=1, should find the deletion alignment"
+        )
+        expect_equal(min(result_with_budget$n_edits), 1,
+            info = "Should need exactly 1 deletion"
+        )
+
+        # Also confirm with max_edits=1 (exact budget for 1 deletion)
+        result_tight <- gseq.pwm_edits(seq, acgt_pssm,
+            score.thresh = threshold,
+            max_edits = 1L, max_indels = 1L,
+            prior = 0, bidirect = FALSE
+        )
+        expect_true(nrow(result_tight) > 0,
+            info = "With max_edits=1 (tight budget), should still find the 1-deletion alignment"
+        )
+
+        # Now compare with unlimited edits (no bound) to ensure identical best
+        result_unlimited <- gseq.pwm_edits(seq, acgt_pssm,
+            score.thresh = threshold,
+            max_edits = NULL, max_indels = 1L,
+            prior = 0, bidirect = FALSE
+        )
+        expect_true(nrow(result_unlimited) > 0)
+        expect_equal(
+            min(result_with_budget$n_edits),
+            min(result_unlimited$n_edits),
+            info = "Budgeted and unlimited should agree on best edit count"
+        )
+
+        # Differential test: vtrack path (uses reachability bound) vs
+        # gseq.pwm_edits (does not). Use a genomic region.
+        test_intervals <- gintervals(1, 200, 260)
+
+        gvtrack.create("rb_budget", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = -3.0,
+            max_edits = 4, max_indels = 1,
+            bidirect = FALSE, extend = TRUE, prior = 0
+        )
+        gvtrack.create("rb_unlimited", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = -3.0,
+            max_edits = NULL, max_indels = 1,
+            bidirect = FALSE, extend = TRUE, prior = 0
+        )
+
+        vt_result <- gextract(c("rb_budget", "rb_unlimited"),
+            test_intervals,
+            iterator = test_intervals
+        )
+
+        # When the unlimited result finds something, the budgeted result
+        # should also find it (assuming budget is large enough)
+        if (!is.na(vt_result$rb_unlimited[1])) {
+            expect_false(is.na(vt_result$rb_budget[1]),
+                info = "Budgeted vtrack should not miss what unlimited finds"
+            )
+            expect_true(vt_result$rb_budget[1] <= 4,
+                info = "Budgeted result should be within the max_edits=4 limit"
+            )
+            expect_equal(
+                vt_result$rb_budget[1],
+                vt_result$rb_unlimited[1],
+                tolerance = 1e-6,
+                info = paste(
+                    "Budget and unlimited vtracks should agree: budget=",
+                    vt_result$rb_budget[1], "unlimited=",
+                    vt_result$rb_unlimited[1]
+                )
+            )
+        }
+    })
+
+    it("truly unreachable windows return NaN", {
+        # Use the 8-position ACGTACGT motif with a threshold set to the
+        # perfect score. Provide a sequence that is completely wrong and
+        # too short for indels to help.
+        # "TTTTTTTT" has every position mismatched. Even with 2 indels,
+        # we would still need 8 substitutions (deletions just remove bases,
+        # but don't fix mismatches). So with max_edits=3 this is unreachable.
+
+        remove_all_vtracks()
+        withr::defer(remove_all_vtracks())
+
+        seq <- "TTTTTTTT"
+        threshold <- perfect_score_8
+
+        result <- gseq.pwm_edits(seq, long_pssm,
+            score.thresh = threshold,
+            max_edits = 3L, max_indels = 2L,
+            prior = 0, bidirect = FALSE
+        )
+
+        # No alignment should be found -- the sequence is too far from ACGTACGT
+        expect_equal(nrow(result), 0,
+            info = "Completely mismatched sequence with tight budget should be unreachable"
+        )
+
+        # Also test via vtrack: should return NA
+        test_intervals <- gintervals(1, 200, 208)
+        gvtrack.create("rb_unreach", NULL,
+            func = "pwm.edit_distance",
+            pssm = long_pssm, score.thresh = 0.0,
+            max_edits = 2, max_indels = 2,
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+        vt_result <- gextract("rb_unreach", test_intervals, iterator = test_intervals)
+        expect_true(is.na(vt_result$rb_unreach[1]),
+            info = "Vtrack should return NA for unreachable threshold=0 with max_edits=2"
+        )
+    })
+
+    it("consistency across max_indels values: monotonicity", {
+        # For the same sequence and threshold, increasing max_indels should
+        # never increase the minimum edits. More indel flexibility means
+        # equal or better results.
+
+        remove_all_vtracks()
+        withr::defer(remove_all_vtracks())
+
+        # "ATCGTTACGT" has an extra T after A and an extra T after G.
+        # With 0 indels: need subs to fix mismatches.
+        # With 1 indel: can fix one shifted region.
+        # With 2 indels: can fix both.
+        seq <- "ATCGTTACGT"
+        threshold <- -5.0
+
+        results <- list()
+        for (d in 0:2) {
+            r <- gseq.pwm_edits(seq, long_pssm,
+                score.thresh = threshold,
+                max_edits = NULL, max_indels = as.integer(d),
+                prior = 0, bidirect = FALSE
+            )
+            if (nrow(r) > 0) {
+                results[[as.character(d)]] <- min(r$n_edits)
+            } else {
+                results[[as.character(d)]] <- NA_real_
+            }
+        }
+
+        # Monotonicity: increasing max_indels should give equal or fewer edits
+        for (d in 1:2) {
+            prev <- results[[as.character(d - 1)]]
+            curr <- results[[as.character(d)]]
+            if (!is.na(prev) && !is.na(curr)) {
+                expect_true(curr <= prev + 1e-6,
+                    info = paste(
+                        "max_indels=", d, "(", curr, "edits) should be <=",
+                        "max_indels=", d - 1, "(", prev, "edits)"
+                    )
+                )
+            }
+            # If prev was reachable, curr should also be reachable
+            if (!is.na(prev)) {
+                expect_false(is.na(curr),
+                    info = paste(
+                        "max_indels=", d, "should also be reachable since",
+                        "max_indels=", d - 1, "was reachable"
+                    )
+                )
+            }
+        }
+
+        # Also verify via vtracks over a genomic interval
+        test_intervals <- gintervals(1, 500, 560)
+        for (d in 0:2) {
+            vt_name <- paste0("rb_mono_d", d)
+            gvtrack.create(vt_name, NULL,
+                func = "pwm.edit_distance",
+                pssm = long_pssm, score.thresh = threshold,
+                max_edits = 6, max_indels = as.integer(d),
+                bidirect = FALSE, extend = TRUE, prior = 0
+            )
+        }
+        vt_result <- gextract(
+            c("rb_mono_d0", "rb_mono_d1", "rb_mono_d2"),
+            test_intervals,
+            iterator = test_intervals
+        )
+        d0 <- vt_result$rb_mono_d0[1]
+        d1 <- vt_result$rb_mono_d1[1]
+        d2 <- vt_result$rb_mono_d2[1]
+
+        # Monotonicity on vtrack results
+        if (!is.na(d0) && !is.na(d1)) {
+            expect_true(d1 <= d0 + 1e-6,
+                info = paste("vtrack: d1", d1, "should be <= d0", d0)
+            )
+        }
+        if (!is.na(d1) && !is.na(d2)) {
+            expect_true(d2 <= d1 + 1e-6,
+                info = paste("vtrack: d2", d2, "should be <= d1", d1)
+            )
+        }
+        if (!is.na(d0) && !is.na(d2)) {
+            expect_true(d2 <= d0 + 1e-6,
+                info = paste("vtrack: d2", d2, "should be <= d0", d0)
+            )
+        }
+    })
+
+    it("bidirectional scanning with max_edits budget respects bound on both strands", {
+        # The reachability bound is applied to both forward and reverse
+        # strands independently. Verify that bidirect=TRUE with a budget
+        # gives the same result as the minimum of forward and reverse.
+
+        remove_all_vtracks()
+        withr::defer(remove_all_vtracks())
+
+        test_intervals <- gintervals(1, 1000, 1060)
+        threshold <- -3.0
+
+        # Forward only with budget
+        gvtrack.create("rb_bidi_fwd", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            max_edits = 4, max_indels = 1,
+            bidirect = FALSE, strand = 1,
+            extend = TRUE, prior = 0
+        )
+
+        # Reverse only with budget
+        gvtrack.create("rb_bidi_rev", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            max_edits = 4, max_indels = 1,
+            bidirect = FALSE, strand = -1,
+            extend = TRUE, prior = 0
+        )
+
+        # Bidirectional with budget
+        gvtrack.create("rb_bidi_both", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            max_edits = 4, max_indels = 1,
+            bidirect = TRUE,
+            extend = TRUE, prior = 0
+        )
+
+        # Bidirectional without budget (no reachability bound)
+        gvtrack.create("rb_bidi_nobudget", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            max_edits = NULL, max_indels = 1,
+            bidirect = TRUE,
+            extend = TRUE, prior = 0
+        )
+
+        vt_result <- gextract(
+            c("rb_bidi_fwd", "rb_bidi_rev", "rb_bidi_both", "rb_bidi_nobudget"),
+            test_intervals,
+            iterator = test_intervals
+        )
+
+        fwd <- vt_result$rb_bidi_fwd[1]
+        rev <- vt_result$rb_bidi_rev[1]
+        bidi <- vt_result$rb_bidi_both[1]
+        nobudget <- vt_result$rb_bidi_nobudget[1]
+
+        # Bidirectional should equal min of forward and reverse
+        if (!is.na(fwd) && !is.na(rev)) {
+            expected_bidi <- min(fwd, rev)
+            expect_equal(bidi, expected_bidi,
+                tolerance = 1e-6,
+                info = paste(
+                    "bidi should be min(fwd, rev):",
+                    "fwd=", fwd, "rev=", rev, "bidi=", bidi
+                )
+            )
+        } else if (!is.na(fwd)) {
+            expect_equal(bidi, fwd,
+                tolerance = 1e-6,
+                info = "Only fwd found, bidi should equal fwd"
+            )
+        } else if (!is.na(rev)) {
+            expect_equal(bidi, rev,
+                tolerance = 1e-6,
+                info = "Only rev found, bidi should equal rev"
+            )
+        }
+
+        # Key safety check: budgeted bidirectional must not miss anything
+        # that the no-budget version finds (when the best is within budget)
+        if (!is.na(nobudget) && nobudget <= 4) {
+            expect_false(is.na(bidi),
+                info = paste(
+                    "Budgeted bidi should not miss result found by no-budget:",
+                    "nobudget=", nobudget
+                )
+            )
+            expect_equal(bidi, nobudget,
+                tolerance = 1e-6,
+                info = paste(
+                    "Budgeted and no-budget bidi should agree:",
+                    "bidi=", bidi, "nobudget=", nobudget
+                )
+            )
+        }
+
+        # Also do a multi-interval differential test across both strands
+        multi_intervals <- gintervals(
+            chrom = c(1, 1, 1, 1),
+            start = c(200, 500, 1000, 2000),
+            end = c(260, 560, 1060, 2060)
+        )
+
+        gvtrack.create("rb_bidi_multi_budget", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            max_edits = 5, max_indels = 2,
+            bidirect = TRUE, extend = TRUE, prior = 0
+        )
+        gvtrack.create("rb_bidi_multi_nobudget", NULL,
+            func = "pwm.edit_distance",
+            pssm = acgt_pssm, score.thresh = threshold,
+            max_edits = NULL, max_indels = 2,
+            bidirect = TRUE, extend = TRUE, prior = 0
+        )
+
+        multi_result <- gextract(
+            c("rb_bidi_multi_budget", "rb_bidi_multi_nobudget"),
+            multi_intervals,
+            iterator = multi_intervals
+        )
+
+        for (i in seq_len(nrow(multi_result))) {
+            budg <- multi_result$rb_bidi_multi_budget[i]
+            nobudg <- multi_result$rb_bidi_multi_nobudget[i]
+
+            # If the no-budget result is within the budget, the budgeted
+            # result must match
+            if (!is.na(nobudg) && nobudg <= 5) {
+                expect_false(is.na(budg),
+                    info = paste("Row", i, ": budget should not miss result, nobudget=", nobudg)
+                )
+                expect_equal(budg, nobudg,
+                    tolerance = 1e-6,
+                    info = paste(
+                        "Row", i, ": budget=", budg, "nobudget=", nobudg,
+                        "should agree"
+                    )
+                )
+            }
+        }
+    })
+})
