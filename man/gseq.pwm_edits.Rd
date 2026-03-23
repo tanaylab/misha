@@ -9,6 +9,7 @@ gseq.pwm_edits(
   pssm,
   score.thresh,
   max_edits = NULL,
+  max_indels = NULL,
   bidirect = TRUE,
   prior = 0.01,
   score.min = NULL,

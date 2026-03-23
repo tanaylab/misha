@@ -461,3 +461,396 @@ test_that("pwm.edit_distance.pos with filter returns positions relative to origi
 
     remove_all_vtracks()
 })
+
+# ============================================================================
+# Indel support tests (max_indels parameter)
+# ============================================================================
+
+test_that("gseq.pwm_edits detects deletion with max_indels=1", {
+    # 4-position PSSM: strongly prefers ACGT
+    pssm <- matrix(c(
+        1, 0, 0, 0, # A
+        0, 1, 0, 0, # C
+        0, 0, 1, 0, # G
+        0, 0, 0, 1  # T
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    # Insert an extra base (T) into "ACGT" -> "ATCGT"
+    # The DP should find that deleting the extra T yields a perfect ACGT match
+    seq <- "ATCGT"
+    result <- gseq.pwm_edits(seq, pssm,
+        score.thresh = -0.01,
+        max_indels = 1L, prior = 0, bidirect = FALSE
+    )
+
+    expect_true(nrow(result) > 0)
+    expect_true("edit_type" %in% colnames(result))
+    edit_rows <- result[result$edit_num > 0, ]
+    expect_true(any(edit_rows$edit_type == "del"))
+    expect_true(all(result$n_edits >= 1))
+})
+
+test_that("gseq.pwm_edits detects insertion with max_indels=1", {
+    # 4-position PSSM: strongly prefers ACGT
+    pssm <- matrix(c(
+        1, 0, 0, 0, # A
+        0, 1, 0, 0, # C
+        0, 0, 1, 0, # G
+        0, 0, 0, 1  # T
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    # Remove a base from "ACGT" -> "AGT" (missing C at position 2)
+    # The DP should find that inserting C yields a perfect ACGT match
+    seq <- "AGT"
+    result <- gseq.pwm_edits(seq, pssm,
+        score.thresh = -0.01,
+        max_indels = 1L, prior = 0, bidirect = FALSE
+    )
+
+    expect_true(nrow(result) > 0)
+    expect_true("edit_type" %in% colnames(result))
+    edit_rows <- result[result$edit_num > 0, ]
+    expect_true(any(edit_rows$edit_type == "ins"))
+})
+
+test_that("gseq.pwm_edits max_indels=0 backward compatibility: all edits are sub", {
+    pssm <- create_test_pssm() # AC motif
+
+    # "TT" needs substitutions to become "AC"
+    result <- gseq.pwm_edits("TT", pssm,
+        score.thresh = -0.01,
+        max_indels = 0L, prior = 0, bidirect = FALSE
+    )
+
+    expect_true("edit_type" %in% colnames(result))
+    edit_rows <- result[result$edit_num > 0, ]
+    expect_true(nrow(edit_rows) > 0)
+    expect_true(all(edit_rows$edit_type == "sub"))
+    expect_false(any(edit_rows$edit_type %in% c("ins", "del")))
+})
+
+test_that("gseq.pwm_edits CTCF deletion detection on ancestral genome", {
+    skip_if_not(dir.exists("/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/evo/Phylo447/PrimatesAnc069"))
+    skip_if_not_installed("prego")
+
+    gsetroot("/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/evo/Phylo447/PrimatesAnc069")
+    ctcf_pssm <- prego::get_motif_pssm("HOMER.CTCF")
+    seq <- gseq.extract(gintervals("Anc069refChr724", 246256, 246256 + 30))
+
+    result <- gseq.pwm_edits(seq, ctcf_pssm,
+        score.thresh = -15,
+        max_indels = 1L, bidirect = TRUE
+    )
+
+    expect_true(nrow(result) > 0)
+    edit_rows <- result[result$edit_num > 0, ]
+    expect_true(any(edit_rows$edit_type == "del"))
+    expect_true(all(result$n_edits <= 2))
+
+    # Verify the vtrack also detects it
+    gvtrack.create("edist_ctcf", NULL, "pwm.edit_distance",
+        pssm = ctcf_pssm, score.thresh = -15,
+        score.min = -35, score.max = -18,
+        max_edits = 2L, max_indels = 1L, bidirect = TRUE
+    )
+    interv <- gintervals("Anc069refChr724", 246256, 246257)
+    val <- gextract("edist_ctcf", interv, iterator = interv)
+    expect_equal(val$edist_ctcf, 1, info = "vtrack should report edit distance of 1")
+})
+
+test_that("gseq.pwm_edits edit_type column always present even with max_indels=0", {
+    pssm <- create_test_pssm() # AC motif
+
+    # Default (max_indels not specified)
+    r_default <- gseq.pwm_edits("TT", pssm,
+        score.thresh = -0.01,
+        prior = 0, bidirect = FALSE
+    )
+    expect_true("edit_type" %in% colnames(r_default))
+
+    # Explicit max_indels=0
+    r_zero <- gseq.pwm_edits("TT", pssm,
+        score.thresh = -0.01,
+        max_indels = 0L, prior = 0, bidirect = FALSE
+    )
+    expect_true("edit_type" %in% colnames(r_zero))
+
+    # 0-edit case (already above threshold)
+    r_perfect <- gseq.pwm_edits("AC", pssm,
+        score.thresh = -5.0,
+        prior = 0, bidirect = FALSE
+    )
+    expect_true("edit_type" %in% colnames(r_perfect))
+    # For 0-edit rows, edit_type should be NA
+    zero_edit_rows <- r_perfect[r_perfect$n_edits == 0, ]
+    expect_true(all(is.na(zero_edit_rows$edit_type)))
+})
+
+# --------------------------------------------------------------------------
+# Detailed column validation for indel edits
+# --------------------------------------------------------------------------
+
+test_that("gseq.pwm_edits deletion: alignment view and column values", {
+    skip_if_not(dir.exists("/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/evo/Phylo447/PrimatesAnc069"))
+    skip_if_not_installed("prego")
+
+    # Use the real CTCF example which is known to produce a deletion
+    gsetroot("/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/evo/Phylo447/PrimatesAnc069")
+    ctcf_pssm <- prego::get_motif_pssm("HOMER.CTCF")
+    seq <- gseq.extract(gintervals("Anc069refChr724", 246256, 246256 + 30))
+
+    result <- gseq.pwm_edits(seq, ctcf_pssm,
+        score.thresh = -15,
+        max_indels = 1L, bidirect = TRUE
+    )
+
+    expect_true(nrow(result) >= 1)
+    del_rows <- result[!is.na(result$edit_type) & result$edit_type == "del", ]
+    expect_true(nrow(del_rows) >= 1, info = "Should find at least one deletion")
+
+    # Alignment view: both strings same length
+    expect_equal(nchar(result$window_seq[1]), nchar(result$mutated_seq[1]))
+
+    # mutated_seq should contain a '-' for the deletion
+    expect_true(grepl("-", result$mutated_seq[1]),
+        info = "mutated_seq should have a hyphen for the deleted base"
+    )
+
+    # window_seq should NOT have a hyphen (deletion means seq has the extra base)
+    expect_false(grepl("-", result$window_seq[1]),
+        info = "window_seq should not have hyphens for deletions"
+    )
+
+    # motif_col should be NA for deletions
+    expect_true(is.na(del_rows$motif_col[1]))
+
+    # alt should be NA for deletions (no replacement)
+    expect_true(is.na(del_rows$alt[1]))
+
+    # ref should be the deleted base (a character)
+    expect_true(!is.na(del_rows$ref[1]))
+    expect_true(del_rows$ref[1] %in% c("A", "C", "G", "T"))
+
+    # gain should be 0 for deletions
+    expect_equal(del_rows$gain[1], 0)
+
+    # score_before and score_after should differ
+    expect_true(result$score_before[1] != result$score_after[1])
+
+    # score_before should be below threshold, score_after above
+    expect_true(result$score_before[1] < -15)
+    expect_true(result$score_after[1] >= -15)
+
+    # Number of hyphens in mutated_seq = number of deletion edits
+    n_del <- nrow(del_rows)
+    n_hyphens <- nchar(result$mutated_seq[1]) - nchar(gsub("-", "", result$mutated_seq[1]))
+    expect_equal(n_hyphens, n_del)
+})
+
+test_that("gseq.pwm_edits insertion: alignment view and column values", {
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01,
+        0.01, 0.01, 0.01, 0.97
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    # "AGT" is missing C at motif position 2 — inserting C gives ACGT
+    result <- gseq.pwm_edits("AGT", pssm,
+        score.thresh = -0.5,
+        max_indels = 1L, prior = 0, bidirect = FALSE
+    )
+
+    expect_true(nrow(result) >= 1)
+    ins_rows <- result[!is.na(result$edit_type) & result$edit_type == "ins", ]
+    expect_true(nrow(ins_rows) >= 1, info = "Should find at least one insertion")
+
+    # Alignment view: both strings same length
+    expect_equal(nchar(result$window_seq[1]), nchar(result$mutated_seq[1]))
+
+    # window_seq should contain a '-' for the insertion
+    expect_true(grepl("-", result$window_seq[1]),
+        info = "window_seq should have a hyphen where base is missing"
+    )
+
+    # mutated_seq should NOT have a hyphen (the inserted base fills the gap)
+    expect_false(grepl("-", result$mutated_seq[1]),
+        info = "mutated_seq should not have hyphens for insertions"
+    )
+
+    # motif_col should be a valid 1-based motif position for insertions
+    expect_true(!is.na(ins_rows$motif_col[1]))
+    expect_true(ins_rows$motif_col[1] >= 1 && ins_rows$motif_col[1] <= 4)
+
+    # ref should be NA for insertions (no original base)
+    expect_true(is.na(ins_rows$ref[1]))
+
+    # alt should be the inserted base
+    expect_true(!is.na(ins_rows$alt[1]))
+    expect_true(ins_rows$alt[1] %in% c("A", "C", "G", "T"))
+})
+
+test_that("gseq.pwm_edits substitution gains are correct", {
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01,
+        0.01, 0.01, 0.01, 0.97
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    # "TCGT" needs T->A at position 1
+    result <- gseq.pwm_edits("TCGT", pssm,
+        score.thresh = -0.5,
+        prior = 0, bidirect = FALSE
+    )
+
+    sub_rows <- result[!is.na(result$edit_type) & result$edit_type == "sub", ]
+    expect_true(nrow(sub_rows) >= 1)
+
+    # Gain should be col_max - current_base_score = log(0.97) - log(0.01)
+    expected_gain <- log(0.97) - log(0.01)
+    expect_equal(sub_rows$gain[1], expected_gain, tolerance = 1e-3)
+
+    # ref should be the original base, alt the replacement
+    expect_equal(sub_rows$ref[1], "T")
+    expect_equal(sub_rows$alt[1], "A")
+
+    # motif_col should be 1 (first position)
+    expect_equal(sub_rows$motif_col[1], 1L)
+
+    # score_before should be below the threshold (edits were needed)
+    expect_true(result$score_before[1] < -0.5,
+        info = "score_before should be below threshold since edits were needed"
+    )
+
+    # score_after should equal score_before + sum(gains) for pure substitutions
+    total_gain <- sum(sub_rows$gain)
+    expect_equal(result$score_after[1], result$score_before[1] + total_gain, tolerance = 1e-3)
+})
+
+test_that("gseq.pwm_edits mixed deletion + substitution", {
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01,
+        0.01, 0.01, 0.01, 0.97
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    # "ATGGT" — extra T at pos 2, and first G should be C
+    # Best alignment: delete T, sub G->C -> gives ACGT
+    # Or: various other combinations
+    result <- gseq.pwm_edits("ATGGT", pssm,
+        score.thresh = -0.5,
+        max_indels = 1L, prior = 0, bidirect = FALSE
+    )
+
+    expect_true(nrow(result) >= 1)
+    edit_rows <- result[result$edit_num > 0, ]
+
+    # Alignment view: both strings same length
+    expect_equal(nchar(result$window_seq[1]), nchar(result$mutated_seq[1]))
+
+    # score_after should be above the threshold
+    expect_true(result$score_after[1] >= -0.5,
+        info = "score_after should be above the threshold"
+    )
+
+    # Deletion rows should have gain=0, motif_col=NA, alt=NA
+    del_rows <- edit_rows[edit_rows$edit_type == "del", ]
+    if (nrow(del_rows) > 0) {
+        expect_true(all(del_rows$gain == 0))
+        expect_true(all(is.na(del_rows$motif_col)))
+        expect_true(all(is.na(del_rows$alt)))
+        expect_true(all(!is.na(del_rows$ref)))
+    }
+
+    # Substitution rows should have gain>0, valid motif_col, ref, alt
+    sub_rows <- edit_rows[edit_rows$edit_type == "sub", ]
+    if (nrow(sub_rows) > 0) {
+        expect_true(all(sub_rows$gain > 0))
+        expect_true(all(!is.na(sub_rows$motif_col)))
+        expect_true(all(sub_rows$motif_col >= 1 & sub_rows$motif_col <= 4))
+        expect_true(all(!is.na(sub_rows$ref)))
+        expect_true(all(!is.na(sub_rows$alt)))
+    }
+})
+
+test_that("gseq.pwm_edits synthetic deletion with 6-position PSSM", {
+    # 6-position PSSM: prefers ACGTAC
+    pssm6 <- matrix(c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01,
+        0.01, 0.01, 0.01, 0.97,
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm6) <- c("A", "C", "G", "T")
+
+    # "ACGATAC" — extra A at position 4. Deleting it gives ACGTAC (perfect).
+    # The 6-char windows "ACGATA" and "CGATAC" both need multiple subs.
+    result <- gseq.pwm_edits("ACGATAC", pssm6,
+        score.thresh = -0.5,
+        max_indels = 1L, prior = 0, bidirect = FALSE
+    )
+
+    expect_true(nrow(result) >= 1)
+    edit_rows <- result[result$edit_num > 0, ]
+    del_rows <- edit_rows[edit_rows$edit_type == "del", ]
+    expect_true(nrow(del_rows) >= 1, info = "Should find a deletion")
+
+    # Validate deletion column values
+    expect_true(all(is.na(del_rows$motif_col)))
+    expect_true(all(is.na(del_rows$alt)))
+    expect_true(all(!is.na(del_rows$ref)))
+    expect_true(all(del_rows$gain == 0))
+
+    # Alignment view: same length, hyphen in mutated_seq
+    expect_equal(nchar(result$window_seq[1]), nchar(result$mutated_seq[1]))
+    expect_true(grepl("-", result$mutated_seq[1]))
+    expect_false(grepl("-", result$window_seq[1]))
+})
+
+test_that("gseq.pwm_edits score_after = score_before + sum(gains) for pure substitutions", {
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01,
+        0.01, 0.01, 0.01, 0.97
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    # "TGCA" -> needs 4 substitutions to become ACGT
+    result <- gseq.pwm_edits("TGCA", pssm,
+        score.thresh = -0.5,
+        prior = 0, bidirect = FALSE
+    )
+
+    sub_rows <- result[!is.na(result$edit_type) & result$edit_type == "sub", ]
+    expect_true(nrow(sub_rows) >= 1)
+
+    # For pure substitutions: score_after = score_before + sum(gains)
+    total_gain <- sum(sub_rows$gain)
+    expect_equal(result$score_after[1], result$score_before[1] + total_gain, tolerance = 1e-3,
+        info = "score_after must equal score_before + sum(gains) for substitutions"
+    )
+
+    # Each gain should equal log(best_base_prob) - log(current_base_prob)
+    for (i in seq_len(nrow(sub_rows))) {
+        col <- sub_rows$motif_col[i]
+        ref <- sub_rows$ref[i]
+        alt <- sub_rows$alt[i]
+        # Best base for this column should be the diagonal (A for col 1, C for col 2, etc.)
+        expected_alt <- c("A", "C", "G", "T")[col]
+        expect_equal(alt, expected_alt,
+            info = paste0("Column ", col, ": alt should be ", expected_alt)
+        )
+        # Gain = log(0.97) - log(0.01)
+        expect_equal(sub_rows$gain[i], log(0.97) - log(0.01), tolerance = 1e-3)
+    }
+})
