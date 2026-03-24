@@ -107,9 +107,27 @@ private:
     std::vector<float> m_max_suffix_score;   // m_max_suffix_score[i] = sum of col maxima from i to L-1
     std::vector<float> m_max_gain_budget;    // m_max_gain_budget[k] = max total gain from k substitutions (per-PSSM)
 
+    // Flat precomputed PSSM lookup tables for cache-friendly access
+    static constexpr int MAX_MOTIF_LEN_OPT = 64;
+    float m_score_table[MAX_MOTIF_LEN_OPT][5];    // [motif_pos][base_index 0-3, 4=N]
+    float m_gain_table[MAX_MOTIF_LEN_OPT][5];     // col_max - score
+    bool m_mandatory_table[MAX_MOTIF_LEN_OPT][5];  // true if score is log-zero or non-finite
+
     // Reusable count vector for compute_exact (PERF-1: touched-list cleanup)
     std::vector<int> m_exact_count;
     std::vector<size_t> m_exact_touched;
+
+    // Pigeonhole pre-filter: divide motif into (K+1) blocks; if a window matches
+    // with at most K total edits, at least one block must match exactly (zero edits)
+    // at some shift in {-D, ..., +D}.
+    struct PrefilterBlock {
+        int start;         // start column in motif
+        int len;           // block length (number of columns)
+        int num_entries;   // 4^len (size of viable bitset)
+        std::vector<bool> viable;  // viable[hash] = true if B-mer can match block with 0 edits
+    };
+    std::vector<PrefilterBlock> m_prefilter_blocks;
+    bool m_use_prefilter;
 
     /**
      * Precompute gain value bins and lookup tables (called once in constructor)
@@ -121,7 +139,7 @@ private:
     inline bool should_scan_forward() const;
     inline bool should_scan_reverse() const;
     inline char complement_base(char base) const;
-    inline float compute_window_edits(const char* window_start, int seq_avail, bool reverse);
+    inline float compute_window_edits(const int* bidx, int seq_avail, bool reverse);
 
     /**
      * Get the effective PSSM score and gain for a motif position aligned with a sequence base.
@@ -137,6 +155,8 @@ private:
      *   out_score = PSSM score for this base
      *   out_gain  = col_max - out_score
      *   return value = false
+     *
+     * Compatibility wrapper — kept for code outside the hot path.
      *
      * @param seq_ptr Pointer to sequence data
      * @param reverse Whether to reverse complement
@@ -179,56 +199,56 @@ private:
 
     /**
      * Compute exact minimum edits using histogram method
-     * @param seq_ptr Sequence to evaluate (already extracted and possibly reverse-complemented)
-     * @param reverse Whether to reverse complement
+     * @param bidx Precomputed base index array (forward or reverse-complemented)
+     * @param reverse Whether to reverse index order (right-to-left)
      * @return Number of edits needed, or NaN if unreachable
      */
-    float compute_exact(const char* seq_ptr, bool reverse);
+    float compute_exact(const int* bidx, bool reverse);
 
     /**
      * Compute minimum edits using fast heuristic (partial sort)
-     * @param seq_ptr Sequence to evaluate
-     * @param reverse Whether to reverse complement
+     * @param bidx Precomputed base index array (forward or reverse-complemented)
+     * @param reverse Whether to reverse index order (right-to-left)
      * @param max_k Maximum edits to consider
      * @return Number of edits needed (<=max_k), or NaN if exceeds max_k or unreachable
      */
-    float compute_heuristic(const char* seq_ptr, bool reverse, int max_k);
+    float compute_heuristic(const int* bidx, bool reverse, int max_k);
 
     /**
      * Compute minimum edits using banded Needleman-Wunsch DP with indel support.
      * Tries all sequence window lengths from L-max_indels to L+max_indels,
      * aligning each against the motif with a DP that allows up to max_indels
      * total insertions + deletions.
-     * @param seq_ptr Pointer to start of sequence window (must have at least L+max_indels bases available)
-     * @param seq_len Total number of sequence bases available from seq_ptr
-     * @param reverse Whether to reverse complement the sequence
+     * @param bidx Precomputed base index array (forward or reverse-complemented)
+     * @param seq_len Total number of sequence bases available from bidx
+     * @param reverse Whether to reverse index order (right-to-left)
      * @return Minimum edits needed (substitutions + indels) to reach threshold, or NaN if unreachable
      */
-    float compute_with_indels(const char* seq_ptr, int seq_len, bool reverse);
+    float compute_with_indels(const int* bidx, int seq_len, bool reverse);
 
     /**
      * Specialized exact solver for max_indels == 1.
      * Enumerates three alignment families (no-indel, one deletion, one insertion)
      * instead of the generic 3D banded DP, for better performance.
      * Produces identical results to compute_with_indels() when max_indels == 1.
-     * @param seq_ptr Pointer to start of sequence window
-     * @param seq_len Total number of sequence bases available from seq_ptr
-     * @param reverse Whether to reverse complement the sequence
+     * @param bidx Precomputed base index array (forward or reverse-complemented)
+     * @param seq_len Total number of sequence bases available from bidx
+     * @param reverse Whether to reverse index order (right-to-left)
      * @return Minimum edits needed to reach threshold, or NaN if unreachable
      */
-    float compute_with_one_indel(const char* seq_ptr, int seq_len, bool reverse);
+    float compute_with_one_indel(const int* bidx, int seq_len, bool reverse);
 
     /**
      * Specialized exact solver for max_indels == 2.
      * Enumerates six alignment families (no-indel, 1 del, 1 ins, 2 dels, 2 ins, 1 del + 1 ins)
      * instead of the generic 3D banded DP, for better performance.
      * Produces identical results to compute_with_indels() when max_indels == 2.
-     * @param seq_ptr Pointer to start of sequence window
-     * @param seq_len Total number of sequence bases available from seq_ptr
-     * @param reverse Whether to reverse complement the sequence
+     * @param bidx Precomputed base index array (forward or reverse-complemented)
+     * @param seq_len Total number of sequence bases available from bidx
+     * @param reverse Whether to reverse index order (right-to-left)
      * @return Minimum edits needed to reach threshold, or NaN if unreachable
      */
-    float compute_with_two_indels(const char* seq_ptr, int seq_len, bool reverse);
+    float compute_with_two_indels(const int* bidx, int seq_len, bool reverse);
 
     /**
      * Banded DP early-abandon filter for indel-enabled windows.
@@ -247,6 +267,17 @@ private:
      * @return true if the window should be SKIPPED (provably unreachable)
      */
     bool early_abandon_banded_dp(const char* seq_ptr, int seq_len, bool reverse) const;
+
+    /**
+     * Pigeonhole pre-filter: checks whether ANY block of the motif can match
+     * the sequence window exactly (zero edits) at some shift in {-D, ..., +D}.
+     * If no block matches, the window provably cannot match within K total edits.
+     * @param bidx Precomputed base index array (forward or reverse-complemented)
+     * @param seq_avail Number of sequence bases available from bidx
+     * @param reverse Whether reverse strand indexing is used
+     * @return true if the window passes the filter (might match); false if safely skippable
+     */
+    bool passes_prefilter(const int* bidx, int seq_avail, bool reverse) const;
 
     /**
      * Convert base character to index (A=0, C=1, G=2, T=3)
