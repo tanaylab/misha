@@ -53,9 +53,31 @@ void PWMEditDistanceScorer::precompute_tables()
         m_S_max += max_score;
     }
 
-    // Precompute sorted column maxima (ascending) for insertion-family bounds
-    m_sorted_col_max_asc = m_col_max_scores;
-    std::sort(m_sorted_col_max_asc.begin(), m_sorted_col_max_asc.end());
+    // Precompute suffix sums of column maxima for early-abandon pruning
+    m_max_suffix_score.resize(L + 1, 0.0f);
+    for (int i = L - 1; i >= 0; i--) {
+        m_max_suffix_score[i] = m_max_suffix_score[i + 1] + m_col_max_scores[i];
+    }
+
+    // Precompute maximum possible gains from k substitutions (for quick deficit checks).
+    // m_max_gain_budget[k] = sum of top k column max-gains (col_max - col_min).
+    // This is a per-PSSM upper bound on the total gain from k edits, regardless of sequence.
+    {
+        std::vector<float> col_max_gains(L);
+        for (int i = 0; i < L; i++) {
+            float min_score = std::numeric_limits<float>::infinity();
+            for (int b = 0; b < 4; b++) {
+                float s = m_pssm[i].get_log_prob_from_code(b);
+                if (s < min_score) min_score = s;
+            }
+            col_max_gains[i] = m_col_max_scores[i] - min_score;
+        }
+        std::sort(col_max_gains.begin(), col_max_gains.end(), std::greater<float>());
+        m_max_gain_budget.resize(L + 1, 0.0f);
+        for (int k = 0; k < L; k++) {
+            m_max_gain_budget[k + 1] = m_max_gain_budget[k] + col_max_gains[k];
+        }
+    }
 
     // Collect all gain values
     std::set<float, std::greater<float>> unique_gains;  // Sorted descending
@@ -199,6 +221,12 @@ float PWMEditDistanceScorer::compute_exact(const char* seq_ptr, bool reverse)
         return std::numeric_limits<float>::quiet_NaN();
     }
 
+    // Quick reachability check: if S_max < threshold, no substitution strategy can
+    // reach it. This is O(1) since m_S_max is precomputed.
+    if (static_cast<double>(m_S_max) < static_cast<double>(m_threshold)) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
     int mandatory_edits = 0;
     double adjusted_score = 0.0;
 
@@ -311,10 +339,23 @@ float PWMEditDistanceScorer::compute_heuristic(const char* seq_ptr, bool reverse
         return std::numeric_limits<float>::quiet_NaN();
     }
 
+    // Quick reachability check: if S_max < threshold, no substitution strategy can
+    // reach it. This is O(1) since m_S_max is precomputed.
+    if (static_cast<double>(m_S_max) < static_cast<double>(m_threshold)) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
     int mandatory_edits = 0;
     double adjusted_score = 0.0;
     std::vector<float> gains;
     gains.reserve(L);
+
+    // Track sum of top max_k gains seen so far for suffix-bound early-abandon.
+    // This accounts for substitutions in already-scanned prefix positions.
+    // We maintain a min-heap of the top max_k gains for O(log k) updates.
+    double top_gains_sum = 0.0;
+    std::vector<float> top_gains_heap;  // min-heap of top max_k gains
+    top_gains_heap.reserve(max_k + 1);
 
     for (int i = 0; i < L; i++) {
         int seq_idx = reverse ? (L - 1 - i) : i;
@@ -340,7 +381,35 @@ float PWMEditDistanceScorer::compute_heuristic(const char* seq_ptr, bool reverse
             adjusted_score += static_cast<double>(m_col_max_scores[i]);
         } else {
             adjusted_score += static_cast<double>(base_score);
-            gains.push_back(m_col_max_scores[i] - base_score);
+            float gain = m_col_max_scores[i] - base_score;
+            gains.push_back(gain);
+
+            // Update top-k gains tracker
+            if (gain > 0.0f) {
+                if (static_cast<int>(top_gains_heap.size()) < max_k) {
+                    top_gains_heap.push_back(gain);
+                    std::push_heap(top_gains_heap.begin(), top_gains_heap.end(), std::greater<float>());
+                    top_gains_sum += static_cast<double>(gain);
+                } else if (!top_gains_heap.empty() && gain > top_gains_heap.front()) {
+                    top_gains_sum -= static_cast<double>(top_gains_heap.front());
+                    std::pop_heap(top_gains_heap.begin(), top_gains_heap.end(), std::greater<float>());
+                    top_gains_heap.back() = gain;
+                    std::push_heap(top_gains_heap.begin(), top_gains_heap.end(), std::greater<float>());
+                    top_gains_sum += static_cast<double>(gain);
+                }
+            }
+        }
+
+        // Column-by-column suffix-bound early-abandon (sound for limited edits):
+        // adjusted_score uses actual bases (plus col_max for mandatory edits).
+        // top_gains_sum accounts for up to max_k substitutions in already-scanned prefix.
+        // m_max_suffix_score[i+1] assumes all remaining columns at their optimum.
+        // This bound is provably safe: it can never reject a reachable window because
+        // any reachable window needs actual_score + at_most_max_k_subs + suffix >= threshold,
+        // and we upper-bound all three components.
+        if (adjusted_score + top_gains_sum + static_cast<double>(m_max_suffix_score[i + 1])
+            < static_cast<double>(m_threshold)) {
+            return std::numeric_limits<float>::quiet_NaN();
         }
     }
 
@@ -427,6 +496,13 @@ float PWMEditDistanceScorer::encode_position(size_t index,
 float PWMEditDistanceScorer::compute_window_edits(const char* window_start, int seq_avail, bool reverse)
 {
     // When indels are enabled, use specialized or generic DP
+    if (m_max_indels > 0) {
+        // Banded DP early-abandon: skip if ALL alignment families are provably unreachable.
+        // Uses col_max for match scores so that substitution potential is accounted for.
+        if (early_abandon_banded_dp(window_start, seq_avail, reverse)) {
+            return std::numeric_limits<float>::quiet_NaN();
+        }
+    }
     if (m_max_indels == 1) {
         return compute_with_one_indel(window_start, seq_avail, reverse);
     } else if (m_max_indels == 2) {
@@ -470,10 +546,6 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
     const char* seq_data = seq.data();
     bool pwm_found = false;
-
-    // Reachability pre-filter: when indels are enabled with an edit budget,
-    // compute a cheap lower bound on minimum edits before calling the full solver.
-    const bool use_indel_prefilter = (m_max_indels > 0 && m_max_edits >= 0);
 
     auto maybe_update_min = [&](float edits, size_t idx, int direction) {
         if (!need_min || std::isnan(edits)) {
@@ -519,14 +591,6 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                     if (has_score_max && logp > m_score_max) pass_score_filter = false;
                 }
 
-                // Reachability pre-filter: skip if lower bound exceeds edit budget
-                if (pass_score_filter && use_indel_prefilter) {
-                    int lb = compute_indel_lower_bound(window_start, seq_avail, /*reverse=*/false);
-                    if (lb > m_max_edits) {
-                        pass_score_filter = false;
-                    }
-                }
-
                 if (pass_score_filter) {
                     float edits = compute_window_edits(window_start, seq_avail, /*reverse=*/false);
                     maybe_update_min(edits, offset, +1);
@@ -548,14 +612,6 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
                     if (has_score_min && logp < m_score_min) pass_score_filter = false;
                     if (has_score_max && logp > m_score_max) pass_score_filter = false;
-                }
-
-                // Reachability pre-filter: skip if lower bound exceeds edit budget
-                if (pass_score_filter && use_indel_prefilter) {
-                    int lb = compute_indel_lower_bound(window_start, seq_avail, /*reverse=*/true);
-                    if (lb > m_max_edits) {
-                        pass_score_filter = false;
-                    }
                 }
 
                 if (pass_score_filter) {
@@ -851,150 +907,164 @@ float PWMEditDistanceScorer::compute_with_indels(const char* seq_ptr, int seq_le
     return best_edits;
 }
 
-int PWMEditDistanceScorer::compute_indel_lower_bound(const char* window_start, int seq_avail, bool reverse)
+bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq_len, bool reverse) const
 {
-    // Compute a lower bound on the minimum edits needed for ANY alignment family
-    // (no-indel, 1-indel, 2-indel) to reach the threshold.
+    // Banded DP early-abandon filter for indel-enabled windows.
     //
-    // Strategy:
-    // 1. Compute the no-indel raw aligned score (O(L)).
-    // 2. For the no-indel family (0 indels): compute min substitutions needed.
-    //    This is a lower bound because we use partial sort to find the minimum.
-    // 3. For D-indel families: the best possible score achievable is
-    //    S_max (for deletions, all L columns get their best base) or
-    //    S_max - sum_of_D_smallest_col_maxes (for insertions, we lose D columns).
-    //    The minimum indels is D, so the lower bound for D-indel families is D
-    //    (if the best achievable score >= threshold) or infinity (if not reachable).
+    // Key insight: the edit distance metric allows substitutions at any matched
+    // position. Each substitution brings a column's score to col_max. Therefore,
+    // the DP must use col_max for every matched column (diagonal transition) to
+    // correctly upper-bound the achievable score. This makes the filter
+    // sequence-independent — it only depends on the motif structure and available
+    // sequence length.
     //
-    // But the real per-window bound comes from the no-indel score:
-    //   For the no-indel alignment, we know the exact score and gains.
-    //   A D-indel alignment can shift at most D columns. The maximum score gain
-    //   from shifting is bounded. But computing that tightly is expensive.
+    // dp[i][j][k] = best achievable PWM score aligning motif[0..i-1] with
+    //   j sequence positions using k indels, where each matched column
+    //   contributes col_max[motif_col] (assuming optimal substitution).
     //
-    // PRACTICAL approach: use the no-indel raw score to compute a lower bound on
-    // substitutions needed for the no-indel family, then check if indel families
-    // could possibly do better enough to matter.
+    // Band constraint: |i - j| <= D.
     //
-    // The tightest cheap bound: for any alignment family with D indels,
-    // total_edits >= D + subs_needed. The subs_needed for the best possible
-    // D-indel alignment is 0 if S_max_achievable >= threshold. So the true
-    // lower bound across all families is min(subs_no_indel, 1, 2, ...).
-    // That's just 0 — not useful.
+    // After each row i, checks: row_max + suffix_score[i] < threshold?
+    // If so, no alignment family can reach the threshold => skip.
     //
-    // Better: compute subs_no_indel (exact for 0-indel family). Then the overall
-    // minimum is min(subs_no_indel, 1 + subs_1indel, 2 + subs_2indel, ...).
-    // If subs_no_indel <= m_max_edits, we can't prune. So the useful case is
-    // when the no-indel raw score is far below threshold.
-    //
-    // Key insight: the no-indel family's min_subs is a lower bound for the
-    // 0-indel case. For D-indel families, the best achievable score is at most
-    // S_max (deletions) or S_max - sum_of_D_smallest_col_max (insertions).
-    // The min edits for D-indel family is D if reachable, otherwise infinity.
-    //
-    // So: lower_bound = min over D in {0..max_indels} of:
-    //   D + max(0, ceil of subs needed if all aligned columns are optimal)
-    //
-    // For D=0: subs = subs_no_indel (computed from raw score + gains)
-    // For D>=1 (deletions): if S_max >= threshold, lower_bound_D = D
-    // For D>=1 (insertions): if S_max - sum_smallest_D >= threshold, lower_bound_D = D
-    //
-    // So the overall lower bound = min(subs_no_indel, min_D_reachable)
-    // where min_D_reachable = smallest D such that some D-indel family is reachable.
+    // For insertion-heavy families (many motif columns skipped), the achievable
+    // score drops because fewer columns contribute col_max. This is where the
+    // filter provides value.
 
     const int L = m_pssm.length();
-    if (L == 0) return std::numeric_limits<int>::max();
+    const int D = m_max_indels;
 
-    // Step 1: Compute no-indel raw score and per-column gains
-    double raw_score = 0.0;
-    std::vector<float> gains;
-    gains.reserve(L);
+    if (L == 0 || D < 0) return false;
 
-    for (int i = 0; i < L; i++) {
-        int seq_idx = reverse ? (L - 1 - i) : i;
-        char base = window_start[seq_idx];
-        if (reverse) {
-            base = complement_base(base);
-        }
-        int bidx = base_to_index(base);
-        float base_score;
-        if (bidx == 4) {
-            // Unknown base: use minimum score
-            float min_s = std::numeric_limits<float>::infinity();
-            for (int b = 0; b < 4; b++) {
-                float s = m_pssm[i].get_log_prob_from_code(b);
-                if (s < min_s) min_s = s;
-            }
-            base_score = min_s;
-        } else {
-            base_score = m_pssm[i].get_log_prob_from_code(bidx);
-        }
-        raw_score += static_cast<double>(base_score);
-        float gain = m_col_max_scores[i] - base_score;
-        if (gain > 1e-12f) {
-            gains.push_back(gain);
+    // Stack allocation limits
+    static constexpr int MAX_MOTIF_LEN = 40;
+    static constexpr int MAX_INDELS = 3;
+    if (L > MAX_MOTIF_LEN || D > MAX_INDELS) return false;
+
+    const int max_j = std::min(seq_len, L + D);
+    if (max_j <= 0) return false;
+
+    static constexpr int MAX_J = MAX_MOTIF_LEN + MAX_INDELS + 1;
+    static constexpr int KD = MAX_INDELS + 1;
+
+    double dp_prev[MAX_J][KD];
+    double dp_cur[MAX_J][KD];
+
+    constexpr double NEG_INF = -1e300;
+    const double threshold_d = static_cast<double>(m_threshold);
+
+    // Initialize dp_prev (row 0) to -inf
+    for (int j = 0; j <= max_j; j++) {
+        for (int k = 0; k <= D; k++) {
+            dp_prev[j][k] = NEG_INF;
         }
     }
 
-    // Step 2: Compute min substitutions for no-indel family
-    double deficit = static_cast<double>(m_threshold) - raw_score;
-    int subs_no_indel;
-    if (deficit <= 0.0) {
-        subs_no_indel = 0;
-    } else {
-        // Check if reachable at all
-        double total_gain = 0.0;
-        for (float g : gains) total_gain += static_cast<double>(g);
-        if (total_gain < deficit) {
-            subs_no_indel = std::numeric_limits<int>::max(); // unreachable
-        } else {
-            // Use partial sort to find min subs needed
-            // We need the smallest k such that sum of top-k gains >= deficit
-            std::sort(gains.begin(), gains.end(), std::greater<float>());
-            double acc = 0.0;
-            subs_no_indel = 0;
-            for (size_t i = 0; i < gains.size(); i++) {
-                acc += static_cast<double>(gains[i]);
-                subs_no_indel++;
-                if (acc >= deficit) break;
-            }
-            if (acc < deficit) {
-                subs_no_indel = std::numeric_limits<int>::max();
-            }
-        }
+    // Row 0: dp[0][0][0] = 0 (empty alignment)
+    dp_prev[0][0] = 0.0;
+    // dp[0][j][j] = 0 for j=1..D (skip j sequence bases = j deletions)
+    for (int j = 1; j <= std::min(D, max_j); j++) {
+        dp_prev[j][j] = 0.0;
     }
 
-    int best_lower_bound = subs_no_indel;
+    // Early abandon check for row 0
+    if (0.0 + static_cast<double>(m_max_suffix_score[0]) < threshold_d) {
+        return true;
+    }
 
-    // Step 3: Check D-indel families (D = 1 to m_max_indels)
-    for (int D = 1; D <= m_max_indels; D++) {
-        // Deletion family (W = L + D): all L motif columns are aligned.
-        // Best achievable = S_max (all columns get their best base).
-        if (static_cast<double>(m_S_max) >= static_cast<double>(m_threshold)) {
-            // Reachable with D indels + 0 subs = D edits
-            if (D < best_lower_bound) {
-                best_lower_bound = D;
+    // Row-by-row fill
+    for (int i = 1; i <= L; i++) {
+        const int j_lo = std::max(0, i - D);
+        const int j_hi = std::min(max_j, i + D);
+
+        // Initialize dp_cur for this row's range
+        for (int j = j_lo; j <= j_hi; j++) {
+            for (int k = 0; k <= D; k++) {
+                dp_cur[j][k] = NEG_INF;
             }
         }
 
-        // Insertion family (W = L - D): L - D motif columns are aligned.
-        // Best achievable = S_max - sum of D smallest col_max values.
-        if (D <= L - 1 && D <= static_cast<int>(m_sorted_col_max_asc.size())) {
-            double ins_best = static_cast<double>(m_S_max);
-            for (int j = 0; j < D; j++) {
-                ins_best -= static_cast<double>(m_sorted_col_max_asc[j]);
-            }
-            if (ins_best >= static_cast<double>(m_threshold)) {
-                if (D < best_lower_bound) {
-                    best_lower_bound = D;
+        // j=0: only insertion (skip motif[i-1]) is possible
+        if (j_lo == 0) {
+            for (int k = 1; k <= D; k++) {
+                double prev = dp_prev[0][k - 1];
+                if (prev > NEG_INF && prev > dp_cur[0][k]) {
+                    dp_cur[0][k] = prev;
                 }
             }
         }
+
+        // Use col_max for match score: since substitutions are allowed,
+        // every matched column can achieve its maximum PSSM score.
+        const double col_max_score = static_cast<double>(m_col_max_scores[i - 1]);
+
+        for (int j = std::max(1, j_lo); j <= j_hi; j++) {
+            for (int k = 0; k <= D; k++) {
+                double val = NEG_INF;
+
+                // 1. Match (diagonal): dp_prev[j-1][k] + col_max
+                //    Substitution is free in edit-distance terms (counted separately).
+                if (std::abs((i - 1) - (j - 1)) <= D) {
+                    double prev = dp_prev[j - 1][k];
+                    if (prev > NEG_INF) {
+                        double cand = prev + col_max_score;
+                        if (cand > val) val = cand;
+                    }
+                }
+
+                // 2. Insertion (skip motif[i-1]): dp_prev[j][k-1]
+                if (k >= 1 && std::abs((i - 1) - j) <= D) {
+                    double prev = dp_prev[j][k - 1];
+                    if (prev > NEG_INF && prev > val) {
+                        val = prev;
+                    }
+                }
+
+                // 3. Deletion (skip seq[j-1]): dp_cur[j-1][k-1]
+                if (k >= 1) {
+                    double prev = dp_cur[j - 1][k - 1];
+                    if (prev > NEG_INF && prev > val) {
+                        val = prev;
+                    }
+                }
+
+                if (val > dp_cur[j][k]) {
+                    dp_cur[j][k] = val;
+                }
+            }
+        }
+
+        // Early abandon: find row maximum across all valid (j, k)
+        double row_max = NEG_INF;
+        for (int j = j_lo; j <= j_hi; j++) {
+            for (int k = 0; k <= D; k++) {
+                if (dp_cur[j][k] > row_max) {
+                    row_max = dp_cur[j][k];
+                }
+            }
+        }
+
+        if (row_max + static_cast<double>(m_max_suffix_score[i]) < threshold_d) {
+            return true;
+        }
+
+        // Swap rows
+        for (int j = 0; j <= max_j; j++) {
+            for (int k = 0; k <= D; k++) {
+                dp_prev[j][k] = NEG_INF;
+            }
+        }
+        for (int j = j_lo; j <= j_hi; j++) {
+            for (int k = 0; k <= D; k++) {
+                dp_prev[j][k] = dp_cur[j][k];
+            }
+        }
     }
 
-    return best_lower_bound;
+    return false;
 }
 
-inline void PWMEditDistanceScorer::get_aligned_base_score(const char* seq_ptr, bool reverse,
+inline bool PWMEditDistanceScorer::get_aligned_base_score(const char* seq_ptr, bool reverse,
                                                           int motif_pos, int raw_seq_idx,
                                                           float& out_score, float& out_gain) const
 {
@@ -1003,18 +1073,65 @@ inline void PWMEditDistanceScorer::get_aligned_base_score(const char* seq_ptr, b
         base = complement_base(base);
     }
     int bidx = base_to_index(base);
-    if (bidx == 4) {
-        // Unknown base: use minimum score (worst case), matching compute_with_indels
-        float min_s = std::numeric_limits<float>::infinity();
-        for (int b = 0; b < 4; b++) {
-            float s = m_pssm[motif_pos].get_log_prob_from_code(b);
-            if (s < min_s) min_s = s;
+
+    if (bidx != 4) {
+        float raw = m_pssm[motif_pos].get_log_prob_from_code(bidx);
+        if (raw > kLogZeroThreshold && std::isfinite(raw)) {
+            // Normal case: finite, non-logzero score
+            out_score = raw;
+            out_gain = m_col_max_scores[motif_pos] - out_score;
+            return false;
         }
-        out_score = min_s;
-    } else {
-        out_score = m_pssm[motif_pos].get_log_prob_from_code(bidx);
+        // Log-zero base: fall through to mandatory edit handling
     }
-    out_gain = m_col_max_scores[motif_pos] - out_score;
+    // Unknown base (bidx==4) or log-zero score: mandatory edit.
+    // Assume the edit is applied: score = col_max, no further gain.
+    // Callers must count this position as +1 mandatory substitution.
+    out_score = m_col_max_scores[motif_pos];
+    out_gain = 0.0f;
+    return true;
+}
+
+bool PWMEditDistanceScorer::quick_deficit_check(double aligned_score, int indels, float best_edits_so_far) const
+{
+    // O(1) check: can this alignment family possibly produce a result better than best_edits_so_far?
+    // Uses precomputed per-PSSM max gain budget to avoid expensive gains collection + sorting.
+
+    // Prune: if indels alone already can't beat best_edits, skip
+    if (!std::isnan(best_edits_so_far) && static_cast<float>(indels) >= best_edits_so_far) {
+        return false;
+    }
+
+    // Prune: if indels alone exceed budget, skip
+    if (m_max_edits >= 0 && indels > m_max_edits) {
+        return false;
+    }
+
+    double deficit = static_cast<double>(m_threshold) - aligned_score;
+    if (deficit <= 0.0) {
+        return true;  // Already at or above threshold
+    }
+
+    // Compute max substitution budget
+    int max_subs = m_pssm.length();  // upper bound
+    if (!std::isnan(best_edits_so_far)) {
+        int ceiling = static_cast<int>(best_edits_so_far) - 1 - indels;
+        if (ceiling < max_subs) max_subs = ceiling;
+    }
+    if (m_max_edits >= 0) {
+        int budget_subs = m_max_edits - indels;
+        if (budget_subs < max_subs) max_subs = budget_subs;
+    }
+    if (max_subs <= 0) {
+        return false;
+    }
+
+    // Quick check using precomputed per-PSSM max gain budget
+    int budget_idx = std::min(max_subs, static_cast<int>(m_max_gain_budget.size()) - 1);
+    if (budget_idx <= 0) {
+        return false;
+    }
+    return static_cast<double>(m_max_gain_budget[budget_idx]) >= deficit;
 }
 
 float PWMEditDistanceScorer::compute_min_edits_from_gains(double aligned_score,
@@ -1093,13 +1210,20 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
 
     float best_edits = std::numeric_limits<float>::quiet_NaN();
 
-    // Shorthand for the shared helpers, capturing seq_ptr and reverse
-    auto get_base_score = [&](int motif_pos, int raw_seq_idx, float& out_score, float& out_gain) {
-        get_aligned_base_score(seq_ptr, reverse, motif_pos, raw_seq_idx, out_score, out_gain);
+    // get_base_score returns true if the position requires a mandatory substitution.
+    // For mandatory positions: out_score = col_max, out_gain = 0.
+    // Callers must track mandatory counts and add them to the indel base cost.
+    auto get_base_score = [&](int motif_pos, int raw_seq_idx,
+                               float& out_score, float& out_gain) -> bool {
+        return get_aligned_base_score(seq_ptr, reverse, motif_pos, raw_seq_idx,
+                                      out_score, out_gain);
     };
 
-    auto compute_total_edits = [&](double aligned_score, std::vector<float>& gains, int indels) -> float {
-        return compute_min_edits_from_gains(aligned_score, gains, indels, best_edits);
+    // compute_total_edits: pass indels + mandatory_subs as the base fixed-edit count.
+    auto compute_total_edits = [&](double aligned_score, std::vector<float>& gains,
+                                   int indels, int mandatory_subs) -> float {
+        return compute_min_edits_from_gains(aligned_score, gains,
+                                            indels + mandatory_subs, best_edits);
     };
 
     // ===== Case A: No indel (W = L, k = 0) =====
@@ -1109,18 +1233,21 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         double aligned_score = 0.0;
         std::vector<float> gains;
         gains.reserve(L);
+        int mandatory_subs = 0;
 
         for (int i = 0; i < L; i++) {
             int raw_seq_idx = reverse ? (L - 1 - i) : i;
             float bs, gain;
-            get_base_score(i, raw_seq_idx, bs, gain);
+            bool mandatory = get_base_score(i, raw_seq_idx, bs, gain);
             aligned_score += static_cast<double>(bs);
-            if (gain > 1e-12f) {
+            if (mandatory) {
+                mandatory_subs++;
+            } else if (gain > 1e-12f) {
                 gains.push_back(gain);
             }
         }
 
-        float total = compute_total_edits(aligned_score, gains, 0);
+        float total = compute_total_edits(aligned_score, gains, 0, mandatory_subs);
         if (!std::isnan(total) && (std::isnan(best_edits) || total < best_edits)) {
             best_edits = total;
         }
@@ -1142,35 +1269,40 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
     if (L + 1 <= seq_len) {
         const int W = L + 1;
 
-        // Precompute base scores and gains for all W sequence positions aligned with
-        // motif columns in two configurations:
+        // Precompute base scores, gains, and mandatory flags for all W sequence
+        // positions aligned with motif columns in two configurations:
         //   prefix: motif[i] aligned with seq_raw[i] for i = 0..L-1
         //   suffix: motif[i] aligned with seq_raw[i+1] for i = 0..L-1
         // where seq_raw[j] = reverse ? (W-1-j) : j
 
-        std::vector<float> prefix_scores(L);   // motif[i] <-> seq[i]
-        std::vector<float> prefix_gains(L);
-        std::vector<float> suffix_scores(L);   // motif[i] <-> seq[i+1]
-        std::vector<float> suffix_gains(L);
+        std::vector<float> prefix_scores(L), prefix_gains(L);
+        std::vector<float> suffix_scores(L), suffix_gains(L);
+        std::vector<bool> prefix_mandatory(L, false), suffix_mandatory(L, false);
 
         for (int i = 0; i < L; i++) {
             int raw_prefix = reverse ? (W - 1 - i) : i;
-            get_base_score(i, raw_prefix, prefix_scores[i], prefix_gains[i]);
+            prefix_mandatory[i] = get_base_score(i, raw_prefix,
+                                                  prefix_scores[i], prefix_gains[i]);
 
             int raw_suffix = reverse ? (W - 1 - (i + 1)) : (i + 1);
-            get_base_score(i, raw_suffix, suffix_scores[i], suffix_gains[i]);
+            suffix_mandatory[i] = get_base_score(i, raw_suffix,
+                                                  suffix_scores[i], suffix_gains[i]);
         }
 
         // Prefix sums for prefix alignment (motif[0..d-1] with seq[0..d-1])
         std::vector<double> prefix_cum_score(L + 1, 0.0);
+        std::vector<int> prefix_cum_mandatory(L + 1, 0);
         for (int i = 0; i < L; i++) {
             prefix_cum_score[i + 1] = prefix_cum_score[i] + static_cast<double>(prefix_scores[i]);
+            prefix_cum_mandatory[i + 1] = prefix_cum_mandatory[i] + (prefix_mandatory[i] ? 1 : 0);
         }
 
         // Suffix sums for shifted alignment (motif[d..L-1] with seq[d+1..L])
         std::vector<double> suffix_cum_score(L + 1, 0.0);
+        std::vector<int> suffix_cum_mandatory(L + 1, 0);
         for (int i = L - 1; i >= 0; i--) {
             suffix_cum_score[i] = suffix_cum_score[i + 1] + static_cast<double>(suffix_scores[i]);
+            suffix_cum_mandatory[i] = suffix_cum_mandatory[i + 1] + (suffix_mandatory[i] ? 1 : 0);
         }
 
         // Try each deletion position d in [0, L]
@@ -1179,21 +1311,26 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         for (int d = 0; d <= L; d++) {
             double aligned_score = prefix_cum_score[d] + suffix_cum_score[d];
 
-            // Collect gains from aligned positions
+            // Quick O(1) deficit check: skip expensive gains collection if hopeless
+            if (!quick_deficit_check(aligned_score, 1, best_edits)) continue;
+
+            int mandatory_subs = prefix_cum_mandatory[d] + suffix_cum_mandatory[d];
+
+            // Collect gains from aligned positions (skip mandatory positions)
             std::vector<float> gains;
             gains.reserve(L);
             for (int i = 0; i < d; i++) {
-                if (prefix_gains[i] > 1e-12f) {
+                if (!prefix_mandatory[i] && prefix_gains[i] > 1e-12f) {
                     gains.push_back(prefix_gains[i]);
                 }
             }
             for (int i = d; i < L; i++) {
-                if (suffix_gains[i] > 1e-12f) {
+                if (!suffix_mandatory[i] && suffix_gains[i] > 1e-12f) {
                     gains.push_back(suffix_gains[i]);
                 }
             }
 
-            float total = compute_total_edits(aligned_score, gains, 1);
+            float total = compute_total_edits(aligned_score, gains, 1, mandatory_subs);
             if (!std::isnan(total) && (std::isnan(best_edits) || total < best_edits)) {
                 best_edits = total;
                 // Early exit: best_edits == 1 means just the indel, can't do better in this case
@@ -1223,37 +1360,42 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
     if (L >= 2) {
         const int W = L - 1;
 
-        // Precompute base scores and gains for aligned columns:
+        // Precompute base scores, gains, and mandatory flags for aligned columns:
         //   prefix: motif[i] aligned with seq_raw[i] for i = 0..L-2
         //   suffix: motif[i] aligned with seq_raw[i-1] for i = 1..L-1
         // where seq_raw[j] = reverse ? (W-1-j) : j
 
-        std::vector<float> prefix_scores(L - 1);   // motif[i] <-> seq[i], i=0..L-2
-        std::vector<float> prefix_gains(L - 1);
-        std::vector<float> suffix_scores(L);        // motif[i] <-> seq[i-1], i=1..L-1
-        std::vector<float> suffix_gains(L);
+        std::vector<float> prefix_scores(L - 1), prefix_gains(L - 1);
+        std::vector<float> suffix_scores(L), suffix_gains(L);
+        std::vector<bool> prefix_mandatory(L - 1, false), suffix_mandatory(L, false);
 
         for (int i = 0; i < L - 1; i++) {
             int raw_idx = reverse ? (W - 1 - i) : i;
-            get_base_score(i, raw_idx, prefix_scores[i], prefix_gains[i]);
+            prefix_mandatory[i] = get_base_score(i, raw_idx,
+                                                  prefix_scores[i], prefix_gains[i]);
         }
 
         // suffix: motif[i] aligns with seq[i-1] for i=1..L-1
         for (int i = 1; i < L; i++) {
             int raw_idx = reverse ? (W - 1 - (i - 1)) : (i - 1);
-            get_base_score(i, raw_idx, suffix_scores[i], suffix_gains[i]);
+            suffix_mandatory[i] = get_base_score(i, raw_idx,
+                                                  suffix_scores[i], suffix_gains[i]);
         }
 
         // Prefix cumulative sums (motif[0..m-1] with seq[0..m-1])
-        std::vector<double> prefix_cum_score(L, 0.0);  // prefix_cum_score[m] = sum for i=0..m-1
+        std::vector<double> prefix_cum_score(L, 0.0);  // sum for i=0..m-1
+        std::vector<int> prefix_cum_mandatory(L, 0);
         for (int i = 0; i < L - 1; i++) {
             prefix_cum_score[i + 1] = prefix_cum_score[i] + static_cast<double>(prefix_scores[i]);
+            prefix_cum_mandatory[i + 1] = prefix_cum_mandatory[i] + (prefix_mandatory[i] ? 1 : 0);
         }
 
         // Suffix cumulative sums (motif[m+1..L-1] with seq[m..L-2])
-        std::vector<double> suffix_cum_score(L, 0.0);  // suffix_cum_score[m] = sum for i=m+1..L-1
+        std::vector<double> suffix_cum_score(L, 0.0);  // sum for i=m+1..L-1
+        std::vector<int> suffix_cum_mandatory(L, 0);
         for (int i = L - 1; i >= 1; i--) {
             suffix_cum_score[i - 1] = suffix_cum_score[i] + static_cast<double>(suffix_scores[i]);
+            suffix_cum_mandatory[i - 1] = suffix_cum_mandatory[i] + (suffix_mandatory[i] ? 1 : 0);
         }
 
         // Try each insertion position m in [0, L-1]
@@ -1262,21 +1404,26 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         for (int m = 0; m < L; m++) {
             double aligned_score = prefix_cum_score[m] + suffix_cum_score[m];
 
-            // Collect gains from aligned positions
+            // Quick O(1) deficit check: skip expensive gains collection if hopeless
+            if (!quick_deficit_check(aligned_score, 1, best_edits)) continue;
+
+            int mandatory_subs = prefix_cum_mandatory[m] + suffix_cum_mandatory[m];
+
+            // Collect gains from aligned positions (skip mandatory positions)
             std::vector<float> gains;
             gains.reserve(L - 1);
             for (int i = 0; i < m; i++) {
-                if (prefix_gains[i] > 1e-12f) {
+                if (!prefix_mandatory[i] && prefix_gains[i] > 1e-12f) {
                     gains.push_back(prefix_gains[i]);
                 }
             }
             for (int i = m + 1; i < L; i++) {
-                if (suffix_gains[i] > 1e-12f) {
+                if (!suffix_mandatory[i] && suffix_gains[i] > 1e-12f) {
                     gains.push_back(suffix_gains[i]);
                 }
             }
 
-            float total = compute_total_edits(aligned_score, gains, 1);
+            float total = compute_total_edits(aligned_score, gains, 1, mandatory_subs);
             if (!std::isnan(total) && (std::isnan(best_edits) || total < best_edits)) {
                 best_edits = total;
                 // Early exit: best_edits == 1 means just the indel, can't do better here
@@ -1302,13 +1449,20 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
 
     float best_edits = std::numeric_limits<float>::quiet_NaN();
 
-    // Shorthand for the shared helpers, capturing seq_ptr and reverse
-    auto get_base_score = [&](int motif_pos, int raw_seq_idx, float& out_score, float& out_gain) {
-        get_aligned_base_score(seq_ptr, reverse, motif_pos, raw_seq_idx, out_score, out_gain);
+    // get_base_score returns true if the position requires a mandatory substitution.
+    // For mandatory positions: out_score = col_max, out_gain = 0.
+    // Callers must track mandatory counts and add them to the indel base cost.
+    auto get_base_score = [&](int motif_pos, int raw_seq_idx,
+                               float& out_score, float& out_gain) -> bool {
+        return get_aligned_base_score(seq_ptr, reverse, motif_pos, raw_seq_idx,
+                                      out_score, out_gain);
     };
 
-    auto compute_total_edits = [&](double aligned_score, std::vector<float>& gains, int indels) -> float {
-        return compute_min_edits_from_gains(aligned_score, gains, indels, best_edits);
+    // compute_total_edits: pass indels + mandatory_subs as the base fixed-edit count.
+    auto compute_total_edits = [&](double aligned_score, std::vector<float>& gains,
+                                   int indels, int mandatory_subs) -> float {
+        return compute_min_edits_from_gains(aligned_score, gains,
+                                            indels + mandatory_subs, best_edits);
     };
 
     auto update_best = [&](float total) {
@@ -1322,18 +1476,21 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         double aligned_score = 0.0;
         std::vector<float> gains;
         gains.reserve(L);
+        int mandatory_subs = 0;
 
         for (int i = 0; i < L; i++) {
             int raw_seq_idx = reverse ? (L - 1 - i) : i;
             float bs, gain;
-            get_base_score(i, raw_seq_idx, bs, gain);
+            bool mandatory = get_base_score(i, raw_seq_idx, bs, gain);
             aligned_score += static_cast<double>(bs);
-            if (gain > 1e-12f) {
+            if (mandatory) {
+                mandatory_subs++;
+            } else if (gain > 1e-12f) {
                 gains.push_back(gain);
             }
         }
 
-        update_best(compute_total_edits(aligned_score, gains, 0));
+        update_best(compute_total_edits(aligned_score, gains, 0, mandatory_subs));
 
         // Early return: 0 edits is optimal
         if (!std::isnan(best_edits) && best_edits <= 0.0f) {
@@ -1341,44 +1498,60 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         }
     }
 
+    // Helper: collect gains and mandatory count for a set of (motif_col, score, gain, mandatory) entries.
+    // Fills gains vector (non-mandatory positions with gain > 1e-12) and returns mandatory count.
+    // Used by the multi-segment cases below.
+
     // ===== Case 2: One deletion (W = L + 1, k = 1) =====
     if (L + 1 <= seq_len) {
         const int W = L + 1;
 
         std::vector<float> prefix_scores(L), prefix_gains(L);
         std::vector<float> suffix_scores(L), suffix_gains(L);
+        std::vector<bool> prefix_mandatory(L, false), suffix_mandatory(L, false);
 
         for (int i = 0; i < L; i++) {
             int raw_prefix = reverse ? (W - 1 - i) : i;
-            get_base_score(i, raw_prefix, prefix_scores[i], prefix_gains[i]);
+            prefix_mandatory[i] = get_base_score(i, raw_prefix,
+                                                  prefix_scores[i], prefix_gains[i]);
 
             int raw_suffix = reverse ? (W - 1 - (i + 1)) : (i + 1);
-            get_base_score(i, raw_suffix, suffix_scores[i], suffix_gains[i]);
+            suffix_mandatory[i] = get_base_score(i, raw_suffix,
+                                                  suffix_scores[i], suffix_gains[i]);
         }
 
         std::vector<double> prefix_cum(L + 1, 0.0);
+        std::vector<int> prefix_cum_mand(L + 1, 0);
         for (int i = 0; i < L; i++) {
             prefix_cum[i + 1] = prefix_cum[i] + static_cast<double>(prefix_scores[i]);
+            prefix_cum_mand[i + 1] = prefix_cum_mand[i] + (prefix_mandatory[i] ? 1 : 0);
         }
 
         std::vector<double> suffix_cum(L + 1, 0.0);
+        std::vector<int> suffix_cum_mand(L + 1, 0);
         for (int i = L - 1; i >= 0; i--) {
             suffix_cum[i] = suffix_cum[i + 1] + static_cast<double>(suffix_scores[i]);
+            suffix_cum_mand[i] = suffix_cum_mand[i + 1] + (suffix_mandatory[i] ? 1 : 0);
         }
 
         for (int d = 0; d <= L; d++) {
             double aligned_score = prefix_cum[d] + suffix_cum[d];
 
+            if (!quick_deficit_check(aligned_score, 1, best_edits)) continue;
+
+            int mandatory_subs = prefix_cum_mand[d] + suffix_cum_mand[d];
             std::vector<float> gains;
             gains.reserve(L);
             for (int i = 0; i < d; i++) {
-                if (prefix_gains[i] > 1e-12f) gains.push_back(prefix_gains[i]);
+                if (!prefix_mandatory[i] && prefix_gains[i] > 1e-12f)
+                    gains.push_back(prefix_gains[i]);
             }
             for (int i = d; i < L; i++) {
-                if (suffix_gains[i] > 1e-12f) gains.push_back(suffix_gains[i]);
+                if (!suffix_mandatory[i] && suffix_gains[i] > 1e-12f)
+                    gains.push_back(suffix_gains[i]);
             }
 
-            update_best(compute_total_edits(aligned_score, gains, 1));
+            update_best(compute_total_edits(aligned_score, gains, 1, mandatory_subs));
             if (!std::isnan(best_edits) && best_edits <= 1.0f) break;
         }
     }
@@ -1390,40 +1563,52 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
 
         std::vector<float> prefix_scores(L - 1), prefix_gains(L - 1);
         std::vector<float> suffix_scores(L), suffix_gains(L);
+        std::vector<bool> prefix_mandatory(L - 1, false), suffix_mandatory(L, false);
 
         for (int i = 0; i < L - 1; i++) {
             int raw_idx = reverse ? (W - 1 - i) : i;
-            get_base_score(i, raw_idx, prefix_scores[i], prefix_gains[i]);
+            prefix_mandatory[i] = get_base_score(i, raw_idx,
+                                                  prefix_scores[i], prefix_gains[i]);
         }
 
         for (int i = 1; i < L; i++) {
             int raw_idx = reverse ? (W - 1 - (i - 1)) : (i - 1);
-            get_base_score(i, raw_idx, suffix_scores[i], suffix_gains[i]);
+            suffix_mandatory[i] = get_base_score(i, raw_idx,
+                                                  suffix_scores[i], suffix_gains[i]);
         }
 
         std::vector<double> prefix_cum(L, 0.0);
+        std::vector<int> prefix_cum_mand(L, 0);
         for (int i = 0; i < L - 1; i++) {
             prefix_cum[i + 1] = prefix_cum[i] + static_cast<double>(prefix_scores[i]);
+            prefix_cum_mand[i + 1] = prefix_cum_mand[i] + (prefix_mandatory[i] ? 1 : 0);
         }
 
         std::vector<double> suffix_cum(L, 0.0);
+        std::vector<int> suffix_cum_mand(L, 0);
         for (int i = L - 1; i >= 1; i--) {
             suffix_cum[i - 1] = suffix_cum[i] + static_cast<double>(suffix_scores[i]);
+            suffix_cum_mand[i - 1] = suffix_cum_mand[i] + (suffix_mandatory[i] ? 1 : 0);
         }
 
         for (int m = 0; m < L; m++) {
             double aligned_score = prefix_cum[m] + suffix_cum[m];
 
+            if (!quick_deficit_check(aligned_score, 1, best_edits)) continue;
+
+            int mandatory_subs = prefix_cum_mand[m] + suffix_cum_mand[m];
             std::vector<float> gains;
             gains.reserve(L - 1);
             for (int i = 0; i < m; i++) {
-                if (prefix_gains[i] > 1e-12f) gains.push_back(prefix_gains[i]);
+                if (!prefix_mandatory[i] && prefix_gains[i] > 1e-12f)
+                    gains.push_back(prefix_gains[i]);
             }
             for (int i = m + 1; i < L; i++) {
-                if (suffix_gains[i] > 1e-12f) gains.push_back(suffix_gains[i]);
+                if (!suffix_mandatory[i] && suffix_gains[i] > 1e-12f)
+                    gains.push_back(suffix_gains[i]);
             }
 
-            update_best(compute_total_edits(aligned_score, gains, 1));
+            update_best(compute_total_edits(aligned_score, gains, 1, mandatory_subs));
             if (!std::isnan(best_edits) && best_edits <= 1.0f) break;
         }
     }
@@ -1449,34 +1634,41 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         std::vector<float> scores0(L), gains0(L);
         std::vector<float> scores1(L), gains1(L);
         std::vector<float> scores2(L), gains2(L);
+        std::vector<bool> mand0(L, false), mand1(L, false), mand2(L, false);
 
         for (int i = 0; i < L; i++) {
             int raw0 = reverse ? (W - 1 - i) : i;
-            get_base_score(i, raw0, scores0[i], gains0[i]);
+            mand0[i] = get_base_score(i, raw0, scores0[i], gains0[i]);
 
             int raw1 = reverse ? (W - 1 - (i + 1)) : (i + 1);
-            get_base_score(i, raw1, scores1[i], gains1[i]);
+            mand1[i] = get_base_score(i, raw1, scores1[i], gains1[i]);
 
             int raw2 = reverse ? (W - 1 - (i + 2)) : (i + 2);
-            get_base_score(i, raw2, scores2[i], gains2[i]);
+            mand2[i] = get_base_score(i, raw2, scores2[i], gains2[i]);
         }
 
         // Prefix cumulative for config0
         std::vector<double> cum0(L + 1, 0.0);
+        std::vector<int> cum0_mand(L + 1, 0);
         for (int i = 0; i < L; i++) {
             cum0[i + 1] = cum0[i] + static_cast<double>(scores0[i]);
+            cum0_mand[i + 1] = cum0_mand[i] + (mand0[i] ? 1 : 0);
         }
 
         // Suffix cumulative for config2
         std::vector<double> suf2(L + 1, 0.0);
+        std::vector<int> suf2_mand(L + 1, 0);
         for (int i = L - 1; i >= 0; i--) {
             suf2[i] = suf2[i + 1] + static_cast<double>(scores2[i]);
+            suf2_mand[i] = suf2_mand[i + 1] + (mand2[i] ? 1 : 0);
         }
 
         // Prefix cumulative for config1 (middle segment)
         std::vector<double> cum1(L + 1, 0.0);
+        std::vector<int> cum1_mand(L + 1, 0);
         for (int i = 0; i < L; i++) {
             cum1[i + 1] = cum1[i] + static_cast<double>(scores1[i]);
+            cum1_mand[i + 1] = cum1_mand[i] + (mand1[i] ? 1 : 0);
         }
 
         std::vector<float> gains_4;
@@ -1485,33 +1677,41 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
             for (int d2 = d1 + 1; d2 <= L + 1; d2++) {
                 // Seg 1: motif[0..d1-1] config0
                 double seg1 = cum0[d1];
+                int mand1_count = cum0_mand[d1];
 
                 // Seg 2: motif[d1..d2-2] config1
                 double seg2 = 0.0;
+                int mand2_count = 0;
                 if (d2 - 1 > d1) {
                     seg2 = cum1[d2 - 1] - cum1[d1];
+                    mand2_count = cum1_mand[d2 - 1] - cum1_mand[d1];
                 }
 
                 // Seg 3: motif[d2-1..L-1] config2
                 double seg3 = 0.0;
+                int mand3_count = 0;
                 if (d2 - 1 < L) {
                     seg3 = suf2[d2 - 1];
+                    mand3_count = suf2_mand[d2 - 1];
                 }
 
                 double aligned_score = seg1 + seg2 + seg3;
 
+                if (!quick_deficit_check(aligned_score, 2, best_edits)) continue;
+
+                int mandatory_subs = mand1_count + mand2_count + mand3_count;
                 gains_4.clear();
                 for (int i = 0; i < d1; i++) {
-                    if (gains0[i] > 1e-12f) gains_4.push_back(gains0[i]);
+                    if (!mand0[i] && gains0[i] > 1e-12f) gains_4.push_back(gains0[i]);
                 }
                 for (int i = d1; i < d2 - 1; i++) {
-                    if (gains1[i] > 1e-12f) gains_4.push_back(gains1[i]);
+                    if (!mand1[i] && gains1[i] > 1e-12f) gains_4.push_back(gains1[i]);
                 }
                 for (int i = d2 - 1; i < L; i++) {
-                    if (gains2[i] > 1e-12f) gains_4.push_back(gains2[i]);
+                    if (!mand2[i] && gains2[i] > 1e-12f) gains_4.push_back(gains2[i]);
                 }
 
-                update_best(compute_total_edits(aligned_score, gains_4, 2));
+                update_best(compute_total_edits(aligned_score, gains_4, 2, mandatory_subs));
                 if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
             }
             if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
@@ -1531,45 +1731,54 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         std::vector<float> scores0(L), gains0_v(L);
         std::vector<float> scores1(L), gains1_v(L);
         std::vector<float> scores2(L), gains2_v(L);
+        std::vector<bool> mand0(L, false), mand1(L, false), mand2(L, false);
 
         for (int i = 0; i < L; i++) {
             if (i < W) {
                 int raw0 = reverse ? (W - 1 - i) : i;
-                get_base_score(i, raw0, scores0[i], gains0_v[i]);
+                mand0[i] = get_base_score(i, raw0, scores0[i], gains0_v[i]);
             }
             if (i >= 1 && i - 1 < W) {
                 int raw1 = reverse ? (W - 1 - (i - 1)) : (i - 1);
-                get_base_score(i, raw1, scores1[i], gains1_v[i]);
+                mand1[i] = get_base_score(i, raw1, scores1[i], gains1_v[i]);
             }
             if (i >= 2 && i - 2 < W) {
                 int raw2 = reverse ? (W - 1 - (i - 2)) : (i - 2);
-                get_base_score(i, raw2, scores2[i], gains2_v[i]);
+                mand2[i] = get_base_score(i, raw2, scores2[i], gains2_v[i]);
             }
         }
 
         // Prefix cumulative for config0
         std::vector<double> cum0(L + 1, 0.0);
+        std::vector<int> cum0_mand(L + 1, 0);
         for (int i = 0; i < std::min(L, W); i++) {
             cum0[i + 1] = cum0[i] + static_cast<double>(scores0[i]);
+            cum0_mand[i + 1] = cum0_mand[i] + (mand0[i] ? 1 : 0);
         }
 
         // Suffix cumulative for config2
         std::vector<double> suf2(L + 1, 0.0);
+        std::vector<int> suf2_mand(L + 1, 0);
         for (int i = L - 1; i >= 2; i--) {
             if (i - 2 < W) {
                 suf2[i] = suf2[i + 1] + static_cast<double>(scores2[i]);
+                suf2_mand[i] = suf2_mand[i + 1] + (mand2[i] ? 1 : 0);
             } else {
                 suf2[i] = suf2[i + 1];
+                suf2_mand[i] = suf2_mand[i + 1];
             }
         }
 
         // Prefix cumulative for config1
         std::vector<double> cum1(L + 1, 0.0);
+        std::vector<int> cum1_mand(L + 1, 0);
         for (int i = 1; i < L; i++) {
             if (i - 1 < W) {
                 cum1[i + 1] = cum1[i] + static_cast<double>(scores1[i]);
+                cum1_mand[i + 1] = cum1_mand[i] + (mand1[i] ? 1 : 0);
             } else {
                 cum1[i + 1] = cum1[i];
+                cum1_mand[i + 1] = cum1_mand[i];
             }
         }
 
@@ -1578,31 +1787,39 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         for (int m1 = 0; m1 < L; m1++) {
             for (int m2 = m1 + 1; m2 < L; m2++) {
                 double seg1 = cum0[m1];
+                int mand1_count = cum0_mand[m1];
 
                 double seg2 = 0.0;
+                int mand2_count = 0;
                 if (m2 > m1 + 1) {
                     seg2 = cum1[m2] - cum1[m1 + 1];
+                    mand2_count = cum1_mand[m2] - cum1_mand[m1 + 1];
                 }
 
                 double seg3 = 0.0;
+                int mand3_count = 0;
                 if (m2 + 1 < L) {
                     seg3 = suf2[m2 + 1];
+                    mand3_count = suf2_mand[m2 + 1];
                 }
 
                 double aligned_score = seg1 + seg2 + seg3;
 
+                if (!quick_deficit_check(aligned_score, 2, best_edits)) continue;
+
+                int mandatory_subs = mand1_count + mand2_count + mand3_count;
                 gains_5.clear();
                 for (int i = 0; i < m1; i++) {
-                    if (gains0_v[i] > 1e-12f) gains_5.push_back(gains0_v[i]);
+                    if (!mand0[i] && gains0_v[i] > 1e-12f) gains_5.push_back(gains0_v[i]);
                 }
                 for (int i = m1 + 1; i < m2; i++) {
-                    if (gains1_v[i] > 1e-12f) gains_5.push_back(gains1_v[i]);
+                    if (!mand1[i] && gains1_v[i] > 1e-12f) gains_5.push_back(gains1_v[i]);
                 }
                 for (int i = m2 + 1; i < L; i++) {
-                    if (gains2_v[i] > 1e-12f) gains_5.push_back(gains2_v[i]);
+                    if (!mand2[i] && gains2_v[i] > 1e-12f) gains_5.push_back(gains2_v[i]);
                 }
 
-                update_best(compute_total_edits(aligned_score, gains_5, 2));
+                update_best(compute_total_edits(aligned_score, gains_5, 2, mandatory_subs));
                 if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
             }
             if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
@@ -1629,44 +1846,53 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         std::vector<float> scores_ns(L), gains_ns(L);   // no shift
         std::vector<float> scores_sp1(L), gains_sp1(L); // seq shifted +1
         std::vector<float> scores_sm1(L), gains_sm1(L); // seq shifted -1
+        std::vector<bool> mand_ns(L, false), mand_sp1(L, false), mand_sm1(L, false);
 
         for (int i = 0; i < L; i++) {
             int raw_ns = reverse ? (W - 1 - i) : i;
-            get_base_score(i, raw_ns, scores_ns[i], gains_ns[i]);
+            mand_ns[i] = get_base_score(i, raw_ns, scores_ns[i], gains_ns[i]);
 
             if (i + 1 < W) {
                 int raw_sp1 = reverse ? (W - 1 - (i + 1)) : (i + 1);
-                get_base_score(i, raw_sp1, scores_sp1[i], gains_sp1[i]);
+                mand_sp1[i] = get_base_score(i, raw_sp1, scores_sp1[i], gains_sp1[i]);
             }
 
             if (i >= 1) {
                 int raw_sm1 = reverse ? (W - 1 - (i - 1)) : (i - 1);
-                get_base_score(i, raw_sm1, scores_sm1[i], gains_sm1[i]);
+                mand_sm1[i] = get_base_score(i, raw_sm1, scores_sm1[i], gains_sm1[i]);
             }
         }
 
         // Prefix sums for no-shift
         std::vector<double> cum_ns(L + 1, 0.0);
+        std::vector<int> cum_ns_mand(L + 1, 0);
         for (int i = 0; i < L; i++) {
             cum_ns[i + 1] = cum_ns[i] + static_cast<double>(scores_ns[i]);
+            cum_ns_mand[i + 1] = cum_ns_mand[i] + (mand_ns[i] ? 1 : 0);
         }
 
         // Prefix sums for seq+1 shift
         std::vector<double> cum_sp1(L + 1, 0.0);
+        std::vector<int> cum_sp1_mand(L + 1, 0);
         for (int i = 0; i < L - 1; i++) {
             cum_sp1[i + 1] = cum_sp1[i] + static_cast<double>(scores_sp1[i]);
+            cum_sp1_mand[i + 1] = cum_sp1_mand[i] + (mand_sp1[i] ? 1 : 0);
         }
 
         // Prefix sums for seq-1 shift (valid for i >= 1)
         std::vector<double> cum_sm1(L + 1, 0.0);
+        std::vector<int> cum_sm1_mand(L + 1, 0);
         for (int i = 1; i < L; i++) {
             cum_sm1[i + 1] = cum_sm1[i] + static_cast<double>(scores_sm1[i]);
+            cum_sm1_mand[i + 1] = cum_sm1_mand[i] + (mand_sm1[i] ? 1 : 0);
         }
 
         // Suffix sums for no-shift
         std::vector<double> suf_ns(L + 1, 0.0);
+        std::vector<int> suf_ns_mand(L + 1, 0);
         for (int i = L - 1; i >= 0; i--) {
             suf_ns[i] = suf_ns[i + 1] + static_cast<double>(scores_ns[i]);
+            suf_ns_mand[i] = suf_ns_mand[i + 1] + (mand_ns[i] ? 1 : 0);
         }
 
         std::vector<float> gains_6;
@@ -1678,47 +1904,52 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
                 // while Case 1 aligns all L pairs with 0 indels.
                 if (d == m) continue;
 
+                // Compute aligned_score and mandatory count first for quick deficit check
                 double aligned_score = 0.0;
-                gains_6.clear();
-
+                int mandatory_subs = 0;
                 if (d < m) {
-                    aligned_score += cum_ns[d];
-                    for (int i = 0; i < d; i++) {
-                        if (gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
-                    }
-
-                    aligned_score += cum_sp1[m] - cum_sp1[d];
-                    for (int i = d; i < m; i++) {
-                        if (gains_sp1[i] > 1e-12f) gains_6.push_back(gains_sp1[i]);
-                    }
-
+                    aligned_score = cum_ns[d] + (cum_sp1[m] - cum_sp1[d]);
+                    mandatory_subs = cum_ns_mand[d] + (cum_sp1_mand[m] - cum_sp1_mand[d]);
                     if (m + 1 < L) {
                         aligned_score += suf_ns[m + 1];
-                        for (int i = m + 1; i < L; i++) {
-                            if (gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
-                        }
+                        mandatory_subs += suf_ns_mand[m + 1];
                     }
                 } else {
-                    // d > m (d == m is skipped above)
-                    aligned_score += cum_ns[m];
-                    for (int i = 0; i < m; i++) {
-                        if (gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
-                    }
-
-                    aligned_score += cum_sm1[d + 1] - cum_sm1[m + 1];
-                    for (int i = m + 1; i <= d; i++) {
-                        if (gains_sm1[i] > 1e-12f) gains_6.push_back(gains_sm1[i]);
-                    }
-
+                    aligned_score = cum_ns[m] + (cum_sm1[d + 1] - cum_sm1[m + 1]);
+                    mandatory_subs = cum_ns_mand[m] + (cum_sm1_mand[d + 1] - cum_sm1_mand[m + 1]);
                     if (d + 1 < L) {
                         aligned_score += suf_ns[d + 1];
-                        for (int i = d + 1; i < L; i++) {
-                            if (gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
-                        }
+                        mandatory_subs += suf_ns_mand[d + 1];
                     }
                 }
 
-                update_best(compute_total_edits(aligned_score, gains_6, 2));
+                if (!quick_deficit_check(aligned_score, 2, best_edits)) continue;
+
+                // Collect gains only for promising candidates (skip mandatory positions)
+                gains_6.clear();
+                if (d < m) {
+                    for (int i = 0; i < d; i++) {
+                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
+                    }
+                    for (int i = d; i < m; i++) {
+                        if (!mand_sp1[i] && gains_sp1[i] > 1e-12f) gains_6.push_back(gains_sp1[i]);
+                    }
+                    for (int i = m + 1; i < L; i++) {
+                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
+                    }
+                } else {
+                    for (int i = 0; i < m; i++) {
+                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
+                    }
+                    for (int i = m + 1; i <= d; i++) {
+                        if (!mand_sm1[i] && gains_sm1[i] > 1e-12f) gains_6.push_back(gains_sm1[i]);
+                    }
+                    for (int i = d + 1; i < L; i++) {
+                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
+                    }
+                }
+
+                update_best(compute_total_edits(aligned_score, gains_6, 2, mandatory_subs));
                 if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
             }
             if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
