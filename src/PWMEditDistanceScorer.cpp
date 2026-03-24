@@ -2,6 +2,7 @@
 #include "GenomeSeqFetch.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace {
@@ -137,6 +138,72 @@ void PWMEditDistanceScorer::precompute_tables()
             m_bin_index[i][b] = static_cast<uint8_t>(std::distance(m_gain_values.begin(), it));
         }
     }
+
+    // Populate flat PSSM lookup tables for cache-friendly access in get_aligned_base_score()
+    for (int i = 0; i < L && i < MAX_MOTIF_LEN_OPT; i++) {
+        for (int b = 0; b < 4; b++) {
+            float raw = m_pssm[i].get_log_prob_from_code(b);
+            bool is_mandatory = (raw <= kLogZeroThreshold || !std::isfinite(raw));
+            m_mandatory_table[i][b] = is_mandatory;
+            if (is_mandatory) {
+                m_score_table[i][b] = m_col_max_scores[i];
+                m_gain_table[i][b] = 0.0f;
+            } else {
+                m_score_table[i][b] = raw;
+                m_gain_table[i][b] = m_col_max_scores[i] - raw;
+            }
+        }
+        // N-base (index 4): always mandatory
+        m_score_table[i][4] = m_col_max_scores[i];
+        m_gain_table[i][4] = 0.0f;
+        m_mandatory_table[i][4] = true;
+    }
+
+    // Build pigeonhole pre-filter blocks (must come after m_mandatory_table is populated).
+    // By the pigeonhole principle: if a sequence matches a motif with at most K total
+    // edits and we divide the motif into (K+1) non-overlapping blocks, at least one
+    // block must match exactly (0 edits). With D indels, check shifts {-D, ..., +D}.
+    //
+    // Enable when: K >= 1 (have an edit budget to pigeonhole) AND L is long enough
+    // that each block has >= 3 columns (enough selectivity to reject random sequence).
+    m_use_prefilter = false;
+    m_prefilter_blocks.clear();
+    {
+        int K = m_max_edits;
+        // For exact mode (K < 0), K is unbounded — can't form finite block count.
+        // For K == 0, we already check exact match only, no pre-filter needed.
+        if (K >= 1 && L >= 3 * (K + 1) && L <= MAX_MOTIF_LEN_OPT) {
+            int num_blocks = K + 1;
+            m_prefilter_blocks.resize(num_blocks);
+
+            for (int b = 0; b < num_blocks; b++) {
+                int block_start = b * L / num_blocks;
+                int block_end = (b + 1) * L / num_blocks;
+                int block_len = block_end - block_start;
+
+                PrefilterBlock& blk = m_prefilter_blocks[b];
+                blk.start = block_start;
+                blk.len = block_len;
+                blk.num_entries = 1 << (2 * block_len);
+                blk.viable.assign(blk.num_entries, false);
+
+                // Enumerate all 4^B possible B-mers and mark viable ones.
+                // A B-mer is viable if every position has a non-mandatory PSSM score,
+                // meaning the base is compatible with the motif column without edits.
+                for (int h = 0; h < blk.num_entries; h++) {
+                    bool ok = true;
+                    for (int j = 0; j < block_len && ok; j++) {
+                        int base = (h >> (2 * j)) & 3;
+                        if (m_mandatory_table[block_start + j][base]) {
+                            ok = false;
+                        }
+                    }
+                    blk.viable[h] = ok;
+                }
+            }
+            m_use_prefilter = true;
+        }
+    }
 }
 
 float PWMEditDistanceScorer::score_interval(const GInterval& interval,
@@ -214,7 +281,7 @@ float PWMEditDistanceScorer::compute_window_pwm_score(const char* window_start, 
     return logp;
 }
 
-float PWMEditDistanceScorer::compute_exact(const char* seq_ptr, bool reverse)
+float PWMEditDistanceScorer::compute_exact(const int* bidx, bool reverse)
 {
     const int L = m_pssm.length();
     if (L == 0) {
@@ -236,30 +303,16 @@ float PWMEditDistanceScorer::compute_exact(const char* seq_ptr, bool reverse)
 
     for (int i = 0; i < L; i++) {
         int seq_idx = reverse ? (L - 1 - i) : i;
-        char base = seq_ptr[seq_idx];
-        if (reverse) {
-            base = complement_base(base);
-        }
+        int base_idx = bidx[seq_idx];
 
-        int base_idx = base_to_index(base);
-
-        // BUG-1 FIX: check for unknown bases before calling get_log_prob
-        if (base_idx == 4) {
-            // Unknown base: treat as mandatory edit with max score assumption
+        // Use precomputed lookup tables (complement already applied in bidx)
+        if (m_mandatory_table[i][base_idx]) {
             mandatory_edits++;
-            adjusted_score += static_cast<double>(m_col_max_scores[i]);
+            adjusted_score += static_cast<double>(m_score_table[i][base_idx]);
             continue;
         }
 
-        float base_score = m_pssm[i].get_log_prob_from_code(base_idx);
-
-        if (base_score <= kLogZeroThreshold || !std::isfinite(base_score)) {
-            mandatory_edits++;
-            adjusted_score += static_cast<double>(m_col_max_scores[i]);
-            continue;
-        }
-
-        adjusted_score += static_cast<double>(base_score);
+        adjusted_score += static_cast<double>(m_score_table[i][base_idx]);
 
         int bin = m_bin_index[i][base_idx];
         if (m_exact_count[bin] == 0) {
@@ -332,7 +385,7 @@ float PWMEditDistanceScorer::compute_exact(const char* seq_ptr, bool reverse)
     return std::numeric_limits<float>::quiet_NaN();
 }
 
-float PWMEditDistanceScorer::compute_heuristic(const char* seq_ptr, bool reverse, int max_k)
+float PWMEditDistanceScorer::compute_heuristic(const int* bidx, bool reverse, int max_k)
 {
     const int L = m_pssm.length();
     if (L == 0) {
@@ -359,29 +412,16 @@ float PWMEditDistanceScorer::compute_heuristic(const char* seq_ptr, bool reverse
 
     for (int i = 0; i < L; i++) {
         int seq_idx = reverse ? (L - 1 - i) : i;
-        char base = seq_ptr[seq_idx];
-        if (reverse) {
-            base = complement_base(base);
-        }
+        int base_idx = bidx[seq_idx];
 
-        int base_idx = base_to_index(base);
-
-        // BUG-1 FIX: check for unknown bases before calling get_log_prob
-        if (base_idx == 4) {
-            // Unknown base: treat as mandatory edit
+        // Use precomputed lookup tables (complement already applied in bidx)
+        if (m_mandatory_table[i][base_idx]) {
             mandatory_edits++;
-            adjusted_score += static_cast<double>(m_col_max_scores[i]);
-            continue;
-        }
-
-        float base_score = m_pssm[i].get_log_prob_from_code(base_idx);
-
-        if (base_score <= kLogZeroThreshold || !std::isfinite(base_score)) {
-            mandatory_edits++;
-            adjusted_score += static_cast<double>(m_col_max_scores[i]);
+            adjusted_score += static_cast<double>(m_score_table[i][base_idx]);
         } else {
+            float base_score = m_score_table[i][base_idx];
             adjusted_score += static_cast<double>(base_score);
-            float gain = m_col_max_scores[i] - base_score;
+            float gain = m_gain_table[i][base_idx];
             gains.push_back(gain);
 
             // Update top-k gains tracker
@@ -493,25 +533,81 @@ float PWMEditDistanceScorer::encode_position(size_t index,
     return pos;
 }
 
-float PWMEditDistanceScorer::compute_window_edits(const char* window_start, int seq_avail, bool reverse)
+bool PWMEditDistanceScorer::passes_prefilter(const int* bidx, int seq_avail, bool reverse) const
 {
-    // When indels are enabled, use specialized solvers
-    // Note: early_abandon_banded_dp() was removed from the hot path because
-    // its upper bound (using col_max for all match scores) is too loose to
-    // fire on real genomic data, making it pure overhead (~40% of D=2 runtime).
+    const int L = m_pssm.length();
+
+    for (const auto& block : m_prefilter_blocks) {
+        for (int shift = -m_max_indels; shift <= m_max_indels; shift++) {
+            int hash = 0;
+            bool valid = true;
+
+            for (int j = 0; j < block.len && valid; j++) {
+                int motif_col = block.start + j;
+                int seq_idx;
+                if (!reverse) {
+                    seq_idx = motif_col + shift;
+                } else {
+                    // Reverse strand: motif column i maps to bidx[L-1-i] for
+                    // the no-indel alignment. With a shift of s (for indels),
+                    // the mapping becomes bidx[L-1-i+s].
+                    seq_idx = L - 1 - motif_col + shift;
+                }
+
+                if (seq_idx < 0 || seq_idx >= seq_avail) {
+                    valid = false;
+                    break;
+                }
+
+                int b = bidx[seq_idx];
+                if (b >= 4) {
+                    valid = false;
+                    break;
+                }
+
+                hash += b << (2 * j);
+            }
+
+            if (valid && block.viable[hash]) {
+                return true;  // At least one block matches exactly at this shift
+            }
+        }
+    }
+
+    return false;  // No block matches at any shift — window provably unreachable
+}
+
+float PWMEditDistanceScorer::compute_window_edits(const int* bidx, int seq_avail, bool reverse)
+{
+    // When indels are enabled, use specialized solvers.
+    // Apply pigeonhole pre-filter first to skip windows that provably cannot
+    // match within the edit budget.
     if (m_max_indels == 1) {
-        return compute_with_one_indel(window_start, seq_avail, reverse);
+        if (m_use_prefilter && !passes_prefilter(bidx, seq_avail, reverse)) {
+            return std::numeric_limits<float>::quiet_NaN();
+        }
+        return compute_with_one_indel(bidx, seq_avail, reverse);
     } else if (m_max_indels == 2) {
-        return compute_with_two_indels(window_start, seq_avail, reverse);
+        if (m_use_prefilter && !passes_prefilter(bidx, seq_avail, reverse)) {
+            return std::numeric_limits<float>::quiet_NaN();
+        }
+        return compute_with_two_indels(bidx, seq_avail, reverse);
     } else if (m_max_indels > 2) {
-        return compute_with_indels(window_start, seq_avail, reverse);
+        if (m_use_prefilter && !passes_prefilter(bidx, seq_avail, reverse)) {
+            return std::numeric_limits<float>::quiet_NaN();
+        }
+        return compute_with_indels(bidx, seq_avail, reverse);
     }
 
     // Fast path: substitutions only
     if (m_max_edits < 0) {
-        return compute_exact(window_start, reverse);
+        return compute_exact(bidx, reverse);
     }
-    return compute_heuristic(window_start, reverse, m_max_edits);
+    // Pigeonhole pre-filter also helps pure substitution mode (shifts = {0})
+    if (m_use_prefilter && !passes_prefilter(bidx, seq_avail, reverse)) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    return compute_heuristic(bidx, reverse, m_max_edits);
 }
 
 PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const std::string& seq,
@@ -541,6 +637,19 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     }
 
     const char* seq_data = seq.data();
+
+    // Precompute base indices for both strands to eliminate per-call
+    // complement_base() and base_to_index() overhead from the inner loop.
+    // fwd_bidx[j] = base_to_index(seq[j]) — forward strand
+    // rev_bidx[j] = base_to_index(complement_base(seq[j])) — reverse strand
+    std::vector<int> fwd_bidx(target_length);
+    std::vector<int> rev_bidx(target_length);
+    for (size_t j = 0; j < target_length; j++) {
+        char base = seq_data[j];
+        fwd_bidx[j] = base_to_index(base);
+        rev_bidx[j] = base_to_index(complement_base(base));
+    }
+
     bool pwm_found = false;
 
     auto maybe_update_min = [&](float edits, size_t idx, int direction) {
@@ -588,7 +697,8 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                 }
 
                 if (pass_score_filter) {
-                    float edits = compute_window_edits(window_start, seq_avail, /*reverse=*/false);
+                    const int* bidx = fwd_bidx.data() + offset;
+                    float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/false);
                     maybe_update_min(edits, offset, +1);
                 }
             }
@@ -611,7 +721,8 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                 }
 
                 if (pass_score_filter) {
-                    float edits = compute_window_edits(window_start, seq_avail, /*reverse=*/true);
+                    const int* bidx = rev_bidx.data() + offset;
+                    float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/true);
                     maybe_update_min(edits, offset, -1);
                 }
             }
@@ -632,9 +743,12 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
              (has_score_max && metrics.best_pwm_logp > m_score_max))) {
             metrics.best_pwm_edits = std::numeric_limits<float>::quiet_NaN();
         } else {
-            const char* window_start = seq_data + metrics.best_pwm_index;
             int seq_avail = static_cast<int>(target_length - metrics.best_pwm_index);
-            metrics.best_pwm_edits = compute_window_edits(window_start, seq_avail, metrics.best_pwm_direction < 0);
+            bool is_reverse = metrics.best_pwm_direction < 0;
+            const int* bidx = is_reverse
+                ? rev_bidx.data() + metrics.best_pwm_index
+                : fwd_bidx.data() + metrics.best_pwm_index;
+            metrics.best_pwm_edits = compute_window_edits(bidx, seq_avail, is_reverse);
         }
         metrics.best_pwm_position = encode_position(metrics.best_pwm_index,
                                                     target_length,
@@ -648,7 +762,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     return metrics;
 }
 
-float PWMEditDistanceScorer::compute_with_indels(const char* seq_ptr, int seq_len, bool reverse)
+float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_len, bool reverse)
 {
     const int L = m_pssm.length();
     if (L == 0) {
@@ -709,16 +823,15 @@ float PWMEditDistanceScorer::compute_with_indels(const char* seq_ptr, int seq_le
             int j_max = std::min(W, i + D);
 
             for (int j = j_min; j <= j_max; ++j) {
-                // Get sequence base at position j-1
+                // Get precomputed base index at position j-1
                 int seq_idx = reverse ? (W - 1 - (j - 1)) : (j - 1);
-                char base = seq_ptr[seq_idx];
-                if (reverse) {
-                    base = complement_base(base);
-                }
-                int bidx = base_to_index(base);
+                int bi = bidx_arr[seq_idx];
 
+                // Use precomputed score from PSSM (complement already applied in bidx_arr).
+                // For the generic DP we need the raw PSSM score (not the mandatory-adjusted one),
+                // because the DP traceback handles gains separately.
                 float base_score;
-                if (bidx == 4) {
+                if (bi == 4) {
                     // Unknown base: use minimum score (worst case)
                     float min_s = std::numeric_limits<float>::infinity();
                     for (int b = 0; b < 4; b++) {
@@ -727,7 +840,7 @@ float PWMEditDistanceScorer::compute_with_indels(const char* seq_ptr, int seq_le
                     }
                     base_score = min_s;
                 } else {
-                    base_score = m_pssm[i - 1].get_log_prob_from_code(bidx);
+                    base_score = m_pssm[i - 1].get_log_prob_from_code(bi);
                 }
 
                 for (int k = 0; k <= D; ++k) {
@@ -807,9 +920,7 @@ float PWMEditDistanceScorer::compute_with_indels(const char* seq_ptr, int seq_le
                 bool found = false;
                 if (std::abs((ti - 1) - (tj - 1)) <= D) {
                     int s_idx = reverse ? (W - 1 - (tj - 1)) : (tj - 1);
-                    char b = seq_ptr[s_idx];
-                    if (reverse) b = complement_base(b);
-                    int bi = base_to_index(b);
+                    int bi = bidx_arr[s_idx];
 
                     float bs;
                     if (bi == 4) {
@@ -1069,23 +1180,9 @@ inline bool PWMEditDistanceScorer::get_aligned_base_score(const char* seq_ptr, b
         base = complement_base(base);
     }
     int bidx = base_to_index(base);
-
-    if (bidx != 4) {
-        float raw = m_pssm[motif_pos].get_log_prob_from_code(bidx);
-        if (raw > kLogZeroThreshold && std::isfinite(raw)) {
-            // Normal case: finite, non-logzero score
-            out_score = raw;
-            out_gain = m_col_max_scores[motif_pos] - out_score;
-            return false;
-        }
-        // Log-zero base: fall through to mandatory edit handling
-    }
-    // Unknown base (bidx==4) or log-zero score: mandatory edit.
-    // Assume the edit is applied: score = col_max, no further gain.
-    // Callers must count this position as +1 mandatory substitution.
-    out_score = m_col_max_scores[motif_pos];
-    out_gain = 0.0f;
-    return true;
+    out_score = m_score_table[motif_pos][bidx];
+    out_gain = m_gain_table[motif_pos][bidx];
+    return m_mandatory_table[motif_pos][bidx];
 }
 
 bool PWMEditDistanceScorer::quick_deficit_check(double aligned_score, int indels, float best_edits_so_far) const
@@ -1197,22 +1294,28 @@ float PWMEditDistanceScorer::compute_min_edits_from_gains(double aligned_score,
     return std::numeric_limits<float>::quiet_NaN();
 }
 
-float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq_len, bool reverse)
+float PWMEditDistanceScorer::compute_with_one_indel(const int* bidx_arr, int seq_len, bool reverse)
 {
     const int L = m_pssm.length();
     if (L == 0) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
+    // Fall back to generic DP solver for motifs exceeding stack array limit
+    if (L > MAX_MOTIF_LEN_OPT) {
+        return compute_with_indels(bidx_arr, seq_len, reverse);
+    }
+
     float best_edits = std::numeric_limits<float>::quiet_NaN();
 
-    // get_base_score returns true if the position requires a mandatory substitution.
-    // For mandatory positions: out_score = col_max, out_gain = 0.
-    // Callers must track mandatory counts and add them to the indel base cost.
+    // get_base_score: direct table lookup using precomputed base indices.
+    // Returns true if the position requires a mandatory substitution.
     auto get_base_score = [&](int motif_pos, int raw_seq_idx,
                                float& out_score, float& out_gain) -> bool {
-        return get_aligned_base_score(seq_ptr, reverse, motif_pos, raw_seq_idx,
-                                      out_score, out_gain);
+        int bi = bidx_arr[raw_seq_idx];
+        out_score = m_score_table[motif_pos][bi];
+        out_gain = m_gain_table[motif_pos][bi];
+        return m_mandatory_table[motif_pos][bi];
     };
 
     // compute_total_edits: pass indels + mandatory_subs as the base fixed-edit count.
@@ -1227,8 +1330,8 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
     // This is equivalent to what the DP computes for W=L, k=0.
     {
         double aligned_score = 0.0;
-        std::vector<float> gains;
-        gains.reserve(L);
+        float gains_arr[MAX_MOTIF_LEN_OPT];
+        int n_gains = 0;
         int mandatory_subs = 0;
 
         for (int i = 0; i < L; i++) {
@@ -1239,10 +1342,11 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
             if (mandatory) {
                 mandatory_subs++;
             } else if (gain > 1e-12f) {
-                gains.push_back(gain);
+                gains_arr[n_gains++] = gain;
             }
         }
 
+        std::vector<float> gains(gains_arr, gains_arr + n_gains);
         float total = compute_total_edits(aligned_score, gains, 0, mandatory_subs);
         if (!std::isnan(total) && (std::isnan(best_edits) || total < best_edits)) {
             best_edits = total;
@@ -1271,9 +1375,11 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         //   suffix: motif[i] aligned with seq_raw[i+1] for i = 0..L-1
         // where seq_raw[j] = reverse ? (W-1-j) : j
 
-        std::vector<float> prefix_scores(L), prefix_gains(L);
-        std::vector<float> suffix_scores(L), suffix_gains(L);
-        std::vector<bool> prefix_mandatory(L, false), suffix_mandatory(L, false);
+        float prefix_scores[MAX_MOTIF_LEN_OPT], prefix_gains[MAX_MOTIF_LEN_OPT];
+        float suffix_scores[MAX_MOTIF_LEN_OPT], suffix_gains[MAX_MOTIF_LEN_OPT];
+        bool prefix_mandatory[MAX_MOTIF_LEN_OPT], suffix_mandatory[MAX_MOTIF_LEN_OPT];
+        memset(prefix_mandatory, 0, sizeof(bool) * L);
+        memset(suffix_mandatory, 0, sizeof(bool) * L);
 
         for (int i = 0; i < L; i++) {
             int raw_prefix = reverse ? (W - 1 - i) : i;
@@ -1286,16 +1392,20 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         }
 
         // Prefix sums for prefix alignment (motif[0..d-1] with seq[0..d-1])
-        std::vector<double> prefix_cum_score(L + 1, 0.0);
-        std::vector<int> prefix_cum_mandatory(L + 1, 0);
+        double prefix_cum_score[MAX_MOTIF_LEN_OPT + 1];
+        int prefix_cum_mandatory[MAX_MOTIF_LEN_OPT + 1];
+        prefix_cum_score[0] = 0.0;
+        prefix_cum_mandatory[0] = 0;
         for (int i = 0; i < L; i++) {
             prefix_cum_score[i + 1] = prefix_cum_score[i] + static_cast<double>(prefix_scores[i]);
             prefix_cum_mandatory[i + 1] = prefix_cum_mandatory[i] + (prefix_mandatory[i] ? 1 : 0);
         }
 
         // Suffix sums for shifted alignment (motif[d..L-1] with seq[d+1..L])
-        std::vector<double> suffix_cum_score(L + 1, 0.0);
-        std::vector<int> suffix_cum_mandatory(L + 1, 0);
+        double suffix_cum_score[MAX_MOTIF_LEN_OPT + 1];
+        int suffix_cum_mandatory[MAX_MOTIF_LEN_OPT + 1];
+        suffix_cum_score[L] = 0.0;
+        suffix_cum_mandatory[L] = 0;
         for (int i = L - 1; i >= 0; i--) {
             suffix_cum_score[i] = suffix_cum_score[i + 1] + static_cast<double>(suffix_scores[i]);
             suffix_cum_mandatory[i] = suffix_cum_mandatory[i + 1] + (suffix_mandatory[i] ? 1 : 0);
@@ -1304,6 +1414,7 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         // Try each deletion position d in [0, L]
         // d=0: skip seq[0], motif[0..L-1] aligns with seq[1..L]
         // d=L: skip seq[L], motif[0..L-1] aligns with seq[0..L-1]
+        float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int d = 0; d <= L; d++) {
             double aligned_score = prefix_cum_score[d] + suffix_cum_score[d];
 
@@ -1313,19 +1424,19 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
             int mandatory_subs = prefix_cum_mandatory[d] + suffix_cum_mandatory[d];
 
             // Collect gains from aligned positions (skip mandatory positions)
-            std::vector<float> gains;
-            gains.reserve(L);
+            int n_gains = 0;
             for (int i = 0; i < d; i++) {
                 if (!prefix_mandatory[i] && prefix_gains[i] > 1e-12f) {
-                    gains.push_back(prefix_gains[i]);
+                    gains_arr[n_gains++] = prefix_gains[i];
                 }
             }
             for (int i = d; i < L; i++) {
                 if (!suffix_mandatory[i] && suffix_gains[i] > 1e-12f) {
-                    gains.push_back(suffix_gains[i]);
+                    gains_arr[n_gains++] = suffix_gains[i];
                 }
             }
 
+            std::vector<float> gains(gains_arr, gains_arr + n_gains);
             float total = compute_total_edits(aligned_score, gains, 1, mandatory_subs);
             if (!std::isnan(total) && (std::isnan(best_edits) || total < best_edits)) {
                 best_edits = total;
@@ -1361,9 +1472,11 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         //   suffix: motif[i] aligned with seq_raw[i-1] for i = 1..L-1
         // where seq_raw[j] = reverse ? (W-1-j) : j
 
-        std::vector<float> prefix_scores(L - 1), prefix_gains(L - 1);
-        std::vector<float> suffix_scores(L), suffix_gains(L);
-        std::vector<bool> prefix_mandatory(L - 1, false), suffix_mandatory(L, false);
+        float prefix_scores[MAX_MOTIF_LEN_OPT], prefix_gains[MAX_MOTIF_LEN_OPT];
+        float suffix_scores[MAX_MOTIF_LEN_OPT], suffix_gains[MAX_MOTIF_LEN_OPT];
+        bool prefix_mandatory[MAX_MOTIF_LEN_OPT], suffix_mandatory[MAX_MOTIF_LEN_OPT];
+        memset(prefix_mandatory, 0, sizeof(bool) * (L - 1));
+        memset(suffix_mandatory, 0, sizeof(bool) * L);
 
         for (int i = 0; i < L - 1; i++) {
             int raw_idx = reverse ? (W - 1 - i) : i;
@@ -1379,16 +1492,20 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         }
 
         // Prefix cumulative sums (motif[0..m-1] with seq[0..m-1])
-        std::vector<double> prefix_cum_score(L, 0.0);  // sum for i=0..m-1
-        std::vector<int> prefix_cum_mandatory(L, 0);
+        double prefix_cum_score[MAX_MOTIF_LEN_OPT];
+        int prefix_cum_mandatory[MAX_MOTIF_LEN_OPT];
+        prefix_cum_score[0] = 0.0;
+        prefix_cum_mandatory[0] = 0;
         for (int i = 0; i < L - 1; i++) {
             prefix_cum_score[i + 1] = prefix_cum_score[i] + static_cast<double>(prefix_scores[i]);
             prefix_cum_mandatory[i + 1] = prefix_cum_mandatory[i] + (prefix_mandatory[i] ? 1 : 0);
         }
 
         // Suffix cumulative sums (motif[m+1..L-1] with seq[m..L-2])
-        std::vector<double> suffix_cum_score(L, 0.0);  // sum for i=m+1..L-1
-        std::vector<int> suffix_cum_mandatory(L, 0);
+        double suffix_cum_score[MAX_MOTIF_LEN_OPT];
+        int suffix_cum_mandatory[MAX_MOTIF_LEN_OPT];
+        suffix_cum_score[L - 1] = 0.0;
+        suffix_cum_mandatory[L - 1] = 0;
         for (int i = L - 1; i >= 1; i--) {
             suffix_cum_score[i - 1] = suffix_cum_score[i] + static_cast<double>(suffix_scores[i]);
             suffix_cum_mandatory[i - 1] = suffix_cum_mandatory[i] + (suffix_mandatory[i] ? 1 : 0);
@@ -1397,6 +1514,7 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
         // Try each insertion position m in [0, L-1]
         // m=0: skip motif[0], motif[1..L-1] aligns with seq[0..L-2]
         // m=L-1: skip motif[L-1], motif[0..L-2] aligns with seq[0..L-2]
+        float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int m = 0; m < L; m++) {
             double aligned_score = prefix_cum_score[m] + suffix_cum_score[m];
 
@@ -1406,19 +1524,19 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
             int mandatory_subs = prefix_cum_mandatory[m] + suffix_cum_mandatory[m];
 
             // Collect gains from aligned positions (skip mandatory positions)
-            std::vector<float> gains;
-            gains.reserve(L - 1);
+            int n_gains = 0;
             for (int i = 0; i < m; i++) {
                 if (!prefix_mandatory[i] && prefix_gains[i] > 1e-12f) {
-                    gains.push_back(prefix_gains[i]);
+                    gains_arr[n_gains++] = prefix_gains[i];
                 }
             }
             for (int i = m + 1; i < L; i++) {
                 if (!suffix_mandatory[i] && suffix_gains[i] > 1e-12f) {
-                    gains.push_back(suffix_gains[i]);
+                    gains_arr[n_gains++] = suffix_gains[i];
                 }
             }
 
+            std::vector<float> gains(gains_arr, gains_arr + n_gains);
             float total = compute_total_edits(aligned_score, gains, 1, mandatory_subs);
             if (!std::isnan(total) && (std::isnan(best_edits) || total < best_edits)) {
                 best_edits = total;
@@ -1436,22 +1554,28 @@ float PWMEditDistanceScorer::compute_with_one_indel(const char* seq_ptr, int seq
     return best_edits;
 }
 
-float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int seq_len, bool reverse)
+float PWMEditDistanceScorer::compute_with_two_indels(const int* bidx_arr, int seq_len, bool reverse)
 {
     const int L = m_pssm.length();
     if (L == 0) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
+    // Fall back to generic DP solver for motifs exceeding stack array limit
+    if (L > MAX_MOTIF_LEN_OPT) {
+        return compute_with_indels(bidx_arr, seq_len, reverse);
+    }
+
     float best_edits = std::numeric_limits<float>::quiet_NaN();
 
-    // get_base_score returns true if the position requires a mandatory substitution.
-    // For mandatory positions: out_score = col_max, out_gain = 0.
-    // Callers must track mandatory counts and add them to the indel base cost.
+    // get_base_score: direct table lookup using precomputed base indices.
+    // Returns true if the position requires a mandatory substitution.
     auto get_base_score = [&](int motif_pos, int raw_seq_idx,
                                float& out_score, float& out_gain) -> bool {
-        return get_aligned_base_score(seq_ptr, reverse, motif_pos, raw_seq_idx,
-                                      out_score, out_gain);
+        int bi = bidx_arr[raw_seq_idx];
+        out_score = m_score_table[motif_pos][bi];
+        out_gain = m_gain_table[motif_pos][bi];
+        return m_mandatory_table[motif_pos][bi];
     };
 
     // compute_total_edits: pass indels + mandatory_subs as the base fixed-edit count.
@@ -1470,8 +1594,8 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
     // ===== Case 1: No indel (W = L, k = 0) =====
     {
         double aligned_score = 0.0;
-        std::vector<float> gains;
-        gains.reserve(L);
+        float gains_arr[MAX_MOTIF_LEN_OPT];
+        int n_gains = 0;
         int mandatory_subs = 0;
 
         for (int i = 0; i < L; i++) {
@@ -1482,10 +1606,11 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
             if (mandatory) {
                 mandatory_subs++;
             } else if (gain > 1e-12f) {
-                gains.push_back(gain);
+                gains_arr[n_gains++] = gain;
             }
         }
 
+        std::vector<float> gains(gains_arr, gains_arr + n_gains);
         update_best(compute_total_edits(aligned_score, gains, 0, mandatory_subs));
 
         // Early return: 0 edits is optimal
@@ -1502,51 +1627,58 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
     if (L + 1 <= seq_len) {
         const int W = L + 1;
 
-        std::vector<float> prefix_scores(L), prefix_gains(L);
-        std::vector<float> suffix_scores(L), suffix_gains(L);
-        std::vector<bool> prefix_mandatory(L, false), suffix_mandatory(L, false);
+        float prefix_scores[MAX_MOTIF_LEN_OPT], prefix_gains_arr[MAX_MOTIF_LEN_OPT];
+        float suffix_scores[MAX_MOTIF_LEN_OPT], suffix_gains_arr[MAX_MOTIF_LEN_OPT];
+        bool prefix_mandatory[MAX_MOTIF_LEN_OPT], suffix_mandatory[MAX_MOTIF_LEN_OPT];
+        memset(prefix_mandatory, 0, sizeof(bool) * L);
+        memset(suffix_mandatory, 0, sizeof(bool) * L);
 
         for (int i = 0; i < L; i++) {
             int raw_prefix = reverse ? (W - 1 - i) : i;
             prefix_mandatory[i] = get_base_score(i, raw_prefix,
-                                                  prefix_scores[i], prefix_gains[i]);
+                                                  prefix_scores[i], prefix_gains_arr[i]);
 
             int raw_suffix = reverse ? (W - 1 - (i + 1)) : (i + 1);
             suffix_mandatory[i] = get_base_score(i, raw_suffix,
-                                                  suffix_scores[i], suffix_gains[i]);
+                                                  suffix_scores[i], suffix_gains_arr[i]);
         }
 
-        std::vector<double> prefix_cum(L + 1, 0.0);
-        std::vector<int> prefix_cum_mand(L + 1, 0);
+        double prefix_cum[MAX_MOTIF_LEN_OPT + 1];
+        int prefix_cum_mand[MAX_MOTIF_LEN_OPT + 1];
+        prefix_cum[0] = 0.0;
+        prefix_cum_mand[0] = 0;
         for (int i = 0; i < L; i++) {
             prefix_cum[i + 1] = prefix_cum[i] + static_cast<double>(prefix_scores[i]);
             prefix_cum_mand[i + 1] = prefix_cum_mand[i] + (prefix_mandatory[i] ? 1 : 0);
         }
 
-        std::vector<double> suffix_cum(L + 1, 0.0);
-        std::vector<int> suffix_cum_mand(L + 1, 0);
+        double suffix_cum[MAX_MOTIF_LEN_OPT + 1];
+        int suffix_cum_mand[MAX_MOTIF_LEN_OPT + 1];
+        suffix_cum[L] = 0.0;
+        suffix_cum_mand[L] = 0;
         for (int i = L - 1; i >= 0; i--) {
             suffix_cum[i] = suffix_cum[i + 1] + static_cast<double>(suffix_scores[i]);
             suffix_cum_mand[i] = suffix_cum_mand[i + 1] + (suffix_mandatory[i] ? 1 : 0);
         }
 
+        float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int d = 0; d <= L; d++) {
             double aligned_score = prefix_cum[d] + suffix_cum[d];
 
             if (!quick_deficit_check(aligned_score, 1, best_edits)) continue;
 
             int mandatory_subs = prefix_cum_mand[d] + suffix_cum_mand[d];
-            std::vector<float> gains;
-            gains.reserve(L);
+            int n_gains = 0;
             for (int i = 0; i < d; i++) {
-                if (!prefix_mandatory[i] && prefix_gains[i] > 1e-12f)
-                    gains.push_back(prefix_gains[i]);
+                if (!prefix_mandatory[i] && prefix_gains_arr[i] > 1e-12f)
+                    gains_arr[n_gains++] = prefix_gains_arr[i];
             }
             for (int i = d; i < L; i++) {
-                if (!suffix_mandatory[i] && suffix_gains[i] > 1e-12f)
-                    gains.push_back(suffix_gains[i]);
+                if (!suffix_mandatory[i] && suffix_gains_arr[i] > 1e-12f)
+                    gains_arr[n_gains++] = suffix_gains_arr[i];
             }
 
+            std::vector<float> gains(gains_arr, gains_arr + n_gains);
             update_best(compute_total_edits(aligned_score, gains, 1, mandatory_subs));
             if (!std::isnan(best_edits) && best_edits <= 1.0f) break;
         }
@@ -1557,53 +1689,60 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
     if (L >= 2 && (std::isnan(best_edits) || best_edits > 1.0f)) {
         const int W = L - 1;
 
-        std::vector<float> prefix_scores(L - 1), prefix_gains(L - 1);
-        std::vector<float> suffix_scores(L), suffix_gains(L);
-        std::vector<bool> prefix_mandatory(L - 1, false), suffix_mandatory(L, false);
+        float prefix_scores[MAX_MOTIF_LEN_OPT], prefix_gains_arr[MAX_MOTIF_LEN_OPT];
+        float suffix_scores[MAX_MOTIF_LEN_OPT], suffix_gains_arr[MAX_MOTIF_LEN_OPT];
+        bool prefix_mandatory[MAX_MOTIF_LEN_OPT], suffix_mandatory[MAX_MOTIF_LEN_OPT];
+        memset(prefix_mandatory, 0, sizeof(bool) * (L - 1));
+        memset(suffix_mandatory, 0, sizeof(bool) * L);
 
         for (int i = 0; i < L - 1; i++) {
             int raw_idx = reverse ? (W - 1 - i) : i;
             prefix_mandatory[i] = get_base_score(i, raw_idx,
-                                                  prefix_scores[i], prefix_gains[i]);
+                                                  prefix_scores[i], prefix_gains_arr[i]);
         }
 
         for (int i = 1; i < L; i++) {
             int raw_idx = reverse ? (W - 1 - (i - 1)) : (i - 1);
             suffix_mandatory[i] = get_base_score(i, raw_idx,
-                                                  suffix_scores[i], suffix_gains[i]);
+                                                  suffix_scores[i], suffix_gains_arr[i]);
         }
 
-        std::vector<double> prefix_cum(L, 0.0);
-        std::vector<int> prefix_cum_mand(L, 0);
+        double prefix_cum[MAX_MOTIF_LEN_OPT];
+        int prefix_cum_mand[MAX_MOTIF_LEN_OPT];
+        prefix_cum[0] = 0.0;
+        prefix_cum_mand[0] = 0;
         for (int i = 0; i < L - 1; i++) {
             prefix_cum[i + 1] = prefix_cum[i] + static_cast<double>(prefix_scores[i]);
             prefix_cum_mand[i + 1] = prefix_cum_mand[i] + (prefix_mandatory[i] ? 1 : 0);
         }
 
-        std::vector<double> suffix_cum(L, 0.0);
-        std::vector<int> suffix_cum_mand(L, 0);
+        double suffix_cum[MAX_MOTIF_LEN_OPT];
+        int suffix_cum_mand[MAX_MOTIF_LEN_OPT];
+        suffix_cum[L - 1] = 0.0;
+        suffix_cum_mand[L - 1] = 0;
         for (int i = L - 1; i >= 1; i--) {
             suffix_cum[i - 1] = suffix_cum[i] + static_cast<double>(suffix_scores[i]);
             suffix_cum_mand[i - 1] = suffix_cum_mand[i] + (suffix_mandatory[i] ? 1 : 0);
         }
 
+        float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int m = 0; m < L; m++) {
             double aligned_score = prefix_cum[m] + suffix_cum[m];
 
             if (!quick_deficit_check(aligned_score, 1, best_edits)) continue;
 
             int mandatory_subs = prefix_cum_mand[m] + suffix_cum_mand[m];
-            std::vector<float> gains;
-            gains.reserve(L - 1);
+            int n_gains = 0;
             for (int i = 0; i < m; i++) {
-                if (!prefix_mandatory[i] && prefix_gains[i] > 1e-12f)
-                    gains.push_back(prefix_gains[i]);
+                if (!prefix_mandatory[i] && prefix_gains_arr[i] > 1e-12f)
+                    gains_arr[n_gains++] = prefix_gains_arr[i];
             }
             for (int i = m + 1; i < L; i++) {
-                if (!suffix_mandatory[i] && suffix_gains[i] > 1e-12f)
-                    gains.push_back(suffix_gains[i]);
+                if (!suffix_mandatory[i] && suffix_gains_arr[i] > 1e-12f)
+                    gains_arr[n_gains++] = suffix_gains_arr[i];
             }
 
+            std::vector<float> gains(gains_arr, gains_arr + n_gains);
             update_best(compute_total_edits(aligned_score, gains, 1, mandatory_subs));
             if (!std::isnan(best_edits) && best_edits <= 1.0f) break;
         }
@@ -1627,10 +1766,13 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
     if (L + 2 <= seq_len && (std::isnan(best_edits) || best_edits > 2.0f)) {
         const int W = L + 2;
 
-        std::vector<float> scores0(L), gains0(L);
-        std::vector<float> scores1(L), gains1(L);
-        std::vector<float> scores2(L), gains2(L);
-        std::vector<bool> mand0(L, false), mand1(L, false), mand2(L, false);
+        float scores0[MAX_MOTIF_LEN_OPT], gains0[MAX_MOTIF_LEN_OPT];
+        float scores1[MAX_MOTIF_LEN_OPT], gains1[MAX_MOTIF_LEN_OPT];
+        float scores2[MAX_MOTIF_LEN_OPT], gains2[MAX_MOTIF_LEN_OPT];
+        bool mand0[MAX_MOTIF_LEN_OPT], mand1[MAX_MOTIF_LEN_OPT], mand2[MAX_MOTIF_LEN_OPT];
+        memset(mand0, 0, sizeof(bool) * L);
+        memset(mand1, 0, sizeof(bool) * L);
+        memset(mand2, 0, sizeof(bool) * L);
 
         for (int i = 0; i < L; i++) {
             int raw0 = reverse ? (W - 1 - i) : i;
@@ -1644,31 +1786,36 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         }
 
         // Prefix cumulative for config0
-        std::vector<double> cum0(L + 1, 0.0);
-        std::vector<int> cum0_mand(L + 1, 0);
+        double cum0[MAX_MOTIF_LEN_OPT + 1];
+        int cum0_mand[MAX_MOTIF_LEN_OPT + 1];
+        cum0[0] = 0.0;
+        cum0_mand[0] = 0;
         for (int i = 0; i < L; i++) {
             cum0[i + 1] = cum0[i] + static_cast<double>(scores0[i]);
             cum0_mand[i + 1] = cum0_mand[i] + (mand0[i] ? 1 : 0);
         }
 
         // Suffix cumulative for config2
-        std::vector<double> suf2(L + 1, 0.0);
-        std::vector<int> suf2_mand(L + 1, 0);
+        double suf2[MAX_MOTIF_LEN_OPT + 1];
+        int suf2_mand[MAX_MOTIF_LEN_OPT + 1];
+        suf2[L] = 0.0;
+        suf2_mand[L] = 0;
         for (int i = L - 1; i >= 0; i--) {
             suf2[i] = suf2[i + 1] + static_cast<double>(scores2[i]);
             suf2_mand[i] = suf2_mand[i + 1] + (mand2[i] ? 1 : 0);
         }
 
         // Prefix cumulative for config1 (middle segment)
-        std::vector<double> cum1(L + 1, 0.0);
-        std::vector<int> cum1_mand(L + 1, 0);
+        double cum1[MAX_MOTIF_LEN_OPT + 1];
+        int cum1_mand[MAX_MOTIF_LEN_OPT + 1];
+        cum1[0] = 0.0;
+        cum1_mand[0] = 0;
         for (int i = 0; i < L; i++) {
             cum1[i + 1] = cum1[i] + static_cast<double>(scores1[i]);
             cum1_mand[i + 1] = cum1_mand[i] + (mand1[i] ? 1 : 0);
         }
 
-        std::vector<float> gains_4;
-        gains_4.reserve(L);
+        float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int d1 = 0; d1 <= L + 1; d1++) {
             for (int d2 = d1 + 1; d2 <= L + 1; d2++) {
                 // Seg 1: motif[0..d1-1] config0
@@ -1696,18 +1843,19 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
                 if (!quick_deficit_check(aligned_score, 2, best_edits)) continue;
 
                 int mandatory_subs = mand1_count + mand2_count + mand3_count;
-                gains_4.clear();
+                int n_gains = 0;
                 for (int i = 0; i < d1; i++) {
-                    if (!mand0[i] && gains0[i] > 1e-12f) gains_4.push_back(gains0[i]);
+                    if (!mand0[i] && gains0[i] > 1e-12f) gains_arr[n_gains++] = gains0[i];
                 }
                 for (int i = d1; i < d2 - 1; i++) {
-                    if (!mand1[i] && gains1[i] > 1e-12f) gains_4.push_back(gains1[i]);
+                    if (!mand1[i] && gains1[i] > 1e-12f) gains_arr[n_gains++] = gains1[i];
                 }
                 for (int i = d2 - 1; i < L; i++) {
-                    if (!mand2[i] && gains2[i] > 1e-12f) gains_4.push_back(gains2[i]);
+                    if (!mand2[i] && gains2[i] > 1e-12f) gains_arr[n_gains++] = gains2[i];
                 }
 
-                update_best(compute_total_edits(aligned_score, gains_4, 2, mandatory_subs));
+                std::vector<float> gains(gains_arr, gains_arr + n_gains);
+                update_best(compute_total_edits(aligned_score, gains, 2, mandatory_subs));
                 if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
             }
             if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
@@ -1724,10 +1872,13 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
     if (L >= 3 && (std::isnan(best_edits) || best_edits > 2.0f)) {
         const int W = L - 2;
 
-        std::vector<float> scores0(L), gains0_v(L);
-        std::vector<float> scores1(L), gains1_v(L);
-        std::vector<float> scores2(L), gains2_v(L);
-        std::vector<bool> mand0(L, false), mand1(L, false), mand2(L, false);
+        float scores0[MAX_MOTIF_LEN_OPT], gains0_v[MAX_MOTIF_LEN_OPT];
+        float scores1[MAX_MOTIF_LEN_OPT], gains1_v[MAX_MOTIF_LEN_OPT];
+        float scores2[MAX_MOTIF_LEN_OPT], gains2_v[MAX_MOTIF_LEN_OPT];
+        bool mand0[MAX_MOTIF_LEN_OPT], mand1[MAX_MOTIF_LEN_OPT], mand2[MAX_MOTIF_LEN_OPT];
+        memset(mand0, 0, sizeof(bool) * L);
+        memset(mand1, 0, sizeof(bool) * L);
+        memset(mand2, 0, sizeof(bool) * L);
 
         for (int i = 0; i < L; i++) {
             if (i < W) {
@@ -1745,16 +1896,20 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         }
 
         // Prefix cumulative for config0
-        std::vector<double> cum0(L + 1, 0.0);
-        std::vector<int> cum0_mand(L + 1, 0);
+        double cum0[MAX_MOTIF_LEN_OPT + 1];
+        int cum0_mand[MAX_MOTIF_LEN_OPT + 1];
+        cum0[0] = 0.0;
+        cum0_mand[0] = 0;
         for (int i = 0; i < std::min(L, W); i++) {
             cum0[i + 1] = cum0[i] + static_cast<double>(scores0[i]);
             cum0_mand[i + 1] = cum0_mand[i] + (mand0[i] ? 1 : 0);
         }
 
         // Suffix cumulative for config2
-        std::vector<double> suf2(L + 1, 0.0);
-        std::vector<int> suf2_mand(L + 1, 0);
+        double suf2[MAX_MOTIF_LEN_OPT + 1];
+        int suf2_mand[MAX_MOTIF_LEN_OPT + 1];
+        suf2[L] = 0.0;
+        suf2_mand[L] = 0;
         for (int i = L - 1; i >= 2; i--) {
             if (i - 2 < W) {
                 suf2[i] = suf2[i + 1] + static_cast<double>(scores2[i]);
@@ -1766,8 +1921,13 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         }
 
         // Prefix cumulative for config1
-        std::vector<double> cum1(L + 1, 0.0);
-        std::vector<int> cum1_mand(L + 1, 0);
+        double cum1[MAX_MOTIF_LEN_OPT + 1];
+        int cum1_mand[MAX_MOTIF_LEN_OPT + 1];
+        cum1[0] = 0.0;
+        cum1_mand[0] = 0;
+        // cum1 starts accumulating from index 1
+        cum1[1] = 0.0;
+        cum1_mand[1] = 0;
         for (int i = 1; i < L; i++) {
             if (i - 1 < W) {
                 cum1[i + 1] = cum1[i] + static_cast<double>(scores1[i]);
@@ -1778,8 +1938,7 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
             }
         }
 
-        std::vector<float> gains_5;
-        gains_5.reserve(L - 2);
+        float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int m1 = 0; m1 < L; m1++) {
             for (int m2 = m1 + 1; m2 < L; m2++) {
                 double seg1 = cum0[m1];
@@ -1804,18 +1963,19 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
                 if (!quick_deficit_check(aligned_score, 2, best_edits)) continue;
 
                 int mandatory_subs = mand1_count + mand2_count + mand3_count;
-                gains_5.clear();
+                int n_gains = 0;
                 for (int i = 0; i < m1; i++) {
-                    if (!mand0[i] && gains0_v[i] > 1e-12f) gains_5.push_back(gains0_v[i]);
+                    if (!mand0[i] && gains0_v[i] > 1e-12f) gains_arr[n_gains++] = gains0_v[i];
                 }
                 for (int i = m1 + 1; i < m2; i++) {
-                    if (!mand1[i] && gains1_v[i] > 1e-12f) gains_5.push_back(gains1_v[i]);
+                    if (!mand1[i] && gains1_v[i] > 1e-12f) gains_arr[n_gains++] = gains1_v[i];
                 }
                 for (int i = m2 + 1; i < L; i++) {
-                    if (!mand2[i] && gains2_v[i] > 1e-12f) gains_5.push_back(gains2_v[i]);
+                    if (!mand2[i] && gains2_v[i] > 1e-12f) gains_arr[n_gains++] = gains2_v[i];
                 }
 
-                update_best(compute_total_edits(aligned_score, gains_5, 2, mandatory_subs));
+                std::vector<float> gains(gains_arr, gains_arr + n_gains);
+                update_best(compute_total_edits(aligned_score, gains, 2, mandatory_subs));
                 if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
             }
             if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
@@ -1839,10 +1999,13 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
     if (std::isnan(best_edits) || best_edits > 2.0f) {
         const int W = L;
 
-        std::vector<float> scores_ns(L), gains_ns(L);   // no shift
-        std::vector<float> scores_sp1(L), gains_sp1(L); // seq shifted +1
-        std::vector<float> scores_sm1(L), gains_sm1(L); // seq shifted -1
-        std::vector<bool> mand_ns(L, false), mand_sp1(L, false), mand_sm1(L, false);
+        float scores_ns[MAX_MOTIF_LEN_OPT], gains_ns[MAX_MOTIF_LEN_OPT];   // no shift
+        float scores_sp1[MAX_MOTIF_LEN_OPT], gains_sp1[MAX_MOTIF_LEN_OPT]; // seq shifted +1
+        float scores_sm1[MAX_MOTIF_LEN_OPT], gains_sm1[MAX_MOTIF_LEN_OPT]; // seq shifted -1
+        bool mand_ns[MAX_MOTIF_LEN_OPT], mand_sp1[MAX_MOTIF_LEN_OPT], mand_sm1[MAX_MOTIF_LEN_OPT];
+        memset(mand_ns, 0, sizeof(bool) * L);
+        memset(mand_sp1, 0, sizeof(bool) * L);
+        memset(mand_sm1, 0, sizeof(bool) * L);
 
         for (int i = 0; i < L; i++) {
             int raw_ns = reverse ? (W - 1 - i) : i;
@@ -1860,39 +2023,48 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
         }
 
         // Prefix sums for no-shift
-        std::vector<double> cum_ns(L + 1, 0.0);
-        std::vector<int> cum_ns_mand(L + 1, 0);
+        double cum_ns[MAX_MOTIF_LEN_OPT + 1];
+        int cum_ns_mand[MAX_MOTIF_LEN_OPT + 1];
+        cum_ns[0] = 0.0;
+        cum_ns_mand[0] = 0;
         for (int i = 0; i < L; i++) {
             cum_ns[i + 1] = cum_ns[i] + static_cast<double>(scores_ns[i]);
             cum_ns_mand[i + 1] = cum_ns_mand[i] + (mand_ns[i] ? 1 : 0);
         }
 
         // Prefix sums for seq+1 shift
-        std::vector<double> cum_sp1(L + 1, 0.0);
-        std::vector<int> cum_sp1_mand(L + 1, 0);
+        double cum_sp1[MAX_MOTIF_LEN_OPT + 1];
+        int cum_sp1_mand[MAX_MOTIF_LEN_OPT + 1];
+        cum_sp1[0] = 0.0;
+        cum_sp1_mand[0] = 0;
         for (int i = 0; i < L - 1; i++) {
             cum_sp1[i + 1] = cum_sp1[i] + static_cast<double>(scores_sp1[i]);
             cum_sp1_mand[i + 1] = cum_sp1_mand[i] + (mand_sp1[i] ? 1 : 0);
         }
 
         // Prefix sums for seq-1 shift (valid for i >= 1)
-        std::vector<double> cum_sm1(L + 1, 0.0);
-        std::vector<int> cum_sm1_mand(L + 1, 0);
+        double cum_sm1[MAX_MOTIF_LEN_OPT + 1];
+        int cum_sm1_mand[MAX_MOTIF_LEN_OPT + 1];
+        cum_sm1[0] = 0.0;
+        cum_sm1_mand[0] = 0;
+        cum_sm1[1] = 0.0;
+        cum_sm1_mand[1] = 0;
         for (int i = 1; i < L; i++) {
             cum_sm1[i + 1] = cum_sm1[i] + static_cast<double>(scores_sm1[i]);
             cum_sm1_mand[i + 1] = cum_sm1_mand[i] + (mand_sm1[i] ? 1 : 0);
         }
 
         // Suffix sums for no-shift
-        std::vector<double> suf_ns(L + 1, 0.0);
-        std::vector<int> suf_ns_mand(L + 1, 0);
+        double suf_ns[MAX_MOTIF_LEN_OPT + 1];
+        int suf_ns_mand[MAX_MOTIF_LEN_OPT + 1];
+        suf_ns[L] = 0.0;
+        suf_ns_mand[L] = 0;
         for (int i = L - 1; i >= 0; i--) {
             suf_ns[i] = suf_ns[i + 1] + static_cast<double>(scores_ns[i]);
             suf_ns_mand[i] = suf_ns_mand[i + 1] + (mand_ns[i] ? 1 : 0);
         }
 
-        std::vector<float> gains_6;
-        gains_6.reserve(L - 1);
+        float gains_arr[MAX_MOTIF_LEN_OPT];
         for (int d = 0; d < L; d++) {
             for (int m = 0; m < L; m++) {
                 // d == m is always dominated by the no-indel case (Case 1):
@@ -1922,30 +2094,31 @@ float PWMEditDistanceScorer::compute_with_two_indels(const char* seq_ptr, int se
                 if (!quick_deficit_check(aligned_score, 2, best_edits)) continue;
 
                 // Collect gains only for promising candidates (skip mandatory positions)
-                gains_6.clear();
+                int n_gains = 0;
                 if (d < m) {
                     for (int i = 0; i < d; i++) {
-                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
+                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_arr[n_gains++] = gains_ns[i];
                     }
                     for (int i = d; i < m; i++) {
-                        if (!mand_sp1[i] && gains_sp1[i] > 1e-12f) gains_6.push_back(gains_sp1[i]);
+                        if (!mand_sp1[i] && gains_sp1[i] > 1e-12f) gains_arr[n_gains++] = gains_sp1[i];
                     }
                     for (int i = m + 1; i < L; i++) {
-                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
+                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_arr[n_gains++] = gains_ns[i];
                     }
                 } else {
                     for (int i = 0; i < m; i++) {
-                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
+                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_arr[n_gains++] = gains_ns[i];
                     }
                     for (int i = m + 1; i <= d; i++) {
-                        if (!mand_sm1[i] && gains_sm1[i] > 1e-12f) gains_6.push_back(gains_sm1[i]);
+                        if (!mand_sm1[i] && gains_sm1[i] > 1e-12f) gains_arr[n_gains++] = gains_sm1[i];
                     }
                     for (int i = d + 1; i < L; i++) {
-                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_6.push_back(gains_ns[i]);
+                        if (!mand_ns[i] && gains_ns[i] > 1e-12f) gains_arr[n_gains++] = gains_ns[i];
                     }
                 }
 
-                update_best(compute_total_edits(aligned_score, gains_6, 2, mandatory_subs));
+                std::vector<float> gains(gains_arr, gains_arr + n_gains);
+                update_best(compute_total_edits(aligned_score, gains, 2, mandatory_subs));
                 if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
             }
             if (!std::isnan(best_edits) && best_edits <= 2.0f) break;
