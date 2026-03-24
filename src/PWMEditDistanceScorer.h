@@ -104,9 +104,8 @@ private:
     std::vector<float> m_gain_values;        // V[1..M] - sorted descending
     std::vector<std::vector<uint8_t>> m_bin_index;  // bin[i][b] - lookup table
     float m_S_max;                           // sum of column maxima
-
-    // Precomputed tables for reachability pre-filter (indel solvers)
-    std::vector<float> m_sorted_col_max_asc; // m_col_max_scores sorted ascending (for insertion-family bound)
+    std::vector<float> m_max_suffix_score;   // m_max_suffix_score[i] = sum of col maxima from i to L-1
+    std::vector<float> m_max_gain_budget;    // m_max_gain_budget[k] = max total gain from k substitutions (per-PSSM)
 
     // Reusable count vector for compute_exact (PERF-1: touched-list cleanup)
     std::vector<int> m_exact_count;
@@ -126,15 +125,28 @@ private:
 
     /**
      * Get the effective PSSM score and gain for a motif position aligned with a sequence base.
-     * Handles reverse complement and unknown bases (index==4 -> minimum score).
+     * Handles reverse complement, unknown bases (index==4), and log-zero PSSM entries.
+     *
+     * When the base has a log-zero (or -Inf) probability, this position is a mandatory
+     * substitution: it must be edited regardless of budget. In that case:
+     *   out_score = col_max  (score assuming the mandatory substitution is applied)
+     *   out_gain  = 0.0f     (no additional gain available from this position)
+     *   return value = true  (this position requires a mandatory edit)
+     *
+     * Normal case (base has finite, non-logzero probability):
+     *   out_score = PSSM score for this base
+     *   out_gain  = col_max - out_score
+     *   return value = false
+     *
      * @param seq_ptr Pointer to sequence data
      * @param reverse Whether to reverse complement
      * @param motif_pos Motif column index
      * @param raw_seq_idx Index into seq_ptr for the aligned base
-     * @param out_score Output: PSSM score at this alignment
-     * @param out_gain Output: col_max - out_score (substitution gain)
+     * @param out_score Output: PSSM score at this alignment (col_max for mandatory edits)
+     * @param out_gain Output: col_max - out_score (0 for mandatory edits)
+     * @return true if this position requires a mandatory substitution
      */
-    inline void get_aligned_base_score(const char* seq_ptr, bool reverse,
+    inline bool get_aligned_base_score(const char* seq_ptr, bool reverse,
                                        int motif_pos, int raw_seq_idx,
                                        float& out_score, float& out_gain) const;
 
@@ -151,6 +163,14 @@ private:
      */
     float compute_min_edits_from_gains(double aligned_score, std::vector<float>& gains,
                                        int indels, float best_edits_so_far) const;
+
+    /**
+     * Quick O(1) deficit check: can this alignment family possibly beat best_edits_so_far?
+     * Uses precomputed per-PSSM max gain budget to avoid expensive gains collection + sorting.
+     * Call BEFORE collecting gains to skip hopeless candidates early.
+     * @return true if the candidate is worth evaluating (might produce a result)
+     */
+    bool quick_deficit_check(double aligned_score, int indels, float best_edits_so_far) const;
 
     /**
      * Compute PWM log-likelihood for a window (used for score.min filtering)
@@ -211,15 +231,22 @@ private:
     float compute_with_two_indels(const char* seq_ptr, int seq_len, bool reverse);
 
     /**
-     * Compute a lower bound on minimum edits for a window when indels are allowed.
-     * Uses the no-indel raw score and precomputed column maxima to determine if
-     * any alignment family can possibly produce a result within the m_max_edits budget.
-     * @param window_start Pointer to the window start
-     * @param seq_avail Number of sequence bases available
-     * @param reverse Whether to reverse complement
-     * @return Lower bound on minimum edits, or INT_MAX if provably unreachable
+     * Banded DP early-abandon filter for indel-enabled windows.
+     * Runs a small stack-allocated banded Needleman-Wunsch DP row-by-row,
+     * processing all window widths W in [L-D, L+D] simultaneously.
+     * After each row, checks whether the best achievable score (current row max
+     * plus max suffix score for remaining rows) can possibly reach the threshold.
+     * If not, ALL alignment families are provably unreachable — skip the window.
+     *
+     * This is a PURE OPTIMIZATION — it never changes results. It returns true
+     * (skip) ONLY when no alignment can possibly reach the threshold.
+     *
+     * @param seq_ptr Pointer to start of sequence window
+     * @param seq_len Total number of sequence bases available from seq_ptr
+     * @param reverse Whether to reverse complement the sequence
+     * @return true if the window should be SKIPPED (provably unreachable)
      */
-    int compute_indel_lower_bound(const char* window_start, int seq_avail, bool reverse);
+    bool early_abandon_banded_dp(const char* seq_ptr, int seq_len, bool reverse) const;
 
     /**
      * Convert base character to index (A=0, C=1, G=2, T=3)

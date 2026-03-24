@@ -195,6 +195,11 @@ WindowResult compute_window_edits_detailed(
 
     // Already above threshold (after accounting for mandatory edits)?
     if (deficit <= 0.0) {
+        // Still apply max_edits cap: mandatory-only result must respect the budget.
+        if (max_edits >= 0 && mandatory_edits > max_edits) {
+            result.n_edits = -1;
+            return result;
+        }
         result.n_edits = mandatory_edits;
         // score_after = adjusted_score (which has mandatory edits applied)
         result.score_after = static_cast<float>(adjusted_score);
