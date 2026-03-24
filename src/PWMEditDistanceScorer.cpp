@@ -187,39 +187,24 @@ void PWMEditDistanceScorer::precompute_tables()
                 blk.num_entries = 1 << (2 * block_len);
                 blk.viable.assign(blk.num_entries, false);
 
-                // Compute the maximum possible score from columns OUTSIDE this block.
-                // This includes: col_max for each outside column (assuming optimal substitution).
-                // The block provides an exact match (no edits), and the remaining K edits
-                // can be used as substitutions on the other columns.
-                double outside_max = 0.0;
-                for (int j = 0; j < L; j++) {
-                    if (j < block_start || j >= block_end) {
-                        outside_max += static_cast<double>(m_col_max_scores[j]);
-                    }
-                }
-                // Block threshold: the block score must be at least
-                //   threshold - outside_max
-                // because even with all other columns at their maximum (via substitutions),
-                // the block score determines the lower bound.
-                double block_threshold = static_cast<double>(m_threshold) - outside_max;
-
                 // Enumerate all 4^B possible B-mers and mark viable ones.
-                // A B-mer is viable if:
-                // 1. Every position has a non-mandatory PSSM score
-                // 2. The block score meets the block_threshold
+                // A B-mer is viable if every position has a non-mandatory PSSM score.
+                // The pigeonhole guarantee is purely structural: with K edits total
+                // and (K+1) blocks, at least one block must have 0 edits.
+                //
+                // NOTE: We intentionally do NOT add a score-based threshold here.
+                // A score threshold (block_score + outside_max >= T) appears sound
+                // when the block matches at shift 0 (no indels consumed), but when
+                // the block matches at a nonzero shift (requiring indels), the remaining
+                // edit budget for outside columns is reduced. Computing a correct
+                // shift-aware threshold would require per-shift viable tables.
                 for (int h = 0; h < blk.num_entries; h++) {
                     bool ok = true;
-                    double block_score = 0.0;
-                    for (int j = 0; j < block_len; j++) {
+                    for (int j = 0; j < block_len && ok; j++) {
                         int base = (h >> (2 * j)) & 3;
                         if (m_mandatory_table[block_start + j][base]) {
                             ok = false;
-                            break;
                         }
-                        block_score += static_cast<double>(m_score_table[block_start + j][base]);
-                    }
-                    if (ok && block_score < block_threshold) {
-                        ok = false;
                     }
                     blk.viable[h] = ok;
                 }
