@@ -495,14 +495,10 @@ float PWMEditDistanceScorer::encode_position(size_t index,
 
 float PWMEditDistanceScorer::compute_window_edits(const char* window_start, int seq_avail, bool reverse)
 {
-    // When indels are enabled, use specialized or generic DP
-    if (m_max_indels > 0) {
-        // Banded DP early-abandon: skip if ALL alignment families are provably unreachable.
-        // Uses col_max for match scores so that substitution potential is accounted for.
-        if (early_abandon_banded_dp(window_start, seq_avail, reverse)) {
-            return std::numeric_limits<float>::quiet_NaN();
-        }
-    }
+    // When indels are enabled, use specialized solvers
+    // Note: early_abandon_banded_dp() was removed from the hot path because
+    // its upper bound (using col_max for all match scores) is too loose to
+    // fire on real genomic data, making it pure overhead (~40% of D=2 runtime).
     if (m_max_indels == 1) {
         return compute_with_one_indel(window_start, seq_avail, reverse);
     } else if (m_max_indels == 2) {
