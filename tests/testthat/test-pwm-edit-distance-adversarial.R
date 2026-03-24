@@ -11,8 +11,8 @@ create_isolated_test_db()
 #'       Run NW-style DP to find optimal alignment(s), then greedily count subs.
 #' Returns minimum total edits (indels + subs) across all windows and strands.
 bruteforce_pwm_edit_distance_with_indels <- function(seq, pssm, threshold,
-                                                      max_indels, max_edits = NULL,
-                                                      bidirect = FALSE, prior = 0) {
+                                                     max_indels, max_edits = NULL,
+                                                     bidirect = FALSE, prior = 0) {
     motif_len <- nrow(pssm)
     S <- nchar(seq)
 
@@ -30,7 +30,9 @@ bruteforce_pwm_edit_distance_with_indels <- function(seq, pssm, threshold,
         D <- max_indels
 
         # Guard: if subseq is shorter than expected, skip
-        if (W < max(1, L - D)) return(NA_real_)
+        if (W < max(1, L - D)) {
+            return(NA_real_)
+        }
 
         # Get sequence bases
         bases <- strsplit(subseq_str, "")[[1]]
@@ -286,7 +288,7 @@ test_that("adversarial: extreme PSSM with huge gain difference at deficit bounda
         0.97, 0.01, 0.01, 0.01, # Strong A
         0.01, 0.97, 0.01, 0.01, # Strong C
         0.01, 0.01, 0.97, 0.01, # Strong G
-        0.01, 0.01, 0.01, 0.97  # Strong T
+        0.01, 0.01, 0.01, 0.97 # Strong T
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -347,7 +349,7 @@ test_that("adversarial: prior=0 with zero-probability bases creates mandatory ed
     pssm <- matrix(c(
         1.0, 0.0, 0.0, 0.0, # Only A
         0.0, 1.0, 0.0, 0.0, # Only C
-        0.0, 0.0, 1.0, 0.0  # Only G
+        0.0, 0.0, 1.0, 0.0 # Only G
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -476,7 +478,7 @@ test_that("adversarial: L=2 motif with max_indels=1", {
 
     pssm <- matrix(c(
         1.0, 0.0, 0.0, 0.0, # Only A
-        0.0, 1.0, 0.0, 0.0  # Only C
+        0.0, 1.0, 0.0, 0.0 # Only C
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -526,7 +528,8 @@ test_that("adversarial: L=2 motif with max_indels=1", {
         gen_min <- min(r_gen$n_edits, na.rm = TRUE)
         if (is.finite(opt_min) && is.finite(gen_min)) {
             expect_true(gen_min <= opt_min,
-                info = sprintf("L=2 seq='%s': generic(max_indels=3)=%d should be <= opt(max_indels=1)=%d",
+                info = sprintf(
+                    "L=2 seq='%s': generic(max_indels=3)=%d should be <= opt(max_indels=1)=%d",
                     s, gen_min, opt_min
                 )
             )
@@ -740,7 +743,7 @@ test_that("adversarial: near-threshold edge cases for substitution counting", {
         0.5, 0.25, 0.125, 0.125, # A preferred, moderate gains
         0.5, 0.25, 0.125, 0.125, # Same
         0.5, 0.25, 0.125, 0.125, # Same
-        0.5, 0.25, 0.125, 0.125  # Same
+        0.5, 0.25, 0.125, 0.125 # Same
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -810,7 +813,7 @@ test_that("adversarial: reverse complement gives different edit count than forwa
     # Asymmetric PSSM where forward and reverse give different scores
     pssm <- matrix(c(
         0.97, 0.01, 0.01, 0.01, # Strong A
-        0.01, 0.01, 0.97, 0.01  # Strong G
+        0.01, 0.01, 0.97, 0.01 # Strong G
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -944,7 +947,8 @@ test_that("adversarial: reverse complement with indels, specialized vs generic",
         # Bidirectional should be min of fwd and rev
         if (!is.na(spec_fwd_min) && !is.na(spec_rev_min) && !is.na(spec_bidi_min)) {
             expect_equal(spec_bidi_min, min(spec_fwd_min, spec_rev_min),
-                info = sprintf("seq='%s': spec bidi=%d should be min(fwd=%d, rev=%d)",
+                info = sprintf(
+                    "seq='%s': spec bidi=%d should be min(fwd=%d, rev=%d)",
                     s, spec_bidi_min, spec_fwd_min, spec_rev_min
                 )
             )
@@ -1789,7 +1793,7 @@ test_that("adversarial: BUG specialized indel solvers with -Inf base scores (vtr
         1.0, 0.0, 0.0, 0.0, # Only A
         0.0, 1.0, 0.0, 0.0, # Only C
         0.0, 0.0, 1.0, 0.0, # Only G
-        0.0, 0.0, 0.0, 1.0  # Only T
+        0.0, 0.0, 0.0, 1.0 # Only T
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -1806,24 +1810,29 @@ test_that("adversarial: BUG specialized indel solvers with -Inf base scores (vtr
     expect_equal(seq_at, "TTTT")
 
     # Create vtracks for all indel modes
-    gvtrack.create("ed_no_indel", NULL, func = "pwm.edit_distance",
+    gvtrack.create("ed_no_indel", NULL,
+        func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold, bidirect = FALSE, extend = FALSE, prior = 0
     )
-    gvtrack.create("ed_indel1", NULL, func = "pwm.edit_distance",
+    gvtrack.create("ed_indel1", NULL,
+        func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold, max_indels = 1L,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
-    gvtrack.create("ed_indel2", NULL, func = "pwm.edit_distance",
+    gvtrack.create("ed_indel2", NULL,
+        func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold, max_indels = 2L,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
-    gvtrack.create("ed_indel3", NULL, func = "pwm.edit_distance",
+    gvtrack.create("ed_indel3", NULL,
+        func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold, max_indels = 3L,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
 
     result <- gextract(c("ed_no_indel", "ed_indel1", "ed_indel2", "ed_indel3"),
-        test_interval, iterator = test_interval
+        test_interval,
+        iterator = test_interval
     )
 
     # TTTT with identity PSSM (prior=0):
@@ -1881,7 +1890,7 @@ test_that("adversarial: BUG gseq.pwm_edits ignores max_edits for mandatory edits
     pssm <- matrix(c(
         1.0, 0.0, 0.0, 0.0, # Only A
         0.0, 1.0, 0.0, 0.0, # Only C
-        0.0, 0.0, 1.0, 0.0  # Only G
+        0.0, 0.0, 1.0, 0.0 # Only G
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
