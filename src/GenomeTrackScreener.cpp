@@ -417,8 +417,14 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 					}
 				}
 
-				if (!out_intervals1d.empty()) 
+				if (!out_intervals1d.empty()) {
+					// Merge abutting intervals at sub-chromosome split boundaries.
+					// Children coalesce adjacent matching bins independently, so intervals
+					// that span a split point come back as two touching intervals.
+					if (allow_range_split)
+						out_intervals1d.unify_overlaps(true);
 					rreturn(iu.convert_intervs(&out_intervals1d));
+				}
 
 				if (!out_intervals2d.empty()) 
 					rreturn(iu.convert_intervs(&out_intervals2d));

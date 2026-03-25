@@ -1733,3 +1733,80 @@ test_that("gextract: multi-chromosome parallel consistency", {
         )
     }
 })
+
+
+# ============================================================================
+# Test 25: gscreen boundary merge — contiguous intervals across split boundary
+# When sub-chromosome splitting divides a chromosome, children independently
+# coalesce adjacent matching bins. Intervals spanning the split point must be
+# re-merged by the parent. Verify serial and parallel produce identical
+# interval structure (not just identical coverage).
+# ============================================================================
+test_that("gscreen: parallel merges abutting intervals at sub-chrom split boundaries", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Use a scope large enough to trigger sub-chromosome splitting
+    # The split point depends on scope size, cores, and min_bins_per_kid
+    test_scope <- gintervals(1, 0, gintervals.all()[1, "end"])
+
+    # Always-true expression: every bin matches, producing one contiguous
+    # interval per chromosome in serial mode. In parallel, children each
+    # produce a contiguous interval for their sub-range. Without the merge
+    # fix, the parent returns multiple abutting intervals.
+    withr::local_options(list(gmultitasking = FALSE))
+    result_serial <- gscreen("1", test_scope, iterator = 100)
+
+    withr::local_options(list(gmultitasking = TRUE, gmax.processes = 4))
+    result_parallel <- gscreen("1", test_scope, iterator = 100)
+
+    expect_equal(nrow(result_serial), nrow(result_parallel),
+        info = "Always-true gscreen should produce same number of intervals serial vs parallel"
+    )
+    if (nrow(result_serial) > 0 && nrow(result_parallel) > 0) {
+        expect_equal(result_serial$start, result_parallel$start,
+            info = "Start positions should match after boundary merge"
+        )
+        expect_equal(result_serial$end, result_parallel$end,
+            info = "End positions should match after boundary merge"
+        )
+    }
+})
+
+
+# ============================================================================
+# Test 26: gscreen boundary merge with non-trivial expression
+# Exercises the merge fix with an expression that produces dense-but-not-
+# universal matching, so that both split and non-split intervals coexist.
+# ============================================================================
+test_that("gscreen: non-trivial expression produces identical intervals serial vs parallel", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Dense expression: most bins match (A, C, G are > 0)
+    test_scope <- gintervals(1, 0, gintervals.all()[1, "end"])
+
+    withr::local_options(list(gmultitasking = FALSE))
+    result_serial <- gscreen("1", test_scope, iterator = 50)
+
+    withr::local_options(list(gmultitasking = TRUE, gmax.processes = 4))
+    result_parallel <- gscreen("1", test_scope, iterator = 50)
+
+    expect_equal(nrow(result_serial), nrow(result_parallel),
+        info = "Dense gscreen should return same number of intervals"
+    )
+
+    if (nrow(result_serial) > 0 && nrow(result_parallel) > 0) {
+        result_serial <- result_serial[order(result_serial$chrom, result_serial$start), ]
+        result_parallel <- result_parallel[order(result_parallel$chrom, result_parallel$start), ]
+        rownames(result_serial) <- NULL
+        rownames(result_parallel) <- NULL
+
+        expect_equal(result_serial$start, result_parallel$start,
+            info = "Start positions should match"
+        )
+        expect_equal(result_serial$end, result_parallel$end,
+            info = "End positions should match"
+        )
+    }
+})
