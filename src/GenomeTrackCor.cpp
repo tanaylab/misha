@@ -408,7 +408,8 @@ SEXP gtrackcor_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_poli
         intervals2d->sort();
         intervals2d->verify_no_overlaps(iu.get_chromkey());
 
-        if (!iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band))
+        bool allow_range_split = !Rf_isNull(_iterator_policy);
+        if (!iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_range_split))
             rreturn(R_NilValue);
 
         if (iu.distribute_task(num_pairs * sizeof(CorSummary), 0)) { // child process

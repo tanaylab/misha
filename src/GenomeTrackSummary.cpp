@@ -190,7 +190,8 @@ SEXP gtracksummary_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy,
 
 		IntervalSummary summary;
 
-		if (!iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band))
+		bool allow_range_split = !Rf_isNull(_iterator_policy);
+		if (!iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band, allow_range_split))
 			rreturn(R_NilValue);
 
 		if (iu.distribute_task(sizeof(summary), 0)) { // child process
