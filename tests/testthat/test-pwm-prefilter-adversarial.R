@@ -35,7 +35,7 @@ test_that("prefilter: PSSM with log-zero in every column, exact-match still foun
         0.00, 0.50, 0.25, 0.25, # col 5: A is forbidden
         0.25, 0.00, 0.50, 0.25, # col 6: C is forbidden
         0.25, 0.25, 0.00, 0.50, # col 7: G is forbidden
-        0.50, 0.25, 0.00, 0.25  # col 8: G is forbidden
+        0.50, 0.25, 0.00, 0.25 # col 8: G is forbidden
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -222,7 +222,7 @@ test_that("prefilter: high-IC columns at edges, low-IC in middle", {
         # Block 3 (high IC)
         0.01, 0.01, 0.01, 0.97, # T
         0.01, 0.01, 0.97, 0.01, # G
-        0.97, 0.01, 0.01, 0.01  # A
+        0.97, 0.01, 0.01, 0.01 # A
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -305,7 +305,7 @@ test_that("prefilter: N-bases at strategic positions do not cause false rejectio
         "ACGTANGTA", # N in block 1, pos 5
         "ACGTACNTA", # N in block 2, pos 6
         "ACGTACGNA", # N in block 2, pos 7
-        "ACGTACGTN"  # N in block 2, pos 8
+        "ACGTACGTN" # N in block 2, pos 8
     )
 
     for (s in seqs_with_N) {
@@ -353,7 +353,7 @@ test_that("prefilter: indels + pigeonhole, 2 indels in same block region", {
         0.01, 0.97, 0.01, 0.01, # C
         0.01, 0.01, 0.97, 0.01, # G
         0.01, 0.01, 0.01, 0.97, # T
-        0.97, 0.01, 0.01, 0.01  # A
+        0.97, 0.01, 0.01, 0.01 # A
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -365,13 +365,13 @@ test_that("prefilter: indels + pigeonhole, 2 indels in same block region", {
     # "ACGXXTACGTA" with XX inserted between positions 2 and 3
     # Optimal: delete X, X -> 2 indels, 0 subs = 2 edits total
     seqs <- c(
-        "ACGGGTACGTA",  # 2 extra G's -> delete 2 = 2 edits (W=L+2)
-        "AACGTACGTA",   # 1 extra A at start -> delete 1 = 1 edit
-        "ACGTACGTAA",   # 1 extra A at end -> delete 1 = 1 edit
-        "CGTACGTA",     # Missing first A -> insert 1 = 1 edit
-        "ACGTACGT",     # Missing last A -> insert 1 = 1 edit
-        "GTACGTA",      # Missing AC -> 2 insertions = 2 edits
-        "ACGTACGTACC"   # 2 extra at end -> 2 deletions = 2 edits
+        "ACGGGTACGTA", # 2 extra G's -> delete 2 = 2 edits (W=L+2)
+        "AACGTACGTA", # 1 extra A at start -> delete 1 = 1 edit
+        "ACGTACGTAA", # 1 extra A at end -> delete 1 = 1 edit
+        "CGTACGTA", # Missing first A -> insert 1 = 1 edit
+        "ACGTACGT", # Missing last A -> insert 1 = 1 edit
+        "GTACGTA", # Missing AC -> 2 insertions = 2 edits
+        "ACGTACGTACC" # 2 extra at end -> 2 deletions = 2 edits
     )
 
     for (s in seqs) {
@@ -423,7 +423,7 @@ test_that("prefilter: reverse complement hashing is correct", {
         0.01, 0.97, 0.01, 0.01, # C
         0.01, 0.01, 0.97, 0.01, # G
         0.01, 0.01, 0.01, 0.97, # T
-        0.97, 0.01, 0.01, 0.01  # A
+        0.97, 0.01, 0.01, 0.01 # A
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -588,7 +588,8 @@ test_that("prefilter: large-scale random differential test (subs only)", {
         threshold <- sum(col_max) - 2.0 * K
 
         # Generate test sequences
-        seqs <- replicate(n_seqs_per,
+        seqs <- replicate(
+            n_seqs_per,
             paste0(sample(c("A", "C", "G", "T"), L, replace = TRUE), collapse = "")
         )
 
@@ -661,7 +662,8 @@ test_that("prefilter: large-scale random differential test (with indels)", {
         # Generate sequences of varying lengths (L-D to L+D)
         seqs <- character(0)
         for (len in max(1, L - D):(L + D)) {
-            seqs <- c(seqs, replicate(n_seqs_per %/% 5 + 1,
+            seqs <- c(seqs, replicate(
+                n_seqs_per %/% 5 + 1,
                 paste0(sample(c("A", "C", "G", "T"), len, replace = TRUE), collapse = "")
             ))
         }
@@ -736,7 +738,8 @@ test_that("prefilter: bidirectional + indels stress test", {
 
     threshold <- -5.0
 
-    seqs <- replicate(40,
+    seqs <- replicate(
+        40,
         paste0(sample(c("A", "C", "G", "T"), sample((L - D):(L + D), 1), replace = TRUE), collapse = "")
     )
 
@@ -1046,7 +1049,7 @@ test_that("prefilter: mandatory edits consuming entire budget", {
         0.25, 0.25, 0.25, 0.25, # Uniform
         0.25, 0.25, 0.25, 0.25, # Uniform
         0.25, 0.25, 0.25, 0.25, # Uniform
-        0.25, 0.25, 0.25, 0.25  # Uniform
+        0.25, 0.25, 0.25, 0.25 # Uniform
     ), ncol = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
@@ -1113,14 +1116,14 @@ test_that("specialized max_indels=1 vs generic: boundary deletion/insertion posi
     # Insertion at position 0: skip motif[0]
     # Insertion at position L-1: skip motif[L-1]
     boundary_seqs <- c(
-        "XACGTACGTAC",   # X at start (deletion needed)
-        "ACGTACGTACX",   # X at end (deletion needed)
-        "CGTACGTAC",     # Missing first base (insertion)
-        "ACGTACGTA",     # Missing last base (insertion)
-        "AACGTACGTAC",   # Extra A at start
-        "ACGTACGTACC",   # Extra C at end
-        "TACGTACGTAC",   # Wrong first + extra
-        "GACGTACGTAC"    # Wrong first + extra
+        "XACGTACGTAC", # X at start (deletion needed)
+        "ACGTACGTACX", # X at end (deletion needed)
+        "CGTACGTAC", # Missing first base (insertion)
+        "ACGTACGTA", # Missing last base (insertion)
+        "AACGTACGTAC", # Extra A at start
+        "ACGTACGTACC", # Extra C at end
+        "TACGTACGTAC", # Wrong first + extra
+        "GACGTACGTAC" # Wrong first + extra
     )
     # Replace X with random bases
     boundary_seqs <- gsub("X", "G", boundary_seqs)
@@ -1195,7 +1198,8 @@ test_that("specialized max_indels=2 vs generic: random stress test", {
 
     seqs <- character(0)
     for (len in (L - 2):(L + 2)) {
-        seqs <- c(seqs, replicate(15,
+        seqs <- c(seqs, replicate(
+            15,
             paste0(sample(c("A", "C", "G", "T"), len, replace = TRUE), collapse = "")
         ))
     }
@@ -1352,7 +1356,8 @@ test_that("gextract: prefilter correctness on real genome data", {
                     )
                 )
                 if (!is.na(h)) {
-                    expect_equal(h, e, tolerance = 1e-6,
+                    expect_equal(h, e,
+                        tolerance = 1e-6,
                         info = sprintf(
                             "Row %d: exact=%g != heur=%g at chr%s:%d-%d",
                             i, e, h, r_exact$chrom[i], r_exact$start[i], r_exact$end[i]
@@ -1494,7 +1499,9 @@ test_that("prefilter: brute-force reference vs C++ with prefilter (indels)", {
             }
 
             deficit <- threshold - adj_score
-            if (deficit <= 0) return(mandatory)
+            if (deficit <= 0) {
+                return(mandatory)
+            }
 
             gains_sorted <- sort(gains, decreasing = TRUE)
             acc <- 0
