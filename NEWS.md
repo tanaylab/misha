@@ -2,6 +2,9 @@
 
 * Added PWM edit distance virtual track functions: `pwm.edit_distance`, `pwm.edit_distance.pos`, `pwm.max.edit_distance`, `pwm.edit_distance.lse`, and `pwm.edit_distance.lse.pos`. Compute minimum edit distance (substitutions and indels) to reach a PWM score threshold, with per-window (max) and aggregate (LSE) scoring modes.
 * Added `gseq.pwm_edits()` for retrieving detailed per-edit information (positions and replacement bases) from PWM edit distance computation.
+* Added pigeonhole pre-filter for PWM edit distance, dramatically reducing computation time for genome-wide scans.
+* Enabled sub-chromosome range splitting for `gscreen` and `gextract`, improving parallel efficiency on genomes with large chromosomes (e.g., hg38 chr1).
+* Fixed `gscreen` returning split intervals at sub-chromosome parallel boundaries instead of merged contiguous intervals.
 
 # misha 5.6.6
 
