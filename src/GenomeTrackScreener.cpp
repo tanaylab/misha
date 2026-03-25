@@ -273,7 +273,12 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
-		if (!iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band))
+		// Enable sub-chromosome range splitting when the iterator is explicit (not NULL)
+		// and results are not being saved to intervals.set.out, following the same
+		// safety guards as gextract. This allows large chromosomes (e.g. hg38 chr1, 249Mb)
+		// to be split across multiple worker processes for better parallel efficiency.
+		bool allow_range_split = !Rf_isNull(_iterator_policy) && intervset_out.empty();
+		if (!iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band, allow_range_split))
 			rreturn(R_NilValue);
 
 		GIntervals res_intervals1d;
