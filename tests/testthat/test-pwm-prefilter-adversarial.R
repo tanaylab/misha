@@ -1762,10 +1762,10 @@ test_that("gscreen: parallel merges abutting intervals at sub-chrom split bounda
     # produce a contiguous interval for their sub-range. Without the merge
     # fix, the parent returns multiple abutting intervals.
     withr::local_options(list(gmultitasking = FALSE))
-    result_serial <- gscreen("1", test_scope, iterator = 100)
+    result_serial <- gscreen("1 == 1", test_scope, iterator = 100)
 
     withr::local_options(list(gmultitasking = TRUE, gmax.processes = 4))
-    result_parallel <- gscreen("1", test_scope, iterator = 100)
+    result_parallel <- gscreen("1 == 1", test_scope, iterator = 100)
 
     expect_equal(nrow(result_serial), nrow(result_parallel),
         info = "Always-true gscreen should produce same number of intervals serial vs parallel"
@@ -1794,10 +1794,10 @@ test_that("gscreen: non-trivial expression produces identical intervals serial v
     test_scope <- gintervals(1, 0, gintervals.all()[1, "end"])
 
     withr::local_options(list(gmultitasking = FALSE))
-    result_serial <- gscreen("1", test_scope, iterator = 50)
+    result_serial <- gscreen("1 == 1", test_scope, iterator = 50)
 
     withr::local_options(list(gmultitasking = TRUE, gmax.processes = 4))
-    result_parallel <- gscreen("1", test_scope, iterator = 50)
+    result_parallel <- gscreen("1 == 1", test_scope, iterator = 50)
 
     expect_equal(nrow(result_serial), nrow(result_parallel),
         info = "Dense gscreen should return same number of intervals"
