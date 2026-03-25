@@ -5,6 +5,7 @@
 * Added pigeonhole pre-filter for PWM edit distance, dramatically reducing computation time for genome-wide scans.
 * Enabled sub-chromosome range splitting for `gscreen` and `gextract`, improving parallel efficiency on genomes with large chromosomes (e.g., hg38 chr1).
 * Fixed `gscreen` returning split intervals at sub-chromosome parallel boundaries instead of merged contiguous intervals.
+* Enabled sub-chromosome range splitting for `gsummary`, `gdist`, and `gcor` (Pearson), improving parallel efficiency with explicit iterators.
 
 # misha 5.6.6
 
