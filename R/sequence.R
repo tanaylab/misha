@@ -477,7 +477,6 @@ gseq.pwm_edits <- function(seqs,
         # the standard extension (matching PWMEditDistanceScorer which
         # calls calculate_expanded_interval with motif_len + max_indels).
         w <- nrow(pssm)
-        if (is.data.frame(pssm)) w <- nrow(pssm)
         indel_extra <- if (!is.null(max_indels)) as.integer(max_indels) else 0L
         ext <- if (isTRUE(extend)) w - 1L + indel_extra else if (isFALSE(extend)) 0L else as.integer(extend) + indel_extra
         extended_intervals <- intervals_df
