@@ -102,68 +102,78 @@ double aggregate_edit_distance_parts(
 
 } // anonymous namespace
 
+void SequenceVarProcessor::classify_track_vars(
+	TrackExpressionVars::Track_vars &track_vars)
+{
+	m_kmer_vtracks.clear();
+	m_pwm_vtracks.clear();
+	m_masked_vtracks.clear();
+	m_pwm_edit_distance_vtracks.clear();
+	m_pwm_lse_edit_distance_vtracks.clear();
+	m_any_filtered = false;
+
+	for (TrackExpressionVars::Track_vars::iterator ivar = track_vars.begin(); ivar != track_vars.end(); ++ivar) {
+		if (TrackExpressionVars::is_pwm_lse_edit_distance_function(ivar->val_func)) {
+			m_pwm_lse_edit_distance_vtracks.push_back(&*ivar);
+		} else if (TrackExpressionVars::is_pwm_edit_distance_function(ivar->val_func)) {
+			m_pwm_edit_distance_vtracks.push_back(&*ivar);
+		} else if (TrackExpressionVars::is_pwm_function(ivar->val_func)) {
+			m_pwm_vtracks.push_back(&*ivar);
+		} else if (TrackExpressionVars::is_kmer_function(ivar->val_func)) {
+			m_kmer_vtracks.push_back(&*ivar);
+		} else if (TrackExpressionVars::is_masked_function(ivar->val_func)) {
+			m_masked_vtracks.push_back(&*ivar);
+		}
+	}
+
+	// Check if any sequence vtrack has a filter
+	for (TrackExpressionVars::Track_var* ivar : m_pwm_vtracks) {
+		if (ivar->filter) {
+			m_any_filtered = true;
+			break;
+		}
+	}
+	if (!m_any_filtered) {
+		for (TrackExpressionVars::Track_var* ivar : m_kmer_vtracks) {
+			if (ivar->filter) {
+				m_any_filtered = true;
+				break;
+			}
+		}
+	}
+	if (!m_any_filtered) {
+		for (TrackExpressionVars::Track_var* ivar : m_masked_vtracks) {
+			if (ivar->filter) {
+				m_any_filtered = true;
+				break;
+			}
+		}
+	}
+
+	m_classification_done = true;
+}
+
 void SequenceVarProcessor::process_sequence_vars(
 	TrackExpressionVars::Track_vars &track_vars,
 	const GInterval &interval,
 	unsigned idx)
 {
-	// Collect sequence-based vtracks for potential batch processing
-	vector<TrackExpressionVars::Track_var*> kmer_vtracks;
-	vector<TrackExpressionVars::Track_var*> pwm_vtracks;
-	vector<TrackExpressionVars::Track_var*> masked_vtracks;
-	vector<TrackExpressionVars::Track_var*> pwm_edit_distance_vtracks;
-	vector<TrackExpressionVars::Track_var*> pwm_lse_edit_distance_vtracks;
-
-	for (TrackExpressionVars::Track_vars::iterator ivar = track_vars.begin(); ivar != track_vars.end(); ++ivar) {
-		if (TrackExpressionVars::is_pwm_lse_edit_distance_function(ivar->val_func)) {
-			pwm_lse_edit_distance_vtracks.push_back(&*ivar);
-		} else if (TrackExpressionVars::is_pwm_edit_distance_function(ivar->val_func)) {
-			pwm_edit_distance_vtracks.push_back(&*ivar);
-		} else if (TrackExpressionVars::is_pwm_function(ivar->val_func)) {
-			pwm_vtracks.push_back(&*ivar);
-		} else if (TrackExpressionVars::is_kmer_function(ivar->val_func)) {
-			kmer_vtracks.push_back(&*ivar);
-		} else if (TrackExpressionVars::is_masked_function(ivar->val_func)) {
-			masked_vtracks.push_back(&*ivar);
-		}
-	}
-
-	// Check if any sequence vtrack has a filter
-	bool any_filtered = false;
-	for (TrackExpressionVars::Track_var* ivar : pwm_vtracks) {
-		if (ivar->filter) {
-			any_filtered = true;
-			break;
-		}
-	}
-	if (!any_filtered) {
-		for (TrackExpressionVars::Track_var* ivar : kmer_vtracks) {
-			if (ivar->filter) {
-				any_filtered = true;
-				break;
-			}
-		}
-	}
-	if (!any_filtered) {
-		for (TrackExpressionVars::Track_var* ivar : masked_vtracks) {
-			if (ivar->filter) {
-				any_filtered = true;
-				break;
-			}
-		}
+	// Classify track variables once; reuse on subsequent calls
+	if (!m_classification_done) {
+		classify_track_vars(track_vars);
 	}
 
 	// Batch process if we have multiple sequence vtracks (threshold: 4+) AND no filters
 	// (batch processing with filters is complex due to variable-length segments)
-	if (!any_filtered && kmer_vtracks.size() + pwm_vtracks.size() + masked_vtracks.size() >= 4) {
-		batch_process_sequence_vtracks(kmer_vtracks, pwm_vtracks, interval, idx);
+	if (!m_any_filtered && m_kmer_vtracks.size() + m_pwm_vtracks.size() + m_masked_vtracks.size() >= 4) {
+		batch_process_sequence_vtracks(m_kmer_vtracks, m_pwm_vtracks, interval, idx);
 		// Process masked vtracks individually even in batch mode (simpler than batching)
-		for (TrackExpressionVars::Track_var* ivar : masked_vtracks) {
+		for (TrackExpressionVars::Track_var* ivar : m_masked_vtracks) {
 			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 			ivar->var[idx] = ivar->masked_counter->score_interval(seq_interval, m_iu.get_chromkey());
 		}
 		// Process edit distance vtracks individually (no batching support)
-		for (TrackExpressionVars::Track_var* ivar : pwm_edit_distance_vtracks) {
+		for (TrackExpressionVars::Track_var* ivar : m_pwm_edit_distance_vtracks) {
 			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 			if (!ivar->pwm_edit_distance_scorer) {
@@ -204,7 +214,7 @@ void SequenceVarProcessor::process_sequence_vars(
 			}
 		}
 		// Process LSE edit distance vtracks individually (no batching support)
-		for (TrackExpressionVars::Track_var* ivar : pwm_lse_edit_distance_vtracks) {
+		for (TrackExpressionVars::Track_var* ivar : m_pwm_lse_edit_distance_vtracks) {
 			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 			if (!ivar->pwm_lse_edit_distance_scorer) {
@@ -246,7 +256,7 @@ void SequenceVarProcessor::process_sequence_vars(
 		}
 	} else {
 		// Process individually if too few or has filters
-		process_individual_sequence_vars(kmer_vtracks, pwm_vtracks, masked_vtracks, pwm_edit_distance_vtracks, pwm_lse_edit_distance_vtracks, interval, idx);
+		process_individual_sequence_vars(m_kmer_vtracks, m_pwm_vtracks, m_masked_vtracks, m_pwm_edit_distance_vtracks, m_pwm_lse_edit_distance_vtracks, interval, idx);
 	}
 }
 

@@ -51,7 +51,8 @@ public:
 
 	virtual void read_interval(const GInterval &interval) = 0;
 
-	void register_function(Functions func) { m_functions[func] = true; }
+	void register_function(Functions func) { m_func_mask |= (1u << func); }
+	bool has_function(Functions func) const { return (m_func_mask & (1u << func)) != 0; }
 	void register_quantile(uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size, uint64_t highest_vals_buf_size);
 
 	float last_avg() const { return m_last_avg; }
@@ -79,7 +80,7 @@ public:
 	const string &file_name() const { return m_bfile.file_name(); }
 
 protected:
-	vector<bool> m_functions;
+	uint32_t     m_func_mask{0};
 	bool         m_use_quantile;
 	int          m_chromid;
 
@@ -103,7 +104,6 @@ protected:
 	StreamPercentiler<float> m_sp;
 
 	GenomeTrack1D(Type type) : GenomeTrack(type), m_use_quantile(false) {
-		m_functions.resize(NUM_FUNCS, false);
 		m_last_max_pos = numeric_limits<double>::quiet_NaN();
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
 		m_last_sample_pos = numeric_limits<double>::quiet_NaN();

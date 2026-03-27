@@ -141,9 +141,9 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 		(*itrack)->m_sum_accum = 0;
 		(*itrack)->m_last_min = numeric_limits<float>::max();
 		(*itrack)->m_last_max = -numeric_limits<float>::max();
-		if ((*itrack)->m_functions[MAX_POS])
+		if ((*itrack)->has_function(MAX_POS))
 			(*itrack)->m_last_max_pos = numeric_limits<double>::quiet_NaN();
-		if ((*itrack)->m_functions[MIN_POS])
+		if ((*itrack)->has_function(MIN_POS))
 			(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
 	}
 
@@ -158,17 +158,17 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 				(*itrack)->m_last_min = min((*itrack)->m_last_min, v);
 				if (v > (*itrack)->m_last_max) {
 					(*itrack)->m_last_max = v;
-					if ((*itrack)->m_functions[MAX_POS])
+					if ((*itrack)->has_function(MAX_POS))
 						(*itrack)->m_last_max_pos = iinterv->start;
 				}
 				if (v < (*itrack)->m_last_min) {
 					(*itrack)->m_last_min = v;
-					if ((*itrack)->m_functions[MIN_POS])
+					if ((*itrack)->has_function(MIN_POS))
 						(*itrack)->m_last_min_pos = iinterv->start;
 				}
 
 				++(*itrack)->m_num_vs;
-				if ((*itrack)->m_functions[STDDEV]) {
+				if ((*itrack)->has_function(STDDEV)) {
 					const double delta = v - (*itrack)->m_stddev_mean;
 					(*itrack)->m_stddev_mean += delta / static_cast<double>((*itrack)->m_num_vs);
 					const double delta2 = v - (*itrack)->m_stddev_mean;
@@ -187,12 +187,12 @@ inline void GenomeTrackArrays::calc_vals(const GInterval &interval)
 			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (float)((*itrack)->m_sum_accum / (*itrack)->m_num_vs);
 		else {
 			(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_min = (*itrack)->m_last_max = (*itrack)->m_last_sum = numeric_limits<float>::quiet_NaN();
-			if ((*itrack)->m_functions[MIN_POS])
+			if ((*itrack)->has_function(MIN_POS))
 				(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
 		}
 
 		// Unbiased sample standard deviation via Welford's stable algorithm.
-		if ((*itrack)->m_functions[STDDEV])
+		if ((*itrack)->has_function(STDDEV))
 			(*itrack)->m_last_stddev = (*itrack)->m_num_vs > 1 ?
 				sqrt((*itrack)->m_stddev_m2 / static_cast<double>((*itrack)->m_num_vs - 1)) :
 				numeric_limits<float>::quiet_NaN();

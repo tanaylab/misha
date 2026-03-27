@@ -75,280 +75,24 @@ void TrackVarProcessor::process_single_track_var_1d(
 		}
 	}
 
-	// If filter exists and resulted in multiple unmasked parts, aggregate across them
-	// If only one part (or filter but no filtering needed), use normal path below
 	if (has_filter && unmasked_parts.size() > 1) {
-		// Aggregate over unmasked parts using helper methods
-		double result = std::numeric_limits<double>::quiet_NaN();
+		// Multiple unmasked parts - aggregate across them
+		var.var[idx] = aggregate_multi_value(var, track, unmasked_parts, base_start);
 
-		switch (var.val_func) {
-		case TrackExpressionVars::Track_var::REG:
-		case TrackExpressionVars::Track_var::PV:
-			result = aggregate_avg_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::STDDEV:
-			result = aggregate_stddev_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::SUM:
-			result = aggregate_sum_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::LSE:
-			result = aggregate_lse_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::REG_MIN:
-		case TrackExpressionVars::Track_var::PV_MIN:
-			result = aggregate_min_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::REG_MAX:
-		case TrackExpressionVars::Track_var::PV_MAX:
-			result = aggregate_max_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::MAX_POS_ABS:
-			result = aggregate_max_pos_abs_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::MAX_POS_REL:
-			result = aggregate_max_pos_rel_with_filter(track, unmasked_parts, base_start);
-			break;
-		case TrackExpressionVars::Track_var::MIN_POS_ABS:
-			result = aggregate_min_pos_abs_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::MIN_POS_REL:
-			result = aggregate_min_pos_rel_with_filter(track, unmasked_parts, base_start);
-			break;
-		case TrackExpressionVars::Track_var::REG_NEAREST:
-			// For nearest, use the first unmasked part (closest to start)
-			track.read_interval(unmasked_parts[0]);
-			result = track.last_nearest();
-			break;
-		case TrackExpressionVars::Track_var::QUANTILE:
-			result = aggregate_quantile_with_filter(track, unmasked_parts, var.percentile);
-			break;
-		case TrackExpressionVars::Track_var::EXISTS:
-			result = aggregate_exists_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::SIZE:
-			result = aggregate_size_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE:
-			result = aggregate_sample_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE_POS_ABS:
-			result = aggregate_sample_pos_abs_with_filter(track, unmasked_parts);
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE_POS_REL:
-			result = aggregate_sample_pos_rel_with_filter(track, unmasked_parts, base_start);
-			break;
-		case TrackExpressionVars::Track_var::FIRST:
-			// For first, use the first unmasked part
-			track.read_interval(unmasked_parts[0]);
-			result = track.last_first();
-			break;
-		case TrackExpressionVars::Track_var::FIRST_POS_ABS:
-			// For first position, use the first unmasked part
-			track.read_interval(unmasked_parts[0]);
-			result = track.last_first_pos();
-			break;
-		case TrackExpressionVars::Track_var::FIRST_POS_REL:
-			// For first position relative, use the first unmasked part
-			track.read_interval(unmasked_parts[0]);
-			result = track.last_first_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::LAST:
-			// For last, use the last unmasked part
-			track.read_interval(unmasked_parts.back());
-			result = track.last_last();
-			break;
-		case TrackExpressionVars::Track_var::LAST_POS_ABS:
-			// For last position, use the last unmasked part
-			track.read_interval(unmasked_parts.back());
-			result = track.last_last_pos();
-			break;
-		case TrackExpressionVars::Track_var::LAST_POS_REL:
-			// For last position relative, use the last unmasked part
-			track.read_interval(unmasked_parts.back());
-			result = track.last_last_pos() - base_start;
-			break;
-		// Sequence-based functions are already handled above
-		default:
-			if (!TrackExpressionVars::is_sequence_based_function(var.val_func))
-				verror("Internal error: unsupported function %d", var.val_func);
-			break;
-		}
-
-		var.var[idx] = result;
-
-		// Restore track state after filter processing
+		// Restore track state after filter processing.
 		// The aggregate functions call track.read_interval() which modifies the shared track state.
 		// Other vtracks sharing this Track_n_imdf need the original interval restored.
 		track.read_interval(base_interval);
 	} else if (has_filter && unmasked_parts.size() == 1) {
 		// Single unmasked part - read just that part
 		track.read_interval(unmasked_parts[0]);
-
-		switch (var.val_func) {
-		case TrackExpressionVars::Track_var::REG:
-		case TrackExpressionVars::Track_var::PV:
-			var.var[idx] = track.last_avg();
-			break;
-		case TrackExpressionVars::Track_var::REG_MIN:
-		case TrackExpressionVars::Track_var::PV_MIN:
-			var.var[idx] = track.last_min();
-			break;
-		case TrackExpressionVars::Track_var::REG_MAX:
-		case TrackExpressionVars::Track_var::PV_MAX:
-			var.var[idx] = track.last_max();
-			break;
-		case TrackExpressionVars::Track_var::MAX_POS_ABS:
-			var.var[idx] = track.last_max_pos();
-			break;
-		case TrackExpressionVars::Track_var::MAX_POS_REL:
-			var.var[idx] = track.last_max_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::MIN_POS_ABS:
-			var.var[idx] = track.last_min_pos();
-			break;
-		case TrackExpressionVars::Track_var::MIN_POS_REL:
-			var.var[idx] = track.last_min_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::REG_NEAREST:
-			var.var[idx] = track.last_nearest();
-			break;
-		case TrackExpressionVars::Track_var::STDDEV:
-			var.var[idx] = track.last_stddev();
-			break;
-		case TrackExpressionVars::Track_var::SUM:
-			var.var[idx] = track.last_sum();
-			break;
-		case TrackExpressionVars::Track_var::LSE:
-			var.var[idx] = track.last_lse();
-			break;
-		case TrackExpressionVars::Track_var::QUANTILE:
-			var.var[idx] = track.last_quantile(var.percentile);
-			break;
-		case TrackExpressionVars::Track_var::EXISTS:
-			var.var[idx] = track.last_exists();
-			break;
-		case TrackExpressionVars::Track_var::SIZE:
-			var.var[idx] = track.last_size();
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE:
-			var.var[idx] = track.last_sample();
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE_POS_ABS:
-			var.var[idx] = track.last_sample_pos();
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE_POS_REL:
-			var.var[idx] = track.last_sample_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::FIRST:
-			var.var[idx] = track.last_first();
-			break;
-		case TrackExpressionVars::Track_var::FIRST_POS_ABS:
-			var.var[idx] = track.last_first_pos();
-			break;
-		case TrackExpressionVars::Track_var::FIRST_POS_REL:
-			var.var[idx] = track.last_first_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::LAST:
-			var.var[idx] = track.last_last();
-			break;
-		case TrackExpressionVars::Track_var::LAST_POS_ABS:
-			var.var[idx] = track.last_last_pos();
-			break;
-		case TrackExpressionVars::Track_var::LAST_POS_REL:
-			var.var[idx] = track.last_last_pos() - base_start;
-			break;
-		// Sequence-based functions are already handled above
-		default:
-			if (!TrackExpressionVars::is_sequence_based_function(var.val_func))
-				verror("Internal error: unsupported function %d", var.val_func);
-			break;
-		}
+		var.var[idx] = extract_single_value(var, track, base_start);
 
 		// Restore track state after processing single filtered part
 		track.read_interval(base_interval);
 	} else {
-		// No filter or single unmasked part - use normal path
-		switch (var.val_func) {
-		case TrackExpressionVars::Track_var::REG:
-		case TrackExpressionVars::Track_var::PV:
-			var.var[idx] = track.last_avg();
-			break;
-		case TrackExpressionVars::Track_var::REG_MIN:
-		case TrackExpressionVars::Track_var::PV_MIN:
-			var.var[idx] = track.last_min();
-			break;
-		case TrackExpressionVars::Track_var::REG_MAX:
-		case TrackExpressionVars::Track_var::PV_MAX:
-			var.var[idx] = track.last_max();
-			break;
-		case TrackExpressionVars::Track_var::MAX_POS_ABS:
-			var.var[idx] = track.last_max_pos();
-			break;
-		case TrackExpressionVars::Track_var::MAX_POS_REL:
-			var.var[idx] = track.last_max_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::MIN_POS_ABS:
-			var.var[idx] = track.last_min_pos();
-			break;
-		case TrackExpressionVars::Track_var::MIN_POS_REL:
-			var.var[idx] = track.last_min_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::REG_NEAREST:
-			var.var[idx] = track.last_nearest();
-			break;
-		case TrackExpressionVars::Track_var::STDDEV:
-			var.var[idx] = track.last_stddev();
-			break;
-		case TrackExpressionVars::Track_var::SUM:
-			var.var[idx] = track.last_sum();
-			break;
-		case TrackExpressionVars::Track_var::LSE:
-			var.var[idx] = track.last_lse();
-			break;
-		case TrackExpressionVars::Track_var::QUANTILE:
-			var.var[idx] = track.last_quantile(var.percentile);
-			break;
-		case TrackExpressionVars::Track_var::EXISTS:
-			var.var[idx] = track.last_exists();
-			break;
-		case TrackExpressionVars::Track_var::SIZE:
-			var.var[idx] = track.last_size();
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE:
-			var.var[idx] = track.last_sample();
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE_POS_ABS:
-			var.var[idx] = track.last_sample_pos();
-			break;
-		case TrackExpressionVars::Track_var::SAMPLE_POS_REL:
-			var.var[idx] = track.last_sample_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::FIRST:
-			var.var[idx] = track.last_first();
-			break;
-		case TrackExpressionVars::Track_var::FIRST_POS_ABS:
-			var.var[idx] = track.last_first_pos();
-			break;
-		case TrackExpressionVars::Track_var::FIRST_POS_REL:
-			var.var[idx] = track.last_first_pos() - base_start;
-			break;
-		case TrackExpressionVars::Track_var::LAST:
-			var.var[idx] = track.last_last();
-			break;
-		case TrackExpressionVars::Track_var::LAST_POS_ABS:
-			var.var[idx] = track.last_last_pos();
-			break;
-		case TrackExpressionVars::Track_var::LAST_POS_REL:
-			var.var[idx] = track.last_last_pos() - base_start;
-			break;
-		// Sequence-based functions are already handled above
-		default:
-			if (!TrackExpressionVars::is_sequence_based_function(var.val_func))
-				verror("Internal error: unsupported function %d", var.val_func);
-			break;
-		}
-
+		// No filter - track already has the right interval loaded
+		var.var[idx] = extract_single_value(var, track, base_start);
 	}
 
 	if (var.requires_pv) {
@@ -363,6 +107,141 @@ void TrackVarProcessor::process_single_track_var_1d(
 			} else
 				var.var[idx] = var.pv_binned.bins[bin];
 		}
+	}
+}
+
+double TrackVarProcessor::extract_single_value(
+	const TrackExpressionVars::Track_var &var,
+	GenomeTrack1D &track,
+	int64_t base_start)
+{
+	switch (var.val_func) {
+	case TrackExpressionVars::Track_var::REG:
+	case TrackExpressionVars::Track_var::PV:
+		return track.last_avg();
+	case TrackExpressionVars::Track_var::REG_MIN:
+	case TrackExpressionVars::Track_var::PV_MIN:
+		return track.last_min();
+	case TrackExpressionVars::Track_var::REG_MAX:
+	case TrackExpressionVars::Track_var::PV_MAX:
+		return track.last_max();
+	case TrackExpressionVars::Track_var::MAX_POS_ABS:
+		return track.last_max_pos();
+	case TrackExpressionVars::Track_var::MAX_POS_REL:
+		return track.last_max_pos() - base_start;
+	case TrackExpressionVars::Track_var::MIN_POS_ABS:
+		return track.last_min_pos();
+	case TrackExpressionVars::Track_var::MIN_POS_REL:
+		return track.last_min_pos() - base_start;
+	case TrackExpressionVars::Track_var::REG_NEAREST:
+		return track.last_nearest();
+	case TrackExpressionVars::Track_var::STDDEV:
+		return track.last_stddev();
+	case TrackExpressionVars::Track_var::SUM:
+		return track.last_sum();
+	case TrackExpressionVars::Track_var::LSE:
+		return track.last_lse();
+	case TrackExpressionVars::Track_var::QUANTILE:
+		return track.last_quantile(var.percentile);
+	case TrackExpressionVars::Track_var::EXISTS:
+		return track.last_exists();
+	case TrackExpressionVars::Track_var::SIZE:
+		return track.last_size();
+	case TrackExpressionVars::Track_var::SAMPLE:
+		return track.last_sample();
+	case TrackExpressionVars::Track_var::SAMPLE_POS_ABS:
+		return track.last_sample_pos();
+	case TrackExpressionVars::Track_var::SAMPLE_POS_REL:
+		return track.last_sample_pos() - base_start;
+	case TrackExpressionVars::Track_var::FIRST:
+		return track.last_first();
+	case TrackExpressionVars::Track_var::FIRST_POS_ABS:
+		return track.last_first_pos();
+	case TrackExpressionVars::Track_var::FIRST_POS_REL:
+		return track.last_first_pos() - base_start;
+	case TrackExpressionVars::Track_var::LAST:
+		return track.last_last();
+	case TrackExpressionVars::Track_var::LAST_POS_ABS:
+		return track.last_last_pos();
+	case TrackExpressionVars::Track_var::LAST_POS_REL:
+		return track.last_last_pos() - base_start;
+	default:
+		if (!TrackExpressionVars::is_sequence_based_function(var.val_func))
+			verror("Internal error: unsupported function %d", var.val_func);
+		return numeric_limits<double>::quiet_NaN();
+	}
+}
+
+double TrackVarProcessor::aggregate_multi_value(
+	const TrackExpressionVars::Track_var &var,
+	GenomeTrack1D &track,
+	const vector<GInterval> &parts,
+	int64_t base_start)
+{
+	switch (var.val_func) {
+	case TrackExpressionVars::Track_var::REG:
+	case TrackExpressionVars::Track_var::PV:
+		return aggregate_avg_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::STDDEV:
+		return aggregate_stddev_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::SUM:
+		return aggregate_sum_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::LSE:
+		return aggregate_lse_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::REG_MIN:
+	case TrackExpressionVars::Track_var::PV_MIN:
+		return aggregate_min_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::REG_MAX:
+	case TrackExpressionVars::Track_var::PV_MAX:
+		return aggregate_max_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::MAX_POS_ABS:
+		return aggregate_max_pos_abs_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::MAX_POS_REL:
+		return aggregate_max_pos_rel_with_filter(track, parts, base_start);
+	case TrackExpressionVars::Track_var::MIN_POS_ABS:
+		return aggregate_min_pos_abs_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::MIN_POS_REL:
+		return aggregate_min_pos_rel_with_filter(track, parts, base_start);
+	case TrackExpressionVars::Track_var::REG_NEAREST:
+		// For nearest, use the first unmasked part (closest to start)
+		track.read_interval(parts[0]);
+		return track.last_nearest();
+	case TrackExpressionVars::Track_var::QUANTILE:
+		return aggregate_quantile_with_filter(track, parts, var.percentile);
+	case TrackExpressionVars::Track_var::EXISTS:
+		return aggregate_exists_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::SIZE:
+		return aggregate_size_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::SAMPLE:
+		return aggregate_sample_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::SAMPLE_POS_ABS:
+		return aggregate_sample_pos_abs_with_filter(track, parts);
+	case TrackExpressionVars::Track_var::SAMPLE_POS_REL:
+		return aggregate_sample_pos_rel_with_filter(track, parts, base_start);
+	case TrackExpressionVars::Track_var::FIRST:
+		// For first, use the first unmasked part
+		track.read_interval(parts[0]);
+		return track.last_first();
+	case TrackExpressionVars::Track_var::FIRST_POS_ABS:
+		track.read_interval(parts[0]);
+		return track.last_first_pos();
+	case TrackExpressionVars::Track_var::FIRST_POS_REL:
+		track.read_interval(parts[0]);
+		return track.last_first_pos() - base_start;
+	case TrackExpressionVars::Track_var::LAST:
+		// For last, use the last unmasked part
+		track.read_interval(parts.back());
+		return track.last_last();
+	case TrackExpressionVars::Track_var::LAST_POS_ABS:
+		track.read_interval(parts.back());
+		return track.last_last_pos();
+	case TrackExpressionVars::Track_var::LAST_POS_REL:
+		track.read_interval(parts.back());
+		return track.last_last_pos() - base_start;
+	default:
+		if (!TrackExpressionVars::is_sequence_based_function(var.val_func))
+			verror("Internal error: unsupported function %d", var.val_func);
+		return numeric_limits<double>::quiet_NaN();
 	}
 }
 

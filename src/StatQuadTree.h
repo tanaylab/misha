@@ -209,7 +209,7 @@ private:
 			Leaf_data leaf;
 		};
 
-		bool   is_leaf;
+		uint8_t is_leaf;
 		Stat   stat;
 		Rectangle arena;
 
@@ -236,7 +236,7 @@ private:
 	vector<Size>          m_obj_ptrs;
 	vector<uint64_t>      m_obj_ptrs_free_chunks;
 	vector<T>             m_objs;
-	mutable vector<bool>  m_intersected_objs; // used for intersection queries, not serialized
+	mutable vector<uint8_t>  m_intersected_objs; // used for intersection queries, not serialized
 	unsigned              m_max_depth;
 	unsigned              m_max_node_objs;
 	void                 *m_uptr;
@@ -290,7 +290,7 @@ public:
 		Rectangle                 m_excluded_area;
 		StatQuadTree<T, Size>    *m_parent;
 		priority_queue<Neighbor>  m_neighbors;
-		vector<bool>              m_used_objs;  // used to prevent multiple return of the same object that belongs to different quads
+		vector<uint8_t>           m_used_objs;  // used to prevent multiple return of the same object that belongs to different quads
 
 		T &cur_obj() { return *m_neighbors.top().obj; }
 		const T &cur_obj() const { return *m_neighbors.top().obj; }

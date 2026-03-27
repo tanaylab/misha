@@ -25,7 +25,7 @@ public:
 	// max_node_objs  - maximal number of objects in the node. Once the number of objects exceed max_node_objs, the node is split.
 	SegmentFinder(int64_t start, int64_t end, unsigned max_depth = 20, unsigned max_node_objs = 20);
 
-	~SegmentFinder() { delete m_root; }
+	~SegmentFinder() { delete_tree(); }
 
 	void init(int64_t start, int64_t end, unsigned max_depth = 20, unsigned max_node_objs = 20);
 
@@ -51,10 +51,7 @@ private:
 
 		Node(const Segment &_arena) : arena(_arena), left(NULL), right(NULL) {}
 
-		~Node() {
-			delete left;
-			delete right;
-		}
+		~Node() {}
 	};
 
 #pragma pack(pop)
@@ -63,6 +60,22 @@ private:
 	uint64_t   m_num_objs;
 	unsigned m_max_depth;
 	unsigned m_max_node_objs;
+
+	void delete_tree() {
+		if (!m_root) return;
+		std::vector<Node*> stack;
+		stack.push_back(m_root);
+		while (!stack.empty()) {
+			Node* node = stack.back();
+			stack.pop_back();
+			if (node->left) stack.push_back(node->left);
+			if (node->right) stack.push_back(node->right);
+			node->left = nullptr;
+			node->right = nullptr;
+			delete node;
+		}
+		m_root = nullptr;
+	}
 
 	void insert(Node *node, unsigned depth, const T &obj);
 
@@ -208,8 +221,7 @@ template <class T>
 void SegmentFinder<T>::reset(int64_t start, int64_t end)
 {
 	m_num_objs = 0;
-	delete m_root;
-	m_root = NULL;
+	delete_tree();
 	m_root = new Node(Segment(start, end));
 }
 
@@ -225,7 +237,7 @@ void SegmentFinder<T>::insert(Node *node, unsigned depth, const T &obj)
 {
 	// should the node be split?
 	if (!node->left && node->objs.size() >= m_max_node_objs && depth < m_max_depth && node->arena.range() >= 2) {
-		int64_t midpoint = (node->arena.start + node->arena.end) / 2;
+		int64_t midpoint = node->arena.start + (node->arena.end - node->arena.start) / 2;
 		node->left = new Node(Segment(node->arena.start, midpoint));
 		node->right = new Node(Segment(midpoint, node->arena.end));
 

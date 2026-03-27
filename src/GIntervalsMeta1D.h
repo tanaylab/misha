@@ -53,6 +53,7 @@ public:
 protected:
 	vector<int64_t>            m_chrom2size;
 	vector<int64_t>            m_orig_chrom2size;
+	vector<uint64_t>           m_orig_chrom2offset;  // precomputed prefix sums of m_orig_chrom2size
 	vector<int64_t>           *m_user_chrom2size;
 	vector<int64_t>            m_chrom2unified_overlap_size;
 	vector<int64_t>            m_chrom2unified_touching_size;

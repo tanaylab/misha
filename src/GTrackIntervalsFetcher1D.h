@@ -98,9 +98,7 @@ void GTrackIntervalsFetcher1D<Track>::load_chrom(int chromid)
 			m_intervals = track.get_intervals();
 
 			// set udata
-			uint64_t offset = 0;
-			for (int i = 0; i < chromid; ++i)
-				offset += m_orig_chrom2size[i];
+			uint64_t offset = m_orig_chrom2offset[chromid];
 			for (GIntervals::iterator iinterval = m_intervals.begin(); iinterval < m_intervals.end(); ++iinterval) 
 				iinterval->udata = (void *)(intptr_t)(iinterval - m_intervals.begin() + offset);
 

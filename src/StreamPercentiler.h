@@ -29,6 +29,11 @@ class StreamPercentiler {
 private:
 	enum { LOWEST, HIGHEST, NUM_EXTREMES };
 
+	// Comparator functors that preserve the original <= / >= semantics
+	// while allowing the compiler to inline them in STL algorithm inner loops.
+	struct MyLess    { bool operator()(const T &a, const T &b) const { return a <= b; } };
+	struct MyGreater { bool operator()(const T &a, const T &b) const { return a >= b; } };
+
 public:
 	StreamPercentiler() { init(0, 0, 0, false); }
 	StreamPercentiler(uint64_t rnd_sampling_buf_size, uint64_t lowest_vals_buf_size = 0, uint64_t highest_vals_buf_size = 0, bool do_reserve = false);
@@ -53,17 +58,18 @@ public:
 	const T get_percentile(double percentile, bool &is_estimated);
 
 private:
-	typedef bool (*Compare_t)(const T &, const T &);
-
 	StreamSampler<T> m_stream_sampler;
 	uint64_t           m_extreme_vals_buf_size[NUM_EXTREMES];
-	Compare_t        m_compare_f[NUM_EXTREMES];
 	vector<T>        m_extreme_vals[NUM_EXTREMES];
 	bool             m_stream_sealed;
 	bool             m_heaps_activated;
 
-	static bool myless(const T &v1, const T &v2) { return v1 <= v2; }
-	static bool mygreater(const T &v1, const T &v2) { return v1 >= v2; }
+	// Template helpers that let the compiler monomorphise STL calls per comparator.
+	template <typename Compare>
+	void init_heap_from_samples(int idx, Compare comp);
+
+	template <typename Compare>
+	void maintain_heap(int idx, const T &sample, Compare comp);
 };
 
 
@@ -81,8 +87,6 @@ void StreamPercentiler<T>::init(uint64_t rnd_sampling_buf_size, uint64_t lowest_
 	m_stream_sampler.init(rnd_sampling_buf_size, do_reserve);
 	m_extreme_vals_buf_size[LOWEST] = lowest_vals_buf_size;
 	m_extreme_vals_buf_size[HIGHEST] = highest_vals_buf_size;
-	m_compare_f[LOWEST] = myless;
-	m_compare_f[HIGHEST] = mygreater;
 
 	if (do_reserve) {
 		for (int i = 0; i < NUM_EXTREMES; ++i) {
@@ -107,8 +111,6 @@ void StreamPercentiler<T>::init_with_swap(uint64_t stream_size, vector<T> &sampl
 	m_heaps_activated = !lowest_vals.empty() || !highest_vals.empty();
 	m_extreme_vals[LOWEST].swap(lowest_vals);
 	m_extreme_vals[HIGHEST].swap(highest_vals);
-	m_compare_f[LOWEST] = myless;
-	m_compare_f[HIGHEST] = mygreater;
 	m_stream_sealed = true;
 }
 
@@ -124,6 +126,46 @@ void StreamPercentiler<T>::reset()
 }
 
 template <class T>
+template <typename Compare>
+void StreamPercentiler<T>::init_heap_from_samples(int idx, Compare comp)
+{
+	if (!m_extreme_vals_buf_size[idx])
+		return;
+
+	if (m_extreme_vals_buf_size[idx] > m_stream_sampler.stream_size())
+		m_extreme_vals[idx] = m_stream_sampler.samples();
+	else {
+		vector<T> &samples = m_stream_sampler.samples();
+
+		m_extreme_vals[idx].reserve(m_extreme_vals_buf_size[idx] + 1);
+		m_extreme_vals[idx].resize(m_extreme_vals_buf_size[idx]);
+
+		// sort the first m_extreme_vals_buf_size[idx] elements, we can do it "in place" of stream_sampler buffer
+		partial_sort(samples.begin(), samples.begin() + m_extreme_vals_buf_size[idx], samples.end(), comp);
+		copy(samples.begin(), samples.begin() + m_extreme_vals_buf_size[idx], m_extreme_vals[idx].begin());
+		make_heap(m_extreme_vals[idx].begin(), m_extreme_vals[idx].end(), comp);
+	}
+	m_heaps_activated = true;
+}
+
+template <class T>
+template <typename Compare>
+void StreamPercentiler<T>::maintain_heap(int idx, const T &sample, Compare comp)
+{
+	if (m_extreme_vals[idx].size() < m_extreme_vals_buf_size[idx] || comp(sample, m_extreme_vals[idx].front())) {
+		m_extreme_vals[idx].push_back(sample);
+
+		if (m_extreme_vals[idx].size() == m_extreme_vals_buf_size[idx])
+			make_heap(m_extreme_vals[idx].begin(), m_extreme_vals[idx].end(), comp);
+		else if (m_extreme_vals[idx].size() == m_extreme_vals_buf_size[idx] + 1) {
+			push_heap(m_extreme_vals[idx].begin(), m_extreme_vals[idx].end(), comp);
+			pop_heap(m_extreme_vals[idx].begin(), m_extreme_vals[idx].end(), comp);
+			m_extreme_vals[idx].pop_back();
+		}
+	}
+}
+
+template <class T>
 uint64_t StreamPercentiler<T>::add(const T &sample, double (*rnd_func)())
 {
 	m_stream_sealed = false;
@@ -131,43 +173,15 @@ uint64_t StreamPercentiler<T>::add(const T &sample, double (*rnd_func)())
 	// the stream reached its limit and we need to add another element =>
 	// it's time to create the heaps
 	if (m_stream_sampler.stream_size() == m_stream_sampler.max_reservoir_size()) {
-		for (int i = 0; i < NUM_EXTREMES; ++i) {
-			if (!m_extreme_vals_buf_size[i])
-				continue;
-
-			if (m_extreme_vals_buf_size[i] > m_stream_sampler.stream_size())
-				m_extreme_vals[i] = m_stream_sampler.samples();
-			else {
-				vector<T> &samples = m_stream_sampler.samples();
-
-				m_extreme_vals[i].reserve(m_extreme_vals_buf_size[i] + 1);
-				m_extreme_vals[i].resize(m_extreme_vals_buf_size[i]);
-
-				// sort the first m_extreme_vals_buf_size[i] elements, we can do it "in place" of stream_sampler buffer
-				partial_sort(samples.begin(), samples.begin() + m_extreme_vals_buf_size[i], samples.end(), m_compare_f[i]);
-				copy(samples.begin(), samples.begin() + m_extreme_vals_buf_size[i], m_extreme_vals[i].begin());
-				make_heap(m_extreme_vals[i].begin(), m_extreme_vals[i].end(), m_compare_f[i]);
-			}
-			m_heaps_activated = true;
-		}
+		init_heap_from_samples(LOWEST,  MyLess());
+		init_heap_from_samples(HIGHEST, MyGreater());
 	}
 
 	uint64_t num_samples = m_stream_sampler.add(sample, rnd_func);
 
 	if (m_heaps_activated) {
-		for (int i = 0; i < NUM_EXTREMES; ++i) {
-			if (m_extreme_vals[i].size() < m_extreme_vals_buf_size[i] || m_compare_f[i](sample, m_extreme_vals[i].front())) {
-				m_extreme_vals[i].push_back(sample);
-
-				if (m_extreme_vals[i].size() == m_extreme_vals_buf_size[i])
-					make_heap(m_extreme_vals[i].begin(), m_extreme_vals[i].end(), m_compare_f[i]);
-				else if (m_extreme_vals[i].size() == m_extreme_vals_buf_size[i] + 1) {
-					push_heap(m_extreme_vals[i].begin(), m_extreme_vals[i].end(), m_compare_f[i]);
-					pop_heap(m_extreme_vals[i].begin(), m_extreme_vals[i].end(), m_compare_f[i]);
-					m_extreme_vals[i].pop_back();
-				}
-			}
-		}
+		maintain_heap(LOWEST,  sample, MyLess());
+		maintain_heap(HIGHEST, sample, MyGreater());
 	}
 
 	return num_samples;

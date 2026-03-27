@@ -42,66 +42,49 @@ bool IntervalsIndex2D::load(const string &index_path) {
             "Failed to open index file %s: %s", index_path.c_str(), strerror(errno));
     }
 
-    // Read and validate magic header
-    char header[8];
-    if (fread(header, 1, 8, fp) != 8 || memcmp(header, MAGIC_HEADER, 8) != 0) {
+    // Read entire fixed header in one call (40 bytes)
+#pragma pack(push, 1)
+    struct Index2DHeader {
+        char magic[8];
+        uint32_t version;
+        uint32_t num_entries;
+        uint64_t flags;
+        uint64_t stored_checksum;
+        uint64_t reserved;
+    };
+#pragma pack(pop)
+
+    Index2DHeader hdr;
+    if (fread(&hdr, sizeof(hdr), 1, fp) != 1) {
+        fclose(fp);
+        TGLError<IntervalsIndex2D>(FILE_READ_FAILED,
+            "Failed to read index header from %s", index_path.c_str());
+    }
+
+    // Validate magic header
+    if (memcmp(hdr.magic, MAGIC_HEADER, 8) != 0) {
         fclose(fp);
         TGLError<IntervalsIndex2D>(INVALID_FORMAT,
             "Invalid index file header in %s (expected MISHAI2D magic)", index_path.c_str());
     }
 
-    // Read version
-    uint32_t version;
-    if (fread(&version, sizeof(version), 1, fp) != 1) {
-        fclose(fp);
-        TGLError<IntervalsIndex2D>(FILE_READ_FAILED,
-            "Failed to read index version from %s", index_path.c_str());
-    }
-    if (version != INDEX_VERSION) {
+    // Validate version
+    if (hdr.version != INDEX_VERSION) {
         fclose(fp);
         TGLError<IntervalsIndex2D>(VERSION_MISMATCH,
             "Index version %u not supported (expected %u) in %s",
-            version, INDEX_VERSION, index_path.c_str());
+            hdr.version, INDEX_VERSION, index_path.c_str());
     }
 
-    // Read number of entries
-    uint32_t num_entries;
-    if (fread(&num_entries, sizeof(num_entries), 1, fp) != 1) {
-        fclose(fp);
-        TGLError<IntervalsIndex2D>(FILE_READ_FAILED,
-            "Failed to read entry count from %s", index_path.c_str());
-    }
-
-    // Read flags
-    uint64_t flags;
-    if (fread(&flags, sizeof(flags), 1, fp) != 1) {
-        fclose(fp);
-        TGLError<IntervalsIndex2D>(FILE_READ_FAILED,
-            "Failed to read flags from %s", index_path.c_str());
-    }
+    uint32_t num_entries = hdr.num_entries;
+    uint64_t stored_checksum = hdr.stored_checksum;
 
     // Check endianness
-    bool index_is_little_endian = (flags & FLAG_LITTLE_ENDIAN) != 0;
+    bool index_is_little_endian = (hdr.flags & FLAG_LITTLE_ENDIAN) != 0;
     if (index_is_little_endian != is_little_endian()) {
         fclose(fp);
         TGLError<IntervalsIndex2D>(ENDIAN_MISMATCH,
             "Index file %s has incompatible endianness", index_path.c_str());
-    }
-
-    // Read stored checksum (will validate later)
-    uint64_t stored_checksum;
-    if (fread(&stored_checksum, sizeof(stored_checksum), 1, fp) != 1) {
-        fclose(fp);
-        TGLError<IntervalsIndex2D>(FILE_READ_FAILED,
-            "Failed to read checksum from %s", index_path.c_str());
-    }
-
-    // Read reserved field
-    uint64_t reserved;
-    if (fread(&reserved, sizeof(reserved), 1, fp) != 1) {
-        fclose(fp);
-        TGLError<IntervalsIndex2D>(FILE_READ_FAILED,
-            "Failed to read reserved field from %s", index_path.c_str());
     }
 
     // Read pair entries
@@ -109,19 +92,32 @@ bool IntervalsIndex2D::load(const string &index_path) {
     m_entries.reserve(num_entries);
     m_pair_to_index.clear();
 
-    for (uint32_t i = 0; i < num_entries; ++i) {
-        IntervalsPairEntry entry;
+    // Packed struct matching the on-disk per-entry layout (28 bytes)
+#pragma pack(push, 1)
+    struct DiskPairEntry {
+        uint32_t chrom1_id;
+        uint32_t chrom2_id;
+        uint64_t offset;
+        uint64_t length;
+        uint32_t reserved;
+    };
+#pragma pack(pop)
 
-        // Read chrom1_id, chrom2_id, offset, length, reserved (28 bytes total)
-        if (fread(&entry.chrom1_id, sizeof(entry.chrom1_id), 1, fp) != 1 ||
-            fread(&entry.chrom2_id, sizeof(entry.chrom2_id), 1, fp) != 1 ||
-            fread(&entry.offset, sizeof(entry.offset), 1, fp) != 1 ||
-            fread(&entry.length, sizeof(entry.length), 1, fp) != 1 ||
-            fread(&entry.reserved, sizeof(entry.reserved), 1, fp) != 1) {
+    for (uint32_t i = 0; i < num_entries; ++i) {
+        // Read all entry fields in one call (28 bytes)
+        DiskPairEntry disk_entry;
+        if (fread(&disk_entry, sizeof(disk_entry), 1, fp) != 1) {
             fclose(fp);
             TGLError<IntervalsIndex2D>(FILE_READ_FAILED,
                 "Failed to read entry %u in %s", i, index_path.c_str());
         }
+
+        IntervalsPairEntry entry;
+        entry.chrom1_id = disk_entry.chrom1_id;
+        entry.chrom2_id = disk_entry.chrom2_id;
+        entry.offset = disk_entry.offset;
+        entry.length = disk_entry.length;
+        entry.reserved = disk_entry.reserved;
 
         // Validate offset+length for overflow
         if (entry.offset + entry.length < entry.offset) {

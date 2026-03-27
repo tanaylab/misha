@@ -279,7 +279,26 @@ private:
 	GInterval               m_interval1d;
 	GInterval2D             m_interval2d;
 	DiagonalBand            m_band;
-	std::unordered_map<std::string, std::shared_ptr<GenomeTrack> > m_shared_1d_track_masters;
+	struct BackendKey {
+		GenomeTrack::Type type;
+		int chromid;
+		std::string filename;
+
+		bool operator==(const BackendKey &other) const {
+			return type == other.type && chromid == other.chromid && filename == other.filename;
+		}
+	};
+
+	struct BackendKeyHash {
+		size_t operator()(const BackendKey &k) const {
+			size_t h = std::hash<int>()(static_cast<int>(k.type));
+			h ^= std::hash<int>()(k.chromid) * 2654435761ULL;
+			h ^= std::hash<std::string>()(k.filename) * 40503ULL;
+			return h;
+		}
+	};
+
+	std::unordered_map<BackendKey, std::shared_ptr<GenomeTrack>, BackendKeyHash> m_shared_1d_track_masters;
 
 	// Shared sequence fetcher for all sequence-based vtracks to enable caching
 	GenomeSeqFetch          m_shared_seqfetch;

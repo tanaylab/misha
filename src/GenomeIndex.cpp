@@ -25,49 +25,46 @@ void GenomeIndex::load(const string &index_path) {
             "Failed to open index file %s: %s", index_path.c_str(), strerror(errno));
     }
 
-    // Read and validate magic header
-    char header[8];
-    if (fread(header, 1, 8, fp) != 8 || memcmp(header, MAGIC_HEADER, 8) != 0) {
+    // Read entire fixed header in one call (24 bytes)
+#pragma pack(push, 1)
+    struct IndexHeader {
+        char magic[8];
+        uint32_t version;
+        uint32_t num_contigs;
+        uint64_t stored_checksum;
+    };
+#pragma pack(pop)
+
+    IndexHeader hdr;
+    if (fread(&hdr, sizeof(hdr), 1, fp) != 1) {
+        fclose(fp);
+        TGLError<GenomeIndex>(FILE_READ_FAILED,
+            "Failed to read index header from %s", index_path.c_str());
+    }
+
+    // Validate magic header
+    if (memcmp(hdr.magic, MAGIC_HEADER, 8) != 0) {
         fclose(fp);
         TGLError<GenomeIndex>(INVALID_FORMAT,
             "Invalid index file header in %s", index_path.c_str());
     }
 
-    // Read version
-    uint32_t version;
-    if (fread(&version, sizeof(version), 1, fp) != 1) {
-        fclose(fp);
-        TGLError<GenomeIndex>(FILE_READ_FAILED,
-            "Failed to read index version from %s", index_path.c_str());
-    }
-    if (version != INDEX_VERSION) {
+    // Validate version
+    if (hdr.version != INDEX_VERSION) {
         fclose(fp);
         TGLError<GenomeIndex>(VERSION_MISMATCH,
             "Index version %u not supported (expected %u) in %s",
-            version, INDEX_VERSION, index_path.c_str());
+            hdr.version, INDEX_VERSION, index_path.c_str());
     }
 
-    // Read number of contigs
-    uint32_t num_contigs;
-    if (fread(&num_contigs, sizeof(num_contigs), 1, fp) != 1) {
-        fclose(fp);
-        TGLError<GenomeIndex>(FILE_READ_FAILED,
-            "Failed to read contig count from %s", index_path.c_str());
-    }
+    uint32_t num_contigs = hdr.num_contigs;
+    uint64_t stored_checksum = hdr.stored_checksum;
 
     // Sanity check: 20 million contigs should be more than enough for any genome
     if (num_contigs > 20000000) {
         fclose(fp);
         TGLError<GenomeIndex>(INVALID_FORMAT,
             "Number of contigs %u exceeds maximum (20000000) in %s", num_contigs, index_path.c_str());
-    }
-
-    // Read stored checksum (will validate later)
-    uint64_t stored_checksum;
-    if (fread(&stored_checksum, sizeof(stored_checksum), 1, fp) != 1) {
-        fclose(fp);
-        TGLError<GenomeIndex>(FILE_READ_FAILED,
-            "Failed to read checksum from %s", index_path.c_str());
     }
 
     // Read contig entries
@@ -113,14 +110,23 @@ void GenomeIndex::load(const string &index_path) {
             entry.name = string(name_buf.data());
         }
 
-        // Read offset, length, and reserved
-        if (fread(&entry.offset, sizeof(entry.offset), 1, fp) != 1 ||
-            fread(&entry.length, sizeof(entry.length), 1, fp) != 1 ||
-            fread(&entry.reserved, sizeof(entry.reserved), 1, fp) != 1) {
+        // Read offset, length, and reserved in one call
+#pragma pack(push, 1)
+        struct EntryTail {
+            uint64_t offset;
+            uint64_t length;
+            uint64_t reserved;
+        };
+#pragma pack(pop)
+        EntryTail tail;
+        if (fread(&tail, sizeof(tail), 1, fp) != 1) {
             fclose(fp);
             TGLError<GenomeIndex>(FILE_READ_FAILED,
                 "Failed to read offset/length/reserved at entry %u in %s", i, index_path.c_str());
         }
+        entry.offset = tail.offset;
+        entry.length = tail.length;
+        entry.reserved = tail.reserved;
 
         // Validate offset+length for overflow
         if (entry.offset + entry.length < entry.offset) {

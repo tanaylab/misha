@@ -21,11 +21,10 @@ void GenomeTrackSparse::sync_master_state_from_dependent()
 	if (!m_master_obj)
 		return;
 
-	for (size_t i = 0; i < m_functions.size(); ++i) {
-		if (m_functions[i] && !m_master_obj->m_functions[i]) {
-			m_master_obj->m_functions[i] = true;
-			m_master_obj->m_fast_path_mode = 0;
-		}
+	uint32_t new_bits = m_func_mask & ~m_master_obj->m_func_mask;
+	if (new_bits) {
+		m_master_obj->m_func_mask |= new_bits;
+		m_master_obj->m_fast_path_mode = 0;
 	}
 
 	if (m_use_quantile && !m_master_obj->m_use_quantile) {
@@ -40,39 +39,39 @@ void GenomeTrackSparse::copy_state_from_master()
 	if (!m_master_obj)
 		return;
 
-	if (m_functions[AVG])
+	if (has_function(AVG))
 		m_last_avg = m_master_obj->m_last_avg;
-	if (m_functions[MIN])
+	if (has_function(MIN))
 		m_last_min = m_master_obj->m_last_min;
-	if (m_functions[MAX])
+	if (has_function(MAX))
 		m_last_max = m_master_obj->m_last_max;
-	if (m_functions[MAX_POS])
+	if (has_function(MAX_POS))
 		m_last_max_pos = m_master_obj->m_last_max_pos;
-	if (m_functions[MIN_POS])
+	if (has_function(MIN_POS))
 		m_last_min_pos = m_master_obj->m_last_min_pos;
-	if (m_functions[NEAREST])
+	if (has_function(NEAREST))
 		m_last_nearest = m_master_obj->m_last_nearest;
-	if (m_functions[STDDEV])
+	if (has_function(STDDEV))
 		m_last_stddev = m_master_obj->m_last_stddev;
-	if (m_functions[SUM])
+	if (has_function(SUM))
 		m_last_sum = m_master_obj->m_last_sum;
-	if (m_functions[LSE])
+	if (has_function(LSE))
 		m_last_lse = m_master_obj->m_last_lse;
-	if (m_functions[EXISTS])
+	if (has_function(EXISTS))
 		m_last_exists = m_master_obj->m_last_exists;
-	if (m_functions[SIZE])
+	if (has_function(SIZE))
 		m_last_size = m_master_obj->m_last_size;
-	if (m_functions[SAMPLE])
+	if (has_function(SAMPLE))
 		m_last_sample = m_master_obj->m_last_sample;
-	if (m_functions[SAMPLE_POS])
+	if (has_function(SAMPLE_POS))
 		m_last_sample_pos = m_master_obj->m_last_sample_pos;
-	if (m_functions[FIRST])
+	if (has_function(FIRST))
 		m_last_first = m_master_obj->m_last_first;
-	if (m_functions[FIRST_POS])
+	if (has_function(FIRST_POS))
 		m_last_first_pos = m_master_obj->m_last_first_pos;
-	if (m_functions[LAST])
+	if (has_function(LAST))
 		m_last_last = m_master_obj->m_last_last;
-	if (m_functions[LAST_POS])
+	if (has_function(LAST_POS))
 		m_last_last_pos = m_master_obj->m_last_last_pos;
 	if (m_use_quantile)
 		m_sp = m_master_obj->m_sp;
@@ -244,27 +243,27 @@ void GenomeTrackSparse::read_interval(const GInterval &interval)
 	}
 
 	m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
-	if (m_functions[LSE])
+	if (has_function(LSE))
 		m_last_lse = numeric_limits<float>::quiet_NaN();
-	if (m_functions[MAX_POS])
+	if (has_function(MAX_POS))
 		m_last_max_pos = numeric_limits<double>::quiet_NaN();
-	if (m_functions[MIN_POS])
+	if (has_function(MIN_POS))
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
-	if (m_functions[EXISTS])
+	if (has_function(EXISTS))
 		m_last_exists = 0;
-	if (m_functions[SIZE])
+	if (has_function(SIZE))
 		m_last_size = 0;
-	if (m_functions[SAMPLE])
+	if (has_function(SAMPLE))
 		m_last_sample = numeric_limits<float>::quiet_NaN();
-	if (m_functions[SAMPLE_POS])
+	if (has_function(SAMPLE_POS))
 		m_last_sample_pos = numeric_limits<double>::quiet_NaN();
-	if (m_functions[FIRST])
+	if (has_function(FIRST))
 		m_last_first = numeric_limits<float>::quiet_NaN();
-	if (m_functions[FIRST_POS])
+	if (has_function(FIRST_POS))
 		m_last_first_pos = numeric_limits<double>::quiet_NaN();
-	if (m_functions[LAST])
+	if (has_function(LAST))
 		m_last_last = numeric_limits<float>::quiet_NaN();
-	if (m_functions[LAST_POS])
+	if (has_function(LAST_POS))
 		m_last_last_pos = numeric_limits<double>::quiet_NaN();
 
 	if (m_use_quantile)
