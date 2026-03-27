@@ -83,14 +83,14 @@ static uint64_t estimate_records_for_expr(
 		return 0;
 	}
 
-	// Intervals iterators: upper bound = iterator_count × scope_count
-	// (one iterator interval can be split by multiple scope intervals)
+	// Intervals iterators: use iterator_count as the estimate.
+	// Scope intervals are non-overlapping (verify_no_overlaps enforced in gextract),
+	// and iterator intervals (TSS/peaks) are small, so each overlaps at most 1 scope interval.
+	// For the rare case where a large iterator interval spans multiple scope intervals,
+	// the direct-to-R loop has a bounds check with fallback.
 	if (auto *int1d_itr = dynamic_cast<TrackExpressionIntervals1DIterator *>(expr_itr)) {
 		uint64_t itr_size = int1d_itr->get_intervals() ? int1d_itr->get_intervals()->size() : 0;
-		uint64_t scope_size = scope1d ? scope1d->size() : (scope2d ? scope2d->size() : 0);
-		if (itr_size > 0 && scope_size > 0)
-			return itr_size * scope_size;
-		return itr_size > 0 ? itr_size : 0;
+		return itr_size;
 	}
 
 	return 0;
@@ -568,6 +568,9 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 		}
 
 		// We have a good estimate — use direct-to-R pre-allocation.
+		// For intervals iterators this is iterator_count (exact when each
+		// interval overlaps ≤1 scope interval; may underestimate with
+		// fragmented scopes). The scan loop grows vectors if needed.
 		uint64_t alloc_size = estimated;
 		{
 			uint64_t max_data = iu.get_max_data_size();
@@ -607,6 +610,21 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 
 		uint64_t row = 0;
 
+		// Helper: grow an R vector by 2× and update pointer.
+		// Used when intervals iterator estimate underestimates (rare: scope splitting).
+		auto grow_intsxp = [&](SEXP &vec, int* &ptr) {
+			SEXP newvec = rprotect_ptr(RSaneAllocVector(INTSXP, alloc_size));
+			memcpy(INTEGER(newvec), ptr, row * sizeof(int));
+			vec = newvec;
+			ptr = INTEGER(newvec);
+		};
+		auto grow_realsxp = [&](SEXP &vec, double* &ptr) {
+			SEXP newvec = rprotect_ptr(RSaneAllocVector(REALSXP, alloc_size));
+			memcpy(REAL(newvec), ptr, row * sizeof(double));
+			vec = newvec;
+			ptr = REAL(newvec);
+		};
+
 		if (is_1d) {
 			// 1D interval columns
 			SEXP r_chroms, r_starts, r_ends;
@@ -619,6 +637,18 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 
 			// Main scan loop for 1D
 			for (; !scanner.isend(); scanner.next()) {
+				// Grow all vectors if estimate was too small (rare: scope splitting)
+				if (row >= alloc_size) {
+					alloc_size = alloc_size * 2;
+					grow_intsxp(r_chroms, p_chroms);
+					grow_realsxp(r_starts, p_starts);
+					grow_realsxp(r_ends, p_ends);
+					grow_intsxp(r_ids, p_ids);
+					grow_intsxp(r_row_names, p_row_names);
+					for (unsigned i = 0; i < num_exprs; i++)
+						grow_realsxp(r_expr_vals[i], p_expr_vals[i]);
+				}
+
 				const GInterval &interval = scanner.last_interval1d();
 				p_chroms[row] = interval.chromid + 1;  // R factors are 1-based
 				p_starts[row] = interval.start;
@@ -670,6 +700,20 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 
 			// Main scan loop for 2D
 			for (; !scanner.isend(); scanner.next()) {
+				if (row >= alloc_size) {
+					alloc_size = alloc_size * 2;
+					grow_intsxp(r_chroms1, p_chroms1);
+					grow_realsxp(r_starts1, p_starts1);
+					grow_realsxp(r_ends1, p_ends1);
+					grow_intsxp(r_chroms2, p_chroms2);
+					grow_realsxp(r_starts2, p_starts2);
+					grow_realsxp(r_ends2, p_ends2);
+					grow_intsxp(r_ids, p_ids);
+					grow_intsxp(r_row_names, p_row_names);
+					for (unsigned i = 0; i < num_exprs; i++)
+						grow_realsxp(r_expr_vals[i], p_expr_vals[i]);
+				}
+
 				const GInterval2D &interval = scanner.last_interval2d();
 				p_chroms1[row] = interval.chromid1() + 1;
 				p_starts1[row] = interval.start1();
