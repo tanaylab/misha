@@ -332,14 +332,14 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			return R_NilValue;
 		}
 
-		GIntervals out_intervals1d;
-		GIntervals2D out_intervals2d;
-		vector< vector<double> > values(num_exprs);
-
-		// Pre-reserve memory for the regular (non-file) path to avoid reallocations
+		// Pre-compute max_size for memory allocation
 		uint64_t max_size = intervals1d ? intervals1d->size() : intervals2d->size();
 
 		if (!intervset_out.empty()) {
+			// intervals_set_out path: uses C++ vectors + build_rintervals_extract for per-chrom saving
+			GIntervals out_intervals1d;
+			GIntervals2D out_intervals2d;
+			vector< vector<double> > values(num_exprs);
 			bool is_1d_iterator = iu.is_1d_iterator(_exprs, intervals1d, intervals2d, _iterator_policy);
 			vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
 			vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
@@ -386,7 +386,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 						SEXP rintervals = build_rintervals_extract(&out_intervals1d, NULL, values, NULL, _exprs, _colnames, iu);
 						GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals1d, rintervals, iu, chromstats1d);
 						out_intervals1d.clear();
-						for (vector< vector<double> >::iterator ivalues = values.begin(); ivalues != values.end(); ++ivalues) 
+						for (vector< vector<double> >::iterator ivalues = values.begin(); ivalues != values.end(); ++ivalues)
 							ivalues->clear();
 					}
 				} else {
@@ -394,7 +394,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 						SEXP rintervals = build_rintervals_extract(NULL, &out_intervals2d, values, NULL, _exprs, _colnames, iu);
 						GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), &out_intervals2d, rintervals, iu, chromstats2d);
 						out_intervals2d.clear();
-						for (vector< vector<double> >::iterator ivalues = values.begin(); ivalues != values.end(); ++ivalues) 
+						for (vector< vector<double> >::iterator ivalues = values.begin(); ivalues != values.end(); ++ivalues)
 							ivalues->clear();
 					}
 				}
@@ -412,44 +412,347 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			return R_NilValue;
 		}
 
-		vector<unsigned> interv_ids;
+		// ---- Direct-to-R accumulation path (in-memory) ----
+		// When we have a good size estimate: pre-allocate R vectors and write directly.
+		// When we don't (sparse/intervals iterators): accumulate in C++ vectors,
+		// then copy directly to R vectors (skipping convert_intervs virtual iteration).
+		uint64_t estimated = estimate_records_for_expr(iu, _exprs, intervals1d, intervals2d, _iterator_policy, _band);
 
-		// Reserve memory to avoid reallocations during the main loop
-		for (auto& v : values) {
-			v.reserve(max_size);
-		}
-		if (intervals1d)
-			out_intervals1d.reserve(max_size);
-		else
-			out_intervals2d.reserve(max_size);
-		interv_ids.reserve(max_size);
+		if (estimated == 0) {
+			// Unknown result size — use safe C++ push_back accumulation,
+			// then build R vectors directly (bypassing convert_intervs).
+			GIntervals out_intervals1d;
+			GIntervals2D out_intervals2d;
+			vector< vector<double> > values(num_exprs);
+			vector<unsigned> interv_ids;
 
-		for (scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band); !scanner.isend(); scanner.next()) {
-			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
-				values[iexpr].push_back(scanner.last_real(iexpr));
+			if (intervals1d)
+				out_intervals1d.reserve(max_size);
+			else
+				out_intervals2d.reserve(max_size);
+			for (auto& v : values)
+				v.reserve(max_size);
+			interv_ids.reserve(max_size);
 
-			if (scanner.get_iterator()->is_1d()) {
-				out_intervals1d.push_back(scanner.last_interval1d());
-				interv_ids.push_back(iu.get_orig_interv_idx(scanner.last_scope_interval1d()) + 1);
-			} else {
-				out_intervals2d.push_back(scanner.last_interval2d());
-				interv_ids.push_back(iu.get_orig_interv_idx(scanner.last_scope_interval2d()) + 1);
+			for (scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band); !scanner.isend(); scanner.next()) {
+				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+					values[iexpr].push_back(scanner.last_real(iexpr));
+
+				if (scanner.get_iterator()->is_1d()) {
+					out_intervals1d.push_back(scanner.last_interval1d());
+					interv_ids.push_back(iu.get_orig_interv_idx(scanner.last_scope_interval1d()) + 1);
+				} else {
+					out_intervals2d.push_back(scanner.last_interval2d());
+					interv_ids.push_back(iu.get_orig_interv_idx(scanner.last_scope_interval2d()) + 1);
+				}
+
+				iu.verify_max_data_size(values[0].size(), "Result");
+				check_interrupt();
 			}
 
-			iu.verify_max_data_size(values[0].size(), "Result");
-			check_interrupt();
+			if (out_intervals1d.empty() && out_intervals2d.empty())
+				return R_NilValue;
+
+			// Build R data frame directly from C++ vectors (no convert_intervs)
+			bool is_1d_fb = !out_intervals1d.empty();
+			uint64_t nrows = is_1d_fb ? out_intervals1d.size() : out_intervals2d.size();
+			unsigned fb_interv_cols = is_1d_fb ? (unsigned)GInterval::NUM_COLS : (unsigned)GInterval2D::NUM_COLS;
+			unsigned fb_total_cols = fb_interv_cols + num_exprs + 1;
+
+			SEXP fb_answer;
+			rprotect(fb_answer = RSaneAllocVector(VECSXP, fb_total_cols));
+
+			if (is_1d_fb) {
+				SEXP fb_chroms, fb_starts, fb_ends;
+				rprotect(fb_chroms = RSaneAllocVector(INTSXP, nrows));
+				rprotect(fb_starts = RSaneAllocVector(REALSXP, nrows));
+				rprotect(fb_ends = RSaneAllocVector(REALSXP, nrows));
+				int *pc = INTEGER(fb_chroms);
+				double *ps = REAL(fb_starts), *pe = REAL(fb_ends);
+				for (uint64_t i = 0; i < nrows; i++) {
+					pc[i] = out_intervals1d[i].chromid + 1;
+					ps[i] = out_intervals1d[i].start;
+					pe[i] = out_intervals1d[i].end;
+				}
+				unsigned nc = iu.get_chromkey().get_num_chroms();
+				SEXP chrom_lvls;
+				rprotect(chrom_lvls = RSaneAllocVector(STRSXP, nc));
+				for (unsigned id = 0; id < nc; ++id)
+					SET_STRING_ELT(chrom_lvls, id, Rf_mkChar(iu.get_chromkey().id2chrom(id).c_str()));
+				Rf_setAttrib(fb_chroms, R_LevelsSymbol, chrom_lvls);
+				Rf_setAttrib(fb_chroms, R_ClassSymbol, Rf_mkString("factor"));
+				SET_VECTOR_ELT(fb_answer, GInterval::CHROM, fb_chroms);
+				SET_VECTOR_ELT(fb_answer, GInterval::START, fb_starts);
+				SET_VECTOR_ELT(fb_answer, GInterval::END, fb_ends);
+			} else {
+				SEXP fb_c1, fb_s1, fb_e1, fb_c2, fb_s2, fb_e2;
+				rprotect(fb_c1 = RSaneAllocVector(INTSXP, nrows));
+				rprotect(fb_s1 = RSaneAllocVector(REALSXP, nrows));
+				rprotect(fb_e1 = RSaneAllocVector(REALSXP, nrows));
+				rprotect(fb_c2 = RSaneAllocVector(INTSXP, nrows));
+				rprotect(fb_s2 = RSaneAllocVector(REALSXP, nrows));
+				rprotect(fb_e2 = RSaneAllocVector(REALSXP, nrows));
+				int *pc1 = INTEGER(fb_c1), *pc2 = INTEGER(fb_c2);
+				double *ps1 = REAL(fb_s1), *pe1 = REAL(fb_e1);
+				double *ps2 = REAL(fb_s2), *pe2 = REAL(fb_e2);
+				for (uint64_t i = 0; i < nrows; i++) {
+					pc1[i] = out_intervals2d[i].chromid1() + 1;
+					ps1[i] = out_intervals2d[i].start1();
+					pe1[i] = out_intervals2d[i].end1();
+					pc2[i] = out_intervals2d[i].chromid2() + 1;
+					ps2[i] = out_intervals2d[i].start2();
+					pe2[i] = out_intervals2d[i].end2();
+				}
+				unsigned nc = iu.get_chromkey().get_num_chroms();
+				SEXP chrom_lvls;
+				rprotect(chrom_lvls = RSaneAllocVector(STRSXP, nc));
+				for (unsigned id = 0; id < nc; ++id)
+					SET_STRING_ELT(chrom_lvls, id, Rf_mkChar(iu.get_chromkey().id2chrom(id).c_str()));
+				Rf_setAttrib(fb_c1, R_LevelsSymbol, chrom_lvls);
+				Rf_setAttrib(fb_c1, R_ClassSymbol, Rf_mkString("factor"));
+				Rf_setAttrib(fb_c2, R_LevelsSymbol, chrom_lvls);
+				Rf_setAttrib(fb_c2, R_ClassSymbol, Rf_mkString("factor"));
+				SET_VECTOR_ELT(fb_answer, GInterval2D::CHROM1, fb_c1);
+				SET_VECTOR_ELT(fb_answer, GInterval2D::START1, fb_s1);
+				SET_VECTOR_ELT(fb_answer, GInterval2D::END1, fb_e1);
+				SET_VECTOR_ELT(fb_answer, GInterval2D::CHROM2, fb_c2);
+				SET_VECTOR_ELT(fb_answer, GInterval2D::START2, fb_s2);
+				SET_VECTOR_ELT(fb_answer, GInterval2D::END2, fb_e2);
+			}
+
+			// Expression value columns (memcpy from C++ vectors)
+			for (unsigned iexpr = 0; iexpr < num_exprs; iexpr++) {
+				SEXP rv = rprotect_ptr(RSaneAllocVector(REALSXP, nrows));
+				memcpy(REAL(rv), values[iexpr].data(), nrows * sizeof(double));
+				SET_VECTOR_ELT(fb_answer, fb_interv_cols + iexpr, rv);
+			}
+
+			// IntervalID column
+			SEXP fb_ids;
+			rprotect(fb_ids = RSaneAllocVector(INTSXP, nrows));
+			for (uint64_t i = 0; i < nrows; i++)
+				INTEGER(fb_ids)[i] = interv_ids[i];
+			SET_VECTOR_ELT(fb_answer, fb_interv_cols + num_exprs, fb_ids);
+
+			// Column names
+			SEXP fb_colnames;
+			rprotect(fb_colnames = RSaneAllocVector(STRSXP, fb_total_cols));
+			if (is_1d_fb) {
+				for (int i = 0; i < GInterval::NUM_COLS; i++)
+					SET_STRING_ELT(fb_colnames, i, Rf_mkChar(GInterval::COL_NAMES[i]));
+			} else {
+				for (int i = 0; i < GInterval2D::NUM_COLS; i++)
+					SET_STRING_ELT(fb_colnames, i, Rf_mkChar(GInterval2D::COL_NAMES[i]));
+			}
+			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+				const char *cn = Rf_isNull(_colnames) ?
+					get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str() :
+					CHAR(STRING_ELT(_colnames, iexpr));
+				SET_STRING_ELT(fb_colnames, fb_interv_cols + iexpr, Rf_mkChar(cn));
+			}
+			SET_STRING_ELT(fb_colnames, fb_interv_cols + num_exprs, Rf_mkChar("intervalID"));
+			Rf_setAttrib(fb_answer, R_NamesSymbol, fb_colnames);
+
+			// Row names and class
+			SEXP fb_rownames;
+			rprotect(fb_rownames = RSaneAllocVector(INTSXP, nrows));
+			for (uint64_t i = 0; i < nrows; i++)
+				INTEGER(fb_rownames)[i] = (int)(i + 1);
+			Rf_setAttrib(fb_answer, R_RowNamesSymbol, fb_rownames);
+			Rf_setAttrib(fb_answer, R_ClassSymbol, Rf_mkString("data.frame"));
+
+			return fb_answer;
 		}
 
-		if (out_intervals1d.empty() && out_intervals2d.empty())
+		// We have a good estimate — use direct-to-R pre-allocation.
+		uint64_t alloc_size = estimated;
+		{
+			uint64_t max_data = iu.get_max_data_size();
+			if (alloc_size > max_data)
+				alloc_size = max_data;
+		}
+
+		scanner.begin(_exprs, intervals1d, intervals2d, _iterator_policy, _band);
+
+		if (scanner.isend())
 			return R_NilValue;
 
-		// assemble the answer
-		SEXP answer;
+		bool is_1d = scanner.get_iterator()->is_1d();
+		unsigned num_interv_cols = is_1d ? (unsigned)GInterval::NUM_COLS : (unsigned)GInterval2D::NUM_COLS;
+		unsigned total_cols = num_interv_cols + num_exprs + 1; // +1 for intervalID
 
-		if (!out_intervals1d.empty())
-			answer = build_rintervals_extract(&out_intervals1d, NULL, values, &interv_ids, _exprs, _colnames, iu);
-		else
-			answer = build_rintervals_extract(NULL, &out_intervals2d, values, &interv_ids, _exprs, _colnames, iu);
+		// Pre-allocate all R vectors at alloc_size
+		SEXP answer;
+		rprotect(answer = RSaneAllocVector(VECSXP, total_cols));
+
+		SEXP r_row_names;
+		rprotect(r_row_names = RSaneAllocVector(INTSXP, alloc_size));
+		int *p_row_names = INTEGER(r_row_names);
+
+		// Expression value columns
+		vector<SEXP> r_expr_vals(num_exprs);
+		vector<double*> p_expr_vals(num_exprs);
+		for (unsigned i = 0; i < num_exprs; i++) {
+			r_expr_vals[i] = rprotect_ptr(RSaneAllocVector(REALSXP, alloc_size));
+			p_expr_vals[i] = REAL(r_expr_vals[i]);
+		}
+
+		// IntervalID column
+		SEXP r_ids;
+		rprotect(r_ids = RSaneAllocVector(INTSXP, alloc_size));
+		int *p_ids = INTEGER(r_ids);
+
+		uint64_t row = 0;
+
+		if (is_1d) {
+			// 1D interval columns
+			SEXP r_chroms, r_starts, r_ends;
+			rprotect(r_chroms = RSaneAllocVector(INTSXP, alloc_size));
+			rprotect(r_starts = RSaneAllocVector(REALSXP, alloc_size));
+			rprotect(r_ends = RSaneAllocVector(REALSXP, alloc_size));
+			int *p_chroms = INTEGER(r_chroms);
+			double *p_starts = REAL(r_starts);
+			double *p_ends = REAL(r_ends);
+
+			// Main scan loop for 1D
+			for (; !scanner.isend(); scanner.next()) {
+				const GInterval &interval = scanner.last_interval1d();
+				p_chroms[row] = interval.chromid + 1;  // R factors are 1-based
+				p_starts[row] = interval.start;
+				p_ends[row] = interval.end;
+				p_ids[row] = iu.get_orig_interv_idx(scanner.last_scope_interval1d()) + 1;
+
+				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+					p_expr_vals[iexpr][row] = scanner.last_real(iexpr);
+
+				p_row_names[row] = (int)(row + 1);
+				row++;
+
+				iu.verify_max_data_size(row, "Result");
+				check_interrupt();
+			}
+
+			// Truncate all vectors to actual size
+			SETLENGTH(r_chroms, row);
+			SETLENGTH(r_starts, row);
+			SETLENGTH(r_ends, row);
+
+			// Set chrom as factor
+			unsigned num_chroms_total = iu.get_chromkey().get_num_chroms();
+			SEXP chrom_levels;
+			rprotect(chrom_levels = RSaneAllocVector(STRSXP, num_chroms_total));
+			for (unsigned id = 0; id < num_chroms_total; ++id)
+				SET_STRING_ELT(chrom_levels, id, Rf_mkChar(iu.get_chromkey().id2chrom(id).c_str()));
+			Rf_setAttrib(r_chroms, R_LevelsSymbol, chrom_levels);
+			Rf_setAttrib(r_chroms, R_ClassSymbol, Rf_mkString("factor"));
+
+			SET_VECTOR_ELT(answer, GInterval::CHROM, r_chroms);
+			SET_VECTOR_ELT(answer, GInterval::START, r_starts);
+			SET_VECTOR_ELT(answer, GInterval::END, r_ends);
+		} else {
+			// 2D interval columns
+			SEXP r_chroms1, r_starts1, r_ends1, r_chroms2, r_starts2, r_ends2;
+			rprotect(r_chroms1 = RSaneAllocVector(INTSXP, alloc_size));
+			rprotect(r_starts1 = RSaneAllocVector(REALSXP, alloc_size));
+			rprotect(r_ends1 = RSaneAllocVector(REALSXP, alloc_size));
+			rprotect(r_chroms2 = RSaneAllocVector(INTSXP, alloc_size));
+			rprotect(r_starts2 = RSaneAllocVector(REALSXP, alloc_size));
+			rprotect(r_ends2 = RSaneAllocVector(REALSXP, alloc_size));
+			int *p_chroms1 = INTEGER(r_chroms1);
+			double *p_starts1 = REAL(r_starts1);
+			double *p_ends1 = REAL(r_ends1);
+			int *p_chroms2 = INTEGER(r_chroms2);
+			double *p_starts2 = REAL(r_starts2);
+			double *p_ends2 = REAL(r_ends2);
+
+			// Main scan loop for 2D
+			for (; !scanner.isend(); scanner.next()) {
+				const GInterval2D &interval = scanner.last_interval2d();
+				p_chroms1[row] = interval.chromid1() + 1;
+				p_starts1[row] = interval.start1();
+				p_ends1[row] = interval.end1();
+				p_chroms2[row] = interval.chromid2() + 1;
+				p_starts2[row] = interval.start2();
+				p_ends2[row] = interval.end2();
+				p_ids[row] = iu.get_orig_interv_idx(scanner.last_scope_interval2d()) + 1;
+
+				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr)
+					p_expr_vals[iexpr][row] = scanner.last_real(iexpr);
+
+				p_row_names[row] = (int)(row + 1);
+				row++;
+
+				iu.verify_max_data_size(row, "Result");
+				check_interrupt();
+			}
+
+			// Truncate all vectors to actual size
+			SETLENGTH(r_chroms1, row);
+			SETLENGTH(r_starts1, row);
+			SETLENGTH(r_ends1, row);
+			SETLENGTH(r_chroms2, row);
+			SETLENGTH(r_starts2, row);
+			SETLENGTH(r_ends2, row);
+
+			// Set chrom1 and chrom2 as factors
+			unsigned num_chroms_total = iu.get_chromkey().get_num_chroms();
+			SEXP chrom_levels1, chrom_levels2;
+			rprotect(chrom_levels1 = RSaneAllocVector(STRSXP, num_chroms_total));
+			rprotect(chrom_levels2 = RSaneAllocVector(STRSXP, num_chroms_total));
+			for (unsigned id = 0; id < num_chroms_total; ++id) {
+				SET_STRING_ELT(chrom_levels1, id, Rf_mkChar(iu.get_chromkey().id2chrom(id).c_str()));
+				SET_STRING_ELT(chrom_levels2, id, Rf_mkChar(iu.get_chromkey().id2chrom(id).c_str()));
+			}
+			Rf_setAttrib(r_chroms1, R_LevelsSymbol, chrom_levels1);
+			Rf_setAttrib(r_chroms1, R_ClassSymbol, Rf_mkString("factor"));
+			Rf_setAttrib(r_chroms2, R_LevelsSymbol, chrom_levels2);
+			Rf_setAttrib(r_chroms2, R_ClassSymbol, Rf_mkString("factor"));
+
+			SET_VECTOR_ELT(answer, GInterval2D::CHROM1, r_chroms1);
+			SET_VECTOR_ELT(answer, GInterval2D::START1, r_starts1);
+			SET_VECTOR_ELT(answer, GInterval2D::END1, r_ends1);
+			SET_VECTOR_ELT(answer, GInterval2D::CHROM2, r_chroms2);
+			SET_VECTOR_ELT(answer, GInterval2D::START2, r_starts2);
+			SET_VECTOR_ELT(answer, GInterval2D::END2, r_ends2);
+		}
+
+		if (row == 0)
+			return R_NilValue;
+
+		// Truncate shared columns to actual size
+		for (unsigned i = 0; i < num_exprs; i++)
+			SETLENGTH(r_expr_vals[i], row);
+		SETLENGTH(r_ids, row);
+		SETLENGTH(r_row_names, row);
+
+		// Set expression value columns
+		for (unsigned iexpr = 0; iexpr < num_exprs; iexpr++)
+			SET_VECTOR_ELT(answer, num_interv_cols + iexpr, r_expr_vals[iexpr]);
+
+		// Set IntervalID column
+		SET_VECTOR_ELT(answer, num_interv_cols + num_exprs, r_ids);
+
+		// Column names
+		SEXP col_names;
+		rprotect(col_names = RSaneAllocVector(STRSXP, total_cols));
+		if (is_1d) {
+			for (int i = 0; i < GInterval::NUM_COLS; i++)
+				SET_STRING_ELT(col_names, i, Rf_mkChar(GInterval::COL_NAMES[i]));
+		} else {
+			for (int i = 0; i < GInterval2D::NUM_COLS; i++)
+				SET_STRING_ELT(col_names, i, Rf_mkChar(GInterval2D::COL_NAMES[i]));
+		}
+		for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
+			if (Rf_isNull(_colnames))
+				SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
+			else
+				SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
+		}
+		SET_STRING_ELT(col_names, num_interv_cols + num_exprs, Rf_mkChar("intervalID"));
+
+		Rf_setAttrib(answer, R_NamesSymbol, col_names);
+		Rf_setAttrib(answer, R_RowNamesSymbol, r_row_names);
+		Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
 
 		return answer;
 	} catch (TGLException &e) {
