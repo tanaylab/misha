@@ -83,11 +83,14 @@ static uint64_t estimate_records_for_expr(
 		return 0;
 	}
 
-	// Intervals iterators can emit more records than the number of iterator intervals
-	// when a long iterator interval overlaps multiple scope intervals.
-	// Avoid underestimating shared-memory size by not capping in this case.
-	if (dynamic_cast<TrackExpressionIntervals1DIterator *>(expr_itr)) {
-		return 0;
+	// Intervals iterators: upper bound = iterator_count × scope_count
+	// (one iterator interval can be split by multiple scope intervals)
+	if (auto *int1d_itr = dynamic_cast<TrackExpressionIntervals1DIterator *>(expr_itr)) {
+		uint64_t itr_size = int1d_itr->get_intervals() ? int1d_itr->get_intervals()->size() : 0;
+		uint64_t scope_size = scope1d ? scope1d->size() : (scope2d ? scope2d->size() : 0);
+		if (itr_size > 0 && scope_size > 0)
+			return itr_size * scope_size;
+		return itr_size > 0 ? itr_size : 0;
 	}
 
 	return 0;
