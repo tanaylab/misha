@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "GenomeTrack1D.h"
+#include "MmapFile.h"
 #include "utils/RunningLogSumExp.h"
 
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
@@ -75,10 +76,18 @@ protected:
 	int64_t m_sliding_num_vs{0};
 	bool m_lse_sliding_valid{false};
 	bool m_running_lse_initialized{false};
-	int m_fast_path_mode{0}; // 0=unknown, 1=reducer-only fast path, 2=avg/nearest-only fast path, -1=generic path
+	int m_fast_path_mode{0}; // 0=unknown, 1=reducer-only fast path, 2=avg/nearest-only fast path, 3=single-function fast path, -1=generic path
+	Functions m_single_func{AVG}; // used when m_fast_path_mode == 3
 	uint32_t m_fast_reducer_bits{0};
 	GenomeTrackFixedBin *m_master_obj{NULL};
 	bool m_master_synced{false};
+
+	// mmap-backed read path (naryn pattern): pointer dereference instead of fread
+	MmapFile m_mmap;
+	std::string m_mmap_path;  // track which file is mmap'd (avoid re-mmap on chrom switch)
+	const float *m_mmap_data{nullptr};  // points to first bin value in mmap'd region
+	int64_t m_mmap_num_bins{0};
+	int64_t m_cur_bin{0};  // current bin index for mmap path
 
 	// Scratch buffers reused across read_interval calls to avoid per-call heap allocation
 	std::vector<float> m_scratch_all_values;
@@ -86,6 +95,7 @@ protected:
 
 	void read_interval_reducers_only(const GInterval &interval);
 	void read_interval_avg_nearest_only(const GInterval &interval);
+	void read_interval_single_function(const GInterval &interval);
 	void sync_master_state_from_dependent();
 	void copy_state_from_master();
 	void classify_fast_path_mode();
@@ -110,15 +120,28 @@ protected:
 
 inline void GenomeTrackFixedBin::goto_bin(uint64_t bin)
 {
-	// Add m_base_offset to the absolute seek for indexed format support
-	if (m_bfile.seek((long)(m_base_offset + sizeof(m_bin_size) + (uint64_t)bin * sizeof(float)), SEEK_SET))
-		TGLError<GenomeTrackFixedBin>("Failed to seek a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+	if (m_mmap_data) {
+		m_cur_bin = bin;
+	} else {
+		if (m_bfile.seek((long)(m_base_offset + sizeof(m_bin_size) + (uint64_t)bin * sizeof(float)), SEEK_SET))
+			TGLError<GenomeTrackFixedBin>("Failed to seek a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+	}
 	m_cur_coord = bin * m_bin_size;
 }
 
 
 inline bool GenomeTrackFixedBin::read_next_bin(float &val)
 {
+	if (m_mmap_data) {
+		if (m_cur_bin >= m_mmap_num_bins)
+			return false;
+		val = m_mmap_data[m_cur_bin++];
+		if (isinf(val))
+			val = numeric_limits<float>::quiet_NaN();
+		m_cur_coord += m_bin_size;
+		return true;
+	}
+
 	if (m_bfile.read(&val, sizeof(val)) != sizeof(val)) {
 		if (m_bfile.error())
 			TGLError<GenomeTrackFixedBin>("Failed to read a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));

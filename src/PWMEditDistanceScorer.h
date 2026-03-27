@@ -124,7 +124,7 @@ private:
         int start;         // start column in motif
         int len;           // block length (number of columns)
         int num_entries;   // 4^len (size of viable bitset)
-        std::vector<bool> viable;  // viable[hash] = true if B-mer can match block with 0 edits
+        std::vector<uint8_t> viable;  // viable[hash] = true if B-mer can match block with 0 edits
     };
     std::vector<PrefilterBlock> m_prefilter_blocks;
     bool m_use_prefilter;

@@ -38,6 +38,11 @@ private:
 		unsigned idx
 	);
 
+	// Helpers to deduplicate switch logic in process_single_track_var_1d
+	double extract_single_value(const TrackExpressionVars::Track_var &var, GenomeTrack1D &track, int64_t base_start);
+	double aggregate_multi_value(const TrackExpressionVars::Track_var &var, GenomeTrack1D &track,
+	                             const std::vector<GInterval> &parts, int64_t base_start);
+
 	// Filter aggregation helpers for 1D tracks
 	double aggregate_avg_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);
 	double aggregate_sum_with_filter(GenomeTrack1D &track, const std::vector<GInterval> &parts);

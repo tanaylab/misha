@@ -68,6 +68,11 @@ void GIntervalsMeta1D::init(const char *name, SEXP meta, const GenomeChromKey &c
 	}
 
 	m_orig_chrom2size = m_chrom2size;
+
+	// Precompute prefix sums for O(1) offset lookups
+	m_orig_chrom2offset.resize(m_orig_chrom2size.size() + 1, 0);
+	for (size_t i = 0; i < m_orig_chrom2size.size(); ++i)
+		m_orig_chrom2offset[i + 1] = m_orig_chrom2offset[i] + m_orig_chrom2size[i];
 }
 
 void GIntervalsMeta1D::init_masked_copy(GIntervalsMeta1D *obj, const set<int> &chromids_mask) const
@@ -88,6 +93,7 @@ void GIntervalsMeta1D::init_masked_copy(GIntervalsMeta1D *obj, const set<int> &c
 	obj->m_chrom2range.resize(m_chromkey->get_num_chroms(), 0);
 	obj->m_chrom2unified_overlap_range.resize(m_chromkey->get_num_chroms(), 0);
 	obj->m_orig_chrom2size = m_orig_chrom2size;
+	obj->m_orig_chrom2offset = m_orig_chrom2offset;
 
 	for (int chromid = 0; chromid < (int)m_chromkey->get_num_chroms(); ++chromid) {
 		if (chromids_mask.find(chromid) == chromids_mask.end()) 

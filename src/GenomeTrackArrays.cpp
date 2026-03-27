@@ -215,9 +215,9 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 
 	for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
 		(*itrack)->m_last_avg = (*itrack)->m_last_nearest = (*itrack)->m_last_min = (*itrack)->m_last_max = (*itrack)->m_last_stddev = (*itrack)->m_last_sum = numeric_limits<float>::quiet_NaN();
-		if ((*itrack)->m_functions[MAX_POS])
+		if ((*itrack)->has_function(MAX_POS))
 			(*itrack)->m_last_max_pos = numeric_limits<double>::quiet_NaN();
-		if ((*itrack)->m_functions[MIN_POS])
+		if ((*itrack)->has_function(MIN_POS))
 			(*itrack)->m_last_min_pos = numeric_limits<double>::quiet_NaN();
 
 		if ((*itrack)->m_use_quantile)
@@ -232,7 +232,7 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 
 	if (m_intervals.front().start >= interval.end) {
 		for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
-			if ((*itrack)->m_functions[NEAREST])
+			if ((*itrack)->has_function(NEAREST))
 				(*itrack)->m_last_nearest = (*itrack)->get_sliced_val(0);
 		}
 		return;
@@ -240,7 +240,7 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 
 	if (m_intervals.back().end <= interval.start) {
 		for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
-			if ((*itrack)->m_functions[NEAREST])
+			if ((*itrack)->has_function(NEAREST))
 				(*itrack)->m_last_nearest = (*itrack)->get_sliced_val(m_vals_pos.size() - 1);
 		}
 		return;
@@ -279,7 +279,7 @@ void GenomeTrackArrays::read_interval(const GInterval &interval)
 
 		if (iend_interval - istart_interval == 1) {
 			for (vector<GenomeTrackArrays *>::iterator itrack = m_dependent_objs.begin(); itrack != m_dependent_objs.end(); ++itrack) {
-				if ((*itrack)->m_functions[NEAREST])
+				if ((*itrack)->has_function(NEAREST))
 					(*itrack)->m_last_nearest = iend_interval == m_intervals.end() || interval.dist2interv(*istart_interval) <= interval.dist2interv(*iend_interval) ?
 						(*itrack)->get_sliced_val(istart_interval - m_intervals.begin()) : (*itrack)->get_sliced_val(iend_interval - m_intervals.begin());
 			}

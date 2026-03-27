@@ -24,11 +24,10 @@ void GenomeTrackFixedBin::sync_master_state_from_dependent()
 		return;
 
 	bool changed = false;
-	for (size_t i = 0; i < m_functions.size(); ++i) {
-		if (m_functions[i] && !m_master_obj->m_functions[i]) {
-			m_master_obj->m_functions[i] = true;
-			changed = true;
-		}
+	uint32_t new_bits = m_func_mask & ~m_master_obj->m_func_mask;
+	if (new_bits) {
+		m_master_obj->m_func_mask |= new_bits;
+		changed = true;
 	}
 
 	if (m_use_quantile && !m_master_obj->m_use_quantile) {
@@ -49,39 +48,39 @@ void GenomeTrackFixedBin::copy_state_from_master()
 	if (!m_master_obj)
 		return;
 
-	if (m_functions[AVG])
+	if (has_function(AVG))
 		m_last_avg = m_master_obj->m_last_avg;
-	if (m_functions[MIN])
+	if (has_function(MIN))
 		m_last_min = m_master_obj->m_last_min;
-	if (m_functions[MAX])
+	if (has_function(MAX))
 		m_last_max = m_master_obj->m_last_max;
-	if (m_functions[MAX_POS])
+	if (has_function(MAX_POS))
 		m_last_max_pos = m_master_obj->m_last_max_pos;
-	if (m_functions[MIN_POS])
+	if (has_function(MIN_POS))
 		m_last_min_pos = m_master_obj->m_last_min_pos;
-	if (m_functions[NEAREST])
+	if (has_function(NEAREST))
 		m_last_nearest = m_master_obj->m_last_nearest;
-	if (m_functions[STDDEV])
+	if (has_function(STDDEV))
 		m_last_stddev = m_master_obj->m_last_stddev;
-	if (m_functions[SUM])
+	if (has_function(SUM))
 		m_last_sum = m_master_obj->m_last_sum;
-	if (m_functions[LSE])
+	if (has_function(LSE))
 		m_last_lse = m_master_obj->m_last_lse;
-	if (m_functions[EXISTS])
+	if (has_function(EXISTS))
 		m_last_exists = m_master_obj->m_last_exists;
-	if (m_functions[SIZE])
+	if (has_function(SIZE))
 		m_last_size = m_master_obj->m_last_size;
-	if (m_functions[SAMPLE])
+	if (has_function(SAMPLE))
 		m_last_sample = m_master_obj->m_last_sample;
-	if (m_functions[SAMPLE_POS])
+	if (has_function(SAMPLE_POS))
 		m_last_sample_pos = m_master_obj->m_last_sample_pos;
-	if (m_functions[FIRST])
+	if (has_function(FIRST))
 		m_last_first = m_master_obj->m_last_first;
-	if (m_functions[FIRST_POS])
+	if (has_function(FIRST_POS))
 		m_last_first_pos = m_master_obj->m_last_first_pos;
-	if (m_functions[LAST])
+	if (has_function(LAST))
 		m_last_last = m_master_obj->m_last_last;
-	if (m_functions[LAST_POS])
+	if (has_function(LAST_POS))
 		m_last_last_pos = m_master_obj->m_last_last_pos;
 	if (m_use_quantile)
 		m_sp = m_master_obj->m_sp;
@@ -89,16 +88,24 @@ void GenomeTrackFixedBin::copy_state_from_master()
 
 void GenomeTrackFixedBin::classify_fast_path_mode()
 {
+	// Single-function fast path: if exactly one function is registered and no quantile,
+	// we can run a tight loop for just that function.
+	if (!m_use_quantile && __builtin_popcount(m_func_mask) == 1) {
+		m_fast_path_mode = 3;
+		m_single_func = static_cast<Functions>(__builtin_ctz(m_func_mask));
+		return;
+	}
+
 	bool reducer_only = !m_use_quantile;
 	bool avg_nearest_only = !m_use_quantile;
 	bool has_avg_nearest = false;
 	uint32_t bits = 0;
 
-	for (size_t i = 0; i < m_functions.size(); ++i) {
-		if (!m_functions[i])
+	for (int i = 0; i < NUM_FUNCS; ++i) {
+		if (!(m_func_mask & (1u << i)))
 			continue;
 
-		const int func = (int)i;
+		const int func = i;
 		if (func == AVG || func == NEAREST)
 			has_avg_nearest = true;
 		else
@@ -133,27 +140,27 @@ void GenomeTrackFixedBin::assign_single_bin_value(float value, double overlap_st
 	m_last_min = m_last_max = m_last_nearest = m_last_sum = m_last_avg;
 	m_last_stddev = numeric_limits<float>::quiet_NaN();
 
-	if (m_functions[LSE])
+	if (has_function(LSE))
 		m_last_lse = m_last_avg;
-	if (m_functions[MAX_POS])
+	if (has_function(MAX_POS))
 		m_last_max_pos = overlap_start;
-	if (m_functions[MIN_POS])
+	if (has_function(MIN_POS))
 		m_last_min_pos = overlap_start;
-	if (m_functions[EXISTS])
+	if (has_function(EXISTS))
 		m_last_exists = 1;
-	if (m_functions[SIZE])
+	if (has_function(SIZE))
 		m_last_size = 1;
-	if (m_functions[SAMPLE])
+	if (has_function(SAMPLE))
 		m_last_sample = m_last_avg;
-	if (m_functions[SAMPLE_POS])
+	if (has_function(SAMPLE_POS))
 		m_last_sample_pos = overlap_start;
-	if (m_functions[FIRST])
+	if (has_function(FIRST))
 		m_last_first = m_last_avg;
-	if (m_functions[FIRST_POS])
+	if (has_function(FIRST_POS))
 		m_last_first_pos = overlap_start;
-	if (m_functions[LAST])
+	if (has_function(LAST))
 		m_last_last = m_last_avg;
-	if (m_functions[LAST_POS])
+	if (has_function(LAST_POS))
 		m_last_last_pos = overlap_start;
 	if (m_use_quantile && !std::isnan(m_last_avg))
 		m_sp.add(m_last_avg, s_rnd_func);
@@ -162,11 +169,11 @@ void GenomeTrackFixedBin::assign_single_bin_value(float value, double overlap_st
 void GenomeTrackFixedBin::assign_single_bin_missing()
 {
 	m_last_min = m_last_max = m_last_nearest = m_last_avg = m_last_stddev = m_last_sum = numeric_limits<float>::quiet_NaN();
-	if (m_functions[LSE])
+	if (has_function(LSE))
 		m_last_lse = numeric_limits<float>::quiet_NaN();
-	if (m_functions[MAX_POS])
+	if (has_function(MAX_POS))
 		m_last_max_pos = numeric_limits<double>::quiet_NaN();
-	if (m_functions[MIN_POS])
+	if (has_function(MIN_POS))
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
 }
 
@@ -435,6 +442,152 @@ void GenomeTrackFixedBin::read_interval_avg_nearest_only(const GInterval &interv
 	}
 }
 
+void GenomeTrackFixedBin::read_interval_single_function(const GInterval &interval)
+{
+	int64_t sbin = (int64_t)(interval.start / m_bin_size);
+	int64_t ebin = (int64_t)ceil(interval.end / (double)m_bin_size);
+
+	// Read all bins in the interval
+	vector<float> bin_vals;
+	int64_t bins_read = read_bins_bulk(sbin, ebin - sbin, bin_vals);
+
+	if (bins_read > 0) {
+		m_cached_bin_idx = sbin + bins_read - 1;
+		m_cached_bin_val = bin_vals[bins_read - 1];
+		m_cache_valid = true;
+	}
+
+	switch (m_single_func) {
+	case AVG:
+	case NEAREST: {
+		uint64_t num_vs = 0;
+		double sum_accum = 0;
+		for (int64_t i = 0; i < bins_read; ++i) {
+			if (!std::isnan(bin_vals[i])) {
+				sum_accum += bin_vals[i];
+				++num_vs;
+			}
+		}
+		if (num_vs > 0) {
+			m_last_avg = m_last_nearest = (float)(sum_accum / num_vs);
+			m_last_sum = (float)sum_accum;
+		} else {
+			m_last_avg = m_last_nearest = m_last_sum = numeric_limits<float>::quiet_NaN();
+		}
+		m_last_min = m_last_max = m_last_stddev = numeric_limits<float>::quiet_NaN();
+		break;
+	}
+	case SUM: {
+		double sum_accum = 0;
+		uint64_t num_vs = 0;
+		for (int64_t i = 0; i < bins_read; ++i) {
+			if (!std::isnan(bin_vals[i])) {
+				sum_accum += bin_vals[i];
+				++num_vs;
+			}
+		}
+		m_last_sum = num_vs > 0 ? (float)sum_accum : numeric_limits<float>::quiet_NaN();
+		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_stddev = numeric_limits<float>::quiet_NaN();
+		break;
+	}
+	case LSE: {
+		m_last_lse = -numeric_limits<float>::infinity();
+		uint64_t num_vs = 0;
+		for (int64_t i = 0; i < bins_read; ++i) {
+			if (!std::isnan(bin_vals[i])) {
+				lse_accumulate(m_last_lse, bin_vals[i]);
+				++num_vs;
+			}
+		}
+		if (num_vs == 0)
+			m_last_lse = numeric_limits<float>::quiet_NaN();
+		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = m_last_stddev = numeric_limits<float>::quiet_NaN();
+		break;
+	}
+	case MIN: {
+		m_last_min = numeric_limits<float>::max();
+		uint64_t num_vs = 0;
+		for (int64_t i = 0; i < bins_read; ++i) {
+			if (!std::isnan(bin_vals[i])) {
+				if (bin_vals[i] < m_last_min)
+					m_last_min = bin_vals[i];
+				++num_vs;
+			}
+		}
+		if (num_vs == 0)
+			m_last_min = numeric_limits<float>::quiet_NaN();
+		// Also compute avg/sum since the generic path does
+		m_last_avg = m_last_nearest = m_last_max = m_last_sum = m_last_stddev = numeric_limits<float>::quiet_NaN();
+		break;
+	}
+	case MAX: {
+		m_last_max = -numeric_limits<float>::max();
+		uint64_t num_vs = 0;
+		for (int64_t i = 0; i < bins_read; ++i) {
+			if (!std::isnan(bin_vals[i])) {
+				if (bin_vals[i] > m_last_max)
+					m_last_max = bin_vals[i];
+				++num_vs;
+			}
+		}
+		if (num_vs == 0)
+			m_last_max = numeric_limits<float>::quiet_NaN();
+		m_last_avg = m_last_nearest = m_last_min = m_last_sum = m_last_stddev = numeric_limits<float>::quiet_NaN();
+		break;
+	}
+	case EXISTS: {
+		m_last_exists = 0;
+		for (int64_t i = 0; i < bins_read; ++i) {
+			if (!std::isnan(bin_vals[i])) {
+				m_last_exists = 1;
+				break;
+			}
+		}
+		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = m_last_stddev = numeric_limits<float>::quiet_NaN();
+		break;
+	}
+	case SIZE: {
+		uint64_t num_vs = 0;
+		for (int64_t i = 0; i < bins_read; ++i) {
+			if (!std::isnan(bin_vals[i]))
+				++num_vs;
+		}
+		m_last_size = num_vs;
+		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = m_last_stddev = numeric_limits<float>::quiet_NaN();
+		break;
+	}
+	case STDDEV: {
+		uint64_t num_vs = 0;
+		double stddev_mean = 0;
+		double stddev_m2 = 0;
+		for (int64_t i = 0; i < bins_read; ++i) {
+			if (!std::isnan(bin_vals[i])) {
+				++num_vs;
+				const double delta = bin_vals[i] - stddev_mean;
+				stddev_mean += delta / static_cast<double>(num_vs);
+				const double delta2 = bin_vals[i] - stddev_mean;
+				stddev_m2 += delta * delta2;
+			}
+		}
+		m_last_stddev = num_vs > 1 ? sqrt(stddev_m2 / static_cast<double>(num_vs - 1)) : numeric_limits<float>::quiet_NaN();
+		m_last_avg = m_last_nearest = m_last_min = m_last_max = m_last_sum = numeric_limits<float>::quiet_NaN();
+		break;
+	}
+	default:
+		// For less common functions (MAX_POS, MIN_POS, SAMPLE, SAMPLE_POS, FIRST, FIRST_POS,
+		// LAST, LAST_POS), fall back to the generic path. This should not happen since
+		// classify_fast_path_mode only sets mode 3 for popcount==1 and these functions
+		// are handled, but as a safety net:
+		m_fast_path_mode = -1;
+		read_interval(interval);
+		return;
+	}
+
+	// Reset sliding window state since single-function path doesn't maintain it
+	m_lse_sliding_valid = false;
+	m_running_lse_initialized = false;
+}
+
 void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 {
 	if (m_master_obj) {
@@ -460,28 +613,33 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		return;
 	}
 
+	if (m_fast_path_mode == 3) {
+		read_interval_single_function(interval);
+		return;
+	}
+
 	if (m_use_quantile)
 		m_sp.reset();
-	if (!m_functions[LSE])
+	if (!has_function(LSE))
 		m_running_lse_initialized = false;
 
-	if (m_functions[MIN_POS])
+	if (has_function(MIN_POS))
 		m_last_min_pos = numeric_limits<double>::quiet_NaN();
-	if (m_functions[EXISTS])
+	if (has_function(EXISTS))
 		m_last_exists = 0;
-	if (m_functions[SIZE])
+	if (has_function(SIZE))
 		m_last_size = 0;
-	if (m_functions[SAMPLE])
+	if (has_function(SAMPLE))
 		m_last_sample = numeric_limits<float>::quiet_NaN();
-	if (m_functions[SAMPLE_POS])
+	if (has_function(SAMPLE_POS))
 		m_last_sample_pos = numeric_limits<double>::quiet_NaN();
-	if (m_functions[FIRST])
+	if (has_function(FIRST))
 		m_last_first = numeric_limits<float>::quiet_NaN();
-	if (m_functions[FIRST_POS])
+	if (has_function(FIRST_POS))
 		m_last_first_pos = numeric_limits<double>::quiet_NaN();
-	if (m_functions[LAST])
+	if (has_function(LAST))
 		m_last_last = numeric_limits<float>::quiet_NaN();
-	if (m_functions[LAST_POS])
+	if (has_function(LAST_POS))
 		m_last_last_pos = numeric_limits<double>::quiet_NaN();
 
 	// optimization of the most common case when the expression iterator starts at 0 and steps by bin_size
@@ -543,37 +701,37 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 		const int64_t window_size = ebin - sbin;
 		const bool simple_sliding_compatible =
 			!m_use_quantile &&
-			!m_functions[MIN] &&
-			!m_functions[MAX] &&
-			!m_functions[MAX_POS] &&
-			!m_functions[MIN_POS] &&
-			!m_functions[STDDEV] &&
-			!m_functions[SAMPLE] &&
-			!m_functions[SAMPLE_POS] &&
-			!m_functions[FIRST] &&
-			!m_functions[FIRST_POS] &&
-			!m_functions[LAST] &&
-			!m_functions[LAST_POS];
+			!has_function(MIN) &&
+			!has_function(MAX) &&
+			!has_function(MAX_POS) &&
+			!has_function(MIN_POS) &&
+			!has_function(STDDEV) &&
+			!has_function(SAMPLE) &&
+			!has_function(SAMPLE_POS) &&
+			!has_function(FIRST) &&
+			!has_function(FIRST_POS) &&
+			!has_function(LAST) &&
+			!has_function(LAST_POS);
 
 		// Reuse scratch buffers for sampling (avoids per-call allocation)
 		m_scratch_all_values.clear();
 		m_scratch_all_positions.clear();
 
-		const bool need_min = m_functions[MIN] || m_functions[MIN_POS];
-		const bool need_max = m_functions[MAX] || m_functions[MAX_POS];
+		const bool need_min = has_function(MIN) || has_function(MIN_POS);
+		const bool need_max = has_function(MAX) || has_function(MAX_POS);
 		m_last_min = need_min ? numeric_limits<float>::max() : numeric_limits<float>::quiet_NaN();
 		m_last_max = need_max ? -numeric_limits<float>::max() : numeric_limits<float>::quiet_NaN();
-		if (m_functions[MAX_POS])
+		if (has_function(MAX_POS))
 			m_last_max_pos = numeric_limits<double>::quiet_NaN();
-		if (m_functions[MIN_POS])
+		if (has_function(MIN_POS))
 			m_last_min_pos = numeric_limits<double>::quiet_NaN();
-		if (m_functions[LSE])
+		if (has_function(LSE))
 			m_last_lse = -numeric_limits<float>::infinity();
 
 		bool simple_sliding_used = false;
 
 		if (simple_sliding_compatible && m_lse_sliding_valid && window_size > 0 &&
-			(!m_functions[LSE] || m_running_lse_initialized)) {
+			(!has_function(LSE) || m_running_lse_initialized)) {
 			int64_t step = sbin - m_lse_prev_sbin;
 			int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
 
@@ -591,7 +749,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 						if (!std::isnan(old_val)) {
 							kahan_sub_from_sliding_sum(old_val);
 							--m_sliding_num_vs;
-							if (m_functions[LSE])
+							if (has_function(LSE))
 								m_running_lse.pop_front();
 						}
 
@@ -599,7 +757,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 							if (!std::isnan(new_val)) {
 								kahan_add_to_sliding_sum(new_val);
 								++m_sliding_num_vs;
-								if (m_functions[LSE])
+								if (has_function(LSE))
 									m_running_lse.push(new_val);
 							}
 						}
@@ -613,7 +771,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 								if (!std::isnan(old_val)) {
 									kahan_sub_from_sliding_sum(old_val);
 									--m_sliding_num_vs;
-									if (m_functions[LSE])
+									if (has_function(LSE))
 										m_running_lse.pop_front();
 								}
 							}
@@ -623,7 +781,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 							if (!std::isnan(new_val)) {
 								kahan_add_to_sliding_sum(new_val);
 								++m_sliding_num_vs;
-								if (m_functions[LSE])
+								if (has_function(LSE))
 									m_running_lse.push(new_val);
 								}
 							}
@@ -639,24 +797,24 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 					if (m_sliding_num_vs > 0) {
 						m_last_sum = (float)m_sliding_sum;
-						if (m_functions[AVG] || m_functions[NEAREST])
+						if (has_function(AVG) || has_function(NEAREST))
 							m_last_avg = m_last_nearest = (float)(m_sliding_sum / m_sliding_num_vs);
-						if (m_functions[LSE])
+						if (has_function(LSE))
 							m_last_lse = m_running_lse.window.empty()
 								? numeric_limits<float>::quiet_NaN()
 								: (float)m_running_lse.value();
-						if (m_functions[EXISTS])
+						if (has_function(EXISTS))
 							m_last_exists = 1;
 					} else {
 						m_last_sum = numeric_limits<float>::quiet_NaN();
-						if (m_functions[AVG] || m_functions[NEAREST])
+						if (has_function(AVG) || has_function(NEAREST))
 							m_last_avg = m_last_nearest = numeric_limits<float>::quiet_NaN();
-						if (m_functions[LSE])
+						if (has_function(LSE))
 							m_last_lse = numeric_limits<float>::quiet_NaN();
-						if (m_functions[EXISTS])
+						if (has_function(EXISTS))
 							m_last_exists = 0;
 					}
-					if (m_functions[SIZE])
+					if (has_function(SIZE))
 						m_last_size = m_sliding_num_vs;
 
 					m_lse_prev_sbin = sbin;
@@ -673,7 +831,7 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			int64_t bins_read = read_bins_bulk(sbin, window_size, bin_vals);
 			bool lse_sliding_used = false;
 
-			if (m_functions[LSE] && m_lse_sliding_valid && bins_read > 0 &&
+			if (has_function(LSE) && m_lse_sliding_valid && bins_read > 0 &&
 				m_running_lse_initialized && !simple_sliding_compatible) {
 				int64_t step = sbin - m_lse_prev_sbin;
 				int64_t prev_window = m_lse_prev_ebin - m_lse_prev_sbin;
@@ -718,9 +876,9 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 					if (need_min) {
 						if (v < m_last_min) {
 							m_last_min = v;
-							if (m_functions[MIN_POS])
+							if (has_function(MIN_POS))
 								m_last_min_pos = overlap_start;
-						} else if (m_functions[MIN_POS] && v == m_last_min) {
+						} else if (has_function(MIN_POS) && v == m_last_min) {
 							double candidate_pos = overlap_start;
 							if (std::isnan(m_last_min_pos) || candidate_pos < m_last_min_pos)
 								m_last_min_pos = candidate_pos;
@@ -729,43 +887,43 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 					if (need_max) {
 						if (v > m_last_max) {
 							m_last_max = v;
-							if (m_functions[MAX_POS])
+							if (has_function(MAX_POS))
 								m_last_max_pos = overlap_start;
 						}
 					}
 
-					if (m_functions[STDDEV]) {
+					if (has_function(STDDEV)) {
 						const double delta = v - stddev_mean;
 						stddev_mean += delta / static_cast<double>(num_vs + 1);
 						const double delta2 = v - stddev_mean;
 						stddev_m2 += delta * delta2;
 					}
 
-					if (m_functions[LSE] && !lse_sliding_used)
+					if (has_function(LSE) && !lse_sliding_used)
 						lse_accumulate(m_last_lse, v);
 
 					if (m_use_quantile && !std::isnan(v))
 						m_sp.add(v, s_rnd_func);
 
 					// New virtual track computations
-					if (m_functions[EXISTS])
+					if (has_function(EXISTS))
 						m_last_exists = 1;
 
-					if (m_functions[FIRST] && std::isnan(m_last_first))
+					if (has_function(FIRST) && std::isnan(m_last_first))
 						m_last_first = v;
 
-					if (m_functions[FIRST_POS] && std::isnan(m_last_first_pos))
+					if (has_function(FIRST_POS) && std::isnan(m_last_first_pos))
 						m_last_first_pos = overlap_start;
 
-					if (m_functions[LAST])
+					if (has_function(LAST))
 						m_last_last = v;
 
-					if (m_functions[LAST_POS])
+					if (has_function(LAST_POS))
 						m_last_last_pos = overlap_start;
 
-					if (m_functions[SAMPLE])
+					if (has_function(SAMPLE))
 						m_scratch_all_values.push_back(v);
-					if (m_functions[SAMPLE_POS])
+					if (has_function(SAMPLE_POS))
 						m_scratch_all_positions.push_back(overlap_start);
 
 					++num_vs;
@@ -773,18 +931,18 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 			}
 
 			// Finalize size
-			if (m_functions[SIZE])
+			if (has_function(SIZE))
 				m_last_size = num_vs;
 
 			// Sample from collected values
-			if (m_functions[SAMPLE] && !m_scratch_all_values.empty()) {
+			if (has_function(SAMPLE) && !m_scratch_all_values.empty()) {
 				int idx = (int)(s_rnd_func() * m_scratch_all_values.size());
 				if (idx >= (int)m_scratch_all_values.size()) idx = (int)m_scratch_all_values.size() - 1;
 				if (idx < 0) idx = 0;
 				m_last_sample = m_scratch_all_values[idx];
 			}
 
-			if (m_functions[SAMPLE_POS] && !m_scratch_all_positions.empty()) {
+			if (has_function(SAMPLE_POS) && !m_scratch_all_positions.empty()) {
 				int idx = (int)(s_rnd_func() * m_scratch_all_positions.size());
 				if (idx >= (int)m_scratch_all_positions.size()) idx = (int)m_scratch_all_positions.size() - 1;
 				if (idx < 0) idx = 0;
@@ -800,17 +958,17 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 					m_last_min = numeric_limits<float>::quiet_NaN();
 				if (need_max)
 					m_last_max = numeric_limits<float>::quiet_NaN();
-				if (m_functions[LSE])
+				if (has_function(LSE))
 					m_last_lse = numeric_limits<float>::quiet_NaN();
-				if (m_functions[MIN_POS])
+				if (has_function(MIN_POS))
 					m_last_min_pos = numeric_limits<double>::quiet_NaN();
 			}
 
 			// Unbiased sample standard deviation via Welford's stable algorithm.
-			if (m_functions[STDDEV])
+			if (has_function(STDDEV))
 				m_last_stddev = num_vs > 1 ? sqrt(stddev_m2 / static_cast<double>(num_vs - 1)) : numeric_limits<float>::quiet_NaN();
 
-			if (m_functions[LSE] || simple_sliding_compatible) {
+			if (has_function(LSE) || simple_sliding_compatible) {
 				if (!lse_sliding_used) {
 					// Full computation was done; initialize sliding state from bin_vals
 					m_running_lse.clear();
@@ -823,11 +981,11 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 						if (!std::isnan(bin_vals[i])) {
 							kahan_add_to_sliding_sum(bin_vals[i]);
 							++m_sliding_num_vs;
-							if (m_functions[LSE])
+							if (has_function(LSE))
 								m_running_lse.push(bin_vals[i]);
 						}
 					}
-					m_running_lse_initialized = m_functions[LSE];
+					m_running_lse_initialized = has_function(LSE);
 				}
 				m_lse_prev_sbin = sbin;
 				m_lse_prev_ebin = ebin;
@@ -866,19 +1024,25 @@ int64_t GenomeTrackFixedBin::read_bins_bulk(int64_t start_bin, int64_t num_bins,
 	int64_t to_read = std::min(num_bins, available);
 
 	vals.resize(to_read);
-	if (m_cur_coord != start_bin * m_bin_size)
-		goto_bin(start_bin);
 
-	// Bulk read all bins in one syscall
-	size_t bytes_to_read = to_read * sizeof(float);
-	uint64_t bytes_read = m_bfile.read(vals.data(), bytes_to_read);
+	if (m_mmap_data) {
+		// mmap path: direct memcpy from mapped region
+		memcpy(vals.data(), m_mmap_data + start_bin, to_read * sizeof(float));
+		m_cur_bin = start_bin + to_read;
+	} else {
+		if (m_cur_coord != start_bin * m_bin_size)
+			goto_bin(start_bin);
 
-	if (bytes_read != bytes_to_read) {
-		if (m_bfile.error())
-			TGLError<GenomeTrackFixedBin>("Failed to read a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
-		// Partial read - adjust size
-		to_read = bytes_read / sizeof(float);
-		vals.resize(to_read);
+		// Bulk read all bins in one syscall
+		size_t bytes_to_read = to_read * sizeof(float);
+		uint64_t bytes_read = m_bfile.read(vals.data(), bytes_to_read);
+
+		if (bytes_read != bytes_to_read) {
+			if (m_bfile.error())
+				TGLError<GenomeTrackFixedBin>("Failed to read a dense track file %s: %s", m_bfile.file_name().c_str(), strerror(errno));
+			to_read = bytes_read / sizeof(float);
+			vals.resize(to_read);
+		}
 	}
 
 	// Convert infinity to NaN (matching read_next_bin behavior)
@@ -989,6 +1153,40 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 
 	m_num_samples = (int64_t)(data_bytes / sizeof(float));
 	m_chromid = chromid;
+
+	// Set up mmap for read-only mode (naryn pattern)
+	// For indexed format: reuse existing mmap if same file (avoid re-mmap per chromosome)
+	m_mmap_data = nullptr;
+	m_mmap_num_bins = 0;
+	m_cur_bin = 0;
+
+	if (strcmp(mode, "rb") == 0 && m_num_samples > 0) {
+		const std::string file_path = m_dat_open ? m_dat_path : std::string(filename);
+
+		// Only re-mmap if file changed (indexed format reuses same track.dat)
+		if (!m_mmap.is_open() || m_mmap_path != file_path) {
+			m_mmap.close();
+			m_mmap.open(file_path, true /* sequential */);
+			m_mmap_path = file_path;
+		}
+
+		if (m_mmap.is_open()) {
+			const uint64_t data_offset = m_base_offset + sizeof(m_bin_size);
+			if (data_offset + m_num_samples * sizeof(float) <= m_mmap.size()) {
+				m_mmap_data = reinterpret_cast<const float *>(m_mmap.data() + data_offset);
+				m_mmap_num_bins = m_num_samples;
+			} else {
+				m_mmap.close();  // file too small, fall back to BufferedFile
+				m_mmap_path.clear();
+			}
+		}
+	} else {
+		// Write/update mode or empty: close any existing mmap
+		if (m_mmap.is_open()) {
+			m_mmap.close();
+			m_mmap_path.clear();
+		}
+	}
 }
 
 void GenomeTrackFixedBin::init_write(const char *filename, unsigned bin_size, int chromid)
