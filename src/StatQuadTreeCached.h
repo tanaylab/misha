@@ -141,7 +141,7 @@ private:
 	};
 
 	struct NodeBase {
-		bool      is_leaf;
+		uint8_t   is_leaf;
 		Stat      stat;
 		Rectangle arena;
 	};

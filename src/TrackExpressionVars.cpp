@@ -112,11 +112,6 @@ shared_ptr<GenomeTrack> create_dependent_1d_track(GenomeTrack::Type type, const 
 	return shared_ptr<GenomeTrack>();
 }
 
-string shared_1d_backend_key(GenomeTrack::Type type, const string &filename, int chromid)
-{
-	return to_string((int)type) + ":" + to_string(chromid) + ":" + filename;
-}
-
 }  // namespace
 
 
@@ -1754,15 +1749,15 @@ shared_ptr<GenomeTrack> TrackExpressionVars::init_1d_track_with_shared_backend(c
 	if (!is_shared_1d_backend_enabled() || !supports_shared_1d_backend(type))
 		return create_and_init_1d_track(filename, chromid, type);
 
-	const string backend_key = shared_1d_backend_key(type, filename, chromid);
+	const BackendKey backend_key{type, chromid, filename};
 
 	shared_ptr<GenomeTrack> master_track;
-	unordered_map<string, shared_ptr<GenomeTrack> >::iterator imaster = m_shared_1d_track_masters.find(backend_key);
+	auto imaster = m_shared_1d_track_masters.find(backend_key);
 	if (imaster == m_shared_1d_track_masters.end()) {
 		master_track = create_and_init_1d_track(filename, chromid, type);
 		if (!master_track)
 			return shared_ptr<GenomeTrack>();
-		m_shared_1d_track_masters.insert(make_pair(backend_key, master_track));
+		m_shared_1d_track_masters.emplace(backend_key, master_track);
 	} else
 		master_track = imaster->second;
 
@@ -1812,7 +1807,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 
 void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 {
-	unordered_map<string, shared_ptr<GenomeTrack> > prev_shared_1d_track_masters;
+	unordered_map<BackendKey, shared_ptr<GenomeTrack>, BackendKeyHash> prev_shared_1d_track_masters;
 	prev_shared_1d_track_masters.swap(m_shared_1d_track_masters);
 	const bool shared_1d_backend_enabled = is_shared_1d_backend_enabled();
 
@@ -1849,18 +1844,16 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 					}
 					itrack_n_imdf->track = new_track;
 				} else if (should_manage_shared_masters) {
-					const string backend_key = shared_1d_backend_key(itrack_n_imdf->type, filename, chromid);
-					unordered_map<string, shared_ptr<GenomeTrack> >::iterator imaster =
-						m_shared_1d_track_masters.find(backend_key);
+					const BackendKey backend_key{itrack_n_imdf->type, chromid, filename};
+					auto imaster = m_shared_1d_track_masters.find(backend_key);
 
 					if (imaster != m_shared_1d_track_masters.end()) {
 						shared_ptr<GenomeTrack> new_track = create_dependent_1d_track(itrack_n_imdf->type, imaster->second);
 						itrack_n_imdf->track = new_track ? new_track : imaster->second;
 					} else {
-						unordered_map<string, shared_ptr<GenomeTrack> >::iterator iprev_master =
-							prev_shared_1d_track_masters.find(backend_key);
+						auto iprev_master = prev_shared_1d_track_masters.find(backend_key);
 						if (iprev_master != prev_shared_1d_track_masters.end()) {
-							m_shared_1d_track_masters.insert(make_pair(backend_key, iprev_master->second));
+							m_shared_1d_track_masters.emplace(backend_key, iprev_master->second);
 						} else {
 							shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, chromid, itrack_n_imdf->type);
 							if (!new_track) {

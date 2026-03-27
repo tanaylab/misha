@@ -22,18 +22,12 @@
 
 namespace std
 {
-	// Ideally we would like the hash to be:
-	//      v1 ^ bit_reverse(v2)
-	// Yet bit_reverse requires quite some computational effort. So our hash is:
-	//      little_endian(v1) ^ big_endian(v2)
 	template<> struct hash<std::pair<uint64_t, uint64_t>>
 	{
 		uint64_t operator()(const std::pair<uint64_t, uint64_t> &v) const {
-#if (__WORDSIZE == 64)
-			return v.first ^ BSWAP_64(v.second);
-#else
-			return (v.first & 0xffff) ^ BSWAP_32(v.second & 0xffff);
-#endif
+			uint64_t h = v.first * 0x9e3779b97f4a7c15ULL;
+			h ^= v.second * 0x517cc1b727220a95ULL;
+			return h ^ (h >> 32);
 		}
 	};
 

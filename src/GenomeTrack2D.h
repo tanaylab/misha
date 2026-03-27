@@ -43,7 +43,8 @@ public:
 	virtual bool is_end_interval() = 0;
 	const GInterval2D &cur_interval() const { return m_interval; }
 
-	void register_function(Functions func) { m_functions[func] = true; }
+	void register_function(Functions func) { m_func_mask |= (1u << func); }
+	bool has_function(Functions func) const { return (m_func_mask & (1u << func)) != 0; }
 
 	float last_weighted_sum() const { return m_last_weighted_sum; }
 	float last_occupied_area() const { return m_last_occupied_area; }
@@ -59,7 +60,7 @@ public:
 	bool has_data_for_pair() const { return m_pair_has_data; }
 
 protected:
-	vector<bool> m_functions;
+	uint32_t     m_func_mask{0};
 	int          m_chromid1;
 	int          m_chromid2;
 	bool         m_loaded;
@@ -77,7 +78,7 @@ protected:
 	bool        m_pair_has_data{false};  // true if current pair has data (replaces opened() check for 2D)
 	int64_t     m_base_offset_2d{0};     // base offset for quad tree in indexed format
 
-	GenomeTrack2D(Type type) : GenomeTrack(type), m_loaded(false), m_dat_open(false), m_pair_has_data(false), m_base_offset_2d(0) { m_functions.resize(NUM_FUNCS, false); }
+	GenomeTrack2D(Type type) : GenomeTrack(type), m_loaded(false), m_dat_open(false), m_pair_has_data(false), m_base_offset_2d(0) {}
 };
 
 #endif /* GENOMETRACK2D_H_ */

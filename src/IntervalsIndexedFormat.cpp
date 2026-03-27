@@ -41,77 +41,59 @@ static const size_t IDX_2D_HEADER_SIZE_TO_CHECKSUM =
     sizeof(uint32_t) +     // Num entries
     sizeof(uint64_t);      // Flags
 
+// Packed header struct for 1D index (36 bytes)
+#pragma pack(push, 1)
+struct Index1DHeader {
+    char magic[8];
+    uint32_t version;
+    uint32_t num_entries;
+    uint64_t flags;
+    uint64_t checksum;
+    uint32_t reserved;
+};
+#pragma pack(pop)
+
 // Helper function to write 1D index header
 static void write_1d_index_header(FILE *fp, uint32_t num_entries, uint64_t checksum) {
-    // Magic header
+    Index1DHeader hdr;
     const char magic[8] = {'M','I','S','H','A','I','1','D'};
-    if (fwrite(magic, 1, 8, fp) != 8) {
-        TGLError("Failed to write index header");
-    }
+    memcpy(hdr.magic, magic, 8);
+    hdr.version = 1;
+    hdr.num_entries = num_entries;
+    hdr.flags = 0x01; // IS_LITTLE_ENDIAN
+    hdr.checksum = checksum;
+    hdr.reserved = 0;
 
-    // Version
-    uint32_t version = 1;
-    if (fwrite(&version, sizeof(version), 1, fp) != 1) {
-        TGLError("Failed to write index version");
-    }
-
-    // Number of entries
-    if (fwrite(&num_entries, sizeof(num_entries), 1, fp) != 1) {
-        TGLError("Failed to write number of entries");
-    }
-
-    // Flags (little-endian flag)
-    uint64_t flags = 0x01; // IS_LITTLE_ENDIAN
-    if (fwrite(&flags, sizeof(flags), 1, fp) != 1) {
-        TGLError("Failed to write flags");
-    }
-
-    // Checksum
-    if (fwrite(&checksum, sizeof(checksum), 1, fp) != 1) {
-        TGLError("Failed to write checksum");
-    }
-
-    // Reserved
-    uint32_t reserved = 0;
-    if (fwrite(&reserved, sizeof(reserved), 1, fp) != 1) {
-        TGLError("Failed to write reserved field");
+    if (fwrite(&hdr, sizeof(hdr), 1, fp) != 1) {
+        TGLError("Failed to write 1D index header");
     }
 }
 
+// Packed header struct for 2D index (40 bytes)
+#pragma pack(push, 1)
+struct Index2DHeader {
+    char magic[8];
+    uint32_t version;
+    uint32_t num_entries;
+    uint64_t flags;
+    uint64_t checksum;
+    uint64_t reserved;
+};
+#pragma pack(pop)
+
 // Helper function to write 2D index header
 static void write_2d_index_header(FILE *fp, uint32_t num_entries, uint64_t checksum) {
-    // Magic header
+    Index2DHeader hdr;
     const char magic[8] = {'M','I','S','H','A','I','2','D'};
-    if (fwrite(magic, 1, 8, fp) != 8) {
-        TGLError("Failed to write index header");
-    }
+    memcpy(hdr.magic, magic, 8);
+    hdr.version = 1;
+    hdr.num_entries = num_entries;
+    hdr.flags = 0x01; // IS_LITTLE_ENDIAN
+    hdr.checksum = checksum;
+    hdr.reserved = 0;
 
-    // Version
-    uint32_t version = 1;
-    if (fwrite(&version, sizeof(version), 1, fp) != 1) {
-        TGLError("Failed to write index version");
-    }
-
-    // Number of entries
-    if (fwrite(&num_entries, sizeof(num_entries), 1, fp) != 1) {
-        TGLError("Failed to write number of entries");
-    }
-
-    // Flags (little-endian flag)
-    uint64_t flags = 0x01; // IS_LITTLE_ENDIAN
-    if (fwrite(&flags, sizeof(flags), 1, fp) != 1) {
-        TGLError("Failed to write flags");
-    }
-
-    // Checksum
-    if (fwrite(&checksum, sizeof(checksum), 1, fp) != 1) {
-        TGLError("Failed to write checksum");
-    }
-
-    // Reserved
-    uint64_t reserved = 0;
-    if (fwrite(&reserved, sizeof(reserved), 1, fp) != 1) {
-        TGLError("Failed to write reserved field");
+    if (fwrite(&hdr, sizeof(hdr), 1, fp) != 1) {
+        TGLError("Failed to write 2D index header");
     }
 }
 
@@ -258,11 +240,22 @@ SEXP ginterv_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
                 chr_files_to_remove.push_back(chr_file);
             }
 
-            // Write entry to index
-            if (fwrite(&entry.chrom_id, sizeof(entry.chrom_id), 1, idx_fp) != 1 ||
-                fwrite(&entry.offset, sizeof(entry.offset), 1, idx_fp) != 1 ||
-                fwrite(&entry.length, sizeof(entry.length), 1, idx_fp) != 1 ||
-                fwrite(&entry.reserved, sizeof(entry.reserved), 1, idx_fp) != 1) {
+            // Write entry to index in one call (24 bytes)
+#pragma pack(push, 1)
+            struct DiskContigEntry {
+                uint32_t chrom_id;
+                uint64_t offset;
+                uint64_t length;
+                uint32_t reserved;
+            };
+#pragma pack(pop)
+            DiskContigEntry disk_entry;
+            disk_entry.chrom_id = entry.chrom_id;
+            disk_entry.offset = entry.offset;
+            disk_entry.length = entry.length;
+            disk_entry.reserved = entry.reserved;
+
+            if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp) != 1) {
                 fclose(dat_fp);
                 fclose(idx_fp);
                 TGLError("Failed to write index entry for chromosome %s", chrom_name.c_str());
@@ -477,12 +470,24 @@ SEXP ginterv2d_convert(SEXP _intervset, SEXP _remove_old, SEXP _envir) {
                 pair_files_to_remove.push_back(pair_file);
             }
 
-            // Write entry to index (28 bytes total)
-            if (fwrite(&entry.chrom1_id, sizeof(entry.chrom1_id), 1, idx_fp) != 1 ||
-                fwrite(&entry.chrom2_id, sizeof(entry.chrom2_id), 1, idx_fp) != 1 ||
-                fwrite(&entry.offset, sizeof(entry.offset), 1, idx_fp) != 1 ||
-                fwrite(&entry.length, sizeof(entry.length), 1, idx_fp) != 1 ||
-                fwrite(&entry.reserved, sizeof(entry.reserved), 1, idx_fp) != 1) {
+            // Write entry to index in one call (28 bytes total)
+#pragma pack(push, 1)
+            struct DiskPairEntry {
+                uint32_t chrom1_id;
+                uint32_t chrom2_id;
+                uint64_t offset;
+                uint64_t length;
+                uint32_t reserved;
+            };
+#pragma pack(pop)
+            DiskPairEntry disk_entry;
+            disk_entry.chrom1_id = entry.chrom1_id;
+            disk_entry.chrom2_id = entry.chrom2_id;
+            disk_entry.offset = entry.offset;
+            disk_entry.length = entry.length;
+            disk_entry.reserved = entry.reserved;
+
+            if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp) != 1) {
                 fclose(dat_fp);
                 fclose(idx_fp);
                 TGLError("Failed to write index entry for pair %s", filename.c_str());
@@ -754,11 +759,22 @@ SEXP gbigintervs_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _intervse
             entry.length = (uint64_t)REAL(lengths)[i];
             entry.reserved = 0;
 
-            // Write entry
-            if (fwrite(&entry.chrom_id, sizeof(entry.chrom_id), 1, idx_fp) != 1 ||
-                fwrite(&entry.offset, sizeof(entry.offset), 1, idx_fp) != 1 ||
-                fwrite(&entry.length, sizeof(entry.length), 1, idx_fp) != 1 ||
-                fwrite(&entry.reserved, sizeof(entry.reserved), 1, idx_fp) != 1) {
+            // Write entry in one call (24 bytes)
+#pragma pack(push, 1)
+            struct DiskContigEntry1D {
+                uint32_t chrom_id;
+                uint64_t offset;
+                uint64_t length;
+                uint32_t reserved;
+            };
+#pragma pack(pop)
+            DiskContigEntry1D disk_entry;
+            disk_entry.chrom_id = entry.chrom_id;
+            disk_entry.offset = entry.offset;
+            disk_entry.length = entry.length;
+            disk_entry.reserved = entry.reserved;
+
+            if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp) != 1) {
                 fclose(idx_fp);
                 verror("Failed to write index entry");
             }
@@ -924,11 +940,22 @@ SEXP gbigintervs_2d_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _inter
             entry.offset = (uint64_t)REAL(offsets)[i];
             entry.length = (uint64_t)REAL(lengths)[i];
 
-            // Write entry
-            if (fwrite(&entry.chrom1_id, sizeof(entry.chrom1_id), 1, idx_fp) != 1 ||
-                fwrite(&entry.chrom2_id, sizeof(entry.chrom2_id), 1, idx_fp) != 1 ||
-                fwrite(&entry.offset, sizeof(entry.offset), 1, idx_fp) != 1 ||
-                fwrite(&entry.length, sizeof(entry.length), 1, idx_fp) != 1) {
+            // Write entry in one call (note: 2D finalize writes 24 bytes, no reserved field)
+#pragma pack(push, 1)
+            struct DiskPairEntry2D {
+                uint32_t chrom1_id;
+                uint32_t chrom2_id;
+                uint64_t offset;
+                uint64_t length;
+            };
+#pragma pack(pop)
+            DiskPairEntry2D disk_entry;
+            disk_entry.chrom1_id = entry.chrom1_id;
+            disk_entry.chrom2_id = entry.chrom2_id;
+            disk_entry.offset = entry.offset;
+            disk_entry.length = entry.length;
+
+            if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp) != 1) {
                 fclose(idx_fp);
                 verror("Failed to write index entry");
             }
