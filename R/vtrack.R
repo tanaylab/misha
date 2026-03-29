@@ -273,6 +273,7 @@
     prior <- if (!is.null(dots$prior)) dots$prior else 0.01
     extend <- if (!is.null(dots$extend)) dots$extend else TRUE
     strand <- if (!is.null(dots$strand)) dots$strand else 1
+    direction <- if (!is.null(dots$direction)) dots$direction else "above"
 
     pssm <- .coerce_pssm_matrix(
         pssm,
@@ -295,6 +296,10 @@
 
     if (strand != 1 && strand != -1) {
         stop("strand must be 1 or -1")
+    }
+
+    if (!direction %in% c("above", "below")) {
+        stop("direction must be 'above' or 'below'")
     }
 
     if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
@@ -338,7 +343,8 @@
         bidirect = bidirect,
         prior = prior,
         extend = extend,
-        strand = strand
+        strand = strand,
+        direction = direction
     )
 }
 
@@ -368,6 +374,7 @@
     prior <- if (!is.null(dots$prior)) dots$prior else 0.01
     extend <- if (!is.null(dots$extend)) dots$extend else TRUE
     strand <- if (!is.null(dots$strand)) dots$strand else 1
+    direction <- if (!is.null(dots$direction)) dots$direction else "above"
 
     pssm <- .coerce_pssm_matrix(
         pssm,
@@ -390,6 +397,10 @@
 
     if (strand != 1 && strand != -1) {
         stop("strand must be 1 or -1")
+    }
+
+    if (!direction %in% c("above", "below")) {
+        stop("direction must be 'above' or 'below'")
     }
 
     if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
@@ -425,7 +436,8 @@
         bidirect = bidirect,
         prior = prior,
         extend = extend,
-        strand = strand
+        strand = strand,
+        direction = direction
     )
 }
 
