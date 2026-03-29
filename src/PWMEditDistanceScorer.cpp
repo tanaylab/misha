@@ -870,11 +870,13 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
     }
 
     const int D = m_max_indels;
+    const bool below = (m_direction == Direction::BELOW);
     float best_edits = std::numeric_limits<float>::quiet_NaN();
 
     // For each sequence window length W in [L-D, L+D], align the motif (length L)
     // against W sequence bases using a 3D DP:
-    //   dp[i][j][k] = max PWM score aligning motif[0..i-1] with seq[0..j-1]
+    //   ABOVE: dp[i][j][k] = max PWM score aligning motif[0..i-1] with seq[0..j-1]
+    //   BELOW: dp[i][j][k] = min PWM score aligning motif[0..i-1] with seq[0..j-1]
     //                 using exactly k indels (insertions + deletions)
     //
     // Band constraint: |i - j| <= D (prevents needing > D indels)
@@ -882,11 +884,18 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
     // For each final state dp[L][W][k], the score tells us the PWM log-likelihood
     // of the aligned positions with their actual sequence bases. To reach the
     // threshold, we may need additional substitutions: each substitution replaces
-    // a mismatched base with the column-optimal base, gaining (col_max - current).
+    // a base with the column-optimal base for the given direction.
+    // ABOVE: gain = col_max - current (raise score toward threshold)
+    // BELOW: gain = current - col_min (lower score toward threshold)
     // We traceback to find aligned positions and greedily pick the largest gains.
     //
     // Total edits = k (indels) + subs_needed.
     // We minimize this across all W and k.
+
+    // DP initialization sentinel: -inf for ABOVE (maximize), +inf for BELOW (minimize)
+    const double dp_sentinel = below
+        ? std::numeric_limits<double>::infinity()
+        : -std::numeric_limits<double>::infinity();
 
     for (int W = std::max(1, L - D); W <= L + D; ++W) {
         if (W > seq_len) {
@@ -898,7 +907,7 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
         const int indel_levels = D + 1;  // k = 0, 1, ..., D
 
         // Flattened 3D DP table
-        std::vector<double> dp(rows * cols * indel_levels, -std::numeric_limits<double>::infinity());
+        std::vector<double> dp(rows * cols * indel_levels, dp_sentinel);
 
         auto idx3 = [cols, indel_levels](int i, int j, int k) -> int {
             return i * cols * indel_levels + j * indel_levels + k;
@@ -932,13 +941,24 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
                 // because the DP traceback handles gains separately.
                 float base_score;
                 if (bi == 4) {
-                    // Unknown base: use minimum score (worst case)
-                    float min_s = std::numeric_limits<float>::infinity();
-                    for (int b = 0; b < 4; b++) {
-                        float s = m_pssm[i - 1].get_log_prob_from_code(b);
-                        if (s < min_s) min_s = s;
+                    // Unknown base: worst case for the direction
+                    // ABOVE: minimum score (hardest to reach threshold from above)
+                    // BELOW: maximum score (hardest to get below threshold)
+                    if (below) {
+                        float max_s = -std::numeric_limits<float>::infinity();
+                        for (int b = 0; b < 4; b++) {
+                            float s = m_pssm[i - 1].get_log_prob_from_code(b);
+                            if (s > max_s) max_s = s;
+                        }
+                        base_score = max_s;
+                    } else {
+                        float min_s = std::numeric_limits<float>::infinity();
+                        for (int b = 0; b < 4; b++) {
+                            float s = m_pssm[i - 1].get_log_prob_from_code(b);
+                            if (s < min_s) min_s = s;
+                        }
+                        base_score = min_s;
                     }
-                    base_score = min_s;
                 } else {
                     base_score = m_pssm[i - 1].get_log_prob_from_code(bi);
                 }
@@ -947,10 +967,21 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
                     // 1. Match/Substitution (diagonal): align motif[i-1] with seq[j-1]
                     if (std::abs((i - 1) - (j - 1)) <= D) {
                         double prev = dp[idx3(i - 1, j - 1, k)];
-                        if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
-                            double new_score = prev + static_cast<double>(base_score);
-                            if (new_score > dp[idx3(i, j, k)]) {
-                                dp[idx3(i, j, k)] = new_score;
+                        if (below) {
+                            // BELOW: minimize score
+                            if (prev < std::numeric_limits<double>::infinity() * 0.5) {
+                                double new_score = prev + static_cast<double>(base_score);
+                                if (new_score < dp[idx3(i, j, k)]) {
+                                    dp[idx3(i, j, k)] = new_score;
+                                }
+                            }
+                        } else {
+                            // ABOVE: maximize score
+                            if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
+                                double new_score = prev + static_cast<double>(base_score);
+                                if (new_score > dp[idx3(i, j, k)]) {
+                                    dp[idx3(i, j, k)] = new_score;
+                                }
                             }
                         }
                     }
@@ -959,9 +990,17 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
                         // 2. Insertion: skip motif[i-1], advance motif not sequence
                         if (std::abs((i - 1) - j) <= D) {
                             double prev = dp[idx3(i - 1, j, k)];
-                            if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
-                                if (prev > dp[idx3(i, j, k + 1)]) {
-                                    dp[idx3(i, j, k + 1)] = prev;
+                            if (below) {
+                                if (prev < std::numeric_limits<double>::infinity() * 0.5) {
+                                    if (prev < dp[idx3(i, j, k + 1)]) {
+                                        dp[idx3(i, j, k + 1)] = prev;
+                                    }
+                                }
+                            } else {
+                                if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
+                                    if (prev > dp[idx3(i, j, k + 1)]) {
+                                        dp[idx3(i, j, k + 1)] = prev;
+                                    }
                                 }
                             }
                         }
@@ -969,9 +1008,17 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
                         // 3. Deletion: skip seq[j-1], advance sequence not motif
                         if (std::abs(i - (j - 1)) <= D) {
                             double prev = dp[idx3(i, j - 1, k)];
-                            if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
-                                if (prev > dp[idx3(i, j, k + 1)]) {
-                                    dp[idx3(i, j, k + 1)] = prev;
+                            if (below) {
+                                if (prev < std::numeric_limits<double>::infinity() * 0.5) {
+                                    if (prev < dp[idx3(i, j, k + 1)]) {
+                                        dp[idx3(i, j, k + 1)] = prev;
+                                    }
+                                }
+                            } else {
+                                if (prev > -std::numeric_limits<double>::infinity() * 0.5) {
+                                    if (prev > dp[idx3(i, j, k + 1)]) {
+                                        dp[idx3(i, j, k + 1)] = prev;
+                                    }
                                 }
                             }
                         }
@@ -983,7 +1030,11 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
         // Extract results for each indel count k
         for (int k = 0; k <= D; ++k) {
             double score = dp[idx3(L, W, k)];
-            if (score <= -std::numeric_limits<double>::infinity() * 0.5) {
+            // Check for sentinel (unreachable state)
+            bool is_sentinel = below
+                ? (score >= std::numeric_limits<double>::infinity() * 0.5)
+                : (score <= -std::numeric_limits<double>::infinity() * 0.5);
+            if (is_sentinel) {
                 continue;
             }
 
@@ -1020,6 +1071,13 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
 
                 double cur = dp[idx3(ti, tj, tk)];
 
+                // Helper: check if a DP value is a valid (non-sentinel) state
+                auto is_valid = [&](double val) -> bool {
+                    return below
+                        ? (val < std::numeric_limits<double>::infinity() * 0.5)
+                        : (val > -std::numeric_limits<double>::infinity() * 0.5);
+                };
+
                 // Try diagonal (match/substitution) first
                 bool found = false;
                 if (std::abs((ti - 1) - (tj - 1)) <= D) {
@@ -1028,22 +1086,32 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
 
                     float bs;
                     if (bi == 4) {
-                        float min_s = std::numeric_limits<float>::infinity();
-                        for (int bb = 0; bb < 4; bb++) {
-                            float s = m_pssm[ti - 1].get_log_prob_from_code(bb);
-                            if (s < min_s) min_s = s;
+                        // Unknown base: use same logic as DP fill
+                        if (below) {
+                            float max_s = -std::numeric_limits<float>::infinity();
+                            for (int bb = 0; bb < 4; bb++) {
+                                float s = m_pssm[ti - 1].get_log_prob_from_code(bb);
+                                if (s > max_s) max_s = s;
+                            }
+                            bs = max_s;
+                        } else {
+                            float min_s = std::numeric_limits<float>::infinity();
+                            for (int bb = 0; bb < 4; bb++) {
+                                float s = m_pssm[ti - 1].get_log_prob_from_code(bb);
+                                if (s < min_s) min_s = s;
+                            }
+                            bs = min_s;
                         }
-                        bs = min_s;
                     } else {
                         bs = m_pssm[ti - 1].get_log_prob_from_code(bi);
                     }
 
                     double prev = dp[idx3(ti - 1, tj - 1, tk)];
-                    if (prev > -std::numeric_limits<double>::infinity() * 0.5 &&
+                    if (is_valid(prev) &&
                         std::fabs((prev + static_cast<double>(bs)) - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
                         // ABOVE: gain = col_max - bs (how much we can raise the score)
                         // BELOW: gain = bs - col_min (how much we can lower the score)
-                        float gain = (m_direction == Direction::BELOW)
+                        float gain = below
                             ? (bs - m_col_min_scores[ti - 1])
                             : (m_col_max_scores[ti - 1] - bs);
                         if (gain > 1e-12f) {
@@ -1057,7 +1125,7 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
                 if (!found && ti > 0 && tk > 0 && std::abs((ti - 1) - tj) <= D) {
                     // Try insertion
                     double prev = dp[idx3(ti - 1, tj, tk - 1)];
-                    if (prev > -std::numeric_limits<double>::infinity() * 0.5 &&
+                    if (is_valid(prev) &&
                         std::fabs(prev - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
                         ti--; tk--;
                         found = true;
@@ -1067,7 +1135,7 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
                 if (!found && tj > 0 && tk > 0 && std::abs(ti - (tj - 1)) <= D) {
                     // Try deletion
                     double prev = dp[idx3(ti, tj - 1, tk - 1)];
-                    if (prev > -std::numeric_limits<double>::infinity() * 0.5 &&
+                    if (is_valid(prev) &&
                         std::fabs(prev - cur) < 1e-9 * std::max(1.0, std::fabs(cur))) {
                         tj--; tk--;
                         found = true;
@@ -1129,27 +1197,23 @@ bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq
     // Banded DP early-abandon filter for indel-enabled windows.
     //
     // Key insight: the edit distance metric allows substitutions at any matched
-    // position. Each substitution brings a column's score to col_max. Therefore,
-    // the DP must use col_max for every matched column (diagonal transition) to
-    // correctly upper-bound the achievable score. This makes the filter
-    // sequence-independent — it only depends on the motif structure and available
-    // sequence length.
+    // position. Each substitution brings a column's score to its optimal value
+    // for the given direction.
     //
-    // dp[i][j][k] = best achievable PWM score aligning motif[0..i-1] with
-    //   j sequence positions using k indels, where each matched column
-    //   contributes col_max[motif_col] (assuming optimal substitution).
+    // ABOVE: each matched column achieves col_max (upper-bound on score).
+    //   dp computes max achievable score. Abandon if row_max + suffix_max < threshold.
+    // BELOW: each matched column achieves col_min (lower-bound on score).
+    //   dp computes min achievable score. Abandon if row_min + suffix_min > threshold.
     //
     // Band constraint: |i - j| <= D.
     //
-    // After each row i, checks: row_max + suffix_score[i] < threshold?
-    // If so, no alignment family can reach the threshold => skip.
-    //
     // For insertion-heavy families (many motif columns skipped), the achievable
-    // score drops because fewer columns contribute col_max. This is where the
-    // filter provides value.
+    // score changes because fewer columns contribute. This is where the filter
+    // provides value.
 
     const int L = m_pssm.length();
     const int D = m_max_indels;
+    const bool below = (m_direction == Direction::BELOW);
 
     if (L == 0 || D < 0) return false;
 
@@ -1167,13 +1231,14 @@ bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq
     double dp_prev[MAX_J][KD];
     double dp_cur[MAX_J][KD];
 
-    constexpr double NEG_INF = -1e300;
+    // ABOVE: sentinel = -inf (maximizing), BELOW: sentinel = +inf (minimizing)
+    const double SENTINEL = below ? 1e300 : -1e300;
     const double threshold_d = static_cast<double>(m_threshold);
 
-    // Initialize dp_prev (row 0) to -inf
+    // Initialize dp_prev (row 0) to sentinel
     for (int j = 0; j <= max_j; j++) {
         for (int k = 0; k <= D; k++) {
-            dp_prev[j][k] = NEG_INF;
+            dp_prev[j][k] = SENTINEL;
         }
     }
 
@@ -1185,8 +1250,16 @@ bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq
     }
 
     // Early abandon check for row 0
-    if (0.0 + static_cast<double>(m_max_suffix_score[0]) < threshold_d) {
-        return true;
+    // ABOVE: 0 + suffix_max < threshold => skip
+    // BELOW: 0 + suffix_min > threshold => skip
+    if (below) {
+        if (0.0 + static_cast<double>(m_max_suffix_score[0]) > threshold_d) {
+            return true;
+        }
+    } else {
+        if (0.0 + static_cast<double>(m_max_suffix_score[0]) < threshold_d) {
+            return true;
+        }
     }
 
     // Row-by-row fill
@@ -1197,7 +1270,7 @@ bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq
         // Initialize dp_cur for this row's range
         for (int j = j_lo; j <= j_hi; j++) {
             for (int k = 0; k <= D; k++) {
-                dp_cur[j][k] = NEG_INF;
+                dp_cur[j][k] = SENTINEL;
             }
         }
 
@@ -1205,34 +1278,42 @@ bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq
         if (j_lo == 0) {
             for (int k = 1; k <= D; k++) {
                 double prev = dp_prev[0][k - 1];
-                if (prev > NEG_INF && prev > dp_cur[0][k]) {
+                bool is_valid = below ? (prev < SENTINEL) : (prev > SENTINEL);
+                bool is_better = below ? (prev < dp_cur[0][k]) : (prev > dp_cur[0][k]);
+                if (is_valid && is_better) {
                     dp_cur[0][k] = prev;
                 }
             }
         }
 
-        // Use col_max for match score: since substitutions are allowed,
-        // every matched column can achieve its maximum PSSM score.
-        const double col_max_score = static_cast<double>(m_col_max_scores[i - 1]);
+        // ABOVE: use col_max (substitutions can raise score to maximum)
+        // BELOW: use col_min (substitutions can lower score to minimum)
+        const double col_score = below
+            ? static_cast<double>(m_col_min_scores[i - 1])
+            : static_cast<double>(m_col_max_scores[i - 1]);
 
         for (int j = std::max(1, j_lo); j <= j_hi; j++) {
             for (int k = 0; k <= D; k++) {
-                double val = NEG_INF;
+                double val = SENTINEL;
 
-                // 1. Match (diagonal): dp_prev[j-1][k] + col_max
+                // 1. Match (diagonal): dp_prev[j-1][k] + col_score
                 //    Substitution is free in edit-distance terms (counted separately).
                 if (std::abs((i - 1) - (j - 1)) <= D) {
                     double prev = dp_prev[j - 1][k];
-                    if (prev > NEG_INF) {
-                        double cand = prev + col_max_score;
-                        if (cand > val) val = cand;
+                    bool is_valid = below ? (prev < SENTINEL) : (prev > SENTINEL);
+                    if (is_valid) {
+                        double cand = prev + col_score;
+                        bool is_better = below ? (cand < val) : (cand > val);
+                        if (is_better) val = cand;
                     }
                 }
 
                 // 2. Insertion (skip motif[i-1]): dp_prev[j][k-1]
                 if (k >= 1 && std::abs((i - 1) - j) <= D) {
                     double prev = dp_prev[j][k - 1];
-                    if (prev > NEG_INF && prev > val) {
+                    bool is_valid = below ? (prev < SENTINEL) : (prev > SENTINEL);
+                    bool is_better = below ? (prev < val) : (prev > val);
+                    if (is_valid && is_better) {
                         val = prev;
                     }
                 }
@@ -1240,35 +1321,49 @@ bool PWMEditDistanceScorer::early_abandon_banded_dp(const char* seq_ptr, int seq
                 // 3. Deletion (skip seq[j-1]): dp_cur[j-1][k-1]
                 if (k >= 1) {
                     double prev = dp_cur[j - 1][k - 1];
-                    if (prev > NEG_INF && prev > val) {
+                    bool is_valid = below ? (prev < SENTINEL) : (prev > SENTINEL);
+                    bool is_better = below ? (prev < val) : (prev > val);
+                    if (is_valid && is_better) {
                         val = prev;
                     }
                 }
 
-                if (val > dp_cur[j][k]) {
+                bool val_better = below ? (val < dp_cur[j][k]) : (val > dp_cur[j][k]);
+                if (val_better) {
                     dp_cur[j][k] = val;
                 }
             }
         }
 
-        // Early abandon: find row maximum across all valid (j, k)
-        double row_max = NEG_INF;
+        // Early abandon: find row optimum across all valid (j, k)
+        // ABOVE: row_max + suffix_max < threshold => skip
+        // BELOW: row_min + suffix_min > threshold => skip
+        double row_opt = SENTINEL;
         for (int j = j_lo; j <= j_hi; j++) {
             for (int k = 0; k <= D; k++) {
-                if (dp_cur[j][k] > row_max) {
-                    row_max = dp_cur[j][k];
+                bool is_better = below
+                    ? (dp_cur[j][k] < row_opt)
+                    : (dp_cur[j][k] > row_opt);
+                if (is_better) {
+                    row_opt = dp_cur[j][k];
                 }
             }
         }
 
-        if (row_max + static_cast<double>(m_max_suffix_score[i]) < threshold_d) {
-            return true;
+        if (below) {
+            if (row_opt + static_cast<double>(m_max_suffix_score[i]) > threshold_d) {
+                return true;
+            }
+        } else {
+            if (row_opt + static_cast<double>(m_max_suffix_score[i]) < threshold_d) {
+                return true;
+            }
         }
 
         // Swap rows
         for (int j = 0; j <= max_j; j++) {
             for (int k = 0; k <= D; k++) {
-                dp_prev[j][k] = NEG_INF;
+                dp_prev[j][k] = SENTINEL;
             }
         }
         for (int j = j_lo; j <= j_hi; j++) {
