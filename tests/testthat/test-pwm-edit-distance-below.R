@@ -1255,3 +1255,546 @@ test_that("direction=below with indels: 1bp iterator matches interval-level resu
         }
     }
 })
+
+# --------------------------------------------------------------------------
+# LSE edit distance with direction=below
+# --------------------------------------------------------------------------
+
+test_that("pwm.edit_distance.lse direction=below basic functionality works", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05,
+        0.1, 0.05, 0.8, 0.05
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 250)
+
+    # Get the actual LSE score for this interval
+    gvtrack.create("v_lse_score", NULL, func = "pwm",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
+    lse_score <- lse_result$v_lse_score[1]
+
+    # Set threshold above the LSE score so the score is already below it
+    # => should require 0 edits
+    high_thresh <- lse_score + 5.0
+    gvtrack.create("v_lse_below_easy", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = high_thresh,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract("v_lse_below_easy", test_interval, iterator = test_interval)
+    expect_equal(result$v_lse_below_easy[1], 0, tolerance = 1e-6)
+})
+
+test_that("pwm.edit_distance.lse direction=below needs edits when score is above threshold", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05,
+        0.1, 0.05, 0.8, 0.05
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 250)
+
+    # Get the actual LSE score
+    gvtrack.create("v_lse_score", NULL, func = "pwm",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
+    lse_score <- lse_result$v_lse_score[1]
+
+    # Set threshold well below the LSE score so edits are needed
+    low_thresh <- lse_score - 10.0
+    gvtrack.create("v_lse_below_hard", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = low_thresh,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract("v_lse_below_hard", test_interval, iterator = test_interval)
+
+    # Should need at least 1 edit since the score is above threshold
+    if (!is.na(result$v_lse_below_hard[1])) {
+        expect_true(result$v_lse_below_hard[1] >= 1,
+            info = paste("LSE score", lse_score, "above threshold", low_thresh, "should need edits")
+        )
+    }
+})
+
+test_that("pwm.edit_distance.lse direction=below returns 0 when already below", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+
+    test_interval <- gintervals(1, 200, 240)
+
+    # Very high threshold: LSE score will certainly be below it
+    threshold <- 100.0
+    gvtrack.create("v_lse_below_already", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract("v_lse_below_already", test_interval, iterator = test_interval)
+    expect_equal(result$v_lse_below_already[1], 0, tolerance = 1e-6)
+})
+
+test_that("pwm.edit_distance.lse direction=below returns NA for unreachable threshold", {
+    remove_all_vtracks()
+
+    # With prior=0, the minimum per-window score can be -Inf (zero probability columns),
+    # so LSE can go to -Inf. Use a PSSM with no zeros so the minimum is bounded.
+    pssm <- matrix(c(
+        0.25, 0.25, 0.25, 0.25,
+        0.25, 0.25, 0.25, 0.25
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 240)
+
+    # With uniform PSSM and no prior, all windows have the same score = 2*log(0.25).
+    # LSE = log(N * exp(2*log(0.25))) where N = number of windows.
+    # This is bounded. A threshold far below this should be unreachable.
+    threshold <- -1000.0
+    gvtrack.create("v_lse_below_impossible", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract("v_lse_below_impossible", test_interval, iterator = test_interval)
+    expect_true(is.na(result$v_lse_below_impossible[1]))
+})
+
+test_that("pwm.edit_distance.lse direction=below vs above are complementary", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 240)
+
+    # Get the actual LSE score
+    gvtrack.create("v_lse_score", NULL, func = "pwm",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
+    lse_score <- lse_result$v_lse_score[1]
+
+    # Use a threshold below the actual score
+    low_thresh <- lse_score - 5.0
+    gvtrack.create("v_lse_above_low", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = low_thresh,
+        direction = "above",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("v_lse_below_low", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = low_thresh,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(c("v_lse_above_low", "v_lse_below_low"),
+        test_interval, iterator = test_interval
+    )
+
+    above_val <- result$v_lse_above_low[1]
+    below_val <- result$v_lse_below_low[1]
+
+    # Score is above the threshold, so:
+    # - "above" direction should need 0 edits (already above)
+    # - "below" direction should need >= 1 edit (need to push score down)
+    expect_equal(above_val, 0, tolerance = 1e-6)
+    if (!is.na(below_val)) {
+        expect_true(below_val >= 1,
+            info = paste("Below should need edits when score", lse_score, "is above threshold", low_thresh)
+        )
+    }
+
+    # Now use a threshold above the actual score
+    high_thresh <- lse_score + 5.0
+    gvtrack.create("v_lse_above_high", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = high_thresh,
+        direction = "above",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("v_lse_below_high", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = high_thresh,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result2 <- gextract(c("v_lse_above_high", "v_lse_below_high"),
+        test_interval, iterator = test_interval
+    )
+
+    above_val2 <- result2$v_lse_above_high[1]
+    below_val2 <- result2$v_lse_below_high[1]
+
+    # Score is below the threshold, so:
+    # - "above" direction should need >= 1 edit (need to push score up)
+    # - "below" direction should need 0 edits (already below)
+    expect_equal(below_val2, 0, tolerance = 1e-6)
+    if (!is.na(above_val2)) {
+        expect_true(above_val2 >= 1,
+            info = paste("Above should need edits when score", lse_score, "is below threshold", high_thresh)
+        )
+    }
+})
+
+test_that("pwm.edit_distance.lse.pos direction=below returns valid position", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05,
+        0.1, 0.05, 0.8, 0.05
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    motif_len <- nrow(pssm)
+    test_interval <- gintervals(1, 200, 250)
+
+    # Get the actual LSE score
+    gvtrack.create("v_lse_score", NULL, func = "pwm",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
+    lse_score <- lse_result$v_lse_score[1]
+
+    # Set threshold below the LSE score so edits are needed
+    threshold <- lse_score - 5.0
+
+    gvtrack.create("v_lse_below_edist", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    gvtrack.create("v_lse_below_pos", NULL,
+        func = "pwm.edit_distance.lse.pos",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(c("v_lse_below_edist", "v_lse_below_pos"),
+        test_interval, iterator = test_interval
+    )
+
+    edist_val <- result$v_lse_below_edist[1]
+    pos_val <- result$v_lse_below_pos[1]
+
+    # If edit distance is not NA, position should also not be NA
+    if (!is.na(edist_val) && edist_val >= 1) {
+        expect_false(is.na(pos_val),
+            info = "Position should be defined when edits are needed"
+        )
+        # Position should be a valid 1-based offset within the interval
+        interval_len <- test_interval$end - test_interval$start
+        expect_true(pos_val >= 1,
+            info = paste("Position", pos_val, "should be >= 1")
+        )
+        expect_true(pos_val <= interval_len,
+            info = paste("Position", pos_val, "should be within interval length", interval_len)
+        )
+    }
+
+    # If already below (0 edits), position is typically NA
+    if (!is.na(edist_val) && edist_val == 0) {
+        expect_true(is.na(pos_val),
+            info = "Position should be NA when no edits are needed"
+        )
+    }
+})
+
+test_that("pwm.edit_distance.lse direction=below edit count is consistent with max-mode below", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05,
+        0.1, 0.05, 0.8, 0.05
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 250)
+
+    # Get the actual LSE score and the max-window score
+    gvtrack.create("v_lse_score", NULL, func = "pwm",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("v_max_score", NULL, func = "pwm.max",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    scores <- gextract(c("v_lse_score", "v_max_score"), test_interval, iterator = test_interval)
+    lse_score <- scores$v_lse_score[1]
+    max_score <- scores$v_max_score[1]
+
+    # Use a threshold based on the max score (the max-mode below problem)
+    threshold <- max_score - 2.0
+
+    gvtrack.create("v_lse_below_edist", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("v_max_below_edist", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(c("v_lse_below_edist", "v_max_below_edist"),
+        test_interval, iterator = test_interval
+    )
+
+    lse_edits <- result$v_lse_below_edist[1]
+    max_edits <- result$v_max_below_edist[1]
+
+    # The LSE score is always >= the max score (LSE = log-sum-exp >= max).
+    # So to bring the LSE below a threshold, we generally need at least as many edits
+    # as bringing the max below the same threshold.
+    # In other words, LSE below edits >= max below edits.
+    if (!is.na(lse_edits) && !is.na(max_edits)) {
+        expect_true(lse_edits >= max_edits,
+            info = paste(
+                "LSE below edits (", lse_edits, ") should be >= max below edits (",
+                max_edits, ") for the same threshold"
+            )
+        )
+    }
+
+    # If max below is reachable, LSE below may or may not be reachable
+    # (LSE is harder to push down since all windows contribute)
+    # Both should be non-negative when not NA
+    if (!is.na(lse_edits)) expect_true(lse_edits >= 0)
+    if (!is.na(max_edits)) expect_true(max_edits >= 0)
+})
+
+test_that("pwm.edit_distance.lse direction=below threshold monotonicity", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 240)
+
+    # Get the actual LSE score
+    gvtrack.create("v_lse_score", NULL, func = "pwm",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
+    lse_score <- lse_result$v_lse_score[1]
+
+    # Thresholds from low to high
+    thresholds <- c(lse_score - 15, lse_score - 10, lse_score - 5, lse_score, lse_score + 5)
+    vnames <- sprintf("v_lse_below_t%d", seq_along(thresholds))
+
+    for (i in seq_along(thresholds)) {
+        gvtrack.create(vnames[i], NULL,
+            func = "pwm.edit_distance.lse",
+            pssm = pssm, score.thresh = thresholds[i],
+            direction = "below",
+            bidirect = FALSE, extend = FALSE, prior = 0
+        )
+    }
+
+    result <- gextract(vnames, test_interval, iterator = test_interval)
+
+    edits <- sapply(vnames, function(v) result[[v]][1])
+
+    # Lower thresholds should require more (or equal) edits to bring the score below them.
+    # So as threshold increases, edits should decrease (non-increasing).
+    for (i in 2:length(edits)) {
+        if (!is.na(edits[i - 1]) && !is.na(edits[i])) {
+            expect_true(edits[i] <= edits[i - 1],
+                info = paste(
+                    "Edits at threshold", thresholds[i], "=", edits[i],
+                    "should be <= edits at threshold", thresholds[i - 1], "=", edits[i - 1]
+                )
+            )
+        }
+        # If a higher threshold is reachable, lower thresholds may not be
+        # but if a lower threshold is reachable, the higher one must also be
+        if (!is.na(edits[i - 1])) {
+            expect_false(is.na(edits[i]),
+                info = paste(
+                    "Threshold", thresholds[i], "should be reachable since lower threshold",
+                    thresholds[i - 1], "is reachable"
+                )
+            )
+        }
+    }
+})
+
+test_that("pwm.edit_distance.lse direction=below with bidirectional", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05,
+        0.1, 0.05, 0.8, 0.05
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 250)
+
+    # Get LSE score to set a meaningful threshold
+    gvtrack.create("v_lse_score", NULL, func = "pwm",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
+    threshold <- lse_result$v_lse_score[1] - 3.0
+
+    # Forward only
+    gvtrack.create("v_lse_below_fwd", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, strand = 1, extend = FALSE, prior = 0
+    )
+
+    # Reverse only
+    gvtrack.create("v_lse_below_rev", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, strand = -1, extend = FALSE, prior = 0
+    )
+
+    # Bidirectional
+    gvtrack.create("v_lse_below_bidi", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = TRUE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(c("v_lse_below_fwd", "v_lse_below_rev", "v_lse_below_bidi"),
+        test_interval, iterator = test_interval
+    )
+
+    fwd <- result$v_lse_below_fwd[1]
+    rev <- result$v_lse_below_rev[1]
+    bidi <- result$v_lse_below_bidi[1]
+
+    # All should be non-negative when not NA
+    if (!is.na(fwd)) expect_true(fwd >= 0)
+    if (!is.na(rev)) expect_true(rev >= 0)
+    if (!is.na(bidi)) expect_true(bidi >= 0)
+
+    # The bidirectional version operates on both strands. Since a single edit
+    # can reduce scores on both strands simultaneously, the bidirectional edit
+    # count may be less than, equal to, or greater than individual strands.
+    # We verify all three produce valid results.
+    if (!is.na(fwd) || !is.na(rev)) {
+        # If at least one strand is reachable, bidirectional should also be reachable
+        # (the algorithm can always degrade both strands or one)
+        expect_false(is.na(bidi),
+            info = "Bidirectional should be reachable when at least one strand is"
+        )
+    }
+})
+
+test_that("pwm.edit_distance.lse direction=below with max_edits cap", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05,
+        0.1, 0.05, 0.8, 0.05
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 250)
+
+    # Get LSE score to set a threshold that needs edits
+    gvtrack.create("v_lse_score", NULL, func = "pwm",
+        pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
+    threshold <- lse_result$v_lse_score[1] - 8.0
+
+    # Unlimited edits
+    gvtrack.create("v_lse_below_unlim", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # max_edits = 1
+    gvtrack.create("v_lse_below_max1", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold, max_edits = 1,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # max_edits = 5
+    gvtrack.create("v_lse_below_max5", NULL,
+        func = "pwm.edit_distance.lse",
+        pssm = pssm, score.thresh = threshold, max_edits = 5,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(c("v_lse_below_unlim", "v_lse_below_max1", "v_lse_below_max5"),
+        test_interval, iterator = test_interval
+    )
+
+    unlim <- result$v_lse_below_unlim[1]
+    max1 <- result$v_lse_below_max1[1]
+    max5 <- result$v_lse_below_max5[1]
+
+    # If unlimited finds a solution, capped versions should find the same or NA
+    if (!is.na(unlim)) {
+        if (unlim <= 1) {
+            expect_equal(max1, unlim, tolerance = 1e-6)
+        } else {
+            expect_true(is.na(max1),
+                info = paste("max_edits=1 should be NA when unlimited needs", unlim)
+            )
+        }
+
+        if (unlim <= 5) {
+            expect_equal(max5, unlim, tolerance = 1e-6)
+        } else {
+            expect_true(is.na(max5),
+                info = paste("max_edits=5 should be NA when unlimited needs", unlim)
+            )
+        }
+    }
+
+    # Non-negative when not NA
+    if (!is.na(unlim)) expect_true(unlim >= 0)
+    if (!is.na(max1)) expect_true(max1 >= 0)
+    if (!is.na(max5)) expect_true(max5 >= 0)
+})
