@@ -14,16 +14,19 @@ PWMLseEditDistanceScorer::PWMLseEditDistanceScorer(const DnaPSSM& pssm,
                                                      char strand,
                                                      Mode mode,
                                                      float score_min,
-                                                     float score_max)
+                                                     float score_max,
+                                                     Direction direction)
     : GenomeSeqScorer(shared_seqfetch, extend, strand),
       m_pssm(pssm),
       m_threshold(threshold),
       m_max_edits(max_edits),
       m_mode(mode),
+      m_direction(direction),
       m_score_min(score_min),
       m_score_max(score_max),
       m_last_min_edits(std::numeric_limits<float>::quiet_NaN()),
-      m_S_max(0.0f)
+      m_S_max(0.0f),
+      m_S_min(0.0f)
 {
     precompute_tables();
 }
@@ -32,18 +35,26 @@ void PWMLseEditDistanceScorer::precompute_tables()
 {
     int L = m_pssm.length();
     m_col_max_scores.resize(L);
+    m_col_min_scores.resize(L);
     m_S_max = 0.0f;
+    m_S_min = 0.0f;
 
     for (int i = 0; i < L; i++) {
         float max_score = -std::numeric_limits<float>::infinity();
+        float min_score = std::numeric_limits<float>::infinity();
         for (int b = 0; b < 4; b++) {
             float score = m_pssm[i].get_log_prob_from_code(b);
             if (score > max_score) {
                 max_score = score;
             }
+            if (score < min_score) {
+                min_score = score;
+            }
         }
         m_col_max_scores[i] = max_score;
+        m_col_min_scores[i] = min_score;
         m_S_max += max_score;
+        m_S_min += min_score;
     }
 }
 
@@ -305,8 +316,12 @@ PWMLseEditDistanceScorer::try_k1_exhaustive(const std::vector<int>& seq_bases,
     LseResult result;
     double T = static_cast<double>(m_threshold);
     int R = static_cast<int>(seq_bases.size());
+    const bool is_below = (m_direction == Direction::BELOW);
 
-    double best_F_after = -std::numeric_limits<double>::infinity();
+    // For ABOVE: track best (highest) F after edit
+    // For BELOW: track best (lowest) F after edit
+    double best_F_after = is_below ? std::numeric_limits<double>::infinity()
+                                   : -std::numeric_limits<double>::infinity();
     int best_q = -1;
 
     for (int q = 0; q < R; q++) {
@@ -319,9 +334,11 @@ PWMLseEditDistanceScorer::try_k1_exhaustive(const std::vector<int>& seq_bases,
             if (new_Z <= 0.0) continue;
 
             double new_F = std::log(new_Z) + m;
-            if (new_F >= T) {
+            bool meets_threshold = is_below ? (new_F <= T) : (new_F >= T);
+            if (meets_threshold) {
                 // Found a valid 1-edit solution
-                if (new_F > best_F_after) {
+                bool is_better = is_below ? (new_F < best_F_after) : (new_F > best_F_after);
+                if (is_better) {
                     best_F_after = new_F;
                     best_q = q;
                 }
@@ -351,8 +368,10 @@ PWMLseEditDistanceScorer::try_k2_exhaustive(const std::vector<int>& seq_bases,
 {
     LseResult result;
     double T = static_cast<double>(m_threshold);
+    const bool is_below = (m_direction == Direction::BELOW);
 
-    double best_F_after = -std::numeric_limits<double>::infinity();
+    double best_F_after = is_below ? std::numeric_limits<double>::infinity()
+                                   : -std::numeric_limits<double>::infinity();
     int best_q1 = -1;
 
     // For each first edit (q1, y1)
@@ -426,8 +445,10 @@ PWMLseEditDistanceScorer::try_k2_exhaustive(const std::vector<int>& seq_bases,
                     if (new_Z <= 0.0) continue;
 
                     double new_F = std::log(new_Z) + m;
-                    if (new_F >= T) {
-                        if (new_F > best_F_after) {
+                    bool meets_threshold = is_below ? (new_F <= T) : (new_F >= T);
+                    if (meets_threshold) {
+                        bool is_better = is_below ? (new_F < best_F_after) : (new_F > best_F_after);
+                        if (is_better) {
                             best_F_after = new_F;
                             best_q1 = q1;
                         }
@@ -462,6 +483,7 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
 {
     LseResult result;
     double T = static_cast<double>(m_threshold);
+    const bool is_below = (m_direction == Direction::BELOW);
 
     // Apply prior edits (from exhaustive k=2 that failed)
     if (first_edit_pos >= 0) {
@@ -473,7 +495,8 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
         F = std::log(Z) + m;
     }
 
-    if (F >= T) {
+    bool threshold_met = is_below ? (F <= T) : (F >= T);
+    if (threshold_met) {
         result.min_edits = static_cast<float>(edits_so_far);
         if (first_edit_pos >= 0) {
             result.best_edit_index = first_edit_pos;
@@ -488,114 +511,223 @@ PWMLseEditDistanceScorer::greedy_search(std::vector<int>& seq_bases,
     int k = edits_so_far;
     int max_k = (m_max_edits > 0) ? m_max_edits : R;  // Practical limit
 
-    // Greedy: use a max-heap with stale-key checking
-    // Heap entry: (delta_z, position, best_base)
-    struct HeapEntry {
-        double delta_z;
-        int pos;
-        int best_base;
-        bool operator<(const HeapEntry& o) const { return delta_z < o.delta_z; }
-    };
+    if (is_below) {
+        // BELOW direction: use a min-heap (most negative delta_z first)
+        // We want to DECREASE F, so pick edits with most negative delta_z
+        struct MinHeapEntry {
+            double delta_z;  // negative values are better
+            int pos;
+            int best_base;
+            // Min-heap: smallest delta_z has highest priority
+            bool operator<(const MinHeapEntry& o) const { return delta_z > o.delta_z; }
+        };
 
-    // Initialize heap with DeltaZ for all positions
-    std::priority_queue<HeapEntry> heap;
-    std::vector<double> stored_dz(R, 0.0);
+        std::priority_queue<MinHeapEntry> heap;
+        std::vector<double> stored_dz(R, 0.0);
 
-    for (int q = 0; q < R; q++) {
-        int cur = seq_bases[q];
-        double best_dz = -std::numeric_limits<double>::infinity();
-        int best_y = -1;
-
-        for (int y = 0; y < 4; y++) {
-            if (y == cur) continue;
-            double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
-            if (dz > best_dz) {
-                best_dz = dz;
-                best_y = y;
-            }
-        }
-
-        if (best_y >= 0 && best_dz > 0.0) {
-            stored_dz[q] = best_dz;
-            heap.push({best_dz, q, best_y});
-        }
-    }
-
-    while (F < T && !heap.empty() && k < max_k) {
-        HeapEntry top = heap.top();
-        heap.pop();
-
-        int q = top.pos;
-
-        // Stale-key check: recompute DeltaZ
-        int cur = seq_bases[q];
-        double best_dz = -std::numeric_limits<double>::infinity();
-        int best_y = -1;
-
-        for (int y = 0; y < 4; y++) {
-            if (y == cur) continue;
-            double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
-            if (dz > best_dz) {
-                best_dz = dz;
-                best_y = y;
-            }
-        }
-
-        if (best_dz <= 0.0) {
-            continue;  // No improvement possible at this position
-        }
-
-        // Check if key is stale (recomputed value significantly different)
-        if (best_dz < top.delta_z - 1e-10 && !heap.empty() && best_dz < heap.top().delta_z) {
-            // Push back with updated key
-            stored_dz[q] = best_dz;
-            heap.push({best_dz, q, best_y});
-            continue;
-        }
-
-        // Apply edit
-        apply_edit(q, best_y, seq_bases, S_p, A_p, Z, m, N, L);
-        F = std::log(Z) + m;
-        k++;
-
-        if (first_greedy_edit_pos < 0) {
-            first_greedy_edit_pos = q;
-        }
-
-        // Recompute DeltaZ in the (2L-1)-wide diamond around q
-        int q_lo = std::max(0, q - L + 1);
-        int q_hi = std::min(R - 1, q + L - 1);
-
-        for (int qp = q_lo; qp <= q_hi; qp++) {
-            int curp = seq_bases[qp];
-            double best_dzp = -std::numeric_limits<double>::infinity();
-            int best_yp = -1;
+        for (int q = 0; q < R; q++) {
+            int cur = seq_bases[q];
+            double best_dz = std::numeric_limits<double>::infinity();  // want most negative
+            int best_y = -1;
 
             for (int y = 0; y < 4; y++) {
-                if (y == curp) continue;
-                double dz = compute_delta_z(qp, y, seq_bases, A_p, N, L);
-                if (dz > best_dzp) {
-                    best_dzp = dz;
-                    best_yp = y;
+                if (y == cur) continue;
+                double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
+                if (dz < best_dz) {
+                    best_dz = dz;
+                    best_y = y;
                 }
             }
 
-            if (best_yp >= 0 && best_dzp > 0.0) {
-                stored_dz[qp] = best_dzp;
-                heap.push({best_dzp, qp, best_yp});
+            if (best_y >= 0 && best_dz < 0.0) {
+                stored_dz[q] = best_dz;
+                heap.push({best_dz, q, best_y});
             }
         }
-    }
 
-    if (F >= T) {
-        result.min_edits = static_cast<float>(k);
-        // Position: report the first edit position
-        int report_pos = (first_edit_pos >= 0) ? first_edit_pos : first_greedy_edit_pos;
-        if (report_pos >= 0) {
-            result.best_edit_index = report_pos;
-            result.best_edit_direction = direction;
-            result.best_pos = encode_position(static_cast<size_t>(report_pos),
-                                              target_length, motif_length, direction);
+        while (F > T && !heap.empty() && k < max_k) {
+            MinHeapEntry top = heap.top();
+            heap.pop();
+
+            int q = top.pos;
+
+            // Stale-key check: recompute DeltaZ
+            int cur = seq_bases[q];
+            double best_dz = std::numeric_limits<double>::infinity();
+            int best_y = -1;
+
+            for (int y = 0; y < 4; y++) {
+                if (y == cur) continue;
+                double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
+                if (dz < best_dz) {
+                    best_dz = dz;
+                    best_y = y;
+                }
+            }
+
+            if (best_dz >= 0.0) {
+                continue;  // No score decrease possible at this position
+            }
+
+            // Check if key is stale (recomputed value significantly different)
+            if (best_dz > top.delta_z + 1e-10 && !heap.empty() && best_dz > heap.top().delta_z) {
+                stored_dz[q] = best_dz;
+                heap.push({best_dz, q, best_y});
+                continue;
+            }
+
+            // Apply edit
+            apply_edit(q, best_y, seq_bases, S_p, A_p, Z, m, N, L);
+            F = std::log(Z) + m;
+            k++;
+
+            if (first_greedy_edit_pos < 0) {
+                first_greedy_edit_pos = q;
+            }
+
+            // Recompute DeltaZ in the (2L-1)-wide diamond around q
+            int q_lo = std::max(0, q - L + 1);
+            int q_hi = std::min(R - 1, q + L - 1);
+
+            for (int qp = q_lo; qp <= q_hi; qp++) {
+                int curp = seq_bases[qp];
+                double best_dzp = std::numeric_limits<double>::infinity();
+                int best_yp = -1;
+
+                for (int y = 0; y < 4; y++) {
+                    if (y == curp) continue;
+                    double dz = compute_delta_z(qp, y, seq_bases, A_p, N, L);
+                    if (dz < best_dzp) {
+                        best_dzp = dz;
+                        best_yp = y;
+                    }
+                }
+
+                if (best_yp >= 0 && best_dzp < 0.0) {
+                    stored_dz[qp] = best_dzp;
+                    heap.push({best_dzp, qp, best_yp});
+                }
+            }
+        }
+
+        if (F <= T) {
+            result.min_edits = static_cast<float>(k);
+            int report_pos = (first_edit_pos >= 0) ? first_edit_pos : first_greedy_edit_pos;
+            if (report_pos >= 0) {
+                result.best_edit_index = report_pos;
+                result.best_edit_direction = direction;
+                result.best_pos = encode_position(static_cast<size_t>(report_pos),
+                                                  target_length, motif_length, direction);
+            }
+        }
+    } else {
+        // ABOVE direction: use a max-heap (original logic)
+        struct HeapEntry {
+            double delta_z;
+            int pos;
+            int best_base;
+            bool operator<(const HeapEntry& o) const { return delta_z < o.delta_z; }
+        };
+
+        std::priority_queue<HeapEntry> heap;
+        std::vector<double> stored_dz(R, 0.0);
+
+        for (int q = 0; q < R; q++) {
+            int cur = seq_bases[q];
+            double best_dz = -std::numeric_limits<double>::infinity();
+            int best_y = -1;
+
+            for (int y = 0; y < 4; y++) {
+                if (y == cur) continue;
+                double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
+                if (dz > best_dz) {
+                    best_dz = dz;
+                    best_y = y;
+                }
+            }
+
+            if (best_y >= 0 && best_dz > 0.0) {
+                stored_dz[q] = best_dz;
+                heap.push({best_dz, q, best_y});
+            }
+        }
+
+        while (F < T && !heap.empty() && k < max_k) {
+            HeapEntry top = heap.top();
+            heap.pop();
+
+            int q = top.pos;
+
+            // Stale-key check: recompute DeltaZ
+            int cur = seq_bases[q];
+            double best_dz = -std::numeric_limits<double>::infinity();
+            int best_y = -1;
+
+            for (int y = 0; y < 4; y++) {
+                if (y == cur) continue;
+                double dz = compute_delta_z(q, y, seq_bases, A_p, N, L);
+                if (dz > best_dz) {
+                    best_dz = dz;
+                    best_y = y;
+                }
+            }
+
+            if (best_dz <= 0.0) {
+                continue;  // No improvement possible at this position
+            }
+
+            // Check if key is stale (recomputed value significantly different)
+            if (best_dz < top.delta_z - 1e-10 && !heap.empty() && best_dz < heap.top().delta_z) {
+                // Push back with updated key
+                stored_dz[q] = best_dz;
+                heap.push({best_dz, q, best_y});
+                continue;
+            }
+
+            // Apply edit
+            apply_edit(q, best_y, seq_bases, S_p, A_p, Z, m, N, L);
+            F = std::log(Z) + m;
+            k++;
+
+            if (first_greedy_edit_pos < 0) {
+                first_greedy_edit_pos = q;
+            }
+
+            // Recompute DeltaZ in the (2L-1)-wide diamond around q
+            int q_lo = std::max(0, q - L + 1);
+            int q_hi = std::min(R - 1, q + L - 1);
+
+            for (int qp = q_lo; qp <= q_hi; qp++) {
+                int curp = seq_bases[qp];
+                double best_dzp = -std::numeric_limits<double>::infinity();
+                int best_yp = -1;
+
+                for (int y = 0; y < 4; y++) {
+                    if (y == curp) continue;
+                    double dz = compute_delta_z(qp, y, seq_bases, A_p, N, L);
+                    if (dz > best_dzp) {
+                        best_dzp = dz;
+                        best_yp = y;
+                    }
+                }
+
+                if (best_yp >= 0 && best_dzp > 0.0) {
+                    stored_dz[qp] = best_dzp;
+                    heap.push({best_dzp, qp, best_yp});
+                }
+            }
+        }
+
+        if (F >= T) {
+            result.min_edits = static_cast<float>(k);
+            // Position: report the first edit position
+            int report_pos = (first_edit_pos >= 0) ? first_edit_pos : first_greedy_edit_pos;
+            if (report_pos >= 0) {
+                result.best_edit_index = report_pos;
+                result.best_edit_direction = direction;
+                result.best_pos = encode_position(static_cast<size_t>(report_pos),
+                                                  target_length, motif_length, direction);
+            }
         }
     }
 
@@ -647,18 +779,37 @@ PWMLseEditDistanceScorer::compute_lse_edit_distance(const std::string& seq,
     }
 
     double T = static_cast<double>(m_threshold);
+    const bool is_below = (m_direction == Direction::BELOW);
 
-    // Already above threshold? 0 edits needed
-    if (F >= T) {
+    // Already at target? 0 edits needed
+    if (is_below ? (F <= T) : (F >= T)) {
         result.min_edits = 0.0f;
         result.best_pos = std::numeric_limits<float>::quiet_NaN();  // No edit needed
         return result;
     }
 
-    // Quick unreachability check: S_max + log(N) is the maximum possible F
-    double max_possible_F = static_cast<double>(m_S_max) + std::log(static_cast<double>(N));
-    if (T > max_possible_F + 1e-9) {
-        return result;  // Unreachable even with all bases optimal
+    // Quick unreachability check
+    if (is_below) {
+        // For BELOW: minimum possible F uses worst base at every position
+        // F_min = log(sum(exp(S_p_min))) where S_p_min uses col_min at each column
+        // Lower bound: F_min >= S_min + log(N) is NOT correct (that's for max).
+        // Actually: F_min = log(N) + S_min only if all starts have same score S_min,
+        // but starts overlap so S_p_min varies. Conservative lower bound:
+        // The minimum F is at least S_min_single (the min single-window score)
+        // since log(sum(exp(S_p))) >= max(S_p) >= min(S_p) >= S_min.
+        // Actually log(sum(exp(S_p))) >= max(S_p), so even with all worst bases,
+        // the min of max(S_p) across all possible sequences is S_min (sum of col minima).
+        // So F >= S_min. If T < S_min, it's unreachable.
+        double min_possible_F = static_cast<double>(m_S_min);
+        if (T < min_possible_F - 1e-9) {
+            return result;  // Unreachable: F can never go below S_min
+        }
+    } else {
+        // For ABOVE: S_max + log(N) is the maximum possible F
+        double max_possible_F = static_cast<double>(m_S_max) + std::log(static_cast<double>(N));
+        if (T > max_possible_F + 1e-9) {
+            return result;  // Unreachable even with all bases optimal
+        }
     }
 
     // Check max_edits cap
