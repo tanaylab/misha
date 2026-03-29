@@ -99,9 +99,14 @@ void PWMEditDistanceScorer::precompute_tables()
 
         for (int b = 0; b < 4; b++) {
             float score = m_pssm[i].get_log_prob_from_code(b);
-            float delta = below
-                ? (score - m_col_min_scores[i])
-                : (m_col_max_scores[i] - score);
+            float delta;
+            if (below) {
+                // For log-zero scores: -Inf - (-Inf) = NaN → treat as 0 (no reduction possible)
+                bool is_logzero = (score <= kLogZeroThreshold || !std::isfinite(score));
+                delta = is_logzero ? 0.0f : (score - m_col_min_scores[i]);
+            } else {
+                delta = m_col_max_scores[i] - score;
+            }
             unique_deltas.insert(delta);
         }
 
@@ -138,9 +143,13 @@ void PWMEditDistanceScorer::precompute_tables()
                 }
             }
 
-            float delta = below
-                ? (score - m_col_min_scores[i])
-                : (m_col_max_scores[i] - score);
+            float delta;
+            if (below) {
+                bool is_logzero_score = (score <= kLogZeroThreshold || !std::isfinite(score));
+                delta = is_logzero_score ? 0.0f : (score - m_col_min_scores[i]);
+            } else {
+                delta = m_col_max_scores[i] - score;
+            }
 
             // Find bin index (m_gain_values is sorted descending)
             auto it = std::lower_bound(m_gain_values.begin(), m_gain_values.end(),
@@ -165,13 +174,14 @@ void PWMEditDistanceScorer::precompute_tables()
             float raw = m_pssm[i].get_log_prob_from_code(b);
             bool is_logzero = (raw <= kLogZeroThreshold || !std::isfinite(raw));
             if (below) {
-                // BELOW: mandatory means the score is already -Inf at this position.
-                // If the current base has -Inf score, the window score is -Inf (< threshold),
-                // so no edits are needed (handled by deficit check). Treat it as col_min with
-                // loss = 0 (no further reduction possible from this already-minimal position).
-                m_mandatory_table[i][b] = is_logzero;
+                // BELOW: log-zero positions are NOT mandatory edits.
+                // A -Inf score makes the window score -Inf (already below any finite
+                // threshold), so zero edits are needed.  We store the raw -Inf score
+                // so that adjusted_score becomes -Inf, deficit <= 0, and compute_exact
+                // returns mandatory_edits == 0.  Loss is 0 (can't decrease below -Inf).
+                m_mandatory_table[i][b] = false;
                 if (is_logzero) {
-                    m_score_table[i][b] = m_col_min_scores[i];
+                    m_score_table[i][b] = raw;  // -Inf
                     m_gain_table[i][b] = 0.0f;
                 } else {
                     m_score_table[i][b] = raw;
@@ -189,14 +199,19 @@ void PWMEditDistanceScorer::precompute_tables()
                 }
             }
         }
-        // N-base (index 4): always mandatory
+        // N-base (index 4):
+        // ABOVE: mandatory (unknown base → worst case = col_min, must substitute)
+        // BELOW: not mandatory; assume worst case = col_max (hardest to get below
+        //        threshold), with full loss = col_max - col_min available.
         if (below) {
-            m_score_table[i][4] = m_col_min_scores[i];
-        } else {
+            m_mandatory_table[i][4] = false;
             m_score_table[i][4] = m_col_max_scores[i];
+            m_gain_table[i][4] = m_col_max_scores[i] - m_col_min_scores[i];
+        } else {
+            m_mandatory_table[i][4] = true;
+            m_score_table[i][4] = m_col_max_scores[i];
+            m_gain_table[i][4] = 0.0f;
         }
-        m_gain_table[i][4] = 0.0f;
-        m_mandatory_table[i][4] = true;
     }
 
     // Build pigeonhole pre-filter blocks (must come after m_mandatory_table is populated).
