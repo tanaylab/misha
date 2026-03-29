@@ -459,7 +459,8 @@ gseq.pwm_edits <- function(seqs,
                            score.min = NULL,
                            score.max = NULL,
                            extend = TRUE,
-                           strand = 1L) {
+                           strand = 1L,
+                           direction = "above") {
     # Handle interval input: extract sequences
     is_intervals <- is.data.frame(seqs) &&
         all(c("chrom", "start", "end") %in% colnames(seqs))
@@ -541,6 +542,7 @@ gseq.pwm_edits <- function(seqs,
     if (!is.logical(bidirect)) stop("bidirect must be TRUE or FALSE")
     if (!is.numeric(prior) || prior < 0 || prior > 1) stop("prior must be between 0 and 1")
     if (strand != 1 && strand != -1) stop("strand must be 1 or -1")
+    if (!direction %in% c("above", "below")) stop("direction must be 'above' or 'below'")
 
     strand_mode <- if (bidirect) 0L else as.integer(strand)
 
@@ -564,7 +566,8 @@ gseq.pwm_edits <- function(seqs,
         if (!is.null(roi_end)) as.integer(roi_end) else NULL,
         if (is.logical(c_extend)) as.logical(c_extend) else as.integer(c_extend),
         if (!is.null(score.min)) as.numeric(score.min) else NULL,
-        if (!is.null(score.max)) as.numeric(score.max) else NULL
+        if (!is.null(score.max)) as.numeric(score.max) else NULL,
+        as.character(direction)
     )
 
     # Add interval columns if input was intervals
