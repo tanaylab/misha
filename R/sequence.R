@@ -585,6 +585,422 @@ gseq.pwm_edits <- function(seqs,
     return(result)
 }
 
+#' Theoretical PWM score distribution under neutral mutation
+#'
+#' Computes the theoretical distribution of PWM log-likelihood scores that
+#' arise when a motif-matching sequence undergoes random mutations at a given
+#' rate. This is useful for comparing observed score distributions (e.g.,
+#' \code{score_before} from \code{\link{gseq.pwm_edits}}) against a neutral
+#' expectation.
+#'
+#' Two computation modes are supported:
+#' \itemize{
+#'   \item \strong{Analytical} (when \code{indel_rate = 0} and
+#'     \code{start = "consensus"} and \code{bidirect = FALSE}): exact
+#'     convolution of per-position score distributions on a discretized grid.
+#'     The exact PMF is attached to the result as the \code{"pmf"} attribute.
+#'   \item \strong{Simulation} (otherwise): vectorized Monte Carlo sampling.
+#' }
+#'
+#' @param pssm numeric matrix or data frame with columns A, C, G, T. Each
+#'   row is a motif position (counts or frequencies).
+#' @param sub_rate numeric; per-position substitution probability (0--1).
+#' @param indel_rate numeric; per-position indel probability (0--1). When
+#'   \code{> 0}, simulation mode is used. Default 0.
+#' @param n integer; number of score samples to generate. Default 10000.
+#' @param start character; starting sequence model. \code{"consensus"} uses
+#'   the argmax base at each position (deterministic). \code{"pssm"} samples
+#'   starting bases from the PSSM probability distribution. Default
+#'   \code{"consensus"}.
+#' @param rate_matrix numeric 4x4 matrix or NULL. When provided, entry
+#'   \code{[i, j]} gives the relative rate of substitution from base \code{i}
+#'   to base \code{j}. The diagonal is ignored (zeroed) and rows are
+#'   normalized internally. \code{NULL} means uniform rates (equal
+#'   probability for each of the 3 alternative bases). Default NULL.
+#' @param prior numeric; pseudocount for PSSM normalization. Default 0.01.
+#' @param bidirect logical; if TRUE, the score is the maximum of forward and
+#'   reverse complement strand scores. Default TRUE.
+#'
+#' @return A data frame with columns:
+#' \describe{
+#'   \item{score}{PWM log-likelihood score of the mutated sequence}
+#'   \item{n_subs}{Number of substitutions applied}
+#'   \item{n_indels}{Number of indels applied (always 0 when
+#'     \code{indel_rate = 0})}
+#' }
+#'
+#' When analytical mode is used, the exact PMF is attached as attribute
+#' \code{"pmf"} (a data frame with columns \code{score} and \code{prob}).
+#'
+#' @examples
+#' \dontrun{
+#' pssm <- matrix(c(
+#'     0.9, 0.03, 0.03, 0.04,
+#'     0.05, 0.8, 0.1, 0.05,
+#'     0.1, 0.1, 0.7, 0.1
+#' ), nrow = 3, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+#'
+#' # Substitution-only, consensus start
+#' res <- gseq.pwm_score_theoretical(pssm, sub_rate = 0.05, bidirect = FALSE)
+#' hist(res$score, breaks = 50)
+#'
+#' # Compare multiple rates
+#' library(ggplot2)
+#' rates <- c(0.01, 0.05, 0.1)
+#' df <- do.call(rbind, lapply(rates, function(r) {
+#'     d <- gseq.pwm_score_theoretical(pssm, sub_rate = r, n = 5000)
+#'     d$sub_rate <- r
+#'     d
+#' }))
+#' ggplot(df, aes(x = score, color = factor(sub_rate))) +
+#'     stat_ecdf() +
+#'     theme_bw()
+#' }
+#'
+#' @export
+#' @seealso \code{\link{gseq.pwm_edits}}, \code{\link{gseq.pwm}}
+gseq.pwm_score_theoretical <- function(pssm,
+                                       sub_rate,
+                                       indel_rate = 0,
+                                       n = 10000,
+                                       start = "consensus",
+                                       rate_matrix = NULL,
+                                       prior = 0.01,
+                                       bidirect = TRUE) {
+    # --- Validate inputs ---
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "pssm must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "pssm must have columns named A, C, G, T",
+        colnames_msg = "pssm must have columns named A, C, G, T"
+    )
+
+    if (!is.numeric(sub_rate) || length(sub_rate) != 1 || sub_rate < 0 || sub_rate > 1) {
+        stop("sub_rate must be a single numeric value between 0 and 1")
+    }
+    if (!is.numeric(indel_rate) || length(indel_rate) != 1 || indel_rate < 0 || indel_rate > 1) {
+        stop("indel_rate must be a single numeric value between 0 and 1")
+    }
+    n <- as.integer(n)
+    if (n < 1) stop("n must be a positive integer")
+    start <- match.arg(start, c("consensus", "pssm"))
+    if (!is.numeric(prior) || prior < 0) stop("prior must be a non-negative number")
+    if (!is.logical(bidirect)) stop("bidirect must be TRUE or FALSE")
+
+    if (!is.null(rate_matrix)) {
+        if (!is.matrix(rate_matrix) || !is.numeric(rate_matrix) ||
+            nrow(rate_matrix) != 4 || ncol(rate_matrix) != 4) {
+            stop("rate_matrix must be a 4x4 numeric matrix")
+        }
+        # Zero diagonal and normalize rows
+        diag(rate_matrix) <- 0
+        row_sums <- rowSums(rate_matrix)
+        if (any(row_sums == 0)) {
+            stop("rate_matrix rows (excluding diagonal) must have positive sums")
+        }
+        rate_matrix <- rate_matrix / row_sums
+    }
+
+    # --- Normalize PSSM to log-probabilities ---
+    L <- nrow(pssm)
+    pssm_prob <- pssm + prior
+    pssm_prob <- pssm_prob / rowSums(pssm_prob)
+    pssm_log <- log(pssm_prob)
+
+    # Reverse complement PSSM (for bidirect scoring)
+    # Reverse the position order and swap A<->T, C<->G
+    pssm_log_rc <- pssm_log[L:1, c("T", "G", "C", "A"), drop = FALSE]
+    colnames(pssm_log_rc) <- c("A", "C", "G", "T")
+
+    # --- Determine mode ---
+    use_analytical <- (indel_rate == 0 && start == "consensus" && !bidirect)
+
+    if (use_analytical) {
+        result <- .pwm_score_analytical(pssm_log, sub_rate, n, rate_matrix)
+    } else if (indel_rate == 0) {
+        result <- .pwm_score_sim_sub_only(
+            pssm_log, pssm_log_rc, pssm_prob, sub_rate, n,
+            start, rate_matrix, bidirect
+        )
+    } else {
+        result <- .pwm_score_sim_indels(
+            pssm_log, pssm_log_rc, pssm_prob, sub_rate, indel_rate, n,
+            start, rate_matrix, bidirect
+        )
+    }
+
+    result
+}
+
+
+# --- Internal helpers for gseq.pwm_score_theoretical ---
+
+#' Analytical mode: discretized convolution
+#' @noRd
+.pwm_score_analytical <- function(pssm_log, sub_rate, n, rate_matrix) {
+    L <- nrow(pssm_log)
+    delta <- 0.001
+
+    # Build per-position score/probability pairs
+    .pos_dist <- function(i) {
+        consensus_base <- which.max(pssm_log[i, ])
+        scores_i <- as.numeric(pssm_log[i, ])
+        probs_i <- numeric(4)
+        if (is.null(rate_matrix)) {
+            probs_i[consensus_base] <- 1 - sub_rate
+            probs_i[-consensus_base] <- sub_rate / 3
+        } else {
+            probs_i[consensus_base] <- 1 - sub_rate
+            probs_i[-consensus_base] <- sub_rate * rate_matrix[consensus_base, -consensus_base]
+        }
+        list(scores = scores_i, probs = probs_i)
+    }
+
+    # Helper: create a PMF vector on a per-position grid
+    .make_pmf <- function(scores_i, probs_i) {
+        lo <- min(scores_i)
+        grid_len <- as.integer(round((max(scores_i) - lo) / delta)) + 1L
+        pmf <- numeric(grid_len)
+        for (b in 1:4) {
+            idx <- as.integer(round((scores_i[b] - lo) / delta)) + 1L
+            pmf[idx] <- pmf[idx] + probs_i[b]
+        }
+        list(pmf = pmf, lo = lo)
+    }
+
+    # Initialize with position 1
+    d1 <- .pos_dist(1)
+    p1 <- .make_pmf(d1$scores, d1$probs)
+    pmf <- p1$pmf
+    cumulative_lo <- p1$lo
+
+    # Convolve with each subsequent position
+    if (L >= 2) {
+        for (i in 2:L) {
+            di <- .pos_dist(i)
+            pi <- .make_pmf(di$scores, di$probs)
+            pmf <- stats::convolve(pmf, rev(pi$pmf), type = "open")
+            cumulative_lo <- cumulative_lo + pi$lo
+        }
+    }
+
+    # Clean up: remove negligible values, normalize
+    pmf[pmf < 0] <- 0
+    pmf <- pmf / sum(pmf)
+
+    # Build score values for the PMF
+    pmf_scores <- cumulative_lo + (seq_along(pmf) - 1) * delta
+
+    # Remove near-zero entries
+    keep <- pmf > 1e-15
+    pmf_scores <- pmf_scores[keep]
+    pmf <- pmf[keep]
+
+    # Sample from the exact PMF
+    sampled_idx <- sample.int(length(pmf), size = n, replace = TRUE, prob = pmf)
+    # Add small jitter within the bin to avoid discretization artifacts
+    scores <- pmf_scores[sampled_idx] + stats::runif(n, -delta / 2, delta / 2)
+
+    # n_subs is not tracked per-sample in analytical mode — draw from
+    # the marginal binomial distribution (independent of score sample)
+    n_subs <- stats::rbinom(n, size = nrow(pssm_log), prob = sub_rate)
+
+    result <- data.frame(
+        score = scores,
+        n_subs = n_subs,
+        n_indels = 0L
+    )
+
+    # Attach exact PMF
+    attr(result, "pmf") <- data.frame(score = pmf_scores, prob = pmf)
+
+    result
+}
+
+#' Simulation mode: substitutions only (vectorized)
+#' @noRd
+.pwm_score_sim_sub_only <- function(pssm_log, pssm_log_rc, pssm_prob,
+                                    sub_rate, n, start, rate_matrix, bidirect) {
+    L <- nrow(pssm_log)
+    bases <- c("A", "C", "G", "T")
+
+    # Starting bases: n x L matrix of base indices (1-4)
+    if (start == "consensus") {
+        consensus_bases <- apply(pssm_log, 1, which.max) # length L
+        base_mat <- matrix(rep(consensus_bases, each = n), nrow = n, ncol = L)
+    } else {
+        # Sample from PSSM probabilities for each position
+        base_mat <- matrix(0L, nrow = n, ncol = L)
+        for (i in seq_len(L)) {
+            base_mat[, i] <- sample.int(4, n, replace = TRUE, prob = pssm_prob[i, ])
+        }
+    }
+
+    # Generate mutation mask: n x L
+    mut_mask <- matrix(stats::rbinom(n * L, 1L, sub_rate), nrow = n, ncol = L)
+    n_subs <- as.integer(rowSums(mut_mask))
+
+    # Apply mutations where mask is 1
+    mut_idx <- which(mut_mask == 1L)
+    if (length(mut_idx) > 0) {
+        original <- base_mat[mut_idx]
+        if (is.null(rate_matrix)) {
+            # Uniform: shift by random 1-3, mod 4
+            offsets <- sample.int(3, length(mut_idx), replace = TRUE)
+            base_mat[mut_idx] <- ((original - 1L + offsets) %% 4L) + 1L
+        } else {
+            # Rate matrix: sample per original base
+            for (b in 1:4) {
+                which_b <- mut_idx[original == b]
+                if (length(which_b) > 0) {
+                    probs <- rate_matrix[b, ]
+                    base_mat[which_b] <- sample.int(4, length(which_b),
+                        replace = TRUE, prob = probs
+                    )
+                }
+            }
+        }
+    }
+
+    # Compute forward scores: look up pssm_log values
+    fwd_scores <- numeric(n)
+    for (i in seq_len(L)) {
+        fwd_scores <- fwd_scores + pssm_log[i, base_mat[, i]]
+    }
+
+    if (bidirect) {
+        # Reverse complement: base 1->4 (A->T), 2->3 (C->G), 3->2, 4->1
+        rc_base_mat <- 5L - base_mat[, L:1, drop = FALSE]
+        rev_scores <- numeric(n)
+        for (i in seq_len(L)) {
+            rev_scores <- rev_scores + pssm_log_rc[i, rc_base_mat[, i]]
+        }
+        scores <- pmax(fwd_scores, rev_scores)
+    } else {
+        scores <- fwd_scores
+    }
+
+    data.frame(
+        score = scores,
+        n_subs = n_subs,
+        n_indels = 0L
+    )
+}
+
+#' Simulation mode: with indels
+#' @noRd
+.pwm_score_sim_indels <- function(pssm_log, pssm_log_rc, pssm_prob,
+                                  sub_rate, indel_rate, n,
+                                  start, rate_matrix, bidirect) {
+    L <- nrow(pssm_log)
+
+    # Helper: score a sequence (string) against a pssm_log matrix
+    score_seq <- function(seq_str, pssm_log_mat) {
+        seq_len <- nchar(seq_str)
+        motif_len <- nrow(pssm_log_mat)
+        if (seq_len < motif_len) {
+            return(-Inf)
+        }
+        best <- -Inf
+        base_map <- c(A = 1L, C = 2L, G = 3L, T = 4L)
+        for (pos in seq_len(seq_len - motif_len + 1)) {
+            s <- 0
+            valid <- TRUE
+            for (j in seq_len(motif_len)) {
+                base <- substr(seq_str, pos + j - 1, pos + j - 1)
+                idx <- base_map[base]
+                if (is.na(idx)) {
+                    valid <- FALSE
+                    break
+                }
+                s <- s + pssm_log_mat[j, idx]
+            }
+            if (valid && s > best) best <- s
+        }
+        best
+    }
+
+    bases_char <- c("A", "C", "G", "T")
+
+    # Consensus starting bases
+    if (start == "consensus") {
+        start_bases <- apply(pssm_log, 1, which.max)
+    }
+
+    scores <- numeric(n)
+    n_subs_vec <- integer(n)
+    n_indels_vec <- integer(n)
+
+    for (s in seq_len(n)) {
+        # Generate starting sequence
+        if (start == "consensus") {
+            seq_bases <- start_bases
+        } else {
+            seq_bases <- vapply(seq_len(L), function(i) {
+                sample.int(4, 1, prob = pssm_prob[i, ])
+            }, integer(1))
+        }
+
+        # Apply substitutions
+        n_sub <- 0L
+        for (i in seq_along(seq_bases)) {
+            if (stats::runif(1) < sub_rate) {
+                n_sub <- n_sub + 1L
+                orig <- seq_bases[i]
+                if (is.null(rate_matrix)) {
+                    seq_bases[i] <- ((orig - 1L + sample.int(3, 1)) %% 4L) + 1L
+                } else {
+                    seq_bases[i] <- sample.int(4, 1, prob = rate_matrix[orig, ])
+                }
+            }
+        }
+
+        # Apply indels: walk through and apply insertions/deletions
+        n_indel <- 0L
+        new_seq <- integer(0)
+        for (i in seq_along(seq_bases)) {
+            r <- stats::runif(1)
+            if (r < indel_rate / 2) {
+                # Insertion: insert random base before current
+                new_seq <- c(new_seq, sample.int(4, 1))
+                new_seq <- c(new_seq, seq_bases[i])
+                n_indel <- n_indel + 1L
+            } else if (r < indel_rate) {
+                # Deletion: skip current base
+                n_indel <- n_indel + 1L
+            } else {
+                new_seq <- c(new_seq, seq_bases[i])
+            }
+        }
+
+        # Convert to string
+        seq_str <- paste0(bases_char[new_seq], collapse = "")
+
+        # Score: max over all windows (pwm.max behavior)
+        fwd_score <- score_seq(seq_str, pssm_log)
+
+        if (bidirect) {
+            # Reverse complement
+            rc_map <- c(4L, 3L, 2L, 1L)
+            rc_bases <- rc_map[rev(new_seq)]
+            rc_str <- paste0(bases_char[rc_bases], collapse = "")
+            rev_score <- score_seq(rc_str, pssm_log)
+            scores[s] <- max(fwd_score, rev_score)
+        } else {
+            scores[s] <- fwd_score
+        }
+
+        n_subs_vec[s] <- n_sub
+        n_indels_vec[s] <- n_indel
+    }
+
+    data.frame(
+        score = scores,
+        n_subs = n_subs_vec,
+        n_indels = n_indels_vec
+    )
+}
+
 #' Score DNA sequences with a k-mer over a region of interest
 #'
 #' Counts exact matches of a k-mer in DNA sequences over a specified region of interest

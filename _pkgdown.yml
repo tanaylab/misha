@@ -126,6 +126,7 @@ reference:
       - gseq.extract
       - gseq.pwm
       - gseq.pwm_edits
+      - gseq.pwm_score_theoretical
       - gseq.kmer
       - gseq.kmer.dist
       - gseq.revcomp
