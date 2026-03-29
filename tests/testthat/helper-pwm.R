@@ -190,3 +190,106 @@ manual_pwm_edit_distance <- function(seq, pssm, threshold, max_edits = NULL, sca
     }
     best
 }
+
+# Helper function to compute PWM edit distance in "below" direction manually.
+# Returns the minimum number of substitutions to bring the best window's score
+# BELOW the threshold (i.e., score <= threshold).
+# When scan_all = TRUE, returns the minimum edits across every start position.
+# When scan_all = FALSE, seq is treated as a single motif-length window.
+manual_pwm_edit_distance_below <- function(seq, pssm, threshold, max_edits = NULL, scan_all = TRUE) {
+    motif_len <- nrow(pssm)
+
+    if (nchar(seq) < motif_len) {
+        return(NA_real_)
+    }
+
+    log_pssm <- log(pssm)
+    col_min <- apply(log_pssm, 1, min)
+
+    score_window <- function(window_seq) {
+        current_score <- 0
+        has_neg_inf <- FALSE
+        losses <- numeric(0)
+
+        for (i in seq_len(motif_len)) {
+            base <- substr(window_seq, i, i)
+            base_idx <- switch(base,
+                "A" = 1,
+                "C" = 2,
+                "G" = 3,
+                "T" = 4,
+                NA
+            )
+
+            if (is.na(base_idx)) {
+                base_score <- min(log_pssm[i, ])
+            } else {
+                base_score <- log_pssm[i, base_idx]
+            }
+
+            if (!is.finite(base_score)) {
+                # Score is -Inf: total score is -Inf, already below any threshold
+                has_neg_inf <- TRUE
+                break
+            }
+
+            current_score <- current_score + base_score
+            loss <- base_score - col_min[i]
+            losses <- c(losses, loss)
+        }
+
+        if (has_neg_inf) {
+            # Score is -Inf, which is <= any finite threshold
+            return(0)
+        }
+
+        # surplus = how much the current score exceeds the threshold
+        surplus <- current_score - threshold
+        if (surplus <= 0) {
+            # Already at or below threshold
+            return(0)
+        }
+
+        # Check if even switching all positions to worst can cover the surplus
+        total_possible_loss <- sum(losses)
+        if (total_possible_loss < surplus - 1e-12) {
+            return(NA_real_)
+        }
+
+        # Sort losses descending and greedily accumulate
+        losses_sorted <- sort(losses, decreasing = TRUE)
+
+        if (!is.null(max_edits)) {
+            if (max_edits < length(losses_sorted)) {
+                losses_sorted <- losses_sorted[seq_len(max_edits)]
+            }
+        }
+
+        acc <- 0
+        edits <- 0
+        for (loss in losses_sorted) {
+            edits <- edits + 1
+            acc <- acc + loss
+            if (acc >= surplus) {
+                return(edits)
+            }
+        }
+
+        return(NA_real_)
+    }
+
+    if (!scan_all) {
+        return(score_window(seq))
+    }
+
+    seq_len_total <- nchar(seq)
+    best <- NA_real_
+    for (start_idx in seq_len(seq_len_total - motif_len + 1)) {
+        window_seq <- substr(seq, start_idx, start_idx + motif_len - 1)
+        cand <- score_window(window_seq)
+        if (is.na(best) || (!is.na(cand) && cand < best)) {
+            best <- cand
+        }
+    }
+    best
+}
