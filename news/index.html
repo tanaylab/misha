@@ -70,10 +70,10 @@
 <h2 class="page-header" data-toc-text="5.6.7" id="misha-567">misha 5.6.7<a class="anchor" aria-label="anchor" href="#misha-567"></a></h2>
 <ul><li>Added PWM edit distance virtual track functions: <code>pwm.edit_distance</code>, <code>pwm.edit_distance.pos</code>, <code>pwm.max.edit_distance</code>, <code>pwm.edit_distance.lse</code>, and <code>pwm.edit_distance.lse.pos</code>. Compute minimum edit distance (substitutions and indels) to reach a PWM score threshold, with per-window (max) and aggregate (LSE) scoring modes.</li>
 <li>Added <code><a href="../reference/gseq.pwm_edits.html">gseq.pwm_edits()</a></code> for retrieving detailed per-edit information (positions and replacement bases) from PWM edit distance computation.</li>
-<li>Added pigeonhole pre-filter for PWM edit distance, dramatically reducing computation time for genome-wide scans.</li>
-<li>Enabled sub-chromosome range splitting for <code>gscreen</code> and <code>gextract</code>, improving parallel efficiency on genomes with large chromosomes (e.g., hg38 chr1).</li>
+<li>Enabled sub-chromosome range splitting for <code>gscreen</code> and <code>gextract</code>, improving parallel efficiency on genomes with large chromosomes.</li>
 <li>Fixed <code>gscreen</code> returning split intervals at sub-chromosome parallel boundaries instead of merged contiguous intervals.</li>
 <li>Enabled sub-chromosome range splitting for <code>gsummary</code>, <code>gdist</code>, and <code>gcor</code> (Pearson), improving parallel efficiency with explicit iterators.</li>
+<li>Multiple performance improvements for <code>gscreen</code> and <code>gextract</code> with dense iterators.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.6" id="misha-566">misha 5.6.6<small>2026-03-19</small><a class="anchor" aria-label="anchor" href="#misha-566"></a></h2>
