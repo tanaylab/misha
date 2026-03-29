@@ -140,6 +140,48 @@ private:
     std::vector<PrefilterBlock> m_prefilter_blocks;
     bool m_use_prefilter;
 
+    // Direction-aware helper methods — avoid scattered if/else throughout the code
+    inline bool is_below() const { return m_direction == Direction::BELOW; }
+
+    /** Compute the deficit: how much score must change to satisfy the threshold. */
+    inline double compute_deficit(double score) const {
+        return is_below() ? (score - static_cast<double>(m_threshold))
+                          : (static_cast<double>(m_threshold) - score);
+    }
+
+    /** Check whether the score already satisfies the threshold. */
+    inline bool threshold_satisfied(double score) const {
+        return is_below() ? (score <= static_cast<double>(m_threshold))
+                          : (score >= static_cast<double>(m_threshold));
+    }
+
+    /** Max possible delta achievable from the given score (using all optimal edits). */
+    inline double max_possible_delta(double score) const {
+        return is_below() ? (score - static_cast<double>(m_S_min))
+                          : (static_cast<double>(m_S_max) - score);
+    }
+
+    /** Global reachability: can the threshold ever be reached from any sequence? */
+    inline bool is_globally_reachable() const {
+        return is_below() ? (static_cast<double>(m_S_min) <= static_cast<double>(m_threshold))
+                          : (static_cast<double>(m_S_max) >= static_cast<double>(m_threshold));
+    }
+
+    /** Compute per-position delta value (gain for ABOVE, loss for BELOW). */
+    inline float compute_position_delta(float score, int col_idx) const {
+        if (is_below()) {
+            bool is_logzero = (score <= -1e30f || !std::isfinite(score));
+            return is_logzero ? 0.0f : (score - m_col_min_scores[col_idx]);
+        } else {
+            return m_col_max_scores[col_idx] - score;
+        }
+    }
+
+    /** Target score for a position after editing (col_max for ABOVE, col_min for BELOW). */
+    inline float target_score(int col_idx) const {
+        return is_below() ? m_col_min_scores[col_idx] : m_col_max_scores[col_idx];
+    }
+
     /**
      * Precompute gain value bins and lookup tables (called once in constructor)
      */
