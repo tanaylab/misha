@@ -758,6 +758,29 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 lse_mode = PWMLseEditDistanceScorer::Mode::LSE_EDIT_DISTANCE_POS;
             }
 
+            // Extract direction parameter (optional, default "above")
+            PWMLseEditDistanceScorer::Direction lse_direction = PWMLseEditDistanceScorer::Direction::ABOVE;
+            if (Rf_isNewList(rparams)) {
+                int dir_idx = findListElementIndex(rparams, "direction");
+                if (dir_idx >= 0) {
+                    SEXP rdir = VECTOR_ELT(rparams, dir_idx);
+                    if (!Rf_isNull(rdir)) {
+                        if (Rf_isString(rdir) && Rf_length(rdir) == 1) {
+                            std::string dir_str = CHAR(STRING_ELT(rdir, 0));
+                            if (dir_str == "above") {
+                                lse_direction = PWMLseEditDistanceScorer::Direction::ABOVE;
+                            } else if (dir_str == "below") {
+                                lse_direction = PWMLseEditDistanceScorer::Direction::BELOW;
+                            } else {
+                                verror("direction parameter must be \"above\" or \"below\" for vtrack %s", vtrack.c_str());
+                            }
+                        } else {
+                            verror("direction parameter must be a single string (\"above\" or \"below\") for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
             // Construct LSE scorer with shared sequence fetcher
             var.pwm_lse_edit_distance_scorer = std::make_unique<PWMLseEditDistanceScorer>(
                 pwm_params.core.pssm,
@@ -768,7 +791,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 static_cast<char>(pwm_params.core.strand_mode),
                 lse_mode,
                 score_min,
-                score_max
+                score_max,
+                lse_direction
             );
 
             // Parse optional iterator modifier

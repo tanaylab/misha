@@ -8,13 +8,15 @@
 #include <queue>
 #include "GenomeSeqScorer.h"
 #include "DnaPSSM.h"
+#include "PWMEditDistanceScorer.h"
 
 /**
  * PWMLseEditDistanceScorer: Computes LSE-mode edit distance for PWM.
  *
  * Given an interval with sequence, the LSE score is F = log(sum(exp(S_p)))
  * where S_p is the PWM score at start position p. This scorer finds the
- * minimum number of base edits (substitutions) to raise F above score.thresh.
+ * minimum number of base edits (substitutions) to bring F above or below
+ * score.thresh, depending on the direction parameter.
  *
  * Algorithm:
  *  - Exhaustive search for k <= 2 (O(RL^2), provably optimal)
@@ -32,6 +34,8 @@ public:
         LSE_EDIT_DISTANCE_POS
     };
 
+    using Direction = PWMEditDistanceScorer::Direction;
+
     /**
      * Constructor
      * @param pssm The Position-Specific Scoring Matrix
@@ -43,6 +47,8 @@ public:
      * @param mode Return mode
      * @param score_min Minimum LSE score filter (NaN = no filter)
      * @param score_max Maximum LSE score filter (NaN = no filter)
+     * @param direction ABOVE = min edits to bring F >= threshold;
+     *                  BELOW = min edits to bring F <= threshold
      */
     PWMLseEditDistanceScorer(const DnaPSSM& pssm,
                              GenomeSeqFetch* shared_seqfetch,
@@ -52,7 +58,8 @@ public:
                              char strand = 0,
                              Mode mode = Mode::LSE_EDIT_DISTANCE,
                              float score_min = std::numeric_limits<float>::quiet_NaN(),
-                             float score_max = std::numeric_limits<float>::quiet_NaN());
+                             float score_max = std::numeric_limits<float>::quiet_NaN(),
+                             Direction direction = Direction::ABOVE);
 
     /**
      * Score a genomic interval - returns minimum edits or position
@@ -66,13 +73,16 @@ private:
     float m_threshold;
     int m_max_edits;
     Mode m_mode;
+    Direction m_direction;
     float m_score_min;
     float m_score_max;
     float m_last_min_edits;
 
     // Precomputed tables
     std::vector<float> m_col_max_scores;  // max score per column
+    std::vector<float> m_col_min_scores;  // min score per column (for BELOW direction)
     float m_S_max;                        // sum of column maxima
+    float m_S_min;                        // sum of column minima (for BELOW direction)
 
     /**
      * Precompute column maxima (called once in constructor)
