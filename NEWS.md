@@ -1,6 +1,9 @@
+# misha 5.6.8
+
+* Added `direction` parameter ("above"/"below") to PWM edit distance functions for computing minimum edits to bring score below a threshold (motif disruption).
+
 # misha 5.6.7
 
-* Added `direction` parameter to PWM edit distance functions (`pwm.edit_distance`, `pwm.edit_distance.pos`, `pwm.max.edit_distance`, `pwm.edit_distance.lse`, `pwm.edit_distance.lse.pos`, `gseq.pwm_edits`) for computing minimum edits to bring score below a threshold.
 * Added PWM edit distance virtual track functions: `pwm.edit_distance`, `pwm.edit_distance.pos`, `pwm.max.edit_distance`, `pwm.edit_distance.lse`, and `pwm.edit_distance.lse.pos`. Compute minimum edit distance (substitutions and indels) to reach a PWM score threshold, with per-window (max) and aggregate (LSE) scoring modes.
 * Added `gseq.pwm_edits()` for retrieving detailed per-edit information (positions and replacement bases) from PWM edit distance computation.
 * Enabled sub-chromosome range splitting for `gscreen` and `gextract`, improving parallel efficiency on genomes with large chromosomes.
