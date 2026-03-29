@@ -39,6 +39,11 @@ public:
         PWM_MAX_EDITS
     };
 
+    enum class Direction {
+        ABOVE,  // minimum edits to bring score >= threshold (default)
+        BELOW   // minimum edits to bring score <= threshold
+    };
+
     /**
      * Constructor
      * @param pssm The Position-Specific Scoring Matrix
@@ -51,6 +56,8 @@ public:
      * @param score_min Minimum PWM score filter (NaN = no filter)
      * @param max_indels Maximum number of insertions+deletions allowed (0 = substitutions only)
      * @param score_max Maximum PWM score filter (NaN = no filter)
+     * @param direction ABOVE = min edits to reach score >= threshold;
+     *                  BELOW = min edits to bring score <= threshold
      */
     PWMEditDistanceScorer(const DnaPSSM& pssm,
                           GenomeSeqFetch* shared_seqfetch,
@@ -61,7 +68,8 @@ public:
                           Mode mode = Mode::MIN_EDITS,
                           float score_min = std::numeric_limits<float>::quiet_NaN(),
                           int max_indels = 0,
-                          float score_max = std::numeric_limits<float>::quiet_NaN());
+                          float score_max = std::numeric_limits<float>::quiet_NaN(),
+                          Direction direction = Direction::ABOVE);
 
     /**
      * Score a genomic interval - returns minimum edits needed
@@ -95,17 +103,20 @@ private:
     int m_max_edits;  // -1 = exact computation, >=1 = fast heuristic
     int m_max_indels; // 0 = substitutions only, >=1 = allow insertions/deletions via banded NW DP
     Mode m_mode;
+    Direction m_direction;  // ABOVE = edits to raise score >= threshold; BELOW = edits to lower score <= threshold
     float m_score_min; // NaN = no filter; otherwise skip windows with PWM score < this
     float m_score_max; // NaN = no filter; otherwise skip windows with PWM score > this
     ScanMetrics m_last_metrics;
 
     // Precomputed tables for exact mode
     std::vector<float> m_col_max_scores;     // s_max[i] - max score per column
-    std::vector<float> m_gain_values;        // V[1..M] - sorted descending
+    std::vector<float> m_col_min_scores;     // s_min[i] - min score per column (for BELOW direction)
+    std::vector<float> m_gain_values;        // V[1..M] - sorted descending (gains for ABOVE, losses for BELOW)
     std::vector<std::vector<uint8_t>> m_bin_index;  // bin[i][b] - lookup table
     float m_S_max;                           // sum of column maxima
+    float m_S_min;                           // sum of column minima (for BELOW direction)
     std::vector<float> m_max_suffix_score;   // m_max_suffix_score[i] = sum of col maxima from i to L-1
-    std::vector<float> m_max_gain_budget;    // m_max_gain_budget[k] = max total gain from k substitutions (per-PSSM)
+    std::vector<float> m_max_gain_budget;    // m_max_gain_budget[k] = max total gain/loss from k substitutions (per-PSSM)
 
     // Flat precomputed PSSM lookup tables for cache-friendly access
     static constexpr int MAX_MOTIF_LEN_OPT = 64;
