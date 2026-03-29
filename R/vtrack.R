@@ -592,16 +592,16 @@
 #' \strong{Edit distance summarizers}
 #' \tabular{llll}{
 #'   Source \tab func \tab Key params \tab Description \cr
-#'   NULL (sequence) \tab pwm.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, bidirect, prior, extend, strand \tab Minimum number of edits (substitutions + indels) needed to reach \code{score.thresh} across all windows. \cr
-#'   NULL (sequence) \tab pwm.edit_distance.pos \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, bidirect, prior, extend, strand \tab 1-based position of the window achieving minimum edit distance (signed by strand when bidirect). \cr
-#'   NULL (sequence) \tab pwm.max.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, bidirect, prior, extend, strand \tab Edit distance at the best-scoring PWM window (same location as pwm.max/pwm.max.pos). \cr
+#'   NULL (sequence) \tab pwm.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand \tab Minimum number of edits (substitutions + indels) needed to reach \code{score.thresh} across all windows. \cr
+#'   NULL (sequence) \tab pwm.edit_distance.pos \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand \tab 1-based position of the window achieving minimum edit distance (signed by strand when bidirect). \cr
+#'   NULL (sequence) \tab pwm.max.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand \tab Edit distance at the best-scoring PWM window (same location as pwm.max/pwm.max.pos). \cr
 #' }
 #'
 #' \strong{LSE edit distance summarizers}
 #' \tabular{llll}{
 #'   Source \tab func \tab Key params \tab Description \cr
-#'   NULL (sequence) \tab pwm.edit_distance.lse \tab pssm, score.thresh, max_edits, score.min, score.max, bidirect, prior, extend, strand \tab Minimum number of substitution edits needed to raise the LSE score (log-sum-exp of per-window PWM scores) above \code{score.thresh}. Exhaustive for k<=2, greedy heuristic for k>=3. \cr
-#'   NULL (sequence) \tab pwm.edit_distance.lse.pos \tab pssm, score.thresh, max_edits, score.min, score.max, bidirect, prior, extend, strand \tab 1-based position of the most impactful single edit for raising the LSE score. \cr
+#'   NULL (sequence) \tab pwm.edit_distance.lse \tab pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand \tab Minimum number of substitution edits needed to raise the LSE score (log-sum-exp of per-window PWM scores) above \code{score.thresh}. Exhaustive for k<=2, greedy heuristic for k>=3. \cr
+#'   NULL (sequence) \tab pwm.edit_distance.lse.pos \tab pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand \tab 1-based position of the most impactful single edit for raising the LSE score. \cr
 #' }
 #'
 #' \strong{K-mer summarizers}
@@ -636,6 +636,7 @@
 #'   \item \code{max_indels}: For \code{pwm.edit_distance}, \code{pwm.edit_distance.pos}, and \code{pwm.max.edit_distance} only. Not supported by LSE variants. Optional non-negative integer specifying the maximum number of insertions and deletions allowed (default 0, substitutions only). When > 0, a banded Needleman-Wunsch DP is used to find the minimum total edits (substitutions + indels) to reach the score threshold. Typical values are 1-2.
 #'   \item \code{score.min}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is below \code{score.min} are skipped (edit distance returns NA). Improves performance by avoiding expensive computation on low-scoring windows. For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter).
 #'   \item \code{score.max}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is above \code{score.max} are skipped (edit distance returns NA). Combined with \code{score.min}, enables efficient regime-specific queries (e.g., only positions with score in [\code{score.min}, \code{score.max}]). For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter).
+#'   \item \code{direction}: For edit distance functions only. Direction of the edit distance query: \code{"above"} (default) finds the minimum edits to bring the score above \code{score.thresh}; \code{"below"} finds the minimum edits to bring the score below \code{score.thresh}.
 #' }
 #'
 #' \strong{Spatial weighting}
