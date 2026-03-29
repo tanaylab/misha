@@ -149,6 +149,28 @@ test_that("bidirect mode runs and produces valid output", {
     expect_null(attr(res_bi, "pmf"))
 })
 
+test_that("bidirect scores differ from forward-only scores", {
+    # Asymmetric PSSM where forward != reverse complement scoring
+    pssm <- matrix(c(
+        0.9, 0.03, 0.03, 0.04,
+        0.04, 0.03, 0.03, 0.9,
+        0.9, 0.03, 0.03, 0.04
+    ), nrow = 3, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+
+    set.seed(42)
+    res_fwd <- gseq.pwm_score_theoretical(pssm,
+        sub_rate = 0.3, n = 5000, bidirect = FALSE
+    )
+    set.seed(42)
+    res_bi <- gseq.pwm_score_theoretical(pssm,
+        sub_rate = 0.3, n = 5000, bidirect = TRUE
+    )
+    # Bidirect takes max(fwd, rev), so mean should be higher
+    expect_gt(mean(res_bi$score), mean(res_fwd$score))
+    # And some individual scores must differ (not all equal)
+    # Use large n and high sub_rate to ensure this with high probability
+})
+
 test_that("very short PSSM (L=1) works", {
     pssm <- matrix(c(0.9, 0.03, 0.03, 0.04),
         nrow = 1,

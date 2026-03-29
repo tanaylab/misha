@@ -775,11 +775,17 @@ gseq.pwm_score_theoretical <- function(pssm,
     cumulative_lo <- p1$lo
 
     # Convolve with each subsequent position
+    # Pad to FFT-friendly (5-smooth) lengths for performance
     if (L >= 2) {
         for (i in 2:L) {
             di <- .pos_dist(i)
             pi <- .make_pmf(di$scores, di$probs)
-            pmf <- stats::convolve(pmf, rev(pi$pmf), type = "open")
+            conv_len <- length(pmf) + length(pi$pmf) - 1L
+            padded_len <- nextn(conv_len)
+            pmf_pad <- c(pmf, rep(0, padded_len - length(pmf)))
+            kern_pad <- c(pi$pmf, rep(0, padded_len - length(pi$pmf)))
+            pmf <- Re(stats::fft(stats::fft(pmf_pad) * stats::fft(kern_pad), inverse = TRUE)) / padded_len
+            pmf <- pmf[seq_len(conv_len)]
             cumulative_lo <- cumulative_lo + pi$lo
         }
     }
@@ -873,7 +879,7 @@ gseq.pwm_score_theoretical <- function(pssm,
         rc_base_mat <- 5L - base_mat[, L:1, drop = FALSE]
         rev_scores <- numeric(n)
         for (i in seq_len(L)) {
-            rev_scores <- rev_scores + pssm_log_rc[i, rc_base_mat[, i]]
+            rev_scores <- rev_scores + pssm_log[i, rc_base_mat[, i]]
         }
         scores <- pmax(fwd_scores, rev_scores)
     } else {
