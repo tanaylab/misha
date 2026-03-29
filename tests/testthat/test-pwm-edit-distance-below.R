@@ -693,3 +693,565 @@ test_that("pwm.edit_distance direction=below with gscreen works", {
         expect_true(all(c("chrom", "start", "end") %in% names(result)))
     }
 })
+
+# --------------------------------------------------------------------------
+# direction=below with indels (max_indels parameter)
+# --------------------------------------------------------------------------
+
+test_that("direction=below with max_indels=1: indels can reduce total edits", {
+    remove_all_vtracks()
+
+    # 4bp motif with strong preferences
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01, # C
+        0.01, 0.01, 0.97, 0.01, # G
+        0.01, 0.01, 0.01, 0.97 # T
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_intervals <- gintervals(
+        chrom = c(1, 1, 1),
+        start = c(200, 500, 1000),
+        end = c(260, 560, 1060)
+    )
+    threshold <- -3.0
+
+    # Substitution-only
+    gvtrack.create("edist_below_sub", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 0,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # With 1 indel
+    gvtrack.create("edist_below_indel1", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(c("edist_below_sub", "edist_below_indel1"),
+        test_intervals,
+        iterator = test_intervals
+    )
+
+    for (i in seq_len(nrow(result))) {
+        sub_val <- result$edist_below_sub[i]
+        indel_val <- result$edist_below_indel1[i]
+
+        # Indels can only help or stay the same: with indels <= without indels
+        if (!is.na(sub_val) && !is.na(indel_val)) {
+            expect_true(indel_val <= sub_val,
+                info = paste("Row", i, ": indel result", indel_val, "should be <= sub-only", sub_val)
+            )
+        }
+
+        # If substitution-only finds a result, indel version should too
+        if (!is.na(sub_val)) {
+            expect_false(is.na(indel_val),
+                info = paste("Row", i, ": indel version should not be NA when sub-only is", sub_val)
+            )
+        }
+
+        # Both should be non-negative when not NA
+        if (!is.na(sub_val)) expect_true(sub_val >= 0)
+        if (!is.na(indel_val)) expect_true(indel_val >= 0)
+    }
+})
+
+test_that("direction=below with max_indels=2: more indels can further reduce edits", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01, # A
+        0.01, 0.97, 0.01, 0.01, # C
+        0.01, 0.01, 0.97, 0.01, # G
+        0.01, 0.01, 0.01, 0.97 # T
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_intervals <- gintervals(
+        chrom = c(1, 1, 1),
+        start = c(200, 500, 1000),
+        end = c(260, 560, 1060)
+    )
+    threshold <- -3.0
+
+    # Compare max_indels = 0, 1, 2
+    gvtrack.create("edist_below_d0", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 0,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_d1", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_d2", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 2,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(c("edist_below_d0", "edist_below_d1", "edist_below_d2"),
+        test_intervals,
+        iterator = test_intervals
+    )
+
+    for (i in seq_len(nrow(result))) {
+        d0 <- result$edist_below_d0[i]
+        d1 <- result$edist_below_d1[i]
+        d2 <- result$edist_below_d2[i]
+
+        # Monotonicity: d2 <= d1 <= d0 (more indels can only help or stay the same)
+        if (!is.na(d0) && !is.na(d1)) {
+            expect_true(d1 <= d0,
+                info = paste("Row", i, ": d1=", d1, "should be <= d0=", d0)
+            )
+        }
+        if (!is.na(d1) && !is.na(d2)) {
+            expect_true(d2 <= d1,
+                info = paste("Row", i, ": d2=", d2, "should be <= d1=", d1)
+            )
+        }
+        if (!is.na(d0) && !is.na(d2)) {
+            expect_true(d2 <= d0,
+                info = paste("Row", i, ": d2=", d2, "should be <= d0=", d0)
+            )
+        }
+
+        # If d0 (sub-only) is reachable, d1 and d2 must also be reachable
+        if (!is.na(d0)) {
+            expect_false(is.na(d1),
+                info = paste("Row", i, ": d1 should not be NA when d0 =", d0)
+            )
+            expect_false(is.na(d2),
+                info = paste("Row", i, ": d2 should not be NA when d0 =", d0)
+            )
+        }
+        if (!is.na(d1)) {
+            expect_false(is.na(d2),
+                info = paste("Row", i, ": d2 should not be NA when d1 =", d1)
+            )
+        }
+    }
+})
+
+test_that("direction=below with max_indels: substitution-only vs indels comparison", {
+    remove_all_vtracks()
+
+    # Longer 6bp motif for more interesting comparisons
+    pssm <- matrix(c(
+        0.9, 0.03, 0.03, 0.04,
+        0.03, 0.9, 0.03, 0.04,
+        0.03, 0.03, 0.9, 0.04,
+        0.04, 0.03, 0.03, 0.9,
+        0.9, 0.03, 0.03, 0.04,
+        0.03, 0.9, 0.03, 0.04
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 280)
+    threshold <- -5.0
+
+    # No indels
+    gvtrack.create("edist_below_noindel", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # With 1 indel
+    gvtrack.create("edist_below_1indel", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # With 2 indels
+    gvtrack.create("edist_below_2indels", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 2,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(
+        c("edist_below_noindel", "edist_below_1indel", "edist_below_2indels"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    no_indel <- result$edist_below_noindel[1]
+    with_1 <- result$edist_below_1indel[1]
+    with_2 <- result$edist_below_2indels[1]
+
+    # More indels should always give the same or fewer total edits
+    if (!is.na(no_indel) && !is.na(with_1)) {
+        expect_true(with_1 <= no_indel)
+    }
+    if (!is.na(no_indel) && !is.na(with_2)) {
+        expect_true(with_2 <= no_indel)
+    }
+    if (!is.na(with_1) && !is.na(with_2)) {
+        expect_true(with_2 <= with_1)
+    }
+
+    # Substitution-only reachable implies indel versions reachable
+    if (!is.na(no_indel)) {
+        expect_false(is.na(with_1))
+        expect_false(is.na(with_2))
+    }
+})
+
+test_that("direction=below with max_indels: cap is respected", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01,
+        0.01, 0.01, 0.01, 0.97
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_intervals <- gintervals(
+        chrom = c(1, 1, 1, 1),
+        start = c(200, 500, 1000, 2000),
+        end = c(260, 560, 1060, 2060)
+    )
+    threshold <- -3.0
+
+    # max_indels=0 should match the default (no indels)
+    gvtrack.create("edist_below_cap_default", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_cap0", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 0,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(c("edist_below_cap_default", "edist_below_cap0"),
+        test_intervals,
+        iterator = test_intervals
+    )
+
+    # max_indels=0 and no max_indels specified should produce identical results
+    for (i in seq_len(nrow(result))) {
+        if (is.na(result$edist_below_cap_default[i])) {
+            expect_true(is.na(result$edist_below_cap0[i]),
+                info = paste("Row", i, ": both should be NA")
+            )
+        } else {
+            expect_equal(result$edist_below_cap_default[i], result$edist_below_cap0[i],
+                tolerance = 1e-6,
+                info = paste("Row", i, ": default and max_indels=0 should match")
+            )
+        }
+    }
+})
+
+test_that("direction=below with indels: consistency - indels always <= sub-only", {
+    remove_all_vtracks()
+
+    # Test across many intervals to increase confidence
+    pssm <- matrix(c(
+        0.8, 0.1, 0.05, 0.05,
+        0.1, 0.8, 0.05, 0.05,
+        0.1, 0.05, 0.8, 0.05,
+        0.04, 0.03, 0.03, 0.9
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_intervals <- gintervals(
+        chrom = rep(1, 8),
+        start = seq(200, 900, by = 100),
+        end = seq(260, 960, by = 100)
+    )
+    threshold <- -4.0
+
+    gvtrack.create("edist_below_con_sub", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 0,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_con_indel1", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_con_indel2", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 2,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(
+        c("edist_below_con_sub", "edist_below_con_indel1", "edist_below_con_indel2"),
+        test_intervals,
+        iterator = test_intervals
+    )
+
+    for (i in seq_len(nrow(result))) {
+        sub_val <- result$edist_below_con_sub[i]
+        ind1_val <- result$edist_below_con_indel1[i]
+        ind2_val <- result$edist_below_con_indel2[i]
+
+        # Consistency: indel version should never return more edits
+        if (!is.na(sub_val) && !is.na(ind1_val)) {
+            expect_true(ind1_val <= sub_val,
+                info = paste("Row", i, ": indel1 should be <= sub-only")
+            )
+        }
+        if (!is.na(sub_val) && !is.na(ind2_val)) {
+            expect_true(ind2_val <= sub_val,
+                info = paste("Row", i, ": indel2 should be <= sub-only")
+            )
+        }
+        if (!is.na(ind1_val) && !is.na(ind2_val)) {
+            expect_true(ind2_val <= ind1_val,
+                info = paste("Row", i, ": indel2 should be <= indel1")
+            )
+        }
+
+        # If sub-only is reachable, indel versions must be too
+        if (!is.na(sub_val)) {
+            expect_false(is.na(ind1_val),
+                info = paste("Row", i, ": indel1 should not be NA when sub-only is", sub_val)
+            )
+            expect_false(is.na(ind2_val),
+                info = paste("Row", i, ": indel2 should not be NA when sub-only is", sub_val)
+            )
+        }
+    }
+})
+
+test_that("direction=below with indels: already below threshold still returns 0", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm() # AC motif
+
+    test_intervals <- gintervals(1, 200, 240)
+
+    # Very high threshold: all windows should score below it
+    threshold <- 100.0
+
+    gvtrack.create("edist_below_indel_already0", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 0,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_indel_already1", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_indel_already2", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 2,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(
+        c("edist_below_indel_already0", "edist_below_indel_already1", "edist_below_indel_already2"),
+        test_intervals,
+        iterator = test_intervals
+    )
+
+    # All should return 0 regardless of max_indels setting
+    expect_equal(result$edist_below_indel_already0[1], 0, tolerance = 1e-6)
+    expect_equal(result$edist_below_indel_already1[1], 0, tolerance = 1e-6)
+    expect_equal(result$edist_below_indel_already2[1], 0, tolerance = 1e-6)
+})
+
+test_that("direction=below with indels: bidirectional considers both strands", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01,
+        0.01, 0.01, 0.01, 0.97
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 260)
+    threshold <- -3.0
+
+    # Forward only with indels
+    gvtrack.create("edist_below_indel_fwd", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, strand = 1, extend = FALSE, prior = 0
+    )
+
+    # Reverse only with indels
+    gvtrack.create("edist_below_indel_rev", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, strand = -1, extend = FALSE, prior = 0
+    )
+
+    # Bidirectional with indels
+    gvtrack.create("edist_below_indel_bidi", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = TRUE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(
+        c("edist_below_indel_fwd", "edist_below_indel_rev", "edist_below_indel_bidi"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    fwd <- result$edist_below_indel_fwd[1]
+    rev <- result$edist_below_indel_rev[1]
+    bidi <- result$edist_below_indel_bidi[1]
+
+    # Bidirectional should return minimum of both strands
+    if (!is.na(fwd) && !is.na(rev)) {
+        expect_equal(bidi, min(fwd, rev), tolerance = 1e-6)
+    } else if (!is.na(fwd)) {
+        expect_equal(bidi, fwd, tolerance = 1e-6)
+    } else if (!is.na(rev)) {
+        expect_equal(bidi, rev, tolerance = 1e-6)
+    }
+})
+
+test_that("direction=below with indels: max_edits cap interacts correctly with max_indels", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.9, 0.03, 0.03, 0.04,
+        0.03, 0.9, 0.03, 0.04,
+        0.03, 0.03, 0.9, 0.04,
+        0.04, 0.03, 0.03, 0.9
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    test_interval <- gintervals(1, 200, 260)
+    threshold <- -5.0
+
+    # Unlimited edits with 1 indel
+    gvtrack.create("edist_below_indel_unlim", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # max_edits=1 with 1 indel (tight cap)
+    gvtrack.create("edist_below_indel_max1", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1, max_edits = 1,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # max_edits=3 with 1 indel
+    gvtrack.create("edist_below_indel_max3", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1, max_edits = 3,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(
+        c("edist_below_indel_unlim", "edist_below_indel_max1", "edist_below_indel_max3"),
+        test_interval,
+        iterator = test_interval
+    )
+
+    unlim <- result$edist_below_indel_unlim[1]
+    max1 <- result$edist_below_indel_max1[1]
+    max3 <- result$edist_below_indel_max3[1]
+
+    # If unlimited finds a solution, capped versions should find same or NA
+    if (!is.na(unlim)) {
+        if (unlim <= 1) {
+            expect_equal(max1, unlim, tolerance = 1e-6,
+                info = "max_edits=1 should find same result when unlimited needs <= 1"
+            )
+        } else {
+            expect_true(is.na(max1),
+                info = paste("max_edits=1 should be NA when unlimited needs", unlim, "edits")
+            )
+        }
+
+        if (unlim <= 3) {
+            expect_equal(max3, unlim, tolerance = 1e-6,
+                info = "max_edits=3 should find same result when unlimited needs <= 3"
+            )
+        } else {
+            expect_true(is.na(max3),
+                info = paste("max_edits=3 should be NA when unlimited needs", unlim, "edits")
+            )
+        }
+    }
+})
+
+test_that("direction=below with indels: 1bp iterator matches interval-level result", {
+    remove_all_vtracks()
+
+    pssm <- matrix(c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01
+    ), ncol = 4, byrow = TRUE)
+    colnames(pssm) <- c("A", "C", "G", "T")
+
+    motif_len <- nrow(pssm)
+    test_interval <- gintervals(1, 200, 210)
+    threshold <- -4.0
+
+    # Interval-level result with indels
+    gvtrack.create("edist_below_indel_int", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # 1bp iterator result with indels
+    gvtrack.create("edist_below_indel_1bp", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        direction = "below", max_indels = 1,
+        bidirect = FALSE, extend = TRUE, prior = 0
+    )
+
+    result_int <- gextract("edist_below_indel_int", test_interval, iterator = test_interval)
+    result_1bp <- gextract("edist_below_indel_1bp", test_interval, iterator = 1)
+
+    # The interval-level minimum should equal the minimum across 1bp windows
+    if (nrow(result_1bp) > 0) {
+        min_1bp <- min(result_1bp$edist_below_indel_1bp, na.rm = TRUE)
+        if (is.finite(min_1bp) && !is.na(result_int$edist_below_indel_int[1])) {
+            expect_equal(result_int$edist_below_indel_int[1], min_1bp, tolerance = 1e-6)
+        }
+    }
+})
