@@ -216,6 +216,40 @@ test_that("scores are within theoretical range", {
     expect_true(all(res$score <= theoretical_max + 0.01))
 })
 
+test_that("analytical and simulation modes produce consistent distributions", {
+    pssm <- matrix(c(
+        0.9, 0.03, 0.03, 0.04,
+        0.05, 0.8, 0.1, 0.05,
+        0.1, 0.1, 0.7, 0.1
+    ), nrow = 3, byrow = TRUE, dimnames = list(NULL, c("A", "C", "G", "T")))
+
+    # Analytical mode: consensus + no bidirect + no indels
+    set.seed(1)
+    res_analytical <- gseq.pwm_score_theoretical(pssm,
+        sub_rate = 0.1, n = 50000,
+        start = "consensus", bidirect = FALSE
+    )
+
+    # Compute theoretical mean/variance from the exact PMF
+    pmf <- attr(res_analytical, "pmf")
+    exact_mean <- sum(pmf$score * pmf$prob)
+    exact_var <- sum((pmf$score - exact_mean)^2 * pmf$prob)
+
+    # Simulation mode: force via indel_rate = 1e-10 (effectively zero indels)
+    set.seed(2)
+    res_sim <- gseq.pwm_score_theoretical(pssm,
+        sub_rate = 0.1, n = 50000,
+        start = "consensus", bidirect = FALSE,
+        indel_rate = 1e-10
+    )
+
+    # Both should match the exact PMF moments
+    expect_equal(mean(res_analytical$score), exact_mean, tolerance = 0.02)
+    expect_equal(mean(res_sim$score), exact_mean, tolerance = 0.02)
+    expect_equal(var(res_analytical$score), exact_var, tolerance = 0.02)
+    expect_equal(var(res_sim$score), exact_var, tolerance = 0.02)
+})
+
 test_that("input validation works", {
     pssm <- matrix(c(0.9, 0.03, 0.03, 0.04),
         nrow = 1,

@@ -624,7 +624,9 @@ gseq.pwm_edits <- function(seqs,
 #' @return A data frame with columns:
 #' \describe{
 #'   \item{score}{PWM log-likelihood score of the mutated sequence}
-#'   \item{n_subs}{Number of substitutions applied}
+#'   \item{n_subs}{Number of substitutions applied. Note: in analytical mode
+#'     this is drawn independently from the score (correct marginal but the
+#'     joint \code{(score, n_subs)} is not meaningful).}
 #'   \item{n_indels}{Number of indels applied (always 0 when
 #'     \code{indel_rate = 0})}
 #' }
@@ -724,7 +726,7 @@ gseq.pwm_score_theoretical <- function(pssm,
         )
     } else {
         result <- .pwm_score_sim_indels(
-            pssm_log, pssm_log_rc, pssm_prob, sub_rate, indel_rate, n,
+            pssm_log, pssm_prob, sub_rate, indel_rate, n,
             start, rate_matrix, bidirect
         )
     }
@@ -779,14 +781,14 @@ gseq.pwm_score_theoretical <- function(pssm,
     if (L >= 2) {
         for (i in 2:L) {
             di <- .pos_dist(i)
-            pi <- .make_pmf(di$scores, di$probs)
-            conv_len <- length(pmf) + length(pi$pmf) - 1L
+            pos_pmf <- .make_pmf(di$scores, di$probs)
+            conv_len <- length(pmf) + length(pos_pmf$pmf) - 1L
             padded_len <- nextn(conv_len)
             pmf_pad <- c(pmf, rep(0, padded_len - length(pmf)))
-            kern_pad <- c(pi$pmf, rep(0, padded_len - length(pi$pmf)))
+            kern_pad <- c(pos_pmf$pmf, rep(0, padded_len - length(pos_pmf$pmf)))
             pmf <- Re(stats::fft(stats::fft(pmf_pad) * stats::fft(kern_pad), inverse = TRUE)) / padded_len
             pmf <- pmf[seq_len(conv_len)]
-            cumulative_lo <- cumulative_lo + pi$lo
+            cumulative_lo <- cumulative_lo + pos_pmf$lo
         }
     }
 
@@ -895,7 +897,7 @@ gseq.pwm_score_theoretical <- function(pssm,
 
 #' Simulation mode: with indels
 #' @noRd
-.pwm_score_sim_indels <- function(pssm_log, pssm_log_rc, pssm_prob,
+.pwm_score_sim_indels <- function(pssm_log, pssm_prob,
                                   sub_rate, indel_rate, n,
                                   start, rate_matrix, bidirect) {
     L <- nrow(pssm_log)
@@ -937,7 +939,7 @@ gseq.pwm_score_theoretical <- function(pssm,
     n_subs_vec <- integer(n)
     n_indels_vec <- integer(n)
 
-    for (s in seq_len(n)) {
+    for (sample_i in seq_len(n)) {
         # Generate starting sequence
         if (start == "consensus") {
             seq_bases <- start_bases
@@ -991,13 +993,13 @@ gseq.pwm_score_theoretical <- function(pssm,
             rc_bases <- rc_map[rev(new_seq)]
             rc_str <- paste0(bases_char[rc_bases], collapse = "")
             rev_score <- score_seq(rc_str, pssm_log)
-            scores[s] <- max(fwd_score, rev_score)
+            scores[sample_i] <- max(fwd_score, rev_score)
         } else {
-            scores[s] <- fwd_score
+            scores[sample_i] <- fwd_score
         }
 
-        n_subs_vec[s] <- n_sub
-        n_indels_vec[s] <- n_indel
+        n_subs_vec[sample_i] <- n_sub
+        n_indels_vec[sample_i] <- n_indel
     }
 
     data.frame(
