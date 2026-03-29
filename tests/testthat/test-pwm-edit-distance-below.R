@@ -1193,7 +1193,8 @@ test_that("direction=below with indels: max_edits cap interacts correctly with m
     # If unlimited finds a solution, capped versions should find same or NA
     if (!is.na(unlim)) {
         if (unlim <= 1) {
-            expect_equal(max1, unlim, tolerance = 1e-6,
+            expect_equal(max1, unlim,
+                tolerance = 1e-6,
                 info = "max_edits=1 should find same result when unlimited needs <= 1"
             )
         } else {
@@ -1203,7 +1204,8 @@ test_that("direction=below with indels: max_edits cap interacts correctly with m
         }
 
         if (unlim <= 3) {
-            expect_equal(max3, unlim, tolerance = 1e-6,
+            expect_equal(max3, unlim,
+                tolerance = 1e-6,
                 info = "max_edits=3 should find same result when unlimited needs <= 3"
             )
         } else {
@@ -1273,7 +1275,8 @@ test_that("pwm.edit_distance.lse direction=below basic functionality works", {
     test_interval <- gintervals(1, 200, 250)
 
     # Get the actual LSE score for this interval
-    gvtrack.create("v_lse_score", NULL, func = "pwm",
+    gvtrack.create("v_lse_score", NULL,
+        func = "pwm",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
     lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
@@ -1306,7 +1309,8 @@ test_that("pwm.edit_distance.lse direction=below needs edits when score is above
     test_interval <- gintervals(1, 200, 250)
 
     # Get the actual LSE score
-    gvtrack.create("v_lse_score", NULL, func = "pwm",
+    gvtrack.create("v_lse_score", NULL,
+        func = "pwm",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
     lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
@@ -1391,7 +1395,8 @@ test_that("pwm.edit_distance.lse direction=below vs above are complementary", {
     test_interval <- gintervals(1, 200, 240)
 
     # Get the actual LSE score
-    gvtrack.create("v_lse_score", NULL, func = "pwm",
+    gvtrack.create("v_lse_score", NULL,
+        func = "pwm",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
     lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
@@ -1413,7 +1418,8 @@ test_that("pwm.edit_distance.lse direction=below vs above are complementary", {
     )
 
     result <- gextract(c("v_lse_above_low", "v_lse_below_low"),
-        test_interval, iterator = test_interval
+        test_interval,
+        iterator = test_interval
     )
 
     above_val <- result$v_lse_above_low[1]
@@ -1445,7 +1451,8 @@ test_that("pwm.edit_distance.lse direction=below vs above are complementary", {
     )
 
     result2 <- gextract(c("v_lse_above_high", "v_lse_below_high"),
-        test_interval, iterator = test_interval
+        test_interval,
+        iterator = test_interval
     )
 
     above_val2 <- result2$v_lse_above_high[1]
@@ -1476,7 +1483,8 @@ test_that("pwm.edit_distance.lse.pos direction=below returns valid position", {
     test_interval <- gintervals(1, 200, 250)
 
     # Get the actual LSE score
-    gvtrack.create("v_lse_score", NULL, func = "pwm",
+    gvtrack.create("v_lse_score", NULL,
+        func = "pwm",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
     lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
@@ -1500,7 +1508,8 @@ test_that("pwm.edit_distance.lse.pos direction=below returns valid position", {
     )
 
     result <- gextract(c("v_lse_below_edist", "v_lse_below_pos"),
-        test_interval, iterator = test_interval
+        test_interval,
+        iterator = test_interval
     )
 
     edist_val <- result$v_lse_below_edist[1]
@@ -1542,10 +1551,12 @@ test_that("pwm.edit_distance.lse direction=below edit count is consistent with m
     test_interval <- gintervals(1, 200, 250)
 
     # Get the actual LSE score and the max-window score
-    gvtrack.create("v_lse_score", NULL, func = "pwm",
+    gvtrack.create("v_lse_score", NULL,
+        func = "pwm",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
-    gvtrack.create("v_max_score", NULL, func = "pwm.max",
+    gvtrack.create("v_max_score", NULL,
+        func = "pwm.max",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
     scores <- gextract(c("v_lse_score", "v_max_score"), test_interval, iterator = test_interval)
@@ -1569,7 +1580,8 @@ test_that("pwm.edit_distance.lse direction=below edit count is consistent with m
     )
 
     result <- gextract(c("v_lse_below_edist", "v_max_below_edist"),
-        test_interval, iterator = test_interval
+        test_interval,
+        iterator = test_interval
     )
 
     lse_edits <- result$v_lse_below_edist[1]
@@ -1607,7 +1619,8 @@ test_that("pwm.edit_distance.lse direction=below threshold monotonicity", {
     test_interval <- gintervals(1, 200, 240)
 
     # Get the actual LSE score
-    gvtrack.create("v_lse_score", NULL, func = "pwm",
+    gvtrack.create("v_lse_score", NULL,
+        func = "pwm",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
     lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
@@ -1667,7 +1680,8 @@ test_that("pwm.edit_distance.lse direction=below with bidirectional", {
     test_interval <- gintervals(1, 200, 250)
 
     # Get LSE score to set a meaningful threshold
-    gvtrack.create("v_lse_score", NULL, func = "pwm",
+    gvtrack.create("v_lse_score", NULL,
+        func = "pwm",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
     lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
@@ -1698,7 +1712,8 @@ test_that("pwm.edit_distance.lse direction=below with bidirectional", {
     )
 
     result <- gextract(c("v_lse_below_fwd", "v_lse_below_rev", "v_lse_below_bidi"),
-        test_interval, iterator = test_interval
+        test_interval,
+        iterator = test_interval
     )
 
     fwd <- result$v_lse_below_fwd[1]
@@ -1736,7 +1751,8 @@ test_that("pwm.edit_distance.lse direction=below with max_edits cap", {
     test_interval <- gintervals(1, 200, 250)
 
     # Get LSE score to set a threshold that needs edits
-    gvtrack.create("v_lse_score", NULL, func = "pwm",
+    gvtrack.create("v_lse_score", NULL,
+        func = "pwm",
         pssm = pssm, bidirect = FALSE, extend = FALSE, prior = 0
     )
     lse_result <- gextract("v_lse_score", test_interval, iterator = test_interval)
@@ -1767,7 +1783,8 @@ test_that("pwm.edit_distance.lse direction=below with max_edits cap", {
     )
 
     result <- gextract(c("v_lse_below_unlim", "v_lse_below_max1", "v_lse_below_max5"),
-        test_interval, iterator = test_interval
+        test_interval,
+        iterator = test_interval
     )
 
     unlim <- result$v_lse_below_unlim[1]

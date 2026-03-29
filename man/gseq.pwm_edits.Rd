@@ -15,7 +15,8 @@ gseq.pwm_edits(
   score.min = NULL,
   score.max = NULL,
   extend = TRUE,
-  strand = 1L
+  strand = 1L,
+  direction = "above"
 )
 }
 \arguments{
@@ -51,6 +52,11 @@ Default TRUE.}
 
 \item{strand}{integer; which strand to scan when \code{bidirect=FALSE}.
 1=forward, -1=reverse. Default 1.}
+
+\item{direction}{character; direction of the edit distance query.
+\code{"above"} (default) finds minimum edits to bring score above
+\code{score.thresh}; \code{"below"} finds minimum edits to bring score
+below \code{score.thresh}.}
 }
 \value{
 A data frame (long format) with one row per edit, containing columns:

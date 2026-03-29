@@ -408,6 +408,10 @@ gseq.pwm <- function(seqs,
 #'   Default TRUE.
 #' @param strand integer; which strand to scan when \code{bidirect=FALSE}.
 #'   1=forward, -1=reverse. Default 1.
+#' @param direction character; direction of the edit distance query.
+#'   \code{"above"} (default) finds minimum edits to bring score above
+#'   \code{score.thresh}; \code{"below"} finds minimum edits to bring score
+#'   below \code{score.thresh}.
 #' @return A data frame (long format) with one row per edit, containing columns:
 #' \describe{
 #'   \item{seq_idx}{Index into input sequences/intervals (1-based)}
