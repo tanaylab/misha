@@ -621,6 +621,29 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 }
             }
 
+            // Extract direction parameter (optional, default "above")
+            PWMEditDistanceScorer::Direction direction = PWMEditDistanceScorer::Direction::ABOVE;
+            if (Rf_isNewList(rparams)) {
+                int dir_idx = findListElementIndex(rparams, "direction");
+                if (dir_idx >= 0) {
+                    SEXP rdir = VECTOR_ELT(rparams, dir_idx);
+                    if (!Rf_isNull(rdir)) {
+                        if (Rf_isString(rdir) && Rf_length(rdir) == 1) {
+                            std::string dir_str = CHAR(STRING_ELT(rdir, 0));
+                            if (dir_str == "above") {
+                                direction = PWMEditDistanceScorer::Direction::ABOVE;
+                            } else if (dir_str == "below") {
+                                direction = PWMEditDistanceScorer::Direction::BELOW;
+                            } else {
+                                verror("direction parameter must be \"above\" or \"below\" for vtrack %s", vtrack.c_str());
+                            }
+                        } else {
+                            verror("direction parameter must be a single string (\"above\" or \"below\") for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
             PWMEditDistanceScorer::Mode mode = PWMEditDistanceScorer::Mode::MIN_EDITS;
             if (var.val_func == Track_var::PWM_EDIT_DISTANCE_POS) {
                 mode = PWMEditDistanceScorer::Mode::MIN_EDITS_POSITION;
@@ -639,7 +662,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 mode,
                 score_min,
                 max_indels,
-                score_max
+                score_max,
+                direction
             );
 
             // Parse optional iterator modifier (sshift/eshift) for sequence-based vtracks
