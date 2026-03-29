@@ -25,6 +25,35 @@
 #include "ValueVarProcessor.h"
 #include "SequenceVarProcessor.h"
 
+namespace {
+// Parse direction parameter from R params list. Returns ABOVE or BELOW.
+PWMEditDistanceScorer::Direction parse_direction_param(SEXP rparams, const std::string& vtrack) {
+    using rdb::verror;
+    PWMEditDistanceScorer::Direction direction = PWMEditDistanceScorer::Direction::ABOVE;
+    if (Rf_isNewList(rparams)) {
+        int dir_idx = TrackExprParams::findListElementIndex(rparams, "direction");
+        if (dir_idx >= 0) {
+            SEXP rdir = VECTOR_ELT(rparams, dir_idx);
+            if (!Rf_isNull(rdir)) {
+                if (Rf_isString(rdir) && Rf_length(rdir) == 1) {
+                    std::string dir_str = CHAR(STRING_ELT(rdir, 0));
+                    if (dir_str == "above") {
+                        direction = PWMEditDistanceScorer::Direction::ABOVE;
+                    } else if (dir_str == "below") {
+                        direction = PWMEditDistanceScorer::Direction::BELOW;
+                    } else {
+                        verror("direction parameter must be \"above\" or \"below\" for vtrack %s", vtrack.c_str());
+                    }
+                } else {
+                    verror("direction parameter must be a single string (\"above\" or \"below\") for vtrack %s", vtrack.c_str());
+                }
+            }
+        }
+    }
+    return direction;
+}
+} // anonymous namespace
+
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
 	"avg", "min", "max", "nearest", "stddev", "sum", "lse", "quantile",
 	"global.percentile", "global.percentile.min", "global.percentile.max",
@@ -621,28 +650,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 }
             }
 
-            // Extract direction parameter (optional, default "above")
-            PWMEditDistanceScorer::Direction direction = PWMEditDistanceScorer::Direction::ABOVE;
-            if (Rf_isNewList(rparams)) {
-                int dir_idx = findListElementIndex(rparams, "direction");
-                if (dir_idx >= 0) {
-                    SEXP rdir = VECTOR_ELT(rparams, dir_idx);
-                    if (!Rf_isNull(rdir)) {
-                        if (Rf_isString(rdir) && Rf_length(rdir) == 1) {
-                            std::string dir_str = CHAR(STRING_ELT(rdir, 0));
-                            if (dir_str == "above") {
-                                direction = PWMEditDistanceScorer::Direction::ABOVE;
-                            } else if (dir_str == "below") {
-                                direction = PWMEditDistanceScorer::Direction::BELOW;
-                            } else {
-                                verror("direction parameter must be \"above\" or \"below\" for vtrack %s", vtrack.c_str());
-                            }
-                        } else {
-                            verror("direction parameter must be a single string (\"above\" or \"below\") for vtrack %s", vtrack.c_str());
-                        }
-                    }
-                }
-            }
+            auto direction = parse_direction_param(rparams, vtrack);
 
             PWMEditDistanceScorer::Mode mode = PWMEditDistanceScorer::Mode::MIN_EDITS;
             if (var.val_func == Track_var::PWM_EDIT_DISTANCE_POS) {
@@ -758,28 +766,7 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 lse_mode = PWMLseEditDistanceScorer::Mode::LSE_EDIT_DISTANCE_POS;
             }
 
-            // Extract direction parameter (optional, default "above")
-            PWMLseEditDistanceScorer::Direction lse_direction = PWMLseEditDistanceScorer::Direction::ABOVE;
-            if (Rf_isNewList(rparams)) {
-                int dir_idx = findListElementIndex(rparams, "direction");
-                if (dir_idx >= 0) {
-                    SEXP rdir = VECTOR_ELT(rparams, dir_idx);
-                    if (!Rf_isNull(rdir)) {
-                        if (Rf_isString(rdir) && Rf_length(rdir) == 1) {
-                            std::string dir_str = CHAR(STRING_ELT(rdir, 0));
-                            if (dir_str == "above") {
-                                lse_direction = PWMLseEditDistanceScorer::Direction::ABOVE;
-                            } else if (dir_str == "below") {
-                                lse_direction = PWMLseEditDistanceScorer::Direction::BELOW;
-                            } else {
-                                verror("direction parameter must be \"above\" or \"below\" for vtrack %s", vtrack.c_str());
-                            }
-                        } else {
-                            verror("direction parameter must be a single string (\"above\" or \"below\") for vtrack %s", vtrack.c_str());
-                        }
-                    }
-                }
-            }
+            auto lse_direction = parse_direction_param(rparams, vtrack);
 
             // Construct LSE scorer with shared sequence fetcher
             var.pwm_lse_edit_distance_scorer = std::make_unique<PWMLseEditDistanceScorer>(
