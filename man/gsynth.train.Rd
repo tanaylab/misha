@@ -2,7 +2,7 @@
 % Please edit documentation in R/synth.R
 \name{gsynth.train}
 \alias{gsynth.train}
-\title{Train a stratified Markov-5 model from genome sequences}
+\title{Train a stratified Markov model from genome sequences}
 \usage{
 gsynth.train(
   ...,
@@ -10,7 +10,8 @@ gsynth.train(
   intervals = NULL,
   iterator = NULL,
   pseudocount = 1,
-  min_obs = 0
+  min_obs = 0,
+  k = 5L
 )
 }
 \arguments{
@@ -35,40 +36,47 @@ track values are computed.}
 \item{pseudocount}{Pseudocount added to all k-mer counts to avoid zero probabilities.
 Default is 1.}
 
-\item{min_obs}{Minimum number of observations (6-mers) required per bin. Bins with
-fewer observations will be marked as NA (not learned) and a warning will be
-issued. Default is 0 (no minimum). During sampling, NA bins will fall back
+\item{min_obs}{Minimum number of observations ((k+1)-mers) required per bin. Bins
+with fewer observations will be marked as NA (not learned) and a warning will
+be issued. Default is 0 (no minimum). During sampling, NA bins will fall back
 to uniform sampling unless merged via \code{bin_merge}.}
+
+\item{k}{Integer Markov order (1--8). Default is 5, which models 6-mer
+(context of length 5 plus the emitted base) transition probabilities.
+Higher values capture longer-range sequence dependencies but require
+exponentially more memory (\eqn{4^k} context states).}
 }
 \value{
 A \code{gsynth.model} object containing:
   \describe{
+    \item{k}{Markov order used for training}
+    \item{num_kmers}{Number of context states (\eqn{4^k})}
     \item{n_dims}{Number of stratification dimensions}
     \item{dim_specs}{List of dimension specifications (expr, breaks, num_bins, bin_map)}
     \item{dim_sizes}{Vector of bin counts per dimension}
     \item{total_bins}{Total number of bins (product of dim_sizes)}
-    \item{total_kmers}{Total number of valid 6-mers counted}
-    \item{per_bin_kmers}{Number of 6-mers counted per bin}
+    \item{total_kmers}{Total number of valid (k+1)-mers counted}
+    \item{per_bin_kmers}{Number of (k+1)-mers counted per bin}
     \item{total_masked}{Number of positions skipped due to mask}
     \item{total_n}{Number of positions skipped due to N bases}
     \item{model_data}{Internal model data (counts and CDFs)}
   }
 }
 \description{
-Computes a 5th-order Markov model optionally stratified by bins of one or more
-track expressions (e.g., GC content and CG dinucleotide frequency). This model
-can be used to generate synthetic genomes that preserve the k-mer statistics of
-the original genome within each stratification bin. When called with no dimension
-specifications, trains a single unstratified model.
+Computes a Markov model of order \code{k} (default 5) optionally stratified by
+bins of one or more track expressions (e.g., GC content and CG dinucleotide
+frequency). This model can be used to generate synthetic genomes that preserve
+the k-mer statistics of the original genome within each stratification bin.
+When called with no dimension specifications, trains a single unstratified model.
 }
 \details{
 \strong{Strand symmetry:} The training process counts both the forward strand
-6-mer and its reverse complement for each position, ensuring strand-symmetric
+(k+1)-mer and its reverse complement for each position, ensuring strand-symmetric
 transition probabilities. This means the reported total_kmers is approximately
 double the number of genomic positions processed.
 
-\strong{N bases:} Positions where the 6-mer contains any N (unknown) bases are
-skipped during training and counted in \code{total_n}. The model only learns
+\strong{N bases:} Positions where the (k+1)-mer contains any N (unknown) bases
+are skipped during training and counted in \code{total_n}. The model only learns
 from valid A/C/G/T sequences.
 }
 \examples{
