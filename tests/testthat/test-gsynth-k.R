@@ -173,6 +173,12 @@ test_that("save/load round-trip with k != 5", {
     on.exit(unlink(out_dir, recursive = TRUE), add = TRUE)
 
     gsynth.save(model, out_dir)
+
+    # Verify .gsm metadata has version 2 for k != 5
+    meta <- yaml::read_yaml(file.path(out_dir, "metadata.yaml"))
+    expect_equal(meta$version, 2L)
+    expect_equal(meta$markov_order, 3L)
+
     loaded <- gsynth.load(out_dir)
 
     expect_s3_class(loaded, "gsynth.model")

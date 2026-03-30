@@ -805,7 +805,7 @@ gsynth.save <- function(model, file, compress = FALSE) {
     # Build metadata
     metadata <- list(
         format = "gsynth_model",
-        version = 1L,
+        version = if (is.null(model$k) || model$k == 5L) 1L else 2L,
         markov_order = as.integer(if (is.null(model$k)) 5L else model$k),
         n_dims = as.integer(n_dims),
         dim_sizes = if (n_dims > 0) as.integer(model$dim_sizes) else list(),
