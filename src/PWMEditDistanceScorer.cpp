@@ -804,9 +804,12 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         const char* window_start = seq_data + offset;
         int seq_avail = static_cast<int>(target_length - offset);
 
+        // Inline prefilter for subs-only mode: check the pigeonhole viable table
+        // directly, avoiding two function calls (compute_window_edits → passes_prefilter)
+        // for the 90%+ of windows that get rejected. For subs-only, shift is always 0,
+        // so the inner loop is tight: just B bidx lookups + 1 viable table read per block.
         if (scan_forward) {
             if (need_min) {
-                // score.min/score.max filtering: skip edit distance if PWM score is out of range
                 bool pass_score_filter = true;
                 if (apply_score_filter) {
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
@@ -816,8 +819,28 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
                 if (pass_score_filter) {
                     const int* bidx = fwd_bidx.data() + offset;
-                    float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/false);
-                    maybe_update_min(edits, offset, +1);
+                    bool prefilter_pass = true;
+                    if (m_use_prefilter && m_max_indels == 0) {
+                        prefilter_pass = false;
+                        for (const auto& block : m_prefilter_blocks) {
+                            int block_len = (int)block.columns.size();
+                            int hash = 0;
+                            bool valid = true;
+                            for (int j = 0; j < block_len; j++) {
+                                int b = bidx[block.columns[j]];
+                                if (b >= 4) { valid = false; break; }
+                                hash += b << (2 * j);
+                            }
+                            if (valid && block.viable[hash]) {
+                                prefilter_pass = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (prefilter_pass) {
+                        float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/false);
+                        maybe_update_min(edits, offset, +1);
+                    }
                 }
             }
             if (need_pwm) {
@@ -830,7 +853,6 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
         if (scan_reverse) {
             if (need_min) {
-                // score.min/score.max filtering: skip edit distance if PWM score is out of range
                 bool pass_score_filter = true;
                 if (apply_score_filter) {
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
@@ -840,8 +862,30 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
                 if (pass_score_filter) {
                     const int* bidx = rev_bidx.data() + offset;
-                    float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/true);
-                    maybe_update_min(edits, offset, -1);
+                    bool prefilter_pass = true;
+                    if (m_use_prefilter && m_max_indels == 0) {
+                        prefilter_pass = false;
+                        const int L_val = static_cast<int>(motif_length);
+                        for (const auto& block : m_prefilter_blocks) {
+                            int block_len = (int)block.columns.size();
+                            int hash = 0;
+                            bool valid = true;
+                            for (int j = 0; j < block_len; j++) {
+                                int seq_idx = L_val - 1 - block.columns[j];
+                                int b = bidx[seq_idx];
+                                if (b >= 4) { valid = false; break; }
+                                hash += b << (2 * j);
+                            }
+                            if (valid && block.viable[hash]) {
+                                prefilter_pass = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (prefilter_pass) {
+                        float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/true);
+                        maybe_update_min(edits, offset, -1);
+                    }
                 }
             }
             if (need_pwm) {
