@@ -35,6 +35,20 @@ PWMEditDistanceScorer::PWMEditDistanceScorer(const DnaPSSM& pssm,
     precompute_tables();
 }
 
+float PWMEditDistanceScorer::compute_column_ic(int col) const {
+    float entropy = 0.0f;
+    for (int b = 0; b < 4; b++) {
+        float log_prob = m_pssm[col].get_log_prob_from_code(b);
+        if (log_prob > -1e10f && std::isfinite(log_prob)) {
+            float p = std::exp(log_prob);
+            if (p > 0.0f) {
+                entropy -= p * std::log2(p);
+            }
+        }
+    }
+    return 2.0f - entropy;  // IC = log2(4) - H
+}
+
 void PWMEditDistanceScorer::precompute_tables()
 {
     int L = m_pssm.length();
@@ -67,6 +81,26 @@ void PWMEditDistanceScorer::precompute_tables()
     m_max_suffix_score.resize(L + 1, 0.0f);
     for (int i = L - 1; i >= 0; i--) {
         m_max_suffix_score[i] = m_max_suffix_score[i + 1] + target_score(i);
+    }
+
+    // IC-ordered column processing: sort columns by information content descending
+    // so early-abandon kicks in faster in compute_heuristic (subs-only mode).
+    m_use_ic_order = (m_max_indels == 0 && L <= MAX_MOTIF_LEN_OPT);
+    if (m_use_ic_order) {
+        std::vector<std::pair<float, int>> col_ics(L);
+        for (int i = 0; i < L; i++) {
+            col_ics[i] = {compute_column_ic(i), i};
+        }
+        std::sort(col_ics.begin(), col_ics.end(),
+                  [](const auto& a, const auto& b) { return a.first > b.first; });
+        for (int i = 0; i < L; i++) {
+            m_ic_col_order[i] = col_ics[i].second;
+        }
+        // Suffix target scores in IC-sorted order
+        m_ic_suffix_target[L] = 0.0f;
+        for (int i = L - 1; i >= 0; i--) {
+            m_ic_suffix_target[i] = m_ic_suffix_target[i + 1] + target_score(m_ic_col_order[i]);
+        }
     }
 
     // Precompute maximum possible delta (gain for ABOVE, loss for BELOW) from k substitutions.
@@ -164,39 +198,88 @@ void PWMEditDistanceScorer::precompute_tables()
             int num_blocks = K + 1;
             m_prefilter_blocks.resize(num_blocks);
 
-            for (int b = 0; b < num_blocks; b++) {
-                int block_start = b * L / num_blocks;
-                int block_end = (b + 1) * L / num_blocks;
-                int block_len = block_end - block_start;
+            if (m_max_indels == 0) {
+                // === SUBS-ONLY: IC-sorted non-contiguous column groups ===
+                std::vector<std::pair<float, int>> col_ics(L);
+                for (int i = 0; i < L; i++) {
+                    col_ics[i] = {compute_column_ic(i), i};
+                }
+                std::sort(col_ics.begin(), col_ics.end(),
+                          [](const auto& a, const auto& b) { return a.first > b.first; });
+                for (int b = 0; b < num_blocks; b++) {
+                    m_prefilter_blocks[b].columns.clear();
+                }
+                int block_size = L / num_blocks;
+                for (int rank = 0; rank < L; rank++) {
+                    int block_idx = rank / block_size;
+                    if (block_idx >= num_blocks) block_idx = num_blocks - 1;
+                    m_prefilter_blocks[block_idx].columns.push_back(col_ics[rank].second);
+                }
+            } else {
+                // === INDEL MODE: contiguous blocks (as before), stored as columns ===
+                for (int b = 0; b < num_blocks; b++) {
+                    int block_start = b * L / num_blocks;
+                    int block_end = (b + 1) * L / num_blocks;
+                    m_prefilter_blocks[b].columns.clear();
+                    for (int i = block_start; i < block_end; i++) {
+                        m_prefilter_blocks[b].columns.push_back(i);
+                    }
+                }
+            }
 
+            // Build viable tables and compute avg_ic for each block.
+            // For subs-only ABOVE mode, use score-aware viability: a hash is viable
+            // only if block_score + outside_col_max >= threshold. This is correct
+            // because with 0 edits in the block, its score is fixed, and K edits
+            // on outside columns can at best bring each to col_max.
+            bool score_aware = (m_max_indels == 0 && !below);
+
+            for (int b = 0; b < num_blocks; b++) {
                 PrefilterBlock& blk = m_prefilter_blocks[b];
-                blk.start = block_start;
-                blk.len = block_len;
+                int block_len = (int)blk.columns.size();
                 blk.num_entries = 1 << (2 * block_len);
                 blk.viable.assign(blk.num_entries, false);
 
-                // Enumerate all 4^B possible B-mers and mark viable ones.
-                // A B-mer is viable if every position has a non-mandatory PSSM score.
-                // The pigeonhole guarantee is purely structural: with K edits total
-                // and (K+1) blocks, at least one block must have 0 edits.
-                //
-                // NOTE: We intentionally do NOT add a score-based threshold here.
-                // A score threshold (block_score + outside_max >= T) appears sound
-                // when the block matches at shift 0 (no indels consumed), but when
-                // the block matches at a nonzero shift (requiring indels), the remaining
-                // edit budget for outside columns is reduced. Computing a correct
-                // shift-aware threshold would require per-shift viable tables.
+                float total_ic = 0.0f;
+                for (int col : blk.columns) {
+                    total_ic += compute_column_ic(col);
+                }
+                blk.avg_ic = total_ic / block_len;
+
+                // Compute sum of col_max for columns outside this block
+                float outside_col_max = 0.0f;
+                if (score_aware) {
+                    std::vector<bool> in_block(L, false);
+                    for (int col : blk.columns) in_block[col] = true;
+                    for (int i = 0; i < L; i++) {
+                        if (!in_block[i]) outside_col_max += m_col_max_scores[i];
+                    }
+                }
+
                 for (int h = 0; h < blk.num_entries; h++) {
                     bool ok = true;
+                    float block_score = 0.0f;
                     for (int j = 0; j < block_len && ok; j++) {
                         int base = (h >> (2 * j)) & 3;
-                        if (m_mandatory_table[block_start + j][base]) {
+                        if (m_mandatory_table[blk.columns[j]][base]) {
                             ok = false;
+                        } else if (score_aware) {
+                            block_score += m_score_table[blk.columns[j]][base];
                         }
+                    }
+                    if (ok && score_aware) {
+                        ok = (block_score + outside_col_max >= m_threshold);
                     }
                     blk.viable[h] = ok;
                 }
             }
+
+            // Sort blocks by avg_ic descending (highest IC checked first)
+            std::sort(m_prefilter_blocks.begin(), m_prefilter_blocks.end(),
+                      [](const PrefilterBlock& a, const PrefilterBlock& b) {
+                          return a.avg_ic > b.avg_ic;
+                      });
+
             m_use_prefilter = true;
         }
     }
@@ -390,39 +473,58 @@ float PWMEditDistanceScorer::compute_heuristic(const int* bidx, bool reverse, in
 
     int mandatory_edits = 0;
     double adjusted_score = 0.0;
-    std::vector<float> deltas;
-    deltas.reserve(L);
+    m_heur_deltas.clear();
 
-    // Track sum of top max_k deltas seen so far for suffix-bound early-abandon.
+    // Flat top-K delta tracker: for K <= 3, a sorted array of K floats is faster
+    // than std::push_heap/pop_heap. For larger K, falls back to insertion sort
+    // which is still efficient for small K.
     double top_deltas_sum = 0.0;
-    std::vector<float> top_deltas_heap;  // min-heap of top max_k deltas
-    top_deltas_heap.reserve(max_k + 1);
+    float top_k[4] = {};  // up to K=4 supported; stack-allocated, no heap
+    int n_top_k = 0;
+
+    // Choose column processing order and matching suffix table:
+    // - IC-sorted order (high-IC first) for subs-only: early-abandon kicks in faster
+    // - Positional order for indel mode (alignment-dependent)
+    const int* col_order = m_use_ic_order ? m_ic_col_order : nullptr;
+    const float* suffix_target = m_use_ic_order ? m_ic_suffix_target : m_max_suffix_score.data();
+    const int capped_k = std::min(max_k, 4);
 
     for (int i = 0; i < L; i++) {
-        int seq_idx = reverse ? (L - 1 - i) : i;
+        int col = col_order ? col_order[i] : i;
+        int seq_idx = reverse ? (L - 1 - col) : col;
         int base_idx = bidx[seq_idx];
 
         // Use precomputed lookup tables (complement already applied in bidx)
-        if (m_mandatory_table[i][base_idx]) {
+        if (m_mandatory_table[col][base_idx]) {
             mandatory_edits++;
-            adjusted_score += static_cast<double>(m_score_table[i][base_idx]);
+            adjusted_score += static_cast<double>(m_score_table[col][base_idx]);
         } else {
-            float base_score = m_score_table[i][base_idx];
+            float base_score = m_score_table[col][base_idx];
             adjusted_score += static_cast<double>(base_score);
-            float delta = m_gain_table[i][base_idx];
-            deltas.push_back(delta);
+            float delta = m_gain_table[col][base_idx];
+            m_heur_deltas.push_back(delta);
 
-            // Update top-k deltas tracker
+            // Update flat top-K tracker (insertion sort, K elements max)
             if (delta > 0.0f) {
-                if (static_cast<int>(top_deltas_heap.size()) < max_k) {
-                    top_deltas_heap.push_back(delta);
-                    std::push_heap(top_deltas_heap.begin(), top_deltas_heap.end(), std::greater<float>());
+                if (n_top_k < capped_k) {
+                    // Still filling: insert in sorted position (descending)
+                    int pos = n_top_k;
+                    while (pos > 0 && top_k[pos - 1] < delta) {
+                        top_k[pos] = top_k[pos - 1];
+                        pos--;
+                    }
+                    top_k[pos] = delta;
+                    n_top_k++;
                     top_deltas_sum += static_cast<double>(delta);
-                } else if (!top_deltas_heap.empty() && delta > top_deltas_heap.front()) {
-                    top_deltas_sum -= static_cast<double>(top_deltas_heap.front());
-                    std::pop_heap(top_deltas_heap.begin(), top_deltas_heap.end(), std::greater<float>());
-                    top_deltas_heap.back() = delta;
-                    std::push_heap(top_deltas_heap.begin(), top_deltas_heap.end(), std::greater<float>());
+                } else if (delta > top_k[n_top_k - 1]) {
+                    // Replace smallest in top-K
+                    top_deltas_sum -= static_cast<double>(top_k[n_top_k - 1]);
+                    int pos = n_top_k - 1;
+                    while (pos > 0 && top_k[pos - 1] < delta) {
+                        top_k[pos] = top_k[pos - 1];
+                        pos--;
+                    }
+                    top_k[pos] = delta;
                     top_deltas_sum += static_cast<double>(delta);
                 }
             }
@@ -430,20 +532,14 @@ float PWMEditDistanceScorer::compute_heuristic(const int* bidx, bool reverse, in
 
         // Column-by-column suffix-bound early-abandon:
         // ABOVE: adjusted_score + top_k_gains + suffix_max < threshold → unreachable
-        //   (best possible: current score + best k edits from prefix + all remaining at col_max)
         // BELOW: adjusted_score - top_k_losses + suffix_min > threshold → unreachable
-        //   (best possible: current score - best k edits from prefix + all remaining at col_min)
         if (below) {
-            if (adjusted_score - top_deltas_sum + static_cast<double>(m_max_suffix_score[i + 1])
+            if (adjusted_score - top_deltas_sum + static_cast<double>(suffix_target[i + 1])
                 > static_cast<double>(m_threshold)) {
-                // Even with the best k losses applied + remaining columns at minimum,
-                // score stays above threshold → unreachable
-                // But only abandon if we've processed enough columns to be meaningful
-                // (early columns don't provide much pruning power)
                 return std::numeric_limits<float>::quiet_NaN();
             }
         } else {
-            if (adjusted_score + top_deltas_sum + static_cast<double>(m_max_suffix_score[i + 1])
+            if (adjusted_score + top_deltas_sum + static_cast<double>(suffix_target[i + 1])
                 < static_cast<double>(m_threshold)) {
                 return std::numeric_limits<float>::quiet_NaN();
             }
@@ -468,23 +564,24 @@ float PWMEditDistanceScorer::compute_heuristic(const int* bidx, bool reverse, in
         return std::numeric_limits<float>::quiet_NaN();
     }
 
-    if (remaining_budget > static_cast<int>(deltas.size())) {
-        remaining_budget = static_cast<int>(deltas.size());
+    if (remaining_budget > static_cast<int>(m_heur_deltas.size())) {
+        remaining_budget = static_cast<int>(m_heur_deltas.size());
     }
 
     if (remaining_budget <= 0) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
-    if (remaining_budget < static_cast<int>(deltas.size())) {
-        std::nth_element(deltas.begin(), deltas.begin() + remaining_budget, deltas.end(),
-                         std::greater<float>());
+    if (remaining_budget < static_cast<int>(m_heur_deltas.size())) {
+        std::nth_element(m_heur_deltas.begin(), m_heur_deltas.begin() + remaining_budget,
+                         m_heur_deltas.end(), std::greater<float>());
     }
-    std::sort(deltas.begin(), deltas.begin() + remaining_budget, std::greater<float>());
+    std::sort(m_heur_deltas.begin(), m_heur_deltas.begin() + remaining_budget,
+              std::greater<float>());
 
     double acc = 0.0;
     for (int i = 0; i < remaining_budget; i++) {
-        acc += static_cast<double>(deltas[i]);
+        acc += static_cast<double>(m_heur_deltas[i]);
         if (acc >= deficit) {
             return static_cast<float>(mandatory_edits + i + 1);
         }
@@ -534,19 +631,18 @@ bool PWMEditDistanceScorer::passes_prefilter(const int* bidx, int seq_avail, boo
     const int L = m_pssm.length();
 
     for (const auto& block : m_prefilter_blocks) {
+        int block_len = (int)block.columns.size();
+
         for (int shift = -m_max_indels; shift <= m_max_indels; shift++) {
             int hash = 0;
             bool valid = true;
 
-            for (int j = 0; j < block.len && valid; j++) {
-                int motif_col = block.start + j;
+            for (int j = 0; j < block_len && valid; j++) {
+                int motif_col = block.columns[j];
                 int seq_idx;
                 if (!reverse) {
                     seq_idx = motif_col + shift;
                 } else {
-                    // Reverse strand: motif column i maps to bidx[L-1-i] for
-                    // the no-indel alignment. With a shift of s (for indels),
-                    // the mapping becomes bidx[L-1-i+s].
                     seq_idx = L - 1 - motif_col + shift;
                 }
 
@@ -565,12 +661,12 @@ bool PWMEditDistanceScorer::passes_prefilter(const int* bidx, int seq_avail, boo
             }
 
             if (valid && block.viable[hash]) {
-                return true;  // At least one block matches exactly at this shift
+                return true;
             }
         }
     }
 
-    return false;  // No block matches at any shift — window provably unreachable
+    return false;
 }
 
 float PWMEditDistanceScorer::compute_window_edits(const int* bidx, int seq_avail, bool reverse)
@@ -646,6 +742,17 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         rev_bidx[j] = base_to_index(complement_base(base));
     }
 
+    // Sliding-window N-count for fast skip of N-heavy regions.
+    // N bases force mandatory edits; if a window has more than max_edits Ns,
+    // it's unreachable. We maintain a running count, O(1) per window step.
+    bool use_n_skip = (m_max_edits >= 0 && max_start > 0);
+    int n_count = 0;
+    if (use_n_skip) {
+        for (size_t j = 0; j < motif_length && j < target_length; j++) {
+            n_count += (fwd_bidx[j] >= 4) ? 1 : 0;
+        }
+    }
+
     bool pwm_found = false;
 
     auto maybe_update_min = [&](float edits, size_t idx, int direction) {
@@ -679,12 +786,30 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     };
 
     for (size_t offset = 0; offset < max_start; ++offset) {
+        // Sliding N-count maintenance (for offset > 0, slide the window by 1)
+        if (use_n_skip && offset > 0) {
+            // Remove the base that just left the window
+            n_count -= (fwd_bidx[offset - 1] >= 4) ? 1 : 0;
+            // Add the base that just entered the window
+            if (offset + motif_length - 1 < target_length) {
+                n_count += (fwd_bidx[offset + motif_length - 1] >= 4) ? 1 : 0;
+            }
+        }
+
+        // Skip windows with too many N-bases (each N forces a mandatory edit)
+        if (use_n_skip && n_count > m_max_edits) {
+            continue;
+        }
+
         const char* window_start = seq_data + offset;
         int seq_avail = static_cast<int>(target_length - offset);
 
+        // Inline prefilter for subs-only mode: check the pigeonhole viable table
+        // directly, avoiding two function calls (compute_window_edits → passes_prefilter)
+        // for the 90%+ of windows that get rejected. For subs-only, shift is always 0,
+        // so the inner loop is tight: just B bidx lookups + 1 viable table read per block.
         if (scan_forward) {
             if (need_min) {
-                // score.min/score.max filtering: skip edit distance if PWM score is out of range
                 bool pass_score_filter = true;
                 if (apply_score_filter) {
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
@@ -694,8 +819,28 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
                 if (pass_score_filter) {
                     const int* bidx = fwd_bidx.data() + offset;
-                    float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/false);
-                    maybe_update_min(edits, offset, +1);
+                    bool prefilter_pass = true;
+                    if (m_use_prefilter && m_max_indels == 0) {
+                        prefilter_pass = false;
+                        for (const auto& block : m_prefilter_blocks) {
+                            int block_len = (int)block.columns.size();
+                            int hash = 0;
+                            bool valid = true;
+                            for (int j = 0; j < block_len; j++) {
+                                int b = bidx[block.columns[j]];
+                                if (b >= 4) { valid = false; break; }
+                                hash += b << (2 * j);
+                            }
+                            if (valid && block.viable[hash]) {
+                                prefilter_pass = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (prefilter_pass) {
+                        float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/false);
+                        maybe_update_min(edits, offset, +1);
+                    }
                 }
             }
             if (need_pwm) {
@@ -708,7 +853,6 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
         if (scan_reverse) {
             if (need_min) {
-                // score.min/score.max filtering: skip edit distance if PWM score is out of range
                 bool pass_score_filter = true;
                 if (apply_score_filter) {
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
@@ -718,8 +862,30 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
                 if (pass_score_filter) {
                     const int* bidx = rev_bidx.data() + offset;
-                    float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/true);
-                    maybe_update_min(edits, offset, -1);
+                    bool prefilter_pass = true;
+                    if (m_use_prefilter && m_max_indels == 0) {
+                        prefilter_pass = false;
+                        const int L_val = static_cast<int>(motif_length);
+                        for (const auto& block : m_prefilter_blocks) {
+                            int block_len = (int)block.columns.size();
+                            int hash = 0;
+                            bool valid = true;
+                            for (int j = 0; j < block_len; j++) {
+                                int seq_idx = L_val - 1 - block.columns[j];
+                                int b = bidx[seq_idx];
+                                if (b >= 4) { valid = false; break; }
+                                hash += b << (2 * j);
+                            }
+                            if (valid && block.viable[hash]) {
+                                prefilter_pass = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (prefilter_pass) {
+                        float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/true);
+                        maybe_update_min(edits, offset, -1);
+                    }
                 }
             }
             if (need_pwm) {
