@@ -129,6 +129,9 @@ private:
     float m_ic_suffix_target[MAX_MOTIF_LEN_OPT + 1]; // suffix target scores in IC order
     bool m_use_ic_order;                              // true when subs-only and L <= MAX_MOTIF_LEN_OPT
 
+    // Reusable vectors for compute_heuristic (avoid per-call heap allocation)
+    std::vector<float> m_heur_deltas;
+
     // Reusable count vector for compute_exact (PERF-1: touched-list cleanup)
     std::vector<int> m_exact_count;
     std::vector<size_t> m_exact_touched;

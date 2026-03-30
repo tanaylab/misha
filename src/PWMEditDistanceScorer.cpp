@@ -473,19 +473,21 @@ float PWMEditDistanceScorer::compute_heuristic(const int* bidx, bool reverse, in
 
     int mandatory_edits = 0;
     double adjusted_score = 0.0;
-    std::vector<float> deltas;
-    deltas.reserve(L);
+    m_heur_deltas.clear();
 
-    // Track sum of top max_k deltas seen so far for suffix-bound early-abandon.
+    // Flat top-K delta tracker: for K <= 3, a sorted array of K floats is faster
+    // than std::push_heap/pop_heap. For larger K, falls back to insertion sort
+    // which is still efficient for small K.
     double top_deltas_sum = 0.0;
-    std::vector<float> top_deltas_heap;  // min-heap of top max_k deltas
-    top_deltas_heap.reserve(max_k + 1);
+    float top_k[4] = {};  // up to K=4 supported; stack-allocated, no heap
+    int n_top_k = 0;
 
     // Choose column processing order and matching suffix table:
     // - IC-sorted order (high-IC first) for subs-only: early-abandon kicks in faster
     // - Positional order for indel mode (alignment-dependent)
     const int* col_order = m_use_ic_order ? m_ic_col_order : nullptr;
     const float* suffix_target = m_use_ic_order ? m_ic_suffix_target : m_max_suffix_score.data();
+    const int capped_k = std::min(max_k, 4);
 
     for (int i = 0; i < L; i++) {
         int col = col_order ? col_order[i] : i;
@@ -500,19 +502,29 @@ float PWMEditDistanceScorer::compute_heuristic(const int* bidx, bool reverse, in
             float base_score = m_score_table[col][base_idx];
             adjusted_score += static_cast<double>(base_score);
             float delta = m_gain_table[col][base_idx];
-            deltas.push_back(delta);
+            m_heur_deltas.push_back(delta);
 
-            // Update top-k deltas tracker
+            // Update flat top-K tracker (insertion sort, K elements max)
             if (delta > 0.0f) {
-                if (static_cast<int>(top_deltas_heap.size()) < max_k) {
-                    top_deltas_heap.push_back(delta);
-                    std::push_heap(top_deltas_heap.begin(), top_deltas_heap.end(), std::greater<float>());
+                if (n_top_k < capped_k) {
+                    // Still filling: insert in sorted position (descending)
+                    int pos = n_top_k;
+                    while (pos > 0 && top_k[pos - 1] < delta) {
+                        top_k[pos] = top_k[pos - 1];
+                        pos--;
+                    }
+                    top_k[pos] = delta;
+                    n_top_k++;
                     top_deltas_sum += static_cast<double>(delta);
-                } else if (!top_deltas_heap.empty() && delta > top_deltas_heap.front()) {
-                    top_deltas_sum -= static_cast<double>(top_deltas_heap.front());
-                    std::pop_heap(top_deltas_heap.begin(), top_deltas_heap.end(), std::greater<float>());
-                    top_deltas_heap.back() = delta;
-                    std::push_heap(top_deltas_heap.begin(), top_deltas_heap.end(), std::greater<float>());
+                } else if (delta > top_k[n_top_k - 1]) {
+                    // Replace smallest in top-K
+                    top_deltas_sum -= static_cast<double>(top_k[n_top_k - 1]);
+                    int pos = n_top_k - 1;
+                    while (pos > 0 && top_k[pos - 1] < delta) {
+                        top_k[pos] = top_k[pos - 1];
+                        pos--;
+                    }
+                    top_k[pos] = delta;
                     top_deltas_sum += static_cast<double>(delta);
                 }
             }
@@ -552,23 +564,24 @@ float PWMEditDistanceScorer::compute_heuristic(const int* bidx, bool reverse, in
         return std::numeric_limits<float>::quiet_NaN();
     }
 
-    if (remaining_budget > static_cast<int>(deltas.size())) {
-        remaining_budget = static_cast<int>(deltas.size());
+    if (remaining_budget > static_cast<int>(m_heur_deltas.size())) {
+        remaining_budget = static_cast<int>(m_heur_deltas.size());
     }
 
     if (remaining_budget <= 0) {
         return std::numeric_limits<float>::quiet_NaN();
     }
 
-    if (remaining_budget < static_cast<int>(deltas.size())) {
-        std::nth_element(deltas.begin(), deltas.begin() + remaining_budget, deltas.end(),
-                         std::greater<float>());
+    if (remaining_budget < static_cast<int>(m_heur_deltas.size())) {
+        std::nth_element(m_heur_deltas.begin(), m_heur_deltas.begin() + remaining_budget,
+                         m_heur_deltas.end(), std::greater<float>());
     }
-    std::sort(deltas.begin(), deltas.begin() + remaining_budget, std::greater<float>());
+    std::sort(m_heur_deltas.begin(), m_heur_deltas.begin() + remaining_budget,
+              std::greater<float>());
 
     double acc = 0.0;
     for (int i = 0; i < remaining_budget; i++) {
-        acc += static_cast<double>(deltas[i]);
+        acc += static_cast<double>(m_heur_deltas[i]);
         if (acc >= deficit) {
             return static_cast<float>(mandatory_edits + i + 1);
         }
