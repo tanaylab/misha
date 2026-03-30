@@ -993,7 +993,7 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         stop("Binary data files (counts.bin, cdf.bin) not found", call. = FALSE)
     }
 
-    expected_n <- total_bins * num_kmers * 4L
+    expected_n <- as.double(total_bins) * as.double(num_kmers) * 4
 
     counts_flat <- readBin(counts_path, "double", n = expected_n, size = 8L, endian = "little")
     cdf_flat <- readBin(cdf_path, "double", n = expected_n, size = 8L, endian = "little")
