@@ -419,10 +419,10 @@ gsynth.train <- function(...,
     .gcheckroot()
 
     # Validate k (Markov order)
-    k <- as.integer(k)
-    if (length(k) != 1L || is.na(k) || k < 1L || k > 8L) {
+    if (!is.numeric(k) || length(k) != 1L || is.na(k) || k != as.integer(k) || k < 1L || k > 8L) {
         stop("k must be a single integer between 1 and 8", call. = FALSE)
     }
+    k <- as.integer(k)
     num_kmers <- as.integer(4L^k)
 
     # Capture all dimension specs from ...
