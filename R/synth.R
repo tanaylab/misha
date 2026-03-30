@@ -309,13 +309,13 @@ gsynth.bin_map <- function(breaks, merge_ranges = NULL) {
     result
 }
 
-#' Train a stratified Markov-5 model from genome sequences
+#' Train a stratified Markov model from genome sequences
 #'
-#' Computes a 5th-order Markov model optionally stratified by bins of one or more
-#' track expressions (e.g., GC content and CG dinucleotide frequency). This model
-#' can be used to generate synthetic genomes that preserve the k-mer statistics of
-#' the original genome within each stratification bin. When called with no dimension
-#' specifications, trains a single unstratified model.
+#' Computes a Markov model of order \code{k} (default 5) optionally stratified by
+#' bins of one or more track expressions (e.g., GC content and CG dinucleotide
+#' frequency). This model can be used to generate synthetic genomes that preserve
+#' the k-mer statistics of the original genome within each stratification bin.
+#' When called with no dimension specifications, trains a single unstratified model.
 #'
 #' @param ... Zero or more dimension specifications. Each specification is a list
 #'        containing:
@@ -333,29 +333,35 @@ gsynth.bin_map <- function(breaks, merge_ranges = NULL) {
 #'        track values are computed.
 #' @param pseudocount Pseudocount added to all k-mer counts to avoid zero probabilities.
 #'        Default is 1.
-#' @param min_obs Minimum number of observations (6-mers) required per bin. Bins with
-#'        fewer observations will be marked as NA (not learned) and a warning will be
-#'        issued. Default is 0 (no minimum). During sampling, NA bins will fall back
+#' @param min_obs Minimum number of observations ((k+1)-mers) required per bin. Bins
+#'        with fewer observations will be marked as NA (not learned) and a warning will
+#'        be issued. Default is 0 (no minimum). During sampling, NA bins will fall back
 #'        to uniform sampling unless merged via \code{bin_merge}.
+#' @param k Integer Markov order (1--8). Default is 5, which models 6-mer
+#'        (context of length 5 plus the emitted base) transition probabilities.
+#'        Higher values capture longer-range sequence dependencies but require
+#'        exponentially more memory (\eqn{4^k} context states).
 #'
 #' @details
 #' \strong{Strand symmetry:} The training process counts both the forward strand
-#' 6-mer and its reverse complement for each position, ensuring strand-symmetric
+#' (k+1)-mer and its reverse complement for each position, ensuring strand-symmetric
 #' transition probabilities. This means the reported total_kmers is approximately
 #' double the number of genomic positions processed.
 #'
-#' \strong{N bases:} Positions where the 6-mer contains any N (unknown) bases are
-#' skipped during training and counted in \code{total_n}. The model only learns
+#' \strong{N bases:} Positions where the (k+1)-mer contains any N (unknown) bases
+#' are skipped during training and counted in \code{total_n}. The model only learns
 #' from valid A/C/G/T sequences.
 #'
 #' @return A \code{gsynth.model} object containing:
 #'   \describe{
+#'     \item{k}{Markov order used for training}
+#'     \item{num_kmers}{Number of context states (\eqn{4^k})}
 #'     \item{n_dims}{Number of stratification dimensions}
 #'     \item{dim_specs}{List of dimension specifications (expr, breaks, num_bins, bin_map)}
 #'     \item{dim_sizes}{Vector of bin counts per dimension}
 #'     \item{total_bins}{Total number of bins (product of dim_sizes)}
-#'     \item{total_kmers}{Total number of valid 6-mers counted}
-#'     \item{per_bin_kmers}{Number of 6-mers counted per bin}
+#'     \item{total_kmers}{Total number of valid (k+1)-mers counted}
+#'     \item{per_bin_kmers}{Number of (k+1)-mers counted per bin}
 #'     \item{total_masked}{Number of positions skipped due to mask}
 #'     \item{total_n}{Number of positions skipped due to N bases}
 #'     \item{model_data}{Internal model data (counts and CDFs)}
@@ -408,8 +414,16 @@ gsynth.train <- function(...,
                          intervals = NULL,
                          iterator = NULL,
                          pseudocount = 1,
-                         min_obs = 0) {
+                         min_obs = 0,
+                         k = 5L) {
     .gcheckroot()
+
+    # Validate k (Markov order)
+    k <- as.integer(k)
+    if (length(k) != 1L || is.na(k) || k < 1L || k > 8L) {
+        stop("k must be a single integer between 1 and 8", call. = FALSE)
+    }
+    num_kmers <- as.integer(4L^k)
 
     # Capture all dimension specs from ...
     args <- list(...)
@@ -587,10 +601,13 @@ gsynth.train <- function(...,
         bin_map_vec,
         mask,
         as.numeric(pseudocount),
+        as.integer(k),
         .misha_env()
     )
 
     # Override C++ result with our multi-dimensional metadata
+    result$k <- k
+    result$num_kmers <- num_kmers
     result$n_dims <- n_dims
     result$dim_specs <- dim_specs
     result$dim_sizes <- dim_sizes
@@ -642,13 +659,13 @@ gsynth.train <- function(...,
 
     if (n_dims == 0) {
         message(sprintf(
-            "Trained unstratified model: %s 6-mers (no stratification)",
-            format(result$total_kmers, big.mark = ",")
+            "Trained unstratified Markov-%d model: %s %d-mers (no stratification)",
+            k, format(result$total_kmers, big.mark = ","), k + 1L
         ))
     } else {
         message(sprintf(
-            "Trained model: %s 6-mers across %d bins (%d dimensions)",
-            format(result$total_kmers, big.mark = ","),
+            "Trained Markov-%d model: %s %d-mers across %d bins (%d dimensions)",
+            k, format(result$total_kmers, big.mark = ","), k + 1L,
             result$total_bins,
             result$n_dims
         ))
@@ -671,8 +688,10 @@ gsynth.train <- function(...,
 #'
 #' @export
 print.gsynth.model <- function(x, ...) {
-    cat("Synthetic Genome Markov-5 Model\n")
+    k <- if (is.null(x$k)) 5L else x$k
+    cat(sprintf("Synthetic Genome Markov-%d Model\n", k))
     cat("----------------------------\n")
+    cat(sprintf("Markov order (k): %d  [context states: %d]\n", k, 4L^k))
 
     if (!is.null(x$n_dims) && x$n_dims == 0) {
         # Zero-dimensional (unstratified) model
@@ -760,6 +779,8 @@ gsynth.save <- function(model, file, compress = FALSE) {
 
     total_bins <- model$total_bins
     n_dims <- if (is.null(model$n_dims)) 0L else model$n_dims
+    k <- if (is.null(model$k)) 5L else model$k
+    num_kmers <- if (is.null(model$num_kmers)) as.integer(4L^k) else model$num_kmers
 
     # Build dim_specs for YAML
     yaml_dim_specs <- list()
@@ -785,7 +806,7 @@ gsynth.save <- function(model, file, compress = FALSE) {
     metadata <- list(
         format = "gsynth_model",
         version = 1L,
-        markov_order = 5L,
+        markov_order = as.integer(if (is.null(model$k)) 5L else model$k),
         n_dims = as.integer(n_dims),
         dim_sizes = if (n_dims > 0) as.integer(model$dim_sizes) else list(),
         total_bins = as.integer(total_bins),
@@ -799,26 +820,26 @@ gsynth.save <- function(model, file, compress = FALSE) {
         data = list(
             counts = list(
                 dtype = "float64",
-                shape = list(as.integer(total_bins), 1024L, 4L),
+                shape = list(as.integer(total_bins), as.integer(num_kmers), 4L),
                 order = "C",
                 file = "counts.bin"
             ),
             cdf = list(
                 dtype = "float64",
-                shape = list(as.integer(total_bins), 1024L, 4L),
+                shape = list(as.integer(total_bins), as.integer(num_kmers), 4L),
                 order = "C",
                 file = "cdf.bin"
             )
         )
     )
 
-    # Helper to write binary data for a list of 1024x4 matrices in row-major order
+    # Helper to write binary data for a list of num_kmers x 4 matrices in row-major order
     .write_bin_matrices <- function(mat_list, filepath) {
         con <- file(filepath, "wb")
         on.exit(close(con))
         for (i in seq_along(mat_list)) {
             mat <- mat_list[[i]]
-            # mat is 1024x4 column-major in R
+            # mat is num_kmers x 4 column-major in R
             # Writing t(mat) column-major = writing mat row-major (C order)
             writeBin(as.double(t(mat)), con, size = 8L, endian = "little")
         }
@@ -960,6 +981,10 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
     total_bins <- as.integer(metadata$total_bins)
     n_dims <- as.integer(metadata$n_dims)
 
+    # Read Markov order (default to 5 for backward compatibility)
+    k <- as.integer(if (is.null(metadata$markov_order)) 5L else metadata$markov_order)
+    num_kmers <- as.integer(4L^k)
+
     # Read binary data
     counts_path <- file.path(dir_path, "counts.bin")
     cdf_path <- file.path(dir_path, "cdf.bin")
@@ -968,7 +993,7 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         stop("Binary data files (counts.bin, cdf.bin) not found", call. = FALSE)
     }
 
-    expected_n <- total_bins * 1024L * 4L
+    expected_n <- total_bins * num_kmers * 4L
 
     counts_flat <- readBin(counts_path, "double", n = expected_n, size = 8L, endian = "little")
     cdf_flat <- readBin(cdf_path, "double", n = expected_n, size = 8L, endian = "little")
@@ -980,20 +1005,20 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         ), call. = FALSE)
     }
 
-    # Reshape: row-major flat -> list of 1024x4 column-major R matrices
-    chunk <- 1024L * 4L
+    # Reshape: row-major flat -> list of num_kmers x 4 column-major R matrices
+    chunk <- num_kmers * 4L
     counts_list <- vector("list", total_bins)
     cdf_list <- vector("list", total_bins)
 
     for (i in seq_len(total_bins)) {
         offset <- (i - 1L) * chunk
         # Data was written as t(mat) in column-major = row-major
-        # Read as 4x1024 matrix (column-major), then transpose to 1024x4
+        # Read as 4 x num_kmers matrix (column-major), then transpose to num_kmers x 4
         counts_list[[i]] <- t(matrix(counts_flat[(offset + 1L):(offset + chunk)],
-            nrow = 4L, ncol = 1024L
+            nrow = 4L, ncol = num_kmers
         ))
         cdf_list[[i]] <- t(matrix(cdf_flat[(offset + 1L):(offset + chunk)],
-            nrow = 4L, ncol = 1024L
+            nrow = 4L, ncol = num_kmers
         ))
     }
 
@@ -1029,6 +1054,8 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
     # Build the model object
     pseudocount <- if (!is.null(metadata$pseudocount)) as.numeric(metadata$pseudocount) else 1.0
     model <- list(
+        k = k,
+        num_kmers = num_kmers,
         num_bins = total_bins,
         breaks = NULL,
         total_kmers = as.numeric(metadata$total_kmers),
@@ -1052,7 +1079,7 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 
 #' Sample a synthetic genome from a trained Markov model
 #'
-#' Generates a synthetic genome by sampling from a trained stratified Markov-5
+#' Generates a synthetic genome by sampling from a trained stratified Markov
 #' model. The generated genome preserves the k-mer statistics of the original
 #' genome within each stratification bin.
 #'
@@ -1097,7 +1124,7 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 #'
 #' @details
 #' \strong{N bases during sampling:} When the sampler needs to initialize the
-#' first 5-mer context and encounters regions with only N bases, it falls back
+#' first k-mer context and encounters regions with only N bases, it falls back
 #' to uniform random base selection until a valid context is established.
 #' Similarly, if a bin has no learned statistics (sparse bin with NA CDF),
 #' uniform sampling is used for that position.
@@ -1162,6 +1189,10 @@ gsynth.sample <- function(model,
     if (!inherits(model, "gsynth.model")) {
         stop("model must be a gsynth.model object", call. = FALSE)
     }
+
+    # Extract Markov order from model (default k=5 for backward compatibility)
+    k <- if (is.null(model$k)) 5L else model$k
+    num_kmers <- if (is.null(model$num_kmers)) as.integer(4L^k) else model$num_kmers
 
     output_format <- match.arg(output_format)
 
@@ -1322,8 +1353,8 @@ gsynth.sample <- function(model,
             # Replace NA CDFs with uniform distribution for sampling
             # Uniform CDF: [0.25, 0.5, 0.75, 1.0]
             uniform_cdf <- matrix(
-                rep(c(0.25, 0.5, 0.75, 1.0), each = 1024),
-                nrow = 1024, ncol = 4
+                rep(c(0.25, 0.5, 0.75, 1.0), each = num_kmers),
+                nrow = num_kmers, ncol = 4
             )
             for (bin_idx in sparse_used) {
                 cdf_list[[bin_idx]] <- uniform_cdf
@@ -1363,6 +1394,7 @@ gsynth.sample <- function(model,
         output_path_str,
         output_format_int,
         n_samples,
+        as.integer(k),
         .misha_env()
     )
 
@@ -1590,9 +1622,13 @@ gsynth.random <- function(intervals = NULL,
     # Order is A=0, C=1, G=2, T=3 (same as C++ code)
     cdf_row <- cumsum(as.numeric(nuc_probs))
 
-    # Create CDF matrix: same for all 1024 contexts (no context dependency)
+    # Use k=5 for context-independent random sampling (all rows identical)
+    random_k <- 5L
+    random_num_kmers <- as.integer(4L^random_k)
+
+    # Create CDF matrix: same for all contexts (no context dependency)
     # Each row is the same CDF - pure random, context-independent sampling
-    cdf_matrix <- matrix(rep(cdf_row, 1024), nrow = 1024, ncol = 4, byrow = TRUE)
+    cdf_matrix <- matrix(rep(cdf_row, random_num_kmers), nrow = random_num_kmers, ncol = 4, byrow = TRUE)
     cdf_list <- list(cdf_matrix)
 
     # Output format: 0 = misha, 1 = fasta, 2 = vector
@@ -1626,6 +1662,7 @@ gsynth.random <- function(intervals = NULL,
         output_path_str,
         output_format_int,
         n_samples,
+        as.integer(random_k),
         .misha_env()
     )
 

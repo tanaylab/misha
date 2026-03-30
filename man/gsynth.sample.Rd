@@ -68,13 +68,13 @@ When output_format is "misha" or "fasta", returns invisible NULL and
         returns a character vector of sequences (length = n_intervals * n_samples).
 }
 \description{
-Generates a synthetic genome by sampling from a trained stratified Markov-5
+Generates a synthetic genome by sampling from a trained stratified Markov
 model. The generated genome preserves the k-mer statistics of the original
 genome within each stratification bin.
 }
 \details{
 \strong{N bases during sampling:} When the sampler needs to initialize the
-first 5-mer context and encounters regions with only N bases, it falls back
+first k-mer context and encounters regions with only N bases, it falls back
 to uniform random base selection until a valid context is established.
 Similarly, if a bin has no learned statistics (sparse bin with NA CDF),
 uniform sampling is used for that position.
