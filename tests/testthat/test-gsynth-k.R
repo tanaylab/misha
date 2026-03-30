@@ -17,12 +17,10 @@ test_that("gsynth.train errors on invalid k values", {
         "k must be a single integer between 1 and 8"
     )
 
-    # k = 3.5 is silently truncated to 3L by as.integer(), which is valid.
-    # Verify it does NOT error (the code uses as.integer(k) without strict
-    # integer checking, so non-integer numerics are accepted).
+    # k = 3.5 should error (non-integer numeric)
     expect_error(
         gsynth.train(intervals = test_intervals, iterator = 200, k = 3.5),
-        NA
+        "k must be a single integer between 1 and 8"
     )
 
     # k = "abc" should error (as.integer("abc") produces NA)
