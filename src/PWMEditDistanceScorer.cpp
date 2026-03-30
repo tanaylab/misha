@@ -227,7 +227,13 @@ void PWMEditDistanceScorer::precompute_tables()
                 }
             }
 
-            // Build viable tables and compute avg_ic for each block
+            // Build viable tables and compute avg_ic for each block.
+            // For subs-only ABOVE mode, use score-aware viability: a hash is viable
+            // only if block_score + outside_col_max >= threshold. This is correct
+            // because with 0 edits in the block, its score is fixed, and K edits
+            // on outside columns can at best bring each to col_max.
+            bool score_aware = (m_max_indels == 0 && !below);
+
             for (int b = 0; b < num_blocks; b++) {
                 PrefilterBlock& blk = m_prefilter_blocks[b];
                 int block_len = (int)blk.columns.size();
@@ -240,13 +246,29 @@ void PWMEditDistanceScorer::precompute_tables()
                 }
                 blk.avg_ic = total_ic / block_len;
 
+                // Compute sum of col_max for columns outside this block
+                float outside_col_max = 0.0f;
+                if (score_aware) {
+                    std::vector<bool> in_block(L, false);
+                    for (int col : blk.columns) in_block[col] = true;
+                    for (int i = 0; i < L; i++) {
+                        if (!in_block[i]) outside_col_max += m_col_max_scores[i];
+                    }
+                }
+
                 for (int h = 0; h < blk.num_entries; h++) {
                     bool ok = true;
+                    float block_score = 0.0f;
                     for (int j = 0; j < block_len && ok; j++) {
                         int base = (h >> (2 * j)) & 3;
                         if (m_mandatory_table[blk.columns[j]][base]) {
                             ok = false;
+                        } else if (score_aware) {
+                            block_score += m_score_table[blk.columns[j]][base];
                         }
+                    }
+                    if (ok && score_aware) {
+                        ok = (block_score + outside_col_max >= m_threshold);
                     }
                     blk.viable[h] = ok;
                 }
