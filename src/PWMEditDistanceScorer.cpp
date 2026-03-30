@@ -707,6 +707,17 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         rev_bidx[j] = base_to_index(complement_base(base));
     }
 
+    // Sliding-window N-count for fast skip of N-heavy regions.
+    // N bases force mandatory edits; if a window has more than max_edits Ns,
+    // it's unreachable. We maintain a running count, O(1) per window step.
+    bool use_n_skip = (m_max_edits >= 0 && max_start > 0);
+    int n_count = 0;
+    if (use_n_skip) {
+        for (size_t j = 0; j < motif_length && j < target_length; j++) {
+            n_count += (fwd_bidx[j] >= 4) ? 1 : 0;
+        }
+    }
+
     bool pwm_found = false;
 
     auto maybe_update_min = [&](float edits, size_t idx, int direction) {
@@ -740,6 +751,21 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     };
 
     for (size_t offset = 0; offset < max_start; ++offset) {
+        // Sliding N-count maintenance (for offset > 0, slide the window by 1)
+        if (use_n_skip && offset > 0) {
+            // Remove the base that just left the window
+            n_count -= (fwd_bidx[offset - 1] >= 4) ? 1 : 0;
+            // Add the base that just entered the window
+            if (offset + motif_length - 1 < target_length) {
+                n_count += (fwd_bidx[offset + motif_length - 1] >= 4) ? 1 : 0;
+            }
+        }
+
+        // Skip windows with too many N-bases (each N forces a mandatory edit)
+        if (use_n_skip && n_count > m_max_edits) {
+            continue;
+        }
+
         const char* window_start = seq_data + offset;
         int seq_avail = static_cast<int>(target_length - offset);
 
