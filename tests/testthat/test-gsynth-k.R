@@ -265,10 +265,13 @@ test_that("k with 1D stratification", {
     }
     gvtrack.create("g_frac_k", NULL, "kmer.frac", kmer = "G")
     gvtrack.create("c_frac_k", NULL, "kmer.frac", kmer = "C")
-    on.exit({
-        if ("g_frac_k" %in% gvtrack.ls()) gvtrack.rm("g_frac_k")
-        if ("c_frac_k" %in% gvtrack.ls()) gvtrack.rm("c_frac_k")
-    }, add = TRUE)
+    on.exit(
+        {
+            if ("g_frac_k" %in% gvtrack.ls()) gvtrack.rm("g_frac_k")
+            if ("c_frac_k" %in% gvtrack.ls()) gvtrack.rm("c_frac_k")
+        },
+        add = TRUE
+    )
 
     test_intervals <- gintervals(1, 0, 100000)
 
