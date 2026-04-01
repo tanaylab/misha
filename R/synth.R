@@ -337,7 +337,7 @@ gsynth.bin_map <- function(breaks, merge_ranges = NULL) {
 #'        with fewer observations will be marked as NA (not learned) and a warning will
 #'        be issued. Default is 0 (no minimum). During sampling, NA bins will fall back
 #'        to uniform sampling unless merged via \code{bin_merge}.
-#' @param k Integer Markov order (1--8). Default is 5, which models 6-mer
+#' @param k Integer Markov order (1--10). Default is 5, which models 6-mer
 #'        (context of length 5 plus the emitted base) transition probabilities.
 #'        Higher values capture longer-range sequence dependencies but require
 #'        exponentially more memory (\eqn{4^k} context states).
@@ -419,8 +419,8 @@ gsynth.train <- function(...,
     .gcheckroot()
 
     # Validate k (Markov order)
-    if (!is.numeric(k) || length(k) != 1L || is.na(k) || k != as.integer(k) || k < 1L || k > 8L) {
-        stop("k must be a single integer between 1 and 8", call. = FALSE)
+    if (!is.numeric(k) || length(k) != 1L || is.na(k) || k != as.integer(k) || k < 1L || k > 10L) {
+        stop("k must be a single integer between 1 and 10", call. = FALSE)
     }
     k <- as.integer(k)
     num_kmers <- as.integer(4L^k)

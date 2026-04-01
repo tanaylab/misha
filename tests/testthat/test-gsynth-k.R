@@ -8,19 +8,19 @@ test_that("gsynth.train errors on invalid k values", {
     # k = 0 should error (below minimum of 1)
     expect_error(
         gsynth.train(intervals = test_intervals, iterator = 200, k = 0),
-        "k must be a single integer between 1 and 8"
+        "k must be a single integer between 1 and 10"
     )
 
-    # k = 9 should error (above maximum of 8)
+    # k = 11 should error (above maximum of 10)
     expect_error(
-        gsynth.train(intervals = test_intervals, iterator = 200, k = 9),
-        "k must be a single integer between 1 and 8"
+        gsynth.train(intervals = test_intervals, iterator = 200, k = 11),
+        "k must be a single integer between 1 and 10"
     )
 
     # k = 3.5 should error (non-integer numeric)
     expect_error(
         gsynth.train(intervals = test_intervals, iterator = 200, k = 3.5),
-        "k must be a single integer between 1 and 8"
+        "k must be a single integer between 1 and 10"
     )
 
     # k = "abc" should error (as.integer("abc") produces NA)
@@ -28,7 +28,7 @@ test_that("gsynth.train errors on invalid k values", {
         suppressWarnings(
             gsynth.train(intervals = test_intervals, iterator = 200, k = "abc")
         ),
-        "k must be a single integer between 1 and 8"
+        "k must be a single integer between 1 and 10"
     )
 })
 

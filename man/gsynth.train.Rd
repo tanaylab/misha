@@ -41,7 +41,7 @@ with fewer observations will be marked as NA (not learned) and a warning will
 be issued. Default is 0 (no minimum). During sampling, NA bins will fall back
 to uniform sampling unless merged via \code{bin_merge}.}
 
-\item{k}{Integer Markov order (1--8). Default is 5, which models 6-mer
+\item{k}{Integer Markov order (1--10). Default is 5, which models 6-mer
 (context of length 5 plus the emitted base) transition probabilities.
 Higher values capture longer-range sequence dependencies but require
 exponentially more memory (\eqn{4^k} context states).}

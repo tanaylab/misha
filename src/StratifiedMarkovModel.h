@@ -35,9 +35,9 @@ constexpr int NUM_BASES = 4;
 class StratifiedMarkovModel {
 public:
     // Maximum supported Markov order
-    static constexpr int MAX_K = 8;
-    // Maximum number of k-mers (4^MAX_K = 65536)
-    static constexpr int MAX_KMERS = 65536;
+    static constexpr int MAX_K = 10;
+    // Maximum number of k-mers (4^MAX_K = 1048576)
+    static constexpr int MAX_KMERS = 1048576;
 
     StratifiedMarkovModel();
 
