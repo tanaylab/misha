@@ -1,7 +1,7 @@
 /*
  * GenomeSynthTrain.cpp
  *
- * C++ implementation for training a stratified Markov-5 model
+ * C++ implementation for training a stratified Markov-k model
  * from genomic sequences.
  */
 
@@ -28,7 +28,7 @@ using namespace rdb;
 extern "C" {
 
 /**
- * C_gsynth_train: Train a stratified Markov-5 model from genome sequences.
+ * C_gsynth_train: Train a stratified Markov-k model from genome sequences.
  *
  * @param _chrom_ids Integer vector of chromosome IDs to process
  * @param _chrom_starts Integer vector of start positions for each chromosome
@@ -48,10 +48,17 @@ extern "C" {
 SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                      SEXP _bin_indices, SEXP _iter_starts, SEXP _iter_chroms,
                      SEXP _breaks, SEXP _bin_map, SEXP _mask,
-                     SEXP _pseudocount, SEXP _envir) {
+                     SEXP _pseudocount, SEXP _k, SEXP _envir) {
     try {
         RdbInitializer rdb_init;
         IntervUtils iu(_envir);
+
+        // Parse Markov order k (default 5 for backward compatibility)
+        int k = Rf_isNull(_k) ? 5 : INTEGER(_k)[0];
+        if (k < 1 || k > StratifiedMarkovModel::MAX_K) {
+            verror("k must be between 1 and %d", StratifiedMarkovModel::MAX_K);
+        }
+        int kmer_len = k + 1;  // sliding window length: k context + 1 next base
 
         // Extract chromosome ranges
         int num_chroms = Rf_length(_chrom_ids);
@@ -117,7 +124,7 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
 
         // Initialize the Markov model
         StratifiedMarkovModel model;
-        model.init(num_bins, breaks_vec);
+        model.init(num_bins, breaks_vec, k);
 
         int iter_size = 0;
         if (num_iter_positions > 0) {
@@ -173,7 +180,7 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
             vector<char> seq;
             seqfetch.read_interval(chrom_interval, iu.get_chromkey(), seq);
 
-            if (seq.size() < 6) continue;  // Need at least 6bp for a 6-mer
+            if ((int)seq.size() < kmer_len) continue;  // Need at least (k+1) bp
 
             // Get mask intervals for this chromosome
             const vector<GInterval>& mask_ivs = mask_per_chrom[chromid];
@@ -182,9 +189,9 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
             const vector<pair<int64_t, int>>& bins = chrom_bins[chromid];
             size_t bin_cursor = 0;
 
-            // Scan with 6-mer sliding window
+            // Scan with (k+1)-mer sliding window
             int64_t seq_size = static_cast<int64_t>(seq.size());
-            for (int64_t pos = 0; pos <= seq_size - 6; ++pos) {
+            for (int64_t pos = 0; pos <= seq_size - kmer_len; ++pos) {
                 int64_t genome_pos = start + pos;
 
                 // Check if masked
@@ -193,9 +200,9 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                     continue;
                 }
 
-                // Check for N's in the 6-mer
+                // Check for N's in the (k+1)-mer
                 bool has_n = false;
-                for (int i = 0; i < 6; ++i) {
+                for (int i = 0; i < kmer_len; ++i) {
                     char base = seq[pos + i];
                     if (StratifiedMarkovModel::encode_base(base) < 0) {
                         has_n = true;
@@ -224,10 +231,10 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                     continue;  // Position not covered by iterator
                 }
 
-                // Encode 5-mer context and next base
-                int context_idx = StratifiedMarkovModel::encode_5mer(&seq[pos]);
+                // Encode k-mer context and next base
+                int context_idx = StratifiedMarkovModel::encode_kmer(&seq[pos], k);
                 int next_base_idx =
-                    StratifiedMarkovModel::encode_base(seq[pos + 5]);
+                    StratifiedMarkovModel::encode_base(seq[pos + k]);
 
                 if (context_idx >= 0 && next_base_idx >= 0) {
                     // Add forward strand count
@@ -236,8 +243,8 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                     // Add reverse complement count for strand symmetry
                     // This ensures the model learns symmetric transition probabilities
                     int revcomp_context_idx, revcomp_next_idx;
-                    StratifiedMarkovModel::revcomp_6mer(
-                        context_idx, next_base_idx,
+                    StratifiedMarkovModel::revcomp_kmer(
+                        context_idx, next_base_idx, k,
                         revcomp_context_idx, revcomp_next_idx);
                     model.increment_count(bin_idx, revcomp_context_idx, revcomp_next_idx);
 
@@ -299,31 +306,32 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
         // We'll serialize it to a temporary buffer
         // For now, we store counts and CDFs as nested lists
 
-        // counts: list of matrices (num_bins x (1024 * 4))
+        // counts: list of matrices (num_bins x (num_kmers * 4))
         SEXP r_counts, r_cdf;
         rprotect(r_counts = Rf_allocVector(VECSXP, num_bins));
         rprotect(r_cdf = Rf_allocVector(VECSXP, num_bins));
 
         const auto& model_counts = model.get_counts();
         const auto& model_cdf = model.get_cdf();
+        int num_kmers = model.get_num_kmers();
 
         for (int b = 0; b < num_bins; ++b) {
-            // Counts matrix: 1024 rows x 4 cols (column-major for R)
+            // Counts matrix: num_kmers rows x 4 cols (column-major for R)
             SEXP count_mat;
-            rprotect(count_mat = Rf_allocMatrix(REALSXP, NUM_5MERS, NUM_BASES));
+            rprotect(count_mat = Rf_allocMatrix(REALSXP, num_kmers, NUM_BASES));
             double* count_data = REAL(count_mat);
 
             SEXP cdf_mat;
-            rprotect(cdf_mat = Rf_allocMatrix(REALSXP, NUM_5MERS, NUM_BASES));
+            rprotect(cdf_mat = Rf_allocMatrix(REALSXP, num_kmers, NUM_BASES));
             double* cdf_data = REAL(cdf_mat);
 
-            for (int ctx = 0; ctx < NUM_5MERS; ++ctx) {
+            for (int ctx = 0; ctx < num_kmers; ++ctx) {
                 for (int base = 0; base < NUM_BASES; ++base) {
                     // R matrices are column-major: [row + col * nrow]
-                    count_data[ctx + base * NUM_5MERS] =
-                        static_cast<double>(model_counts[b][ctx][base]);
-                    cdf_data[ctx + base * NUM_5MERS] =
-                        static_cast<double>(model_cdf[b][ctx][base]);
+                    count_data[ctx + base * num_kmers] =
+                        static_cast<double>(model_counts[b][ctx * NUM_BASES + base]);
+                    cdf_data[ctx + base * num_kmers] =
+                        static_cast<double>(model_cdf[b][ctx * NUM_BASES + base]);
                 }
             }
 
