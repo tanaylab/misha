@@ -1,3 +1,7 @@
+# misha 5.6.9
+
+* Added `k` parameter to `gsynth.train()` to configure the Markov order (1-8, default 5).
+
 # misha 5.6.8
 
 * Added `direction` parameter ("above"/"below") to PWM edit distance functions for computing minimum edits to bring score below a threshold (motif disruption).

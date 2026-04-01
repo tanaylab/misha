@@ -2,7 +2,7 @@
  * GenomeSynthSample.cpp
  *
  * C++ implementation for sampling a synthetic genome from a trained
- * stratified Markov-5 model.
+ * stratified Markov-k model.
  */
 
 #include <algorithm>
@@ -71,7 +71,8 @@ extern "C" {
 SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                       SEXP _iter_starts, SEXP _iter_chroms, SEXP _intervals,
                       SEXP _mask_copy, SEXP _output_path,
-                      SEXP _output_format, SEXP _n_samples, SEXP _envir) {
+                      SEXP _output_format, SEXP _n_samples, SEXP _k,
+                      SEXP _envir) {
     try {
         struct RNGStateGuard {
             bool active = false;
@@ -99,6 +100,14 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         RNGStateGuard rng_guard;
         rng_guard.acquire();
 
+        // Parse Markov order k (default 5 for backward compatibility)
+        int k = Rf_isNull(_k) ? 5 : INTEGER(_k)[0];
+        if (k < 1 || k > StratifiedMarkovModel::MAX_K) {
+            verror("k must be between 1 and %d", StratifiedMarkovModel::MAX_K);
+        }
+        int num_kmers = 1;
+        for (int i = 0; i < k; ++i) num_kmers *= NUM_BASES;  // 4^k
+
         // Extract breaks
         int num_breaks = Rf_length(_breaks);
         int num_bins = num_breaks - 1;
@@ -107,20 +116,16 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         }
         double* breaks = REAL(_breaks);
         vector<double> breaks_vec(breaks, breaks + num_breaks);
-
-        // Build CDF lookup from R list
-        // cdf_list is a list of matrices, one per bin
-        // Each matrix is 1024 rows x 4 cols
-        vector<vector<array<float, NUM_BASES>>> cdf_data(num_bins);
+        vector<vector<float>> cdf_data(num_bins);
         for (int b = 0; b < num_bins; ++b) {
             SEXP cdf_mat = VECTOR_ELT(_cdf_list, b);
             double* cdf_ptr = REAL(cdf_mat);
-            cdf_data[b].resize(NUM_5MERS);
-            for (int ctx = 0; ctx < NUM_5MERS; ++ctx) {
+            cdf_data[b].resize(num_kmers * NUM_BASES);
+            for (int ctx = 0; ctx < num_kmers; ++ctx) {
                 for (int base = 0; base < NUM_BASES; ++base) {
                     // R matrices are column-major: [row + col * nrow]
-                    cdf_data[b][ctx][base] =
-                        static_cast<float>(cdf_ptr[ctx + base * NUM_5MERS]);
+                    cdf_data[b][ctx * NUM_BASES + base] =
+                        static_cast<float>(cdf_ptr[ctx + base * num_kmers]);
                 }
             }
         }
@@ -291,8 +296,8 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                         ++mask_cursor;
                     }
 
-                    // Initialize first 5 bases, honoring mask_copy semantics.
-                    int64_t init_len = min<int64_t>(5, interval_len);
+                    // Initialize first k bases, honoring mask_copy semantics.
+                    int64_t init_len = min<int64_t>(k, interval_len);
                     for (int64_t i = 0; i < init_len; ++i) {
                         int64_t pos = interval_start + i;
                         // Check if this position should be copied from original
@@ -335,21 +340,21 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                             }
                         }
 
-                        // Get 5-mer context from already-sampled bases
-                        int context_idx = StratifiedMarkovModel::encode_5mer(
-                            &synth_seq[rel_pos - 5]);
+                        // Get k-mer context from already-sampled bases
+                        int context_idx = StratifiedMarkovModel::encode_kmer(
+                            &synth_seq[rel_pos - k], k);
 
                         int next_base;
                         if (context_idx < 0 || bin_idx < 0 || bin_idx >= num_bins) {
                             // Invalid context or bin - sample uniformly
                             next_base = static_cast<int>(unif_rand() * NUM_BASES);
                         } else {
-                            // Sample from CDF
+                            // Sample from CDF (flat layout: ctx * NUM_BASES + base)
                             float r = unif_rand();
-                            const auto& cdf = cdf_data[bin_idx][context_idx];
+                            int base_offset = context_idx * NUM_BASES;
                             next_base = NUM_BASES - 1;
                             for (int b = 0; b < NUM_BASES; ++b) {
-                                if (r < cdf[b]) {
+                                if (r < cdf_data[bin_idx][base_offset + b]) {
                                     next_base = b;
                                     break;
                                 }
