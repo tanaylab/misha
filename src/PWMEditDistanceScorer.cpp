@@ -968,8 +968,13 @@ float PWMEditDistanceScorer::compute_with_indels(const int* bidx_arr, int seq_le
         const int cols = W + 1;
         const int indel_levels = D + 1;  // k = 0, 1, ..., D
 
-        // Flattened 3D DP table
-        std::vector<double> dp(rows * cols * indel_levels, dp_sentinel);
+        // Reuse pre-allocated DP buffer to avoid per-window heap allocation
+        size_t dp_size = (size_t)rows * cols * indel_levels;
+        if (m_dp_buffer.size() < dp_size) {
+            m_dp_buffer.resize(dp_size);
+        }
+        std::fill(m_dp_buffer.begin(), m_dp_buffer.begin() + dp_size, dp_sentinel);
+        auto& dp = m_dp_buffer;
 
         auto idx3 = [cols, indel_levels](int i, int j, int k) -> int {
             return i * cols * indel_levels + j * indel_levels + k;
