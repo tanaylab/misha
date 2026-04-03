@@ -26,6 +26,17 @@
 
 static const double kLogQuarter = std::log(0.25);
 
+// Enum for PWM scoring mode — avoids string comparison in hot loops
+enum PwmMode { PWM_LSE, PWM_MAX, PWM_COUNT, PWM_POS };
+
+static PwmMode parse_pwm_mode(const std::string& mode) {
+    if (mode == "lse") return PWM_LSE;
+    if (mode == "max") return PWM_MAX;
+    if (mode == "count") return PWM_COUNT;
+    if (mode == "pos") return PWM_POS;
+    return PWM_MAX; // default
+}
+
 // Helper struct for score results
 struct ScoreResult {
     double value;
@@ -166,6 +177,7 @@ static ScoreResult score_pwm_over_range(
     ScoreResult result;
     int w = params.pssm.size();
     bool use_spat = !params.spat_log_factors.empty();
+    PwmMode pwm_mode = parse_pwm_mode(mode);
 
     auto log_sum_exp_add = [](double a, double b) -> double {
         if (a == R_NegInf) return b;
@@ -230,7 +242,7 @@ static ScoreResult score_pwm_over_range(
 
     if (!skip_gaps || gaps == nullptr) {
         if (start_max0 < start_min0) {
-            if (mode == "count") {
+            if (pwm_mode == PWM_COUNT) {
                 result.value = 0.0;
             } else {
                 result.value = R_NaReal;
@@ -286,7 +298,7 @@ static ScoreResult score_pwm_over_range(
                 if (rev_score > R_NegInf) rev_score += spat_log;
             }
 
-            if (mode == "lse") {
+            if (pwm_mode == PWM_LSE) {
                 if (params.bidirect) {
                     total = log_sum_exp_add(total, fwd_score);
                     total = log_sum_exp_add(total, rev_score);
@@ -294,21 +306,20 @@ static ScoreResult score_pwm_over_range(
                     double this_score = (params.strand_mode >= 0) ? fwd_score : rev_score;
                     total = log_sum_exp_add(total, this_score);
                 }
-            } else if (mode == "max") {
+            } else if (pwm_mode == PWM_MAX) {
                 double this_max = std::max(fwd_score, rev_score);
                 if (this_max > best_score) {
                     best_score = this_max;
                 }
-            } else if (mode == "count") {
+            } else if (pwm_mode == PWM_COUNT) {
                 if (params.bidirect) {
                     if (fwd_score >= params.score_thresh) count++;
                     if (rev_score >= params.score_thresh) count++;
                 } else {
-                    // single-strand mode: use the strand selected by strand_mode
                     double one = (params.strand_mode >= 0) ? fwd_score : rev_score;
                     if (one >= params.score_thresh) count++;
                 }
-            } else if (mode == "pos") {
+            } else if (pwm_mode == PWM_POS) {
                 if (fwd_score > best_score ||
                     (fwd_score == best_score && s0 < best_start0) ||
                     (fwd_score == best_score && s0 == best_start0 && best_strand == -1)) {
@@ -325,13 +336,13 @@ static ScoreResult score_pwm_over_range(
             }
         }
 
-        if (mode == "lse") {
+        if (pwm_mode == PWM_LSE) {
             result.value = total;
-        } else if (mode == "max") {
+        } else if (pwm_mode == PWM_MAX) {
             result.value = best_score;
-        } else if (mode == "count") {
+        } else if (pwm_mode == PWM_COUNT) {
             result.value = count;
-        } else if (mode == "pos") {
+        } else if (pwm_mode == PWM_POS) {
             if (best_start0 >= 0) {
                 result.has_pos = true;
                 result.pos_1based = best_start0 + 1;
@@ -351,7 +362,7 @@ static ScoreResult score_pwm_over_range(
         int j_max = gp.last_log_window_end_le_phys(end_lim_phys0, w);
 
         if (j_min < 0 || j_max < j_min || static_cast<int>(gp.comp.size()) < w) {
-            if (mode == "count") {
+            if (pwm_mode == PWM_COUNT) {
                 result.value = 0.0;
             } else {
                 result.value = R_NaReal;
@@ -410,7 +421,7 @@ static ScoreResult score_pwm_over_range(
                 if (rev_score > R_NegInf) rev_score += spat_log;
             }
 
-            if (mode == "lse") {
+            if (pwm_mode == PWM_LSE) {
                 if (params.bidirect) {
                     total = log_sum_exp_add(total, fwd_score);
                     total = log_sum_exp_add(total, rev_score);
@@ -418,12 +429,12 @@ static ScoreResult score_pwm_over_range(
                     double this_score = (params.strand_mode >= 0) ? fwd_score : rev_score;
                     total = log_sum_exp_add(total, this_score);
                 }
-            } else if (mode == "max") {
+            } else if (pwm_mode == PWM_MAX) {
                 double this_max = std::max(fwd_score, rev_score);
                 if (this_max > best_score) {
                     best_score = this_max;
                 }
-            } else if (mode == "count") {
+            } else if (pwm_mode == PWM_COUNT) {
                 if (params.bidirect) {
                     if (fwd_score >= params.score_thresh) count++;
                     if (rev_score >= params.score_thresh) count++;
@@ -431,7 +442,7 @@ static ScoreResult score_pwm_over_range(
                     double one = (params.strand_mode >= 0) ? fwd_score : rev_score;
                     if (one >= params.score_thresh) count++;
                 }
-            } else if (mode == "pos") {
+            } else if (pwm_mode == PWM_POS) {
                 if (fwd_score > best_score ||
                     (fwd_score == best_score && start_phys0 < (best_j >= 0 ? gp.log_to_phys[best_j] : INT_MAX)) ||
                     (fwd_score == best_score && start_phys0 == (best_j >= 0 ? gp.log_to_phys[best_j] : 0) && best_strand == -1)) {
@@ -448,13 +459,13 @@ static ScoreResult score_pwm_over_range(
             }
         }
 
-        if (mode == "lse") {
+        if (pwm_mode == PWM_LSE) {
             result.value = total;
-        } else if (mode == "max") {
+        } else if (pwm_mode == PWM_MAX) {
             result.value = best_score;
-        } else if (mode == "count") {
+        } else if (pwm_mode == PWM_COUNT) {
             result.value = count;
-        } else if (mode == "pos") {
+        } else if (pwm_mode == PWM_POS) {
             if (best_j >= 0) {
                 result.has_pos = true;
                 result.pos_1based = gp.log_to_phys[best_j] + 1;
