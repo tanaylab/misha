@@ -1,6 +1,8 @@
 # misha 5.6.9
 
 * Added `k` parameter to `gsynth.train()` to configure the Markov order (1-8, default 5).
+* 14-20x faster PWM scoring across all code paths (`gextract` with PWM vtracks, `gseq.pwm`, PWM edit distance). Replaced switch-statement DNA base encoding with O(1) lookup tables, eliminating branch mispredictions in the inner scoring loop.
+* Fixed a typo in `DnaPSSM::integrate_energy` where `case 'h'` was written instead of `case 'g'` in the reverse-complement scoring path. This caused lowercase 'g' bases to be silently skipped (contributing zero to the score) instead of being complemented to 'C'. The affected function was dead code (never called by any user-facing API — all callers use `integrate_energy_logspat` instead), so no user-visible results were affected.
 
 # misha 5.6.8
 

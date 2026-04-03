@@ -42,12 +42,16 @@ int64_t GIntervals::range() const
 
 int64_t GIntervals::range(int chromid) const
 {
-	int64_t range = 0;
+	build_chrom_map();
+	if ((uint64_t)chromid >= m_chrom2itr.size())
+		return 0;
 
-	for (const_iterator iinterv = begin(); iinterv < end(); ++iinterv) {
-		if (iinterv->chromid == chromid) 
-			range += iinterv->range();
-	}
+	const_iterator chrom_begin = m_chrom2itr[chromid];
+	const_iterator chrom_end = ((uint64_t)chromid == m_chrom2itr.size() - 1) ? end() : m_chrom2itr[chromid + 1];
+
+	int64_t range = 0;
+	for (const_iterator iinterv = chrom_begin; iinterv < chrom_end; ++iinterv)
+		range += iinterv->range();
 	return range;
 }
 

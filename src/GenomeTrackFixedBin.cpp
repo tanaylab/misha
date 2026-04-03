@@ -310,8 +310,9 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 					appended = 1;
 				}
 			} else {
-				vector<float> new_vals;
-				appended = read_bins_bulk(m_lse_prev_ebin, step, new_vals);
+				m_scratch_bin_vals.clear();
+				appended = read_bins_bulk(m_lse_prev_ebin, step, m_scratch_bin_vals);
+				auto& new_vals = m_scratch_bin_vals;
 				if (appended == step) {
 					for (int64_t i = 0; i < step && !m_lse_window_bins.empty(); ++i) {
 						float old_val = m_lse_window_bins.front();
@@ -351,8 +352,9 @@ void GenomeTrackFixedBin::read_interval_reducers_only(const GInterval &interval)
 	}
 
 	// Fallback: full window read.
-	vector<float> bin_vals;
-	int64_t bins_read = read_bins_bulk(sbin, window_size, bin_vals);
+	m_scratch_bin_vals.clear();
+	int64_t bins_read = read_bins_bulk(sbin, window_size, m_scratch_bin_vals);
+	auto& bin_vals = m_scratch_bin_vals;
 
 	if (need_lse)
 		m_running_lse.clear();
@@ -448,8 +450,9 @@ void GenomeTrackFixedBin::read_interval_single_function(const GInterval &interva
 	int64_t ebin = (int64_t)ceil(interval.end / (double)m_bin_size);
 
 	// Read all bins in the interval
-	vector<float> bin_vals;
-	int64_t bins_read = read_bins_bulk(sbin, ebin - sbin, bin_vals);
+	m_scratch_bin_vals.clear();
+	int64_t bins_read = read_bins_bulk(sbin, ebin - sbin, m_scratch_bin_vals);
+	auto& bin_vals = m_scratch_bin_vals;
 
 	if (bins_read > 0) {
 		m_cached_bin_idx = sbin + bins_read - 1;
@@ -827,8 +830,9 @@ void GenomeTrackFixedBin::read_interval(const GInterval &interval)
 
 		if (!simple_sliding_used) {
 			// Bulk read all bins at once instead of one-by-one
-			vector<float> bin_vals;
-			int64_t bins_read = read_bins_bulk(sbin, window_size, bin_vals);
+			m_scratch_bin_vals.clear();
+			int64_t bins_read = read_bins_bulk(sbin, window_size, m_scratch_bin_vals);
+			auto& bin_vals = m_scratch_bin_vals;
 			bool lse_sliding_used = false;
 
 			if (has_function(LSE) && m_lse_sliding_valid && bins_read > 0 &&
