@@ -343,11 +343,11 @@ void GenomeTrackArrays::read_array_vals(uint64_t idx)
 
 		m_array_vals.resize(num_vals);
 
-		for (unsigned i = 0; i < num_vals; ++i) {
-			ArrayVal &array_val = m_array_vals[i];
-
-			m_bfile.read(&array_val.val, sizeof(array_val.val));
-			if (m_bfile.read(&array_val.idx, sizeof(array_val.idx)) != sizeof(array_val.idx)) {
+		if (num_vals > 0) {
+			static_assert(sizeof(ArrayVal) == sizeof(float) + sizeof(unsigned),
+						  "ArrayVal must be packed for bulk read");
+			size_t total_bytes = num_vals * sizeof(ArrayVal);
+			if (m_bfile.read(m_array_vals.data(), total_bytes) != total_bytes) {
 				if (m_bfile.error())
 					TGLError<GenomeTrackArrays>("Failed to read %s track file %s: %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str(), strerror(errno));
 				TGLError<GenomeTrackArrays>("Invalid format of %s track file %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str());

@@ -168,8 +168,8 @@ void Linear_ramp_smoother::set_next_sample(double sample)
 	}
 	m_vals[m_left_idx] = sample;
 
-	m_left_idx = (m_left_idx + 1) % m_num_samples;
-	m_peak_idx = (m_peak_idx + 1) % m_num_samples;
+	if (++m_left_idx >= m_num_samples) m_left_idx = 0;
+	if (++m_peak_idx >= m_num_samples) m_peak_idx = 0;
 
 	// over time the loss of precision in floating point operations is accumulated =>
 	// recalculate all from scratch each 1/2 window size samples
@@ -282,8 +282,8 @@ void Mean_smoother::set_next_sample(double sample)
 
 	m_vals[m_left_idx] = sample;
 
-	m_left_idx = (m_left_idx + 1) % m_num_samples;
-	m_peak_idx = (m_peak_idx + 1) % m_num_samples;
+	if (++m_left_idx >= m_num_samples) m_left_idx = 0;
+	if (++m_peak_idx >= m_num_samples) m_peak_idx = 0;
 
 	// over time the loss of precision in floating point operations is accumulated =>
 	// recalculate all from scratch each 1/2 window size samples

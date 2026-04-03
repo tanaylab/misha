@@ -92,6 +92,7 @@ protected:
 	// Scratch buffers reused across read_interval calls to avoid per-call heap allocation
 	std::vector<float> m_scratch_all_values;
 	std::vector<double> m_scratch_all_positions;
+	std::vector<float> m_scratch_bin_vals;
 
 	void read_interval_reducers_only(const GInterval &interval);
 	void read_interval_avg_nearest_only(const GInterval &interval);

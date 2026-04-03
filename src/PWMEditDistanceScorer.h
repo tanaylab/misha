@@ -136,6 +136,9 @@ private:
     std::vector<int> m_exact_count;
     std::vector<size_t> m_exact_touched;
 
+    // Reusable DP buffer for compute_with_indels (avoid per-window heap allocation)
+    std::vector<double> m_dp_buffer;
+
     // Pigeonhole pre-filter: divide motif into (K+1) blocks; if a window matches
     // with at most K total edits, at least one block must match exactly (zero edits)
     // at some shift in {-D, ..., +D}.
