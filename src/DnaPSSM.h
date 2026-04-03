@@ -6,10 +6,20 @@
 
 #include <list>
 #include <string>
+#include <cstdint>
 
 #include "config.h"
 #include "util.h"
 #include "RaList.h"
+
+// Lookup tables for O(1) base encoding (replacing switch statements)
+// BASE_ENCODE: A/a->0, C/c->1, G/g->2, T/t->3, else->-1
+// COMPLEMENT_ENCODE: A/a->3(T), C/c->2(G), G/g->1(C), T/t->0(A), else->-1
+struct DnaLookupTables {
+	static const int8_t BASE_ENCODE[256];
+	static const int8_t COMPLEMENT_ENCODE[256];
+	static const int8_t NEUTRAL_CHAR[256]; // 1 for N/n/*, 0 otherwise
+};
 
 class DnaProbVec {
 private:
@@ -18,21 +28,7 @@ private:
 
 public:
 	int encode(char c) const {
-		switch(c) {
-			case 'a': 
-			case 'A' : return(0);
-				   break;
-			case 'c':
-			case 'C' : return(1);
-				   break;
-			case 'g':
-			case 'G' : return(2);
-				   break;
-			case 't':
-			case 'T' : return(3);
-				   break;
-			default:   return(-1);
-		}
+		return DnaLookupTables::BASE_ENCODE[(unsigned char)c];
 	}
 	DnaProbVec() {
 		m_p[0] = 0.25;

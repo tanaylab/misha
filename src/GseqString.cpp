@@ -186,13 +186,12 @@ static ScoreResult score_pwm_over_range(
         return na;
     };
 
-    // Allocation-free window scoring using const char* and O(1) neutral char lookup
+    // Allocation-free window scoring using const char* and O(1) lookup tables
     auto window_log_prob_ptr = [&](const char* window_start, bool reverse) -> double {
         double logp = 0.0;
         if (!reverse) {
             for (int idx = 0; idx < w; ++idx) {
-                char c = window_start[idx];
-                // O(1) lookup instead of O(n) linear scan
+                unsigned char c = (unsigned char)window_start[idx];
                 if (neutral_chars && neutral_chars->check(c)) {
                     if (neutral_policy == NEUTRAL_POLICY_AVERAGE) {
                         logp += params.pssm[idx].get_avg_log_prob();
@@ -202,16 +201,15 @@ static ScoreResult score_pwm_over_range(
                         return std::numeric_limits<double>::quiet_NaN();
                     }
                 } else {
-                    int code = params.pssm[idx].encode(c);
+                    int code = DnaLookupTables::BASE_ENCODE[c];
                     if (code < 0) return R_NegInf;
                     logp += params.pssm[idx].get_log_prob_from_code(code);
                 }
             }
         } else {
             for (int idx = 0; idx < w; ++idx) {
-                char c = window_start[idx];
+                unsigned char c = (unsigned char)window_start[idx];
                 int rev_idx = w - idx - 1;
-                // O(1) lookup instead of O(n) linear scan
                 if (neutral_chars && neutral_chars->check(c)) {
                     if (neutral_policy == NEUTRAL_POLICY_AVERAGE) {
                         logp += params.pssm[rev_idx].get_avg_log_prob();
@@ -221,15 +219,8 @@ static ScoreResult score_pwm_over_range(
                         return std::numeric_limits<double>::quiet_NaN();
                     }
                 } else {
-                    int code;
-                    // Complement base mapping: A->T(3), T->A(0), C->G(2), G->C(1)
-                    switch (c) {
-                        case 'a': case 'A': code = 3; break;
-                        case 't': case 'T': code = 0; break;
-                        case 'c': case 'C': code = 2; break;
-                        case 'g': case 'G': code = 1; break;
-                        default: return R_NegInf;
-                    }
+                    int code = DnaLookupTables::COMPLEMENT_ENCODE[c];
+                    if (code < 0) return R_NegInf;
                     logp += params.pssm[rev_idx].get_log_prob_from_code(code);
                 }
             }
