@@ -332,6 +332,13 @@
         }
     }
 
+    # For direction="below", default score.min to score.thresh: windows already
+    # scoring below the threshold trivially need 0 edits and would dominate the
+    # minimum, making the result always 0.
+    if (direction == "below" && is.null(score.min)) {
+        score.min <- score.thresh
+    }
+
     # Set params with processed values
     list(
         pssm = pssm,
@@ -424,6 +431,12 @@
         if (!is.numeric(score.max) || length(score.max) != 1) {
             stop("score.max must be NULL or a single numeric value")
         }
+    }
+
+    # For direction="below", default score.min to score.thresh (see comment
+    # in .vtrack_params_pwm_edit_distance for rationale).
+    if (direction == "below" && is.null(score.min)) {
+        score.min <- score.thresh
     }
 
     # Set params with processed values
@@ -634,7 +647,7 @@
 #'   \item \code{score.thresh}: For edit distance functions, this is the PWM log-likelihood target that the algorithm tries to reach via substitutions. The edit distance is the minimum number of single-base changes needed for the window to achieve this score.
 #'   \item \code{max_edits}: For edit distance functions only. Optional positive integer setting the maximum search depth. If reaching the threshold requires more than \code{max_edits} substitutions, NA is returned. When NULL (default), exact computation is used.
 #'   \item \code{max_indels}: For \code{pwm.edit_distance}, \code{pwm.edit_distance.pos}, and \code{pwm.max.edit_distance} only. Not supported by LSE variants. Optional non-negative integer specifying the maximum number of insertions and deletions allowed (default 0, substitutions only). When > 0, a banded Needleman-Wunsch DP is used to find the minimum total edits (substitutions + indels) to reach the score threshold. Typical values are 1-2.
-#'   \item \code{score.min}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is below \code{score.min} are skipped (edit distance returns NA). Improves performance by avoiding expensive computation on low-scoring windows. For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter).
+#'   \item \code{score.min}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is below \code{score.min} are skipped (edit distance returns NA). Improves performance by avoiding expensive computation on low-scoring windows. For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter). When \code{direction = "below"} and \code{score.min} is NULL, it defaults to \code{score.thresh} — windows already scoring below the threshold trivially need 0 edits, so filtering them out gives the useful semantics of "how many edits to disrupt this motif match". Use \code{score.min = -Inf} to disable this.
 #'   \item \code{score.max}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is above \code{score.max} are skipped (edit distance returns NA). Combined with \code{score.min}, enables efficient regime-specific queries (e.g., only positions with score in [\code{score.min}, \code{score.max}]). For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter).
 #'   \item \code{direction}: For edit distance functions only. Direction of the edit distance query: \code{"above"} (default) finds the minimum edits to bring the score above \code{score.thresh}; \code{"below"} finds the minimum edits to bring the score below \code{score.thresh}.
 #' }

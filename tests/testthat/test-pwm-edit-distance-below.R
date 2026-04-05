@@ -15,6 +15,7 @@ test_that("pwm.edit_distance direction=below basic functionality works", {
     gvtrack.create("edist_below", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -43,6 +44,7 @@ test_that("pwm.edit_distance direction=below returns 0 when already below thresh
     gvtrack.create("edist_below_already", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -72,6 +74,7 @@ test_that("pwm.edit_distance direction=below returns NA for unreachable threshol
     gvtrack.create("edist_below_impossible", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -103,6 +106,7 @@ test_that("pwm.edit_distance direction=below matches R reference on multiple int
     gvtrack.create("edist_below_ref", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -142,6 +146,7 @@ test_that("pwm.edit_distance direction=below max_edits cap works", {
     gvtrack.create("edist_below_exact", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -150,6 +155,7 @@ test_that("pwm.edit_distance direction=below max_edits cap works", {
     gvtrack.create("edist_below_max1", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold, max_edits = 1,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -192,6 +198,7 @@ test_that("pwm.edit_distance direction=below bidirectional considers both strand
     gvtrack.create("edist_below_fwd", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, strand = 1, extend = FALSE, prior = 0
     )
@@ -200,6 +207,7 @@ test_that("pwm.edit_distance direction=below bidirectional considers both strand
     gvtrack.create("edist_below_rev", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, strand = -1, extend = FALSE, prior = 0
     )
@@ -208,6 +216,7 @@ test_that("pwm.edit_distance direction=below bidirectional considers both strand
     gvtrack.create("edist_below_bidi", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = TRUE, extend = FALSE, prior = 0
     )
@@ -249,6 +258,7 @@ test_that("pwm.edit_distance.pos and pwm.max.edit_distance work with direction=b
     gvtrack.create("edist_below_min", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -256,6 +266,7 @@ test_that("pwm.edit_distance.pos and pwm.max.edit_distance work with direction=b
     gvtrack.create("edist_below_pos", NULL,
         func = "pwm.edit_distance.pos",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -263,6 +274,7 @@ test_that("pwm.edit_distance.pos and pwm.max.edit_distance work with direction=b
     gvtrack.create("edist_below_max_site", NULL,
         func = "pwm.max.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -329,15 +341,24 @@ test_that("pwm.edit_distance direction=below with score.min/score.max filtering"
     test_interval <- gintervals(1, 200, 240)
     threshold <- -5.0
 
-    # Without score filters
-    gvtrack.create("edist_below_nofilt", NULL,
+    # Default (no score.min) — for direction="below", defaults to score.thresh
+    gvtrack.create("edist_below_default", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
 
-    # With -Inf score.min (should not filter anything)
+    # Explicit score.min = score.thresh — should match the default
+    gvtrack.create("edist_below_explicit_thresh", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        score.min = threshold,
+        direction = "below",
+        bidirect = FALSE, extend = FALSE, prior = 0
+    )
+
+    # With -Inf score.min (disables filtering, old behavior)
     gvtrack.create("edist_below_lowfilt", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
@@ -356,17 +377,17 @@ test_that("pwm.edit_distance direction=below with score.min/score.max filtering"
     )
 
     result <- gextract(
-        c("edist_below_nofilt", "edist_below_lowfilt", "edist_below_highfilt"),
+        c("edist_below_default", "edist_below_explicit_thresh", "edist_below_lowfilt", "edist_below_highfilt"),
         test_interval,
         iterator = test_interval
     )
 
-    # Low filter should match no-filter
-    expect_equal(result$edist_below_nofilt[1], result$edist_below_lowfilt[1], tolerance = 1e-6)
+    # Default should match explicit score.min = score.thresh
+    expect_equal(result$edist_below_default[1], result$edist_below_explicit_thresh[1], tolerance = 1e-6)
 
-    # High filter should either be NA or >= unfiltered result
-    if (!is.na(result$edist_below_highfilt[1]) && !is.na(result$edist_below_nofilt[1])) {
-        expect_true(result$edist_below_highfilt[1] >= result$edist_below_nofilt[1])
+    # High filter should either be NA or >= default result
+    if (!is.na(result$edist_below_highfilt[1]) && !is.na(result$edist_below_default[1])) {
+        expect_true(result$edist_below_highfilt[1] >= result$edist_below_default[1])
     }
 })
 
@@ -382,6 +403,7 @@ test_that("pwm.edit_distance direction=below with 1bp iterator matches R referen
     gvtrack.create("edist_below_1bp", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = TRUE, prior = 0
     )
@@ -431,6 +453,7 @@ test_that("pwm.edit_distance direction=below vs direction=above are complementar
     gvtrack.create("edist_below", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -479,6 +502,7 @@ test_that("pwm.edit_distance direction=below with longer motif matches R referen
     gvtrack.create("edist_below_6bp", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -510,6 +534,7 @@ test_that("pwm.edit_distance direction=below with different thresholds is monoto
         gvtrack.create(vnames[i], NULL,
             func = "pwm.edit_distance",
             pssm = pssm, score.thresh = thresholds[i],
+            score.min = -Inf,
             direction = "below",
             bidirect = FALSE, extend = FALSE, prior = 0
         )
@@ -551,6 +576,7 @@ test_that("pwm.edit_distance direction=below with max_edits consistency", {
     gvtrack.create("edist_below_exact", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -560,6 +586,7 @@ test_that("pwm.edit_distance direction=below with max_edits consistency", {
         gvtrack.create(vname, NULL,
             func = "pwm.edit_distance",
             pssm = pssm, score.thresh = threshold, max_edits = k,
+            score.min = -Inf,
             direction = "below",
             bidirect = FALSE, extend = FALSE, prior = 0
         )
@@ -598,6 +625,7 @@ test_that("pwm.edit_distance direction=below with extend flag works", {
     gvtrack.create("edist_below_ext", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = TRUE, prior = 0
     )
@@ -605,6 +633,7 @@ test_that("pwm.edit_distance direction=below with extend flag works", {
     gvtrack.create("edist_below_noext", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -649,6 +678,7 @@ test_that("pwm.edit_distance direction=below with zero-probability columns", {
     gvtrack.create("edist_below_zeros", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -679,6 +709,7 @@ test_that("pwm.edit_distance direction=below with gscreen works", {
     gvtrack.create("edist_below_screen", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -721,6 +752,7 @@ test_that("direction=below with max_indels=1: indels can reduce total edits", {
     gvtrack.create("edist_below_sub", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 0,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -729,6 +761,7 @@ test_that("direction=below with max_indels=1: indels can reduce total edits", {
     gvtrack.create("edist_below_indel1", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -784,18 +817,21 @@ test_that("direction=below with max_indels=2: more indels can further reduce edi
     gvtrack.create("edist_below_d0", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 0,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
     gvtrack.create("edist_below_d1", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
     gvtrack.create("edist_below_d2", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 2,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -865,6 +901,7 @@ test_that("direction=below with max_indels: substitution-only vs indels comparis
     gvtrack.create("edist_below_noindel", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -873,6 +910,7 @@ test_that("direction=below with max_indels: substitution-only vs indels comparis
     gvtrack.create("edist_below_1indel", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -881,6 +919,7 @@ test_that("direction=below with max_indels: substitution-only vs indels comparis
     gvtrack.create("edist_below_2indels", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 2,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -935,12 +974,14 @@ test_that("direction=below with max_indels: cap is respected", {
     gvtrack.create("edist_below_cap_default", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
     gvtrack.create("edist_below_cap0", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 0,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -987,18 +1028,21 @@ test_that("direction=below with indels: consistency - indels always <= sub-only"
     gvtrack.create("edist_below_con_sub", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 0,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
     gvtrack.create("edist_below_con_indel1", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
     gvtrack.create("edist_below_con_indel2", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 2,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1056,18 +1100,21 @@ test_that("direction=below with indels: already below threshold still returns 0"
     gvtrack.create("edist_below_indel_already0", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 0,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
     gvtrack.create("edist_below_indel_already1", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
     gvtrack.create("edist_below_indel_already2", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 2,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1102,6 +1149,7 @@ test_that("direction=below with indels: bidirectional considers both strands", {
     gvtrack.create("edist_below_indel_fwd", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, strand = 1, extend = FALSE, prior = 0
     )
@@ -1110,6 +1158,7 @@ test_that("direction=below with indels: bidirectional considers both strands", {
     gvtrack.create("edist_below_indel_rev", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, strand = -1, extend = FALSE, prior = 0
     )
@@ -1118,6 +1167,7 @@ test_that("direction=below with indels: bidirectional considers both strands", {
     gvtrack.create("edist_below_indel_bidi", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = TRUE, extend = FALSE, prior = 0
     )
@@ -1160,6 +1210,7 @@ test_that("direction=below with indels: max_edits cap interacts correctly with m
     gvtrack.create("edist_below_indel_unlim", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1168,6 +1219,7 @@ test_that("direction=below with indels: max_edits cap interacts correctly with m
     gvtrack.create("edist_below_indel_max1", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1, max_edits = 1,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1176,6 +1228,7 @@ test_that("direction=below with indels: max_edits cap interacts correctly with m
     gvtrack.create("edist_below_indel_max3", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1, max_edits = 3,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1234,6 +1287,7 @@ test_that("direction=below with indels: 1bp iterator matches interval-level resu
     gvtrack.create("edist_below_indel_int", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1242,6 +1296,7 @@ test_that("direction=below with indels: 1bp iterator matches interval-level resu
     gvtrack.create("edist_below_indel_1bp", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below", max_indels = 1,
         bidirect = FALSE, extend = TRUE, prior = 0
     )
@@ -1288,6 +1343,7 @@ test_that("pwm.edit_distance.lse direction=below basic functionality works", {
     gvtrack.create("v_lse_below_easy", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = high_thresh,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1321,6 +1377,7 @@ test_that("pwm.edit_distance.lse direction=below needs edits when score is above
     gvtrack.create("v_lse_below_hard", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = low_thresh,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1347,6 +1404,7 @@ test_that("pwm.edit_distance.lse direction=below returns 0 when already below", 
     gvtrack.create("v_lse_below_already", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1375,6 +1433,7 @@ test_that("pwm.edit_distance.lse direction=below returns NA for unreachable thre
     gvtrack.create("v_lse_below_impossible", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1413,6 +1472,7 @@ test_that("pwm.edit_distance.lse direction=below vs above are complementary", {
     gvtrack.create("v_lse_below_low", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = low_thresh,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1446,6 +1506,7 @@ test_that("pwm.edit_distance.lse direction=below vs above are complementary", {
     gvtrack.create("v_lse_below_high", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = high_thresh,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1496,6 +1557,7 @@ test_that("pwm.edit_distance.lse.pos direction=below returns valid position", {
     gvtrack.create("v_lse_below_edist", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1503,6 +1565,7 @@ test_that("pwm.edit_distance.lse.pos direction=below returns valid position", {
     gvtrack.create("v_lse_below_pos", NULL,
         func = "pwm.edit_distance.lse.pos",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1569,12 +1632,14 @@ test_that("pwm.edit_distance.lse direction=below edit count is consistent with m
     gvtrack.create("v_lse_below_edist", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
     gvtrack.create("v_max_below_edist", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1634,6 +1699,7 @@ test_that("pwm.edit_distance.lse direction=below threshold monotonicity", {
         gvtrack.create(vnames[i], NULL,
             func = "pwm.edit_distance.lse",
             pssm = pssm, score.thresh = thresholds[i],
+            score.min = -Inf,
             direction = "below",
             bidirect = FALSE, extend = FALSE, prior = 0
         )
@@ -1691,6 +1757,7 @@ test_that("pwm.edit_distance.lse direction=below with bidirectional", {
     gvtrack.create("v_lse_below_fwd", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, strand = 1, extend = FALSE, prior = 0
     )
@@ -1699,6 +1766,7 @@ test_that("pwm.edit_distance.lse direction=below with bidirectional", {
     gvtrack.create("v_lse_below_rev", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, strand = -1, extend = FALSE, prior = 0
     )
@@ -1707,6 +1775,7 @@ test_that("pwm.edit_distance.lse direction=below with bidirectional", {
     gvtrack.create("v_lse_below_bidi", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = TRUE, extend = FALSE, prior = 0
     )
@@ -1762,6 +1831,7 @@ test_that("pwm.edit_distance.lse direction=below with max_edits cap", {
     gvtrack.create("v_lse_below_unlim", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1770,6 +1840,7 @@ test_that("pwm.edit_distance.lse direction=below with max_edits cap", {
     gvtrack.create("v_lse_below_max1", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold, max_edits = 1,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -1778,6 +1849,7 @@ test_that("pwm.edit_distance.lse direction=below with max_edits cap", {
     gvtrack.create("v_lse_below_max5", NULL,
         func = "pwm.edit_distance.lse",
         pssm = pssm, score.thresh = threshold, max_edits = 5,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )

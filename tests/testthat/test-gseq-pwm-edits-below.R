@@ -17,6 +17,7 @@ test_that("gseq.pwm_edits direction=below returns correct structure", {
     # "ACGT" is a perfect match — its score is well above any negative threshold
     result <- gseq.pwm_edits("ACGT", pssm,
         score.thresh = -1.0,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -45,6 +46,7 @@ test_that("gseq.pwm_edits direction=below returns 0 edits when already below thr
     # With a threshold high enough that score is already below
     result <- gseq.pwm_edits("TT", pssm,
         score.thresh = -0.5,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -68,6 +70,7 @@ test_that("gseq.pwm_edits direction=below: score_before > threshold and score_af
     # "ACGT" is a perfect match — score is near 4*log(0.97) ~ -0.12
     result <- gseq.pwm_edits("ACGT", pssm,
         score.thresh = -1.0,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -99,6 +102,7 @@ test_that("gseq.pwm_edits direction=below: edits reference bases match window_se
     # "ACG" is a perfect match
     result <- gseq.pwm_edits("ACG", pssm,
         score.thresh = -1.0,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -148,6 +152,7 @@ test_that("gseq.pwm_edits direction=below: gain values are negative for real edi
     # "ACGT" is a perfect match — edits needed to destroy it
     result <- gseq.pwm_edits("ACGT", pssm,
         score.thresh = -1.0,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -177,6 +182,7 @@ test_that("gseq.pwm_edits direction=below: score_after = score_before + sum(gain
 
     result <- gseq.pwm_edits("ACGT", pssm,
         score.thresh = -1.0,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -203,6 +209,7 @@ test_that("gseq.pwm_edits direction=below with multiple sequences", {
     # "AC" is perfect match (above threshold), "TT" is poor match (likely below)
     result <- gseq.pwm_edits(c("AC", "TT"), pssm,
         score.thresh = -1.0,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -237,6 +244,7 @@ test_that("gseq.pwm_edits direction=below matches manual_pwm_edit_distance_below
     for (i in seq_along(seqs)) {
         result <- gseq.pwm_edits(seqs[i], pssm,
             score.thresh = threshold,
+            score.min = -Inf,
             prior = 0, bidirect = FALSE, direction = "below"
         )
 
@@ -272,6 +280,7 @@ test_that("gseq.pwm_edits direction=below with bidirectional scanning", {
     # which is the forward strand with 0 edits.
     result <- gseq.pwm_edits("GT", pssm,
         score.thresh = -1.0,
+        score.min = -Inf,
         prior = 0, bidirect = TRUE, direction = "below"
     )
 
@@ -286,6 +295,7 @@ test_that("gseq.pwm_edits direction=below with bidirectional scanning", {
     # Use a higher threshold to force both strands above it.
     result2 <- gseq.pwm_edits("AC", pssm,
         score.thresh = -0.01,
+        score.min = -Inf,
         prior = 0, bidirect = TRUE, direction = "below"
     )
     expect_true(nrow(result2) > 0)
@@ -310,6 +320,7 @@ test_that("gseq.pwm_edits direction=below with max_indels=1", {
     # "ACGT" is a perfect match — try to destroy it with indels allowed
     result <- gseq.pwm_edits("ACGT", pssm,
         score.thresh = -1.0,
+        score.min = -Inf,
         max_indels = 1L, prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -351,6 +362,7 @@ test_that("gseq.pwm_edits direction=below: comparison with vtrack", {
     # Use gseq.pwm_edits with direction=below
     result <- gseq.pwm_edits(seq, pssm,
         score.thresh = thresh,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -358,6 +370,7 @@ test_that("gseq.pwm_edits direction=below: comparison with vtrack", {
     gvtrack.create("edist_below", NULL, "pwm.edit_distance",
         pssm = pssm, score.thresh = thresh,
         bidirect = FALSE, prior = 0, extend = FALSE,
+        score.min = -Inf,
         direction = "below"
     )
     vtrack_result <- gextract("edist_below",
@@ -393,6 +406,7 @@ test_that("gseq.pwm_edits direction=below vs direction=above are complementary",
     )
     result_below <- gseq.pwm_edits("AC", pssm,
         score.thresh = threshold,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -411,6 +425,7 @@ test_that("gseq.pwm_edits direction=below vs direction=above are complementary",
     )
     result_below_tt <- gseq.pwm_edits("TT", pssm,
         score.thresh = threshold,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -441,6 +456,7 @@ test_that("gseq.pwm_edits direction=below with longer sequence picks best window
 
     result <- gseq.pwm_edits(seq, pssm,
         score.thresh = threshold,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
@@ -471,6 +487,7 @@ test_that("gseq.pwm_edits direction=below with highly informative PSSM", {
     # For direction=below, we need to make it score below threshold
     result <- gseq.pwm_edits("AC", pssm,
         score.thresh = -0.5,
+        score.min = -Inf,
         prior = 0, bidirect = FALSE, direction = "below"
     )
 
