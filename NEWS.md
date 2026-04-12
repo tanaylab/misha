@@ -1,6 +1,7 @@
 # misha 5.6.10
 
 * Fixed `direction="below"` with `bidirect=TRUE` taking min across strands instead of max. A genomic substitution changes both strands, so disrupting a motif requires both strands to fall below the threshold.
+* **Breaking**: removed the hidden default that set `score.min = score.thresh` when `direction = "below"`. `score.min` now defaults to NULL (no filter) for both directions. Set `score.min` explicitly to filter windows.
 * Improved edit distance documentation: dedicated section with direction/strand semantics, parameter reference, and worked examples.
 
 # misha 5.6.9
