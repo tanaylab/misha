@@ -644,12 +644,70 @@
 #'   \item \code{score.thresh}: Threshold for \code{pwm.count}. Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
 #'   \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
 #'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Ties resolve to the most 5' anchor; the forward strand wins ties at the same coordinate. Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse).
-#'   \item \code{score.thresh}: For edit distance functions, this is the PWM log-likelihood target that the algorithm tries to reach via substitutions. The edit distance is the minimum number of single-base changes needed for the window to achieve this score.
-#'   \item \code{max_edits}: For edit distance functions only. Optional positive integer setting the maximum search depth. If reaching the threshold requires more than \code{max_edits} substitutions, NA is returned. When NULL (default), exact computation is used.
-#'   \item \code{max_indels}: For \code{pwm.edit_distance}, \code{pwm.edit_distance.pos}, and \code{pwm.max.edit_distance} only. Not supported by LSE variants. Optional non-negative integer specifying the maximum number of insertions and deletions allowed (default 0, substitutions only). When > 0, a banded Needleman-Wunsch DP is used to find the minimum total edits (substitutions + indels) to reach the score threshold. Typical values are 1-2.
-#'   \item \code{score.min}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is below \code{score.min} are skipped (edit distance returns NA). Improves performance by avoiding expensive computation on low-scoring windows. For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter). When \code{direction = "below"} and \code{score.min} is NULL, it defaults to \code{score.thresh} — windows already scoring below the threshold trivially need 0 edits, so filtering them out gives the useful semantics of "how many edits to disrupt this motif match". Use \code{score.min = -Inf} to disable this.
-#'   \item \code{score.max}: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is above \code{score.max} are skipped (edit distance returns NA). Combined with \code{score.min}, enables efficient regime-specific queries (e.g., only positions with score in [\code{score.min}, \code{score.max}]). For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter).
-#'   \item \code{direction}: For edit distance functions only. Direction of the edit distance query: \code{"above"} (default) finds the minimum edits to bring the score above \code{score.thresh}; \code{"below"} finds the minimum edits to bring the score below \code{score.thresh}.
+#' }
+#'
+#' \strong{Edit distance notes}
+#'
+#' The edit distance functions answer "how many single-base changes are needed to reach a target
+#' PWM score?" Each genomic window (same length as the PSSM) gets an edit distance: the minimum
+#' number of substitutions (and optionally indels) required to bring its PWM log-likelihood score
+#' to the target threshold. The virtual track returns the minimum edit distance across all windows
+#' in the iterator interval.
+#'
+#' \strong{Direction.} The \code{direction} parameter controls which side of the threshold to target:
+#' \itemize{
+#'   \item \code{"above"} (default): minimum edits to make the score \strong{reach or exceed}
+#'     \code{score.thresh}. Use this to ask "how close is this sequence to becoming a motif match?"
+#'     A window already scoring above the threshold needs 0 edits.
+#'   \item \code{"below"}: minimum edits to make the score \strong{fall below}
+#'     \code{score.thresh}. Use this to ask "how fragile is this motif match — how many mutations
+#'     would disrupt it?" A window already scoring below the threshold needs 0 edits.
+#' }
+#'
+#' \strong{Strand handling differs by direction.} When \code{bidirect = TRUE}, both strands are
+#' scanned at each genomic position. The way their edit distances are combined depends on
+#' the direction:
+#' \itemize{
+#'   \item \code{direction = "above"}: takes the \strong{minimum} across both strands. A motif
+#'     match on \emph{either} strand is sufficient (e.g., for TF binding), so the easier strand
+#'     wins.
+#'   \item \code{direction = "below"}: takes the \strong{maximum} across both strands. A single
+#'     genomic substitution changes both strands simultaneously (the forward base and its reverse
+#'     complement). To truly disrupt a binding site you must bring \emph{both} strands below the
+#'     threshold, so the harder strand determines the answer. For example, if the forward strand
+#'     needs 3 edits to go below the threshold and the reverse needs 1, the result is 3 — after
+#'     just 1 edit the forward strand would still have a match.
+#' }
+#' Then, across all windows in the iterator interval, the minimum is reported (the position
+#' where it is easiest to create or disrupt a match).
+#'
+#' \strong{Parameters:}
+#' \itemize{
+#'   \item \code{score.thresh}: The target PWM log-likelihood score. Edit distance counts the
+#'     minimum substitutions needed for a window to cross this threshold (above or below it,
+#'     depending on \code{direction}).
+#'   \item \code{max_edits}: Optional positive integer. Cap the search depth: if reaching the
+#'     threshold requires more than \code{max_edits} edits, NA is returned for that window.
+#'     Default NULL (exact computation, no cap).
+#'   \item \code{max_indels}: Optional non-negative integer (default 0). When > 0, allows
+#'     insertions and deletions in addition to substitutions, using a banded Needleman-Wunsch DP.
+#'     Typical values are 1-2. Only supported by the non-LSE variants
+#'     (\code{pwm.edit_distance}, \code{pwm.edit_distance.pos}, \code{pwm.max.edit_distance}).
+#'   \item \code{score.min}: Optional numeric filter. Windows whose current PWM score is below
+#'     \code{score.min} are skipped (edit distance returns NA for that window). Default NULL.
+#'
+#'     \strong{Special default for \code{direction = "below"}}: when \code{score.min} is NULL and
+#'     \code{direction = "below"}, it automatically defaults to \code{score.thresh}. This filters
+#'     out windows already scoring below the threshold (which would trivially need 0 edits),
+#'     giving the useful semantics of "how many edits to disrupt this existing match." Set
+#'     \code{score.min = -Inf} explicitly to disable this filtering.
+#'
+#'     For LSE variants, the filter applies to the aggregate LSE score, not individual windows.
+#'   \item \code{score.max}: Optional numeric filter. Windows whose current PWM score is above
+#'     \code{score.max} are skipped (edit distance returns NA). Combined with \code{score.min},
+#'     this enables regime-specific queries (e.g., only windows scoring in a given range).
+#'     Default NULL (no filter). For LSE variants, applies to the aggregate LSE score.
+#'   \item \code{direction}: \code{"above"} (default) or \code{"below"}. See Direction above.
 #' }
 #'
 #' \strong{Spatial weighting}
@@ -875,6 +933,57 @@
 #'     spat_max = 450
 #' )
 #' gextract("window_spatial_pwm", gintervals(1, 0, 10000), iterator = 500)
+#'
+#' # --- Edit distance examples ---
+#' # (Using the same 4-position PSSM defined above)
+#'
+#' # First, check the PWM score distribution to pick sensible thresholds
+#' gvtrack.create("pwm_score", NULL, "pwm.max", pssm = pssm)
+#' head(gextract("pwm_score", gintervals(1, 500, 520), iterator = 1))
+#' # Scores range from ~-8.3 (poor) to ~-0.8 (strong match)
+#'
+#' # --- direction = "above": how many edits to CREATE a motif match? ---
+#' # "How many substitutions until this window scores >= -5?"
+#' gvtrack.create("edist_above", NULL, "pwm.edit_distance",
+#'     pssm = pssm, score.thresh = -5
+#' )
+#' # At 1bp: each position gets its own edit distance (0 if already matching)
+#' head(gextract(c("pwm_score", "edist_above"),
+#'     gintervals(1, 500, 520),
+#'     iterator = 1
+#' ))
+#'
+#' # --- direction = "below": how many edits to DISRUPT a motif match? ---
+#' # "How many substitutions to push the score below -5?"
+#' # By default, windows already below -5 are filtered out (score.min
+#' # defaults to score.thresh), so only existing matches are considered.
+#' gvtrack.create("edist_below", NULL, "pwm.edit_distance",
+#'     pssm = pssm, score.thresh = -5, direction = "below"
+#' )
+#' # Positions where score > -5 get an edit distance; others get NA
+#' head(gextract(c("pwm_score", "edist_above", "edist_below"),
+#'     gintervals(1, 500, 520),
+#'     iterator = 1
+#' ))
+#'
+#' # --- max_edits: cap the search depth ---
+#' # Return NA if more than 2 substitutions are needed
+#' gvtrack.create("edist_max2", NULL, "pwm.edit_distance",
+#'     pssm = pssm, score.thresh = -5, max_edits = 2
+#' )
+#' # Positions needing 3+ edits now return NA instead of 3
+#' head(gextract(c("pwm_score", "edist_above", "edist_max2"),
+#'     gintervals(1, 500, 520),
+#'     iterator = 1
+#' ))
+#'
+#' # --- Aggregation over intervals ---
+#' # With a larger iterator, the minimum edit distance across the
+#' # interval is returned.
+#' gextract(c("pwm_score", "edist_above", "edist_below"),
+#'     gintervals(1, 0, 2000),
+#'     iterator = 200
+#' )
 #' @seealso \code{\link{gvtrack.iterator}}, \code{\link{gvtrack.iterator.2d}}, \code{\link{gvtrack.filter}}
 #' @export gvtrack.create
 gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL, dim = NULL, sshift = NULL, eshift = NULL, filter = NULL, ...) {

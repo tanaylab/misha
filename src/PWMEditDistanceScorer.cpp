@@ -723,6 +723,13 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     const bool has_score_filter = has_score_min || has_score_max;
     const bool apply_score_filter = has_score_filter && (m_max_indels == 0);
 
+    // For direction=BELOW with bidirectional scanning: a genomic substitution
+    // affects both strands, so we need enough edits to bring the *harder* strand
+    // below the threshold. Take max across strands at each position, then min
+    // across positions. (For ABOVE, min across strands is correct: any one strand
+    // reaching the threshold suffices.)
+    const bool below_bidirect = is_below() && scan_forward && scan_reverse && need_min;
+
     const size_t max_start = std::min(interval_length, target_length - motif_length + 1);
     if (max_start == 0 || (!scan_forward && !scan_reverse)) {
         return metrics;
@@ -808,91 +815,146 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         // directly, avoiding two function calls (compute_window_edits → passes_prefilter)
         // for the 90%+ of windows that get rejected. For subs-only, shift is always 0,
         // so the inner loop is tight: just B bidx lookups + 1 viable table read per block.
-        if (scan_forward) {
-            if (need_min) {
+        if (below_bidirect) {
+            // direction=BELOW + bidirectional: compute both strands, take max
+            // (prefilter is always off for BELOW, so no pigeonhole check needed)
+            float fwd_edits = std::numeric_limits<float>::quiet_NaN();
+            {
                 bool pass_score_filter = true;
                 if (apply_score_filter) {
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
                     if (has_score_min && logp < m_score_min) pass_score_filter = false;
                     if (has_score_max && logp > m_score_max) pass_score_filter = false;
                 }
-
                 if (pass_score_filter) {
-                    const int* bidx = fwd_bidx.data() + offset;
-                    bool prefilter_pass = true;
-                    if (m_use_prefilter && m_max_indels == 0) {
-                        prefilter_pass = false;
-                        for (const auto& block : m_prefilter_blocks) {
-                            int block_len = (int)block.columns.size();
-                            int hash = 0;
-                            bool valid = true;
-                            for (int j = 0; j < block_len; j++) {
-                                int b = bidx[block.columns[j]];
-                                if (b >= 4) { valid = false; break; }
-                                hash += b << (2 * j);
-                            }
-                            if (valid && block.viable[hash]) {
-                                prefilter_pass = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (prefilter_pass) {
-                        float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/false);
-                        maybe_update_min(edits, offset, +1);
-                    }
+                    fwd_edits = compute_window_edits(fwd_bidx.data() + offset, seq_avail, /*reverse=*/false);
                 }
             }
-            if (need_pwm) {
-                float logp = 0.0f;
-                std::string::const_iterator it = seq.begin() + offset;
-                m_pssm.calc_like(it, logp);
-                maybe_update_pwm(logp, offset, +1);
-            }
-        }
 
-        if (scan_reverse) {
-            if (need_min) {
+            float rev_edits = std::numeric_limits<float>::quiet_NaN();
+            {
                 bool pass_score_filter = true;
                 if (apply_score_filter) {
                     float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
                     if (has_score_min && logp < m_score_min) pass_score_filter = false;
                     if (has_score_max && logp > m_score_max) pass_score_filter = false;
                 }
-
                 if (pass_score_filter) {
-                    const int* bidx = rev_bidx.data() + offset;
-                    bool prefilter_pass = true;
-                    if (m_use_prefilter && m_max_indels == 0) {
-                        prefilter_pass = false;
-                        const int L_val = static_cast<int>(motif_length);
-                        for (const auto& block : m_prefilter_blocks) {
-                            int block_len = (int)block.columns.size();
-                            int hash = 0;
-                            bool valid = true;
-                            for (int j = 0; j < block_len; j++) {
-                                int seq_idx = L_val - 1 - block.columns[j];
-                                int b = bidx[seq_idx];
-                                if (b >= 4) { valid = false; break; }
-                                hash += b << (2 * j);
-                            }
-                            if (valid && block.viable[hash]) {
-                                prefilter_pass = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (prefilter_pass) {
-                        float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/true);
-                        maybe_update_min(edits, offset, -1);
-                    }
+                    rev_edits = compute_window_edits(rev_bidx.data() + offset, seq_avail, /*reverse=*/true);
                 }
             }
-            if (need_pwm) {
-                float logp_rc = 0.0f;
-                std::string::const_iterator it2 = seq.begin() + offset;
-                m_pssm.calc_like_rc(it2, logp_rc);
-                maybe_update_pwm(logp_rc, offset, -1);
+
+            // Combine: max of non-NaN values (NaN = strand filtered out / no match)
+            bool have_fwd = !std::isnan(fwd_edits);
+            bool have_rev = !std::isnan(rev_edits);
+            if (have_fwd || have_rev) {
+                float combined;
+                int combined_dir;
+                if (have_fwd && have_rev) {
+                    // Both strands have matches — take the harder one to disrupt
+                    if (fwd_edits >= rev_edits) {
+                        combined = fwd_edits;
+                        combined_dir = +1;
+                    } else {
+                        combined = rev_edits;
+                        combined_dir = -1;
+                    }
+                } else if (have_fwd) {
+                    combined = fwd_edits;
+                    combined_dir = +1;
+                } else {
+                    combined = rev_edits;
+                    combined_dir = -1;
+                }
+                maybe_update_min(combined, offset, combined_dir);
+            }
+        } else if (scan_forward || scan_reverse) {
+            if (scan_forward) {
+                if (need_min) {
+                    bool pass_score_filter = true;
+                    if (apply_score_filter) {
+                        float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
+                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                    }
+
+                    if (pass_score_filter) {
+                        const int* bidx = fwd_bidx.data() + offset;
+                        bool prefilter_pass = true;
+                        if (m_use_prefilter && m_max_indels == 0) {
+                            prefilter_pass = false;
+                            for (const auto& block : m_prefilter_blocks) {
+                                int block_len = (int)block.columns.size();
+                                int hash = 0;
+                                bool valid = true;
+                                for (int j = 0; j < block_len; j++) {
+                                    int b = bidx[block.columns[j]];
+                                    if (b >= 4) { valid = false; break; }
+                                    hash += b << (2 * j);
+                                }
+                                if (valid && block.viable[hash]) {
+                                    prefilter_pass = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (prefilter_pass) {
+                            float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/false);
+                            maybe_update_min(edits, offset, +1);
+                        }
+                    }
+                }
+                if (need_pwm) {
+                    float logp = 0.0f;
+                    std::string::const_iterator it = seq.begin() + offset;
+                    m_pssm.calc_like(it, logp);
+                    maybe_update_pwm(logp, offset, +1);
+                }
+            }
+
+            if (scan_reverse) {
+                if (need_min) {
+                    bool pass_score_filter = true;
+                    if (apply_score_filter) {
+                        float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
+                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                    }
+
+                    if (pass_score_filter) {
+                        const int* bidx = rev_bidx.data() + offset;
+                        bool prefilter_pass = true;
+                        if (m_use_prefilter && m_max_indels == 0) {
+                            prefilter_pass = false;
+                            const int L_val = static_cast<int>(motif_length);
+                            for (const auto& block : m_prefilter_blocks) {
+                                int block_len = (int)block.columns.size();
+                                int hash = 0;
+                                bool valid = true;
+                                for (int j = 0; j < block_len; j++) {
+                                    int seq_idx = L_val - 1 - block.columns[j];
+                                    int b = bidx[seq_idx];
+                                    if (b >= 4) { valid = false; break; }
+                                    hash += b << (2 * j);
+                                }
+                                if (valid && block.viable[hash]) {
+                                    prefilter_pass = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (prefilter_pass) {
+                            float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/true);
+                            maybe_update_min(edits, offset, -1);
+                        }
+                    }
+                }
+                if (need_pwm) {
+                    float logp_rc = 0.0f;
+                    std::string::const_iterator it2 = seq.begin() + offset;
+                    m_pssm.calc_like_rc(it2, logp_rc);
+                    maybe_update_pwm(logp_rc, offset, -1);
+                }
             }
         }
     }

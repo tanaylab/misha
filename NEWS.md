@@ -1,3 +1,8 @@
+# misha 5.6.10
+
+* Fixed `direction="below"` with `bidirect=TRUE` taking min across strands instead of max. A genomic substitution changes both strands, so disrupting a motif requires both strands to fall below the threshold.
+* Improved edit distance documentation: dedicated section with direction/strand semantics, parameter reference, and worked examples.
+
 # misha 5.6.9
 
 * Added `k` parameter to `gsynth.train()` to configure the Markov order (1-8, default 5).
