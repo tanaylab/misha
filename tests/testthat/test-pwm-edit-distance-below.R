@@ -226,17 +226,78 @@ test_that("pwm.edit_distance direction=below bidirectional considers both strand
         iterator = test_interval
     )
 
-    # Bidirectional should return minimum of both strands
+    # For direction=below, bidirectional takes max across strands at each
+    # position (need to disrupt *both* strands), then min across positions.
+    # This gives bidi >= max(fwd, rev) in general.
     fwd <- result$edist_below_fwd[1]
     rev <- result$edist_below_rev[1]
     bidi <- result$edist_below_bidi[1]
 
     if (!is.na(fwd) && !is.na(rev)) {
-        expect_equal(bidi, min(fwd, rev), tolerance = 1e-6)
+        expect_true(bidi >= max(fwd, rev) - 1e-6)
     } else if (!is.na(fwd)) {
         expect_equal(bidi, fwd, tolerance = 1e-6)
     } else if (!is.na(rev)) {
         expect_equal(bidi, rev, tolerance = 1e-6)
+    }
+})
+
+test_that("pwm.edit_distance direction=below bidirectional takes max across strands per position", {
+    remove_all_vtracks()
+
+    pssm <- create_test_pssm()
+
+    # Use a wider interval with 1bp iterator to check per-position behavior
+    test_interval <- gintervals(1, 200, 260)
+    threshold <- -5.0
+
+    gvtrack.create("edist_below_fwd_1bp", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
+        direction = "below",
+        bidirect = FALSE, strand = 1, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_rev_1bp", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
+        direction = "below",
+        bidirect = FALSE, strand = -1, extend = FALSE, prior = 0
+    )
+    gvtrack.create("edist_below_bidi_1bp", NULL,
+        func = "pwm.edit_distance",
+        pssm = pssm, score.thresh = threshold,
+        score.min = -Inf,
+        direction = "below",
+        bidirect = TRUE, extend = FALSE, prior = 0
+    )
+
+    result <- gextract(
+        c("edist_below_fwd_1bp", "edist_below_rev_1bp", "edist_below_bidi_1bp"),
+        test_interval,
+        iterator = 1
+    )
+
+    # At each 1bp position: bidi should be max of fwd and rev (per-position)
+    # when both are non-NA, and equal to the non-NA one when only one is present
+    for (i in seq_len(nrow(result))) {
+        fwd <- result$edist_below_fwd_1bp[i]
+        rev <- result$edist_below_rev_1bp[i]
+        bidi <- result$edist_below_bidi_1bp[i]
+
+        if (!is.na(fwd) && !is.na(rev)) {
+            expect_equal(bidi, max(fwd, rev),
+                tolerance = 1e-6,
+                info = paste("position", i, "fwd=", fwd, "rev=", rev, "bidi=", bidi)
+            )
+        } else if (!is.na(fwd)) {
+            expect_equal(bidi, fwd, tolerance = 1e-6)
+        } else if (!is.na(rev)) {
+            expect_equal(bidi, rev, tolerance = 1e-6)
+        } else {
+            expect_true(is.na(bidi))
+        }
     }
 })
 
