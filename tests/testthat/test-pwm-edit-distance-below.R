@@ -402,7 +402,7 @@ test_that("pwm.edit_distance direction=below with score.min/score.max filtering"
     test_interval <- gintervals(1, 200, 240)
     threshold <- -5.0
 
-    # Default (no score.min) — for direction="below", defaults to score.thresh
+    # Default (no score.min) — no filtering, same as score.min = -Inf
     gvtrack.create("edist_below_default", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
@@ -410,20 +410,20 @@ test_that("pwm.edit_distance direction=below with score.min/score.max filtering"
         bidirect = FALSE, extend = FALSE, prior = 0
     )
 
-    # Explicit score.min = score.thresh — should match the default
-    gvtrack.create("edist_below_explicit_thresh", NULL,
+    # Explicit score.min = -Inf — should match the default
+    gvtrack.create("edist_below_no_filter", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
-        score.min = threshold,
+        score.min = -Inf,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
 
-    # With -Inf score.min (disables filtering, old behavior)
-    gvtrack.create("edist_below_lowfilt", NULL,
+    # Explicit score.min = score.thresh — filters windows already below threshold
+    gvtrack.create("edist_below_filtered", NULL,
         func = "pwm.edit_distance",
         pssm = pssm, score.thresh = threshold,
-        score.min = -Inf,
+        score.min = threshold,
         direction = "below",
         bidirect = FALSE, extend = FALSE, prior = 0
     )
@@ -438,13 +438,13 @@ test_that("pwm.edit_distance direction=below with score.min/score.max filtering"
     )
 
     result <- gextract(
-        c("edist_below_default", "edist_below_explicit_thresh", "edist_below_lowfilt", "edist_below_highfilt"),
+        c("edist_below_default", "edist_below_no_filter", "edist_below_filtered", "edist_below_highfilt"),
         test_interval,
         iterator = test_interval
     )
 
-    # Default should match explicit score.min = score.thresh
-    expect_equal(result$edist_below_default[1], result$edist_below_explicit_thresh[1], tolerance = 1e-6)
+    # Default should match explicit score.min = -Inf (no filter)
+    expect_equal(result$edist_below_default[1], result$edist_below_no_filter[1], tolerance = 1e-6)
 
     # High filter should either be NA or >= default result
     if (!is.na(result$edist_below_highfilt[1]) && !is.na(result$edist_below_default[1])) {
