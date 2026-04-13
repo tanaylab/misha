@@ -348,6 +348,89 @@
     )
 }
 
+#' Validate and process PWM n_mutations function parameters
+#' @noRd
+.vtrack_params_pwm_n_mutations <- function(func, params, dots) {
+    if (!is.null(params)) {
+        if (!is.list(params) || !("pssm" %in% names(params))) {
+            stop("pwm.n_mutations requires a list with at least 'pssm' matrix parameter")
+        }
+        dots <- params
+    }
+
+    if (!("pssm" %in% names(dots))) {
+        stop("pwm.n_mutations requires a 'pssm' matrix parameter")
+    }
+    if (!("score.thresh" %in% names(dots))) {
+        stop("pwm.n_mutations requires a 'score.thresh' parameter")
+    }
+
+    pssm <- dots$pssm
+    score.thresh <- dots$score.thresh
+    score.min <- dots$score.min
+    score.max <- dots$score.max
+    bidirect <- if (!is.null(dots$bidirect)) dots$bidirect else TRUE
+    prior <- if (!is.null(dots$prior)) dots$prior else 0.01
+    extend <- if (!is.null(dots$extend)) dots$extend else TRUE
+    strand <- if (!is.null(dots$strand)) dots$strand else 1
+    direction <- if (!is.null(dots$direction)) dots$direction else "above"
+
+    pssm <- .coerce_pssm_matrix(
+        pssm,
+        numeric_msg = "PSSM must be a numeric matrix or data frame with numeric columns",
+        ncol_msg = "PSSM must have columns named A, C, G, T",
+        colnames_msg = "PSSM must have columns named A, C, G, T"
+    )
+
+    if (!is.numeric(prior) || prior < 0 || prior > 1) {
+        stop("prior must be a number between 0 and 1")
+    }
+
+    if (!is.logical(bidirect)) {
+        stop("bidirect must be TRUE or FALSE")
+    }
+
+    if (!is.logical(extend) && !(is.numeric(extend) && length(extend) == 1 && extend == as.integer(extend) && extend >= 0)) {
+        stop("extend must be TRUE, FALSE, or a non-negative integer")
+    }
+
+    if (strand != 1 && strand != -1) {
+        stop("strand must be 1 or -1")
+    }
+
+    if (!direction %in% c("above", "below")) {
+        stop("direction must be 'above' or 'below'")
+    }
+
+    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
+        stop("score.thresh must be a single numeric value")
+    }
+
+    if (!is.null(score.min)) {
+        if (!is.numeric(score.min) || length(score.min) != 1) {
+            stop("score.min must be NULL or a single numeric value")
+        }
+    }
+
+    if (!is.null(score.max)) {
+        if (!is.numeric(score.max) || length(score.max) != 1) {
+            stop("score.max must be NULL or a single numeric value")
+        }
+    }
+
+    list(
+        pssm = pssm,
+        score.thresh = score.thresh,
+        score.min = score.min,
+        score.max = score.max,
+        bidirect = bidirect,
+        prior = prior,
+        extend = extend,
+        strand = strand,
+        direction = direction
+    )
+}
+
 #' Validate and process PWM LSE edit distance function parameters
 #' @noRd
 .vtrack_params_pwm_edit_distance_lse <- function(func, params, dots) {
@@ -486,6 +569,7 @@
     pwm.max.edit_distance = .vtrack_params_pwm_edit_distance,
     pwm.edit_distance.lse = .vtrack_params_pwm_edit_distance_lse,
     pwm.edit_distance.lse.pos = .vtrack_params_pwm_edit_distance_lse,
+    pwm.n_mutations = .vtrack_params_pwm_n_mutations,
     neighbor.count = .vtrack_params_neighbor_count
 )
 
@@ -495,7 +579,8 @@
     "kmer.count", "kmer.frac",
     "masked.count", "masked.frac",
     "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
-    "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos"
+    "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos",
+    "pwm.n_mutations"
 )
 
 #' Creates a new virtual track
@@ -595,6 +680,12 @@
 #'   NULL (sequence) \tab pwm.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand \tab Minimum number of edits (substitutions + indels) needed to reach \code{score.thresh} across all windows. \cr
 #'   NULL (sequence) \tab pwm.edit_distance.pos \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand \tab 1-based position of the window achieving minimum edit distance (signed by strand when bidirect). \cr
 #'   NULL (sequence) \tab pwm.max.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand \tab Edit distance at the best-scoring PWM window (same location as pwm.max/pwm.max.pos). \cr
+#' }
+#'
+#' \strong{Mutation count summarizers}
+#' \tabular{llll}{
+#'   Source \tab func \tab Key params \tab Description \cr
+#'   NULL (sequence) \tab pwm.n_mutations \tab pssm, score.thresh, score.min, score.max, direction, bidirect, prior, extend, strand \tab Number of single-base substitutions that independently cross \code{score.thresh}. Returns 0 if threshold already satisfied, NA if no single edit suffices. \cr
 #' }
 #'
 #' \strong{LSE edit distance summarizers}
