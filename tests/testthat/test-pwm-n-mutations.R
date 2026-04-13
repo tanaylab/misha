@@ -27,8 +27,12 @@ manual_pwm_n_mutations <- function(seq, pssm_mat, threshold, direction = "above"
     }
 
     # Check if threshold already satisfied
-    if (direction == "above" && score >= threshold) return(0)
-    if (direction == "below" && score <= threshold) return(0)
+    if (direction == "above" && score >= threshold) {
+        return(0)
+    }
+    if (direction == "below" && score <= threshold) {
+        return(0)
+    }
 
     # Compute deficit
     deficit <- if (direction == "above") threshold - score else score - threshold
@@ -58,7 +62,9 @@ manual_pwm_n_mutations <- function(seq, pssm_mat, threshold, direction = "above"
         }
     }
 
-    if (count == 0) return(NA_real_)
+    if (count == 0) {
+        return(NA_real_)
+    }
     return(count)
 }
 
@@ -66,7 +72,9 @@ manual_pwm_n_mutations <- function(seq, pssm_mat, threshold, direction = "above"
 manual_pwm_n_mutations_scan <- function(seq, pssm_mat, threshold, direction = "above") {
     L <- nrow(pssm_mat)
     n <- nchar(seq)
-    if (n < L) return(NA_real_)
+    if (n < L) {
+        return(NA_real_)
+    }
 
     best <- NA_real_
     for (start in 1:(n - L + 1)) {
