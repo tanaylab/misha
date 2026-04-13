@@ -326,6 +326,8 @@ float PWMEditDistanceScorer::score_interval(const GInterval& interval,
             return metrics.min_edits_position;
         case Mode::PWM_MAX_EDITS:
             return metrics.best_pwm_edits;
+        case Mode::N_MUTATIONS:
+            return metrics.n_mutations;
         default:
             return std::numeric_limits<float>::quiet_NaN();
     }
@@ -702,6 +704,51 @@ float PWMEditDistanceScorer::compute_window_edits(const int* bidx, int seq_avail
     return compute_heuristic(bidx, reverse, m_max_edits);
 }
 
+float PWMEditDistanceScorer::compute_n_mutations(const int* bidx, bool reverse) {
+    int L = m_pssm.length();
+
+    // Compute current window score using the flat lookup table
+    double score = 0;
+    for (int i = 0; i < L; i++) {
+        int col = reverse ? (L - 1 - i) : i;
+        int base = bidx[i];
+        if (base >= 4) {
+            score += m_score_table[col][4];
+        } else {
+            score += m_score_table[col][base];
+        }
+    }
+
+    // If threshold already satisfied, return 0
+    if (threshold_satisfied(score)) return 0.0f;
+
+    // Compute deficit
+    double deficit = compute_deficit(score);
+
+    // Count single-base substitutions that independently cross threshold
+    int count = 0;
+    for (int i = 0; i < L; i++) {
+        int col = reverse ? (L - 1 - i) : i;
+        int current_base = bidx[i];
+        if (current_base >= 4) continue; // skip N bases
+
+        for (int b = 0; b < 4; b++) {
+            if (b == current_base) continue;
+
+            double delta;
+            if (is_below()) {
+                delta = m_score_table[col][current_base] - m_score_table[col][b];
+            } else {
+                delta = m_score_table[col][b] - m_score_table[col][current_base];
+            }
+
+            if (delta >= deficit) count++;
+        }
+    }
+
+    return (count > 0) ? static_cast<float>(count) : std::numeric_limits<float>::quiet_NaN();
+}
+
 PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const std::string& seq,
                                                                            size_t interval_length)
 {
@@ -715,7 +762,8 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
 
     const bool scan_forward = should_scan_forward();
     const bool scan_reverse = should_scan_reverse();
-    const bool need_min = (m_mode != Mode::PWM_MAX_EDITS);
+    const bool need_n_mutations = (m_mode == Mode::N_MUTATIONS);
+    const bool need_min = (m_mode != Mode::PWM_MAX_EDITS && !need_n_mutations);
     const bool need_min_pos = (m_mode == Mode::MIN_EDITS_POSITION);
     const bool need_pwm = (m_mode == Mode::PWM_MAX_EDITS);
     const bool has_score_min = !std::isnan(m_score_min);
@@ -728,7 +776,7 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     // below the threshold. Take max across strands at each position, then min
     // across positions. (For ABOVE, min across strands is correct: any one strand
     // reaching the threshold suffices.)
-    const bool below_bidirect = is_below() && scan_forward && scan_reverse && need_min;
+    const bool below_bidirect = is_below() && scan_forward && scan_reverse && (need_min || need_n_mutations);
 
     const size_t max_start = std::min(interval_length, target_length - motif_length + 1);
     if (max_start == 0 || (!scan_forward && !scan_reverse)) {
@@ -792,6 +840,16 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         }
     };
 
+    auto maybe_update_n_mutations = [&](float nmut) {
+        if (!need_n_mutations || std::isnan(nmut)) {
+            return;
+        }
+        // Track maximum n_mutations across qualifying windows
+        if (std::isnan(metrics.n_mutations) || nmut > metrics.n_mutations) {
+            metrics.n_mutations = nmut;
+        }
+    };
+
     for (size_t offset = 0; offset < max_start; ++offset) {
         // Sliding N-count maintenance (for offset > 0, slide the window by 1)
         if (use_n_skip && offset > 0) {
@@ -818,55 +876,100 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
         if (below_bidirect) {
             // direction=BELOW + bidirectional: compute both strands, take max
             // (prefilter is always off for BELOW, so no pigeonhole check needed)
-            float fwd_edits = std::numeric_limits<float>::quiet_NaN();
-            {
-                bool pass_score_filter = true;
-                if (apply_score_filter) {
-                    float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
-                    if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                    if (has_score_max && logp > m_score_max) pass_score_filter = false;
+            if (need_min) {
+                float fwd_edits = std::numeric_limits<float>::quiet_NaN();
+                {
+                    bool pass_score_filter = true;
+                    if (apply_score_filter) {
+                        float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
+                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                    }
+                    if (pass_score_filter) {
+                        fwd_edits = compute_window_edits(fwd_bidx.data() + offset, seq_avail, /*reverse=*/false);
+                    }
                 }
-                if (pass_score_filter) {
-                    fwd_edits = compute_window_edits(fwd_bidx.data() + offset, seq_avail, /*reverse=*/false);
-                }
-            }
 
-            float rev_edits = std::numeric_limits<float>::quiet_NaN();
-            {
-                bool pass_score_filter = true;
-                if (apply_score_filter) {
-                    float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
-                    if (has_score_min && logp < m_score_min) pass_score_filter = false;
-                    if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                float rev_edits = std::numeric_limits<float>::quiet_NaN();
+                {
+                    bool pass_score_filter = true;
+                    if (apply_score_filter) {
+                        float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
+                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                    }
+                    if (pass_score_filter) {
+                        rev_edits = compute_window_edits(rev_bidx.data() + offset, seq_avail, /*reverse=*/true);
+                    }
                 }
-                if (pass_score_filter) {
-                    rev_edits = compute_window_edits(rev_bidx.data() + offset, seq_avail, /*reverse=*/true);
-                }
-            }
 
-            // Combine: max of non-NaN values (NaN = strand filtered out / no match)
-            bool have_fwd = !std::isnan(fwd_edits);
-            bool have_rev = !std::isnan(rev_edits);
-            if (have_fwd || have_rev) {
-                float combined;
-                int combined_dir;
-                if (have_fwd && have_rev) {
-                    // Both strands have matches — take the harder one to disrupt
-                    if (fwd_edits >= rev_edits) {
+                // Combine: max of non-NaN values (NaN = strand filtered out / no match)
+                bool have_fwd = !std::isnan(fwd_edits);
+                bool have_rev = !std::isnan(rev_edits);
+                if (have_fwd || have_rev) {
+                    float combined;
+                    int combined_dir;
+                    if (have_fwd && have_rev) {
+                        // Both strands have matches — take the harder one to disrupt
+                        if (fwd_edits >= rev_edits) {
+                            combined = fwd_edits;
+                            combined_dir = +1;
+                        } else {
+                            combined = rev_edits;
+                            combined_dir = -1;
+                        }
+                    } else if (have_fwd) {
                         combined = fwd_edits;
                         combined_dir = +1;
                     } else {
                         combined = rev_edits;
                         combined_dir = -1;
                     }
-                } else if (have_fwd) {
-                    combined = fwd_edits;
-                    combined_dir = +1;
-                } else {
-                    combined = rev_edits;
-                    combined_dir = -1;
+                    maybe_update_min(combined, offset, combined_dir);
                 }
-                maybe_update_min(combined, offset, combined_dir);
+            }
+            if (need_n_mutations) {
+                // N_MUTATIONS + BELOW + bidirect: compute both strands, take max across strands
+                float fwd_nmut = std::numeric_limits<float>::quiet_NaN();
+                {
+                    bool pass_score_filter = true;
+                    if (apply_score_filter) {
+                        float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
+                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                    }
+                    if (pass_score_filter) {
+                        fwd_nmut = compute_n_mutations(fwd_bidx.data() + offset, /*reverse=*/false);
+                    }
+                }
+
+                float rev_nmut = std::numeric_limits<float>::quiet_NaN();
+                {
+                    bool pass_score_filter = true;
+                    if (apply_score_filter) {
+                        float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
+                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                    }
+                    if (pass_score_filter) {
+                        rev_nmut = compute_n_mutations(rev_bidx.data() + offset, /*reverse=*/true);
+                    }
+                }
+
+                // Combine: max of non-NaN values across strands
+                bool have_fwd = !std::isnan(fwd_nmut);
+                bool have_rev = !std::isnan(rev_nmut);
+                if (have_fwd || have_rev) {
+                    float combined;
+                    if (have_fwd && have_rev) {
+                        combined = std::max(fwd_nmut, rev_nmut);
+                    } else if (have_fwd) {
+                        combined = fwd_nmut;
+                    } else {
+                        combined = rev_nmut;
+                    }
+                    maybe_update_n_mutations(combined);
+                }
             }
         } else if (scan_forward || scan_reverse) {
             if (scan_forward) {
@@ -902,6 +1005,18 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                             float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/false);
                             maybe_update_min(edits, offset, +1);
                         }
+                    }
+                }
+                if (need_n_mutations) {
+                    bool pass_score_filter = true;
+                    if (apply_score_filter) {
+                        float logp = compute_window_pwm_score(window_start, /*reverse=*/false);
+                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                    }
+                    if (pass_score_filter) {
+                        float nmut = compute_n_mutations(fwd_bidx.data() + offset, /*reverse=*/false);
+                        maybe_update_n_mutations(nmut);
                     }
                 }
                 if (need_pwm) {
@@ -947,6 +1062,18 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
                             float edits = compute_window_edits(bidx, seq_avail, /*reverse=*/true);
                             maybe_update_min(edits, offset, -1);
                         }
+                    }
+                }
+                if (need_n_mutations) {
+                    bool pass_score_filter = true;
+                    if (apply_score_filter) {
+                        float logp = compute_window_pwm_score(window_start, /*reverse=*/true);
+                        if (has_score_min && logp < m_score_min) pass_score_filter = false;
+                        if (has_score_max && logp > m_score_max) pass_score_filter = false;
+                    }
+                    if (pass_score_filter) {
+                        float nmut = compute_n_mutations(rev_bidx.data() + offset, /*reverse=*/true);
+                        maybe_update_n_mutations(nmut);
                     }
                 }
                 if (need_pwm) {
