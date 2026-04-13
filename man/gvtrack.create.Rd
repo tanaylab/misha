@@ -148,6 +148,12 @@ interval after all modifier adjustments.
   NULL (sequence) \tab pwm.max.edit_distance \tab pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand \tab Edit distance at the best-scoring PWM window (same location as pwm.max/pwm.max.pos). \cr
 }
 
+\strong{Mutation count summarizers}
+\tabular{llll}{
+  Source \tab func \tab Key params \tab Description \cr
+  NULL (sequence) \tab pwm.n_mutations \tab pssm, score.thresh, score.min, score.max, direction, bidirect, prior, extend, strand \tab Number of single-base substitutions that independently cross \code{score.thresh}. Returns 0 if threshold already satisfied, NA if no single edit suffices. \cr
+}
+
 \strong{LSE edit distance summarizers}
 \tabular{llll}{
   Source \tab func \tab Key params \tab Description \cr

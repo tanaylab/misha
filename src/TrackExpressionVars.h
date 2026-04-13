@@ -157,6 +157,7 @@ public:
             PWM_MAX_EDIT_DISTANCE,
             PWM_EDIT_DISTANCE_LSE,
             PWM_EDIT_DISTANCE_LSE_POS,
+            PWM_N_MUTATIONS,
             NUM_FUNCS
         };
 
@@ -410,7 +411,8 @@ inline bool TrackExpressionVars::is_seq_variable(unsigned ivar) const {
            m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_POS ||
            m_track_vars[ivar].val_func == Track_var::PWM_MAX_EDIT_DISTANCE ||
            m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_LSE ||
-           m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
+           m_track_vars[ivar].val_func == Track_var::PWM_EDIT_DISTANCE_LSE_POS ||
+           m_track_vars[ivar].val_func == Track_var::PWM_N_MUTATIONS;
 }
 
 // Helper methods to check variable function types
@@ -423,7 +425,8 @@ inline bool TrackExpressionVars::is_sequence_based_function(Track_var::Val_func 
            func == Track_var::PWM_EDIT_DISTANCE_POS ||
            func == Track_var::PWM_MAX_EDIT_DISTANCE ||
            func == Track_var::PWM_EDIT_DISTANCE_LSE ||
-           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
+           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS ||
+           func == Track_var::PWM_N_MUTATIONS;
 }
 
 inline bool TrackExpressionVars::is_pwm_function(Track_var::Val_func func) {
@@ -436,7 +439,8 @@ inline bool TrackExpressionVars::is_pwm_edit_distance_function(Track_var::Val_fu
            func == Track_var::PWM_EDIT_DISTANCE_POS ||
            func == Track_var::PWM_MAX_EDIT_DISTANCE ||
            func == Track_var::PWM_EDIT_DISTANCE_LSE ||
-           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS;
+           func == Track_var::PWM_EDIT_DISTANCE_LSE_POS ||
+           func == Track_var::PWM_N_MUTATIONS;
 }
 
 inline bool TrackExpressionVars::is_pwm_lse_edit_distance_function(Track_var::Val_func func) {

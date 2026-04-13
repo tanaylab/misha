@@ -25,7 +25,8 @@ namespace {
 enum class EditDistAggMode {
 	MIN_EDITS,     // PWM_EDIT_DISTANCE, PWM_EDIT_DISTANCE_LSE
 	MIN_EDITS_POS, // PWM_EDIT_DISTANCE_POS, PWM_EDIT_DISTANCE_LSE_POS
-	MAX_EDITS      // PWM_MAX_EDIT_DISTANCE
+	MAX_EDITS,     // PWM_MAX_EDIT_DISTANCE
+	MAX_SCORE      // PWM_N_MUTATIONS (take maximum score across parts)
 };
 
 // Per-part scoring result for edit distance aggregation
@@ -44,6 +45,8 @@ EditDistAggMode get_agg_mode(TrackExpressionVars::Track_var::Val_func func) {
 			return EditDistAggMode::MIN_EDITS_POS;
 		case TrackExpressionVars::Track_var::PWM_MAX_EDIT_DISTANCE:
 			return EditDistAggMode::MAX_EDITS;
+		case TrackExpressionVars::Track_var::PWM_N_MUTATIONS:
+			return EditDistAggMode::MAX_SCORE;
 		default:
 			return EditDistAggMode::MIN_EDITS;
 	}
@@ -95,6 +98,16 @@ double aggregate_edit_distance_parts(
 				}
 			}
 			return found ? best_edits : numeric_limits<double>::quiet_NaN();
+		}
+		case EditDistAggMode::MAX_SCORE: {
+			// Take maximum score across parts (for N_MUTATIONS)
+			double max_score = numeric_limits<double>::quiet_NaN();
+			for (const auto &r : parts) {
+				if (std::isnan(max_score) || (!std::isnan(r.score) && r.score > max_score)) {
+					max_score = r.score;
+				}
+			}
+			return max_score;
 		}
 	}
 	return numeric_limits<double>::quiet_NaN(); // unreachable

@@ -63,7 +63,8 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
     "exists", "size", "sample", "sample.pos.abs", "sample.pos.relative",
     "first", "first.pos.abs", "first.pos.relative", "last", "last.pos.abs", "last.pos.relative",
     "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
-    "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos"};
+    "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos",
+    "pwm.n_mutations"};
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "distance.edge", "coverage", "neighbor.count" };
 
@@ -780,6 +781,84 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 score_min,
                 score_max,
                 lse_direction
+            );
+
+            // Parse optional iterator modifier
+            Iterator_modifier1D imdf1d;
+            parse_imdf(rvtrack, vtrack, &imdf1d, NULL);
+            var.seq_imdf1d = add_imdf(imdf1d);
+
+            var.percentile = numeric_limits<double>::quiet_NaN();
+            var.requires_pv = false;
+
+            // Attach filter if present
+            attach_filter_to_var(rvtrack, vtrack, var);
+            return;
+        } else if (func == "pwm.n_mutations") {
+            // N_MUTATIONS mode: count single-base substitutions that independently cross threshold
+            m_track_vars.push_back(Track_var());
+            Track_var &var = m_track_vars.back();
+            var.var_name = vtrack;
+            var.val_func = Track_var::PWM_N_MUTATIONS;
+            var.track_n_imdf = nullptr;
+            var.seq_imdf1d = nullptr;
+
+            SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
+
+            // Parse PWM parameters using helper struct
+            TrackExprParams::PWMParams pwm_params = TrackExprParams::PWMParams::parse(rparams, vtrack);
+
+            // Extract score.min parameter (optional, default NaN = no filter)
+            float score_min = std::numeric_limits<float>::quiet_NaN();
+            if (Rf_isNewList(rparams)) {
+                int sm_idx = findListElementIndex(rparams, "score.min");
+                if (sm_idx >= 0) {
+                    SEXP rscore_min = VECTOR_ELT(rparams, sm_idx);
+                    if (!Rf_isNull(rscore_min)) {
+                        if (Rf_isReal(rscore_min) && Rf_length(rscore_min) == 1) {
+                            score_min = static_cast<float>(REAL(rscore_min)[0]);
+                        } else if (Rf_isInteger(rscore_min) && Rf_length(rscore_min) == 1) {
+                            score_min = static_cast<float>(INTEGER(rscore_min)[0]);
+                        } else {
+                            verror("score.min parameter must be NULL or a single numeric value for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
+            // Extract score.max parameter (optional, default NaN = no filter)
+            float score_max = std::numeric_limits<float>::quiet_NaN();
+            if (Rf_isNewList(rparams)) {
+                int smx_idx = findListElementIndex(rparams, "score.max");
+                if (smx_idx >= 0) {
+                    SEXP rscore_max = VECTOR_ELT(rparams, smx_idx);
+                    if (!Rf_isNull(rscore_max)) {
+                        if (Rf_isReal(rscore_max) && Rf_length(rscore_max) == 1) {
+                            score_max = static_cast<float>(REAL(rscore_max)[0]);
+                        } else if (Rf_isInteger(rscore_max) && Rf_length(rscore_max) == 1) {
+                            score_max = static_cast<float>(INTEGER(rscore_max)[0]);
+                        } else {
+                            verror("score.max parameter must be NULL or a single numeric value for vtrack %s", vtrack.c_str());
+                        }
+                    }
+                }
+            }
+
+            auto direction = parse_direction_param(rparams, vtrack);
+
+            // Construct scorer with N_MUTATIONS mode, no max_edits or max_indels
+            var.pwm_edit_distance_scorer = std::make_unique<PWMEditDistanceScorer>(
+                pwm_params.core.pssm,
+                &m_shared_seqfetch,
+                static_cast<float>(pwm_params.core.score_thresh),
+                -1,  // max_edits: not applicable for n_mutations
+                pwm_params.extend_flag,
+                static_cast<char>(pwm_params.core.strand_mode),
+                PWMEditDistanceScorer::Mode::N_MUTATIONS,
+                score_min,
+                0,   // max_indels: not applicable for n_mutations
+                score_max,
+                direction
             );
 
             // Parse optional iterator modifier
