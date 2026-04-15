@@ -47,104 +47,28 @@
 #' @return Character vector of chromosome names in file order (invisibly).
 #' @noRd
 .stream_fasta <- function(fasta_path, callback) {
-    con <- file(fasta_path, open = "rb")
-    on.exit(close(con), add = TRUE)
-
-    chrom_names <- character(0)
-    current_chrom <- NULL
-    chunks <- list()
-
-    while (TRUE) {
-        line <- readLines(con, n = 1L, warn = FALSE)
-        if (length(line) == 0L) break
-
-        if (startsWith(line, ">")) {
-            # Flush previous chromosome
-            if (!is.null(current_chrom)) {
-                seq_raw <- charToRaw(toupper(paste0(chunks, collapse = "")))
-                callback(current_chrom, seq_raw)
-            }
-            current_chrom <- sub("^>\\s*", "", sub("\\s.*", "", line))
-            chrom_names <- c(chrom_names, current_chrom)
-            chunks <- list()
-        } else {
-            chunks[[length(chunks) + 1L]] <- line
-        }
+    # Bulk-read all lines (fast), then iterate by chromosome
+    lines <- readLines(fasta_path, warn = FALSE)
+    header_idx <- which(startsWith(lines, ">"))
+    if (length(header_idx) == 0L) {
+        stop("No FASTA headers found in: ", fasta_path, call. = FALSE)
     }
 
-    # Flush last chromosome
-    if (!is.null(current_chrom)) {
-        seq_raw <- charToRaw(toupper(paste0(chunks, collapse = "")))
-        callback(current_chrom, seq_raw)
+    chrom_names <- sub("^>\\s*", "", sub("\\s.*", "", lines[header_idx]))
+
+    for (i in seq_along(header_idx)) {
+        seq_start <- header_idx[i] + 1L
+        seq_end <- if (i < length(header_idx)) header_idx[i + 1L] - 1L else length(lines)
+
+        if (seq_start > seq_end) {
+            seq_raw <- raw(0)
+        } else {
+            seq_raw <- charToRaw(toupper(paste0(lines[seq_start:seq_end], collapse = "")))
+        }
+        callback(chrom_names[i], seq_raw)
     }
 
     invisible(chrom_names)
-}
-
-
-#' Write a raw-vector sequence to a FASTA connection with fixed-width lines
-#'
-#' Also returns the .fai metadata for the written entry.
-#'
-#' @param con A writable binary connection.
-#' @param chrom_name Chromosome name.
-#' @param seq_raw Raw vector of uppercase ASCII sequence bytes.
-#' @param line_width Bases per line.
-#' @param byte_offset Current byte offset in the file (before this call).
-#' @return Named list with fai fields: name, length, offset, linebases, linewidth,
-#'   and total_bytes (bytes written by this call).
-#' @noRd
-.write_fasta_chrom_raw <- function(con, chrom_name, seq_raw, line_width, byte_offset) {
-    header <- paste0(">", chrom_name, "\n")
-    header_bytes <- charToRaw(header)
-    writeBin(header_bytes, con)
-
-    seq_len <- length(seq_raw)
-    if (seq_len == 0L) {
-        return(list(
-            name = chrom_name, length = 0L,
-            offset = byte_offset + length(header_bytes),
-            linebases = 0L, linewidth = 0L,
-            total_bytes = length(header_bytes)
-        ))
-    }
-
-    # Write sequence in fixed-width lines, binary mode
-    newline_raw <- charToRaw("\n")
-    data_offset <- byte_offset + length(header_bytes)
-    actual_linebases <- min(line_width, seq_len)
-    data_bytes <- 0L
-    pos <- 1L
-    while (pos <= seq_len) {
-        chunk_end <- min(pos + line_width - 1L, seq_len)
-        writeBin(seq_raw[pos:chunk_end], con)
-        writeBin(newline_raw, con)
-        data_bytes <- data_bytes + (chunk_end - pos + 1L) + 1L
-        pos <- chunk_end + 1L
-    }
-
-    list(
-        name = chrom_name, length = seq_len,
-        offset = data_offset,
-        linebases = actual_linebases,
-        linewidth = actual_linebases + 1L, # +1 for newline
-        total_bytes = length(header_bytes) + data_bytes
-    )
-}
-
-
-#' Write a .fai index from pre-computed metadata
-#'
-#' @param fai_path Path to write the .fai file.
-#' @param fai_entries List of lists, each with name/length/offset/linebases/linewidth.
-#' @return Invisibly returns the .fai path.
-#' @noRd
-.write_fai_from_entries <- function(fai_path, fai_entries) {
-    lines <- vapply(fai_entries, function(e) {
-        paste(e$name, e$length, e$offset, e$linebases, e$linewidth, sep = "\t")
-    }, character(1))
-    writeLines(lines, fai_path)
-    invisible(fai_path)
 }
 
 
@@ -320,69 +244,28 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
         }
     }
 
-    # --- build perturbation index by chrom ---------------------------------
     interval_chroms <- as.character(intervals$chrom)
-    pert_by_chrom <- split(seq_len(nrow(intervals)), interval_chroms)
-    # Sort each chromosome's perturbations by start position descending
-    for (chr_name in names(pert_by_chrom)) {
-        idx <- pert_by_chrom[[chr_name]]
-        pert_by_chrom[[chr_name]] <- idx[order(-intervals$start[idx])]
-    }
 
-    # Pre-convert donor sequences to raw vectors (once)
-    donor_raws <- lapply(toupper(donor_seqs), charToRaw)
-
-    # --- stream: read each chrom, apply perturbations, write output --------
-    fai_entries <- list()
-    byte_offset <- 0L
-    chrom_names_seen <- character(0)
-
-    # Use a block so the output file is closed before gdb.create reads it
-    local({
-        out_con <- file(output, open = "wb")
-        on.exit(close(out_con), add = TRUE)
-
-        .stream_fasta(genome_fasta, function(chrom_name, seq_raw) {
-            chrom_names_seen <<- c(chrom_names_seen, chrom_name)
-
-            # Apply perturbations for this chromosome using raw vector replacement
-            idx_list <- pert_by_chrom[[chrom_name]]
-            if (!is.null(idx_list)) {
-                chrom_len <- length(seq_raw)
-                for (i in idx_list) {
-                    s <- intervals$start[i] # 0-based
-                    e <- intervals$end[i] # 0-based, exclusive
-                    if (s < 0 || e > chrom_len) {
-                        stop(sprintf(
-                            "Interval out of bounds: %s:%d-%d (chromosome length: %d)",
-                            chrom_name, s, e, chrom_len
-                        ), call. = FALSE)
-                    }
-                    # raw vector is 1-based: positions (s+1) to e
-                    seq_raw[(s + 1L):e] <- donor_raws[[i]]
-                }
-            }
-
-            # Write and collect .fai metadata
-            entry <- .write_fasta_chrom_raw(out_con, chrom_name, seq_raw, line_width, byte_offset)
-            byte_offset <<- byte_offset + entry$total_bytes
-            fai_entries[[length(fai_entries) + 1L]] <<- entry
-        })
-    })
+    # --- C++ fast path: read FASTA, apply perturbations, write output + .fai
+    fai_df <- .gcall(
+        "C_ggenome_implant",
+        genome_fasta, output,
+        as.character(intervals$chrom),
+        as.integer(intervals$start),
+        as.integer(intervals$end),
+        toupper(donor_seqs),
+        as.integer(line_width)
+    )
 
     # Validate that all interval chromosomes were found in reference
-    missing_chroms <- setdiff(unique(interval_chroms), chrom_names_seen)
+    missing_chroms <- setdiff(unique(interval_chroms), fai_df$name)
     if (length(missing_chroms) > 0L) {
-        # Clean up partial output
         unlink(output)
         stop(sprintf(
             "Chromosome(s) not found in reference: %s",
             paste(missing_chroms, collapse = ", ")
         ), call. = FALSE)
     }
-
-    # --- write .fai index (from collected metadata, no re-read) ------------
-    .write_fai_from_entries(paste0(output, ".fai"), fai_entries)
 
     # --- create trackdb ---
     if (create_trackdb) {
