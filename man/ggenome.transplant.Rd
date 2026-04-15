@@ -57,25 +57,32 @@ donor_db <- tempfile()
 gdb.create(donor_db, fasta = donor_fasta, verbose = FALSE)
 
 # Export the current DB as the target FASTA
+gdb.init_examples()
 ref_fasta <- tempfile(fileext = ".fa")
 gdb.export_fasta(ref_fasta)
 
 # Transplant donor sequence into positions 100-200 of chr1
 intervals <- data.frame(chrom = "chr1", start = 100, end = 200)
 out <- tempfile(fileext = ".fa")
+trackdb <- tempfile()
 ggenome.transplant(intervals,
     source_genome = donor_db,
     target_genome = ref_fasta,
     output = out,
-    create_trackdb = FALSE
+    create_trackdb = TRUE,
+    trackdb_path = trackdb
 )
 
-# Verify: positions 101-200 should now be all T's
-result <- .read_fasta(out)
-substring(result[["chr1"]], 101, 200) == paste(rep("T", 100), collapse = "")
+# Verify: positions 100-200 should now be all T's
+gdb.init(trackdb)
+gseq.extract(data.frame(chrom = "chr1", start = 100, end = 200))
 
 # Clean up
-unlink(c(donor_fasta, donor_db, ref_fasta, out, paste0(out, ".fai")),
+unlink(
+    c(
+        donor_fasta, donor_db, ref_fasta, out,
+        paste0(out, ".fai"), trackdb
+    ),
     recursive = TRUE
 )
 
