@@ -155,6 +155,11 @@ reference:
       - gsynth.convert
       - gsynth.bin_map
       - print.gsynth.model
+  - title: Genome editing functions
+    desc: Replace intervals in a reference genome with donor sequences
+    contents:
+      - ggenome.implant
+      - ggenome.transplant
   - title: Database functions
     desc: Database functions
     contents:
