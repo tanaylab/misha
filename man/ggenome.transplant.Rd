@@ -45,18 +45,39 @@ intervals and implants them into a target genome. Equivalent to calling
 \code{genome_fasta = target_genome}.
 }
 \examples{
-\dontrun{
-intervals <- data.frame(
-    chrom = c("chr1", "chr2"),
-    start = c(100, 200),
-    end = c(200, 300)
+gdb.init_examples()
+
+# Create a "donor" DB with different sequence (all T's)
+donor_fasta <- tempfile(fileext = ".fa")
+cat(">chr1\n", paste(rep("T", 500000), collapse = ""), "\n",
+    ">chr2\n", paste(rep("T", 300000), collapse = ""), "\n",
+    file = donor_fasta, sep = ""
 )
+donor_db <- tempfile()
+gdb.create(donor_db, fasta = donor_fasta, verbose = FALSE)
+
+# Export the current DB as the target FASTA
+ref_fasta <- tempfile(fileext = ".fa")
+gdb.export_fasta(ref_fasta)
+
+# Transplant donor sequence into positions 100-200 of chr1
+intervals <- data.frame(chrom = "chr1", start = 100, end = 200)
+out <- tempfile(fileext = ".fa")
 ggenome.transplant(intervals,
-    source_genome = "/path/to/donor/db",
-    target_genome = "/path/to/target.fa",
-    output = "/tmp/transplanted.fa"
+    source_genome = donor_db,
+    target_genome = ref_fasta,
+    output = out,
+    create_trackdb = FALSE
 )
-}
+
+# Verify: positions 101-200 should now be all T's
+result <- .read_fasta(out)
+substring(result[["chr1"]], 101, 200) == paste(rep("T", 100), collapse = "")
+
+# Clean up
+unlink(c(donor_fasta, donor_db, ref_fasta, out, paste0(out, ".fai")),
+    recursive = TRUE
+)
 
 }
 \seealso{
