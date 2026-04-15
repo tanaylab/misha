@@ -36,42 +36,6 @@
 }
 
 
-#' Stream-process a FASTA file chromosome by chromosome
-#'
-#' Reads a FASTA file and calls \code{callback(chrom_name, seq_raw)} for each
-#' chromosome, where \code{seq_raw} is the uppercase sequence as a raw vector.
-#' Only one chromosome is in memory at a time.
-#'
-#' @param fasta_path Path to FASTA file
-#' @param callback Function taking (chrom_name, seq_raw). Return value ignored.
-#' @return Character vector of chromosome names in file order (invisibly).
-#' @noRd
-.stream_fasta <- function(fasta_path, callback) {
-    # Bulk-read all lines (fast), then iterate by chromosome
-    lines <- readLines(fasta_path, warn = FALSE)
-    header_idx <- which(startsWith(lines, ">"))
-    if (length(header_idx) == 0L) {
-        stop("No FASTA headers found in: ", fasta_path, call. = FALSE)
-    }
-
-    chrom_names <- sub("^>\\s*", "", sub("\\s.*", "", lines[header_idx]))
-
-    for (i in seq_along(header_idx)) {
-        seq_start <- header_idx[i] + 1L
-        seq_end <- if (i < length(header_idx)) header_idx[i + 1L] - 1L else length(lines)
-
-        if (seq_start > seq_end) {
-            seq_raw <- raw(0)
-        } else {
-            seq_raw <- charToRaw(toupper(paste0(lines[seq_start:seq_end], collapse = "")))
-        }
-        callback(chrom_names[i], seq_raw)
-    }
-
-    invisible(chrom_names)
-}
-
-
 #' Implant donor sequences into a reference genome
 #'
 #' Replaces specified intervals in a reference genome with donor DNA sequences
