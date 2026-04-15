@@ -1,41 +1,5 @@
 # Genome Editing: Replace intervals in a reference genome with donor sequences
 
-#' Read a FASTA file into a named list of sequences
-#'
-#' @param fasta_path Path to FASTA file
-#' @return Named list with chromosome names as keys and full sequences as values
-#' @noRd
-.read_fasta <- function(fasta_path) {
-    lines <- readLines(fasta_path)
-    if (length(lines) == 0L) {
-        stop("FASTA file is empty: ", fasta_path, call. = FALSE)
-    }
-
-    header_idx <- which(startsWith(lines, ">"))
-    if (length(header_idx) == 0L) {
-        stop("No FASTA headers found in: ", fasta_path, call. = FALSE)
-    }
-
-    # Pre-allocate result list
-    chrom_names <- sub("^>\\s*", "", sub("\\s.*", "", lines[header_idx]))
-    result <- vector("list", length(chrom_names))
-    names(result) <- chrom_names
-
-    # For each header, concatenate all sequence lines until the next header
-    for (i in seq_along(header_idx)) {
-        start <- header_idx[i] + 1L
-        end <- if (i < length(header_idx)) header_idx[i + 1L] - 1L else length(lines)
-        if (start > end) {
-            result[[i]] <- ""
-        } else {
-            result[[i]] <- paste0(lines[start:end], collapse = "")
-        }
-    }
-
-    result
-}
-
-
 #' Implant donor sequences into a reference genome
 #'
 #' Replaces specified intervals in a reference genome with donor DNA sequences
