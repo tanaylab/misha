@@ -1,3 +1,8 @@
+# misha 5.6.11
+
+* Added `ggenome.implant()` for replacing intervals in a reference genome with donor sequences and writing a new FASTA. Supports literal donor sequences or extraction from a misha database, with optional trackdb creation.
+* Added `ggenome.transplant()` as sugar for cross-genome sequence swaps — extracts from a source genome and implants into a target genome in a single call.
+
 # misha 5.6.10
 
 * Fixed `direction="below"` with `bidirect=TRUE` taking min across strands instead of max. A genomic substitution changes both strands, so disrupting a motif requires both strands to fall below the threshold.
