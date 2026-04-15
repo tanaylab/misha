@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.9</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.10</span>
       </span>
     </div>
 
@@ -66,6 +66,13 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.10" id="misha-5610">misha 5.6.10<a class="anchor" aria-label="anchor" href="#misha-5610"></a></h2>
+<ul><li>Fixed <code>direction="below"</code> with <code>bidirect=TRUE</code> taking min across strands instead of max. A genomic substitution changes both strands, so disrupting a motif requires both strands to fall below the threshold.</li>
+<li>
+<strong>Breaking</strong>: removed the hidden default that set <code>score.min = score.thresh</code> when <code>direction = "below"</code>. <code>score.min</code> now defaults to NULL (no filter) for both directions. Set <code>score.min</code> explicitly to filter windows.</li>
+<li>Improved edit distance documentation: dedicated section with direction/strand semantics, parameter reference, and worked examples.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.9" id="misha-569">misha 5.6.9<a class="anchor" aria-label="anchor" href="#misha-569"></a></h2>
 <ul><li>Added <code>k</code> parameter to <code><a href="../reference/gsynth.train.html">gsynth.train()</a></code> to configure the Markov order (1-8, default 5).</li>

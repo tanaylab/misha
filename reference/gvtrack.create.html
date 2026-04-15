@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.9</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.10</span>
       </span>
     </div>
 
@@ -162,7 +162,7 @@ iterator modifiers (including <code>sshift</code> /
 applied before the position is reported. In other words, the returned
 coordinate is always 0-based and measured from the start of the iterator
 interval after all modifier adjustments.</p>
-<p><strong>Interval-based summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>params</td><td>Description</td></tr><tr><td>1D intervals</td><td>distance</td><td>Minimal distance from center (default 0)</td><td>Signed distance using normalized formula when inside intervals, distance to edge when outside; see notes below for exact formula.</td></tr><tr><td>1D intervals</td><td>distance.center</td><td>NULL</td><td>Distance from iterator center to the closest interval center, <code>NA</code> if outside all intervals.</td></tr><tr><td>1D intervals</td><td>distance.edge</td><td>NULL</td><td>Edge-to-edge distance from iterator interval to closest source interval (like <code>gintervals.neighbors</code>); see notes below for strand handling.</td></tr><tr><td>1D intervals</td><td>coverage</td><td>NULL</td><td>Fraction of iterator length covered by source intervals (after unifying overlaps).</td></tr><tr><td>1D intervals</td><td>neighbor.count</td><td>Max distance (&gt;= 0)</td><td>Number of source intervals whose edge-to-edge distance from the iterator interval is within params (no unification).</td></tr></table><p><strong>2D track summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>params</td><td>Description</td></tr><tr><td>2D track</td><td>area</td><td>NULL</td><td>Area covered by intersections of track rectangles with the iterator interval.</td></tr><tr><td>2D track</td><td>weighted.sum</td><td>NULL</td><td>Weighted sum of values where each weight equals the intersection area.</td></tr></table><p><strong>Motif (PWM) summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>pwm</td><td>pssm, bidirect, prior, extend, spat_*</td><td>Log-sum-exp score of motif likelihoods across all anchors inside the iterator interval.</td></tr><tr><td>NULL (sequence)</td><td>pwm.max</td><td>pssm, bidirect, prior, extend, spat_*</td><td>Maximum log-likelihood score among all anchors (per-position union across strands).</td></tr><tr><td>NULL (sequence)</td><td>pwm.max.pos</td><td>pssm, bidirect, prior, extend, spat_*</td><td>1-based position of the best-scoring anchor (signed by strand when <code>bidirect = TRUE</code>); coordinates are always relative to the iterator interval after any <code><a href="gvtrack.iterator.html">gvtrack.iterator()</a></code> shifts/extensions.</td></tr><tr><td>NULL (sequence)</td><td>pwm.count</td><td>pssm, score.thresh, bidirect, prior, extend, strand, spat_*</td><td>Count of anchors whose score exceeds <code>score.thresh</code> (per-position union).</td></tr></table><p><strong>Edit distance summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>pwm.edit_distance</td><td>pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>Minimum number of edits (substitutions + indels) needed to reach <code>score.thresh</code> across all windows.</td></tr><tr><td>NULL (sequence)</td><td>pwm.edit_distance.pos</td><td>pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>1-based position of the window achieving minimum edit distance (signed by strand when bidirect).</td></tr><tr><td>NULL (sequence)</td><td>pwm.max.edit_distance</td><td>pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>Edit distance at the best-scoring PWM window (same location as pwm.max/pwm.max.pos).</td></tr></table><p><strong>LSE edit distance summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>pwm.edit_distance.lse</td><td>pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>Minimum number of substitution edits needed to raise the LSE score (log-sum-exp of per-window PWM scores) above <code>score.thresh</code>. Exhaustive for k&lt;=2, greedy heuristic for k&gt;=3.</td></tr><tr><td>NULL (sequence)</td><td>pwm.edit_distance.lse.pos</td><td>pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>1-based position of the most impactful single edit for raising the LSE score.</td></tr></table><p><strong>K-mer summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>kmer.count</td><td>kmer, extend, strand</td><td>Number of k-mer occurrences whose anchor lies inside the iterator interval.</td></tr><tr><td>NULL (sequence)</td><td>kmer.frac</td><td>kmer, extend, strand</td><td>Fraction of possible anchors within the interval that match the k-mer.</td></tr></table><p><strong>Masked sequence summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>masked.count</td><td>NULL</td><td>Number of masked (lowercase) base pairs in the iterator interval.</td></tr><tr><td>NULL (sequence)</td><td>masked.frac</td><td>NULL</td><td>Fraction of base pairs in the iterator interval that are masked (lowercase).</td></tr></table><p>The sections below provide additional notes for motif, interval, k-mer, and masked sequence functions.</p>
+<p><strong>Interval-based summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>params</td><td>Description</td></tr><tr><td>1D intervals</td><td>distance</td><td>Minimal distance from center (default 0)</td><td>Signed distance using normalized formula when inside intervals, distance to edge when outside; see notes below for exact formula.</td></tr><tr><td>1D intervals</td><td>distance.center</td><td>NULL</td><td>Distance from iterator center to the closest interval center, <code>NA</code> if outside all intervals.</td></tr><tr><td>1D intervals</td><td>distance.edge</td><td>NULL</td><td>Edge-to-edge distance from iterator interval to closest source interval (like <code>gintervals.neighbors</code>); see notes below for strand handling.</td></tr><tr><td>1D intervals</td><td>coverage</td><td>NULL</td><td>Fraction of iterator length covered by source intervals (after unifying overlaps).</td></tr><tr><td>1D intervals</td><td>neighbor.count</td><td>Max distance (&gt;= 0)</td><td>Number of source intervals whose edge-to-edge distance from the iterator interval is within params (no unification).</td></tr></table><p><strong>2D track summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>params</td><td>Description</td></tr><tr><td>2D track</td><td>area</td><td>NULL</td><td>Area covered by intersections of track rectangles with the iterator interval.</td></tr><tr><td>2D track</td><td>weighted.sum</td><td>NULL</td><td>Weighted sum of values where each weight equals the intersection area.</td></tr></table><p><strong>Motif (PWM) summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>pwm</td><td>pssm, bidirect, prior, extend, spat_*</td><td>Log-sum-exp score of motif likelihoods across all anchors inside the iterator interval.</td></tr><tr><td>NULL (sequence)</td><td>pwm.max</td><td>pssm, bidirect, prior, extend, spat_*</td><td>Maximum log-likelihood score among all anchors (per-position union across strands).</td></tr><tr><td>NULL (sequence)</td><td>pwm.max.pos</td><td>pssm, bidirect, prior, extend, spat_*</td><td>1-based position of the best-scoring anchor (signed by strand when <code>bidirect = TRUE</code>); coordinates are always relative to the iterator interval after any <code><a href="gvtrack.iterator.html">gvtrack.iterator()</a></code> shifts/extensions.</td></tr><tr><td>NULL (sequence)</td><td>pwm.count</td><td>pssm, score.thresh, bidirect, prior, extend, strand, spat_*</td><td>Count of anchors whose score exceeds <code>score.thresh</code> (per-position union).</td></tr></table><p><strong>Edit distance summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>pwm.edit_distance</td><td>pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>Minimum number of edits (substitutions + indels) needed to reach <code>score.thresh</code> across all windows.</td></tr><tr><td>NULL (sequence)</td><td>pwm.edit_distance.pos</td><td>pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>1-based position of the window achieving minimum edit distance (signed by strand when bidirect).</td></tr><tr><td>NULL (sequence)</td><td>pwm.max.edit_distance</td><td>pssm, score.thresh, max_edits, max_indels, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>Edit distance at the best-scoring PWM window (same location as pwm.max/pwm.max.pos).</td></tr></table><p><strong>Mutation count summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>pwm.n_mutations</td><td>pssm, score.thresh, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>Number of single-base substitutions that independently cross <code>score.thresh</code>. Returns 0 if threshold already satisfied, NA if no single edit suffices.</td></tr></table><p><strong>LSE edit distance summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>pwm.edit_distance.lse</td><td>pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>Minimum number of substitution edits needed to raise the LSE score (log-sum-exp of per-window PWM scores) above <code>score.thresh</code>. Exhaustive for k&lt;=2, greedy heuristic for k&gt;=3.</td></tr><tr><td>NULL (sequence)</td><td>pwm.edit_distance.lse.pos</td><td>pssm, score.thresh, max_edits, score.min, score.max, direction, bidirect, prior, extend, strand</td><td>1-based position of the most impactful single edit for raising the LSE score.</td></tr></table><p><strong>K-mer summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>kmer.count</td><td>kmer, extend, strand</td><td>Number of k-mer occurrences whose anchor lies inside the iterator interval.</td></tr><tr><td>NULL (sequence)</td><td>kmer.frac</td><td>kmer, extend, strand</td><td>Fraction of possible anchors within the interval that match the k-mer.</td></tr></table><p><strong>Masked sequence summarizers</strong></p><table class="table table"><tr><td>Source</td><td>func</td><td>Key params</td><td>Description</td></tr><tr><td>NULL (sequence)</td><td>masked.count</td><td>NULL</td><td>Number of masked (lowercase) base pairs in the iterator interval.</td></tr><tr><td>NULL (sequence)</td><td>masked.frac</td><td>NULL</td><td>Fraction of base pairs in the iterator interval that are masked (lowercase).</td></tr></table><p>The sections below provide additional notes for motif, interval, k-mer, and masked sequence functions.</p>
 <p><strong>Motif (PWM) notes</strong></p><ul><li><p><code>pssm</code>: Position-specific scoring matrix (matrix or data frame) with columns <code>A</code>, <code>C</code>, <code>G</code>, <code>T</code>; extra columns are ignored.</p></li>
 <li><p><code>bidirect</code>: When TRUE (default), both strands are scanned and combined per genomic start (per-position union). The <code>strand</code> argument is ignored. When FALSE, only the strand specified by <code>strand</code> is scanned.</p></li>
 <li><p><code>prior</code>: Pseudocount added to frequencies (default 0.01). Set to 0 to disable.</p></li>
@@ -172,12 +172,53 @@ interval after all modifier adjustments.</p>
 <li><p><code>score.thresh</code>: Threshold for <code>pwm.count</code>. Anchors with log-likelihood &gt;= <code>score.thresh</code> are counted; only one count per genomic start.</p></li>
 <li><p>Spatial weighting (<code>spat_factor</code>, <code>spat_bin</code>, <code>spat_min</code>, <code>spat_max</code>): optional position-dependent weights applied in log-space. Provide a positive numeric vector <code>spat_factor</code>; <code>spat_bin</code> (integer &gt; 0) defines bin width; <code>spat_min</code>/<code>spat_max</code> restrict the scanning window.</p></li>
 <li><p><code>pwm.max.pos</code>: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Ties resolve to the most 5' anchor; the forward strand wins ties at the same coordinate. Values are signed when <code>bidirect = TRUE</code> (positive for forward, negative for reverse).</p></li>
-<li><p><code>score.thresh</code>: For edit distance functions, this is the PWM log-likelihood target that the algorithm tries to reach via substitutions. The edit distance is the minimum number of single-base changes needed for the window to achieve this score.</p></li>
-<li><p><code>max_edits</code>: For edit distance functions only. Optional positive integer setting the maximum search depth. If reaching the threshold requires more than <code>max_edits</code> substitutions, NA is returned. When NULL (default), exact computation is used.</p></li>
-<li><p><code>max_indels</code>: For <code>pwm.edit_distance</code>, <code>pwm.edit_distance.pos</code>, and <code>pwm.max.edit_distance</code> only. Not supported by LSE variants. Optional non-negative integer specifying the maximum number of insertions and deletions allowed (default 0, substitutions only). When &gt; 0, a banded Needleman-Wunsch DP is used to find the minimum total edits (substitutions + indels) to reach the score threshold. Typical values are 1-2.</p></li>
-<li><p><code>score.min</code>: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is below <code>score.min</code> are skipped (edit distance returns NA). Improves performance by avoiding expensive computation on low-scoring windows. For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter). When <code>direction = "below"</code> and <code>score.min</code> is NULL, it defaults to <code>score.thresh</code> — windows already scoring below the threshold trivially need 0 edits, so filtering them out gives the useful semantics of "how many edits to disrupt this motif match". Use <code>score.min = -Inf</code> to disable this.</p></li>
-<li><p><code>score.max</code>: For edit distance functions only. Optional numeric filter. Windows whose PWM log-likelihood is above <code>score.max</code> are skipped (edit distance returns NA). Combined with <code>score.min</code>, enables efficient regime-specific queries (e.g., only positions with score in [<code>score.min</code>, <code>score.max</code>]). For LSE variants, the filter applies to the aggregate LSE score across all windows rather than individual window scores. Default NULL (no filter).</p></li>
-<li><p><code>direction</code>: For edit distance functions only. Direction of the edit distance query: <code>"above"</code> (default) finds the minimum edits to bring the score above <code>score.thresh</code>; <code>"below"</code> finds the minimum edits to bring the score below <code>score.thresh</code>.</p></li>
+</ul><p><strong>Edit distance notes</strong></p>
+<p>The edit distance functions answer "how many single-base changes are needed to reach a target
+PWM score?" Each genomic window (same length as the PSSM) gets an edit distance: the minimum
+number of substitutions (and optionally indels) required to bring its PWM log-likelihood score
+to the target threshold. The virtual track returns the minimum edit distance across all windows
+in the iterator interval.</p>
+<p><strong>Direction.</strong> The <code>direction</code> parameter controls which side of the threshold to target:</p><ul><li><p><code>"above"</code> (default): minimum edits to make the score <strong>reach or exceed</strong>
+    <code>score.thresh</code>. Use this to ask "how close is this sequence to becoming a motif match?"
+    A window already scoring above the threshold needs 0 edits.</p></li>
+<li><p><code>"below"</code>: minimum edits to make the score <strong>fall below</strong>
+    <code>score.thresh</code>. Use this to ask "how fragile is this motif match — how many mutations
+    would disrupt it?" A window already scoring below the threshold needs 0 edits.</p></li>
+</ul><p><strong>Strand handling differs by direction.</strong> When <code>bidirect = TRUE</code>, both strands are
+scanned at each genomic position. The way their edit distances are combined depends on
+the direction:</p><ul><li><p><code>direction = "above"</code>: takes the <strong>minimum</strong> across both strands. A motif
+    match on <em>either</em> strand is sufficient (e.g., for TF binding), so the easier strand
+    wins.</p></li>
+<li><p><code>direction = "below"</code>: takes the <strong>maximum</strong> across both strands. A single
+    genomic substitution changes both strands simultaneously (the forward base and its reverse
+    complement). To truly disrupt a binding site you must bring <em>both</em> strands below the
+    threshold, so the harder strand determines the answer. For example, if the forward strand
+    needs 3 edits to go below the threshold and the reverse needs 1, the result is 3 — after
+    just 1 edit the forward strand would still have a match.</p></li>
+</ul><p>Then, across all windows in the iterator interval, the minimum is reported (the position
+where it is easiest to create or disrupt a match).</p>
+<p><strong>Parameters:</strong></p><ul><li><p><code>score.thresh</code>: The target PWM log-likelihood score that the edit distance
+    algorithm tries to reach. For <code>direction = "above"</code>, this is the score to reach
+    or exceed; for <code>direction = "below"</code>, this is the score to fall below.</p></li>
+<li><p><code>score.min</code>, <code>score.max</code>: Optional numeric pre-filters on the <strong>current</strong>
+    (unedited) PWM score. Windows scoring outside the [<code>score.min</code>, <code>score.max</code>]
+    range are skipped (edit distance returns NA). Default NULL (no filter).
+    These are independent of <code>score.thresh</code> — they control <em>which windows to
+    evaluate</em>, not the target score.</p>
+<p><strong>Typical usage with <code>direction = "below"</code></strong>: use <code>score.min</code> to restrict
+    to windows that currently have a motif match. For example, with <code>score.thresh = -18</code>
+    and <code>score.min = -14</code>, only windows scoring &gt;= -14 are considered, and the edit
+    distance tells you how many edits to push each one below -18. Without <code>score.min</code>,
+    windows already scoring below -18 will return 0 edits.</p>
+<p>For LSE variants, the filters apply to the aggregate LSE score, not individual windows.</p></li>
+<li><p><code>max_edits</code>: Optional positive integer. Cap the search depth: if reaching the
+    threshold requires more than <code>max_edits</code> edits, NA is returned for that window.
+    Default NULL (exact computation, no cap).</p></li>
+<li><p><code>max_indels</code>: Optional non-negative integer (default 0). When &gt; 0, allows
+    insertions and deletions in addition to substitutions, using a banded Needleman-Wunsch DP.
+    Typical values are 1-2. Only supported by the non-LSE variants
+    (<code>pwm.edit_distance</code>, <code>pwm.edit_distance.pos</code>, <code>pwm.max.edit_distance</code>).</p></li>
+<li><p><code>direction</code>: <code>"above"</code> (default) or <code>"below"</code>. See Direction above.</p></li>
 </ul><p><strong>Spatial weighting</strong>
 enables position-dependent weighting for modeling positional biases. Bins are 0-indexed from the
 scan start. When using <code><a href="gvtrack.iterator.html">gvtrack.iterator()</a></code> shifts (e.g., <code>sshift = -50</code>, <code>eshift = 50</code>), bins index from
@@ -722,6 +763,123 @@ range divisible by <code>spat_bin</code> if needed.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 18  chr1  8500  9000          1.1660963          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 19  chr1  9000  9500          0.9576775          1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 20  chr1  9500 10000          0.7346372          1</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># --- Edit distance examples ---</span></span></span>
+<span class="r-in"><span><span class="co"># (Using the same 4-position PSSM defined above)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># First, check the PWM score distribution to pick sensible thresholds</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"pwm_score"</span>, <span class="cn">NULL</span>, <span class="st">"pwm.max"</span>, pssm <span class="op">=</span> <span class="va">pssm</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="st">"pwm_score"</span>, <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">500</span>, <span class="fl">520</span><span class="op">)</span>, iterator <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start end pwm_score intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1   500 501 -6.428051          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1   501 502 -6.428051          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1   502 503 -8.292835          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1   503 504 -8.292835          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr1   504 505 -2.698482          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6  chr1   505 506 -6.428051          1</span>
+<span class="r-in"><span><span class="co"># Scores range from ~-8.3 (poor) to ~-0.8 (strong match)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># --- direction = "above": how many edits to CREATE a motif match? ---</span></span></span>
+<span class="r-in"><span><span class="co"># "How many substitutions until this window scores &gt;= -5?"</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"edist_above"</span>, <span class="cn">NULL</span>, <span class="st">"pwm.edit_distance"</span>,</span></span>
+<span class="r-in"><span>    pssm <span class="op">=</span> <span class="va">pssm</span>, score.thresh <span class="op">=</span> <span class="op">-</span><span class="fl">5</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># At 1bp: each position gets its own edit distance (0 if already matching)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pwm_score"</span>, <span class="st">"edist_above"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">500</span>, <span class="fl">520</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">1</span></span></span>
+<span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start end pwm_score edist_above intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1   500 501 -6.428051           2          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1   501 502 -6.428051           2          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1   502 503 -8.292835           3          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1   503 504 -8.292835           3          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr1   504 505 -2.698482           0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6  chr1   505 506 -6.428051           2          1</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># --- direction = "below": how many edits to DISRUPT a motif match? ---</span></span></span>
+<span class="r-in"><span><span class="co">#</span></span></span>
+<span class="r-in"><span><span class="co"># score.thresh is the target: "push the score below this value"</span></span></span>
+<span class="r-in"><span><span class="co"># score.min is a pre-filter: "only consider windows currently scoring above this"</span></span></span>
+<span class="r-in"><span><span class="co"># These are independent — score.min controls WHICH windows to evaluate,</span></span></span>
+<span class="r-in"><span><span class="co"># score.thresh controls WHAT score to target.</span></span></span>
+<span class="r-in"><span><span class="co">#</span></span></span>
+<span class="r-in"><span><span class="co"># Example: among windows scoring &gt;= -5 (strong matches),</span></span></span>
+<span class="r-in"><span><span class="co"># how many edits to push below -7 (disrupt the match)?</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"edist_below"</span>, <span class="cn">NULL</span>, <span class="st">"pwm.edit_distance"</span>,</span></span>
+<span class="r-in"><span>    pssm <span class="op">=</span> <span class="va">pssm</span>, score.thresh <span class="op">=</span> <span class="op">-</span><span class="fl">7</span>, score.min <span class="op">=</span> <span class="op">-</span><span class="fl">5</span>,</span></span>
+<span class="r-in"><span>    direction <span class="op">=</span> <span class="st">"below"</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pwm_score"</span>, <span class="st">"edist_above"</span>, <span class="st">"edist_below"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">500</span>, <span class="fl">520</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">1</span></span></span>
+<span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start end pwm_score edist_above edist_below intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1   500 501 -6.428051           2         NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1   501 502 -6.428051           2         NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1   502 503 -8.292835           3         NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1   503 504 -8.292835           3         NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr1   504 505 -2.698482           0           2          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6  chr1   505 506 -6.428051           2         NaN          1</span>
+<span class="r-in"><span><span class="co"># score &gt;= -5 (e.g. -2.7): gets edit distance (2 edits to go below -7)</span></span></span>
+<span class="r-in"><span><span class="co"># score &lt; -5 (e.g. -6.4): NA (filtered out by score.min)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Without score.min, ALL windows are evaluated — windows already</span></span></span>
+<span class="r-in"><span><span class="co"># below -7 return 0 edits:</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"edist_below_all"</span>, <span class="cn">NULL</span>, <span class="st">"pwm.edit_distance"</span>,</span></span>
+<span class="r-in"><span>    pssm <span class="op">=</span> <span class="va">pssm</span>, score.thresh <span class="op">=</span> <span class="op">-</span><span class="fl">7</span>, direction <span class="op">=</span> <span class="st">"below"</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pwm_score"</span>, <span class="st">"edist_below"</span>, <span class="st">"edist_below_all"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">500</span>, <span class="fl">520</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">1</span></span></span>
+<span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start end pwm_score edist_below edist_below_all intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1   500 501 -6.428051         NaN               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1   501 502 -6.428051         NaN               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1   502 503 -8.292835         NaN               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1   503 504 -8.292835         NaN               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr1   504 505 -2.698482           2               2          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6  chr1   505 506 -6.428051         NaN               0          1</span>
+<span class="r-in"><span><span class="co"># score &gt;= -5: same result as edist_below (2 edits)</span></span></span>
+<span class="r-in"><span><span class="co"># score between -7 and -5 (e.g. -6.4): edist_below=NA, edist_below_all=0</span></span></span>
+<span class="r-in"><span><span class="co"># score &lt; -7: both return 0 (already below threshold)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># --- max_edits: cap the search depth ---</span></span></span>
+<span class="r-in"><span><span class="co"># Return NA if more than 2 substitutions are needed</span></span></span>
+<span class="r-in"><span><span class="fu">gvtrack.create</span><span class="op">(</span><span class="st">"edist_max2"</span>, <span class="cn">NULL</span>, <span class="st">"pwm.edit_distance"</span>,</span></span>
+<span class="r-in"><span>    pssm <span class="op">=</span> <span class="va">pssm</span>, score.thresh <span class="op">=</span> <span class="op">-</span><span class="fl">5</span>, max_edits <span class="op">=</span> <span class="fl">2</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># Positions needing 3+ edits now return NA instead of 3</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pwm_score"</span>, <span class="st">"edist_above"</span>, <span class="st">"edist_max2"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">500</span>, <span class="fl">520</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">1</span></span></span>
+<span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   chrom start end pwm_score edist_above edist_max2 intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  chr1   500 501 -6.428051           2          2          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  chr1   501 502 -6.428051           2          2          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  chr1   502 503 -8.292835           3        NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4  chr1   503 504 -8.292835           3        NaN          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5  chr1   504 505 -2.698482           0          0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6  chr1   505 506 -6.428051           2          2          1</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># --- Aggregation over intervals ---</span></span></span>
+<span class="r-in"><span><span class="co"># With a larger iterator, the minimum edit distance across the</span></span></span>
+<span class="r-in"><span><span class="co"># interval is returned.</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="gextract.html">gextract</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pwm_score"</span>, <span class="st">"edist_above"</span>, <span class="st">"edist_below_all"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    <span class="fu"><a href="gintervals.html">gintervals</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">2000</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    iterator <span class="op">=</span> <span class="fl">200</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    chrom start  end pwm_score edist_above edist_below_all intervalID</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   chr1     0  200 -2.698482           0               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   chr1   200  400 -4.563266           1               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   chr1   400  600 -2.698482           0               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   chr1   600  800 -2.698482           0               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   chr1   800 1000 -0.833697           0               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6   chr1  1000 1200 -2.698482           0               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7   chr1  1200 1400 -2.698482           0               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8   chr1  1400 1600 -2.698482           0               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9   chr1  1600 1800 -2.698482           0               0          1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10  chr1  1800 2000 -2.698482           0               0          1</span>
 </code></pre></div>
     </div>
   </div>
