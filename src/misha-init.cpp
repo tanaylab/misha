@@ -108,6 +108,7 @@ extern "C" {
     extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_replace_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer_dist(SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_ggenome_implant(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -212,6 +213,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 12},
     {"C_gsynth_replace_kmer", (DL_FUNC)&C_gsynth_replace_kmer, 6},
     {"C_gseq_kmer_dist", (DL_FUNC)&C_gseq_kmer_dist, 4},
+    {"C_ggenome_implant", (DL_FUNC)&C_ggenome_implant, 7},
     {NULL, NULL, 0}
 };
 

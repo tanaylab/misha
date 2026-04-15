@@ -1,125 +1,5 @@
 # Genome Editing: Replace intervals in a reference genome with donor sequences
 
-#' Read a FASTA file into a named list of sequences
-#'
-#' @param fasta_path Path to FASTA file
-#' @return Named list with chromosome names as keys and full sequences as values
-#' @noRd
-.read_fasta <- function(fasta_path) {
-    lines <- readLines(fasta_path)
-    if (length(lines) == 0L) {
-        stop("FASTA file is empty: ", fasta_path, call. = FALSE)
-    }
-
-    header_idx <- which(startsWith(lines, ">"))
-    if (length(header_idx) == 0L) {
-        stop("No FASTA headers found in: ", fasta_path, call. = FALSE)
-    }
-
-    # Pre-allocate result list
-    chrom_names <- sub("^>\\s*", "", sub("\\s.*", "", lines[header_idx]))
-    result <- vector("list", length(chrom_names))
-    names(result) <- chrom_names
-
-    # For each header, concatenate all sequence lines until the next header
-    for (i in seq_along(header_idx)) {
-        start <- header_idx[i] + 1L
-        end <- if (i < length(header_idx)) header_idx[i + 1L] - 1L else length(lines)
-        if (start > end) {
-            result[[i]] <- ""
-        } else {
-            result[[i]] <- paste0(lines[start:end], collapse = "")
-        }
-    }
-
-    result
-}
-
-#' Write sequences as a FASTA file with fixed-width lines
-#'
-#' @param sequences Named list of sequences (name -> sequence string)
-#' @param output Path to output file
-#' @param line_width Bases per line
-#' @return Invisibly returns the output path
-#' @noRd
-.write_fasta <- function(sequences, output, line_width = 80L) {
-    con <- file(output, open = "wt")
-    on.exit(close(con), add = TRUE)
-
-    for (chrom_name in names(sequences)) {
-        writeLines(paste0(">", chrom_name), con)
-        seq_str <- sequences[[chrom_name]]
-        seq_len <- nchar(seq_str)
-        if (seq_len == 0L) next
-
-        line_starts <- seq.int(1L, seq_len, by = line_width)
-        line_ends <- pmin(line_starts + line_width - 1L, seq_len)
-        writeLines(substring(seq_str, line_starts, line_ends), con)
-    }
-
-    invisible(output)
-}
-
-#' Write a FASTA index (.fai) file
-#'
-#' Creates a samtools-compatible .fai index alongside a FASTA file.
-#' The .fai format is: name\\tlength\\toffset\\tlinebases\\tlinewidth
-#' where linewidth includes the newline character.
-#'
-#' @param fasta_path Path to the FASTA file to index
-#' @param line_width Number of bases per line used when writing
-#' @return Invisibly returns the .fai path
-#' @noRd
-.write_fai <- function(fasta_path, line_width = 80L) {
-    fai_path <- paste0(fasta_path, ".fai")
-    lines <- readLines(fasta_path)
-
-    header_idx <- which(startsWith(lines, ">"))
-    if (length(header_idx) == 0L) {
-        stop("No FASTA headers found in: ", fasta_path, call. = FALSE)
-    }
-
-    fai_entries <- character(length(header_idx))
-
-    for (i in seq_along(header_idx)) {
-        chrom_name <- sub("^>\\s*", "", sub("\\s.*", "", lines[header_idx[i]]))
-
-        seq_start <- header_idx[i] + 1L
-        seq_end <- if (i < length(header_idx)) header_idx[i + 1L] - 1L else length(lines)
-
-        if (seq_start > seq_end) {
-            seq_length <- 0L
-        } else {
-            seq_lines <- lines[seq_start:seq_end]
-            seq_length <- sum(nchar(seq_lines))
-        }
-
-        # Calculate byte offset to the first sequence character
-        # Each previous line has its content + newline (\n)
-        offset <- 0L
-        for (j in seq_len(header_idx[i])) {
-            offset <- offset + nchar(lines[j]) + 1L # +1 for newline
-        }
-
-        # linebases/linewidth must reflect the actual first sequence line,
-        # not the requested wrap width — short contigs may fit on one line.
-        if (seq_start > seq_end) {
-            linebases <- 0L
-            linewidth <- 0L
-        } else {
-            first_line_len <- nchar(lines[seq_start])
-            linebases <- first_line_len
-            linewidth <- first_line_len + 1L # +1 for newline character
-        }
-
-        fai_entries[i] <- paste(chrom_name, seq_length, offset, linebases, linewidth, sep = "\t")
-    }
-
-    writeLines(fai_entries, fai_path)
-    invisible(fai_path)
-}
-
-
 #' Implant donor sequences into a reference genome
 #'
 #' Replaces specified intervals in a reference genome with donor DNA sequences
@@ -280,7 +160,7 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
         ), call. = FALSE)
     }
 
-    # --- load reference FASTA ---
+    # --- resolve reference FASTA path ---
     if (is.null(genome_fasta)) {
         .gcheckroot()
         genome_fasta <- tempfile(fileext = ".fa")
@@ -292,56 +172,28 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
         }
     }
 
-    sequences <- .read_fasta(genome_fasta)
-
-    # --- validate intervals against reference ---
-    chroms_in_ref <- names(sequences)
     interval_chroms <- as.character(intervals$chrom)
-    missing_chroms <- setdiff(unique(interval_chroms), chroms_in_ref)
+
+    # --- C++ fast path: read FASTA, apply perturbations, write output + .fai
+    fai_df <- .gcall(
+        "C_ggenome_implant",
+        genome_fasta, output,
+        as.character(intervals$chrom),
+        as.integer(intervals$start),
+        as.integer(intervals$end),
+        toupper(donor_seqs),
+        as.integer(line_width)
+    )
+
+    # Validate that all interval chromosomes were found in reference
+    missing_chroms <- setdiff(unique(interval_chroms), fai_df$name)
     if (length(missing_chroms) > 0L) {
+        unlink(output)
         stop(sprintf(
             "Chromosome(s) not found in reference: %s",
             paste(missing_chroms, collapse = ", ")
         ), call. = FALSE)
     }
-
-    for (i in seq_len(nrow(intervals))) {
-        chrom <- interval_chroms[i]
-        chrom_len <- nchar(sequences[[chrom]])
-        if (intervals$start[i] < 0 || intervals$end[i] > chrom_len) {
-            stop(sprintf(
-                "Interval out of bounds at row %d: %s:%d-%d (chromosome length: %d)",
-                i, chrom, intervals$start[i], intervals$end[i], chrom_len
-            ), call. = FALSE)
-        }
-        if (intervals$start[i] >= intervals$end[i]) {
-            stop(sprintf(
-                "Invalid interval at row %d: start (%d) must be less than end (%d)",
-                i, intervals$start[i], intervals$end[i]
-            ), call. = FALSE)
-        }
-    }
-
-    # --- apply perturbations ---
-    # Group by chromosome, sort descending by start within each group
-    # so that replacing later positions first preserves earlier coordinates
-    order_idx <- order(match(interval_chroms, chroms_in_ref), -intervals$start)
-
-    for (i in order_idx) {
-        chrom <- interval_chroms[i]
-        # misha coordinates are 0-based; R substr is 1-based
-        r_start <- intervals$start[i] + 1L
-        r_end <- intervals$end[i]
-        seq_str <- sequences[[chrom]]
-
-        prefix <- if (r_start > 1L) substr(seq_str, 1L, r_start - 1L) else ""
-        suffix <- if (r_end < nchar(seq_str)) substr(seq_str, r_end + 1L, nchar(seq_str)) else ""
-        sequences[[chrom]] <- paste0(prefix, donor_seqs[i], suffix)
-    }
-
-    # --- write output ---
-    .write_fasta(sequences, output, line_width = line_width)
-    .write_fai(output, line_width = line_width)
 
     # --- create trackdb ---
     if (create_trackdb) {

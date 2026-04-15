@@ -1,3 +1,18 @@
+# Local test helper: read a FASTA file into a named list of sequences
+read_fasta <- function(fasta_path) {
+    lines <- readLines(fasta_path)
+    header_idx <- which(startsWith(lines, ">"))
+    chrom_names <- sub("^>\\s*", "", sub("\\s.*", "", lines[header_idx]))
+    result <- vector("list", length(chrom_names))
+    names(result) <- chrom_names
+    for (i in seq_along(header_idx)) {
+        start <- header_idx[i] + 1L
+        end <- if (i < length(header_idx)) header_idx[i + 1L] - 1L else length(lines)
+        result[[i]] <- if (start > end) "" else paste0(lines[start:end], collapse = "")
+    }
+    result
+}
+
 test_that("ggenome.implant replaces intervals with literal sequences", {
     local_db_state()
 
@@ -30,7 +45,7 @@ test_that("ggenome.implant replaces intervals with literal sequences", {
 
     # chrA: positions 0-9 = A C G T A C G T A C
     # Replace [2,6) = positions 2,3,4,5 with NNNN: A C N N N N G T A C
-    seqs <- .read_fasta(out_fasta)
+    seqs <- read_fasta(out_fasta)
     expect_equal(seqs[["chrA"]], "ACNNNNGTAC")
     expect_equal(seqs[["chrB"]], "TTTTAAAA")
 })
@@ -63,7 +78,7 @@ test_that("ggenome.implant handles multiple perturbations on same chromosome", {
         overwrite = TRUE
     )
 
-    seqs <- .read_fasta(out_fasta)
+    seqs <- read_fasta(out_fasta)
     # Original: AAAAACCCCCGGGGGTTTT
     # Replace [0,5) with XXXXX and [10,15) with YYYYY
     expect_equal(seqs[["chr1"]], "XXXXXCCCCCYYYYYTTTTT")
@@ -260,7 +275,7 @@ test_that("ggenome.implant preserves chromosome order", {
         overwrite = TRUE
     )
 
-    seqs <- .read_fasta(out_fasta)
+    seqs <- read_fasta(out_fasta)
     expect_equal(names(seqs), c("chrB", "chrA", "chrC"))
     expect_equal(seqs[["chrB"]], "TTTT")
     expect_equal(seqs[["chrA"]], "CCAA")
@@ -332,7 +347,7 @@ test_that("ggenome.implant with donor from misha database", {
         overwrite = TRUE
     )
 
-    seqs <- .read_fasta(out_fasta)
+    seqs <- read_fasta(out_fasta)
     # chrA: AA + GGGG + AA = AAGGGGAA
     expect_equal(seqs[["chrA"]], "AAGGGGAA")
     # chrB: TTTT + CCCC = TTTTCCCC
@@ -370,7 +385,7 @@ test_that("ggenome.transplant works as sugar for implant", {
         overwrite = TRUE
     )
 
-    seqs <- .read_fasta(out_fasta)
+    seqs <- read_fasta(out_fasta)
     expect_equal(seqs[["chrA"]], "GGGGAAAA")
 })
 
