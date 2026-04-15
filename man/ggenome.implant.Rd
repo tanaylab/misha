@@ -65,24 +65,32 @@ Perturbations are applied in reverse coordinate order within each chromosome
 so that earlier coordinates remain valid when later ones are replaced.
 }
 \examples{
-\dontrun{
-gdb.init("/path/to/my/db")
+gdb.init_examples()
+
+# Export the example DB to a reference FASTA
+ref_fasta <- tempfile(fileext = ".fa")
+gdb.export_fasta(ref_fasta)
 
 # Replace two regions with literal sequences
 intervals <- data.frame(
     chrom = c("chr1", "chr1"),
-    start = c(100, 500),
-    end = c(110, 510)
+    start = c(100, 200),
+    end = c(110, 210)
 )
 donors <- c("AAAAAAAAAA", "CCCCCCCCCC")
-ggenome.implant(intervals, donors, output = "/tmp/edited.fa")
-
-# Replace regions with sequences from another misha database
-ggenome.implant(intervals,
-    donor = "/path/to/donor/db",
-    output = "/tmp/transplanted.fa"
+out <- tempfile(fileext = ".fa")
+ggenome.implant(intervals, donors,
+    output = out,
+    genome_fasta = ref_fasta,
+    create_trackdb = FALSE
 )
-}
+
+# Verify the implanted sequences
+result <- .read_fasta(out)
+substring(result[["chr1"]], 101, 110) # "AAAAAAAAAA"
+
+# Clean up
+unlink(c(ref_fasta, out, paste0(out, ".fai")))
 
 }
 \seealso{

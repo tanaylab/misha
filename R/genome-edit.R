@@ -161,24 +161,32 @@
 #' @return Invisibly returns the output FASTA path.
 #'
 #' @examples
-#' \dontrun{
-#' gdb.init("/path/to/my/db")
+#' gdb.init_examples()
+#'
+#' # Export the example DB to a reference FASTA
+#' ref_fasta <- tempfile(fileext = ".fa")
+#' gdb.export_fasta(ref_fasta)
 #'
 #' # Replace two regions with literal sequences
 #' intervals <- data.frame(
 #'     chrom = c("chr1", "chr1"),
-#'     start = c(100, 500),
-#'     end = c(110, 510)
+#'     start = c(100, 200),
+#'     end = c(110, 210)
 #' )
 #' donors <- c("AAAAAAAAAA", "CCCCCCCCCC")
-#' ggenome.implant(intervals, donors, output = "/tmp/edited.fa")
-#'
-#' # Replace regions with sequences from another misha database
-#' ggenome.implant(intervals,
-#'     donor = "/path/to/donor/db",
-#'     output = "/tmp/transplanted.fa"
+#' out <- tempfile(fileext = ".fa")
+#' ggenome.implant(intervals, donors,
+#'     output = out,
+#'     genome_fasta = ref_fasta,
+#'     create_trackdb = FALSE
 #' )
-#' }
+#'
+#' # Verify the implanted sequences
+#' result <- .read_fasta(out)
+#' substring(result[["chr1"]], 101, 110) # "AAAAAAAAAA"
+#'
+#' # Clean up
+#' unlink(c(ref_fasta, out, paste0(out, ".fai")))
 #'
 #' @seealso \code{\link{ggenome.transplant}}, \code{\link{gdb.export_fasta}},
 #'   \code{\link{gseq.extract}}, \code{\link{gdb.create}}
@@ -373,18 +381,39 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
 #' @return Invisibly returns the output FASTA path.
 #'
 #' @examples
-#' \dontrun{
-#' intervals <- data.frame(
-#'     chrom = c("chr1", "chr2"),
-#'     start = c(100, 200),
-#'     end = c(200, 300)
+#' gdb.init_examples()
+#'
+#' # Create a "donor" DB with different sequence (all T's)
+#' donor_fasta <- tempfile(fileext = ".fa")
+#' cat(">chr1\n", paste(rep("T", 500000), collapse = ""), "\n",
+#'     ">chr2\n", paste(rep("T", 300000), collapse = ""), "\n",
+#'     file = donor_fasta, sep = ""
 #' )
+#' donor_db <- tempfile()
+#' gdb.create(donor_db, fasta = donor_fasta, verbose = FALSE)
+#'
+#' # Export the current DB as the target FASTA
+#' ref_fasta <- tempfile(fileext = ".fa")
+#' gdb.export_fasta(ref_fasta)
+#'
+#' # Transplant donor sequence into positions 100-200 of chr1
+#' intervals <- data.frame(chrom = "chr1", start = 100, end = 200)
+#' out <- tempfile(fileext = ".fa")
 #' ggenome.transplant(intervals,
-#'     source_genome = "/path/to/donor/db",
-#'     target_genome = "/path/to/target.fa",
-#'     output = "/tmp/transplanted.fa"
+#'     source_genome = donor_db,
+#'     target_genome = ref_fasta,
+#'     output = out,
+#'     create_trackdb = FALSE
 #' )
-#' }
+#'
+#' # Verify: positions 101-200 should now be all T's
+#' result <- .read_fasta(out)
+#' substring(result[["chr1"]], 101, 200) == paste(rep("T", 100), collapse = "")
+#'
+#' # Clean up
+#' unlink(c(donor_fasta, donor_db, ref_fasta, out, paste0(out, ".fai")),
+#'     recursive = TRUE
+#' )
 #'
 #' @seealso \code{\link{ggenome.implant}}, \code{\link{gdb.export_fasta}},
 #'   \code{\link{gseq.extract}}
