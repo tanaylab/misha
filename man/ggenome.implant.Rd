@@ -79,18 +79,20 @@ intervals <- data.frame(
 )
 donors <- c("AAAAAAAAAA", "CCCCCCCCCC")
 out <- tempfile(fileext = ".fa")
+trackdb <- tempfile()
 ggenome.implant(intervals, donors,
     output = out,
     genome_fasta = ref_fasta,
-    create_trackdb = FALSE
+    create_trackdb = TRUE,
+    trackdb_path = trackdb
 )
 
-# Verify the implanted sequences
-result <- .read_fasta(out)
-substring(result[["chr1"]], 101, 110) # "AAAAAAAAAA"
+# Verify the implanted sequences via the new trackdb
+gdb.init(trackdb)
+gseq.extract(data.frame(chrom = "chr1", start = 100, end = 110))
 
 # Clean up
-unlink(c(ref_fasta, out, paste0(out, ".fai")))
+unlink(c(ref_fasta, out, paste0(out, ".fai"), trackdb), recursive = TRUE)
 
 }
 \seealso{
