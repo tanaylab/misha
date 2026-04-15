@@ -7,7 +7,7 @@
 ggenome.transplant(
   intervals,
   source_genome,
-  target_genome,
+  target_genome = NULL,
   output,
   create_trackdb = TRUE,
   trackdb_path = NULL,

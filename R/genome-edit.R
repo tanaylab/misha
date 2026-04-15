@@ -101,9 +101,16 @@
             offset <- offset + nchar(lines[j]) + 1L # +1 for newline
         }
 
-        # linebases = actual bases per line, linewidth = bytes per line including newline
-        linebases <- line_width
-        linewidth <- line_width + 1L # +1 for newline character
+        # linebases/linewidth must reflect the actual first sequence line,
+        # not the requested wrap width — short contigs may fit on one line.
+        if (seq_start > seq_end) {
+            linebases <- 0L
+            linewidth <- 0L
+        } else {
+            first_line_len <- nchar(lines[seq_start])
+            linebases <- first_line_len
+            linewidth <- first_line_len + 1L # +1 for newline character
+        }
 
         fai_entries[i] <- paste(chrom_name, seq_length, offset, linebases, linewidth, sep = "\t")
     }
@@ -216,19 +223,25 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
     donor_is_db <- is.character(donor) && length(donor) == 1L && dir.exists(donor)
 
     if (donor_is_db) {
-        # donor is a misha database root — extract sequences from it
+        # donor is a misha database root — extract sequences from it.
+        # We must restore the original root afterwards, especially when
+        # genome_fasta is NULL (which needs the original DB for export).
         old_groot <- NULL
         if (exists("GROOT", envir = .misha, inherits = FALSE)) {
             old_groot <- get("GROOT", envir = .misha)
         }
-        suppressMessages(gdb.init(donor))
-        withr::defer({
-            if (!is.null(old_groot) && old_groot != "") {
-                suppressMessages(gdb.init(old_groot))
+        if (is.null(old_groot) || old_groot == "") {
+            if (is.null(genome_fasta)) {
+                stop(
+                    "No misha database is initialized and 'genome_fasta' is NULL. ",
+                    "Either call gdb.init() first or provide 'genome_fasta'.",
+                    call. = FALSE
+                )
             }
-        })
+        }
+        suppressMessages(gdb.init(donor))
         donor_seqs <- gseq.extract(intervals)
-        # Restore root immediately since we need to possibly export reference
+        # Restore original root immediately
         if (!is.null(old_groot) && old_groot != "") {
             suppressMessages(gdb.init(old_groot))
         }
@@ -376,7 +389,7 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
 #' @seealso \code{\link{ggenome.implant}}, \code{\link{gdb.export_fasta}},
 #'   \code{\link{gseq.extract}}
 #' @export
-ggenome.transplant <- function(intervals, source_genome, target_genome, output,
+ggenome.transplant <- function(intervals, source_genome, target_genome = NULL, output,
                                create_trackdb = TRUE, trackdb_path = NULL,
                                line_width = 80L, overwrite = FALSE) {
     if (missing(intervals) || missing(source_genome) || missing(output)) {
