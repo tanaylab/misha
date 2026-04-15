@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.10</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.11</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.11" id="misha-5611">misha 5.6.11<a class="anchor" aria-label="anchor" href="#misha-5611"></a></h2>
+<ul><li>Added <code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code> for replacing intervals in a reference genome with donor sequences and writing a new FASTA. Supports literal donor sequences or extraction from a misha database, with optional trackdb creation.</li>
+<li>Added <code><a href="../reference/ggenome.transplant.html">ggenome.transplant()</a></code> as sugar for cross-genome sequence swaps — extracts from a source genome and implants into a target genome in a single call.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.10" id="misha-5610">misha 5.6.10<a class="anchor" aria-label="anchor" href="#misha-5610"></a></h2>
 <ul><li>Fixed <code>direction="below"</code> with <code>bidirect=TRUE</code> taking min across strands instead of max. A genomic substitution changes both strands, so disrupting a motif requires both strands to fall below the threshold.</li>
