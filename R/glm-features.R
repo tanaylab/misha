@@ -256,11 +256,14 @@ glm_batch_quantiles <- function(
   iterator = 20L,
   sshift = -140L,
   eshift = 140L,
-  n_threads = getOption("gmax.processes", 1L)
+  n_threads = getOption("gmax.processes", 1L),
+  func = "lse",
+  intervals = NULL
 ) {
     stopifnot(is.character(track_names), length(track_names) > 0)
     stopifnot(is.numeric(percentiles), length(percentiles) > 0)
     stopifnot(all(percentiles >= 0 & percentiles <= 1))
+    stopifnot(is.character(func), length(func) == 1)
 
     .gcall(
         "C_gquantiles_multi",
@@ -270,6 +273,8 @@ glm_batch_quantiles <- function(
         as.integer(sshift),
         as.integer(eshift),
         as.integer(n_threads),
+        as.character(func),
+        intervals,
         .misha_env()
     )
 }

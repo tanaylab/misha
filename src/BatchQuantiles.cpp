@@ -1,11 +1,12 @@
 // BatchQuantiles.cpp — batched multi-track genome-wide quantile scan.
 //
-// Uses BatchTrackScan<TopKQuantile> to scan N tracks in parallel threads.
-// Phase 1 operates in fallback mode (full-vector storage + nth_element),
-// matching the pre-refactor behavior bit-for-bit. Phase 2 adds top-K
-// pruning + aggregator templating + intervals support.
+// Phase 2: TopKQuantile reducer with top-K / bottom-K heap-backed vector
+// plus full-vector fallback, sliding-max upper-bound pruning, and
+// per-aggregator (`lse`/`avg`/`sum`/`max`/`min`) templating. Supports
+// whole-genome scans and caller-provided intervals.
 
 #include "BatchTrackScan.h"
+#include "rdbinterval.h"
 #include "rdbutils.h"
 #include "GenomeTrack.h"
 
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
@@ -24,66 +26,211 @@ using namespace rdb;
 using namespace batchscan;
 
 // ---------------------------------------------------------------------------
-// TopKQuantile reducer. Phase 1: fallback-only (no top-K heap). State stores
-// all non-NaN accepted values; finalize() runs nth_element per percentile.
+// TopKQuantile reducer.
+//
+// Mode (set at Config build time):
+//   use_fallback = true  -> State::buf holds every accepted value; final
+//                           nth_element runs over the full buffer.
+//   use_fallback = false -> State::buf is a heap-backed vector of size K.
+//                           top_side = true  -> min-heap of largest K so far
+//                           top_side = false -> max-heap of smallest K so far
+//
+// Heap build is lazy: we append until buf.size() == K, then make_heap once,
+// and thereafter swap-replace the extremum. This avoids heap overhead while
+// the buffer is filling and amortizes the log(K) cost across pushes.
 // ---------------------------------------------------------------------------
 struct TopKQuantile {
     struct Config {
-        std::vector<double> percentiles;   // as provided (original order)
+        std::vector<double> percentiles;
         uint32_t K = 0;
-        bool use_fallback = true;          // Phase 1: always fallback
+        bool use_fallback = true;
         bool top_side = true;
     };
 
     struct State {
         const Config *cfg = nullptr;
         uint64_t n_total = 0;
-        std::vector<float> buf;            // full buffer in fallback mode
+        std::vector<float> buf;
+        bool heap_built = false;
 
         void init(const Config &c, int /*chromid*/, int /*iterator_step*/) {
             cfg = &c;
-            buf.reserve(1024);
+            buf.reserve(c.use_fallback ? 1024
+                                       : std::min<size_t>(c.K, 1u << 20));
         }
 
+        // Pre-Phase-2 helper: since cfg may be nullptr after std::move,
+        // cache cfg pointer at init time. merge() handles the null case
+        // by adopting the source cfg.
         void accept(float v, int64_t /*pos*/) {
             ++n_total;
-            buf.push_back(v);
+            if (!cfg || cfg->use_fallback) {
+                buf.push_back(v);
+                return;
+            }
+            uint32_t K = cfg->K;
+            if (!heap_built) {
+                buf.push_back(v);
+                if (buf.size() == (size_t)K) {
+                    if (cfg->top_side)
+                        std::make_heap(buf.begin(), buf.end(),
+                                       std::greater<float>{});
+                    else
+                        std::make_heap(buf.begin(), buf.end(),
+                                       std::less<float>{});
+                    heap_built = true;
+                }
+                return;
+            }
+            // Heap full; swap-replace if v improves on the extremum.
+            if (cfg->top_side) {
+                if (v > buf.front()) {
+                    std::pop_heap(buf.begin(), buf.end(),
+                                  std::greater<float>{});
+                    buf.back() = v;
+                    std::push_heap(buf.begin(), buf.end(),
+                                   std::greater<float>{});
+                }
+            } else {
+                if (v < buf.front()) {
+                    std::pop_heap(buf.begin(), buf.end(),
+                                  std::less<float>{});
+                    buf.back() = v;
+                    std::push_heap(buf.begin(), buf.end(),
+                                   std::less<float>{});
+                }
+            }
         }
 
         void boundary() {}
 
-        bool prune(float /*upper*/, float /*lower*/) const { return false; }
+        // Pruning: only meaningful in heap mode, and only once the heap is
+        // full. For top-K (all percentiles >= 0.5), skip positions whose
+        // upper bound is below the current K-th largest. For bottom-K,
+        // skip positions whose lower bound is above the current K-th smallest.
+        bool prune(float upper, float lower) const {
+            if (!cfg || cfg->use_fallback || !heap_built) return false;
+            return cfg->top_side ? (upper < buf.front())
+                                 : (lower > buf.front());
+        }
 
+        // Merge: concat, then if in heap mode and over capacity, trim to K
+        // via nth_element (cheaper than N·K heap pushes).
         void merge(const State &o) {
             n_total += o.n_total;
-            buf.insert(buf.end(), o.buf.begin(), o.buf.end());
+            if (!cfg && o.cfg) cfg = o.cfg;  // pick up Config on first merge
+
+            if (cfg && !cfg->use_fallback) {
+                buf.insert(buf.end(), o.buf.begin(), o.buf.end());
+                if (buf.size() > (size_t)cfg->K) {
+                    uint32_t K = cfg->K;
+                    if (cfg->top_side) {
+                        // Keep largest K: order buf so that the largest K
+                        // occupy positions [N-K, N); then discard prefix.
+                        std::nth_element(buf.begin(), buf.begin() + (buf.size() - K),
+                                         buf.end());
+                        buf.erase(buf.begin(), buf.begin() + (buf.size() - K));
+                    } else {
+                        std::nth_element(buf.begin(), buf.begin() + K - 1,
+                                         buf.end());
+                        buf.resize(K);
+                    }
+                }
+                heap_built = false;  // re-heapify lazily on next accept
+            } else {
+                buf.insert(buf.end(), o.buf.begin(), o.buf.end());
+            }
         }
     };
 
     struct Result { std::vector<double> quantile_vals; };
 
-    static constexpr bool needs_pruning = false;
-    static constexpr bool needs_lower_bound = false;
+    // Pruning is meaningful only in heap mode; setting needs_pruning=true
+    // unconditionally is safe (State::prune returns false in fallback mode).
+    static constexpr bool needs_pruning = true;
+    // We need the lower bound only for bottom-K. Always reporting both is
+    // a small overhead (one extra deque) paid only when the reducer
+    // actually consults lower — i.e., in bottom-K mode. Keep
+    // needs_lower_bound = false: bottom-K mode uses window_max via
+    // aggregate_upper_bound for its own extremum bound; see sparse-path
+    // note. Top-side pruning dominates real workflows anyway.
+    static constexpr bool needs_lower_bound = true;
 };
 
+// ---------------------------------------------------------------------------
+// finalize: compute the quantile value for each requested percentile, using
+// the merged State::buf. In fallback mode buf holds all N values; in heap
+// mode buf holds the K extreme values.
+// ---------------------------------------------------------------------------
 static std::vector<double> topk_finalize(TopKQuantile::State &s)
 {
     const auto &pctiles = s.cfg->percentiles;
     std::vector<double> out(pctiles.size(),
                             std::numeric_limits<double>::quiet_NaN());
-    int64_t N = (int64_t)s.buf.size();
-    if (N == 0) return out;
+    int64_t N_total = (int64_t)s.n_total;     // all accepted (non-NaN) values
+    int64_t N_buf   = (int64_t)s.buf.size();
+    if (N_buf == 0) return out;
     for (size_t i = 0; i < pctiles.size(); ++i) {
         double p = pctiles[i];
-        int64_t idx = (int64_t)std::floor(p * (double)(N - 1));
-        if (idx < 0) idx = 0;
-        if (idx >= N) idx = N - 1;
-        std::nth_element(s.buf.begin(), s.buf.begin() + idx, s.buf.end());
-        out[i] = (double)s.buf[idx];
+        int64_t rank = (int64_t)std::floor(p * (double)(N_total - 1));
+        if (rank < 0) rank = 0;
+        if (rank >= N_total) rank = N_total - 1;
+
+        int64_t buf_rank;
+        if (s.cfg->use_fallback) {
+            buf_rank = rank;
+        } else {
+            // Heap mode: buf holds K extreme values.
+            //   top_side = true  -> buf holds the largest K values;
+            //                       rank r among all N maps to buf index
+            //                       r - (N - K).
+            //   top_side = false -> buf holds the smallest K values;
+            //                       rank r maps to buf index r.
+            if (s.cfg->top_side)
+                buf_rank = rank - (N_total - N_buf);
+            else
+                buf_rank = rank;
+        }
+        if (buf_rank < 0) buf_rank = 0;
+        if (buf_rank >= N_buf) buf_rank = N_buf - 1;
+        std::nth_element(s.buf.begin(), s.buf.begin() + buf_rank,
+                         s.buf.end());
+        out[i] = (double)s.buf[buf_rank];
     }
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// Parse `_func` SEXP into WindowAggFunc.
+// ---------------------------------------------------------------------------
+static WindowAggFunc parse_func(SEXP _func)
+{
+    if (!Rf_isString(_func) || Rf_length(_func) != 1)
+        verror("func must be a character scalar");
+    const char *s = CHAR(STRING_ELT(_func, 0));
+    if (!std::strcmp(s, "lse")) return WindowAggFunc::LSE;
+    if (!std::strcmp(s, "avg")) return WindowAggFunc::AVG;
+    if (!std::strcmp(s, "sum")) return WindowAggFunc::SUM;
+    if (!std::strcmp(s, "max")) return WindowAggFunc::MAX;
+    if (!std::strcmp(s, "min")) return WindowAggFunc::MIN;
+    verror("func must be one of: lse, avg, sum, max, min");
+    return WindowAggFunc::LSE;  // unreachable
+}
+
+// ---------------------------------------------------------------------------
+// .Call entry: C_gquantiles_multi
+//
+// Args (9):
+//   1. _track_names   character vector
+//   2. _percentiles   numeric vector
+//   3. _iterator      integer scalar (bp step)
+//   4. _sshift        integer scalar
+//   5. _eshift        integer scalar
+//   6. _n_threads     integer scalar (0 = auto)
+//   7. _func          character scalar: "lse"|"avg"|"sum"|"max"|"min"
+//   8. _intervals     data.frame (or NULL for whole-genome)
+//   9. _envir         R environment
+// ---------------------------------------------------------------------------
 extern "C" SEXP C_gquantiles_multi(
     SEXP _track_names,
     SEXP _percentiles,
@@ -91,6 +238,8 @@ extern "C" SEXP C_gquantiles_multi(
     SEXP _sshift,
     SEXP _eshift,
     SEXP _n_threads,
+    SEXP _func,
+    SEXP _intervals,
     SEXP _envir)
 {
     try {
@@ -105,18 +254,22 @@ extern "C" SEXP C_gquantiles_multi(
         int n_pctiles = Rf_length(_percentiles);
         std::vector<double> pctiles(REAL(_percentiles),
                                     REAL(_percentiles) + n_pctiles);
+        for (double p : pctiles)
+            if (p < 0.0 || p > 1.0) verror("percentile %g not in [0, 1]", p);
 
         int iterator_step = INTEGER(_iterator)[0];
         int sshift = INTEGER(_sshift)[0];
         int eshift = INTEGER(_eshift)[0];
         int n_threads_req = INTEGER(_n_threads)[0];
-
         if (iterator_step <= 0)
             verror("iterator must be a positive integer");
+
+        WindowAggFunc func = parse_func(_func);
 
         const GenomeChromKey &chromkey = iu.get_chromkey();
         SEXP envir = iu.get_env();
 
+        // Main-thread resolution of track paths and types.
         std::vector<std::string> track_dirs(n_tracks);
         std::vector<GenomeTrack::Type> track_types(n_tracks);
         for (int m = 0; m < n_tracks; ++m) {
@@ -125,13 +278,78 @@ extern "C" SEXP C_gquantiles_multi(
                 track_dirs[m].c_str(), chromkey, false);
         }
 
+        // Build per-chrom intervals list (optional restriction).
+        const int n_chroms = (int)chromkey.get_num_chroms();
+        std::vector<std::vector<GInterval>> per_chrom(n_chroms);
+        bool use_intervals = !Rf_isNull(_intervals);
+        if (use_intervals) {
+            GIntervalsFetcher1D *i1d = nullptr;
+            GIntervalsFetcher2D *i2d = nullptr;
+            iu.convert_rintervs(_intervals, &i1d, &i2d);
+            std::unique_ptr<GIntervalsFetcher1D> g1(i1d);
+            std::unique_ptr<GIntervalsFetcher2D> g2(i2d);
+            if (i2d && i2d->size() > 0)
+                verror("intervals must be 1D");
+            i1d->sort();
+            i1d->unify_overlaps();
+            for (int c = 0; c < n_chroms; ++c) {
+                if (i1d->size(c) == 0) continue;
+                i1d->begin_chrom_iter(c);
+                for (auto it = i1d->get_chrom_begin();
+                     it != i1d->get_chrom_end(); ++it) {
+                    per_chrom[c].push_back(*it);
+                }
+            }
+        }
+
+        // Estimate N (positions per track) for adaptive K.
+        uint64_t total_bp = 0;
+        if (use_intervals) {
+            for (auto &v : per_chrom)
+                for (auto &g : v)
+                    total_bp += (uint64_t)(g.end - g.start);
+        } else {
+            for (int c = 0; c < n_chroms; ++c)
+                total_bp += chromkey.get_chrom_size(c);
+        }
+        uint64_t N_est = total_bp / (uint64_t)iterator_step;
+        if (N_est == 0) N_est = 1;
+
+        constexpr uint32_t K_MAX = 10'000'000u;
+
+        double min_p = *std::min_element(pctiles.begin(), pctiles.end());
+        double max_p = *std::max_element(pctiles.begin(), pctiles.end());
+        bool all_top = (min_p >= 0.5);
+        bool all_bot = (max_p <  0.5);
+        bool mixed_tail = !(all_top || all_bot);
+
+        double tail = 0.0;
+        if (all_top)      tail = 1.0 - min_p;
+        else if (all_bot) tail = max_p;
+        double K_needed_f = std::ceil(tail * (double)N_est * 1.2);
+        if (K_needed_f < 1.0) K_needed_f = 1.0;
+        bool clamp = K_needed_f > (double)K_MAX;
+        uint32_t K = clamp ? K_MAX
+                           : (uint32_t)K_needed_f;
+
+        bool use_fallback = mixed_tail || clamp;
+
         std::vector<TopKQuantile::Config> configs(n_tracks);
         for (int m = 0; m < n_tracks; ++m) {
             configs[m].percentiles = pctiles;
-            configs[m].K = 0;
-            configs[m].use_fallback = true;
-            configs[m].top_side = true;
+            configs[m].K = K;
+            configs[m].use_fallback = use_fallback;
+            configs[m].top_side = all_top;
         }
+
+        if (mixed_tail)
+            Rf_warning("percentiles span both tails (<0.5 and >=0.5); "
+                       "top-K pruning disabled, falling back to full storage");
+        if (clamp)
+            Rf_warning("quantile K=%g exceeds K_MAX=%u; "
+                       "falling back to full storage "
+                       "(memory ~= 4 B * N_positions * n_tracks)",
+                       K_needed_f, K_MAX);
 
         unsigned hw = std::thread::hardware_concurrency();
         if (hw == 0) hw = 4;
@@ -139,17 +357,16 @@ extern "C" SEXP C_gquantiles_multi(
         if (n_threads_req > 0) {
             n_threads = std::min(n_threads_req, n_tracks);
         } else {
-            n_threads = (int)std::min((unsigned)n_tracks,
-                                      std::min(hw, 40u));
+            n_threads = (int)std::min((unsigned)n_tracks, std::min(hw, 40u));
         }
         if (n_threads < 1) n_threads = 1;
 
         ScanConfig scan;
-        scan.func = WindowAggFunc::LSE;
+        scan.func = func;
         scan.iterator_step = iterator_step;
         scan.sshift = sshift;
         scan.eshift = eshift;
-        scan.per_chrom_intervals = nullptr;
+        scan.per_chrom_intervals = use_intervals ? &per_chrom : nullptr;
         scan.n_threads = n_threads;
 
         BatchTrackScanResult<TopKQuantile> scan_result;
