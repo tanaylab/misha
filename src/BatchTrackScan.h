@@ -46,8 +46,9 @@ struct ScanConfig {
     int n_threads;
 };
 
-// One task per (track, chrom). Workers write into State; main thread merges
-// per-track states after join.
+// One task per (track, chrom). Each worker scans its task, merges its
+// state into the per-track accumulator (in BatchTrackScanResult), and
+// frees the task's state buffers. Not exposed to callers.
 template <typename Reducer>
 struct BatchTrackScanTask {
     std::string track_name;
@@ -56,8 +57,14 @@ struct BatchTrackScanTask {
     int track_idx;              // index into the original track_names vector
     int chromid;
     typename Reducer::State state;
-    std::string error_msg;      // set by worker on exception; checked on main
+    std::string error_msg;      // set by worker on exception
 };
+
+// Output of run_batch_scan: merged per-track states + per-track error
+// messages. Caller iterates per_track_states[m] to build the R result;
+// error_messages[m] is non-empty if any chrom-task for track m failed.
+template <typename Reducer>
+struct BatchTrackScanResult;   // defined in BatchTrackScan.tpp
 
 // Aggregator math helpers — safe to call from any thread (pure, no R).
 float aggregate_window(WindowAggFunc func, const float *bins, int64_t sbin,
@@ -74,6 +81,10 @@ float aggregate_precomputed_const(WindowAggFunc func, int n_bins);
 
 // Top-level driver. `track_dirs` and `track_types` must be resolved on the
 // main thread before calling; workers never touch R to resolve names.
+// After the call, out.per_track_states[m] is the fully-merged state for
+// track m, and out.error_messages[m] is non-empty if any of its chrom-tasks
+// failed. See run_batch_scan body in BatchTrackScan.tpp for memory
+// discipline notes.
 template <typename Reducer>
 void run_batch_scan(
     const std::vector<std::string> &track_names,
@@ -82,7 +93,7 @@ void run_batch_scan(
     const std::vector<typename Reducer::Config> &per_track_configs,
     const ScanConfig &scan,
     const GenomeChromKey &chromkey,
-    std::vector<BatchTrackScanTask<Reducer>> &out_tasks);
+    BatchTrackScanResult<Reducer> &out);
 
 }  // namespace batchscan
 
