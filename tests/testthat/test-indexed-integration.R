@@ -265,7 +265,8 @@ test_that("indexed dense track works correctly across many chromosomes", {
     test_fasta <- tempfile(fileext = ".fasta")
     for (i in seq_len(n_chroms)) {
         cat(sprintf(">chr%d\n%s\n", i, paste(rep("ACGT", 25), collapse = "")),
-            file = test_fasta, append = (i > 1))
+            file = test_fasta, append = (i > 1)
+        )
     }
 
     test_db <- tempfile()
