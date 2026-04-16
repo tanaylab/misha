@@ -666,9 +666,9 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			}
 
 			// Truncate all vectors to actual size
-			SETLENGTH(r_chroms, row);
-			SETLENGTH(r_starts, row);
-			SETLENGTH(r_ends, row);
+			r_chroms = rprotect_ptr(Rf_lengthgets(r_chroms, row));
+			r_starts = rprotect_ptr(Rf_lengthgets(r_starts, row));
+			r_ends   = rprotect_ptr(Rf_lengthgets(r_ends, row));
 
 			// Set chrom as factor
 			unsigned num_chroms_total = iu.get_chromkey().get_num_chroms();
@@ -734,12 +734,12 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			}
 
 			// Truncate all vectors to actual size
-			SETLENGTH(r_chroms1, row);
-			SETLENGTH(r_starts1, row);
-			SETLENGTH(r_ends1, row);
-			SETLENGTH(r_chroms2, row);
-			SETLENGTH(r_starts2, row);
-			SETLENGTH(r_ends2, row);
+			r_chroms1 = rprotect_ptr(Rf_lengthgets(r_chroms1, row));
+			r_starts1 = rprotect_ptr(Rf_lengthgets(r_starts1, row));
+			r_ends1   = rprotect_ptr(Rf_lengthgets(r_ends1, row));
+			r_chroms2 = rprotect_ptr(Rf_lengthgets(r_chroms2, row));
+			r_starts2 = rprotect_ptr(Rf_lengthgets(r_starts2, row));
+			r_ends2   = rprotect_ptr(Rf_lengthgets(r_ends2, row));
 
 			// Set chrom1 and chrom2 as factors
 			unsigned num_chroms_total = iu.get_chromkey().get_num_chroms();
@@ -768,9 +768,9 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 
 		// Truncate shared columns to actual size
 		for (unsigned i = 0; i < num_exprs; i++)
-			SETLENGTH(r_expr_vals[i], row);
-		SETLENGTH(r_ids, row);
-		SETLENGTH(r_row_names, row);
+			r_expr_vals[i] = rprotect_ptr(Rf_lengthgets(r_expr_vals[i], row));
+		r_ids = rprotect_ptr(Rf_lengthgets(r_ids, row));
+		r_row_names = rprotect_ptr(Rf_lengthgets(r_row_names, row));
 
 		// Set expression value columns
 		for (unsigned iexpr = 0; iexpr < num_exprs; iexpr++)
