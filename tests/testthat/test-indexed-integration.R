@@ -257,5 +257,74 @@ test_that("indexed format validates on init", {
     }
 })
 
+test_that("indexed dense track works correctly across many chromosomes", {
+    # Regression test: indexed tracks previously re-mmapped the entire track.dat
+    # for every chromosome during iterator init and chromosome transitions,
+    # making them unusable on genomes with many contigs.
+    n_chroms <- 50
+    test_fasta <- tempfile(fileext = ".fasta")
+    for (i in seq_len(n_chroms)) {
+        cat(sprintf(">chr%d\n%s\n", i, paste(rep("ACGT", 25), collapse = "")),
+            file = test_fasta, append = (i > 1))
+    }
+
+    test_db <- tempfile()
+    withr::defer({
+        unlink(test_db, recursive = TRUE)
+        unlink(test_fasta)
+    })
+
+    withr::local_options(list(
+        gmulticontig.indexed_format = TRUE,
+        gmultitasking = FALSE
+    ))
+    gdb.create(groot = test_db, fasta = test_fasta, verbose = FALSE)
+    gdb.init(test_db)
+
+    # Create a dense track with known values on all chromosomes
+    all_intervs <- gintervals.all()
+    gdir.create("testidx")
+
+    all_track_intervs <- do.call(rbind, lapply(seq_len(nrow(all_intervs)), function(i) {
+        chrom <- as.character(all_intervs$chrom[i])
+        chrom_end <- all_intervs$end[i]
+        data.frame(
+            chrom = chrom,
+            start = seq(0, chrom_end - 10, by = 10),
+            end = seq(10, chrom_end, by = 10)
+        )
+    }))
+    all_vals <- rep(1.0, nrow(all_track_intervs))
+    gtrack.create_dense("testidx.dense1", "Test dense track", all_track_intervs, all_vals, 10, 0)
+
+    # Convert to indexed format
+    gtrack.convert_to_indexed("testidx.dense1")
+
+    # Verify indexed format was applied
+    info <- gtrack.info("testidx.dense1")
+    expect_equal(info$format, "indexed")
+
+    # Single-chromosome extraction should work and return correct values
+    first_chrom <- as.character(all_intervs$chrom[1])
+    result <- gextract("testidx.dense1", gintervals(first_chrom, 0, 20))
+    expect_equal(nrow(result), 2)
+    expect_true(all(result$testidx.dense1 == 1.0))
+
+    # Multi-chromosome extraction across all chromosomes should work
+    # This exercises the start_chrom code path for every chromosome
+    result_all <- gextract("testidx.dense1", gintervals.all())
+    expect_equal(nrow(result_all), sum(all_intervs$end) / 10)
+
+    # Virtual track with function should work across chromosome transitions
+    gvtrack.create("v_max", "testidx.dense1", func = "max")
+    result_vtrack <- gextract("v_max", gintervals(first_chrom, 0, 100))
+    expect_true(all(result_vtrack$v_max == 1.0))
+    gvtrack.rm("v_max")
+
+    # Clean up
+    gtrack.rm("testidx.dense1", force = TRUE)
+    gdir.rm("testidx", force = TRUE, recursive = TRUE)
+})
+
 # Restore the test database after all integration tests
 suppressMessages(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))

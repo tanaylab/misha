@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cmath>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <unordered_set>
 
@@ -1730,11 +1731,11 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 				if (GenomeTrack::is_1d(track_type))
 				{
 					set<int> chromids;
+					GenomeTrackFixedBin gtrack_fbin;
 
 					for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename)
 					{
 						int chromid = -1;
-						GenomeTrackFixedBin gtrack_fbin;
 
 						try
 						{
@@ -1897,12 +1898,42 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 			string track_dir = track2path(m_iu.get_env(), itrack_n_imdf->name);
 			string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
 			string filename(track_dir + "/" + resolved);
-			shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, interval.chromid, itrack_n_imdf->type);
-			if (!new_track) {
-				verror("Internal error: track %s of type %s is not supported by 1D iterators",
-					   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
+
+			// For indexed tracks, reuse the persistent backend to avoid
+			// re-mmapping the entire track.dat on every chromosome transition.
+			const IndexedBackendKey idx_key{itrack_n_imdf->type, track_dir};
+			auto idx_it = m_indexed_track_backends.find(idx_key);
+
+			if (idx_it != m_indexed_track_backends.end()) {
+				// Reuse existing indexed track object — init_read reuses the mmap
+				shared_ptr<GenomeTrack> master = idx_it->second;
+				if (itrack_n_imdf->type == GenomeTrack::FIXED_BIN) {
+					static_cast<GenomeTrackFixedBin *>(master.get())->init_read(filename.c_str(), interval.chromid);
+				} else if (itrack_n_imdf->type == GenomeTrack::SPARSE) {
+					static_cast<GenomeTrackSparse *>(master.get())->init_read(filename.c_str(), interval.chromid);
+				}
+				const BackendKey bk{itrack_n_imdf->type, interval.chromid, filename};
+				m_shared_1d_track_masters.emplace(bk, master);
+				shared_ptr<GenomeTrack> dependent = create_dependent_1d_track(itrack_n_imdf->type, master);
+				itrack_n_imdf->track = dependent ? dependent : master;
+			} else {
+				shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, interval.chromid, itrack_n_imdf->type);
+				if (!new_track) {
+					verror("Internal error: track %s of type %s is not supported by 1D iterators",
+						   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
+				}
+				itrack_n_imdf->track = new_track;
+
+				// If this is an indexed track, add to persistent cache
+				struct stat idx_st;
+				if (stat((track_dir + "/track.idx").c_str(), &idx_st) == 0 && supports_shared_1d_backend(itrack_n_imdf->type)) {
+					// Find the master in the shared cache (just added by init_1d_track_with_shared_backend)
+					const BackendKey bk{itrack_n_imdf->type, interval.chromid, filename};
+					auto master_it = m_shared_1d_track_masters.find(bk);
+					if (master_it != m_shared_1d_track_masters.end())
+						m_indexed_track_backends.emplace(idx_key, master_it->second);
+				}
 			}
-			itrack_n_imdf->track = new_track;
 		}
 		catch (TGLException &e)
 		{
@@ -1951,12 +1982,37 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 				}
 
 				if (chromid != itrack_n_imdf->imdf1d->interval.chromid) {
-					shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, chromid, itrack_n_imdf->type);
-					if (!new_track) {
-						verror("Internal error: track %s of type %s is not supported by 1D iterators (projected from 2D)",
-							   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
+					// For indexed tracks, reuse the persistent backend to avoid re-mmapping
+					const IndexedBackendKey idx_key{itrack_n_imdf->type, track_dir};
+					auto idx_it = m_indexed_track_backends.find(idx_key);
+
+					if (idx_it != m_indexed_track_backends.end()) {
+						shared_ptr<GenomeTrack> master = idx_it->second;
+						if (itrack_n_imdf->type == GenomeTrack::FIXED_BIN)
+							static_cast<GenomeTrackFixedBin *>(master.get())->init_read(filename.c_str(), chromid);
+						else if (itrack_n_imdf->type == GenomeTrack::SPARSE)
+							static_cast<GenomeTrackSparse *>(master.get())->init_read(filename.c_str(), chromid);
+						const BackendKey bk{itrack_n_imdf->type, chromid, filename};
+						m_shared_1d_track_masters.emplace(bk, master);
+						shared_ptr<GenomeTrack> dependent = create_dependent_1d_track(itrack_n_imdf->type, master);
+						itrack_n_imdf->track = dependent ? dependent : master;
+					} else {
+						shared_ptr<GenomeTrack> new_track = init_1d_track_with_shared_backend(filename, chromid, itrack_n_imdf->type);
+						if (!new_track) {
+							verror("Internal error: track %s of type %s is not supported by 1D iterators (projected from 2D)",
+								   itrack_n_imdf->name.c_str(), GenomeTrack::TYPE_NAMES[itrack_n_imdf->type]);
+						}
+						itrack_n_imdf->track = new_track;
+
+						// If indexed, add to persistent cache
+						struct stat idx_st;
+						if (stat((track_dir + "/track.idx").c_str(), &idx_st) == 0 && supports_shared_1d_backend(itrack_n_imdf->type)) {
+							const BackendKey bk{itrack_n_imdf->type, chromid, filename};
+							auto master_it = m_shared_1d_track_masters.find(bk);
+							if (master_it != m_shared_1d_track_masters.end())
+								m_indexed_track_backends.emplace(idx_key, master_it->second);
+						}
 					}
-					itrack_n_imdf->track = new_track;
 				} else if (should_manage_shared_masters) {
 					const BackendKey backend_key{itrack_n_imdf->type, chromid, filename};
 					auto imaster = m_shared_1d_track_masters.find(backend_key);
