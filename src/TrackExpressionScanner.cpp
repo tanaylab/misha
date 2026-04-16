@@ -636,10 +636,12 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 
 			if (GenomeTrack::is_1d(track_type)) {
 				set<int> chromids;
+				// Declare outside the loop so init_read can reuse mmap for indexed
+				// tracks (single track.dat) instead of re-mmapping per chromosome.
+				GenomeTrackFixedBin gtrack_fbin;
 
-				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {										
+				for (vector<string>::const_iterator ifilename = filenames.begin(); ifilename != filenames.end(); ++ifilename) {
 					int chromid = -1;
-					GenomeTrackFixedBin gtrack_fbin;
 
 					try {
 						 chromid = GenomeTrack::get_chromid_1d(m_iu.get_chromkey(), *ifilename);

@@ -301,6 +301,28 @@ private:
 
 	std::unordered_map<BackendKey, std::shared_ptr<GenomeTrack>, BackendKeyHash> m_shared_1d_track_masters;
 
+	// Persistent cache for indexed track backends, keyed by {type, track_dir}.
+	// Survives reset_shared_1d_track_masters() so that mmap can be reused across
+	// chromosome transitions instead of re-mapping the entire track.dat each time.
+	struct IndexedBackendKey {
+		GenomeTrack::Type type;
+		std::string track_dir;
+
+		bool operator==(const IndexedBackendKey &other) const {
+			return type == other.type && track_dir == other.track_dir;
+		}
+	};
+
+	struct IndexedBackendKeyHash {
+		size_t operator()(const IndexedBackendKey &k) const {
+			size_t h = std::hash<int>()(static_cast<int>(k.type));
+			h ^= std::hash<std::string>()(k.track_dir) * 40503ULL;
+			return h;
+		}
+	};
+
+	std::unordered_map<IndexedBackendKey, std::shared_ptr<GenomeTrack>, IndexedBackendKeyHash> m_indexed_track_backends;
+
 	// Shared sequence fetcher for all sequence-based vtracks to enable caching
 	GenomeSeqFetch          m_shared_seqfetch;
 
