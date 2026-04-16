@@ -63,6 +63,7 @@ reference:
     desc: Batch feature extraction for LASSO training from motif tracks
     contents:
       - glm_extract_features
+      - glm_batch_quantiles
   - title: Intervals functions
     desc:  Functions to manipulate and create intervals
     contents:
