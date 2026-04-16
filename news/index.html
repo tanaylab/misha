@@ -67,6 +67,10 @@
     </div>
 
     <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.12" id="misha-5612">misha 5.6.12<a class="anchor" aria-label="anchor" href="#misha-5612"></a></h2>
+<ul><li>Fixed child processes surviving <code>rexit()</code> due to R’s SIGTERM handler. All multitasked operations (<code>gmultitasking = TRUE</code>) were affected: after forking, child processes continued executing R-level post-processing code instead of terminating. Track-creating functions (<code>gtrack.create</code>, <code>gtrack.smooth</code>, <code>gtrack.create_pwm_energy</code>) could corrupt data on indexed databases — children ran <code>gtrack.convert_to_indexed</code> concurrently, reading incomplete files and deleting files still being written by other children. On non-indexed databases, track data was correct. Query functions (<code>gextract</code>, <code>gscreen</code>, <code>gdist</code>, <code>gquantiles</code>, <code>gcor</code>, <code>gsummary</code>, <code>gcis.decay</code>, <code>gapply</code>, <code>gbins.quantiles</code>, <code>gbins.summary</code>) returned correct results since data was written to shared memory before the failed exit.</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.11" id="misha-5611">misha 5.6.11<a class="anchor" aria-label="anchor" href="#misha-5611"></a></h2>
 <ul><li>Added <code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code> for replacing intervals in a reference genome with donor sequences and writing a new FASTA. Supports literal donor sequences or extraction from a misha database, with optional trackdb creation.</li>
 <li>Added <code><a href="../reference/ggenome.transplant.html">ggenome.transplant()</a></code> as sugar for cross-genome sequence swaps — extracts from a source genome and implants into a target genome in a single call.</li>
