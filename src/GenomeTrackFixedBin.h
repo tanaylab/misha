@@ -37,6 +37,22 @@ public:
 
 	unsigned get_bin_size() const { return m_bin_size; }
 	int64_t  get_num_samples() const { return m_num_samples; }
+	bool     is_mmap() const { return m_mmap_data != nullptr; }
+
+	// Direct pointer access into mmap region (zero-copy).
+	// Returns pointer to start_bin, sets out_count to number of bins available.
+	// Caller must handle isinf→NaN conversion. Returns nullptr if not mmap-backed.
+	const float *get_mmap_bins_ptr(int64_t start_bin, int64_t num_bins, int64_t &out_count) const {
+		if (!m_mmap_data || num_bins <= 0)
+			return nullptr;
+		int64_t available = m_mmap_num_bins - start_bin;
+		if (available <= 0) {
+			out_count = 0;
+			return nullptr;
+		}
+		out_count = std::min(num_bins, available);
+		return m_mmap_data + start_bin;
+	}
 
 	void goto_bin(uint64_t bin);
 

@@ -1,0 +1,457 @@
+# ============================================================================
+# GLM Predictor Virtual Track
+# ============================================================================
+# Fused GLM linear prediction: per-position computation of
+# bias + Σ(weight × transform(scale(smooth(track)))) + Σ(inter_weight × transform(product))
+
+#' Create a GLM predictor virtual track
+#'
+#' Creates a virtual track that computes a fused generalized linear model
+#' prediction at each genome position. The pipeline for each entry is:
+#' smooth → scale (cap + normalize) → transform (logistic) → weight.
+#' Interactions are computed post-scaling, pre-transform.
+#'
+#' @param name character(1) Virtual track name
+#' @param tracks character(N) Genomic track names (repeated OK)
+#' @param inner_func character(N) \code{"sum"} or \code{"lse"} per entry
+#' @param weights numeric(N) or matrix(N, K) LM coefficients per entry.
+#'   For a single model (no selector), a plain numeric vector of length N.
+#'   When \code{selector_track} is specified, must be a matrix with N rows
+#'   and K columns (one column per selector bin), so each position uses the
+#'   weights from the bin selected by the selector track value.
+#' @param bias numeric(1) or numeric(K) Intercept term (default 0). For a
+#'   single model, a scalar. When a selector is used, can be numeric(K) to
+#'   provide a per-bin intercept; a scalar is recycled to length K.
+#' @param kernels list of numeric vectors (N or 1, recycled) Sub-bin kernel
+#'   weights, or NULL for direct aggregation
+#' @param kernel_bins numeric(B) Offsets relative to shift window center, or NULL
+#' @param shifts list of numeric(2) Per-entry \code{c(sshift, eshift)}, or NULL
+#' @param trans_family character(N or 1 or NULL) \code{"logist"} or NA per entry
+#' @param trans_params list of lists (N or NULL) Each element is a list with
+#'   fields \code{L}, \code{k}, \code{x_0}, and optionally \code{pre_shift},
+#'   \code{post_shift}
+#' @param max_cap numeric(N or NULL) Capping threshold per entry (NA to skip)
+#' @param dis_from_cap numeric(N or NULL) Distance from cap per entry (NA to skip)
+#' @param simple_cap logical(N or NULL) If TRUE, use simple cap-and-divide
+#'   scaling: \code{min(raw, max_cap) / dis_from_cap}. Default NULL (standard
+#'   cap-normalize scaling).
+#' @param scale_factor numeric(1) Global scale factor (default 10)
+#' @param interactions list of integer(2) (M or NULL) Pairs of entry indices (1-based)
+#' @param interaction_weights numeric(M) or matrix(M, K) or NULL Per-interaction
+#'   LM coefficients. For a single model, a numeric vector of length M.
+#'   When \code{selector_track} is specified (K > 1), must be a matrix with
+#'   M rows and K columns.
+#' @param interaction_trans_family character(M or 1 or NULL) Transform for interactions
+#' @param inter_trans_params list of lists (M or NULL) Logistic params per interaction
+#' @param selector_track character(1) or NULL Name of a fixed-bin (dense)
+#'   track used for per-position model selection. At each genomic position,
+#'   the selector track value is binned via \code{selector_breaks} to choose
+#'   which bin's weights (column of the weight matrix) to use. When NULL
+#'   (default), K = 1 and a single set of weights is applied everywhere.
+#' @param selector_breaks numeric vector of length K+1 defining K bins, or
+#'   NULL. Break points use \code{cut(include.lowest = TRUE, right = TRUE)}
+#'   semantics. Required when \code{selector_track} is specified.
+#'
+#' @return Invisibly returns \code{name}.
+#' @export
+glm_pred.create <- function(name,
+                            tracks,
+                            inner_func,
+                            weights,
+                            bias = 0,
+                            kernels = NULL,
+                            kernel_bins = NULL,
+                            shifts = NULL,
+                            trans_family = NULL,
+                            trans_params = NULL,
+                            max_cap = NULL,
+                            dis_from_cap = NULL,
+                            simple_cap = NULL,
+                            scale_factor = 10,
+                            interactions = NULL,
+                            interaction_weights = NULL,
+                            interaction_trans_family = NULL,
+                            inter_trans_params = NULL,
+                            selector_track = NULL,
+                            selector_breaks = NULL) {
+    .gcheckroot()
+
+    # --- Validate core vectors ---
+    if (!is.character(name) || length(name) != 1) {
+        stop("'name' must be a single character string", call. = FALSE)
+    }
+    if (!is.character(tracks) || length(tracks) == 0) {
+        stop("'tracks' must be a non-empty character vector", call. = FALSE)
+    }
+    N <- length(tracks)
+
+    # Validate that all tracks exist
+    existing <- gtrack.ls()
+    missing_tracks <- setdiff(unique(tracks), existing)
+    if (length(missing_tracks) > 0) {
+        stop(
+            sprintf(
+                "Track(s) not found: %s",
+                paste0("'", missing_tracks, "'", collapse = ", ")
+            ),
+            call. = FALSE
+        )
+    }
+
+    if (!is.character(inner_func) || length(inner_func) != N) {
+        stop(sprintf("'inner_func' must be a character vector of length %d", N), call. = FALSE)
+    }
+    invalid_if <- setdiff(unique(inner_func), c("sum", "lse"))
+    if (length(invalid_if) > 0) {
+        stop(
+            sprintf(
+                "'inner_func' values must be 'sum' or 'lse' (got: %s)",
+                paste0("'", invalid_if, "'", collapse = ", ")
+            ),
+            call. = FALSE
+        )
+    }
+
+    # --- Validate selector track and determine K ---
+    K <- 1L
+    if (!is.null(selector_track)) {
+        if (is.null(selector_breaks)) {
+            stop("'selector_breaks' required when 'selector_track' is specified", call. = FALSE)
+        }
+        if (!is.character(selector_track) || length(selector_track) != 1) {
+            stop("'selector_track' must be a single character string", call. = FALSE)
+        }
+        if (!is.numeric(selector_breaks) || length(selector_breaks) < 2) {
+            stop("'selector_breaks' must be a numeric vector with at least 2 elements", call. = FALSE)
+        }
+        K <- length(selector_breaks) - 1L
+
+        # Validate selector track exists and is fixed-bin
+        if (!(selector_track %in% gtrack.ls())) {
+            stop(sprintf("Selector track '%s' not found", selector_track), call. = FALSE)
+        }
+        sel_info <- gtrack.info(selector_track)
+        if (sel_info$type != "dense") {
+            stop(sprintf(
+                "Selector track '%s' must be a fixed-bin (dense) track, got '%s'",
+                selector_track, sel_info$type
+            ), call. = FALSE)
+        }
+    }
+
+    # --- Validate weights (vector or matrix depending on K) ---
+    if (is.matrix(weights)) {
+        if (nrow(weights) != N || ncol(weights) != K) {
+            stop(sprintf("'weights' matrix must be %d x %d (N x K)", N, K), call. = FALSE)
+        }
+    } else {
+        if (!is.numeric(weights) || length(weights) != N) {
+            stop(sprintf("'weights' must be numeric of length %d", N), call. = FALSE)
+        }
+        if (K > 1) {
+            stop("'weights' must be a matrix when selector_track is specified", call. = FALSE)
+        }
+    }
+
+    # --- Validate bias (scalar or length K) ---
+    if (!is.numeric(bias) || !(length(bias) %in% c(1L, K))) {
+        stop(sprintf("'bias' must be numeric of length 1 or %d", K), call. = FALSE)
+    }
+    if (length(bias) == 1 && K > 1) bias <- rep(bias, K)
+
+    if (!is.numeric(scale_factor) || length(scale_factor) != 1 || scale_factor <= 0) {
+        stop("'scale_factor' must be a positive numeric scalar", call. = FALSE)
+    }
+
+    # --- Validate and process shifts ---
+    sshifts <- rep(0, N)
+    eshifts <- rep(0, N)
+    if (!is.null(shifts)) {
+        if (!is.list(shifts) || length(shifts) != N) {
+            stop(sprintf("'shifts' must be a list of length %d", N), call. = FALSE)
+        }
+        for (i in seq_len(N)) {
+            s <- shifts[[i]]
+            if (!is.numeric(s) || length(s) != 2) {
+                stop(sprintf("shifts[[%d]] must be numeric(2)", i), call. = FALSE)
+            }
+            if (s[1] >= s[2]) {
+                stop(sprintf("shifts[[%d]]: sshift (%g) must be < eshift (%g)", i, s[1], s[2]),
+                    call. = FALSE
+                )
+            }
+            sshifts[i] <- s[1]
+            eshifts[i] <- s[2]
+        }
+    }
+
+    # --- Validate kernel_bins and kernels ---
+    if (!is.null(kernel_bins)) {
+        if (!is.numeric(kernel_bins)) {
+            stop("'kernel_bins' must be a numeric vector", call. = FALSE)
+        }
+        if (is.null(kernels)) {
+            stop("'kernels' must be provided when 'kernel_bins' is specified", call. = FALSE)
+        }
+    }
+    if (!is.null(kernels)) {
+        if (!is.list(kernels)) {
+            stop("'kernels' must be a list of numeric vectors", call. = FALSE)
+        }
+        B <- if (!is.null(kernel_bins)) length(kernel_bins) else NA
+        kn_len <- length(kernels)
+        if (kn_len != 1 && kn_len != N) {
+            stop(sprintf("'kernels' must be length 1 or %d", N), call. = FALSE)
+        }
+        for (i in seq_along(kernels)) {
+            if (!is.numeric(kernels[[i]])) {
+                stop(sprintf("kernels[[%d]] must be numeric", i), call. = FALSE)
+            }
+            if (!is.na(B) && length(kernels[[i]]) != B) {
+                stop(sprintf("kernels[[%d]] must have length %d (matching kernel_bins)", i, B),
+                    call. = FALSE
+                )
+            }
+        }
+        # Recycle length-1 kernels
+        if (kn_len == 1 && N > 1) {
+            kernels <- rep(kernels, N)
+        }
+    }
+
+    # --- Validate and recycle trans_family / trans_params ---
+    if (!is.null(trans_family)) {
+        if (length(trans_family) == 1) {
+            trans_family <- rep(trans_family, N)
+        }
+        if (length(trans_family) != N) {
+            stop(sprintf("'trans_family' must be length 1, %d, or NULL", N), call. = FALSE)
+        }
+        invalid_tf <- setdiff(unique(trans_family[!is.na(trans_family)]), "logist")
+        if (length(invalid_tf) > 0) {
+            stop(
+                sprintf(
+                    "'trans_family' must be 'logist' or NA (got: %s)",
+                    paste0("'", invalid_tf, "'", collapse = ", ")
+                ),
+                call. = FALSE
+            )
+        }
+    } else {
+        trans_family <- rep(NA_character_, N)
+    }
+
+    if (!is.null(trans_params)) {
+        if (length(trans_params) == 1) {
+            trans_params <- rep(trans_params, N)
+        }
+        if (length(trans_params) != N) {
+            stop(sprintf("'trans_params' must be length 1, %d, or NULL", N), call. = FALSE)
+        }
+    } else {
+        trans_params <- vector("list", N)
+    }
+
+    # --- Validate max_cap / dis_from_cap ---
+    if (is.null(max_cap)) max_cap <- rep(NA_real_, N)
+    if (is.null(dis_from_cap)) dis_from_cap <- rep(NA_real_, N)
+    if (length(max_cap) != N) {
+        stop(sprintf("'max_cap' must be length %d or NULL", N), call. = FALSE)
+    }
+    if (length(dis_from_cap) != N) {
+        stop(sprintf("'dis_from_cap' must be length %d or NULL", N), call. = FALSE)
+    }
+    # max_cap and dis_from_cap must be specified together per entry
+    cap_mismatch <- xor(is.na(max_cap), is.na(dis_from_cap))
+    if (any(cap_mismatch)) {
+        bad <- which(cap_mismatch)[1]
+        stop(
+            sprintf(
+                "'max_cap' and 'dis_from_cap' must both be specified or both NA for each entry (mismatch at entry %d)",
+                bad
+            ),
+            call. = FALSE
+        )
+    }
+
+    # --- Flatten transform params into parallel vectors ---
+    trans_L <- vapply(seq_len(N), function(i) {
+        p <- trans_params[[i]]
+        if (is.null(p) || is.na(trans_family[i])) NA_real_ else p$L %||% 1
+    }, numeric(1))
+    trans_k <- vapply(seq_len(N), function(i) {
+        p <- trans_params[[i]]
+        if (is.null(p) || is.na(trans_family[i])) NA_real_ else p$k %||% 1
+    }, numeric(1))
+    trans_x0 <- vapply(seq_len(N), function(i) {
+        p <- trans_params[[i]]
+        if (is.null(p) || is.na(trans_family[i])) NA_real_ else p$x_0 %||% 0
+    }, numeric(1))
+    trans_pre <- vapply(seq_len(N), function(i) {
+        p <- trans_params[[i]]
+        if (is.null(p) || is.na(trans_family[i])) NA_real_ else p$pre_shift %||% 0
+    }, numeric(1))
+    trans_post <- vapply(seq_len(N), function(i) {
+        p <- trans_params[[i]]
+        if (is.null(p) || is.na(trans_family[i])) NA_real_ else p$post_shift %||% 0
+    }, numeric(1))
+
+    # --- Build params list for C++ ---
+    params <- list(
+        tracks = tracks,
+        inner_func = inner_func,
+        weights = as.numeric(weights),
+        bias = as.numeric(bias),
+        num_bins = as.integer(K),
+        scale_factor = as.numeric(scale_factor),
+        sshifts = as.numeric(sshifts),
+        eshifts = as.numeric(eshifts),
+        max_cap = as.numeric(max_cap),
+        dis_from_cap = as.numeric(dis_from_cap),
+        simple_cap = if (!is.null(simple_cap)) as.logical(simple_cap) else NULL,
+        trans_family = trans_family,
+        trans_L = as.numeric(trans_L),
+        trans_k = as.numeric(trans_k),
+        trans_x0 = as.numeric(trans_x0),
+        trans_pre = as.numeric(trans_pre),
+        trans_post = as.numeric(trans_post)
+    )
+
+    # Add selector params if present
+    if (!is.null(selector_track)) {
+        params$selector_track <- selector_track
+        params$selector_breaks <- as.numeric(selector_breaks)
+    }
+
+    # Add kernel params if present
+    if (!is.null(kernel_bins)) {
+        params$kernel_bins <- as.numeric(kernel_bins)
+    }
+    if (!is.null(kernels)) {
+        params$kernels <- kernels
+    }
+
+    # --- Validate and flatten interactions ---
+    if (!is.null(interactions)) {
+        if (!is.list(interactions)) {
+            stop("'interactions' must be a list of integer(2) pairs", call. = FALSE)
+        }
+        M <- length(interactions)
+        if (is.matrix(interaction_weights)) {
+            if (nrow(interaction_weights) != M || ncol(interaction_weights) != K) {
+                stop(sprintf("'interaction_weights' matrix must be %d x %d", M, K), call. = FALSE)
+            }
+        } else {
+            if (!is.numeric(interaction_weights) || length(interaction_weights) != M) {
+                stop(sprintf("'interaction_weights' must be numeric of length %d", M), call. = FALSE)
+            }
+        }
+
+        inter_i <- vapply(interactions, `[`, integer(1), 1L)
+        inter_j <- vapply(interactions, `[`, integer(1), 2L)
+
+        if (any(inter_i < 1 | inter_i > N | inter_j < 1 | inter_j > N)) {
+            stop(sprintf("Interaction indices must be in [1, %d]", N), call. = FALSE)
+        }
+
+        params$inter_i <- as.integer(inter_i)
+        params$inter_j <- as.integer(inter_j)
+        params$inter_weights <- as.numeric(interaction_weights)
+
+        # Process interaction transforms
+        if (is.null(interaction_trans_family)) {
+            interaction_trans_family <- rep(NA_character_, M)
+        }
+        if (length(interaction_trans_family) == 1) {
+            interaction_trans_family <- rep(interaction_trans_family, M)
+        }
+
+        if (is.null(inter_trans_params)) {
+            inter_trans_params <- vector("list", M)
+        }
+        if (length(inter_trans_params) == 1) {
+            inter_trans_params <- rep(inter_trans_params, M)
+        }
+
+        params$inter_trans_family <- interaction_trans_family
+        params$inter_trans_L <- vapply(seq_len(M), function(m) {
+            p <- inter_trans_params[[m]]
+            if (is.null(p) || is.na(interaction_trans_family[m])) NA_real_ else p$L %||% 1
+        }, numeric(1))
+        params$inter_trans_k <- vapply(seq_len(M), function(m) {
+            p <- inter_trans_params[[m]]
+            if (is.null(p) || is.na(interaction_trans_family[m])) NA_real_ else p$k %||% 1
+        }, numeric(1))
+        params$inter_trans_x0 <- vapply(seq_len(M), function(m) {
+            p <- inter_trans_params[[m]]
+            if (is.null(p) || is.na(interaction_trans_family[m])) NA_real_ else p$x_0 %||% 0
+        }, numeric(1))
+        params$inter_trans_pre <- vapply(seq_len(M), function(m) {
+            p <- inter_trans_params[[m]]
+            if (is.null(p) || is.na(interaction_trans_family[m])) NA_real_ else p$pre_shift %||% 0
+        }, numeric(1))
+        params$inter_trans_post <- vapply(seq_len(M), function(m) {
+            p <- inter_trans_params[[m]]
+            if (is.null(p) || is.na(interaction_trans_family[m])) NA_real_ else p$post_shift %||% 0
+        }, numeric(1))
+    }
+
+    # --- Register as vtrack ---
+    var <- list(
+        func = "glm.predict",
+        params = params
+    )
+
+    .gvtrack.set(name, var)
+
+    invisible(name)
+}
+
+#' Remove a GLM predictor virtual track
+#'
+#' @param name character(1) Virtual track name
+#' @return None.
+#' @export
+glm_pred.rm <- function(name) {
+    gvtrack.rm(name)
+}
+
+#' List GLM predictor virtual tracks
+#'
+#' @return Character vector of virtual track names that use glm.predict.
+#' @export
+glm_pred.ls <- function() {
+    all_vt <- gvtrack.ls()
+    if (length(all_vt) == 0) {
+        return(character(0))
+    }
+    is_glm <- vapply(all_vt, function(vt) {
+        info <- gvtrack.info(vt)
+        identical(info$func, "glm.predict")
+    }, logical(1))
+    all_vt[is_glm]
+}
+
+#' Get info for a GLM predictor virtual track
+#'
+#' Returns the virtual track definition. When the track uses a selector
+#' (K > 1 bins), weights and interaction weights are reshaped back to
+#' matrices with N (or M) rows and K columns.
+#'
+#' @param name character(1) Virtual track name
+#' @return List with virtual track definition.
+#' @export
+glm_pred.info <- function(name) {
+    info <- gvtrack.info(name)
+    K <- info$params$num_bins
+    if (!is.null(K) && K > 1) {
+        N <- length(info$params$tracks)
+        info$params$weights <- matrix(info$params$weights, nrow = N, ncol = K)
+        if (!is.null(info$params$inter_weights)) {
+            M <- length(info$params$inter_i)
+            info$params$inter_weights <- matrix(info$params$inter_weights, nrow = M, ncol = K)
+        }
+        info$params$bias <- as.numeric(info$params$bias)
+    }
+    info
+}

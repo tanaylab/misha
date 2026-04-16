@@ -571,8 +571,8 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 	vector<GenomeTrack::Type> track_types;
 
 for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
-    // Skip sequence-based variables since they don't have associated tracks
-    if (vars.is_seq_variable(ivar)) {
+    // Skip sourceless variables (sequence-based, glm.predict)
+    if (vars.is_seq_variable(ivar) || !vars.has_track(ivar)) {
         continue;
     }
     track_names.push_back(vars.get_track_name(ivar));
@@ -747,6 +747,7 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 			num_tracks > 1)
 		{
 			for (unsigned ivar = 1; ivar < vars.get_num_track_vars(); ++ivar) {
+				if (!vars.has_track(ivar) || !vars.has_track(ivar - 1)) continue;
 				if (vars.get_track_name(ivar) != vars.get_track_name(ivar - 1)) {
 					if (track_exprs.size() == 1)
 						verror("Cannot implicitly determine iterator policy: track expression \"%s\" contains more than one %s track.\n",
