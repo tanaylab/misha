@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cmath>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
 
@@ -42,6 +43,9 @@ struct SlidingExtremum {
             if (!dominated) break;
             --tail;
         }
+        // Caller is required to hold the live window to <= CAP bins (enforced
+        // by the scan_fixedbin_inner guard at window setup time).
+        // assert((size_t)(tail - head) < (size_t)CAP);
         idx[tail % CAP] = b;
         val[tail % CAP] = v;
         ++tail;
@@ -157,8 +161,9 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
         if (sbin >= ebin) continue;
 
         if constexpr (Reducer::needs_pruning) {
-            // If the window jumped (e.g. after a mask gap reset), rewind
-            // next_bin_to_push so we don't lose state.
+            // Forward-jump past bins in a mask gap: after the deque reset
+            // on a gap, next_bin_to_push is 0, and we don't want to walk
+            // through the skipped region — skip directly to sbin.
             if (next_bin_to_push < (int)sbin) next_bin_to_push = (int)sbin;
             // Push all bins up to ebin that we haven't seen yet.
             while (next_bin_to_push < (int)ebin) {
@@ -238,6 +243,10 @@ void scan_sparse_inner(GenomeTrackSparse *sp, int64_t chrom_size,
         }
 
         // Scan overlapping sparse intervals and compute the aggregator inline.
+        // We don't build a dense bins array here (sparse positions are
+        // irregular); aggregate state is kept directly. SUM/AVG accumulate
+        // in double for numerical stability, mirroring aggregate_window's
+        // fixedbin path. No pruning on sparse — we always call accept().
         float acc_lse = -std::numeric_limits<float>::infinity();
         double acc_sum = 0.0;
         float acc_max = -std::numeric_limits<float>::infinity();
@@ -309,7 +318,20 @@ void scan_task_dispatch(BatchTrackScanTask<Reducer> &task,
 // -----------------------------------------------------------------------------
 // Top-level driver. Tasks = all (track, chrom) pairs with non-zero chrom_size.
 // Work queue via std::atomic<size_t>. Workers catch all exceptions locally.
+//
+// Memory discipline: each worker, after completing a (track, chrom) task,
+// merges its state into the corresponding per-track accumulator (under a
+// per-track mutex) and frees the task's state. This keeps peak memory
+// bounded by (per_track_accumulator * n_tracks + concurrent_task_buffers *
+// n_threads), not by (all_task_buffers summed). Critical for the
+// Phase 1 fallback mode where task state holds the full value vector.
 // -----------------------------------------------------------------------------
+template <typename Reducer>
+struct BatchTrackScanResult {
+    std::vector<typename Reducer::State> per_track_states;   // length n_tracks
+    std::vector<std::string> error_messages;                 // one per track, empty => OK
+};
+
 template <typename Reducer>
 void run_batch_scan(
     const std::vector<std::string> &track_names,
@@ -318,19 +340,28 @@ void run_batch_scan(
     const std::vector<typename Reducer::Config> &per_track_configs,
     const ScanConfig &scan,
     const GenomeChromKey &chromkey,
-    std::vector<BatchTrackScanTask<Reducer>> &out_tasks)
+    BatchTrackScanResult<Reducer> &out)
 {
     const int n_tracks = (int)track_names.size();
     const int n_chroms = (int)chromkey.get_num_chroms();
 
-    out_tasks.clear();
-    out_tasks.reserve((size_t)n_tracks * n_chroms);
+    // Per-track accumulators + per-track mutexes. Accumulators are
+    // initialized with the track's Config so their cfg pointer outlives
+    // any merge call.
+    out.per_track_states.clear();
+    out.per_track_states.resize(n_tracks);
+    out.error_messages.assign(n_tracks, std::string());
+    for (int t = 0; t < n_tracks; ++t)
+        out.per_track_states[t].init(per_track_configs[t], /*chromid=*/0,
+                                     scan.iterator_step);
+    std::vector<std::mutex> per_track_mutex(n_tracks);
 
+    // Build (track, chrom) task list.
+    std::vector<BatchTrackScanTask<Reducer>> tasks;
+    tasks.reserve((size_t)n_tracks * n_chroms);
     for (int t = 0; t < n_tracks; ++t) {
         for (int c = 0; c < n_chroms; ++c) {
             if (chromkey.get_chrom_size(c) == 0) continue;
-            // Skip tracks whose chrom file doesn't exist. This mirrors the
-            // existing GlmBatchQuantiles behavior.
             std::string resolved;
             try {
                 resolved = GenomeTrack::find_existing_1d_filename(
@@ -347,24 +378,30 @@ void run_batch_scan(
             task.track_idx = t;
             task.chromid = c;
             task.state.init(per_track_configs[t], c, scan.iterator_step);
-            out_tasks.push_back(std::move(task));
+            tasks.push_back(std::move(task));
         }
     }
 
     std::atomic<size_t> next_task{0};
-    const size_t n_tasks = out_tasks.size();
+    const size_t n_tasks = tasks.size();
 
     auto worker = [&]() {
         for (;;) {
             size_t i = next_task.fetch_add(1);
             if (i >= n_tasks) return;
-            auto &task = out_tasks[i];
+            auto &task = tasks[i];
             try {
                 const std::vector<GInterval> *allowed =
                     scan.per_chrom_intervals
                         ? &(*scan.per_chrom_intervals)[task.chromid]
                         : nullptr;
                 scan_task_dispatch<Reducer>(task, scan, chromkey, allowed);
+                // Merge into the per-track accumulator and release task state.
+                {
+                    std::lock_guard<std::mutex> lk(per_track_mutex[task.track_idx]);
+                    out.per_track_states[task.track_idx].merge(task.state);
+                }
+                task.state = typename Reducer::State{};  // free buffers
             } catch (const std::exception &e) {
                 task.error_msg = e.what();
             } catch (...) {
@@ -376,12 +413,18 @@ void run_batch_scan(
     int n_threads = scan.n_threads;
     if (n_threads < 1) n_threads = 1;
     if ((size_t)n_threads > n_tasks) n_threads = (int)n_tasks;
-    if (n_threads <= 0) return;  // no tasks
+    if (n_threads > 0) {
+        std::vector<std::thread> threads;
+        threads.reserve(n_threads);
+        for (int i = 0; i < n_threads; ++i) threads.emplace_back(worker);
+        for (auto &t : threads) t.join();
+    }
 
-    std::vector<std::thread> threads;
-    threads.reserve(n_threads);
-    for (int i = 0; i < n_threads; ++i) threads.emplace_back(worker);
-    for (auto &t : threads) t.join();
+    // Surface the first error per track (if any).
+    for (auto &task : tasks) {
+        if (!task.error_msg.empty() && out.error_messages[task.track_idx].empty())
+            out.error_messages[task.track_idx] = task.error_msg;
+    }
 }
 
 }  // namespace batchscan
