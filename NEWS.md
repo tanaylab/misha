@@ -1,6 +1,6 @@
 # misha 5.6.12 
 
-* Fixed child processes surviving `rexit()` due to R's SIGTERM handler. All multitasked operations (`gmultitasking = TRUE`) were affected: after forking, child processes continued executing R-level post-processing code instead of terminating. On indexed databases, `gtrack.create`/`gtrack.smooth` children could run `gtrack.convert_to_indexed` concurrently, reading incomplete data and deleting files still being written by other children. Query functions (`gextract`, `gscreen`, etc.) returned correct results since data was written to shared memory before the failed exit.
+* Fixed child processes surviving `rexit()` due to R's SIGTERM handler. All multitasked operations (`gmultitasking = TRUE`) were affected: after forking, child processes continued executing R-level post-processing code instead of terminating. Track-creating functions (`gtrack.create`, `gtrack.smooth`, `gtrack.create_pwm_energy`) could corrupt data on indexed databases — children ran `gtrack.convert_to_indexed` concurrently, reading incomplete files and deleting files still being written by other children. On non-indexed databases, track data was correct. Query functions (`gextract`, `gscreen`, `gdist`, `gquantiles`, `gcor`, `gsummary`, `gcis.decay`, `gapply`, `gbins.quantiles`, `gbins.summary`) returned correct results since data was written to shared memory before the failed exit.
 
 # misha 5.6.11
 
