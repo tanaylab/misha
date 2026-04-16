@@ -191,3 +191,85 @@ glm_extract_features <- function(
 }
 
 
+#' Compute genome-wide quantiles for multiple tracks in parallel
+#'
+#' Efficiently computes genome-wide quantiles for many tracks using parallel
+#' C++ threads. Each thread scans the genome for one track, computing LSE
+#' aggregation over the specified window at each iterator position, then
+#' computes exact quantiles using nth_element.
+#'
+#' @param track_names Character vector of track names.
+#' @param percentiles Numeric vector of percentiles to compute (e.g., 0.9999).
+#' @param iterator Integer scalar: iterator step size in bp (default 20L).
+#' @param sshift Integer scalar: start shift for the LSE aggregation window
+#'   relative to iterator center (default -140L).
+#' @param eshift Integer scalar: end shift for the LSE aggregation window
+#'   relative to iterator center (default 140L).
+#' @param n_threads Integer scalar: number of parallel threads. Defaults to
+#'   \code{getOption("gmax.processes", 1L)} to match the rest of misha.
+#'   Set \code{options(gmax.processes = N)} or pass \code{n_threads = N}
+#'   to raise it. Pass \code{n_threads = 0L} to auto-detect
+#'   (\code{min(n_tracks, hardware_concurrency, 40)}). Each thread uses
+#'   ~540 MB for mouse genome at 20bp resolution.
+#'
+#' @return If a single percentile is requested: a named numeric vector
+#'   (one value per track). If multiple percentiles: a matrix with
+#'   \code{n_tracks} rows and \code{n_percentiles} columns.
+#'
+#' @details
+#' This function replaces the pattern of calling \code{gquantiles} once per
+#' track in a loop. For 191 motif tracks, it reduces total runtime from
+#' 5-10 minutes to ~1 minute by:
+#' \itemize{
+#'   \item Multi-threaded C++ execution (N tracks processed in parallel)
+#'   \item Avoiding R-to-C++ boundary overhead per track
+#'   \item No \code{doMC} fork overhead
+#'   \item Benefiting from OS page cache (mmap'd track files)
+#' }
+#'
+#' The LSE aggregation uses the same float-precision \code{lse_accumulate}
+#' as misha's \code{vtrack func="lse"}.
+#'
+#' The quantile algorithm uses exact \code{nth_element} (equivalent to
+#' R's \code{quantile(x, p, type=1)}), which may differ slightly from
+#' \code{gquantiles} which uses StreamPercentiler (approximate).
+#'
+#' @examples
+#' \dontrun{
+#' gdb.init("/path/to/trackdb")
+#' tracks <- paste0("th_epi.all_db_motifs.", c("JASPAR_Zic2", "HOMER_Unknown_ESC_element"))
+#' q <- glm_batch_quantiles(tracks, percentiles = 0.9999)
+#' # Returns: named vector with one value per track
+#'
+#' # Multiple percentiles:
+#' q_mat <- glm_batch_quantiles(tracks, percentiles = c(0.99, 0.999, 0.9999))
+#' # Returns: matrix with tracks as rows, percentiles as columns
+#'
+#' # Control parallelism:
+#' q <- glm_batch_quantiles(tracks, percentiles = 0.9999, n_threads = 10L)
+#' }
+#'
+#' @export
+glm_batch_quantiles <- function(
+  track_names,
+  percentiles,
+  iterator = 20L,
+  sshift = -140L,
+  eshift = 140L,
+  n_threads = getOption("gmax.processes", 1L)
+) {
+    stopifnot(is.character(track_names), length(track_names) > 0)
+    stopifnot(is.numeric(percentiles), length(percentiles) > 0)
+    stopifnot(all(percentiles >= 0 & percentiles <= 1))
+
+    .gcall(
+        "C_glm_batch_quantiles",
+        as.character(track_names),
+        as.numeric(percentiles),
+        as.integer(iterator),
+        as.integer(sshift),
+        as.integer(eshift),
+        as.integer(n_threads),
+        .misha_env()
+    )
+}
