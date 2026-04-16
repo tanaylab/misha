@@ -301,15 +301,18 @@ private:
 
 	std::unordered_map<BackendKey, std::shared_ptr<GenomeTrack>, BackendKeyHash> m_shared_1d_track_masters;
 
-	// Persistent cache for indexed track backends, keyed by {type, track_dir}.
+	// Persistent cache for indexed track backends, keyed by {type, track_dir, dim}.
 	// Survives reset_shared_1d_track_masters() so that mmap can be reused across
 	// chromosome transitions instead of re-mapping the entire track.dat each time.
+	// The dim field distinguishes DIM1/DIM2 projections in 2D iterators so that
+	// each projection gets its own master with independent chromosome state.
 	struct IndexedBackendKey {
 		GenomeTrack::Type type;
 		std::string track_dir;
+		int dim;  // Iterator_modifier1D::Dimension (DIM_NONE for 1D iterators)
 
 		bool operator==(const IndexedBackendKey &other) const {
-			return type == other.type && track_dir == other.track_dir;
+			return type == other.type && track_dir == other.track_dir && dim == other.dim;
 		}
 	};
 
@@ -317,6 +320,7 @@ private:
 		size_t operator()(const IndexedBackendKey &k) const {
 			size_t h = std::hash<int>()(static_cast<int>(k.type));
 			h ^= std::hash<std::string>()(k.track_dir) * 40503ULL;
+			h ^= std::hash<int>()(k.dim) * 2246822519ULL;
 			return h;
 		}
 	};

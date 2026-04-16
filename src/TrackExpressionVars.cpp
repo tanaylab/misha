@@ -1901,7 +1901,7 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 
 			// For indexed tracks, reuse the persistent backend to avoid
 			// re-mmapping the entire track.dat on every chromosome transition.
-			const IndexedBackendKey idx_key{itrack_n_imdf->type, track_dir};
+			const IndexedBackendKey idx_key{itrack_n_imdf->type, track_dir, 0};
 			auto idx_it = m_indexed_track_backends.find(idx_key);
 
 			if (idx_it != m_indexed_track_backends.end()) {
@@ -1927,11 +1927,14 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 				// If this is an indexed track, add to persistent cache
 				struct stat idx_st;
 				if (stat((track_dir + "/track.idx").c_str(), &idx_st) == 0 && supports_shared_1d_backend(itrack_n_imdf->type)) {
-					// Find the master in the shared cache (just added by init_1d_track_with_shared_backend)
 					const BackendKey bk{itrack_n_imdf->type, interval.chromid, filename};
 					auto master_it = m_shared_1d_track_masters.find(bk);
-					if (master_it != m_shared_1d_track_masters.end())
+					if (master_it != m_shared_1d_track_masters.end()) {
 						m_indexed_track_backends.emplace(idx_key, master_it->second);
+					} else {
+						// Shared backends disabled — cache the track directly
+						m_indexed_track_backends.emplace(idx_key, new_track);
+					}
 				}
 			}
 		}
@@ -1982,8 +1985,10 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 				}
 
 				if (chromid != itrack_n_imdf->imdf1d->interval.chromid) {
-					// For indexed tracks, reuse the persistent backend to avoid re-mmapping
-					const IndexedBackendKey idx_key{itrack_n_imdf->type, track_dir};
+					// For indexed tracks, reuse the persistent backend to avoid re-mmapping.
+					// Key includes dim so DIM1/DIM2 projections get independent masters.
+					const int dim = static_cast<int>(itrack_n_imdf->imdf1d->dim);
+					const IndexedBackendKey idx_key{itrack_n_imdf->type, track_dir, dim};
 					auto idx_it = m_indexed_track_backends.find(idx_key);
 
 					if (idx_it != m_indexed_track_backends.end()) {
@@ -2009,8 +2014,12 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 						if (stat((track_dir + "/track.idx").c_str(), &idx_st) == 0 && supports_shared_1d_backend(itrack_n_imdf->type)) {
 							const BackendKey bk{itrack_n_imdf->type, chromid, filename};
 							auto master_it = m_shared_1d_track_masters.find(bk);
-							if (master_it != m_shared_1d_track_masters.end())
+							if (master_it != m_shared_1d_track_masters.end()) {
 								m_indexed_track_backends.emplace(idx_key, master_it->second);
+							} else {
+								// Shared backends disabled — cache the track directly
+								m_indexed_track_backends.emplace(idx_key, new_track);
+							}
 						}
 					}
 				} else if (should_manage_shared_masters) {
