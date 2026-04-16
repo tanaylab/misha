@@ -33,6 +33,10 @@ void TrackVarProcessor::process_track_vars(
 		if (TrackExpressionVars::is_sequence_based_function(ivar->val_func)) {
 			continue;
 		}
+		// Skip GLM predict vtracks (processed by GlmVarProcessor)
+		if (TrackExpressionVars::is_glm_function(ivar->val_func)) {
+			continue;
+		}
 
 		if (GenomeTrack::is_1d(ivar->track_n_imdf->type)) {
 			process_single_track_var_1d(*ivar, interval, idx);
