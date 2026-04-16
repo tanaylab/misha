@@ -263,7 +263,7 @@ glm_batch_quantiles <- function(
     stopifnot(all(percentiles >= 0 & percentiles <= 1))
 
     .gcall(
-        "C_glm_batch_quantiles",
+        "C_gquantiles_multi",
         as.character(track_names),
         as.numeric(percentiles),
         as.integer(iterator),
