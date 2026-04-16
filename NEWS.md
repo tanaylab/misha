@@ -1,3 +1,7 @@
+# misha 5.6.14
+
+* Fixed indexed tracks re-mmapping the entire `track.dat` for every chromosome during iterator init and chromosome transitions. Made indexed tracks unusable on genomes with many contigs (e.g. Pan_troglodytes with 4344 contigs).
+
 # misha 5.6.13
 
 * Fixed `pwm.max.pos` returning wrong strand sign. The direction (positive/negative) of the returned position was determined by the last scanned position in the interval rather than the position with the best score. Bug existed since `pwm.max.pos` was introduced (v4.3.0).
