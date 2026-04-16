@@ -1071,11 +1071,25 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
 
                     UNPROTECT(3);  // seqs_chunk, roi_start_chunk, roi_end_chunk
                     // Use signal-based exit to avoid CRAN issues with _exit()
-                    // (similar to rexit() but without RdbInitializer dependency)
+                    // (similar to rexit() but without RdbInitializer dependency).
+                    // Reset SIGTERM to SIG_DFL first — R's handler would just
+                    // set a flag and the child would continue executing R code.
+                    {
+                        struct sigaction sa;
+                        sa.sa_handler = SIG_DFL;
+                        sigemptyset(&sa.sa_mask);
+                        sa.sa_flags = 0;
+                        sigaction(MISHA_EXIT_SIG, &sa, NULL);
+                    }
                     kill(getpid(), MISHA_EXIT_SIG);
 
                 } catch (...) {
                     // Use signal-based exit for error case as well
+                    struct sigaction sa;
+                    sa.sa_handler = SIG_DFL;
+                    sigemptyset(&sa.sa_mask);
+                    sa.sa_flags = 0;
+                    sigaction(MISHA_EXIT_SIG, &sa, NULL);
                     kill(getpid(), MISHA_EXIT_SIG);
                 }
             } else {
