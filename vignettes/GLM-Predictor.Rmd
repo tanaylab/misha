@@ -1,0 +1,172 @@
+---
+title: "GLM Predictor Virtual Tracks"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{GLM Predictor Virtual Tracks}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>"
+)
+```
+
+## Overview
+
+`glm_pred.create()` registers a virtual track that computes a fused linear model prediction at each genome position. The full pipeline — track reads, aggregation, capping, logistic transforms, linear weights, and pairwise interactions — runs in a single C++ pass, avoiding the overhead of composing multiple virtual tracks and R-level combining expressions.
+
+This vignette describes the mathematical formulation implemented by `glm_pred`. For usage examples and the R API, see `?glm_pred.create`.
+
+## Mathematical Formulation
+
+### Core Formula
+
+At each genome position $p$ (defined as the midpoint of the iterator interval), the GLM predictor computes:
+
+$$
+\hat{y}(p) = \beta_0 + \sum_{i=1}^{N} w_i \cdot f_i\bigl(\operatorname{scale}_i(\operatorname{smooth}_i(p))\bigr) + \sum_{m=1}^{M} u_m \cdot g_m\bigl(\operatorname{product}_m(p)\bigr)
+$$
+
+where:
+
+- $\beta_0$ is the intercept (`bias`),
+- $w_i$ are the main-effect weights (`weights`),
+- $u_m$ are the interaction weights (`interaction_weights`),
+- $f_i$ and $g_m$ are optional per-entry and per-interaction logistic transforms,
+- and $N$, $M$ are the number of entries and interactions respectively.
+
+The computation proceeds in four stages for each entry: **smooth**, **scale**, **transform**, **weight**.
+
+### Stage 1: Smooth (Aggregation)
+
+Each entry $i$ references a genomic track $T_i$ and an aggregation function (sum or log-sum-exp). A shift window $[s_i, e_i]$ offsets the query position.
+
+**Without kernel smoothing** (`kernel_bins = NULL`):
+
+$$
+\operatorname{smooth}_i(p) = \operatorname{agg}\bigl(T_i,\; [p + s_i,\; p + e_i]\bigr)
+$$
+
+where $\operatorname{agg}$ is one of:
+
+$$
+\operatorname{sum}(T, W) = \sum_{j \in W} T_j, \qquad
+\operatorname{lse}(T, W) = \log\!\Bigl(\sum_{j \in W} \exp(T_j)\Bigr)
+$$
+
+The LSE is computed with the numerically stable two-pass form: $\max_j T_j + \log\bigl(\sum_j \exp(T_j - \max_j T_j)\bigr)$.
+
+**With kernel smoothing** (`kernel_bins` and `kernels` specified):
+
+Let $c_i = p + (s_i + e_i)/2$ be the window center and let $\{d_1, \ldots, d_B\}$ be the kernel bin offsets. Let $k_{i,b}$ be the kernel weight for entry $i$ at offset $b$.
+
+For **sum** aggregation:
+
+$$
+\operatorname{smooth}_i(p) = \sum_{b=1}^{B} k_{i,b} \cdot T_i(c_i + d_b)
+$$
+
+For **lse** aggregation, the kernel multiplies the exponentiated values before re-logarithmizing:
+
+$$
+\operatorname{smooth}_i(p) = \log\!\Bigl(\sum_{b=1}^{B} k_{i,b} \cdot \exp\bigl(T_i(c_i + d_b)\bigr)\Bigr) = \operatorname{LSE}_b\!\bigl(\log k_{i,b} + T_i(c_i + d_b)\bigr)
+$$
+
+where $T_i(q)$ denotes the value of track $T_i$ at the native bin containing position $q$.
+
+If all values in the window are `NaN`, the entire position emits `NaN`.
+
+### Stage 2: Scale (Cap and Normalize)
+
+Scaling maps the raw aggregated value to a bounded range. Two modes are available:
+
+**Standard cap-normalize** (default when `max_cap` is specified):
+
+$$
+\operatorname{scale}(x) = S \cdot \frac{\max\!\bigl(\min(x - C_i,\; 0),\; -D_i\bigr) + D_i}{D_i}
+$$
+
+where $C_i$ = `max_cap[i]`, $D_i$ = `dis_from_cap[i]`, and $S$ = `scale_factor`.
+
+This maps the interval $[C_i - D_i,\; C_i] \to [0,\; S]$. Values above $C_i$ are clamped to $S$; values below $C_i - D_i$ are clamped to $0$.
+
+**Simple cap-and-divide** (when `simple_cap[i] = TRUE`):
+
+$$
+\operatorname{scale}(x) = \frac{\min(x,\; C_i)}{D_i}
+$$
+
+When neither `max_cap` nor `dis_from_cap` are specified for entry $i$, scaling is the identity: $\operatorname{scale}(x) = x$.
+
+### Stage 3: Transform (Logistic)
+
+When `trans_family[i] = "logist"`, a generalized logistic function is applied:
+
+$$
+f_i(x) = \frac{L_i}{1 + \exp\!\bigl(-k_i \cdot ((x + \delta^{\text{pre}}_i) - x_{0,i})\bigr)} + \delta^{\text{post}}_i
+$$
+
+with parameters $L_i$, $k_i$, $x_{0,i}$, $\delta^{\text{pre}}_i$ (`pre_shift`), and $\delta^{\text{post}}_i$ (`post_shift`). When `trans_family[i]` is `NA`, the transform is the identity: $f_i(x) = x$.
+
+The implementation uses a fast $\exp$ approximation (degree-5 Taylor series with `ldexp`) for inputs in $[-20, 20]$, with maximum relative error $< 0.01\%$.
+
+### Stage 4: Weight and Sum
+
+Each main effect contributes:
+
+$$
+\text{main\_effect}_i = w_i \cdot f_i\!\bigl(\operatorname{scale}_i(\operatorname{smooth}_i(p))\bigr)
+$$
+
+### Interactions
+
+Interactions operate on **post-scaling, pre-transform** values. Both entries are in $[0, S]$ after scaling; their product is re-normalized by $S$ to remain in $[0, S]$.
+
+**Without kernel smoothing:**
+
+Let $\tilde{x}_i = \operatorname{scale}_i(\operatorname{smooth}_i(p))$ and $\tilde{x}_j = \operatorname{scale}_j(\operatorname{smooth}_j(p))$. For interaction $m$ between entries $(i, j)$:
+
+$$
+\operatorname{product}_m(p) = \frac{\tilde{x}_i \cdot \tilde{x}_j}{S}
+$$
+
+**With kernel smoothing:**
+
+The product is computed per kernel bin and then aggregated:
+
+$$
+\operatorname{product}_m(p) = \sum_{b=1}^{B} k_{i,b} \cdot \frac{\tilde{x}_{i,b} \cdot \tilde{x}_{j,b}}{S}
+$$
+
+where $\tilde{x}_{i,b}$ is the scaled value of entry $i$ at kernel bin offset $d_b$ (i.e., scaling is applied per bin before the kernel-weighted sum, and the logistic is not yet applied).
+
+An optional per-interaction logistic transform $g_m$ (same functional form as $f_i$) is applied to the product. The interaction contribution is:
+
+$$
+\text{interaction}_m = u_m \cdot g_m\!\bigl(\operatorname{product}_m(p)\bigr)
+$$
+
+## Selector-Stratified Models
+
+When a `selector_track` and `selector_breaks` are provided, the model becomes position-dependent: at each position $p$, a selector track value is binned into one of $K$ bins, and the corresponding column of weights is used.
+
+Let $v(p)$ be the selector track value at position $p$, and let $b(p) \in \{1, \ldots, K\}$ be the bin assigned by `selector_breaks`. The formula becomes:
+
+$$
+\hat{y}(p) = \beta_{0,b} + \sum_{i=1}^{N} w_{i,b} \cdot f_i\!\bigl(\operatorname{scale}_i(\operatorname{smooth}_i(p))\bigr) + \sum_{m=1}^{M} u_{m,b} \cdot g_m\!\bigl(\operatorname{product}_m(p)\bigr)
+$$
+
+where $b = b(p)$. Note that only the weights and bias vary across bins — the pipeline structure (tracks, shifts, capping, transforms) is shared. If $v(p)$ falls outside the break range or is non-finite, the position emits `NaN`.
+
+The `weights` parameter is then an $N \times K$ matrix (one column per bin), `bias` is a length-$K$ vector, and `interaction_weights` is an $M \times K$ matrix.
+
+## NaN Handling
+
+`NaN` bins within an aggregation window are skipped, consistent with the default behavior of misha virtual tracks (e.g., `gvtrack.create(func = "sum")`). A window with some `NaN` bins aggregates the finite bins only. If **all** bins in an entry's window are `NaN`, the entire position's result is `NaN`.
+
+Note: `Inf` values in track data are converted to `NaN` at the track-reading layer, so they are treated as missing.
+
+As a defensive guard, non-finite intermediate values from later stages (which can only arise from degenerate parameter configurations such as `dis_from_cap = 0` or `scale_factor = 0`) are replaced with $0$.
