@@ -189,7 +189,16 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
             float lower = Reducer::needs_lower_bound
                           ? aggregate_lower_bound(F, wmin, pre_const)
                           : std::numeric_limits<float>::quiet_NaN();
-            if (state.prune(upper, lower)) continue;
+            if (state.prune(upper, lower)) {
+                // Pruned position still counts as a valid sample if at
+                // least one bin in the window is non-NaN (wmax > -inf).
+                // Without this, the effective N used for rank
+                // calculation in heap-mode reducers drifts off from the
+                // fallback N.
+                if (wmax > -std::numeric_limits<float>::infinity())
+                    state.count_pruned();
+                continue;
+            }
         }
 
         float val = aggregate_window(F, all_bins, sbin, ebin);

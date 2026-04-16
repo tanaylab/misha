@@ -1,7 +1,54 @@
 # Phase 2 tests: top-K pruning, aggregator templating, intervals support.
 # Runs on gdb.init_examples() so no external db required.
 
-test_that("glm_batch_quantiles top-K path matches full-storage on extreme p", {
+test_that("top-K path returns EXACTLY the same quantile value as fallback for the same extreme p", {
+    # Forces the fallback path by passing a mixed-tail percentile vector
+    # (triggers use_fallback=true in the C++ entry). Extracts the p=0.95
+    # column and compares against a top-K-only call at p=0.95.
+    # Both share the identical scan and the identical downstream
+    # nth_element rank formula; any divergence is a real bug.
+    gdb.init_examples()
+    args <- list(
+        track_names = "dense_track",
+        iterator = 20L, sshift = -50L, eshift = 50L,
+        n_threads = 1L, func = "avg"
+    )
+    # Mixed-tail → fallback.
+    suppressWarnings({
+        q_fallback_mat <- do.call(glm_batch_quantiles,
+                                  c(args, list(percentiles = c(0.2, 0.95))))
+    })
+    q_fallback_at_95 <- q_fallback_mat[1, 2]   # p=0.95 column
+
+    # Top-K only (all percentiles >= 0.5; no clamp on example db).
+    q_topk <- do.call(glm_batch_quantiles,
+                      c(args, list(percentiles = 0.95)))
+
+    expect_equal(unname(q_topk), unname(q_fallback_at_95), tolerance = 0,
+                 info = sprintf("topk=%g fallback=%g",
+                                unname(q_topk), unname(q_fallback_at_95)))
+})
+
+test_that("bottom-K path returns same value as fallback for p < 0.5", {
+    gdb.init_examples()
+    args <- list(
+        track_names = "dense_track",
+        iterator = 20L, sshift = -50L, eshift = 50L,
+        n_threads = 1L, func = "avg"
+    )
+    suppressWarnings({
+        q_fb <- do.call(glm_batch_quantiles,
+                        c(args, list(percentiles = c(0.05, 0.95))))
+    })
+    q_fb_at_5 <- q_fb[1, 1]
+    q_bot <- do.call(glm_batch_quantiles,
+                     c(args, list(percentiles = 0.05)))
+    expect_equal(unname(q_bot), unname(q_fb_at_5), tolerance = 0,
+                 info = sprintf("bot=%g fb=%g",
+                                unname(q_bot), unname(q_fb_at_5)))
+})
+
+test_that("glm_batch_quantiles top-K path matches gquantiles on vtrack-max (sanity)", {
     gdb.init_examples()
     # Extreme p triggers top-K mode (heap-backed). Compare against the
     # fallback path by forcing K large enough to not trip the pruning
@@ -101,12 +148,12 @@ test_that("intervals with multiple chroms and interval-mask boundary", {
     expect_true(is.finite(q))
 })
 
-test_that("top-K clamp triggers fallback warning for p = 0.5", {
+test_that("no fallback warning when K stays under K_MAX (example db at p=0.5)", {
     gdb.init_examples()
-    # p=0.5 on any non-trivial N gives K ≈ N/2 > K_MAX on real genomes.
-    # On the tiny example db, K ≈ (2K positions) / 2 = ~1.2K, well under
-    # K_MAX=10M, so we should NOT warn here. This test documents that
-    # boundary: fallback triggers only when K genuinely exceeds K_MAX.
+    # p=0.5 on the tiny example db gives K ≈ (few K positions) / 2,
+    # well under K_MAX=10M, so NO warning should fire. On real genomes
+    # the same call would trigger the K>K_MAX fallback warning; this
+    # test only documents the small-N branch.
     expect_silent(
         glm_batch_quantiles(
             track_names = "dense_track", percentiles = 0.5,
