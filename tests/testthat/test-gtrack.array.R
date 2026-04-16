@@ -39,6 +39,7 @@ test_that("Testing gtrack.array column name functions", {
     expect_error(gtrack.array.set_colnames("test.array", "col1"))
     cols <- gtrack.array.get_colnames("test.array")
     gtrack.array.set_colnames("test.array", paste(cols, "blabla", sep = ""))
+    withr::defer(gtrack.array.set_colnames("test.array", cols))
     r <- gtrack.array.get_colnames("test.array")
     gtrack.array.set_colnames("test.array", cols)
     expect_regression(r, "gtrack_array_set_colnames")
@@ -46,14 +47,14 @@ test_that("Testing gtrack.array column name functions", {
 
 test_that("Import and extraction with gtrack.array", {
     withr::local_options(list(.ginteractive = FALSE))
-    withr::defer(gtrack.rm("test_track1", TRUE))
-    withr::defer(gtrack.rm("test_track2", TRUE))
-    withr::defer(unlink(c(f1, f2, f3)))
     f1 <- tempfile()
     gextract("test.sparse", gintervals(c(1, 2)), file = f1)
     f2 <- tempfile()
     gtrack.array.extract("test.array", c("col2", "col3", "col4"), gintervals(c(1, 2)), file = f2)
     f3 <- tempfile()
+    withr::defer(unlink(c(f1, f2, f3)))
+    withr::defer(try(gtrack.rm("test_track1", TRUE), silent = TRUE))
+    withr::defer(try(gtrack.rm("test_track2", TRUE), silent = TRUE))
     gtrack.array.extract("test.array", c("col1", "col3"), gintervals(c(1, 2)), file = f3)
 
     gtrack.array.import("test_track1", "", f1, f2)
