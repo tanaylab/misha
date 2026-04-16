@@ -152,21 +152,17 @@ extern "C" SEXP C_gquantiles_multi(
         scan.per_chrom_intervals = nullptr;
         scan.n_threads = n_threads;
 
-        std::vector<BatchTrackScanTask<TopKQuantile>> tasks;
+        BatchTrackScanResult<TopKQuantile> scan_result;
         run_batch_scan<TopKQuantile>(track_names, track_dirs, track_types,
-                                     configs, scan, chromkey, tasks);
+                                     configs, scan, chromkey, scan_result);
 
-        for (auto &t : tasks) {
-            if (!t.error_msg.empty())
-                verror("Error processing track %s (chrom %d): %s",
-                       t.track_name.c_str(), t.chromid, t.error_msg.c_str());
+        for (int m = 0; m < n_tracks; ++m) {
+            if (!scan_result.error_messages[m].empty())
+                verror("Error processing track %s: %s",
+                       track_names[m].c_str(),
+                       scan_result.error_messages[m].c_str());
         }
-
-        std::vector<TopKQuantile::State> per_track(n_tracks);
-        for (int m = 0; m < n_tracks; ++m)
-            per_track[m].init(configs[m], 0, iterator_step);
-        for (auto &t : tasks)
-            per_track[t.track_idx].merge(t.state);
+        auto &per_track = scan_result.per_track_states;
 
         SEXP result;
         if (n_pctiles == 1)
