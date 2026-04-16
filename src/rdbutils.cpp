@@ -385,25 +385,35 @@ void RdbInitializer::check_kids_state(bool ignore_errors)
                 swap(*ipid, s_running_pids.back());
                 s_running_pids.pop_back();
 
-                if (!ignore_errors && !WIFEXITED(status) && WIFSIGNALED(status) && WTERMSIG(status) != MISHA_EXIT_SIG){
-                    // Check if the child wrote an error message to shared memory
-                    char error_msg_copy[1000];
-                    bool has_error_msg = false;
-                    {
-                        SemLocker sl(s_shm_sem);
-                        if (s_shm->error_msg[0]) {
-                            strncpy(error_msg_copy, s_shm->error_msg, sizeof(error_msg_copy) - 1);
-                            error_msg_copy[sizeof(error_msg_copy) - 1] = '\0';
-                            has_error_msg = true;
+                if (!ignore_errors) {
+                    // Expected exit: killed by MISHA_EXIT_SIG (SIGTERM with SIG_DFL).
+                    // Any other exit is abnormal — either a different signal, or
+                    // a normal exit(0) from R that escaped rexit().
+                    bool expected_exit = WIFSIGNALED(status) && WTERMSIG(status) == MISHA_EXIT_SIG;
+
+                    if (!expected_exit) {
+                        // Check if the child wrote an error message to shared memory
+                        char error_msg_copy[1000];
+                        bool has_error_msg = false;
+                        {
+                            SemLocker sl(s_shm_sem);
+                            if (s_shm->error_msg[0]) {
+                                strncpy(error_msg_copy, s_shm->error_msg, sizeof(error_msg_copy) - 1);
+                                error_msg_copy[sizeof(error_msg_copy) - 1] = '\0';
+                                has_error_msg = true;
+                            }
+                        }
+                        // Call verror AFTER releasing the semaphore to avoid deadlock
+                        if (has_error_msg) {
+                            verror("%s", error_msg_copy);
+                        } else if (WIFEXITED(status)) {
+                            verror("Child process %d exited unexpectedly with status %d (expected signal termination via rexit)",
+                                   (int)pid, WEXITSTATUS(status));
+                        } else {
+                            verror("Child process %d ended unexpectedly (signal %d)", (int)pid, WTERMSIG(status));
                         }
                     }
-                    // Call verror AFTER releasing the semaphore to avoid deadlock
-                    if (has_error_msg) {
-                        verror("%s", error_msg_copy);
-                    } else {
-                        verror("Child process %d ended unexpectedly", (int)ipid->pid);
-                    }
-				}
+                }
 
                 // choose a new untouchable kid: the one with maximal memory consumption
                 if (kid_idx == s_shm->untouchable_kid_idx && s_running_pids.size()) {

@@ -503,6 +503,17 @@ inline void rexit() {
 		// messages cannot be submitted to CRAN. Yet the child process MUST end
 		// the R sessions, that's the whole point. Solution? Send a signal to
 		// itself. Fortunately "R CMD check" allows signals.
+		//
+		// IMPORTANT: Reset the signal handler to SIG_DFL before sending.
+		// R installs its own SIGTERM handler that merely sets a flag instead
+		// of terminating the process. Without this reset, the child survives
+		// the signal and continues executing R-level code (e.g., gtrack.create
+		// post-processing), causing file corruption and early parent return.
+		struct sigaction sa;
+		sa.sa_handler = SIG_DFL;
+		sigemptyset(&sa.sa_mask);
+		sa.sa_flags = 0;
+		sigaction(MISHA_EXIT_SIG, &sa, NULL);
 		kill(getpid(), MISHA_EXIT_SIG);
 	} else {
 		rdb::verror("rexit is called from parent process");
