@@ -59,9 +59,13 @@ struct TopKQuantile {
                                        : std::min<size_t>(c.K, 1u << 20));
         }
 
-        // Pre-Phase-2 helper: since cfg may be nullptr after std::move,
-        // cache cfg pointer at init time. merge() handles the null case
-        // by adopting the source cfg.
+        // Called by the scan driver for every non-NaN position, whether it
+        // gets pushed into the heap or not. This keeps n_total consistent
+        // between fallback and heap modes — without it, heap-mode would
+        // undercount pruned-but-valid positions, shifting the rank
+        // calculation in topk_finalize.
+        void count_pruned() { ++n_total; }
+
         void accept(float v, int64_t /*pos*/) {
             ++n_total;
             if (!cfg || cfg->use_fallback) {
@@ -71,7 +75,10 @@ struct TopKQuantile {
             uint32_t K = cfg->K;
             if (!heap_built) {
                 buf.push_back(v);
-                if (buf.size() == (size_t)K) {
+                // Use >= K so that a merged accumulator (which may already
+                // hold K elements before the first accept) heapifies on its
+                // very first accept rather than silently growing past K.
+                if (buf.size() >= (size_t)K) {
                     if (cfg->top_side)
                         std::make_heap(buf.begin(), buf.end(),
                                        std::greater<float>{});
@@ -146,14 +153,15 @@ struct TopKQuantile {
     struct Result { std::vector<double> quantile_vals; };
 
     // Pruning is meaningful only in heap mode; setting needs_pruning=true
-    // unconditionally is safe (State::prune returns false in fallback mode).
+    // unconditionally is safe (State::prune returns false in fallback mode
+    // because `heap_built` stays false and the early-return fires). In
+    // fallback mode the scan driver still maintains the sliding deques —
+    // measurable overhead flagged as future work (addendum, Phase 2 review).
     static constexpr bool needs_pruning = true;
-    // We need the lower bound only for bottom-K. Always reporting both is
-    // a small overhead (one extra deque) paid only when the reducer
-    // actually consults lower — i.e., in bottom-K mode. Keep
-    // needs_lower_bound = false: bottom-K mode uses window_max via
-    // aggregate_upper_bound for its own extremum bound; see sparse-path
-    // note. Top-side pruning dominates real workflows anyway.
+    // needs_lower_bound = true is required for bottom-K pruning
+    // (top_side=false, all percentiles < 0.5), which consults `lower` in
+    // State::prune. Spec originally had false; implementation flipped to
+    // true to make bottom-K pruning actually fire. See addendum D-phase-2.
     static constexpr bool needs_lower_bound = true;
 };
 
