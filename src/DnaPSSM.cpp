@@ -320,6 +320,7 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 		}
 
 		float total_logp = logp;
+		int cur_dir = 1;
 
 		if(m_bidirect) {
 			float rlogp = 0;
@@ -345,23 +346,20 @@ string::const_iterator DnaPSSM::max_like_match(const string &target,
 			if (combine_strands) {
 				// Combine probabilities by adding them in log space
 				log_sum_log(total_logp, rlogp);
-				best_dir = 0; // Indicate combined strands
+				cur_dir = 0; // Indicate combined strands
 			} else {
 				// select best strand
 				if(rlogp > logp) {
 					total_logp = rlogp;
-					best_dir = -1;
-				} else {
-					best_dir = 1;
+					cur_dir = -1;
 				}
 			}
-		} else {
-			best_dir = 1;
 		}
 
 		if(total_logp > best_logp) {
 			best_logp = total_logp;
 			best_pos = i;
+			best_dir = cur_dir;
 		}
 	}
 	return(best_pos);
