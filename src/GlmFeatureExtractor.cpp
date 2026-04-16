@@ -1,0 +1,452 @@
+#include "GlmFeatureExtractor.h"
+#include "GenomeTrack1D.h"  // for lse_accumulate
+#include "rdbutils.h"
+#include "GenomeTrack.h"
+#include "GenomeTrackFixedBin.h"
+
+#include <Rinternals.h>
+#include <vector>
+#include <string>
+#include <memory>
+#include <cmath>
+#include <limits>
+#include <algorithm>
+#include <numeric>
+
+using namespace rdb;
+using namespace std;
+
+// ---------------------------------------------------------------------------
+// Track opening — handles both FixedBin and Sparse tracks
+// ---------------------------------------------------------------------------
+void GlmFeatureExtractor::open_track(TrackHandle &handle, int chromid)
+{
+    const GenomeChromKey &chromkey = m_iu.get_chromkey();
+    string resolved = GenomeTrack::find_existing_1d_filename(chromkey, handle.track_dir, chromid);
+    string filename = handle.track_dir + "/" + resolved;
+
+    handle.fixedbin = nullptr;
+    handle.sparse = nullptr;
+    handle.bin_size = 0;
+
+    if (handle.type == GenomeTrack::FIXED_BIN) {
+        auto t = make_shared<GenomeTrackFixedBin>();
+        t->init_read(filename.c_str(), chromid);
+        handle.track = t;
+        handle.fixedbin = t.get();
+        handle.bin_size = t->get_bin_size();
+    } else if (handle.type == GenomeTrack::SPARSE) {
+        auto t = make_shared<GenomeTrackSparse>();
+        t->init_read(filename.c_str(), chromid);
+        handle.track = t;
+        handle.sparse = t.get();
+    } else {
+        verror("Track %s has unsupported type (expected dense or sparse)",
+               handle.track_dir.c_str());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Aggregation: log-sum-exp over a window
+// Uses the same float-precision lse_accumulate as misha's vtrack func="lse"
+// (GenomeTrack1D.h) to produce bit-identical results.
+// ---------------------------------------------------------------------------
+double GlmFeatureExtractor::aggregate_lse(const TrackHandle &handle,
+                                           int64_t start, int64_t end)
+{
+    if (start < 0) start = 0;
+    if (start >= end) return numeric_limits<double>::quiet_NaN();
+
+    if (handle.fixedbin) {
+        unsigned bin_size = handle.bin_size;
+        if (bin_size == 0) return numeric_limits<double>::quiet_NaN();
+
+        int64_t sbin = start / (int64_t)bin_size;
+        int64_t ebin = (int64_t)ceil(end / (double)bin_size);
+        int64_t num_bins = ebin - sbin;
+        if (num_bins <= 0) return numeric_limits<double>::quiet_NaN();
+
+        int64_t out_count = 0;
+        const float *ptr = handle.fixedbin->get_mmap_bins_ptr(sbin, num_bins, out_count);
+        if (!ptr || out_count <= 0) return numeric_limits<double>::quiet_NaN();
+
+        // Match misha's vtrack LSE: sequential float-precision accumulation
+        // (GenomeTrackFixedBin.cpp line 497-506, uses lse_accumulate(float&, float))
+        float lse = -numeric_limits<float>::infinity();
+        uint64_t num_vs = 0;
+        for (int64_t i = 0; i < out_count; i++) {
+            if (!isnan(ptr[i])) {
+                lse_accumulate(lse, ptr[i]);
+                num_vs++;
+            }
+        }
+        if (num_vs == 0) return numeric_limits<double>::quiet_NaN();
+        return (double)lse;
+    }
+
+    if (handle.sparse) {
+        const GIntervals &intervals = handle.sparse->get_intervals();
+        const vector<float> &vals = handle.sparse->get_vals();
+
+        size_t idx = sparse_lower_bound(intervals, start);
+
+        float lse = -numeric_limits<float>::infinity();
+        uint64_t num_vs = 0;
+        for (size_t i = idx; i < intervals.size(); i++) {
+            if (intervals[i].start >= end) break;
+            if (!isnan(vals[i])) {
+                lse_accumulate(lse, vals[i]);
+                num_vs++;
+            }
+        }
+        if (num_vs == 0) return numeric_limits<double>::quiet_NaN();
+        return (double)lse;
+    }
+
+    return numeric_limits<double>::quiet_NaN();
+}
+
+// ---------------------------------------------------------------------------
+// Aggregation: sum over a window (supports both FixedBin and Sparse)
+// ---------------------------------------------------------------------------
+double GlmFeatureExtractor::aggregate_sum(const TrackHandle &handle,
+                                           int64_t start, int64_t end)
+{
+    if (start < 0) start = 0;
+    if (start >= end) return numeric_limits<double>::quiet_NaN();
+
+    if (handle.fixedbin) {
+        unsigned bin_size = handle.bin_size;
+        if (bin_size == 0) return numeric_limits<double>::quiet_NaN();
+
+        int64_t sbin = start / (int64_t)bin_size;
+        int64_t ebin = (int64_t)ceil(end / (double)bin_size);
+        int64_t num_bins = ebin - sbin;
+        if (num_bins <= 0) return numeric_limits<double>::quiet_NaN();
+
+        int64_t out_count = 0;
+        const float *ptr = handle.fixedbin->get_mmap_bins_ptr(sbin, num_bins, out_count);
+        if (!ptr || out_count <= 0) return numeric_limits<double>::quiet_NaN();
+
+        double acc = 0.0;
+        bool has_val = false;
+        for (int64_t i = 0; i < out_count; i++) {
+            float v = ptr[i];
+            if (!isnan(v) && !isinf(v)) {
+                acc += (double)v;
+                has_val = true;
+            }
+        }
+        return has_val ? acc : numeric_limits<double>::quiet_NaN();
+    }
+
+    if (handle.sparse) {
+        const GIntervals &intervals = handle.sparse->get_intervals();
+        const vector<float> &vals = handle.sparse->get_vals();
+
+        size_t idx = sparse_lower_bound(intervals, start);
+
+        double acc = 0.0;
+        bool has_val = false;
+        for (size_t i = idx; i < intervals.size(); i++) {
+            if (intervals[i].start >= end) break;
+            float v = vals[i];
+            if (!isnan(v) && !isinf(v)) {
+                int64_t overlap_start = max((int64_t)intervals[i].start, start);
+                int64_t overlap_end = min((int64_t)intervals[i].end, end);
+                int64_t overlap_len = overlap_end - overlap_start;
+                acc += (double)v * overlap_len;
+                has_val = true;
+            }
+        }
+        return has_val ? acc : numeric_limits<double>::quiet_NaN();
+    }
+
+    return numeric_limits<double>::quiet_NaN();
+}
+
+// ---------------------------------------------------------------------------
+// Binary search: find first interval where intervals[i].end > pos
+// (i.e., the first interval that could overlap a query starting at pos)
+// ---------------------------------------------------------------------------
+size_t GlmFeatureExtractor::sparse_lower_bound(const GIntervals &intervals, int64_t pos)
+{
+    size_t lo = 0, hi = intervals.size();
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (intervals[mid].end <= pos)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
+// ---------------------------------------------------------------------------
+// Main extraction
+// ---------------------------------------------------------------------------
+void GlmFeatureExtractor::extract(
+    const vector<string> &track_names,
+    const int *peak_chromids,
+    const int64_t *peak_starts,
+    const int64_t *peak_ends,
+    int n_peaks,
+    int tile_size,
+    int flank_size,
+    const vector<LmScalingConfig> &scaling,
+    const vector<LmTransformConfig> &transforms,
+    const string &gc_track_name,
+    double gc_scale_factor,
+    double *output,
+    int n_cols)
+{
+    int n_motifs = (int)track_names.size();
+    int n_transforms = (int)transforms.size();
+
+    // Tile geometry: for each peak, we center n_tiles tiles of width tile_size
+    // symmetrically around the peak midpoint, with tile_size spacing and an
+    // outer flank of flank_size on each side. The first tile starts at
+    // center - peak_half - flank_size, stepping by tile_size. Peak width may
+    // vary per peak, so we compute tile_start[i] per-peak below.
+
+    // Number of tiles per peak (assuming all peaks same size)
+    // peak_size = end - start (e.g., 300)
+    // extended = peak_size + 2*flank
+    // n_tiles = extended / tile_size
+    // We'll compute n_tiles from the first peak and assume uniform
+    int first_peak_size = (int)(peak_ends[0] - peak_starts[0]);
+    int extended = first_peak_size + 2 * flank_size;
+    int n_tiles = extended / tile_size;
+
+    // Verify column count
+    int n_gc_inter = n_tiles * (n_tiles - 1) / 2;
+    int expected_cols = n_motifs * n_tiles * n_transforms + n_tiles + n_gc_inter;
+    if (n_cols != expected_cols) {
+        verror("Column count mismatch: expected %d, got %d", expected_cols, n_cols);
+    }
+
+    // Resolve all track paths
+    SEXP envir = m_iu.get_env();
+    const GenomeChromKey &chromkey = m_iu.get_chromkey();
+
+    vector<TrackHandle> motif_handles(n_motifs);
+    for (int m = 0; m < n_motifs; m++) {
+        motif_handles[m].track_dir = track2path(envir, track_names[m]);
+        motif_handles[m].type = GenomeTrack::get_type(
+            motif_handles[m].track_dir.c_str(), chromkey, false);
+    }
+
+    TrackHandle gc_handle;
+    gc_handle.track_dir = track2path(envir, gc_track_name);
+    gc_handle.type = GenomeTrack::get_type(gc_handle.track_dir.c_str(), chromkey, false);
+
+    // Sort peaks by chromosome for efficient track access
+    vector<int> peak_order(n_peaks);
+    iota(peak_order.begin(), peak_order.end(), 0);
+    sort(peak_order.begin(), peak_order.end(), [&](int a, int b) {
+        if (peak_chromids[a] != peak_chromids[b])
+            return peak_chromids[a] < peak_chromids[b];
+        return peak_starts[a] < peak_starts[b];
+    });
+
+    // Initialize output to 0
+    memset(output, 0, sizeof(double) * (int64_t)n_peaks * n_cols);
+
+    // Column layout (all column-major, stride = n_peaks):
+    //   motif block: n_motifs * n_tiles * n_transforms columns
+    //     col = (tile * n_motifs + motif) * n_transforms + transform
+    //   gc block: n_tiles columns starting at motif_block_size
+    //   gc_inter block: n_gc_inter columns starting at motif_block_size + n_tiles
+    int motif_block_size = n_motifs * n_tiles * n_transforms;
+    int gc_block_start = motif_block_size;
+    int gc_inter_start = gc_block_start + n_tiles;
+
+    int current_chrom = -1;
+
+    for (int oi = 0; oi < n_peaks; oi++) {
+        int pi = peak_order[oi]; // original peak index (= output row)
+        int chromid = peak_chromids[pi];
+
+        // Open tracks for new chromosome
+        if (chromid != current_chrom) {
+            current_chrom = chromid;
+            for (int m = 0; m < n_motifs; m++) {
+                open_track(motif_handles[m], chromid);
+            }
+            open_track(gc_handle, chromid);
+        }
+
+        int64_t peak_center = (peak_starts[pi] + peak_ends[pi]) / 2;
+        int peak_size = (int)(peak_ends[pi] - peak_starts[pi]);
+        int half = peak_size / 2;
+
+        // Temporary GC values for this peak (for interaction computation)
+        vector<double> gc_vals(n_tiles, 0.0);
+
+        for (int ti = 0; ti < n_tiles; ti++) {
+            // Tile window
+            int64_t tile_start = peak_center - half - flank_size + (int64_t)ti * tile_size;
+            int64_t tile_end = tile_start + tile_size;
+
+            // --- GC feature ---
+            double gc_raw = aggregate_sum(gc_handle, tile_start, tile_end);
+            double gc_scaled;
+            if (isnan(gc_raw)) {
+                gc_scaled = 0.0;
+            } else {
+                gc_scaled = (gc_raw / tile_size) * gc_scale_factor;
+            }
+            gc_vals[ti] = gc_scaled;
+
+            // Write GC column
+            int gc_col = gc_block_start + ti;
+            output[pi + (int64_t)gc_col * n_peaks] = gc_scaled;
+
+            // --- Motif features ---
+            for (int m = 0; m < n_motifs; m++) {
+                double raw = aggregate_lse(motif_handles[m], tile_start, tile_end);
+
+                double scaled;
+                if (isnan(raw) || !isfinite(raw)) {
+                    scaled = 0.0;
+                } else {
+                    scaled = apply_scaling(raw, scaling[m]);
+                }
+
+                // Apply each transform and write
+                for (int t = 0; t < n_transforms; t++) {
+                    double transformed = apply_transform(scaled, transforms[t]);
+                    if (!isfinite(transformed)) transformed = 0.0;
+
+                    int col = (ti * n_motifs + m) * n_transforms + t;
+                    output[pi + (int64_t)col * n_peaks] = transformed;
+                }
+            }
+        }
+
+        // --- GC interactions (pairwise products) ---
+        int inter_idx = 0;
+        for (int a = 0; a < n_tiles; a++) {
+            for (int b = a + 1; b < n_tiles; b++) {
+                int col = gc_inter_start + inter_idx;
+                output[pi + (int64_t)col * n_peaks] =
+                    gc_vals[a] * gc_vals[b] / gc_scale_factor;
+                inter_idx++;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// .Call entry point
+// ---------------------------------------------------------------------------
+extern "C" SEXP C_glm_extract_features(
+    SEXP _track_names,     // character vector
+    SEXP _chroms,          // integer vector (chromosome IDs, 0-based)
+    SEXP _starts,          // numeric vector (int64 as double)
+    SEXP _ends,            // numeric vector (int64 as double)
+    SEXP _tile_size,       // integer scalar
+    SEXP _flank_size,      // integer scalar
+    SEXP _max_caps,        // numeric vector (per-motif, same order as track_names)
+    SEXP _dis_from_cap,    // numeric scalar
+    SEXP _scale_factor,    // numeric scalar
+    SEXP _transforms,      // numeric matrix: n_transforms x 5 (L, k, x_0, pre_shift, post_shift)
+    SEXP _gc_track,        // character scalar
+    SEXP _gc_scale_factor, // numeric scalar
+    SEXP _envir)           // R environment
+{
+    try {
+        RdbInitializer rdb_init;
+        IntervUtils iu(_envir);
+
+        // Parse track names
+        int n_motifs = Rf_length(_track_names);
+        vector<string> track_names(n_motifs);
+        for (int i = 0; i < n_motifs; i++) {
+            track_names[i] = CHAR(STRING_ELT(_track_names, i));
+        }
+
+        // Parse intervals
+        int n_peaks = Rf_length(_chroms);
+        const int *chromids = INTEGER(_chroms);
+        const double *starts_d = REAL(_starts);
+        const double *ends_d = REAL(_ends);
+
+        // Convert doubles to int64
+        vector<int64_t> starts(n_peaks), ends(n_peaks);
+        for (int i = 0; i < n_peaks; i++) {
+            starts[i] = (int64_t)starts_d[i];
+            ends[i] = (int64_t)ends_d[i];
+        }
+
+        int tile_size = INTEGER(_tile_size)[0];
+        int flank_size = INTEGER(_flank_size)[0];
+
+        // Parse scaling config
+        const double *max_caps = REAL(_max_caps);
+        double dis_from_cap = REAL(_dis_from_cap)[0];
+        double scale_factor = REAL(_scale_factor)[0];
+
+        vector<LmScalingConfig> scaling(n_motifs);
+        for (int i = 0; i < n_motifs; i++) {
+            scaling[i].max_cap = max_caps[i];
+            scaling[i].dis_from_cap = dis_from_cap;
+            scaling[i].scale_factor = scale_factor;
+        }
+
+        // Parse transforms (matrix: n_transforms x 5, column-major)
+        int n_transforms = Rf_nrows(_transforms);
+        const double *tdata = REAL(_transforms);
+        vector<LmTransformConfig> transforms(n_transforms);
+        for (int i = 0; i < n_transforms; i++) {
+            transforms[i].L          = tdata[i + 0 * n_transforms];
+            transforms[i].k          = tdata[i + 1 * n_transforms];
+            transforms[i].x_0        = tdata[i + 2 * n_transforms];
+            transforms[i].pre_shift  = tdata[i + 3 * n_transforms];
+            transforms[i].post_shift = tdata[i + 4 * n_transforms];
+        }
+
+        string gc_track = CHAR(STRING_ELT(_gc_track, 0));
+        double gc_scale_factor = REAL(_gc_scale_factor)[0];
+
+        // Compute output dimensions
+        int first_peak_size = (int)(ends[0] - starts[0]);
+        int extended = first_peak_size + 2 * flank_size;
+        int n_tiles = extended / tile_size;
+        int n_gc_inter = n_tiles * (n_tiles - 1) / 2;
+        int n_cols = n_motifs * n_tiles * n_transforms + n_tiles + n_gc_inter;
+
+        // Allocate output matrix
+        SEXP result;
+        rprotect(result = Rf_allocMatrix(REALSXP, n_peaks, n_cols));
+        double *output = REAL(result);
+
+        // Run extraction
+        GlmFeatureExtractor extractor(iu);
+        extractor.extract(
+            track_names,
+            chromids,
+            starts.data(),
+            ends.data(),
+            n_peaks,
+            tile_size,
+            flank_size,
+            scaling,
+            transforms,
+            gc_track,
+            gc_scale_factor,
+            output,
+            n_cols
+        );
+
+        return result;
+
+    } catch (TGLException &e) {
+        rerror("%s", e.msg());
+    } catch (const bad_alloc &e) {
+        rerror("Out of memory");
+    } catch (const exception &e) {
+        rerror("%s", e.what());
+    }
+    return R_NilValue;
+}
