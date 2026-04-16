@@ -1,3 +1,7 @@
+# misha 5.6.12 
+
+* Fixed child processes surviving `rexit()` due to R's SIGTERM handler. All multitasked operations (`gmultitasking = TRUE`) were affected: after forking, child processes continued executing R-level post-processing code instead of terminating. On indexed databases, `gtrack.create`/`gtrack.smooth` children could run `gtrack.convert_to_indexed` concurrently, reading incomplete data and deleting files still being written by other children. Query functions (`gextract`, `gscreen`, etc.) returned correct results since data was written to shared memory before the failed exit.
+
 # misha 5.6.11
 
 * Added `ggenome.implant()` for replacing intervals in a reference genome with donor sequences and writing a new FASTA. Supports literal donor sequences or extraction from a misha database, with optional trackdb creation.
