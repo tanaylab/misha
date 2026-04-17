@@ -115,6 +115,36 @@ struct ThresholdScreen {
             return false;
         }
 
+        // Symmetric to prune(): returns true when the aggregator bound
+        // already guarantees the predicate passes, so the driver can skip
+        // aggregate_window entirely. For GT/GE the lower bound > threshold
+        // guarantees the actual value > threshold; for LT/LE the upper
+        // bound < threshold guarantees value < threshold. EQ has no
+        // bound-based pass-guarantee.
+        bool certain_pass(float upper, float lower) const {
+            switch (cfg->op) {
+                case CmpOp::GT: return lower >  cfg->threshold;
+                case CmpOp::GE: return lower >= cfg->threshold;
+                case CmpOp::LT: return upper <  cfg->threshold;
+                case CmpOp::LE: return upper <= cfg->threshold;
+                case CmpOp::EQ: return false;
+            }
+            return false;
+        }
+
+        // Called by the driver when certain_pass() returns true. Semantics
+        // identical to accept() with pass=true — extends or starts a run.
+        // We don't know the real aggregated value here, so we can't call
+        // compare(); that's fine because ThresholdScreen only emits
+        // intervals, not values.
+        void accept_certain_pass(int64_t pos) {
+            if (cur_start < 0 || pos > cur_end + iterator_step) {
+                flush_cur();
+                cur_start = pos;
+            }
+            cur_end = pos;
+        }
+
         // Pruned-but-valid positions must be counted in a reducer that
         // needs n_total for rank math; ThresholdScreen doesn't. No-op.
         void count_pruned() {}
@@ -128,6 +158,11 @@ struct ThresholdScreen {
 
     static constexpr bool needs_pruning = true;
     static constexpr bool needs_lower_bound = true;
+    // Trait: driver should consult state.certain_pass() and, when true,
+    // call state.accept_certain_pass() instead of aggregate_window +
+    // accept. Reducers that don't benefit (summary, quantiles — they
+    // need the actual value) omit the trait.
+    static constexpr bool supports_certain_pass = true;
 };
 
 static WindowAggFunc parse_func(SEXP _func)
