@@ -247,11 +247,11 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL,
 
             n_threads <- as.integer(getOption("gmax.processes", 1L))
             ops_int <- .screen_op_to_int(fp$ops)
-            # C_gscreen_multi needs the underlying track names (it reads
-            # mmap data), so we pass fp$tracks. The returned data.frame's
-            # `track` column initially holds underlying track names; rewrite
-            # it per-row to the corresponding input expression so the user
-            # sees the predicates they passed in.
+            # C_gscreen_multi returns columns (chrom, start, end, track_idx)
+            # where track_idx is the 0-based index into the input expression
+            # vector. Map to the user-facing `track` column with the original
+            # expression strings — unambiguous even for duplicate underlying
+            # tracks (e.g. two thresholds on the same source track).
             res <- .gcall("C_gscreen_multi",
                           as.character(fp$tracks),
                           as.integer(fp$iterator),
@@ -263,41 +263,9 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL,
                           as.numeric(fp$thresholds),
                           c_intervals,
                           .misha_env())
-            if (nrow(res) > 0) {
-                # Multiple expressions may share the same underlying track
-                # with different operators/thresholds. Use position-based
-                # mapping: C emits tracks in input order, so we match by
-                # index rather than by name.
-                #
-                # Implementation note: C_gscreen_multi returns intervals
-                # grouped per task-index (track_idx), which equals the
-                # index into fp$tracks == index into expr. Group res by
-                # the track column and remap to expr in order.
-                # For the common case (each underlying track appears
-                # once), a simple name→expr lookup is correct.
-                if (length(fp$tracks) == length(unique(fp$tracks))) {
-                    track2expr <- setNames(as.character(expr), fp$tracks)
-                    res$track <- unname(track2expr[as.character(res$track)])
-                } else {
-                    # Duplicate track names — fall back: reconstruct from
-                    # per-track counts of rows.
-                    # (C_gscreen_multi emits tracks in input order, so
-                    #  consecutive runs of matching track names in the
-                    #  result correspond to input indices 1..N in order.)
-                    new_track <- character(nrow(res))
-                    cur_idx <- 1L
-                    last_track <- NA_character_
-                    for (i in seq_len(nrow(res))) {
-                        tn <- as.character(res$track[i])
-                        if (!is.na(last_track) && tn != last_track) {
-                            cur_idx <- cur_idx + 1L
-                        }
-                        last_track <- tn
-                        new_track[i] <- as.character(expr)[cur_idx]
-                    }
-                    res$track <- new_track
-                }
-            }
+            expr_str <- as.character(expr)
+            res$track <- expr_str[res$track_idx + 1L]
+            res$track_idx <- NULL
             return(res)
         }
         .fast_dispatch_msg("gscreen",
