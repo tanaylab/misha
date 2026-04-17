@@ -4,7 +4,13 @@
 \alias{gsummary}
 \title{Calculates summary statistics of track expression}
 \usage{
-gsummary(expr = NULL, intervals = NULL, iterator = NULL, band = NULL)
+gsummary(
+  expr = NULL,
+  intervals = NULL,
+  iterator = NULL,
+  band = NULL,
+  fast = TRUE
+)
 }
 \arguments{
 \item{expr}{track expression}
@@ -15,6 +21,12 @@ gsummary(expr = NULL, intervals = NULL, iterator = NULL, band = NULL)
 implicitly based on track expression.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
+
+\item{fast}{if \code{TRUE} (default) and \code{expr} is a character vector
+of length > 1 whose elements are bare track or vtrack names, a fast
+direct-mmap C++ multi-track path is used and a data.frame with columns
+\code{track, n, n_nan, min, max, sum, mean, sd} is returned. Single
+expressions always take the legacy path for bit-exact back-compat.}
 }
 \value{
 An array that represents summary statistics.

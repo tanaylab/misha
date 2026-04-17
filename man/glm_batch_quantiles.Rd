@@ -10,7 +10,9 @@ glm_batch_quantiles(
   iterator = 20L,
   sshift = -140L,
   eshift = 140L,
-  n_threads = getOption("gmax.processes", 1L)
+  n_threads = getOption("gmax.processes", 1L),
+  func = "lse",
+  intervals = NULL
 )
 }
 \arguments{
@@ -32,6 +34,14 @@ Set \code{options(gmax.processes = N)} or pass \code{n_threads = N}
 to raise it. Pass \code{n_threads = 0L} to auto-detect
 (\code{min(n_tracks, hardware_concurrency, 40)}). Each thread uses
 ~540 MB for mouse genome at 20bp resolution.}
+
+\item{func}{Window aggregation function. One of \code{"lse"} (default),
+\code{"avg"}, \code{"sum"}, \code{"max"}, \code{"min"}. Matches the
+vtrack \code{func} semantics.}
+
+\item{intervals}{Optional 1D intervals data.frame (\code{chrom, start, end})
+restricting the scan to a subset of the genome. \code{NULL} (default)
+scans the whole genome.}
 }
 \value{
 If a single percentile is requested: a named numeric vector
