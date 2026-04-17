@@ -255,11 +255,15 @@ extern "C" SEXP C_gscreen_multi(
         for (auto &st : scan_result.per_track_states)
             total_intervals += (int64_t)st.passing.size();
 
-        SEXP chrom_col, start_col, end_col, track_col;
+        // Return a track_idx column (0-based into the input vector) instead
+        // of a track-name column. The R wrapper uses this to map each row
+        // back to the caller's original expression string — unambiguous even
+        // when multiple expressions share the same underlying source track.
+        SEXP chrom_col, start_col, end_col, track_idx_col;
         rprotect(chrom_col = Rf_allocVector(STRSXP, total_intervals));
         rprotect(start_col = Rf_allocVector(REALSXP, total_intervals));
         rprotect(end_col = Rf_allocVector(REALSXP, total_intervals));
-        rprotect(track_col = Rf_allocVector(STRSXP, total_intervals));
+        rprotect(track_idx_col = Rf_allocVector(INTSXP, total_intervals));
 
         int64_t row = 0;
         for (int m = 0; m < n_tracks; ++m) {
@@ -269,8 +273,7 @@ extern "C" SEXP C_gscreen_multi(
                                Rf_mkChar(iu.id2chrom(g.chromid).c_str()));
                 REAL(start_col)[row] = (double)g.start;
                 REAL(end_col)[row] = (double)g.end;
-                SET_STRING_ELT(track_col, row,
-                               STRING_ELT(_track_names, m));
+                INTEGER(track_idx_col)[row] = m;
                 ++row;
             }
         }
@@ -282,14 +285,14 @@ extern "C" SEXP C_gscreen_multi(
         SET_VECTOR_ELT(df, 0, chrom_col);
         SET_VECTOR_ELT(df, 1, start_col);
         SET_VECTOR_ELT(df, 2, end_col);
-        SET_VECTOR_ELT(df, 3, track_col);
+        SET_VECTOR_ELT(df, 3, track_idx_col);
 
         SEXP names;
         rprotect(names = Rf_allocVector(STRSXP, 4));
         SET_STRING_ELT(names, 0, Rf_mkChar("chrom"));
         SET_STRING_ELT(names, 1, Rf_mkChar("start"));
         SET_STRING_ELT(names, 2, Rf_mkChar("end"));
-        SET_STRING_ELT(names, 3, Rf_mkChar("track"));
+        SET_STRING_ELT(names, 3, Rf_mkChar("track_idx"));
         Rf_setAttrib(df, R_NamesSymbol, names);
 
         SEXP rownames;

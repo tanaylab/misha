@@ -60,6 +60,9 @@
 .detect_fast_path <- function(exprs, iterator, intervals, band) {
     if (!is.character(exprs) || length(exprs) == 0) return(NULL)
     if (!is.null(band)) return(NULL)
+    # Cheap lexical gate: skip the gtrack.info / .gvtrack.get calls when
+    # any expression contains operators or whitespace.
+    if (!all(.looks_like_bare_name(exprs))) return(NULL)
 
     infos <- lapply(exprs, .describe_single_expr)
     if (any(vapply(infos, is.null, logical(1)))) return(NULL)
@@ -181,6 +184,15 @@
     out <- tbl[op_chr]
     if (any(is.na(out))) stop("unknown comparison operator", call. = FALSE)
     as.integer(out)
+}
+
+# Cheap lexical pre-check: an expression that contains operators,
+# whitespace-around-operators, or parentheses cannot be a bare track or
+# vtrack name, so skip the expensive .describe_single_expr path entirely.
+# Matches identifier-like strings (letters, digits, "." and "_"), optionally
+# wrapped in outer whitespace. Anything else falls through immediately.
+.looks_like_bare_name <- function(s) {
+    grepl("^\\s*[A-Za-z0-9._]+\\s*$", s)
 }
 
 # Emit a one-time per-session informational message explaining which path
