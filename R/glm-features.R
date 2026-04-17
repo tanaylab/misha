@@ -211,6 +211,12 @@ glm_extract_features <- function(
 #'   to raise it. Pass \code{n_threads = 0L} to auto-detect
 #'   (\code{min(n_tracks, hardware_concurrency, 40)}). Each thread uses
 #'   ~540 MB for mouse genome at 20bp resolution.
+#' @param func Window aggregation function. One of \code{"lse"} (default),
+#'   \code{"avg"}, \code{"sum"}, \code{"max"}, \code{"min"}. Matches the
+#'   vtrack \code{func} semantics.
+#' @param intervals Optional 1D intervals data.frame (\code{chrom, start, end})
+#'   restricting the scan to a subset of the genome. \code{NULL} (default)
+#'   scans the whole genome.
 #'
 #' @return If a single percentile is requested: a named numeric vector
 #'   (one value per track). If multiple percentiles: a matrix with

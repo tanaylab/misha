@@ -362,6 +362,11 @@ gquantiles <- function(expr = NULL, percentiles = 0.5,
 #' @param iterator track expression iterator. If 'NULL' iterator is determined
 #' implicitly based on track expression.
 #' @param band track expression band. If 'NULL' no band is used.
+#' @param fast if \code{TRUE} (default) and \code{expr} is a character vector
+#'   of length > 1 whose elements are bare track or vtrack names, a fast
+#'   direct-mmap C++ multi-track path is used and a data.frame with columns
+#'   \code{track, n, n_nan, min, max, sum, mean, sd} is returned. Single
+#'   expressions always take the legacy path for bit-exact back-compat.
 #' @return An array that represents summary statistics.
 #' @seealso \code{\link{gintervals.summary}}, \code{\link{gbins.summary}}
 #' @keywords ~summary ~statistics
