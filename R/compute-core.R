@@ -228,9 +228,11 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
 #' gsummary("rects_track")
 #'
 #' @export gsummary
-gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL) {
+gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL,
+                     band = NULL, fast = TRUE) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gsummary(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = FALSE)
+        stop("Usage: gsummary(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, fast = TRUE)",
+             call. = FALSE)
     }
     .gcheckroot()
 
@@ -240,6 +242,56 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL
         intervals <- get("ALLGENOME", envir = .misha)
     }
 
+    # Fast path activates only for a character vector of length > 1. Single
+    # scalar inputs always take the legacy path to preserve bit-exact
+    # backward compatibility (existing regression tests rely on the legacy
+    # output shape and numerics).
+    if (isTRUE(fast) && is.character(expr) && length(expr) > 1) {
+        fp <- .detect_fast_path(as.character(expr), iterator, intervals, band)
+        if (!is.null(fp)) {
+            # Unwrap ALLGENOME-style list into a bare 1D data.frame (the
+            # batch C entry only consumes 1D intervals).
+            iv <- intervals
+            if (is.list(iv) && !is.data.frame(iv) && length(iv) == 2 &&
+                is.data.frame(iv[[1]])) {
+                iv <- iv[[1]]
+            }
+            # ALLGENOME equivalent ⇒ pass NULL to the C entry to skip the
+            # interval-mask machinery entirely (faster, same result).
+            allg <- get("ALLGENOME", envir = .misha)
+            is_allgenome <- identical(iv, allg[[1]])
+            c_intervals <- if (is_allgenome) NULL else iv
+
+            n_threads <- as.integer(getOption("gmax.processes", 1L))
+            m <- .gcall("C_gsummary_multi",
+                        as.character(fp$tracks),
+                        as.integer(fp$iterator),
+                        as.integer(fp$sshift),
+                        as.integer(fp$eshift),
+                        n_threads,
+                        as.character(fp$func),
+                        c_intervals,
+                        .misha_env())
+            df <- data.frame(
+                track = as.character(expr),
+                n = m[, 1], n_nan = m[, 2],
+                min = m[, 3], max = m[, 4], sum = m[, 5],
+                mean = m[, 6], sd = m[, 7],
+                stringsAsFactors = FALSE
+            )
+            rownames(df) <- NULL
+            return(df)
+        }
+        .fast_dispatch_msg("gsummary",
+            "multi-expr fast-path not eligible (expression not a bare track or simple vtrack); using slow path")
+    }
+
+    # Slow path (single expression, legacy behavior).
+    if (is.character(expr) && length(expr) > 1) {
+        stop("gsummary: multi-expression slow path not yet implemented ",
+             "(Phase 5 work); pass fast=TRUE with simple track or vtrack names, ",
+             "or call gsummary once per expression.", call. = FALSE)
+    }
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 

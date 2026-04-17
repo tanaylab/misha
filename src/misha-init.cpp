@@ -111,6 +111,7 @@ extern "C" {
     extern SEXP C_ggenome_implant(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_glm_extract_features(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gquantiles_multi(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gsummary_multi(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -218,6 +219,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_ggenome_implant", (DL_FUNC)&C_ggenome_implant, 7},
     {"C_glm_extract_features", (DL_FUNC)&C_glm_extract_features, 13},
     {"C_gquantiles_multi", (DL_FUNC)&C_gquantiles_multi, 9},
+    {"C_gsummary_multi", (DL_FUNC)&C_gsummary_multi, 8},
     {NULL, NULL, 0}
 };
 
