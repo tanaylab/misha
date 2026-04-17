@@ -66,6 +66,10 @@ struct TopKQuantile {
         // calculation in topk_finalize.
         void count_pruned() { ++n_total; }
 
+        // NaN-aggregate positions have no rank. Ignored for quantile math;
+        // they neither contribute to n_total nor the heap.
+        void nan_seen() {}
+
         void accept(float v, int64_t /*pos*/) {
             ++n_total;
             if (!cfg || cfg->use_fallback) {

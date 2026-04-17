@@ -39,15 +39,22 @@ struct Summary {
 
         void init(const Config &, int, int) {}
 
+        // Called only for non-NaN aggregate values (driver filters NaN
+        // before calling accept). Bumps total count and updates aggregates.
         void accept(float v, int64_t) {
             ++n;
-            if (std::isnan(v)) { ++n_nan; return; }
             double d = (double)v;
             sum += d;
             sum_sq += d * d;
             if (d < min_val) min_val = d;
             if (d > max_val) max_val = d;
         }
+
+        // Called by the driver when the aggregate is NaN (all-NaN window).
+        // Matches legacy gsummary semantics: every evaluated scan position
+        // contributes to num_bins, and NaN-aggregate positions also
+        // contribute to num_nan.
+        void nan_seen() { ++n; ++n_nan; }
 
         // Count a pruned valid position — required interface (no-op here
         // because needs_pruning is false, this never gets called).

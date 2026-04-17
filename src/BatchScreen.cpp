@@ -95,6 +95,11 @@ struct ThresholdScreen {
         // interval spanning positions that were never evaluated.
         void boundary() { flush_cur(); }
 
+        // NaN aggregate → no value to compare against threshold; in legacy
+        // gscreen semantics the comparison `NaN <op> threshold` is false
+        // for every operator, which breaks any passing run.
+        void nan_seen() { flush_cur(); }
+
         bool prune(float upper, float lower) const {
             switch (cfg->op) {
                 case CmpOp::GT: case CmpOp::GE: return upper <  cfg->threshold;
