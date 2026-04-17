@@ -15,18 +15,26 @@ test_that("top-K path returns EXACTLY the same quantile value as fallback for th
     )
     # Mixed-tail → fallback.
     suppressWarnings({
-        q_fallback_mat <- do.call(glm_batch_quantiles,
-                                  c(args, list(percentiles = c(0.2, 0.95))))
+        q_fallback_mat <- do.call(
+            glm_batch_quantiles,
+            c(args, list(percentiles = c(0.2, 0.95)))
+        )
     })
-    q_fallback_at_95 <- q_fallback_mat[1, 2]   # p=0.95 column
+    q_fallback_at_95 <- q_fallback_mat[1, 2] # p=0.95 column
 
     # Top-K only (all percentiles >= 0.5; no clamp on example db).
-    q_topk <- do.call(glm_batch_quantiles,
-                      c(args, list(percentiles = 0.95)))
+    q_topk <- do.call(
+        glm_batch_quantiles,
+        c(args, list(percentiles = 0.95))
+    )
 
-    expect_equal(unname(q_topk), unname(q_fallback_at_95), tolerance = 0,
-                 info = sprintf("topk=%g fallback=%g",
-                                unname(q_topk), unname(q_fallback_at_95)))
+    expect_equal(unname(q_topk), unname(q_fallback_at_95),
+        tolerance = 0,
+        info = sprintf(
+            "topk=%g fallback=%g",
+            unname(q_topk), unname(q_fallback_at_95)
+        )
+    )
 })
 
 test_that("bottom-K path returns same value as fallback for p < 0.5", {
@@ -37,15 +45,23 @@ test_that("bottom-K path returns same value as fallback for p < 0.5", {
         n_threads = 1L, func = "avg"
     )
     suppressWarnings({
-        q_fb <- do.call(glm_batch_quantiles,
-                        c(args, list(percentiles = c(0.05, 0.95))))
+        q_fb <- do.call(
+            glm_batch_quantiles,
+            c(args, list(percentiles = c(0.05, 0.95)))
+        )
     })
     q_fb_at_5 <- q_fb[1, 1]
-    q_bot <- do.call(glm_batch_quantiles,
-                     c(args, list(percentiles = 0.05)))
-    expect_equal(unname(q_bot), unname(q_fb_at_5), tolerance = 0,
-                 info = sprintf("bot=%g fb=%g",
-                                unname(q_bot), unname(q_fb_at_5)))
+    q_bot <- do.call(
+        glm_batch_quantiles,
+        c(args, list(percentiles = 0.05))
+    )
+    expect_equal(unname(q_bot), unname(q_fb_at_5),
+        tolerance = 0,
+        info = sprintf(
+            "bot=%g fb=%g",
+            unname(q_bot), unname(q_fb_at_5)
+        )
+    )
 })
 
 test_that("glm_batch_quantiles top-K path matches gquantiles on vtrack-max (sanity)", {
@@ -69,7 +85,8 @@ test_that("glm_batch_quantiles top-K path matches gquantiles on vtrack-max (sani
     # should match closely. Tolerance is loose because gquantiles may
     # return a different quantile definition at the boundary.
     expect_true(abs(unname(q_top) - unname(ref)) < 0.1,
-                info = sprintf("q_top=%g, ref=%g", unname(q_top), unname(ref)))
+        info = sprintf("q_top=%g, ref=%g", unname(q_top), unname(ref))
+    )
 })
 
 test_that("func='avg' produces different values than func='max' (sanity)", {
@@ -106,7 +123,8 @@ test_that("func='lse' matches vtrack lse", {
     # Example db is tiny; tolerance is loose to absorb StreamPercentiler
     # vs exact-nth_element divergence on a small stream.
     expect_true(abs(unname(q) - unname(ref)) < 1.0,
-                info = sprintf("q=%g ref=%g", unname(q), unname(ref)))
+        info = sprintf("q=%g ref=%g", unname(q), unname(ref))
+    )
 })
 
 test_that("intervals restriction narrows the scan", {
@@ -137,9 +155,11 @@ test_that("intervals with multiple chroms and interval-mask boundary", {
     # hook in the driver at the gap. The TopKQuantile reducer's boundary()
     # is a no-op, so this is a smoke test that the driver doesn't crash
     # when the mask has gaps.
-    ivs <- data.frame(chrom = c("1", "1"),
-                      start = c(0, 5000),
-                      end   = c(2000, 7000))
+    ivs <- data.frame(
+        chrom = c("1", "1"),
+        start = c(0, 5000),
+        end = c(2000, 7000)
+    )
     q <- glm_batch_quantiles(
         track_names = "dense_track", percentiles = 0.5,
         iterator = 50L, sshift = -50L, eshift = 50L, n_threads = 2L,

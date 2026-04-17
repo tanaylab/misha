@@ -217,7 +217,8 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL,
                     band = NULL, intervals.set.out = NULL, fast = TRUE) {
     if (is.null(substitute(expr))) {
         stop("Usage: gscreen(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, intervals.set.out = NULL, fast = TRUE)",
-             call. = FALSE)
+            call. = FALSE
+        )
     }
     .gcheckroot()
 
@@ -233,8 +234,10 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL,
     # existing gscreen regression tests and intervals-set-out semantics.
     if (isTRUE(fast) && is.character(expr) && length(expr) > 1 &&
         is.null(intervals.set.out)) {
-        fp <- .detect_screen_fast_path(as.character(expr), iterator,
-                                       intervals, band)
+        fp <- .detect_screen_fast_path(
+            as.character(expr), iterator,
+            intervals, band
+        )
         if (!is.null(fp)) {
             iv <- intervals
             if (is.list(iv) && !is.data.frame(iv) && length(iv) == 2 &&
@@ -252,29 +255,35 @@ gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL,
             # vector. Map to the user-facing `track` column with the original
             # expression strings — unambiguous even for duplicate underlying
             # tracks (e.g. two thresholds on the same source track).
-            res <- .gcall("C_gscreen_multi",
-                          as.character(fp$tracks),
-                          as.integer(fp$iterator),
-                          as.integer(fp$sshift),
-                          as.integer(fp$eshift),
-                          n_threads,
-                          as.character(fp$func),
-                          as.integer(ops_int),
-                          as.numeric(fp$thresholds),
-                          c_intervals,
-                          .misha_env())
+            res <- .gcall(
+                "C_gscreen_multi",
+                as.character(fp$tracks),
+                as.integer(fp$iterator),
+                as.integer(fp$sshift),
+                as.integer(fp$eshift),
+                n_threads,
+                as.character(fp$func),
+                as.integer(ops_int),
+                as.numeric(fp$thresholds),
+                c_intervals,
+                .misha_env()
+            )
             expr_str <- as.character(expr)
             res$track <- expr_str[res$track_idx + 1L]
             res$track_idx <- NULL
             return(res)
         }
-        .fast_dispatch_msg("gscreen",
-            "multi-expr fast-path not eligible; using slow path")
+        .fast_dispatch_msg(
+            "gscreen",
+            "multi-expr fast-path not eligible; using slow path"
+        )
     }
     if (is.character(expr) && length(expr) > 1) {
         stop("gscreen: multi-expression slow path not yet implemented ",
-             "(Phase 5 work); pass fast=TRUE with simple '<track> <op> <const>' ",
-             "comparisons, or call gscreen once per expression.", call. = FALSE)
+            "(Phase 5 work); pass fast=TRUE with simple '<track> <op> <const>' ",
+            "comparisons, or call gscreen once per expression.",
+            call. = FALSE
+        )
     }
 
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
