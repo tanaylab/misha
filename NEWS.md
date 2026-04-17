@@ -1,3 +1,7 @@
+# misha 5.6.17
+
+* `gquantiles`, `gsummary`, `gscreen` now accept a vector of expressions and return a `data.frame` for multi-track calls (matrix-returning single-expression calls are unchanged). An optimized C++ fast path is available for simple track or vtrack shapes; `gsummary` and `gscreen` use it automatically when the input resolves to bare tracks / simple vtracks, since their outputs agree exactly between paths. `gquantiles` keeps `fast = FALSE` as its default to preserve existing numeric outputs; pass `fast = TRUE` to opt into the exact top-K path (substantially faster for extreme quantiles — ≥5× on a 10-motif mouse-genome benchmark). A one-time session message suggests `fast = TRUE` on calls where it is eligible.
+
 # misha 5.6.16
 
 * `gsynth.sample()` with `output_format = "fasta"` now writes a samtools-compatible `.fai` alongside the FASTA (tracking byte offsets during the write loop, no extra pass over the file). Removes the need to call `samtools faidx` by hand on every sampled genome. Matches the convention already used by `ggenome.implant()`.
