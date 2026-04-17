@@ -115,6 +115,16 @@ struct TopKQuantile {
 
         void boundary() {}
 
+        // Runtime hint to the driver: is pruning ever possible for this
+        // State? Returning false lets the driver skip sliding-deque
+        // maintenance entirely (each position saves 1-2 deque pushes +
+        // advance_front calls — measurable on large fallback-mode scans).
+        // For TopKQuantile, fallback mode never prunes, so maintaining
+        // the max/min deques is pure overhead.
+        bool pruning_active() const {
+            return cfg && !cfg->use_fallback;
+        }
+
         // Pruning: only meaningful in heap mode, and only once the heap is
         // full. For top-K (all percentiles >= 0.5), skip positions whose
         // upper bound is below the current K-th largest. For bottom-K,
