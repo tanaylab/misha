@@ -82,6 +82,25 @@ test_that("gscreen flushes at interval-mask boundary (no spurious fusion)", {
     expect_false(any(bad))
 })
 
+test_that("gscreen handles multiple predicates on the SAME underlying track", {
+    # Regression for Phase 4 review C1: when two or more expressions share
+    # the same underlying source track, the R-side track-column rewrite
+    # previously collapsed the per-row mapping because it relied on
+    # the underlying-track name string and the rows were indistinguishable.
+    gdb.init_examples()
+    exprs <- c("dense_track > 0.05", "dense_track > 0.15")
+    fast <- gscreen(exprs, fast = TRUE)
+    # Both input expressions must appear in the track column.
+    expect_true(all(c("dense_track > 0.05", "dense_track > 0.15") %in%
+                      unique(as.character(fast$track))))
+    # The stricter threshold produces a subset of the looser one; every
+    # row tagged as the stricter predicate must also satisfy the looser.
+    ref_looser <- gscreen("dense_track > 0.05")
+    ref_stricter <- gscreen("dense_track > 0.15")
+    expect_equal(sum(fast$track == "dense_track > 0.05"), nrow(ref_looser))
+    expect_equal(sum(fast$track == "dense_track > 0.15"), nrow(ref_stricter))
+})
+
 test_that("gscreen multi-expr with fast=FALSE errors cleanly (Phase 5 scope)", {
     gdb.init_examples()
     expect_error(
