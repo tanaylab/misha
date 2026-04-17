@@ -112,6 +112,7 @@ extern "C" {
     extern SEXP C_glm_extract_features(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gquantiles_multi(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsummary_multi(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gscreen_multi(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -220,6 +221,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_glm_extract_features", (DL_FUNC)&C_glm_extract_features, 13},
     {"C_gquantiles_multi", (DL_FUNC)&C_gquantiles_multi, 9},
     {"C_gsummary_multi", (DL_FUNC)&C_gsummary_multi, 8},
+    {"C_gscreen_multi", (DL_FUNC)&C_gscreen_multi, 10},
     {NULL, NULL, 0}
 };
 
