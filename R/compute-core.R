@@ -163,13 +163,49 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 #' want to achieve identical results on any machine. For more information
 #' regarding multitasking please refer "User Manual".
 #'
-#' @param expr track expression
+#' @param expr track expression. Character vectors of length > 1 are
+#'   supported when \code{fast = TRUE} and every element resolves to a
+#'   simple track or vtrack shape; the return value is then a data.frame
+#'   with a \code{track} column and one column per percentile.
 #' @param percentiles an array of percentiles of quantiles in [0, 1] range
 #' @param intervals genomic scope for which the function is applied
 #' @param iterator track expression iterator. If 'NULL' iterator is determined
 #' implicitly based on track expression.
 #' @param band track expression band. If 'NULL' no band is used.
-#' @return An array that represent quantiles.
+#' @param fast if \code{TRUE} and \code{expr} is a bare track or vtrack name
+#'   (or a character vector of such names), a direct-mmap C++ fast path is
+#'   used. Default \code{FALSE} to preserve numeric back-compat with
+#'   single-expression calls (see Details). For multi-expression calls
+#'   \code{fast = TRUE} is required.
+#' @return For a single expression, a named numeric vector of quantile
+#'   values. For a character vector of expressions with \code{fast = TRUE},
+#'   a data.frame with columns \code{track} and one per percentile.
+#' @details
+#' **Numerical differences between fast and slow paths.** The fast path
+#' (\code{fast = TRUE}) computes *exact* quantiles via \code{nth_element}
+#' on a top-K heap (or on a full value buffer in fallback mode),
+#' equivalent to \code{quantile(x, p, type = 1)}. The slow path
+#' (\code{fast = FALSE}, default) uses \code{StreamPercentiler}, which
+#' draws a reservoir sample when scanned data exceeds
+#' \code{options(gmax.data.size)} and can return approximate quantiles
+#' at extreme percentiles. Observed differences on motif-energy tracks at
+#' \code{p = 0.9999} are in the range 0.02–0.06. The fast path is the
+#' more correct answer (no subsampling); the slow path matches
+#' long-standing misha behavior. If you have workflows pinned to
+#' existing \code{gquantiles} outputs, keep \code{fast = FALSE};
+#' otherwise \code{fast = TRUE} is faster and exact. In a future
+#' release the default may flip to \code{fast = TRUE}; this will be
+#' announced in NEWS.
+#'
+#' **Memory and speed near p = 0.5.** The fast path's speedup for
+#' extreme quantiles comes from a top-K heap that keeps only the top
+#' (or bottom) \code{ceil((1 - max(p)) * N * 1.2)} values. For \code{p}
+#' near 0.5, \code{K} approaches \code{N/2}, exceeds the internal cap
+#' (\code{K_MAX = 10M}), and the fast path falls back to storing all
+#' values (same memory footprint as pre-refactor misha). A warning
+#' names the affected tracks. For median-like queries on whole-genome
+#' data the fast path provides no speedup from top-K but still benefits
+#' from direct-mmap scan and \code{std::thread} parallelism.
 #' @seealso \code{\link{gbins.quantiles}}, \code{\link{gintervals.quantiles}},
 #' \code{\link{gdist}}
 #' @keywords ~quantiles ~percentiles
@@ -183,16 +219,109 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 #'
 #' @export gquantiles
 
-gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOME", envir = .misha), iterator = NULL, band = NULL) {
+gquantiles <- function(expr = NULL, percentiles = 0.5,
+                       intervals = get("ALLGENOME", envir = .misha),
+                       iterator = NULL, band = NULL, fast = FALSE) {
     if (is.null(substitute(expr))) {
-        stop("Usage: gquantiles(expr, percentiles = 0.5, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = FALSE)
+        stop("Usage: gquantiles(expr, percentiles = 0.5, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, fast = FALSE)",
+             call. = FALSE)
     }
     .gcheckroot()
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
+    # Multi-expression path: requires fast=TRUE and dispatch-eligible inputs.
+    if (is.character(expr) && length(expr) > 1) {
+        if (!isTRUE(fast)) {
+            stop("gquantiles: multi-expression calls require fast=TRUE ",
+                 "(the slow path for multi-expr is Phase 5 work, not yet ",
+                 "implemented).", call. = FALSE)
+        }
+        fp <- .detect_fast_path(as.character(expr), iterator, intervals, band)
+        if (is.null(fp)) {
+            stop("gquantiles: multi-expression fast-path not eligible ",
+                 "(each expression must resolve to a bare track or simple ",
+                 "vtrack with matching func/sshift/eshift).", call. = FALSE)
+        }
+        iv <- intervals
+        if (is.list(iv) && !is.data.frame(iv) && length(iv) == 2 &&
+            is.data.frame(iv[[1]])) {
+            iv <- iv[[1]]
+        }
+        allg <- get("ALLGENOME", envir = .misha)
+        is_allgenome <- identical(iv, allg[[1]])
+        c_intervals <- if (is_allgenome) NULL else iv
+
+        n_threads <- as.integer(getOption("gmax.processes", 1L))
+        m <- .gcall("C_gquantiles_multi",
+                    as.character(fp$tracks),
+                    as.numeric(percentiles),
+                    as.integer(fp$iterator),
+                    as.integer(fp$sshift),
+                    as.integer(fp$eshift),
+                    n_threads,
+                    as.character(fp$func),
+                    c_intervals,
+                    .misha_env())
+        # C returns a named matrix (rows = tracks, cols = percentiles).
+        # Convert to long data.frame with a leading `track` column whose
+        # values are the original input expressions.
+        mat <- if (is.matrix(m)) m else matrix(m, nrow = length(fp$tracks))
+        df <- data.frame(track = as.character(expr), mat,
+                         check.names = FALSE, stringsAsFactors = FALSE)
+        names(df)[-1] <- as.character(percentiles)
+        rownames(df) <- NULL
+        return(df)
+    }
+
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
+
+    # Single-expression fast path: opt-in via fast=TRUE. If preconditions
+    # fail, emit a one-time informational message and fall back to the
+    # slow path. If preconditions pass, use the exact-nth_element path.
+    if (isTRUE(fast) && is.character(expr) && length(expr) == 1L) {
+        fp <- .detect_fast_path(as.character(expr), iterator, intervals, band)
+        if (!is.null(fp)) {
+            iv <- intervals
+            if (is.list(iv) && !is.data.frame(iv) && length(iv) == 2 &&
+                is.data.frame(iv[[1]])) {
+                iv <- iv[[1]]
+            }
+            allg <- get("ALLGENOME", envir = .misha)
+            is_allgenome <- identical(iv, allg[[1]])
+            c_intervals <- if (is_allgenome) NULL else iv
+
+            n_threads <- as.integer(getOption("gmax.processes", 1L))
+            m <- .gcall("C_gquantiles_multi",
+                        as.character(fp$tracks),
+                        as.numeric(percentiles),
+                        as.integer(fp$iterator),
+                        as.integer(fp$sshift),
+                        as.integer(fp$eshift),
+                        n_threads,
+                        as.character(fp$func),
+                        c_intervals,
+                        .misha_env())
+            # For a single track the C entry returns a numeric vector
+            # (n_pctiles=1) or a 1-row matrix. Flatten to the named-numeric
+            # return shape that legacy gquantiles produces.
+            out <- as.numeric(m)
+            names(out) <- as.character(percentiles)
+            return(out)
+        }
+        .fast_dispatch_msg("gquantiles",
+            "fast=TRUE not eligible for this expression; using slow path")
+    } else if (!isTRUE(fast) && is.character(expr) && length(expr) == 1L) {
+        # Inform only when the user could have opted in and the fast path
+        # is eligible. Silent otherwise.
+        fp_test <- .detect_fast_path(as.character(expr), iterator,
+                                     intervals, band)
+        if (!is.null(fp_test)) {
+            .fast_dispatch_msg("gquantiles",
+                "a faster exact-quantile path is available; pass fast = TRUE (see ?gquantiles)")
+        }
+    }
 
     if (.ggetOption("gmultitasking")) {
         res <- .gcall("gquantiles_multitask", intervals, exprstr, percentiles, .iterator, band, .misha_env())
