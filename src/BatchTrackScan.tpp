@@ -202,7 +202,8 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
         }
 
         float val = aggregate_window(F, all_bins, sbin, ebin);
-        if (!std::isnan(val)) state.accept(val, c);
+        if (std::isnan(val)) state.nan_seen();
+        else state.accept(val, c);
     }
 }
 
@@ -272,7 +273,15 @@ void scan_sparse_inner(GenomeTrackSparse *sp, int64_t chrom_size,
             else if constexpr (F == WindowAggFunc::MAX) { if (v > acc_max) acc_max = v; }
             else if constexpr (F == WindowAggFunc::MIN) { if (v < acc_min) acc_min = v; }
         }
-        if (n == 0) continue;
+        if (n == 0) {
+            // Zero non-NaN bins in window → NaN aggregate. Still a valid
+            // scan position; reducers that count bins (Summary) need to
+            // see it via nan_seen(). Reducers that only care about
+            // non-NaN values (TopKQuantile, ThresholdScreen behavior on
+            // gap) ignore.
+            state.nan_seen();
+            continue;
+        }
 
         float val;
         if constexpr (F == WindowAggFunc::LSE) val = acc_lse;
@@ -281,8 +290,9 @@ void scan_sparse_inner(GenomeTrackSparse *sp, int64_t chrom_size,
         else if constexpr (F == WindowAggFunc::MAX) val = acc_max;
         else if constexpr (F == WindowAggFunc::MIN) val = acc_min;
 
-        // No pruning for sparse path: call accept directly.
-        if (!std::isnan(val)) state.accept(val, c);
+        // No pruning for sparse path.
+        if (std::isnan(val)) state.nan_seen();
+        else state.accept(val, c);
     }
 }
 

@@ -52,10 +52,11 @@ test_that("gsummary multi-track fast path matches per-track single calls", {
             row.names = NULL, stringsAsFactors = FALSE
         )
     }))
-    # The slow path uses implicit bin iteration (no sshift/eshift window);
-    # the fast path with iterator=20 + sshift=0 + eshift=20 is equivalent
-    # for dense tracks at 20bp bin size. Values should be close to bit-equal
-    # on the example db.
+    # Both paths iterate bin-by-bin for these dense tracks.
+    # n = total scan positions (NaN + non-NaN); n_nan = NaN-aggregate
+    # positions. Must match legacy exactly.
+    expect_equal(fast$n, ref$n, tolerance = 0)
+    expect_equal(fast$n_nan, ref$n_nan, tolerance = 0)
     expect_equal(fast$min, ref$min, tolerance = 1e-5)
     expect_equal(fast$max, ref$max, tolerance = 1e-5)
     expect_equal(fast$mean, ref$mean, tolerance = 1e-5)
