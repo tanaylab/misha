@@ -126,6 +126,16 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
     SlidingMin smin;
     int next_bin_to_push = 0;   // next bin index to enter the deque(s)
 
+    // Hoist the runtime "is pruning possible for this scan?" check out
+    // of the inner loop. For Reducer::needs_pruning==false the value is
+    // unused (the if constexpr below elides the branch entirely). For
+    // TopKQuantile fallback mode or ThresholdScreen EQ, this is false
+    // and we skip all sliding-deque maintenance per position.
+    const bool pruning_enabled = [&]() {
+        if constexpr (Reducer::needs_pruning) return state.pruning_active();
+        else return false;
+    }();
+
     size_t interval_cursor = 0;
     bool prev_in_mask = false;
 
@@ -160,7 +170,14 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
         if (ebin > out_count) ebin = out_count;
         if (sbin >= ebin) continue;
 
+        // Sliding-deque + pruning block. Gated by the compile-time
+        // Reducer::needs_pruning and the runtime pruning_enabled flag
+        // (hoisted above the loop from State::pruning_active()). For
+        // example, TopKQuantile fallback mode sets pruning_enabled=false,
+        // letting us skip the per-position deque push/advance entirely —
+        // a meaningful win on fallback-mode scans.
         if constexpr (Reducer::needs_pruning) {
+          if (pruning_enabled) {
             // Forward-jump past bins in a mask gap: after the deque reset
             // on a gap, next_bin_to_push is 0, and we don't want to walk
             // through the skipped region — skip directly to sbin.
@@ -199,6 +216,7 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
                     state.count_pruned();
                 continue;
             }
+          }
         }
 
         float val = aggregate_window(F, all_bins, sbin, ebin);
@@ -224,6 +242,12 @@ void scan_sparse_inner(GenomeTrackSparse *sp, int64_t chrom_size,
     size_t interval_cursor = 0;
     bool prev_in_mask = false;
 
+    // Monotonic cursor over `intervals`: because c increases by iterator_step
+    // each step, win_s is also monotonically non-decreasing, so the first
+    // sparse interval whose end > win_s can only move forward. Replaces the
+    // per-position binary search with amortized O(1) advance.
+    size_t sparse_cursor = 0;
+
     for (int64_t c = 0; c < chrom_size; c += iterator_step) {
         if (allowed_intervals) {
             while (interval_cursor < allowed_intervals->size() &&
@@ -244,13 +268,11 @@ void scan_sparse_inner(GenomeTrackSparse *sp, int64_t chrom_size,
         if (win_s < 0) win_s = 0;
         if (win_e <= win_s) continue;
 
-        // Binary-search first interval whose end > win_s.
-        size_t lo = 0, hi = intervals.size();
-        while (lo < hi) {
-            size_t mid = lo + (hi - lo) / 2;
-            if ((int64_t)intervals[mid].end <= win_s) lo = mid + 1;
-            else hi = mid;
-        }
+        // Advance sparse_cursor past intervals that end at/before win_s.
+        while (sparse_cursor < intervals.size() &&
+               (int64_t)intervals[sparse_cursor].end <= win_s)
+            ++sparse_cursor;
+        size_t lo = sparse_cursor;
 
         // Scan overlapping sparse intervals and compute the aggregator inline.
         // We don't build a dense bins array here (sparse positions are

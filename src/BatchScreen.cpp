@@ -100,6 +100,12 @@ struct ThresholdScreen {
         // for every operator, which breaks any passing run.
         void nan_seen() { flush_cur(); }
 
+        // EQ never prunes; GT/GE/LT/LE do. Returning false on EQ lets the
+        // driver skip sliding-deque maintenance entirely for EQ predicates.
+        bool pruning_active() const {
+            return cfg && cfg->op != CmpOp::EQ;
+        }
+
         bool prune(float upper, float lower) const {
             switch (cfg->op) {
                 case CmpOp::GT: case CmpOp::GE: return upper <  cfg->threshold;
