@@ -10,6 +10,10 @@
 //   - struct Config, State, Result
 //   - static constexpr bool needs_pruning       (enables sliding-max + prune())
 //   - static constexpr bool needs_lower_bound   (also enables sliding-min)
+//   - static constexpr bool supports_certain_pass
+//       (when true, State must also expose certain_pass(upper, lower) and
+//        accept_certain_pass(pos); driver uses them to skip aggregate_window
+//        for positions whose bound already guarantees the predicate passes)
 //   - State::init(const Config&, int chromid, int iterator_step)
 //   - State::accept(float val, int64_t pos)     (called for non-NaN aggregate)
 //   - State::nan_seen()                          (called for NaN aggregate)

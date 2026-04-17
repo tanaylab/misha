@@ -177,6 +177,9 @@ struct TopKQuantile {
     // State::prune. Spec originally had false; implementation flipped to
     // true to make bottom-K pruning actually fire. See addendum D-phase-2.
     static constexpr bool needs_lower_bound = true;
+    // Quantiles need the actual value, not just a pass-flag, so the
+    // certain-pass shortcut doesn't apply.
+    static constexpr bool supports_certain_pass = false;
 };
 
 // ---------------------------------------------------------------------------

@@ -80,6 +80,7 @@ struct Summary {
 
     static constexpr bool needs_pruning = false;
     static constexpr bool needs_lower_bound = false;
+    static constexpr bool supports_certain_pass = false;
 };
 
 static Summary::Result summary_finalize(const Summary::State &s)
