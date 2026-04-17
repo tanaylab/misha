@@ -216,6 +216,16 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
                     state.count_pruned();
                 continue;
             }
+            // Symmetric to prune: when the bound already guarantees the
+            // predicate passes (e.g. `lower > threshold` for GT), skip
+            // aggregate_window entirely. Only applies to reducers that
+            // don't need the actual value (ThresholdScreen).
+            if constexpr (Reducer::supports_certain_pass) {
+                if (state.certain_pass(upper, lower)) {
+                    state.accept_certain_pass(c);
+                    continue;
+                }
+            }
           }
         }
 
