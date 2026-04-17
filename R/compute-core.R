@@ -224,7 +224,8 @@ gquantiles <- function(expr = NULL, percentiles = 0.5,
                        iterator = NULL, band = NULL, fast = FALSE) {
     if (is.null(substitute(expr))) {
         stop("Usage: gquantiles(expr, percentiles = 0.5, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, fast = FALSE)",
-             call. = FALSE)
+            call. = FALSE
+        )
     }
     .gcheckroot()
 
@@ -234,14 +235,18 @@ gquantiles <- function(expr = NULL, percentiles = 0.5,
     if (is.character(expr) && length(expr) > 1) {
         if (!isTRUE(fast)) {
             stop("gquantiles: multi-expression calls require fast=TRUE ",
-                 "(the slow path for multi-expr is Phase 5 work, not yet ",
-                 "implemented).", call. = FALSE)
+                "(the slow path for multi-expr is Phase 5 work, not yet ",
+                "implemented).",
+                call. = FALSE
+            )
         }
         fp <- .detect_fast_path(as.character(expr), iterator, intervals, band)
         if (is.null(fp)) {
             stop("gquantiles: multi-expression fast-path not eligible ",
-                 "(each expression must resolve to a bare track or simple ",
-                 "vtrack with matching func/sshift/eshift).", call. = FALSE)
+                "(each expression must resolve to a bare track or simple ",
+                "vtrack with matching func/sshift/eshift).",
+                call. = FALSE
+            )
         }
         iv <- intervals
         if (is.list(iv) && !is.data.frame(iv) && length(iv) == 2 &&
@@ -253,22 +258,26 @@ gquantiles <- function(expr = NULL, percentiles = 0.5,
         c_intervals <- if (is_allgenome) NULL else iv
 
         n_threads <- as.integer(getOption("gmax.processes", 1L))
-        m <- .gcall("C_gquantiles_multi",
-                    as.character(fp$tracks),
-                    as.numeric(percentiles),
-                    as.integer(fp$iterator),
-                    as.integer(fp$sshift),
-                    as.integer(fp$eshift),
-                    n_threads,
-                    as.character(fp$func),
-                    c_intervals,
-                    .misha_env())
+        m <- .gcall(
+            "C_gquantiles_multi",
+            as.character(fp$tracks),
+            as.numeric(percentiles),
+            as.integer(fp$iterator),
+            as.integer(fp$sshift),
+            as.integer(fp$eshift),
+            n_threads,
+            as.character(fp$func),
+            c_intervals,
+            .misha_env()
+        )
         # C returns a named matrix (rows = tracks, cols = percentiles).
         # Convert to long data.frame with a leading `track` column whose
         # values are the original input expressions.
         mat <- if (is.matrix(m)) m else matrix(m, nrow = length(fp$tracks))
-        df <- data.frame(track = as.character(expr), mat,
-                         check.names = FALSE, stringsAsFactors = FALSE)
+        df <- data.frame(
+            track = as.character(expr), mat,
+            check.names = FALSE, stringsAsFactors = FALSE
+        )
         names(df)[-1] <- as.character(percentiles)
         rownames(df) <- NULL
         return(df)
@@ -293,16 +302,18 @@ gquantiles <- function(expr = NULL, percentiles = 0.5,
             c_intervals <- if (is_allgenome) NULL else iv
 
             n_threads <- as.integer(getOption("gmax.processes", 1L))
-            m <- .gcall("C_gquantiles_multi",
-                        as.character(fp$tracks),
-                        as.numeric(percentiles),
-                        as.integer(fp$iterator),
-                        as.integer(fp$sshift),
-                        as.integer(fp$eshift),
-                        n_threads,
-                        as.character(fp$func),
-                        c_intervals,
-                        .misha_env())
+            m <- .gcall(
+                "C_gquantiles_multi",
+                as.character(fp$tracks),
+                as.numeric(percentiles),
+                as.integer(fp$iterator),
+                as.integer(fp$sshift),
+                as.integer(fp$eshift),
+                n_threads,
+                as.character(fp$func),
+                c_intervals,
+                .misha_env()
+            )
             # For a single track the C entry returns a numeric vector
             # (n_pctiles=1) or a 1-row matrix. Flatten to the named-numeric
             # return shape that legacy gquantiles produces.
@@ -310,16 +321,22 @@ gquantiles <- function(expr = NULL, percentiles = 0.5,
             names(out) <- as.character(percentiles)
             return(out)
         }
-        .fast_dispatch_msg("gquantiles",
-            "fast=TRUE not eligible for this expression; using slow path")
+        .fast_dispatch_msg(
+            "gquantiles",
+            "fast=TRUE not eligible for this expression; using slow path"
+        )
     } else if (!isTRUE(fast) && is.character(expr) && length(expr) == 1L) {
         # Inform only when the user could have opted in and the fast path
         # is eligible. Silent otherwise.
-        fp_test <- .detect_fast_path(as.character(expr), iterator,
-                                     intervals, band)
+        fp_test <- .detect_fast_path(
+            as.character(expr), iterator,
+            intervals, band
+        )
         if (!is.null(fp_test)) {
-            .fast_dispatch_msg("gquantiles",
-                "a faster exact-quantile path is available; pass fast = TRUE (see ?gquantiles)")
+            .fast_dispatch_msg(
+                "gquantiles",
+                "a faster exact-quantile path is available; pass fast = TRUE (see ?gquantiles)"
+            )
         }
     }
 
@@ -361,7 +378,8 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL,
                      band = NULL, fast = TRUE) {
     if (is.null(substitute(expr))) {
         stop("Usage: gsummary(expr, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL, fast = TRUE)",
-             call. = FALSE)
+            call. = FALSE
+        )
     }
     .gcheckroot()
 
@@ -392,15 +410,17 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL,
             c_intervals <- if (is_allgenome) NULL else iv
 
             n_threads <- as.integer(getOption("gmax.processes", 1L))
-            m <- .gcall("C_gsummary_multi",
-                        as.character(fp$tracks),
-                        as.integer(fp$iterator),
-                        as.integer(fp$sshift),
-                        as.integer(fp$eshift),
-                        n_threads,
-                        as.character(fp$func),
-                        c_intervals,
-                        .misha_env())
+            m <- .gcall(
+                "C_gsummary_multi",
+                as.character(fp$tracks),
+                as.integer(fp$iterator),
+                as.integer(fp$sshift),
+                as.integer(fp$eshift),
+                n_threads,
+                as.character(fp$func),
+                c_intervals,
+                .misha_env()
+            )
             df <- data.frame(
                 track = as.character(expr),
                 n = m[, 1], n_nan = m[, 2],
@@ -411,15 +431,19 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL,
             rownames(df) <- NULL
             return(df)
         }
-        .fast_dispatch_msg("gsummary",
-            "multi-expr fast-path not eligible (expression not a bare track or simple vtrack); using slow path")
+        .fast_dispatch_msg(
+            "gsummary",
+            "multi-expr fast-path not eligible (expression not a bare track or simple vtrack); using slow path"
+        )
     }
 
     # Slow path (single expression, legacy behavior).
     if (is.character(expr) && length(expr) > 1) {
         stop("gsummary: multi-expression slow path not yet implemented ",
-             "(Phase 5 work); pass fast=TRUE with simple track or vtrack names, ",
-             "or call gsummary once per expression.", call. = FALSE)
+            "(Phase 5 work); pass fast=TRUE with simple track or vtrack names, ",
+            "or call gsummary once per expression.",
+            call. = FALSE
+        )
     }
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())

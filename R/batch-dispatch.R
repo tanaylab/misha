@@ -21,9 +21,12 @@
     # Bare track?
     if (gtrack.exists(e)) {
         info <- tryCatch(gtrack.info(e), error = function(err) NULL)
-        if (is.null(info)) return(NULL)
-        if (!identical(info$type, "dense") && !identical(info$type, "sparse"))
+        if (is.null(info)) {
             return(NULL)
+        }
+        if (!identical(info$type, "dense") && !identical(info$type, "sparse")) {
+            return(NULL)
+        }
         # Bare track → per-bin scan semantics. We return sshift=0 and
         # eshift=bin_size for dense tracks so the window covers exactly one
         # bin at each iterator position (and func=avg collapses to the bin
@@ -32,8 +35,10 @@
         # override by wrapping in a vtrack.
         bsz <- info$bin.size
         if (is.null(bsz) || !is.numeric(bsz)) bsz <- 1L
-        return(list(track = e, func = "avg", sshift = 0L,
-                    eshift = as.integer(bsz)))
+        return(list(
+            track = e, func = "avg", sshift = 0L,
+            eshift = as.integer(bsz)
+        ))
     }
     # Virtual track?
     if (exists("GVTRACKS", envir = misha:::.misha)) {
@@ -41,31 +46,52 @@
         vts <- get("GVTRACKS", envir = misha:::.misha)[[gwd]]
         if (!is.null(vts) && e %in% names(vts)) {
             v <- vts[[e]]
-            if (!is.character(v$src) || length(v$src) != 1) return(NULL)
-            if (!gtrack.exists(v$src)) return(NULL)
-            if (!is.character(v$func) || length(v$func) != 1) return(NULL)
-            if (!(v$func %in% c("avg", "sum", "max", "min", "lse")))
+            if (!is.character(v$src) || length(v$src) != 1) {
                 return(NULL)
-            if (is.null(v$itr) || !identical(v$itr$type, "1d")) return(NULL)
+            }
+            if (!gtrack.exists(v$src)) {
+                return(NULL)
+            }
+            if (!is.character(v$func) || length(v$func) != 1) {
+                return(NULL)
+            }
+            if (!(v$func %in% c("avg", "sum", "max", "min", "lse"))) {
+                return(NULL)
+            }
+            if (is.null(v$itr) || !identical(v$itr$type, "1d")) {
+                return(NULL)
+            }
             sshift <- as.integer(v$itr$sshift)
             eshift <- as.integer(v$itr$eshift)
-            if (is.na(sshift) || is.na(eshift)) return(NULL)
-            return(list(track = v$src, func = v$func,
-                        sshift = sshift, eshift = eshift))
+            if (is.na(sshift) || is.na(eshift)) {
+                return(NULL)
+            }
+            return(list(
+                track = v$src, func = v$func,
+                sshift = sshift, eshift = eshift
+            ))
         }
     }
     NULL
 }
 
 .detect_fast_path <- function(exprs, iterator, intervals, band) {
-    if (!is.character(exprs) || length(exprs) == 0) return(NULL)
-    if (!is.null(band)) return(NULL)
+    if (!is.character(exprs) || length(exprs) == 0) {
+        return(NULL)
+    }
+    if (!is.null(band)) {
+        return(NULL)
+    }
     # Cheap lexical gate: skip the gtrack.info / .gvtrack.get calls when
     # any expression contains operators or whitespace.
-    if (!all(.looks_like_bare_name(exprs))) return(NULL)
+    if (!all(.looks_like_bare_name(exprs))) {
+        return(NULL)
+    }
 
     infos <- lapply(exprs, .describe_single_expr)
-    if (any(vapply(infos, is.null, logical(1)))) return(NULL)
+    if (any(vapply(infos, is.null, logical(1)))) {
+        return(NULL)
+    }
 
     # iterator is optional when every expression is a bare track with a
     # known bin size — default to the common bin size (all must match).
@@ -74,22 +100,36 @@
         eshifts <- vapply(infos, `[[`, integer(1), "eshift")
         sshifts <- vapply(infos, `[[`, integer(1), "sshift")
         is_bare <- sshifts == 0L
-        if (!all(is_bare)) return(NULL)
-        if (length(unique(eshifts)) != 1) return(NULL)
+        if (!all(is_bare)) {
+            return(NULL)
+        }
+        if (length(unique(eshifts)) != 1) {
+            return(NULL)
+        }
         it_int <- eshifts[1]
     } else {
-        if (!is.numeric(iterator) || length(iterator) != 1) return(NULL)
+        if (!is.numeric(iterator) || length(iterator) != 1) {
+            return(NULL)
+        }
         it_int <- as.integer(iterator)
-        if (is.na(it_int) || it_int <= 0) return(NULL)
+        if (is.na(it_int) || it_int <= 0) {
+            return(NULL)
+        }
     }
 
-    funcs  <- vapply(infos, `[[`, character(1), "func")
+    funcs <- vapply(infos, `[[`, character(1), "func")
     sshift <- vapply(infos, `[[`, integer(1), "sshift")
     eshift <- vapply(infos, `[[`, integer(1), "eshift")
 
-    if (length(unique(funcs)) != 1) return(NULL)
-    if (length(unique(sshift)) != 1) return(NULL)
-    if (length(unique(eshift)) != 1) return(NULL)
+    if (length(unique(funcs)) != 1) {
+        return(NULL)
+    }
+    if (length(unique(sshift)) != 1) {
+        return(NULL)
+    }
+    if (length(unique(eshift)) != 1) {
+        return(NULL)
+    }
 
     # Intervals: accept 1D data.frame. ALLGENOME is a list of
     # (1D_df, 2D_df); unwrap to the 1D part. Reject bigset handles
@@ -100,10 +140,15 @@
             is.data.frame(iv[[1]])) {
             iv <- iv[[1]]
         }
-        if (!is.data.frame(iv)) return(NULL)
-        if (!all(c("chrom", "start", "end") %in% colnames(iv)))
+        if (!is.data.frame(iv)) {
             return(NULL)
-        if ("chrom1" %in% colnames(iv)) return(NULL)
+        }
+        if (!all(c("chrom", "start", "end") %in% colnames(iv))) {
+            return(NULL)
+        }
+        if ("chrom1" %in% colnames(iv)) {
+            return(NULL)
+        }
     }
 
     list(
@@ -122,19 +167,29 @@
 # vtrack). Returns either NULL or a list with tracks/func/sshift/eshift/
 # iterator/ops/thresholds fields.
 .detect_screen_fast_path <- function(exprs, iterator, intervals, band) {
-    if (!is.character(exprs) || length(exprs) == 0) return(NULL)
-    if (!is.null(band)) return(NULL)
+    if (!is.character(exprs) || length(exprs) == 0) {
+        return(NULL)
+    }
+    if (!is.null(band)) {
+        return(NULL)
+    }
     # Parse "<lhs> <op> <const>" from each expr.
     rx <- "^\\s*(.+?)\\s*(<=|>=|==|<|>)\\s*([-+0-9.eE]+)\\s*$"
     m <- regmatches(exprs, regexec(rx, exprs))
-    if (any(vapply(m, function(x) length(x) != 4, logical(1)))) return(NULL)
+    if (any(vapply(m, function(x) length(x) != 4, logical(1)))) {
+        return(NULL)
+    }
     lhs <- vapply(m, `[`, character(1), 2)
     ops <- vapply(m, `[`, character(1), 3)
     thr <- suppressWarnings(as.numeric(vapply(m, `[`, character(1), 4)))
-    if (any(is.na(thr))) return(NULL)
+    if (any(is.na(thr))) {
+        return(NULL)
+    }
 
     infos <- lapply(lhs, .describe_single_expr)
-    if (any(vapply(infos, is.null, logical(1)))) return(NULL)
+    if (any(vapply(infos, is.null, logical(1)))) {
+        return(NULL)
+    }
 
     funcs <- vapply(infos, `[[`, character(1), "func")
     sshifts <- vapply(infos, `[[`, integer(1), "sshift")
@@ -142,18 +197,32 @@
 
     if (is.null(iterator)) {
         is_bare <- sshifts == 0L
-        if (!all(is_bare)) return(NULL)
-        if (length(unique(eshifts)) != 1) return(NULL)
+        if (!all(is_bare)) {
+            return(NULL)
+        }
+        if (length(unique(eshifts)) != 1) {
+            return(NULL)
+        }
         it_int <- eshifts[1]
     } else {
-        if (!is.numeric(iterator) || length(iterator) != 1) return(NULL)
+        if (!is.numeric(iterator) || length(iterator) != 1) {
+            return(NULL)
+        }
         it_int <- as.integer(iterator)
-        if (is.na(it_int) || it_int <= 0) return(NULL)
+        if (is.na(it_int) || it_int <= 0) {
+            return(NULL)
+        }
     }
 
-    if (length(unique(funcs)) != 1) return(NULL)
-    if (length(unique(sshifts)) != 1) return(NULL)
-    if (length(unique(eshifts)) != 1) return(NULL)
+    if (length(unique(funcs)) != 1) {
+        return(NULL)
+    }
+    if (length(unique(sshifts)) != 1) {
+        return(NULL)
+    }
+    if (length(unique(eshifts)) != 1) {
+        return(NULL)
+    }
 
     if (!is.null(intervals)) {
         iv <- intervals
@@ -161,9 +230,15 @@
             is.data.frame(iv[[1]])) {
             iv <- iv[[1]]
         }
-        if (!is.data.frame(iv)) return(NULL)
-        if (!all(c("chrom", "start", "end") %in% colnames(iv))) return(NULL)
-        if ("chrom1" %in% colnames(iv)) return(NULL)
+        if (!is.data.frame(iv)) {
+            return(NULL)
+        }
+        if (!all(c("chrom", "start", "end") %in% colnames(iv))) {
+            return(NULL)
+        }
+        if ("chrom1" %in% colnames(iv)) {
+            return(NULL)
+        }
     }
 
     list(
@@ -199,9 +274,13 @@
 # was taken (or why the fast path was declined). Suppressed via
 # options(misha.quiet_dispatch = TRUE).
 .fast_dispatch_msg <- function(fn, reason) {
-    if (isTRUE(getOption("misha.quiet_dispatch"))) return(invisible())
+    if (isTRUE(getOption("misha.quiet_dispatch"))) {
+        return(invisible())
+    }
     key <- paste0("misha.dispatch_msg.", fn)
-    if (isTRUE(getOption(key))) return(invisible())
+    if (isTRUE(getOption(key))) {
+        return(invisible())
+    }
     packageStartupMessage(sprintf("[%s] %s", fn, reason))
     args <- setNames(list(TRUE), key)
     do.call(options, args)

@@ -44,7 +44,8 @@ test_that("gquantiles multi-expr with complex expression errors cleanly", {
     # Complex expressions aren't fast-path eligible.
     expect_error(
         gquantiles(c("dense_track + 1", "subdir.dense_track2"), 0.9,
-                   fast = TRUE),
+            fast = TRUE
+        ),
         regexp = "fast-path not eligible"
     )
 })
@@ -57,7 +58,8 @@ test_that("gquantiles single-expr fast=TRUE matches legacy on small examples", {
     # Here we use the track's natural bin size (50) as the iterator to
     # align with the legacy path's implicit per-bin iteration.
     q_fast <- gquantiles("dense_track", c(0.1, 0.5, 0.9),
-                         iterator = 50L, fast = TRUE)
+        iterator = 50L, fast = TRUE
+    )
     q_slow <- gquantiles("dense_track", c(0.1, 0.5, 0.9), iterator = 50L)
     expect_equal(unname(q_fast), unname(q_slow), tolerance = 0.01)
 })
@@ -65,13 +67,17 @@ test_that("gquantiles single-expr fast=TRUE matches legacy on small examples", {
 test_that("gquantiles vtrack vector works for fast=TRUE", {
     gdb.init_examples()
     gvtrack.create(vtrack = "vt_q1", src = "dense_track", func = "lse")
-    gvtrack.create(vtrack = "vt_q2", src = "subdir.dense_track2",
-                   func = "lse")
+    gvtrack.create(
+        vtrack = "vt_q2", src = "subdir.dense_track2",
+        func = "lse"
+    )
     gvtrack.iterator("vt_q1", sshift = -50, eshift = 50)
     gvtrack.iterator("vt_q2", sshift = -50, eshift = 50)
     df <- gquantiles(c("vt_q1", "vt_q2"), 0.9,
-                     iterator = 20L, fast = TRUE)
-    gvtrack.rm("vt_q1"); gvtrack.rm("vt_q2")
+        iterator = 20L, fast = TRUE
+    )
+    gvtrack.rm("vt_q1")
+    gvtrack.rm("vt_q2")
     expect_s3_class(df, "data.frame")
     expect_equal(nrow(df), 2)
     expect_true(all(is.finite(df[["0.9"]])))
