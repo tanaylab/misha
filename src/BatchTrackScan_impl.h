@@ -1,5 +1,5 @@
-#ifndef BATCHTRACKSCAN_TPP_
-#define BATCHTRACKSCAN_TPP_
+#ifndef BATCHTRACKSCAN_IMPL_H_
+#define BATCHTRACKSCAN_IMPL_H_
 
 // Included from BatchTrackScan.h. Contains templated scan driver and
 // per-track inner loops. Reducer methods are called via task.state.*.
@@ -480,4 +480,4 @@ void run_batch_scan(
 
 }  // namespace batchscan
 
-#endif  // BATCHTRACKSCAN_TPP_
+#endif  // BATCHTRACKSCAN_IMPL_H_

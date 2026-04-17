@@ -70,7 +70,7 @@ struct BatchTrackScanTask {
 // messages. Caller iterates per_track_states[m] to build the R result;
 // error_messages[m] is non-empty if any chrom-task for track m failed.
 template <typename Reducer>
-struct BatchTrackScanResult;   // defined in BatchTrackScan.tpp
+struct BatchTrackScanResult;   // defined in BatchTrackScan_impl.h
 
 // Aggregator math helpers — safe to call from any thread (pure, no R).
 float aggregate_window(WindowAggFunc func, const float *bins, int64_t sbin,
@@ -89,7 +89,7 @@ float aggregate_precomputed_const(WindowAggFunc func, int n_bins);
 // main thread before calling; workers never touch R to resolve names.
 // After the call, out.per_track_states[m] is the fully-merged state for
 // track m, and out.error_messages[m] is non-empty if any of its chrom-tasks
-// failed. See run_batch_scan body in BatchTrackScan.tpp for memory
+// failed. See run_batch_scan body in BatchTrackScan_impl.h for memory
 // discipline notes.
 template <typename Reducer>
 void run_batch_scan(
@@ -103,6 +103,6 @@ void run_batch_scan(
 
 }  // namespace batchscan
 
-#include "BatchTrackScan.tpp"
+#include "BatchTrackScan_impl.h"
 
 #endif  // BATCHTRACKSCAN_H_

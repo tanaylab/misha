@@ -9,11 +9,15 @@ gquantiles(
   percentiles = 0.5,
   intervals = get("ALLGENOME", envir = .misha),
   iterator = NULL,
-  band = NULL
+  band = NULL,
+  fast = FALSE
 )
 }
 \arguments{
-\item{expr}{track expression}
+\item{expr}{track expression. Character vectors of length > 1 are
+supported when \code{fast = TRUE} and every element resolves to a
+simple track or vtrack shape; the return value is then a data.frame
+with a \code{track} column and one column per percentile.}
 
 \item{percentiles}{an array of percentiles of quantiles in [0, 1] range}
 
@@ -23,9 +27,17 @@ gquantiles(
 implicitly based on track expression.}
 
 \item{band}{track expression band. If 'NULL' no band is used.}
+
+\item{fast}{if \code{TRUE} and \code{expr} is a bare track or vtrack name
+(or a character vector of such names), a direct-mmap C++ fast path is
+used. Default \code{FALSE} to preserve numeric back-compat with
+single-expression calls (see Details). For multi-expression calls
+\code{fast = TRUE} is required.}
 }
 \value{
-An array that represent quantiles.
+For a single expression, a named numeric vector of quantile
+  values. For a character vector of expressions with \code{fast = TRUE},
+  a data.frame with columns \code{track} and one per percentile.
 }
 \description{
 Calculates the quantiles of a track expression for the given percentiles.
@@ -44,6 +56,33 @@ the number of available CPU cores, running the function on two different
 machines might give different results. Please switch off multitasking if you
 want to achieve identical results on any machine. For more information
 regarding multitasking please refer "User Manual".
+
+
+**Numerical differences between fast and slow paths.** The fast path
+(\code{fast = TRUE}) computes *exact* quantiles via \code{nth_element}
+on a top-K heap (or on a full value buffer in fallback mode),
+equivalent to \code{quantile(x, p, type = 1)}. The slow path
+(\code{fast = FALSE}, default) uses \code{StreamPercentiler}, which
+draws a reservoir sample when scanned data exceeds
+\code{options(gmax.data.size)} and can return approximate quantiles
+at extreme percentiles. Observed differences on motif-energy tracks at
+\code{p = 0.9999} are in the range 0.02–0.06. The fast path is the
+more correct answer (no subsampling); the slow path matches
+long-standing misha behavior. If you have workflows pinned to
+existing \code{gquantiles} outputs, keep \code{fast = FALSE};
+otherwise \code{fast = TRUE} is faster and exact. In a future
+release the default may flip to \code{fast = TRUE}; this will be
+announced in NEWS.
+
+**Memory and speed near p = 0.5.** The fast path's speedup for
+extreme quantiles comes from a top-K heap that keeps only the top
+(or bottom) \code{ceil((1 - max(p)) * N * 1.2)} values. For \code{p}
+near 0.5, \code{K} approaches \code{N/2}, exceeds the internal cap
+(\code{K_MAX = 10M}), and the fast path falls back to storing all
+values (same memory footprint as pre-refactor misha). A warning
+names the affected tracks. For median-like queries on whole-genome
+data the fast path provides no speedup from top-K but still benefits
+from direct-mmap scan and \code{std::thread} parallelism.
 }
 \examples{
 \dontshow{

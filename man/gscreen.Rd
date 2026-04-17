@@ -9,7 +9,8 @@ gscreen(
   intervals = NULL,
   iterator = NULL,
   band = NULL,
-  intervals.set.out = NULL
+  intervals.set.out = NULL,
+  fast = TRUE
 )
 }
 \arguments{
@@ -24,6 +25,13 @@ implicitly based on track expression.}
 
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputted}
+
+\item{fast}{if \code{TRUE} (default) and \code{expr} is a character vector
+of length > 1 whose elements are simple \code{"<track> <op> <const>"}
+comparisons (with \code{op} one of \code{<, <=, ==, >=, >}), a fast
+direct-mmap C++ multi-track path is used and a data.frame with columns
+\code{chrom, start, end, track} is returned. Single expressions always
+take the legacy path for bit-exact back-compat.}
 }
 \value{
 If 'intervals.set.out' is 'NULL' a set of intervals that match track

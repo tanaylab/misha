@@ -198,6 +198,12 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
 #' @param band track expression band. If 'NULL' no band is used.
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
+#' @param fast if \code{TRUE} (default) and \code{expr} is a character vector
+#'   of length > 1 whose elements are simple \code{"<track> <op> <const>"}
+#'   comparisons (with \code{op} one of \code{<, <=, ==, >=, >}), a fast
+#'   direct-mmap C++ multi-track path is used and a data.frame with columns
+#'   \code{chrom, start, end, track} is returned. Single expressions always
+#'   take the legacy path for bit-exact back-compat.
 #' @return If 'intervals.set.out' is 'NULL' a set of intervals that match track
 #' expression.
 #' @seealso \code{\link{gsegment}}, \code{\link{gextract}}
