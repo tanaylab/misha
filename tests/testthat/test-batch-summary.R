@@ -5,8 +5,10 @@ test_that("gsummary single-expr legacy path is unchanged when fast=FALSE", {
     r <- gsummary("dense_track", fast = FALSE)
     expect_type(r, "double")
     expect_named(r)
-    expect_true(all(c("Total intervals", "NaN intervals",
-                      "Min", "Max", "Sum", "Mean", "Std dev") %in% names(r)))
+    expect_true(all(c(
+        "Total intervals", "NaN intervals",
+        "Min", "Max", "Sum", "Mean", "Std dev"
+    ) %in% names(r)))
 })
 
 test_that("gsummary single-expr with fast=TRUE still returns legacy-shaped row", {
@@ -16,8 +18,10 @@ test_that("gsummary single-expr with fast=TRUE still returns legacy-shaped row",
     # output. Multi-track is where the fast path activates.
     r <- gsummary("dense_track", fast = TRUE)
     expect_type(r, "double")
-    expect_true(all(c("Total intervals", "NaN intervals",
-                      "Min", "Max", "Sum", "Mean", "Std dev") %in% names(r)))
+    expect_true(all(c(
+        "Total intervals", "NaN intervals",
+        "Min", "Max", "Sum", "Mean", "Std dev"
+    ) %in% names(r)))
 })
 
 test_that("gsummary with vector of tracks returns a data.frame", {
@@ -25,8 +29,10 @@ test_that("gsummary with vector of tracks returns a data.frame", {
     tracks <- c("dense_track", "subdir.dense_track2")
     df <- gsummary(tracks, iterator = 20L, fast = TRUE)
     expect_s3_class(df, "data.frame")
-    expect_equal(colnames(df),
-                 c("track", "n", "n_nan", "min", "max", "sum", "mean", "sd"))
+    expect_equal(
+        colnames(df),
+        c("track", "n", "n_nan", "min", "max", "sum", "mean", "sd")
+    )
     expect_equal(nrow(df), 2)
     expect_equal(df$track, tracks)
     expect_true(all(is.finite(df$mean)))
@@ -66,11 +72,14 @@ test_that("gsummary multi-track fast path matches per-track single calls", {
 test_that("gsummary fast path accepts intervals restriction", {
     gdb.init_examples()
     allg <- get("ALLGENOME", envir = .misha)
-    small <- data.frame(chrom = "1", start = 0, end = 2000,
-                        stringsAsFactors = FALSE)
+    small <- data.frame(
+        chrom = "1", start = 0, end = 2000,
+        stringsAsFactors = FALSE
+    )
     # Intervals as a data.frame must work.
     df <- gsummary(c("dense_track", "subdir.dense_track2"),
-                   iterator = 20L, intervals = small, fast = TRUE)
+        iterator = 20L, intervals = small, fast = TRUE
+    )
     expect_s3_class(df, "data.frame")
     expect_equal(nrow(df), 2)
     expect_true(all(is.finite(df$mean)))
