@@ -511,14 +511,18 @@ gsynth.train <- function(...,
         # All positions map to bin 1 in R (will be converted to 0-based for C++)
         flat_indices <- rep(1L, n_positions)
 
-        # Get chromosome info for processing
+        # Get chromosome info for processing. Use levels() (full chromkey order
+        # from gintervals_chrom_sizes) rather than chrom_sizes$chrom (only chroms
+        # present in the input subset) so chromids match misha's internal chromkey
+        # even when the input is missing chroms that sort earlier in the chromkey.
         chrom_sizes <- gintervals.chrom_sizes(intervals)
-        chrom_ids <- match(as.character(intervals$chrom), chrom_sizes$chrom) - 1L
+        chrom_key <- levels(chrom_sizes$chrom)
+        chrom_ids <- match(as.character(intervals$chrom), chrom_key) - 1L
         chrom_starts <- intervals$start
         chrom_ends <- intervals$end
 
         # Prepare iterator position data
-        iter_chroms <- match(as.character(iter_info$chrom), chrom_sizes$chrom) - 1L
+        iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
         iter_starts <- as.integer(iter_info$start)
     } else {
         # Multi-dimensional model: existing logic
@@ -562,14 +566,16 @@ gsynth.train <- function(...,
         # Compute flat bin indices using vectorized helper
         flat_indices <- .compute_flat_indices(per_dim_indices, dim_sizes)
 
-        # Get chromosome info for processing
+        # Get chromosome info for processing. See note above re: levels() vs
+        # chrom_sizes$chrom.
         chrom_sizes <- gintervals.chrom_sizes(intervals)
-        chrom_ids <- match(as.character(intervals$chrom), chrom_sizes$chrom) - 1L
+        chrom_key <- levels(chrom_sizes$chrom)
+        chrom_ids <- match(as.character(intervals$chrom), chrom_key) - 1L
         chrom_starts <- intervals$start
         chrom_ends <- intervals$end
 
         # Prepare iterator position data
-        iter_chroms <- match(as.character(track_data$chrom), chrom_sizes$chrom) - 1L
+        iter_chroms <- match(as.character(track_data$chrom), chrom_key) - 1L
         iter_starts <- as.integer(track_data$start)
     }
 
@@ -1243,9 +1249,12 @@ gsynth.sample <- function(model,
         # All positions map to bin 1 in R (will be converted to 0-based for C++)
         flat_indices <- rep(1L, n_positions)
 
-        # Get chromosome info
+        # Get chromosome info. Use levels() (full chromkey order) rather than
+        # chrom_sizes$chrom (only chroms present in the input) so chromids match
+        # misha's internal chromkey.
         chrom_sizes <- gintervals.chrom_sizes(intervals)
-        iter_chroms <- match(as.character(iter_info$chrom), chrom_sizes$chrom) - 1L
+        chrom_key <- levels(chrom_sizes$chrom)
+        iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
         iter_starts <- as.integer(iter_info$start)
     } else {
         # Multi-dimensional model: extract track values and compute bins
@@ -1322,9 +1331,10 @@ gsynth.sample <- function(model,
         # Compute flat bin indices using vectorized helper
         flat_indices <- .compute_flat_indices(per_dim_indices, dim_sizes)
 
-        # Get chromosome info
+        # Get chromosome info. See note above re: levels() vs chrom_sizes$chrom.
         chrom_sizes <- gintervals.chrom_sizes(intervals)
-        iter_chroms <- match(as.character(track_data$chrom), chrom_sizes$chrom) - 1L
+        chrom_key <- levels(chrom_sizes$chrom)
+        iter_chroms <- match(as.character(track_data$chrom), chrom_key) - 1L
         iter_starts <- as.integer(track_data$start)
     }
 
@@ -1613,9 +1623,12 @@ gsynth.random <- function(intervals = NULL,
     # All positions map to bin 0 (single bin)
     flat_indices <- rep(0L, n_positions)
 
-    # Get chromosome info
+    # Get chromosome info. Use levels() (full chromkey order) rather than
+    # chrom_sizes$chrom (only chroms present in the input) so chromids match
+    # misha's internal chromkey.
     chrom_sizes <- gintervals.chrom_sizes(intervals)
-    iter_chroms <- match(as.character(iter_info$chrom), chrom_sizes$chrom) - 1L
+    chrom_key <- levels(chrom_sizes$chrom)
+    iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
     iter_starts <- as.integer(iter_info$start)
 
     # Create CDF from probabilities: [P(A), P(A)+P(C), P(A)+P(C)+P(G), 1]
