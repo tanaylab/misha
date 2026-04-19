@@ -1,3 +1,7 @@
+# misha 5.6.15
+
+* Fixed `gsynth.train()`, `gsynth.sample()`, and `gsynth.random_seqs()` silently reading sequences from the wrong chromosomes when the input `intervals` omitted chromosomes that sort earlier in the chromkey. The R wrapper resolved chromids positionally against the input subset rather than misha's internal chromkey.
+
 # misha 5.6.14
 
 * Fixed indexed tracks re-mmapping the entire `track.dat` for every chromosome during iterator init and chromosome transitions. Made indexed tracks unusable on genomes with many contigs (e.g. Pan_troglodytes with 4344 contigs).
