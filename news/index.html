@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.14</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.15</span>
       </span>
     </div>
 
@@ -66,6 +66,10 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.15" id="misha-5615">misha 5.6.15<a class="anchor" aria-label="anchor" href="#misha-5615"></a></h2>
+<ul><li>Fixed <code><a href="../reference/gsynth.train.html">gsynth.train()</a></code>, <code><a href="../reference/gsynth.sample.html">gsynth.sample()</a></code>, and <code>gsynth.random_seqs()</code> silently reading sequences from the wrong chromosome when the <code>intervals</code> argument covered a subset of the genome that omitted one or more earlier chromosomes in the chromkey. For every chromosome in the input that came after a missing one, the C++ side opened the wrong chromosome’s sequence (shifted by the number of earlier missing chromosomes), producing invalid models and corrupted sampled genomes without any error. Calls that passed <code>intervals = gintervals.all()</code> or left <code>intervals</code> at its default (which is <code><a href="../reference/gintervals.all.html">gintervals.all()</a></code>) were not affected. Users who ran these functions on custom interval subsets should re-run them with this version.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.14" id="misha-5614">misha 5.6.14<a class="anchor" aria-label="anchor" href="#misha-5614"></a></h2>
 <ul><li>Fixed indexed tracks re-mmapping the entire <code>track.dat</code> for every chromosome during iterator init and chromosome transitions. Made indexed tracks unusable on genomes with many contigs (e.g. Pan_troglodytes with 4344 contigs).</li>
