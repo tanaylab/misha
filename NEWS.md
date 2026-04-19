@@ -1,6 +1,6 @@
 # misha 5.6.15
 
-* Fixed `gsynth.train()`, `gsynth.sample()`, and `gsynth.random_seqs()` silently reading sequences from the wrong chromosomes when the input `intervals` omitted chromosomes that sort earlier in the chromkey. The R wrapper resolved chromids positionally against the input subset rather than misha's internal chromkey.
+* Fixed `gsynth.train()`, `gsynth.sample()`, and `gsynth.random_seqs()` silently reading sequences from the wrong chromosome when the `intervals` argument covered a subset of the genome that omitted one or more earlier chromosomes in the chromkey. For every chromosome in the input that came after a missing one, the C++ side opened the wrong chromosome's sequence (shifted by the number of earlier missing chromosomes), producing invalid models and corrupted sampled genomes without any error. Calls that passed `intervals = gintervals.all()` or left `intervals` at its default (which is `gintervals.all()`) were not affected. Users who ran these functions on custom interval subsets should re-run them with this version.
 
 # misha 5.6.14
 
