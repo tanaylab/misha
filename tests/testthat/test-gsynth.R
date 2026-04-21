@@ -3313,6 +3313,83 @@ test_that("gsynth.sample(cell_merge) swaps source CDF with target and redirects 
     gvtrack.rm("cg_frac")
 })
 
+test_that("gsynth.sample FASTA output writes a samtools-compatible .fai alongside", {
+    gdb.init_examples()
+    model <- .cell_merge_train_2d()
+
+    out_fa <- tempfile(fileext = ".fa")
+    gsynth.sample(
+        model, out_fa,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 5000),
+        seed = 42
+    )
+
+    fai_path <- paste0(out_fa, ".fai")
+    expect_true(file.exists(fai_path))
+
+    fai <- read.delim(fai_path, header = FALSE, stringsAsFactors = FALSE)
+    colnames(fai) <- c("name", "length", "offset", "linebases", "linewidth")
+    expect_equal(nrow(fai), 1L)
+    expect_equal(fai$length[1], 5000L)
+    expect_equal(fai$linebases[1], 60L)
+    expect_equal(fai$linewidth[1], 61L)
+    # Single-record file: header at byte 0, first base at byte len(">name\n").
+    expect_equal(fai$offset[1], 1L + nchar(fai$name[1]) + 1L)
+
+    # Seek to offset and read linebases bytes; they must be ACGT.
+    con <- file(out_fa, "rb")
+    seek(con, where = fai$offset[1], origin = "start")
+    bytes <- rawToChar(readBin(con, what = "raw", n = fai$linebases[1]))
+    close(con)
+    expect_true(grepl("^[ACGT]+$", bytes))
+
+    unlink(c(out_fa, fai_path))
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
+
+test_that("gsynth.sample .fai is correct across multiple FASTA records", {
+    gdb.init_examples()
+    model <- .cell_merge_train_2d()
+
+    out_fa <- tempfile(fileext = ".fa")
+    intervals <- gintervals.all()
+    intervals <- intervals[1:min(3L, nrow(intervals)), , drop = FALSE]
+
+    gsynth.sample(
+        model, out_fa,
+        output_format = "fasta",
+        intervals = intervals,
+        seed = 42
+    )
+
+    fai <- read.delim(paste0(out_fa, ".fai"), header = FALSE, stringsAsFactors = FALSE)
+    colnames(fai) <- c("name", "length", "offset", "linebases", "linewidth")
+    expect_equal(nrow(fai), nrow(intervals))
+    expect_equal(fai$length, intervals$end - intervals$start)
+
+    # Cross-check: for each entry, seek + read exactly the expected number of
+    # bytes for the FASTA sequence block; strip '\n' and confirm length.
+    con <- file(out_fa, "rb")
+    for (i in seq_len(nrow(fai))) {
+        n_full <- fai$length[i] %/% fai$linebases[i]
+        tail <- fai$length[i] %% fai$linebases[i]
+        bytes_to_read <- n_full * fai$linewidth[i] +
+            (if (tail > 0) tail + 1 else 0)
+        seek(con, where = fai$offset[i], origin = "start")
+        chunk <- rawToChar(readBin(con, what = "raw", n = bytes_to_read))
+        expect_equal(nchar(gsub("\n", "", chunk, fixed = TRUE)), fai$length[i])
+    }
+    close(con)
+
+    unlink(c(out_fa, paste0(out_fa, ".fai")))
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
+
 test_that("gsynth.sample(cell_merge) warns on self-redirects and duplicates", {
     gdb.init_examples()
     model <- .cell_merge_train_2d()
