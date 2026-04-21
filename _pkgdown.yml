@@ -154,6 +154,7 @@ reference:
       - gsynth.load
       - gsynth.convert
       - gsynth.bin_map
+      - gsynth.cell_merge
       - print.gsynth.model
   - title: Genome editing functions
     desc: Replace intervals in a reference genome with donor sequences
