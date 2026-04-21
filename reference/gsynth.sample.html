@@ -19,7 +19,7 @@ genome within each stratification bin."><!-- mathjax --><script src="https://cdn
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.15</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.16</span>
       </span>
     </div>
 
@@ -65,7 +65,7 @@ genome within each stratification bin."><!-- mathjax --><script src="https://cdn
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Sample a synthetic genome from a trained Markov model</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.6.15/R/synth.R" class="external-link"><code>R/synth.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/synth.R" class="external-link"><code>R/synth.R</code></a></small>
     <div class="hidden name"><code>gsynth.sample.Rd</code></div>
     </div>
 
@@ -84,7 +84,8 @@ genome within each stratification bin.</p>
 <span>  seed <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  intervals <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  n_samples <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  bin_merge <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  bin_merge <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  cell_merge <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -147,6 +148,21 @@ When output_format = "vector", returns n_samples * n_intervals sequences.</p></d
 <span><span class="op">)</span></span>
 <span>       </span></code></pre></div></dd>
 
+
+<dt id="arg-cell-merge">cell_merge<a class="anchor" aria-label="anchor" href="#arg-cell-merge"></a></dt>
+<dd><p>Optional per-<em>joint-cell</em> redirect table, applied
+after <code>bin_merge</code> and after any sparse-bin uniform fallback.
+Each entry redirects one specific training cell to another specific
+training cell whose Cartesian position cannot be expressed as a
+per-axis merge. Format: a list where each element is
+<code>list(from = c(v1, v2, ...), to = c(v1, v2, ...))</code>, with one
+representative value per dimension; or a data frame with columns
+<code>from_1, from_2, ..., to_1, to_2, ...</code>. Internally resolved via
+<code><a href="gsynth.cell_merge.html">gsynth.cell_merge</a></code>; at sampling time each source cell's
+CDF is replaced with the target cell's CDF (a pointer-level copy
+inside <code>cdf_list</code> — no matrix duplication and no change to
+the C++ hot path).</p></dd>
+
 </dl></div>
     <div id="value">
     <h2>Value</h2>
@@ -156,7 +172,12 @@ When output_format = "vector", returns n_samples * n_intervals sequences.</p></d
     </div>
     <div id="details">
     <h2>Details</h2>
-    <p><strong>N bases during sampling:</strong> When the sampler needs to initialize the
+    <p><strong>FASTA index (.fai):</strong> When <code>output_format = "fasta"</code>, the
+function also writes a samtools-compatible <code>.fai</code> file alongside the
+FASTA (byte offsets are tracked during the write loop, so this is
+effectively free). The index is suitable for any downstream tool that
+expects a samtools-indexed reference.</p>
+<p><strong>N bases during sampling:</strong> When the sampler needs to initialize the
 first k-mer context and encounters regions with only N bases, it falls back
 to uniform random base selection until a valid context is established.
 Similarly, if a bin has no learned statistics (sparse bin with NA CDF),
@@ -218,7 +239,7 @@ Consider using <code>bin_merge</code> to redirect sparse bins to well-populated 
 <span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>16 sparse bins (with &lt; 1000 observations) will be used during sampling.</span>
 <span class="r-wrn co"><span class="r-pr">#&gt;</span> These bins will use uniform base distribution. Consider using bin_merge to merge them.</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Sampling synthetic genome...</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Synthetic genome written to: /tmp/RtmpXaZqNm/synthetic_genome.fa</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Synthetic genome written to: /tmp/Rtmpftdew7/synthetic_genome.fa</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
