@@ -2,6 +2,7 @@
 
 * `gsynth.sample()` with `output_format = "fasta"` now writes a samtools-compatible `.fai` alongside the FASTA (tracking byte offsets during the write loop, no extra pass over the file). Removes the need to call `samtools faidx` by hand on every sampled genome. Matches the convention already used by `ggenome.implant()`.
 * Added `cell_merge` argument to `gsynth.sample()` and a companion exported utility `gsynth.cell_merge()`. Unlike `bin_merge`, which redirects bins independently along each dimension, `cell_merge` redirects specific per-joint-cell CDFs to other per-joint-cell CDFs (e.g. `(GC=0.725, CG=0.05) -> (GC=0.70, CG=0.08)`). Redirects are applied after `bin_merge` and after sparse-bin uniform fallback via pointer-level list-element copies in `cdf_list`, so there is no matrix duplication and no change to the C++ sampling hot path. Intended for reassigning under-trained joint cells to a nearest-sufficient neighbor to avoid sequence leakage from tiny training sets.
+* Added `gsynth.forbid_kmer(model, pattern)` returning a new `gsynth.model` whose samples are guaranteed pattern-free downstream of the seeding window (e.g. `gsynth.forbid_kmer(model, "CG")` for a CpG-null background). Analytically equivalent to rejection sampling, implemented by zeroing the transitions that would produce the pattern and renormalizing per state-row; pattern length is capped at `model$k + 1`.
 
 ### Bug fixes
 

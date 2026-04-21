@@ -539,6 +539,182 @@ gsynth.cell_merge <- function(model, cell_merge, bin_merge = NULL) {
     out
 }
 
+#' Forbid a k-mer pattern in a trained gsynth model
+#'
+#' Returns a new \code{gsynth.model} whose samples are guaranteed not to contain
+#' \code{pattern} as a substring (subject to the seeding caveat below).
+#' Analytically equivalent to rejection sampling the output, implemented by
+#' zeroing every transition that would produce the pattern and renormalizing
+#' per state-row.
+#'
+#' Useful for building CpG-null, motif-null, or repeat-class-null synthetic
+#' backgrounds from a standard \code{gsynth.train()} model without retraining.
+#'
+#' @param model A \code{gsynth.model} from \code{\link{gsynth.train}}.
+#' @param pattern Character scalar, uppercase DNA (\code{ACGT} only), with
+#'        \code{nchar(pattern) <= model$k + 1}. Patterns longer than one
+#'        transition cannot be forbidden locally and error.
+#' @param check Logical. If \code{TRUE} (default), print a short summary of how
+#'        many transitions and how many bins were affected.
+#'
+#' @details
+#' \strong{Seeding caveat.} \code{\link{gsynth.sample}} initializes the first
+#' \code{k} bases of each sampling interval by uniform random draw, so those
+#' seed bases may themselves contain \code{pattern}. If the seed lands on a
+#' state k-mer that already contains \code{pattern} as a substring, every
+#' possible next base would extend that occurrence and thus be forbidden; such
+#' "trapped" states fall back to uniform sampling (not the forbid'd CDF) until
+#' the pattern slides out of the state window. The guarantee applies to the
+#' Markov-sampled bases downstream of the trap-escape window, not to the first
+#' few bases of the interval. Expected residual per interval is small but
+#' nonzero; for strict pattern-free output, pass \code{mask_copy} to
+#' \code{\link{gsynth.sample}} to seed from a known pattern-free reference, or
+#' scrub residuals after sampling.
+#'
+#' @return A new \code{gsynth.model} with modified \code{model_data$counts} and
+#'         \code{model_data$cdf}. The original model is not mutated.
+#'
+#' @examples
+#' \dontrun{
+#' # CpG-null synthetic background: train on the genome, then forbid CG.
+#' model <- gsynth.train(
+#'     list(expr = "gc_vt", breaks = seq(0, 1, 0.05)),
+#'     intervals = gintervals.all(),
+#'     iterator = 200
+#' )
+#' model_no_cg <- gsynth.forbid_kmer(model, "CG")
+#' seqs <- gsynth.sample(model_no_cg,
+#'     output_format = "vector",
+#'     intervals = some_regions, seed = 42
+#' )
+#'
+#' # Motif-null background: forbid a 4-mer TF consensus substring.
+#' model_no_ebox <- gsynth.forbid_kmer(model, "CACG")
+#' }
+#'
+#' @seealso \code{\link{gsynth.sample}}, \code{\link{gsynth.train}}
+#' @export
+gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
+    if (!inherits(model, "gsynth.model")) {
+        stop("model must be a gsynth.model object", call. = FALSE)
+    }
+    if (!is.character(pattern) || length(pattern) != 1L || is.na(pattern)) {
+        stop("pattern must be a single non-NA character string", call. = FALSE)
+    }
+    pattern <- toupper(pattern)
+    if (!grepl("^[ACGT]+$", pattern)) {
+        stop("pattern must be non-empty DNA over ACGT (got: '", pattern, "')",
+            call. = FALSE
+        )
+    }
+    L <- nchar(pattern)
+    k <- if (is.null(model$k)) 5L else as.integer(model$k)
+    if (L > k + 1L) {
+        stop(sprintf(
+            "pattern length %d exceeds model$k + 1 = %d; cannot forbid a pattern longer than a single transition",
+            L, k + 1L
+        ), call. = FALSE)
+    }
+
+    base_map <- c(A = 0L, C = 1L, G = 2L, T = 3L)
+    pat_vec <- unname(base_map[strsplit(pattern, "")[[1]]])
+    n_states <- 4L^k
+
+    # flag_mat[state + 1, next + 1] = TRUE iff the (k+1)-mer formed by
+    # concatenating the k-mer state with `next` contains `pattern` as any
+    # L-length substring. Layout matches the counts/cdf matrices (row=state,
+    # col=next).
+    flag_mat <- matrix(FALSE, nrow = n_states, ncol = 4L)
+    n_windows <- k + 2L - L # number of L-length windows inside a (k+1)-mer
+    for (state in 0L:(n_states - 1L)) {
+        state_bases <- integer(k)
+        tmp <- state
+        for (i in k:1L) {
+            state_bases[i] <- tmp %% 4L
+            tmp <- tmp %/% 4L
+        }
+        for (next_base in 0L:3L) {
+            bases <- c(state_bases, next_base)
+            hit <- FALSE
+            for (start in seq_len(n_windows)) {
+                if (all(bases[start:(start + L - 1L)] == pat_vec)) {
+                    hit <- TRUE
+                    break
+                }
+            }
+            flag_mat[state + 1L, next_base + 1L] <- hit
+        }
+    }
+
+    # Precompute per-state legal-next masks for empty-row fallback.
+    legal_next <- !flag_mat
+
+    # Any state whose k-mer already contains `pattern` as a substring has no
+    # legal next base (every extension still contains the pattern). Such a
+    # state is unreachable from a pattern-free Markov walk but IS reachable
+    # via the uniform-random seeding step in gsynth.sample (see seeding caveat
+    # above). Fall back to uniform over all 4 bases so the chain can eventually
+    # slide the pattern out of the k-mer state window.
+    trapped_state <- rowSums(legal_next) == 0L
+
+    out <- model
+    out_counts <- model$model_data$counts
+    out_cdf <- model$model_data$cdf
+
+    n_zeroed_cells <- 0L
+    n_affected_bins <- 0L
+    n_empty_rows <- 0L
+
+    for (b in seq_along(out_counts)) {
+        co <- out_counts[[b]]
+        if (is.null(co) || all(is.na(co))) next
+        zeroed_here <- sum(flag_mat & co != 0)
+        if (zeroed_here > 0L) {
+            n_affected_bins <- n_affected_bins + 1L
+            n_zeroed_cells <- n_zeroed_cells + zeroed_here
+        }
+        co[flag_mat] <- 0
+
+        rs <- rowSums(co)
+        probs <- co
+        nz <- rs > 0
+        probs[nz, ] <- co[nz, ] / rs[nz]
+        zr <- which(!nz)
+        if (length(zr) > 0L) {
+            n_empty_rows <- n_empty_rows + length(zr)
+            for (r in zr) {
+                if (trapped_state[r]) {
+                    # State already contains pattern (seeding residual). Use
+                    # uniform to let the chain escape the pattern window.
+                    probs[r, ] <- 0.25
+                } else {
+                    legal <- legal_next[r, ]
+                    probs[r, legal] <- 1 / sum(legal)
+                    probs[r, !legal] <- 0
+                }
+            }
+        }
+
+        new_cdf <- t(apply(probs, 1L, cumsum))
+        new_cdf[, 4L] <- 1
+
+        out_counts[[b]] <- co
+        out_cdf[[b]] <- new_cdf
+    }
+
+    out$model_data$counts <- out_counts
+    out$model_data$cdf <- out_cdf
+
+    if (isTRUE(check)) {
+        message(sprintf(
+            "gsynth.forbid_kmer('%s'): zeroed %s transitions across %d bins; %d empty rows used uniform fallback.",
+            pattern, format(n_zeroed_cells, big.mark = ","),
+            n_affected_bins, n_empty_rows
+        ))
+    }
+    out
+}
+
 #' Train a stratified Markov model from genome sequences
 #'
 #' Computes a Markov model of order \code{k} (default 5) optionally stratified by

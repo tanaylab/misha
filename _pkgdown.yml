@@ -155,6 +155,7 @@ reference:
       - gsynth.convert
       - gsynth.bin_map
       - gsynth.cell_merge
+      - gsynth.forbid_kmer
       - print.gsynth.model
   - title: Genome editing functions
     desc: Replace intervals in a reference genome with donor sequences
