@@ -105,7 +105,7 @@ extern "C" {
     extern SEXP C_gseq_pwm_edits(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_train(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gsynth_sample(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gsynth_replace_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer_dist(SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_ggenome_implant(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -210,7 +210,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gseq_pwm_edits", (DL_FUNC)&C_gseq_pwm_edits, 14},
     {"C_gseq_kmer", (DL_FUNC)&C_gseq_kmer, 9},
     {"C_gsynth_train", (DL_FUNC)&C_gsynth_train, 12},
-    {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 12},
+    {"C_gsynth_sample", (DL_FUNC)&C_gsynth_sample, 13},
     {"C_gsynth_replace_kmer", (DL_FUNC)&C_gsynth_replace_kmer, 6},
     {"C_gseq_kmer_dist", (DL_FUNC)&C_gseq_kmer_dist, 4},
     {"C_ggenome_implant", (DL_FUNC)&C_ggenome_implant, 7},

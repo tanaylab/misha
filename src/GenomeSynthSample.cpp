@@ -99,6 +99,8 @@ extern "C" {
  * @param _output_path Output file path (ignored if output_format = 2)
  * @param _output_format Integer: 0 = misha .seq, 1 = FASTA, 2 = return vector
  * @param _n_samples Integer: number of samples to generate per interval
+ * @param _k Integer: Markov order k
+ * @param _iter_size Integer: iterator bin size in bp (e.g., model$iterator)
  * @param _envir R environment
  *
  * @return R_NilValue on success for file output, or character vector for
@@ -108,7 +110,7 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                       SEXP _iter_starts, SEXP _iter_chroms, SEXP _intervals,
                       SEXP _mask_copy, SEXP _output_path,
                       SEXP _output_format, SEXP _n_samples, SEXP _k,
-                      SEXP _envir) {
+                      SEXP _iter_size, SEXP _envir) {
     try {
         struct RNGStateGuard {
             bool active = false;
@@ -172,16 +174,12 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         int* iter_starts = INTEGER(_iter_starts);
         int* iter_chroms = INTEGER(_iter_chroms);
 
-        // Compute iterator bin size
-        int iter_size = 0;
-        if (num_iter_positions > 0) {
-            for (int i = 1; i < num_iter_positions; ++i) {
-                if (iter_chroms[i] == iter_chroms[i - 1]) {
-                    iter_size = iter_starts[i] - iter_starts[i - 1];
-                    break;
-                }
-            }
-            if (iter_size <= 0) iter_size = 1;
+        // Iterator bin size (in bp). Passed explicitly from R (e.g. model$iterator)
+        // so unaligned intervals are handled correctly (was silently inferred
+        // from the first same-chrom diff — see misha#94).
+        int iter_size = Rf_asInteger(_iter_size);
+        if (iter_size <= 0) {
+            verror("iter_size must be a positive integer; got %d", iter_size);
         }
 
         const GenomeChromKey& chromkey = iu.get_chromkey();

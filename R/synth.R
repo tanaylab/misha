@@ -1705,6 +1705,7 @@ gsynth.sample <- function(model,
         output_format_int,
         n_samples,
         as.integer(k),
+        as.integer(model$iterator),
         .misha_env()
     )
 
@@ -1963,6 +1964,18 @@ gsynth.random <- function(intervals = NULL,
     # Create dummy breaks for single bin
     dummy_breaks <- c(0, 1)
 
+    # Derive iter_size for C_gsynth_sample. For gsynth.random all positions
+    # map to the single bin (index 0), so iter_size only controls whether a
+    # position inside an interval counts as bin-covered. For numeric iterators
+    # this is just the iterator itself; for track/intervals iterators the bin
+    # extent isn't fixed, so pass .Machine$integer.max to mark every position
+    # inside any interval as bin-covered (preserves pre-fix behavior).
+    iter_size_int <- if (is.numeric(.iterator) && length(.iterator) == 1 && .iterator > 0) {
+        as.integer(.iterator)
+    } else {
+        .Machine$integer.max
+    }
+
     result <- .gcall(
         "C_gsynth_sample",
         cdf_list,
@@ -1976,6 +1989,7 @@ gsynth.random <- function(intervals = NULL,
         output_format_int,
         n_samples,
         as.integer(random_k),
+        iter_size_int,
         .misha_env()
     )
 
