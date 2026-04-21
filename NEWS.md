@@ -1,3 +1,7 @@
+# misha 5.6.16
+
+* Added `cell_merge` argument to `gsynth.sample()` and a companion exported utility `gsynth.cell_merge()`. Unlike `bin_merge`, which redirects bins independently along each dimension, `cell_merge` redirects specific per-joint-cell CDFs to other per-joint-cell CDFs (e.g. `(GC=0.725, CG=0.05) -> (GC=0.70, CG=0.08)`). Redirects are applied after `bin_merge` and after sparse-bin uniform fallback via pointer-level list-element copies in `cdf_list`, so there is no matrix duplication and no change to the C++ sampling hot path. Intended for reassigning under-trained joint cells to a nearest-sufficient neighbor to avoid sequence leakage from tiny training sets.
+
 # misha 5.6.15
 
 * Fixed `gsynth.train()`, `gsynth.sample()`, and `gsynth.random_seqs()` silently reading sequences from the wrong chromosome when the `intervals` argument covered a subset of the genome that omitted one or more earlier chromosomes in the chromkey. For every chromosome in the input that came after a missing one, the C++ side opened the wrong chromosome's sequence (shifted by the number of earlier missing chromosomes), producing invalid models and corrupted sampled genomes without any error. Calls that passed `intervals = gintervals.all()` or left `intervals` at its default (which is `gintervals.all()`) were not affected. Users who ran these functions on custom interval subsets should re-run them with this version.

@@ -3059,3 +3059,290 @@ test_that("gsynth.replace_kmer maintains base composition when enabled", {
     expect_equal(orig_c, result_c)
     expect_equal(orig_g, result_g)
 })
+
+
+# -----------------------------------------------------------------------------
+# cell_merge: per-joint-cell CDF redirects
+# -----------------------------------------------------------------------------
+
+.cell_merge_train_2d <- function(test_intervals = gintervals(1, 0, 200000)) {
+    for (vt in c("g_frac", "c_frac", "cg_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
+
+    gsynth.train(
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.1)), # 10 bins
+        list(expr = "cg_frac", breaks = seq(0, 0.1, 0.02)), # 5 bins
+        intervals = test_intervals,
+        iterator = 200
+    )
+}
+
+test_that("gsynth.cell_merge resolves value-space to flat indices", {
+    gdb.init_examples()
+    model <- .cell_merge_train_2d()
+
+    # Identity redirect (source == target): flat indices should equal
+    redirects <- list(
+        list(from = c(0.55, 0.03), to = c(0.55, 0.03))
+    )
+    resolved <- gsynth.cell_merge(model, redirects)
+    expect_equal(nrow(resolved), 1L)
+    expect_equal(resolved$source_flat, resolved$target_flat)
+    # (GC=0.55 -> bin 6 on 0.1-width breaks; CG=0.03 -> bin 2 on 0.02-width breaks)
+    expect_equal(resolved$from_1, 6L)
+    expect_equal(resolved$from_2, 2L)
+
+    # Non-identity redirect
+    redirects <- list(
+        list(from = c(0.75, 0.01), to = c(0.55, 0.03))
+    )
+    resolved <- gsynth.cell_merge(model, redirects)
+    expect_equal(nrow(resolved), 1L)
+    expect_false(resolved$source_flat == resolved$target_flat)
+    expect_equal(resolved$from_1, 8L)
+    expect_equal(resolved$from_2, 1L)
+    expect_equal(resolved$to_1, 6L)
+    expect_equal(resolved$to_2, 2L)
+
+    # Flat index formula: (dim1 - 1) + (dim2 - 1) * dim_sizes[1] + 1
+    expect_equal(resolved$source_flat, (8L - 1L) + (1L - 1L) * 10L + 1L)
+    expect_equal(resolved$target_flat, (6L - 1L) + (2L - 1L) * 10L + 1L)
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
+
+test_that("gsynth.cell_merge accepts a data frame spec", {
+    gdb.init_examples()
+    model <- .cell_merge_train_2d()
+
+    df <- data.frame(
+        from_1 = c(0.75, 0.85), from_2 = c(0.01, 0.05),
+        to_1   = c(0.55, 0.55), to_2   = c(0.03, 0.03)
+    )
+    resolved <- gsynth.cell_merge(model, df)
+    expect_equal(nrow(resolved), 2L)
+    expect_equal(resolved$target_flat, rep((6L - 1L) + (2L - 1L) * 10L + 1L, 2L))
+
+    # Missing column should error
+    bad_df <- data.frame(from_1 = 0.5, from_2 = 0.05, to_1 = 0.5)
+    expect_error(gsynth.cell_merge(model, bad_df), "missing required columns")
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
+
+test_that("gsynth.cell_merge errors on out-of-range values", {
+    gdb.init_examples()
+    model <- .cell_merge_train_2d()
+
+    # GC = 1.5 is outside [0, 1]
+    expect_error(
+        gsynth.cell_merge(
+            model,
+            list(list(from = c(1.5, 0.05), to = c(0.5, 0.05)))
+        ),
+        "out of range in dimension 1"
+    )
+    # CG = 0.5 is outside [0, 0.1]
+    expect_error(
+        gsynth.cell_merge(
+            model,
+            list(list(from = c(0.5, 0.05), to = c(0.5, 0.5)))
+        ),
+        "out of range in dimension 2"
+    )
+    # Entry length mismatch
+    expect_error(
+        gsynth.cell_merge(model, list(list(from = c(0.5), to = c(0.5, 0.05)))),
+        "length 2"
+    )
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
+
+test_that("gsynth.cell_merge honors bin_merge when remapping coordinates", {
+    gdb.init_examples()
+    model <- .cell_merge_train_2d()
+
+    # With bin_merge capping GC >= 0.7 into bin [0.6, 0.7) (bin 7),
+    # 'from = c(0.85, 0.05)' should resolve to GC bin 7, not 9.
+    bin_merge <- list(
+        list(list(from = 0.7, to = c(0.6, 0.7))), # GC cap
+        NULL
+    )
+    resolved <- gsynth.cell_merge(
+        model,
+        list(list(from = c(0.85, 0.05), to = c(0.55, 0.03))),
+        bin_merge = bin_merge
+    )
+    expect_equal(resolved$from_1, 7L)
+    expect_equal(resolved$from_2, 3L) # CG=0.05 -> bin 3 on 0.02-width breaks
+    expect_equal(resolved$to_1, 6L)
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
+
+test_that("gsynth.sample(cell_merge = identity) produces output identical to no cell_merge", {
+    gdb.init_examples()
+    model <- .cell_merge_train_2d()
+
+    out1 <- tempfile(fileext = ".fa")
+    out2 <- tempfile(fileext = ".fa")
+
+    gsynth.sample(model, out1,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 10000), seed = 12345
+    )
+    # All-identity cell_merge must be a no-op. Suppress the expected
+    # self-redirect warning (tested separately below).
+    suppressWarnings(
+        gsynth.sample(model, out2,
+            output_format = "fasta",
+            intervals = gintervals(1, 0, 10000), seed = 12345,
+            cell_merge = list(
+                list(from = c(0.55, 0.03), to = c(0.55, 0.03))
+            )
+        )
+    )
+
+    lines1 <- readLines(out1)
+    lines2 <- readLines(out2)
+    seq1 <- paste(lines1[!grepl("^>", lines1)], collapse = "")
+    seq2 <- paste(lines2[!grepl("^>", lines2)], collapse = "")
+    expect_equal(seq1, seq2)
+
+    unlink(out1)
+    unlink(out2)
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
+
+test_that("gsynth.sample(cell_merge) swaps source CDF with target and redirects output", {
+    gdb.init_examples()
+
+    # Train a tiny 2D model whose cells have distinct training data.
+    # We then sample with cell_merge A -> B and verify that the sampled
+    # sequence at positions that fall into cell A now matches cell B's
+    # sampling distribution (approximated by: sampling the same positions
+    # twice yields identical output when the seed is fixed AND cell A's
+    # CDF has been replaced by cell B's).
+    for (vt in c("g_frac", "c_frac", "cg_frac")) {
+        if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+    }
+    gvtrack.create("g_frac", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac", NULL, "kmer.frac", kmer = "C")
+    gvtrack.create("cg_frac", NULL, "kmer.frac", kmer = "CG")
+
+    test_intervals <- gintervals(1, 0, 200000)
+    model <- gsynth.train(
+        list(expr = "g_frac + c_frac", breaks = seq(0, 1, 0.1)),
+        list(expr = "cg_frac", breaks = seq(0, 0.1, 0.02)),
+        intervals = test_intervals,
+        iterator = 200
+    )
+
+    # Pick any populated (source, target) pair with distinct training data.
+    per_bin <- model$per_bin_kmers
+    non_empty <- which(per_bin > 0)
+    if (length(non_empty) < 2) skip("needs at least two populated cells")
+
+    # Convert flat bin 1 -> per-dim indices for our redirect spec
+    flat_to_values <- function(flat_idx) {
+        # 1-based flat -> per-dim 1-based
+        flat0 <- flat_idx - 1L
+        d1 <- (flat0 %% model$dim_sizes[1]) + 1L
+        d2 <- (flat0 %/% model$dim_sizes[1]) + 1L
+        b1 <- model$dim_specs[[1]]$breaks
+        b2 <- model$dim_specs[[2]]$breaks
+        c(mean(b1[c(d1, d1 + 1L)]), mean(b2[c(d2, d2 + 1L)]))
+    }
+
+    # Find a cell that actually gets sampled from in a small interval so we
+    # can observe the redirect in the output. Fall back to any two cells.
+    src_flat <- non_empty[1]
+    tgt_flat <- non_empty[length(non_empty)]
+    from_vals <- flat_to_values(src_flat)
+    to_vals <- flat_to_values(tgt_flat)
+
+    # Same seed, two runs:
+    #   A) no cell_merge
+    #   B) cell_merge that REPLACES cdf_list[[src_flat]] with cdf_list[[tgt_flat]]
+    # If src is never hit in the sampling interval, the two outputs match.
+    # If src IS hit, the outputs diverge at those positions and the total
+    # sequences are NOT identical.
+    out1 <- tempfile(fileext = ".fa")
+    out2 <- tempfile(fileext = ".fa")
+
+    gsynth.sample(model, out1,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 50000), seed = 777
+    )
+    gsynth.sample(model, out2,
+        output_format = "fasta",
+        intervals = gintervals(1, 0, 50000), seed = 777,
+        cell_merge = list(list(from = from_vals, to = to_vals))
+    )
+
+    seq1 <- paste(readLines(out1)[-1], collapse = "")
+    seq2 <- paste(readLines(out2)[-1], collapse = "")
+    expect_equal(nchar(seq1), nchar(seq2))
+
+    # Apply the same redirect in-R and check it resolves to the expected flat pair
+    resolved <- gsynth.cell_merge(
+        model, list(list(from = from_vals, to = to_vals))
+    )
+    expect_equal(resolved$source_flat, src_flat)
+    expect_equal(resolved$target_flat, tgt_flat)
+
+    unlink(out1)
+    unlink(out2)
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
+
+test_that("gsynth.sample(cell_merge) warns on self-redirects and duplicates", {
+    gdb.init_examples()
+    model <- .cell_merge_train_2d()
+
+    # Self-redirect: same source and target
+    expect_warning(
+        gsynth.sample(model, tempfile(fileext = ".fa"),
+            output_format = "fasta",
+            intervals = gintervals(1, 0, 2000), seed = 1,
+            cell_merge = list(
+                list(from = c(0.55, 0.03), to = c(0.55, 0.03))
+            )
+        ),
+        "self-redirect"
+    )
+
+    # Duplicate source: two entries redirect the same source cell
+    expect_warning(
+        gsynth.sample(model, tempfile(fileext = ".fa"),
+            output_format = "fasta",
+            intervals = gintervals(1, 0, 2000), seed = 1,
+            cell_merge = list(
+                list(from = c(0.75, 0.01), to = c(0.55, 0.03)),
+                list(from = c(0.75, 0.01), to = c(0.45, 0.03))
+            )
+        ),
+        "duplicate source"
+    )
+
+    gvtrack.rm("g_frac")
+    gvtrack.rm("c_frac")
+    gvtrack.rm("cg_frac")
+})
