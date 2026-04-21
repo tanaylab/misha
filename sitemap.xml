@@ -107,7 +107,9 @@
 <url><loc>/reference/gseq.revcomp.html</loc></url>
 <url><loc>/reference/gsummary.html</loc></url>
 <url><loc>/reference/gsynth.bin_map.html</loc></url>
+<url><loc>/reference/gsynth.cell_merge.html</loc></url>
 <url><loc>/reference/gsynth.convert.html</loc></url>
+<url><loc>/reference/gsynth.forbid_kmer.html</loc></url>
 <url><loc>/reference/gsynth.load.html</loc></url>
 <url><loc>/reference/gsynth.random.html</loc></url>
 <url><loc>/reference/gsynth.replace_kmer.html</loc></url>

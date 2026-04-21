@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.15</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.16</span>
       </span>
     </div>
 
@@ -63,9 +63,20 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.6.15/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.16" id="misha-5616">misha 5.6.16<a class="anchor" aria-label="anchor" href="#misha-5616"></a></h2>
+<ul><li>
+<code><a href="../reference/gsynth.sample.html">gsynth.sample()</a></code> with <code>output_format = "fasta"</code> now writes a samtools-compatible <code>.fai</code> alongside the FASTA (tracking byte offsets during the write loop, no extra pass over the file). Removes the need to call <code>samtools faidx</code> by hand on every sampled genome. Matches the convention already used by <code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code>.</li>
+<li>Added <code>cell_merge</code> argument to <code><a href="../reference/gsynth.sample.html">gsynth.sample()</a></code> and a companion exported utility <code><a href="../reference/gsynth.cell_merge.html">gsynth.cell_merge()</a></code>. Unlike <code>bin_merge</code>, which redirects bins independently along each dimension, <code>cell_merge</code> redirects specific per-joint-cell CDFs to other per-joint-cell CDFs (e.g. <code>(GC=0.725, CG=0.05) -&gt; (GC=0.70, CG=0.08)</code>). Redirects are applied after <code>bin_merge</code> and after sparse-bin uniform fallback via pointer-level list-element copies in <code>cdf_list</code>, so there is no matrix duplication and no change to the C++ sampling hot path. Intended for reassigning under-trained joint cells to a nearest-sufficient neighbor to avoid sequence leakage from tiny training sets.</li>
+<li>Added <code>gsynth.forbid_kmer(model, pattern)</code> returning a new <code>gsynth.model</code> whose samples are guaranteed pattern-free downstream of the seeding window (e.g. <code>gsynth.forbid_kmer(model, "CG")</code> for a CpG-null background). Analytically equivalent to rejection sampling, implemented by zeroing the transitions that would produce the pattern and renormalizing per state-row; pattern length is capped at <code>model$k + 1</code>.</li>
+</ul><div class="section level4">
+<h4 id="bug-fixes-5-6-16">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-5-6-16"></a></h4>
+<ul><li>Fixed <code><a href="../reference/gsynth.sample.html">gsynth.sample()</a></code> silently falling back to uniform-random sampling for most positions inside any interval whose start was not aligned to <code>model$iterator</code> (<a href="https://github.com/tanaylab/misha/issues/94" class="external-link">#94</a>). The iterator bin size is now passed explicitly from R instead of inferred from the first same-chrom diff in <code>iter_starts</code> (which was the partial first-bin width, not the full bin width). Output k-mer statistics on unaligned intervals were wrong; composition was partially uniform.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.15" id="misha-5615">misha 5.6.15<a class="anchor" aria-label="anchor" href="#misha-5615"></a></h2>
 <ul><li>Fixed <code><a href="../reference/gsynth.train.html">gsynth.train()</a></code>, <code><a href="../reference/gsynth.sample.html">gsynth.sample()</a></code>, and <code>gsynth.random_seqs()</code> silently reading sequences from the wrong chromosome when the <code>intervals</code> argument covered a subset of the genome that omitted one or more earlier chromosomes in the chromkey. For every chromosome in the input that came after a missing one, the C++ side opened the wrong chromosome’s sequence (shifted by the number of earlier missing chromosomes), producing invalid models and corrupted sampled genomes without any error. Calls that passed <code>intervals = gintervals.all()</code> or left <code>intervals</code> at its default (which is <code><a href="../reference/gintervals.all.html">gintervals.all()</a></code>) were not affected. Users who ran these functions on custom interval subsets should re-run them with this version.</li>
