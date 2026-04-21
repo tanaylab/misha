@@ -29,16 +29,52 @@ using namespace std;
 using namespace rdb;
 
 /**
- * Helper: Write sequence to FASTA format.
+ * One entry of a FASTA index (.fai) file:
+ *   <name>\t<length>\t<offset>\t<linebases>\t<linewidth>
+ * where offset is the byte offset of the first sequence base (i.e., just
+ * after the header line) and linewidth = linebases + 1 for LF line endings.
+ */
+struct FaiEntry {
+    string    name;
+    long long length;
+    long long offset;
+    int       linebases;
+    int       linewidth;
+};
+
+/**
+ * Helper: Write sequence to FASTA format and record a FaiEntry describing
+ * the written record. The caller passes the byte offset BEFORE the header
+ * write (from fasta_ofs.tellp()); we use it to compute the first-base byte
+ * offset that samtools expects. line_width is the FASTA line wrap width.
  */
 static void write_fasta(ofstream& ofs, const string& chrom_name,
-                        const vector<char>& seq, int line_width = 60) {
+                        const vector<char>& seq, int line_width,
+                        long long header_byte_offset,
+                        FaiEntry* out_entry) {
     ofs << ">" << chrom_name << "\n";
     for (size_t i = 0; i < seq.size(); i += line_width) {
         size_t len = min(static_cast<size_t>(line_width), seq.size() - i);
         ofs.write(&seq[i], len);
         ofs << "\n";
     }
+    if (out_entry) {
+        // First-base offset = byte position of header + ">" + name + "\n"
+        out_entry->name      = chrom_name;
+        out_entry->length    = static_cast<long long>(seq.size());
+        out_entry->offset    = header_byte_offset + 1 +
+                               static_cast<long long>(chrom_name.size()) + 1;
+        out_entry->linebases = (out_entry->length > 0)
+                                   ? (int)min((long long)line_width, out_entry->length)
+                                   : 0;
+        out_entry->linewidth = (out_entry->length > 0) ? out_entry->linebases + 1 : 0;
+    }
+}
+
+// Overload kept for internal call sites that don't care about .fai.
+static inline void write_fasta(ofstream& ofs, const string& chrom_name,
+                                const vector<char>& seq, int line_width = 60) {
+    write_fasta(ofs, chrom_name, seq, line_width, 0, nullptr);
 }
 
 /**
@@ -219,6 +255,7 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         // Open output file (only if not vector mode)
         ofstream fasta_ofs;
         BufferedFile seq_bfile;
+        vector<FaiEntry> fai_entries;  // collected during FASTA write, flushed after
         if (output_format == 1) {
             // FASTA
             fasta_ofs.open(output_path);
@@ -380,7 +417,11 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                         if (n_samples > 1) {
                             header += "_sample" + to_string(sample_idx + 1);
                         }
-                        write_fasta(fasta_ofs, header, synth_seq);
+                        long long header_offset = static_cast<long long>(fasta_ofs.tellp());
+                        FaiEntry entry;
+                        write_fasta(fasta_ofs, header, synth_seq, 60,
+                                    header_offset, &entry);
+                        fai_entries.push_back(entry);
                     } else {
                         // .seq binary
                         write_seq(seq_bfile, synth_seq);
@@ -398,6 +439,19 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         // Close output files
         if (output_format == 1) {
             fasta_ofs.close();
+            // Write .fai alongside the FASTA so the output is a drop-in replacement
+            // for samtools-indexed references. Matches the format produced by
+            // `samtools faidx`: <name>\t<length>\t<offset>\t<linebases>\t<linewidth>.
+            string fai_path = string(output_path) + ".fai";
+            FILE* ffai = fopen(fai_path.c_str(), "w");
+            if (!ffai) {
+                verror("Failed to open .fai file for writing: %s", fai_path.c_str());
+            }
+            for (const auto& e : fai_entries) {
+                fprintf(ffai, "%s\t%lld\t%lld\t%d\t%d\n",
+                        e.name.c_str(), e.length, e.offset, e.linebases, e.linewidth);
+            }
+            fclose(ffai);
         } else if (output_format == 0) {
             seq_bfile.close();
         }
