@@ -1371,6 +1371,12 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 #'        the C++ hot path).
 #'
 #' @details
+#' \strong{FASTA index (.fai):} When \code{output_format = "fasta"}, the
+#' function also writes a samtools-compatible \code{.fai} file alongside the
+#' FASTA (byte offsets are tracked during the write loop, so this is
+#' effectively free). The index is suitable for any downstream tool that
+#' expects a samtools-indexed reference.
+#'
 #' \strong{N bases during sampling:} When the sampler needs to initialize the
 #' first k-mer context and encounters regions with only N bases, it falls back
 #' to uniform random base selection until a valid context is established.
