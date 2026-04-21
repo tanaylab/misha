@@ -55,5 +55,6 @@ bin_map2 <- gsynth.bin_map(
 
 }
 \seealso{
-\code{\link{gsynth.train}}
+\code{\link{gsynth.train}}, \code{\link{gsynth.cell_merge}},
+         \code{\link{gsynth.sample}}
 }

@@ -215,7 +215,8 @@
 #'     )
 #' )
 #'
-#' @seealso \code{\link{gsynth.train}}
+#' @seealso \code{\link{gsynth.train}}, \code{\link{gsynth.cell_merge}},
+#'          \code{\link{gsynth.sample}}
 #' @export
 gsynth.bin_map <- function(breaks, merge_ranges = NULL) {
     if (!is.numeric(breaks) || length(breaks) < 2) {
@@ -307,6 +308,235 @@ gsynth.bin_map <- function(breaks, merge_ranges = NULL) {
     result <- as.integer(bin_map_vec)
     names(result) <- as.character(seq_len(num_bins))
     result
+}
+
+#' Resolve a cell-level merge specification into flat bin indices
+#'
+#' Unlike \code{\link{gsynth.bin_map}}, which merges bins independently along
+#' each dimension, \code{gsynth.cell_merge} resolves per-\emph{joint-cell}
+#' redirects: each entry redirects one specific training cell (identified by
+#' its per-dimension values) to another specific training cell. This lets
+#' callers redirect arbitrary cells whose Cartesian position cannot be
+#' expressed via per-axis merges (e.g., \dQuote{cell (GC=0.725, CG=0.05) -->
+#' cell (GC=0.70, CG=0.08)}).
+#'
+#' This function is primarily a utility for inspecting / debugging what
+#' \code{\link{gsynth.sample}} will do when invoked with the \code{cell_merge}
+#' argument. It returns a data frame describing, for every entry, the resolved
+#' source and target cells in both per-dimension-bin and flat-bin space.
+#'
+#' @param model A \code{gsynth.model} object from \code{\link{gsynth.train}}.
+#' @param cell_merge A list of redirect specifications. Each entry is a named
+#'        list with:
+#'   \describe{
+#'     \item{from}{Numeric vector of length \code{n_dims}; one representative
+#'           value per dimension that identifies the \emph{source} cell.}
+#'     \item{to}{Numeric vector of length \code{n_dims}; one representative
+#'           value per dimension that identifies the \emph{target} cell.}
+#'   }
+#'   A single data frame with columns \code{from_1, from_2, ..., to_1, to_2,
+#'   ...} is also accepted and converted internally.
+#' @param bin_merge Optional sampling-time bin merge specification (same format
+#'        as in \code{\link{gsynth.sample}}). When supplied, source and target
+#'        per-dimension bin indices are remapped through the resulting
+#'        per-axis maps before being combined into flat indices, so that cell
+#'        values reference post-bin_merge cells.
+#'
+#' @return A data frame with one row per \code{cell_merge} entry and columns:
+#'   \itemize{
+#'     \item \code{from_<d>}, \code{to_<d>} for each dimension \code{d}:
+#'           1-based bin index after any bin_merge remapping.
+#'     \item \code{source_flat}, \code{target_flat}: 1-based flat bin index
+#'           into \code{model$model_data$cdf}.
+#'   }
+#'
+#' @examples
+#' \dontrun{
+#' # Resolve a redirect table before handing it to gsynth.sample:
+#' redirects <- list(
+#'     list(from = c(0.725, 0.05), to = c(0.70, 0.08)),
+#'     list(from = c(0.75, 0.06), to = c(0.70, 0.08))
+#' )
+#' resolved <- gsynth.cell_merge(model, redirects)
+#' print(resolved)
+#'
+#' gsynth.sample(model, "out.fa",
+#'     output_format = "fasta",
+#'     cell_merge = redirects
+#' )
+#' }
+#'
+#' @seealso \code{\link{gsynth.bin_map}}, \code{\link{gsynth.sample}}
+#' @export
+gsynth.cell_merge <- function(model, cell_merge, bin_merge = NULL) {
+    if (!inherits(model, "gsynth.model")) {
+        stop("model must be a gsynth.model object", call. = FALSE)
+    }
+    n_dims <- model$n_dims
+    if (is.null(n_dims) || n_dims < 1) {
+        stop("cell_merge requires a stratified model (n_dims >= 1)", call. = FALSE)
+    }
+
+    cell_merge <- .cell_merge_normalize(cell_merge, n_dims)
+    n_entries <- length(cell_merge)
+    if (n_entries == 0) {
+        return(.cell_merge_empty_result(n_dims))
+    }
+
+    sample_bin_maps <- .cell_merge_sample_bin_maps(model, bin_merge)
+    dim_sizes <- model$dim_sizes
+
+    source_dims <- matrix(NA_integer_, nrow = n_entries, ncol = n_dims)
+    target_dims <- matrix(NA_integer_, nrow = n_entries, ncol = n_dims)
+
+    for (d in seq_len(n_dims)) {
+        spec <- model$dim_specs[[d]]
+        breaks <- spec$breaks
+        num_bins <- spec$num_bins
+
+        from_vals <- vapply(cell_merge, function(e) as.numeric(e$from[d]), numeric(1))
+        to_vals <- vapply(cell_merge, function(e) as.numeric(e$to[d]), numeric(1))
+
+        from_bins <- findInterval(from_vals, breaks, rightmost.closed = TRUE)
+        to_bins <- findInterval(to_vals, breaks, rightmost.closed = TRUE)
+
+        bad_from <- from_bins < 1 | from_bins > num_bins | is.na(from_bins)
+        bad_to <- to_bins < 1 | to_bins > num_bins | is.na(to_bins)
+        if (any(bad_from)) {
+            stop(sprintf(
+                "cell_merge: 'from' values out of range in dimension %d (entries %s)",
+                d, paste(which(bad_from), collapse = ", ")
+            ), call. = FALSE)
+        }
+        if (any(bad_to)) {
+            stop(sprintf(
+                "cell_merge: 'to' values out of range in dimension %d (entries %s)",
+                d, paste(which(bad_to), collapse = ", ")
+            ), call. = FALSE)
+        }
+
+        # Remap through sample-time bin_map so cell coordinates reference
+        # post-bin_merge training cells (the cells whose CDFs actually exist).
+        source_dims[, d] <- sample_bin_maps[[d]][from_bins]
+        target_dims[, d] <- sample_bin_maps[[d]][to_bins]
+    }
+
+    source_flat <- .compute_flat_indices(source_dims, dim_sizes)
+    target_flat <- .compute_flat_indices(target_dims, dim_sizes)
+
+    resolved <- data.frame(
+        source_flat = as.integer(source_flat),
+        target_flat = as.integer(target_flat),
+        stringsAsFactors = FALSE
+    )
+    for (d in seq_len(n_dims)) {
+        resolved[[paste0("from_", d)]] <- as.integer(source_dims[, d])
+        resolved[[paste0("to_", d)]] <- as.integer(target_dims[, d])
+    }
+    attr(resolved, "n_dims") <- n_dims
+    resolved
+}
+
+# --- cell_merge helpers ------------------------------------------------------
+
+# Normalize user input into a list-of-lists with $from and $to numeric vectors
+# of length n_dims.
+.cell_merge_normalize <- function(cell_merge, n_dims) {
+    if (is.null(cell_merge) || (is.list(cell_merge) && length(cell_merge) == 0)) {
+        return(list())
+    }
+
+    if (is.data.frame(cell_merge)) {
+        from_cols <- paste0("from_", seq_len(n_dims))
+        to_cols <- paste0("to_", seq_len(n_dims))
+        missing_cols <- setdiff(c(from_cols, to_cols), colnames(cell_merge))
+        if (length(missing_cols) > 0) {
+            stop(sprintf(
+                "cell_merge data frame missing required columns: %s",
+                paste(missing_cols, collapse = ", ")
+            ), call. = FALSE)
+        }
+        cell_merge <- lapply(seq_len(nrow(cell_merge)), function(i) {
+            list(
+                from = as.numeric(unlist(cell_merge[i, from_cols])),
+                to   = as.numeric(unlist(cell_merge[i, to_cols]))
+            )
+        })
+    }
+
+    if (!is.list(cell_merge)) {
+        stop("cell_merge must be a list of entries or a data frame", call. = FALSE)
+    }
+
+    for (i in seq_along(cell_merge)) {
+        entry <- cell_merge[[i]]
+        if (!is.list(entry) || !all(c("from", "to") %in% names(entry))) {
+            stop(sprintf(
+                "cell_merge entry %d must be a list with 'from' and 'to' elements",
+                i
+            ), call. = FALSE)
+        }
+        if (length(entry$from) != n_dims || length(entry$to) != n_dims) {
+            stop(sprintf(
+                "cell_merge entry %d: 'from' and 'to' must each have length %d (n_dims)",
+                i, n_dims
+            ), call. = FALSE)
+        }
+    }
+    cell_merge
+}
+
+# Empty resolved result with the right columns (for zero-entry input).
+.cell_merge_empty_result <- function(n_dims) {
+    resolved <- data.frame(
+        source_flat = integer(0),
+        target_flat = integer(0),
+        stringsAsFactors = FALSE
+    )
+    for (d in seq_len(n_dims)) {
+        resolved[[paste0("from_", d)]] <- integer(0)
+        resolved[[paste0("to_", d)]] <- integer(0)
+    }
+    attr(resolved, "n_dims") <- n_dims
+    resolved
+}
+
+# Compute sample-time per-dim bin_maps from a (possibly NULL) bin_merge spec.
+# Falls back to training-time bin_map for dimensions not overridden. This
+# duplicates the logic inside gsynth.sample() so gsynth.cell_merge() can be
+# called standalone and still see the same remapping.
+.cell_merge_sample_bin_maps <- function(model, bin_merge) {
+    n_dims <- model$n_dims
+    out <- vector("list", n_dims)
+    if (!is.null(bin_merge)) {
+        if (!is.list(bin_merge) || length(bin_merge) != n_dims) {
+            stop(sprintf(
+                "bin_merge must be a list with %d elements (one per dimension)",
+                n_dims
+            ), call. = FALSE)
+        }
+    }
+    for (d in seq_len(n_dims)) {
+        spec <- model$dim_specs[[d]]
+        dim_merge <- if (is.null(bin_merge)) NULL else bin_merge[[d]]
+        if (is.null(dim_merge)) {
+            out[[d]] <- spec$bin_map
+        } else {
+            bin_map_result <- gsynth.bin_map(spec$breaks, dim_merge)
+            new_bin_map <- seq_len(spec$num_bins)
+            for (j in seq_along(bin_map_result)) {
+                src_bin <- as.integer(names(bin_map_result)[j])
+                tgt_bin <- as.integer(bin_map_result[j])
+                if (!is.na(src_bin) && !is.na(tgt_bin) &&
+                    src_bin >= 1 && src_bin <= spec$num_bins &&
+                    tgt_bin >= 1 && tgt_bin <= spec$num_bins) {
+                    new_bin_map[src_bin] <- tgt_bin
+                }
+            }
+            out[[d]] <- as.integer(new_bin_map)
+        }
+    }
+    out
 }
 
 #' Train a stratified Markov model from genome sequences
@@ -1127,6 +1357,18 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 #'   NULL
 #' )
 #'        }
+#' @param cell_merge Optional per-\emph{joint-cell} redirect table, applied
+#'        after \code{bin_merge} and after any sparse-bin uniform fallback.
+#'        Each entry redirects one specific training cell to another specific
+#'        training cell whose Cartesian position cannot be expressed as a
+#'        per-axis merge. Format: a list where each element is
+#'        \code{list(from = c(v1, v2, ...), to = c(v1, v2, ...))}, with one
+#'        representative value per dimension; or a data frame with columns
+#'        \code{from_1, from_2, ..., to_1, to_2, ...}. Internally resolved via
+#'        \code{\link{gsynth.cell_merge}}; at sampling time each source cell's
+#'        CDF is replaced with the target cell's CDF (a pointer-level copy
+#'        inside \code{cdf_list} --- no matrix duplication and no change to
+#'        the C++ hot path).
 #'
 #' @details
 #' \strong{N bases during sampling:} When the sampler needs to initialize the
@@ -1189,7 +1431,8 @@ gsynth.sample <- function(model,
                           seed = NULL,
                           intervals = NULL,
                           n_samples = 1,
-                          bin_merge = NULL) {
+                          bin_merge = NULL,
+                          cell_merge = NULL) {
     .gcheckroot()
 
     if (!inherits(model, "gsynth.model")) {
@@ -1370,6 +1613,57 @@ gsynth.sample <- function(model,
                 cdf_list[[bin_idx]] <- uniform_cdf
             }
         }
+    }
+
+    # Apply cell_merge: per-joint-cell CDF redirects. Runs AFTER bin_merge and
+    # the sparse-bin uniform fallback, so callers can layer the mechanisms
+    # (cell_merge wins). Each redirect is a pointer-level list-element copy;
+    # the underlying CDF matrix is shared, no duplication, and the C++ hot
+    # path sees identical SEXPs for source and target flat bins.
+    if (!is.null(cell_merge) && model$n_dims >= 1) {
+        resolved <- gsynth.cell_merge(model, cell_merge, bin_merge = bin_merge)
+
+        if (nrow(resolved) > 0) {
+            self <- resolved$source_flat == resolved$target_flat
+            if (any(self)) {
+                warning(sprintf(
+                    "cell_merge: %d %s a self-redirect and %s ignored.",
+                    sum(self),
+                    if (sum(self) == 1L) "entry is" else "entries are",
+                    if (sum(self) == 1L) "was" else "were"
+                ), call. = FALSE)
+                resolved <- resolved[!self, , drop = FALSE]
+            }
+        }
+
+        if (nrow(resolved) > 0) {
+            dup <- duplicated(resolved$source_flat)
+            if (any(dup)) {
+                warning(sprintf(
+                    "cell_merge: %d duplicate source cell(s); later entries override earlier.",
+                    sum(dup)
+                ), call. = FALSE)
+            }
+
+            if (!is.null(sparse_bins) && length(sparse_bins) > 0 &&
+                any(resolved$target_flat %in% sparse_bins)) {
+                warning("cell_merge: at least one target cell is itself a sparse bin (uniform fallback).",
+                    call. = FALSE
+                )
+            }
+
+            message(sprintf(
+                "cell_merge: redirecting %d source cell(s).",
+                nrow(resolved)
+            ))
+
+            for (i in seq_len(nrow(resolved))) {
+                cdf_list[[resolved$source_flat[i]]] <-
+                    cdf_list[[resolved$target_flat[i]]]
+            }
+        }
+    } else if (!is.null(cell_merge) && model$n_dims < 1) {
+        stop("cell_merge requires a stratified model (n_dims >= 1)", call. = FALSE)
     }
 
     # Output format: 0 = misha, 1 = fasta, 2 = vector

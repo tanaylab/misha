@@ -12,7 +12,8 @@ gsynth.sample(
   seed = NULL,
   intervals = NULL,
   n_samples = 1,
-  bin_merge = NULL
+  bin_merge = NULL,
+  cell_merge = NULL
 )
 }
 \arguments{
@@ -61,6 +62,19 @@ bin_merge = list(
   NULL
 )
        }}
+
+\item{cell_merge}{Optional per-\emph{joint-cell} redirect table, applied
+after \code{bin_merge} and after any sparse-bin uniform fallback.
+Each entry redirects one specific training cell to another specific
+training cell whose Cartesian position cannot be expressed as a
+per-axis merge. Format: a list where each element is
+\code{list(from = c(v1, v2, ...), to = c(v1, v2, ...))}, with one
+representative value per dimension; or a data frame with columns
+\code{from_1, from_2, ..., to_1, to_2, ...}. Internally resolved via
+\code{\link{gsynth.cell_merge}}; at sampling time each source cell's
+CDF is replaced with the target cell's CDF (a pointer-level copy
+inside \code{cdf_list} --- no matrix duplication and no change to
+the C++ hot path).}
 }
 \value{
 When output_format is "misha" or "fasta", returns invisible NULL and
