@@ -79,7 +79,7 @@ test_that("aligned and unaligned intervals produce matching forbidden-kmer stats
         cdf <- model$model_data$cdf[[b]]
         # Recover per-row probabilities from the cumulative.
         probs <- cbind(cdf[, 1], cdf[, 2] - cdf[, 1], cdf[, 3] - cdf[, 2], 1 - cdf[, 3])
-        probs[state_ends_in_C, 3L] <- 0  # C -> G blocked
+        probs[state_ends_in_C, 3L] <- 0 # C -> G blocked
         rs <- rowSums(probs)
         nz <- rs > 0
         probs[nz, ] <- probs[nz, ] / rs[nz]
@@ -91,10 +91,14 @@ test_that("aligned and unaligned intervals produce matching forbidden-kmer stats
     aligned <- gintervals(1, 0, 2000)
     unaligned <- gintervals(1, 64, 2064)
 
-    seq_a <- gsynth.sample(model, output_format = "vector",
-                           intervals = aligned, seed = 60427)[[1]]
-    seq_u <- gsynth.sample(model, output_format = "vector",
-                           intervals = unaligned, seed = 60427)[[1]]
+    seq_a <- gsynth.sample(model,
+        output_format = "vector",
+        intervals = aligned, seed = 60427
+    )[[1]]
+    seq_u <- gsynth.sample(model,
+        output_format = "vector",
+        intervals = unaligned, seed = 60427
+    )[[1]]
 
     # Ignore the first k=5 seeded bases in each (they are uniform random so
     # can form "CG" across the seeding boundary).
@@ -125,8 +129,10 @@ test_that("gsynth.sample errors clearly on non-positive model$iterator", {
     # fine, both signal a bad model loud and early.
     model$iterator <- 0L
     expect_error(
-        gsynth.sample(model, output_format = "vector",
-                      intervals = gintervals(1, 0, 200), seed = 1)
+        gsynth.sample(model,
+            output_format = "vector",
+            intervals = gintervals(1, 0, 200), seed = 1
+        )
     )
 
     gvtrack.rm("test_vt")
