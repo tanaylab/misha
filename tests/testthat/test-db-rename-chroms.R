@@ -174,3 +174,39 @@ test_that(".misha_rename_remap_factor is a no-op on NULL or empty", {
     result <- .misha_rename_remap_factor(empty_f, old = "chr1", new = "A")
     expect_equal(levels(result), c("A", "chr2"))
 })
+
+test_that(".misha_rename_remap_df remaps chrom column in 1D frames", {
+    df <- data.frame(
+        chrom = factor(c("chr1", "chr2"), levels = c("chr1", "chr2", "chr3")),
+        start = c(0L, 0L), end = c(100L, 200L),
+        stringsAsFactors = FALSE
+    )
+    out <- .misha_rename_remap_df(df, old = "chr1", new = "A")
+    expect_equal(as.character(out$chrom), c("A", "chr2"))
+    expect_equal(levels(out$chrom), c("A", "chr2", "chr3"))
+})
+
+test_that(".misha_rename_remap_df remaps chrom1/chrom2 in 2D frames", {
+    df <- data.frame(
+        chrom1 = factor(c("chr1"), levels = c("chr1", "chr2")),
+        start1 = 0L, end1 = 100L,
+        chrom2 = factor(c("chr2"), levels = c("chr1", "chr2")),
+        start2 = 0L, end2 = 100L,
+        stringsAsFactors = FALSE
+    )
+    out <- .misha_rename_remap_df(df,
+        old = c("chr1", "chr2"),
+        new = c("A",    "B"))
+    expect_equal(as.character(out$chrom1), "A")
+    expect_equal(as.character(out$chrom2), "B")
+})
+
+test_that(".misha_rename_remap_df tolerates 0-row frames (zerolines)", {
+    df <- data.frame(
+        chrom = factor(character(0), levels = c("chr1", "chr2")),
+        start = integer(0), end = integer(0),
+        stringsAsFactors = FALSE
+    )
+    out <- .misha_rename_remap_df(df, old = "chr1", new = "A")
+    expect_equal(levels(out$chrom), c("A", "chr2"))
+})

@@ -90,3 +90,13 @@
     levels(f) <- lv
     f
 }
+
+.misha_rename_remap_df <- function(df, old, new) {
+    if (!is.data.frame(df)) return(df)
+    for (col in c("chrom", "chrom1", "chrom2")) {
+        if (col %in% colnames(df)) {
+            df[[col]] <- .misha_rename_remap_factor(df[[col]], old = old, new = new)
+        }
+    }
+    df
+}
