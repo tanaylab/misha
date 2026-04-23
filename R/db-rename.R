@@ -287,3 +287,27 @@
 
     invisible(NULL)
 }
+
+# Apply a plan that may include swaps. If swaps are detected, split the
+# mapping into two stages — (old → temp) and (temp → new) — and re-walk
+# the DB once per stage (one extra enumeration is acceptable cost for
+# the safety of two-phase rename).
+.misha_rename_apply_with_swap <- function(groot, plan, mapping, verbose = FALSE) {
+    if (!.misha_rename_needs_two_phase(mapping)) {
+        .misha_rename_apply_plan(plan, mapping, verbose = verbose)
+        return(invisible(NULL))
+    }
+
+    tag <- sprintf("__misha_rename_%s_", format(Sys.time(), "%Y%m%d%H%M%S"))
+    tmp_names <- paste0(tag, mapping$old)
+
+    stage1 <- data.frame(old = mapping$old, new = tmp_names, stringsAsFactors = FALSE)
+    plan1 <- .misha_rename_build_plan(groot, stage1)
+    .misha_rename_apply_plan(plan1, stage1, verbose = verbose)
+
+    stage2 <- data.frame(old = tmp_names, new = mapping$new, stringsAsFactors = FALSE)
+    plan2 <- .misha_rename_build_plan(groot, stage2)
+    .misha_rename_apply_plan(plan2, stage2, verbose = verbose)
+
+    invisible(NULL)
+}
