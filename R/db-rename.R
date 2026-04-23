@@ -12,11 +12,12 @@
         old <- as.character(mapping$old)
         new <- as.character(mapping$new)
     } else if (is.character(mapping)) {
-        if (is.null(names(mapping)) || any(!nzchar(names(mapping)))) {
+        nm <- names(mapping)
+        if (is.null(nm) || any(is.na(nm)) || any(!nzchar(nm))) {
             stop("mapping must be a named character vector (names = old chroms)",
                  call. = FALSE)
         }
-        old <- names(mapping)
+        old <- nm
         new <- unname(mapping)
     } else {
         stop("mapping must be a data.frame(old, new) or a named character vector",
@@ -29,6 +30,12 @@
 .misha_rename_validate_mapping <- function(mapping, existing) {
     if (nrow(mapping) == 0L) {
         stop("mapping is empty", call. = FALSE)
+    }
+
+    bad <- is.na(mapping$old) | !nzchar(mapping$old) |
+           is.na(mapping$new) | !nzchar(mapping$new)
+    if (any(bad)) {
+        stop("mapping contains NA or empty chromosome names", call. = FALSE)
     }
 
     dup_old <- mapping$old[duplicated(mapping$old)]
