@@ -299,3 +299,21 @@ test_that(".misha_rename_rewrite_meta handles 2D stats", {
     expect_equal(as.character(m$stats$chrom2), "B")
     unlink(path, recursive = TRUE)
 })
+
+test_that(".misha_rename_rewrite_single_interv updates factor levels and values", {
+    path <- tempfile(fileext = ".interv")
+    df <- data.frame(
+        chrom = factor(c("chr1", "chr2"), levels = c("chr1", "chr2", "chr3")),
+        start = c(0L, 0L), end = c(100L, 200L),
+        stringsAsFactors = FALSE
+    )
+    f <- file(path, "wb"); serialize(df, f); close(f)
+
+    .misha_rename_rewrite_single_interv(path,
+        old = c("chr1", "chr2"), new = c("A", "B"))
+
+    f <- file(path, "rb"); out <- unserialize(f); close(f)
+    expect_equal(as.character(out$chrom), c("A", "B"))
+    expect_equal(levels(out$chrom), c("A", "B", "chr3"))
+    unlink(path)
+})
