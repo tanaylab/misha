@@ -214,3 +214,33 @@ test_that(".misha_rename_remap_df tolerates 0-row frames (zerolines)", {
 test_that(".misha_rename_remap_df is a no-op on NULL (zeroline path)", {
     expect_null(.misha_rename_remap_df(NULL, old = "chr1", new = "A"))
 })
+
+test_that(".misha_rename_atomic_rewrite replaces file atomically", {
+    target <- tempfile()
+    writeLines("old content", target)
+    .misha_rename_atomic_rewrite(target, function(tmp_path) {
+        writeLines("new content", tmp_path)
+    })
+    expect_equal(readLines(target), "new content")
+    unlink(target)
+})
+
+test_that(".misha_rename_atomic_rewrite leaves original intact on writer error", {
+    target <- tempfile()
+    writeLines("original", target)
+    expect_error(
+        .misha_rename_atomic_rewrite(target, function(tmp_path) {
+            writeLines("partial", tmp_path)
+            stop("boom")
+        }),
+        "boom"
+    )
+    expect_equal(readLines(target), "original")
+    tmps <- list.files(
+        dirname(target),
+        pattern = paste0(basename(target), "\\.tmp\\..*"),
+        full.names = TRUE
+    )
+    expect_length(tmps, 0L)
+    unlink(target)
+})
