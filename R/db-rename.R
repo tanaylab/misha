@@ -315,7 +315,7 @@
 }
 
 # Apply a plan that may include swaps. If swaps are detected, split the
-# mapping into two stages — (old → temp) and (temp → new) — and re-walk
+# mapping into two stages -- (old -> temp) and (temp -> new) -- and re-walk
 # the DB once per stage (one extra enumeration is acceptable cost for
 # the safety of two-phase rename).
 .misha_rename_apply_with_swap <- function(groot, plan, mapping, verbose = FALSE) {
@@ -465,7 +465,7 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
 
     if (dry_run) {
         cat(summary_str, "\n", sep = "")
-        cat("(dry run — no changes made)\n")
+        cat("(dry run -- no changes made)\n")
         return(invisible(NULL))
     }
 
@@ -505,7 +505,7 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
                 allgenome_name <- paste0("chr", cs_name)
                 transform <- function(x) sub("^chr", "", x)
             } else {
-                next # unknown row — leave as-is
+                next # unknown row -- leave as-is
             }
             mi <- match(allgenome_name, mapping$old)
             if (!is.na(mi)) {
@@ -529,7 +529,7 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
             unlink(breadcrumb)
         }
         if (was_loaded) {
-            # Reload whether we succeeded or failed — in-memory state is stale.
+            # Reload whether we succeeded or failed -- in-memory state is stale.
             suppressMessages(try(gdb.init(saved_groot), silent = TRUE))
         } else if (!is.null(prior_groot) &&
             normalizePath(prior_groot, mustWork = FALSE) !=
