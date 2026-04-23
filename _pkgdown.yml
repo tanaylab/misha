@@ -173,6 +173,7 @@ reference:
       - gdb.init
       - gdb.mark_cache_dirty
       - gdb.reload
+      - gdb.rename_chroms
       - gdb.set_readonly_attrs
       - gdb.convert_to_indexed
       - gdb.export_fasta
