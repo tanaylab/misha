@@ -115,12 +115,81 @@
     tmp_path <- paste0(target, ".tmp.", Sys.getpid(), ".", as.integer(Sys.time()))
     success <- FALSE
     on.exit(if (!success && file.exists(tmp_path)) unlink(tmp_path), add = TRUE)
-    writer(tmp_path)
+    # file(..., "wb") signals EACCES as a warning and returns an invalid
+    # connection; promote that to an error so the caller aborts cleanly instead
+    # of producing a half-written temp file.
+    withCallingHandlers(
+        writer(tmp_path),
+        warning = function(w) {
+            if (grepl("cannot open file|Permission denied", conditionMessage(w))) {
+                stop(conditionMessage(w), call. = FALSE)
+            }
+        }
+    )
     if (!file.rename(tmp_path, target)) {
         stop(sprintf("failed to rename %s to %s", tmp_path, target), call. = FALSE)
     }
     success <- TRUE
     invisible(target)
+}
+
+# Enumerate every directory whose writability the rename requires.
+# Rewrites go through a temp-file + rename pattern, so the CONTAINING directory
+# must allow file creation (not just modification of the existing file).
+.misha_rename_required_dirs <- function(groot, plan) {
+    dirs <- groot  # chrom_sizes.txt rewrite + .rename_interrupted breadcrumb
+    if (plan$is_indexed) {
+        dirs <- c(dirs, dirname(plan$genome_idx_path))
+    } else if (length(plan$seq_renames)) {
+        dirs <- c(dirs, unique(dirname(plan$seq_renames_new)))
+    }
+    dirs <- c(dirs, names(plan$track_dir_renames))
+    dirs <- c(dirs, names(plan$interv_dir_renames))
+    if (length(plan$meta_rewrites)) {
+        dirs <- c(dirs, unique(dirname(plan$meta_rewrites)))
+    }
+    if (length(plan$single_interv_rewrites)) {
+        dirs <- c(dirs, unique(dirname(plan$single_interv_rewrites)))
+    }
+    unique(dirs)
+}
+
+# Probe each directory by creating and removing a zero-byte temp file.
+# file.access() is unreliable on NFS/Lustre, so exercise the filesystem.
+.misha_rename_check_writable <- function(dirs) {
+    bad <- character(0)
+    for (d in dirs) {
+        probe <- tryCatch(tempfile(tmpdir = d), error = function(e) NULL)
+        if (is.null(probe)) {
+            bad <- c(bad, d)
+            next
+        }
+        ok <- tryCatch(
+            withCallingHandlers(
+                {
+                    fh <- file(probe, "wb")
+                    close(fh)
+                    unlink(probe)
+                    TRUE
+                },
+                warning = function(w) {
+                    if (grepl("cannot open file|Permission denied", conditionMessage(w))) {
+                        stop(conditionMessage(w), call. = FALSE)
+                    }
+                }
+            ),
+            error = function(e) FALSE
+        )
+        if (!isTRUE(ok)) bad <- c(bad, d)
+    }
+    if (length(bad)) {
+        stop(sprintf(
+            "gdb.rename_chroms requires write permission on every directory containing a file it rewrites. The following %s not writable:\n  %s",
+            if (length(bad) == 1) "directory is" else "directories are",
+            paste(bad, collapse = "\n  ")
+        ), call. = FALSE)
+    }
+    invisible(NULL)
 }
 
 .misha_rename_rewrite_meta <- function(meta_path, old, new) {
@@ -448,6 +517,11 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
     }
 
     plan <- .misha_rename_build_plan(groot, mapping)
+
+    # Pre-flight: fail fast if we can't write to any directory in the plan.
+    # Without this, a partway-through permission error leaves the DB in a
+    # half-renamed state.
+    .misha_rename_check_writable(.misha_rename_required_dirs(groot, plan))
 
     n_seq <- length(plan$seq_renames) + (if (plan$is_indexed) 1L else 0L)
     n_track <- sum(vapply(plan$track_dir_renames, nrow, integer(1)))
