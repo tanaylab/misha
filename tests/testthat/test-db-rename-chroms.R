@@ -373,7 +373,7 @@ test_that("C_gdb_rewrite_genome_idx updates names without changing offsets", {
             } else {
                 ""
             }
-            # offset/length/reserved are uint64 — read as raw and summarize.
+            # offset/length/reserved are uint64 -- read as raw and summarize.
             tail_raw <- readBin(con, "raw", n = 24L)
             entries[[i]] <- list(chromid = chromid, name = nm, tail = tail_raw)
         }
@@ -403,7 +403,7 @@ test_that("C_gdb_rewrite_genome_idx updates names without changing offsets", {
         lapply(after, `[[`, "tail")
     )
 
-    # Checksum was recomputed correctly — gdb.init() validates it.
+    # Checksum was recomputed correctly -- gdb.init() validates it.
     expect_silent(gdb.init(new_groot))
 
     unlink(db_dir, recursive = TRUE)
@@ -545,7 +545,7 @@ test_that("gdb.rename_chroms round-trips on per-chromosome DB", {
 
     gdb.rename_chroms(groot = groot, mapping = mapping, force = TRUE)
 
-    # chrom_sizes.txt must reflect the rename (form-preserving — may strip
+    # chrom_sizes.txt must reflect the rename (form-preserving -- may strip
     # the prefix if original form did).
     cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
         stringsAsFactors = FALSE, col.names = c("chrom", "size")
@@ -701,7 +701,7 @@ test_that("gdb.rename_chroms re-initializes a loaded DB on completion", {
     cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
         stringsAsFactors = FALSE, col.names = c("chrom", "size")
     )
-    # Form-preserving rewrite may strip "chr" prefix — accept either.
+    # Form-preserving rewrite may strip "chr" prefix -- accept either.
     expect_true("RELOADED" %in% cs2$chrom || sub("^chr", "", "RELOADED") %in% cs2$chrom)
 
     unlink(db_dir, recursive = TRUE)
@@ -774,4 +774,90 @@ test_that("gdb.rename_chroms preserves sequence and track data across rename", {
     }
 
     unlink(db_dir, recursive = TRUE)
+})
+
+
+test_that(".misha_rename_check_writable errors on read-only directory", {
+    skip_on_os("windows")
+    skip_if(Sys.getenv("USER") == "root" || Sys.getenv("USERNAME") == "root",
+        "permission checks are bypassed under root"
+    )
+
+    d <- tempfile("misha-ro-")
+    dir.create(d)
+    Sys.chmod(d, "0555")
+    on.exit(
+        {
+            Sys.chmod(d, "0755")
+            unlink(d, recursive = TRUE)
+        },
+        add = TRUE
+    )
+
+    expect_error(
+        .misha_rename_check_writable(d),
+        "No write permission|not writable"
+    )
+})
+
+test_that(".misha_rename_check_writable accepts writable directory", {
+    d <- tempfile("misha-rw-")
+    dir.create(d)
+    on.exit(unlink(d, recursive = TRUE), add = TRUE)
+    expect_silent(.misha_rename_check_writable(d))
+})
+
+test_that("gdb.rename_chroms bails pre-flight when a dir is read-only, leaving DB intact", {
+    skip_on_os("windows")
+    skip_if(Sys.getenv("USER") == "root" || Sys.getenv("USERNAME") == "root",
+        "permission checks are bypassed under root"
+    )
+
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-ro-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    gdb.init(groot)
+    chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+
+    # Find a directory holding a single-file .interv and make it read-only.
+    intervs <- list.files(file.path(groot, "tracks"),
+        pattern = "\\.interv$", recursive = TRUE, full.names = TRUE,
+        include.dirs = TRUE
+    )
+    single <- intervs[!(file.info(intervs)$isdir %in% TRUE)]
+    if (length(single) == 0) skip("no single-file .interv in example DB")
+    ro_dir <- dirname(single[1])
+    Sys.chmod(ro_dir, "0555")
+    on.exit(
+        {
+            Sys.chmod(ro_dir, "0755")
+            unlink(db_dir, recursive = TRUE)
+        },
+        add = TRUE
+    )
+
+    cs_before <- readLines(file.path(groot, "chrom_sizes.txt"))
+    idx_mtime_before <- file.info(file.path(groot, "seq", "genome.idx"))$mtime
+
+    expect_error(
+        gdb.rename_chroms(
+            groot = groot,
+            mapping = data.frame(old = chrom, new = "RENAMED", stringsAsFactors = FALSE),
+            force = TRUE
+        ),
+        "write permission"
+    )
+
+    # DB untouched: chrom_sizes.txt unchanged, genome.idx mtime unchanged,
+    # no breadcrumb.
+    expect_equal(readLines(file.path(groot, "chrom_sizes.txt")), cs_before)
+    idx_mtime_after <- file.info(file.path(groot, "seq", "genome.idx"))$mtime
+    if (!is.na(idx_mtime_before) && !is.na(idx_mtime_after)) {
+        expect_equal(idx_mtime_after, idx_mtime_before)
+    }
+    expect_false(file.exists(file.path(groot, ".rename_interrupted")))
 })
