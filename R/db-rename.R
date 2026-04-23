@@ -79,3 +79,14 @@
     if (nrow(active) == 0L) return(FALSE)
     any(active$new %in% active$old)
 }
+
+.misha_rename_remap_factor <- function(f, old, new) {
+    if (is.null(f)) return(NULL)
+    stopifnot(length(old) == length(new))
+    if (!is.factor(f)) f <- as.factor(f)
+    lv <- levels(f)
+    idx <- match(lv, old)
+    lv[!is.na(idx)] <- new[idx[!is.na(idx)]]
+    levels(f) <- lv
+    f
+}
