@@ -181,9 +181,15 @@
     if (!is_indexed) {
         from <- file.path(seq_dir, paste0(mapping$old, ".seq"))
         to <- file.path(seq_dir, paste0(mapping$new, ".seq"))
-        keep <- file.exists(from)
-        plan$seq_renames <- from[keep]
-        plan$seq_renames_new <- to[keep]
+        missing <- !file.exists(from)
+        if (any(missing)) {
+            stop(sprintf(
+                "Expected per-chromosome sequence file(s) not found: %s. The DB layout may be inconsistent.",
+                paste(basename(from[missing]), collapse = ", ")
+            ), call. = FALSE)
+        }
+        plan$seq_renames <- from
+        plan$seq_renames_new <- to
     }
 
     tracks_root <- file.path(groot, "tracks")
@@ -353,7 +359,7 @@
 #' via numeric IDs and are left untouched.
 #'
 #' \strong{Atomicity.} Individual file operations are atomic (temp file +
-#' fsync + rename). The operation as a whole is \emph{not} atomic across the
+#' rename). The operation as a whole is \emph{not} atomic across the
 #' database. If execution is interrupted, a \code{.rename_interrupted}
 #' breadcrumb is left at the database root to help recovery. Back up the
 #' database (or at least \code{chrom_sizes.txt}, \code{seq/genome.idx},
@@ -363,7 +369,10 @@
 #'   database is used.
 #' @param mapping a \code{data.frame} with columns \code{old} and \code{new},
 #'   or a named character vector (names are old chromosome names, values are
-#'   new names). Names must match those in \code{chrom_sizes.txt}.
+#'   new names). Old names must match the canonical chromosome names as
+#'   exposed by \code{ALLGENOME} (for per-chromosome DBs this is the
+#'   \code{chr}-prefixed form; \code{chrom_sizes.txt} may store a stripped
+#'   form, which is preserved on rewrite).
 #' @param force logical; if \code{TRUE}, skip the interactive confirmation.
 #' @param dry_run logical; if \code{TRUE}, print the plan and return without
 #'   modifying any file.
@@ -411,7 +420,21 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
         sep = "\t", stringsAsFactors = FALSE,
         col.names = c("chrom", "size")
     )
-    existing <- cs$chrom
+
+    # Ensure the target DB is loaded so we can use ALLGENOME for validation
+    # and name resolution. Capture prior state for restoration.
+    prior_groot <- NULL
+    if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+        pg <- get("GROOT", envir = .misha)
+        if (!is.null(pg) && nzchar(pg)) prior_groot <- pg
+    }
+
+    if (!was_loaded) {
+        suppressMessages(gdb.init(groot))
+    }
+
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    existing <- as.character(allgenome$chrom)
 
     mapping <- .misha_rename_normalize_mapping(mapping)
     .misha_rename_validate_mapping(mapping, existing = existing)
@@ -465,11 +488,32 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
     tryCatch({
         .misha_rename_apply_with_swap(groot, plan, mapping, verbose = verbose)
 
-        # Rewrite chrom_sizes.txt.
-        idx <- match(cs$chrom, mapping$old)
-        cs$chrom[!is.na(idx)] <- mapping$new[idx[!is.na(idx)]]
+        # Rewrite chrom_sizes.txt while preserving its "form" (stripped vs
+        # prefixed). mapping$old / mapping$new are in ALLGENOME canonical form.
+        # For each row, detect how cs$chrom relates to the ALLGENOME name and
+        # apply the same transformation to the new name.
+        cs_new <- cs
+        for (i in seq_len(nrow(cs))) {
+            cs_name <- cs$chrom[i]
+            # Find this row in ALLGENOME by matching strip/prefix variants.
+            if (cs_name %in% existing) {
+                # Same form (cs uses prefix, ALLGENOME uses prefix).
+                allgenome_name <- cs_name
+                transform <- identity
+            } else if (paste0("chr", cs_name) %in% existing) {
+                # cs strips "chr" prefix; ALLGENOME has it.
+                allgenome_name <- paste0("chr", cs_name)
+                transform <- function(x) sub("^chr", "", x)
+            } else {
+                next # unknown row — leave as-is
+            }
+            mi <- match(allgenome_name, mapping$old)
+            if (!is.na(mi)) {
+                cs_new$chrom[i] <- transform(mapping$new[mi])
+            }
+        }
         .misha_rename_atomic_rewrite(chrom_sizes_path, function(tmp_path) {
-            utils::write.table(cs, tmp_path,
+            utils::write.table(cs_new, tmp_path,
                 sep = "\t", quote = FALSE,
                 row.names = FALSE, col.names = FALSE
             )
@@ -485,7 +529,18 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
             unlink(breadcrumb)
         }
         if (was_loaded) {
+            # Reload whether we succeeded or failed — in-memory state is stale.
             suppressMessages(try(gdb.init(saved_groot), silent = TRUE))
+        } else if (!is.null(prior_groot) &&
+            normalizePath(prior_groot, mustWork = FALSE) !=
+                normalizePath(groot, mustWork = FALSE)) {
+            # We loaded the DB temporarily; restore whatever was active before.
+            suppressMessages(try(gdb.init(prior_groot), silent = TRUE))
+        } else {
+            # Nothing was loaded before (or prior was this same DB) and we
+            # loaded it during this call. Re-init so in-memory state reflects
+            # the rename.
+            suppressMessages(try(gdb.init(groot), silent = TRUE))
         }
     })
 

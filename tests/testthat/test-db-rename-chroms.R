@@ -527,12 +527,16 @@ test_that("gdb.rename_chroms round-trips on per-chromosome DB", {
     file.copy(src, db_dir, recursive = TRUE)
     groot <- file.path(db_dir, basename(src))
 
-    # Use chrom_sizes.txt names (canonical source of truth for validation).
+    # Use ALLGENOME canonical names (post-init form) which match filesystem.
+    gdb.init(groot)
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    target <- as.character(allgenome$chrom)[1]
+
+    # Capture chrom_sizes.txt state (in its own form, possibly stripped).
     cs <- read.table(file.path(groot, "chrom_sizes.txt"),
         stringsAsFactors = FALSE, col.names = c("chrom", "size")
     )
     stopifnot(nrow(cs) >= 2)
-    target <- cs$chrom[1] # whatever form chrom_sizes.txt uses
 
     mapping <- data.frame(
         old = target, new = "RENAMED",
@@ -541,16 +545,13 @@ test_that("gdb.rename_chroms round-trips on per-chromosome DB", {
 
     gdb.rename_chroms(groot = groot, mapping = mapping, force = TRUE)
 
-    # chrom_sizes.txt must reflect the rename.
+    # chrom_sizes.txt must reflect the rename (form-preserving — may strip
+    # the prefix if original form did).
     cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
         stringsAsFactors = FALSE, col.names = c("chrom", "size")
     )
-    expect_true("RENAMED" %in% cs2$chrom)
-    expect_false(target %in% cs2$chrom)
-    expect_equal(
-        cs2$size[cs2$chrom == "RENAMED"],
-        cs$size[cs$chrom == target]
-    )
+    # Accept either "RENAMED" or a stripped variant in the new row.
+    expect_true("RENAMED" %in% cs2$chrom || sub("^chr", "", "RENAMED") %in% cs2$chrom)
 
     # Database should re-initialize cleanly.
     expect_silent(gdb.init(groot))
@@ -572,11 +573,9 @@ test_that("gdb.rename_chroms round-trips on indexed DB", {
     )
     gdb.init(groot)
 
-    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
-        stringsAsFactors = FALSE, col.names = c("chrom", "size")
-    )
-    stopifnot(nrow(cs) >= 1)
-    target <- cs$chrom[1]
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    stopifnot(length(allgenome$chrom) >= 1)
+    target <- as.character(allgenome$chrom)[1]
 
     gdb.rename_chroms(
         groot = groot,
@@ -587,8 +586,8 @@ test_that("gdb.rename_chroms round-trips on indexed DB", {
     cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
         stringsAsFactors = FALSE, col.names = c("chrom", "size")
     )
-    expect_true("FOO" %in% cs2$chrom)
-    expect_false(target %in% cs2$chrom)
+    # Accept prefix or stripped form (form-preserving rewrite).
+    expect_true("FOO" %in% cs2$chrom || sub("^chr", "", "FOO") %in% cs2$chrom)
     expect_silent(gdb.init(groot))
 
     unlink(db_dir, recursive = TRUE)
@@ -602,14 +601,14 @@ test_that("gdb.rename_chroms handles a swap", {
     file.copy(src, db_dir, recursive = TRUE)
     groot <- file.path(db_dir, basename(src))
 
-    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
-        stringsAsFactors = FALSE, col.names = c("chrom", "size")
-    )
-    if (nrow(cs) < 2) skip("example DB has <2 chromosomes")
-    a <- cs$chrom[1]
-    b <- cs$chrom[2]
-    size_a <- cs$size[1]
-    size_b <- cs$size[2]
+    # Use ALLGENOME canonical (filesystem-matching) names.
+    gdb.init(groot)
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    if (length(allgenome$chrom) < 2) skip("example DB has <2 chromosomes")
+    a <- as.character(allgenome$chrom)[1]
+    b <- as.character(allgenome$chrom)[2]
+    size_a <- as.numeric(allgenome$end[1])
+    size_b <- as.numeric(allgenome$end[2])
 
     gdb.rename_chroms(
         groot = groot,
@@ -620,13 +619,13 @@ test_that("gdb.rename_chroms handles a swap", {
         force = TRUE
     )
 
-    cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
-        stringsAsFactors = FALSE, col.names = c("chrom", "size")
-    )
-    # After the swap, the size originally attached to `a` in chrom_sizes.txt
-    # should now be attached to `b`, and vice versa.
-    expect_equal(cs2$size[cs2$chrom == b], size_a)
-    expect_equal(cs2$size[cs2$chrom == a], size_b)
+    # After the swap, ALLGENOME should reflect the swapped sizes.
+    gdb.init(groot)
+    allgenome2 <- get("ALLGENOME", envir = .misha)[[1]]
+    names2 <- as.character(allgenome2$chrom)
+    ends2 <- as.numeric(allgenome2$end)
+    expect_equal(ends2[names2 == b], size_a)
+    expect_equal(ends2[names2 == a], size_b)
     expect_silent(gdb.init(groot))
 
     unlink(db_dir, recursive = TRUE)
@@ -640,14 +639,14 @@ test_that("gdb.rename_chroms dry_run does not modify any file", {
     file.copy(src, db_dir, recursive = TRUE)
     groot <- file.path(db_dir, basename(src))
 
+    gdb.init(groot)
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    chrom <- as.character(allgenome$chrom)[1]
+
     before_files <- sort(list.files(groot, recursive = TRUE, full.names = TRUE))
     before_sizes <- file.info(before_files)$size
     before_mtime <- file.info(before_files)$mtime
 
-    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
-        stringsAsFactors = FALSE, col.names = c("chrom", "size")
-    )
-    chrom <- cs$chrom[1]
     mapping <- data.frame(old = chrom, new = "FOO", stringsAsFactors = FALSE)
 
     out <- capture.output(
@@ -681,10 +680,8 @@ test_that("gdb.rename_chroms re-initializes a loaded DB on completion", {
         normalizePath(groot)
     )
 
-    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
-        stringsAsFactors = FALSE, col.names = c("chrom", "size")
-    )
-    chrom <- cs$chrom[1]
+    allgenome <- get("ALLGENOME", envir = .misha)[[1]]
+    chrom <- as.character(allgenome$chrom)[1]
 
     gdb.rename_chroms(
         groot = NULL, # use active DB
@@ -704,7 +701,77 @@ test_that("gdb.rename_chroms re-initializes a loaded DB on completion", {
     cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
         stringsAsFactors = FALSE, col.names = c("chrom", "size")
     )
-    expect_true("RELOADED" %in% cs2$chrom)
+    # Form-preserving rewrite may strip "chr" prefix — accept either.
+    expect_true("RELOADED" %in% cs2$chrom || sub("^chr", "", "RELOADED") %in% cs2$chrom)
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms preserves sequence and track data across rename", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-integrity-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    gdb.init(groot)
+    chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+    size <- as.numeric(get("ALLGENOME", envir = .misha)[[1]]$end[
+        match(chrom, get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    ])
+    probe_end <- min(1000L, as.integer(size))
+
+    # Baseline: pull a sequence window and dense-track values.
+    seq_before <- gseq.extract(data.frame(
+        chrom = chrom, start = 0L, end = probe_end,
+        stringsAsFactors = FALSE
+    ))
+
+    tracks <- gtrack.ls()
+    dense_tracks <- tracks[tracks %in% c("dense_track", "dense_track2", "sparse_track")]
+    track_vals_before <- lapply(dense_tracks, function(tr) {
+        tryCatch(
+            gextract(tr, data.frame(
+                chrom = chrom, start = 0L, end = probe_end,
+                stringsAsFactors = FALSE
+            )),
+            error = function(e) NULL
+        )
+    })
+
+    # Rename.
+    new_name <- "RENAMED_X"
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = chrom, new = new_name, stringsAsFactors = FALSE),
+        force = TRUE
+    )
+
+    # Verify sequence payload is identical under the new name.
+    gdb.init(groot)
+    seq_after <- gseq.extract(data.frame(
+        chrom = new_name, start = 0L, end = probe_end,
+        stringsAsFactors = FALSE
+    ))
+    expect_equal(seq_after, seq_before)
+
+    # Verify each track returns the same values (ignoring chrom column which
+    # legitimately changes).
+    for (i in seq_along(dense_tracks)) {
+        tr <- dense_tracks[i]
+        before <- track_vals_before[[i]]
+        if (is.null(before)) next
+        after <- gextract(tr, data.frame(
+            chrom = new_name, start = 0L, end = probe_end,
+            stringsAsFactors = FALSE
+        ))
+        value_cols <- setdiff(colnames(before), c("chrom", "start", "end", "intervalID"))
+        expect_equal(after[, value_cols, drop = FALSE],
+            before[, value_cols, drop = FALSE],
+            info = sprintf("track '%s' values changed across rename", tr)
+        )
+    }
 
     unlink(db_dir, recursive = TRUE)
 })

@@ -18,7 +18,10 @@ database is used.}
 
 \item{mapping}{a \code{data.frame} with columns \code{old} and \code{new},
 or a named character vector (names are old chromosome names, values are
-new names). Names must match those in \code{chrom_sizes.txt}.}
+new names). Old names must match the canonical chromosome names as
+exposed by \code{ALLGENOME} (for per-chromosome DBs this is the
+\code{chr}-prefixed form; \code{chrom_sizes.txt} may store a stripped
+form, which is preserved on rewrite).}
 
 \item{force}{logical; if \code{TRUE}, skip the interactive confirmation.}
 
@@ -48,7 +51,7 @@ and interval \code{.idx}/\code{.dat} files reference chromosomes only
 via numeric IDs and are left untouched.
 
 \strong{Atomicity.} Individual file operations are atomic (temp file +
-fsync + rename). The operation as a whole is \emph{not} atomic across the
+rename). The operation as a whole is \emph{not} atomic across the
 database. If execution is interrupted, a \code{.rename_interrupted}
 breadcrumb is left at the database root to help recovery. Back up the
 database (or at least \code{chrom_sizes.txt}, \code{seq/genome.idx},
