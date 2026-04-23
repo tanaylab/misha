@@ -459,3 +459,31 @@ test_that(".misha_rename_apply_plan renames per-chrom DB (no swap)", {
 
     unlink(db_dir, recursive = TRUE)
 })
+
+test_that("two-phase plan succeeds for swap", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-swap-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    # chrom_sizes.txt stores stripped names (e.g. "1") while seq/ uses the
+    # full names ("chr1.seq"); mapping must match the filesystem.
+    seq_files <- list.files(file.path(groot, "seq"), pattern = "\\.seq$")
+    chroms <- sub("\\.seq$", "", seq_files)
+    if (length(chroms) < 2) skip("example DB has <2 chromosomes")
+    a <- chroms[1]; b <- chroms[2]
+
+    mapping <- data.frame(old = c(a, b), new = c(b, a), stringsAsFactors = FALSE)
+
+    plan <- .misha_rename_build_plan(groot, mapping)
+    .misha_rename_apply_with_swap(groot, plan, mapping)
+
+    if (!plan$is_indexed) {
+        expect_true(file.exists(file.path(groot, "seq", paste0(b, ".seq"))))
+        expect_true(file.exists(file.path(groot, "seq", paste0(a, ".seq"))))
+    }
+
+    unlink(db_dir, recursive = TRUE)
+})
