@@ -129,3 +129,17 @@
         close(f)
     })
 }
+
+.misha_rename_rewrite_single_interv <- function(path, old, new) {
+    f <- file(path, "rb")
+    df <- unserialize(f)
+    close(f)
+
+    df <- .misha_rename_remap_df(df, old = old, new = new)
+
+    .misha_rename_atomic_rewrite(path, function(tmp_path) {
+        f <- file(tmp_path, "wb")
+        serialize(df, f)
+        close(f)
+    })
+}
