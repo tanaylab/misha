@@ -779,7 +779,8 @@ test_that("gdb.rename_chroms preserves sequence and track data across rename", {
 
 test_that(".misha_rename_check_writable errors on read-only directory", {
     skip_on_os("windows")
-    skip_if(Sys.getenv("USER") == "root" || Sys.getenv("USERNAME") == "root",
+    skip_if(
+        Sys.getenv("USER") == "root" || Sys.getenv("USERNAME") == "root",
         "permission checks are bypassed under root"
     )
 
@@ -809,7 +810,8 @@ test_that(".misha_rename_check_writable accepts writable directory", {
 
 test_that("gdb.rename_chroms bails pre-flight when a dir is read-only, leaving DB intact", {
     skip_on_os("windows")
-    skip_if(Sys.getenv("USER") == "root" || Sys.getenv("USERNAME") == "root",
+    skip_if(
+        Sys.getenv("USER") == "root" || Sys.getenv("USERNAME") == "root",
         "permission checks are bypassed under root"
     )
 
