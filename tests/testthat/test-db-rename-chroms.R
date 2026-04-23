@@ -487,3 +487,36 @@ test_that("two-phase plan succeeds for swap", {
 
     unlink(db_dir, recursive = TRUE)
 })
+
+test_that("gdb.rename_chroms round-trips on per-chromosome DB", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-e2e-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    # Use chrom_sizes.txt names (canonical source of truth for validation).
+    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
+                     stringsAsFactors = FALSE, col.names = c("chrom", "size"))
+    stopifnot(nrow(cs) >= 2)
+    target <- cs$chrom[1]  # whatever form chrom_sizes.txt uses
+
+    mapping <- data.frame(old = target, new = "RENAMED",
+                          stringsAsFactors = FALSE)
+
+    gdb.rename_chroms(groot = groot, mapping = mapping, force = TRUE)
+
+    # chrom_sizes.txt must reflect the rename.
+    cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
+                      stringsAsFactors = FALSE, col.names = c("chrom", "size"))
+    expect_true("RENAMED" %in% cs2$chrom)
+    expect_false(target %in% cs2$chrom)
+    expect_equal(cs2$size[cs2$chrom == "RENAMED"],
+                 cs$size[cs$chrom == target])
+
+    # Database should re-initialize cleanly.
+    expect_silent(gdb.init(groot))
+
+    unlink(db_dir, recursive = TRUE)
+})

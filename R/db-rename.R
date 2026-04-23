@@ -298,7 +298,8 @@
         return(invisible(NULL))
     }
 
-    tag <- sprintf("__misha_rename_%s_", format(Sys.time(), "%Y%m%d%H%M%S"))
+    tag <- sprintf("__misha_rename_%s_%d_",
+                   format(Sys.time(), "%Y%m%d%H%M%S"), Sys.getpid())
     tmp_names <- paste0(tag, mapping$old)
 
     stage1 <- data.frame(old = mapping$old, new = tmp_names, stringsAsFactors = FALSE)
@@ -308,6 +309,157 @@
     stage2 <- data.frame(old = tmp_names, new = mapping$new, stringsAsFactors = FALSE)
     plan2 <- .misha_rename_build_plan(groot, stage2)
     .misha_rename_apply_plan(plan2, stage2, verbose = verbose)
+
+    invisible(NULL)
+}
+
+#' Rename chromosomes in a misha database
+#'
+#' Performs an in-place rename of chromosomes across an existing misha
+#' database. Works on both indexed (\code{seq/genome.idx + genome.seq}) and
+#' per-chromosome (\code{seq/*.seq}) database formats.
+#'
+#' The rename is bijective. Partial mappings are allowed: chromosomes not
+#' mentioned in \code{mapping} keep their current names. Swaps and
+#' permutations are supported via an internal two-phase rename.
+#'
+#' The operation rewrites every file that references chromosome names:
+#' \code{chrom_sizes.txt}, per-chromosome sequence/track/interval files
+#' (per-chromosome DBs only), \code{seq/genome.idx} (indexed DBs only),
+#' bigset \code{.meta} files, and single-file \code{.interv} sets. Track
+#' and interval \code{.idx}/\code{.dat} files reference chromosomes only
+#' via numeric IDs and are left untouched.
+#'
+#' \strong{Atomicity.} Individual file operations are atomic (temp file +
+#' fsync + rename). The operation as a whole is \emph{not} atomic across the
+#' database. If execution is interrupted, a \code{.rename_interrupted}
+#' breadcrumb is left at the database root to help recovery. Back up the
+#' database (or at least \code{chrom_sizes.txt}, \code{seq/genome.idx},
+#' and all \code{.meta} files) before running this on critical databases.
+#'
+#' @param groot path to database root. If \code{NULL}, the currently active
+#'   database is used.
+#' @param mapping a \code{data.frame} with columns \code{old} and \code{new},
+#'   or a named character vector (names are old chromosome names, values are
+#'   new names). Names must match those in \code{chrom_sizes.txt}.
+#' @param force logical; if \code{TRUE}, skip the interactive confirmation.
+#' @param dry_run logical; if \code{TRUE}, print the plan and return without
+#'   modifying any file.
+#' @param verbose logical; if \code{TRUE}, print progress per phase.
+#'
+#' @return invisible \code{NULL}.
+#' @export
+gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
+                              force = FALSE, dry_run = FALSE, verbose = FALSE) {
+    if (is.null(mapping)) {
+        stop("Usage: gdb.rename_chroms(groot, mapping, force = FALSE, dry_run = FALSE, verbose = FALSE)",
+             call. = FALSE)
+    }
+
+    was_loaded <- FALSE
+    if (is.null(groot)) {
+        if (!exists("GROOT", envir = .misha) || is.null(get("GROOT", envir = .misha))) {
+            stop("No database is currently active. Provide `groot` or call gdb.init() first.",
+                 call. = FALSE)
+        }
+        groot <- get("GROOT", envir = .misha)
+        was_loaded <- TRUE
+    } else {
+        if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+            cur <- get("GROOT", envir = .misha)
+            if (!is.null(cur) && nzchar(cur) &&
+                normalizePath(cur, mustWork = FALSE) ==
+                normalizePath(groot, mustWork = FALSE)) {
+                was_loaded <- TRUE
+            }
+        }
+    }
+
+    if (!dir.exists(groot)) {
+        stop(sprintf("Database directory does not exist: %s", groot), call. = FALSE)
+    }
+
+    chrom_sizes_path <- file.path(groot, "chrom_sizes.txt")
+    if (!file.exists(chrom_sizes_path)) {
+        stop(sprintf("chrom_sizes.txt not found: %s", chrom_sizes_path), call. = FALSE)
+    }
+    cs <- utils::read.table(chrom_sizes_path, sep = "\t", stringsAsFactors = FALSE,
+                            col.names = c("chrom", "size"))
+    existing <- cs$chrom
+
+    mapping <- .misha_rename_normalize_mapping(mapping)
+    .misha_rename_validate_mapping(mapping, existing = existing)
+
+    breadcrumb <- file.path(groot, ".rename_interrupted")
+    if (file.exists(breadcrumb) && !force) {
+        stop(sprintf(
+            "Found %s from a previous interrupted rename. Inspect and remove it, or call with force = TRUE.",
+            breadcrumb
+        ), call. = FALSE)
+    }
+
+    plan <- .misha_rename_build_plan(groot, mapping)
+
+    n_seq   <- length(plan$seq_renames) + (if (plan$is_indexed) 1L else 0L)
+    n_track <- sum(vapply(plan$track_dir_renames,  nrow, integer(1)))
+    n_interv <- sum(vapply(plan$interv_dir_renames, nrow, integer(1)))
+    n_meta  <- length(plan$meta_rewrites)
+    n_single <- length(plan$single_interv_rewrites)
+
+    summary_str <- sprintf(
+        "Database: %s\nFormat: %s\nRenames: %d sequence(s), %d track files, %d interval files\nRewrites: %d .meta, %d single-file .interv\nChromosomes affected: %d",
+        groot,
+        if (plan$is_indexed) "indexed" else "per-chromosome",
+        n_seq, n_track, n_interv, n_meta, n_single,
+        nrow(mapping)
+    )
+
+    if (dry_run) {
+        cat(summary_str, "\n", sep = "")
+        cat("(dry run — no changes made)\n")
+        return(invisible(NULL))
+    }
+
+    if (interactive() && !force) {
+        cat(summary_str, "\n", sep = "")
+        resp <- readline("Proceed with rename? (yes/no): ")
+        if (!(tolower(resp) %in% c("y", "yes"))) {
+            message("Cancelled.")
+            return(invisible(NULL))
+        }
+    }
+
+    f <- file(breadcrumb, "wb")
+    serialize(list(mapping = mapping, timestamp = Sys.time()), f)
+    close(f)
+
+    saved_groot <- if (was_loaded) groot else NULL
+
+    success <- FALSE
+    tryCatch({
+        .misha_rename_apply_with_swap(groot, plan, mapping, verbose = verbose)
+
+        # Rewrite chrom_sizes.txt.
+        idx <- match(cs$chrom, mapping$old)
+        cs$chrom[!is.na(idx)] <- mapping$new[idx[!is.na(idx)]]
+        .misha_rename_atomic_rewrite(chrom_sizes_path, function(tmp_path) {
+            utils::write.table(cs, tmp_path, sep = "\t", quote = FALSE,
+                               row.names = FALSE, col.names = FALSE)
+        })
+
+        # Invalidate .db.cache so next gdb.init() rescans.
+        cache_path <- file.path(groot, ".db.cache")
+        if (file.exists(cache_path)) unlink(cache_path)
+
+        success <- TRUE
+    }, finally = {
+        if (success) {
+            unlink(breadcrumb)
+        }
+        if (was_loaded) {
+            suppressMessages(try(gdb.init(saved_groot), silent = TRUE))
+        }
+    })
 
     invisible(NULL)
 }
