@@ -439,3 +439,23 @@ test_that(".misha_rename_build_plan enumerates example DB correctly", {
 
     unlink(db_dir, recursive = TRUE)
 })
+
+test_that(".misha_rename_apply_plan renames per-chrom DB (no swap)", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-apply-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    mapping <- data.frame(old = "chr1", new = "chrFOO", stringsAsFactors = FALSE)
+    plan <- .misha_rename_build_plan(groot, mapping)
+    .misha_rename_apply_plan(plan, mapping)
+
+    if (!plan$is_indexed) {
+        expect_true(file.exists(file.path(groot, "seq", "chrFOO.seq")))
+        expect_false(file.exists(file.path(groot, "seq", "chr1.seq")))
+    }
+
+    unlink(db_dir, recursive = TRUE)
+})

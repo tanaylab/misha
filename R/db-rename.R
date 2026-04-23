@@ -242,3 +242,48 @@
 
     plan
 }
+
+# Execute a rename plan. Assumes validation has already been performed.
+# Does NOT handle two-phase (swap) cases; caller must stage swaps first.
+.misha_rename_apply_plan <- function(plan, mapping, verbose = FALSE) {
+    # Phase 1: sequence data
+    if (plan$is_indexed) {
+        if (verbose) message("Rewriting genome.idx...")
+        .gcall("C_gdb_rewrite_genome_idx",
+               plan$genome_idx_path, mapping$old, mapping$new, .misha_env())
+    } else if (length(plan$seq_renames)) {
+        if (verbose) message(sprintf("Renaming %d seq files...", length(plan$seq_renames)))
+        ok <- file.rename(plan$seq_renames, plan$seq_renames_new)
+        if (!all(ok)) stop("one or more seq file renames failed", call. = FALSE)
+    }
+
+    # Phase 2: per-chromosome track/interv files (only per-chrom DBs)
+    if (!plan$is_indexed) {
+        for (d in names(plan$track_dir_renames)) {
+            r <- plan$track_dir_renames[[d]]
+            if (verbose) message(sprintf("Track dir %s: renaming %d files", d, nrow(r)))
+            ok <- file.rename(r$old, r$new)
+            if (!all(ok)) stop(sprintf("rename failed in %s", d), call. = FALSE)
+        }
+        for (d in names(plan$interv_dir_renames)) {
+            r <- plan$interv_dir_renames[[d]]
+            if (verbose) message(sprintf("Interval dir %s: renaming %d files", d, nrow(r)))
+            ok <- file.rename(r$old, r$new)
+            if (!all(ok)) stop(sprintf("rename failed in %s", d), call. = FALSE)
+        }
+    }
+
+    # Phase 3: meta rewrites
+    for (m in plan$meta_rewrites) {
+        if (verbose) message(sprintf("Rewriting %s", m))
+        .misha_rename_rewrite_meta(m, old = mapping$old, new = mapping$new)
+    }
+
+    # Phase 4: single-file .interv rewrites
+    for (p in plan$single_interv_rewrites) {
+        if (verbose) message(sprintf("Rewriting %s", p))
+        .misha_rename_rewrite_single_interv(p, old = mapping$old, new = mapping$new)
+    }
+
+    invisible(NULL)
+}
