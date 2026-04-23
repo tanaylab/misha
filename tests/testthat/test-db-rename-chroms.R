@@ -153,3 +153,24 @@ test_that(".misha_rename_validate_mapping rejects empty-string new", {
         "NA or empty"
     )
 })
+
+test_that(".misha_rename_remap_factor replaces matching levels and values", {
+    f <- factor(c("chr1", "chr2", "chr1"), levels = c("chr1", "chr2", "chr3"))
+    result <- .misha_rename_remap_factor(f, old = c("chr1", "chr2"), new = c("A", "B"))
+    expect_equal(as.character(result), c("A", "B", "A"))
+    expect_equal(levels(result), c("A", "B", "chr3"))
+})
+
+test_that(".misha_rename_remap_factor leaves unmapped levels alone", {
+    f <- factor(c("chr1", "chr2"), levels = c("chr1", "chr2"))
+    result <- .misha_rename_remap_factor(f, old = "chr1", new = "A")
+    expect_equal(as.character(result), c("A", "chr2"))
+    expect_equal(levels(result), c("A", "chr2"))
+})
+
+test_that(".misha_rename_remap_factor is a no-op on NULL or empty", {
+    expect_null(.misha_rename_remap_factor(NULL, old = "a", new = "b"))
+    empty_f <- factor(character(0), levels = c("chr1", "chr2"))
+    result <- .misha_rename_remap_factor(empty_f, old = "chr1", new = "A")
+    expect_equal(levels(result), c("A", "chr2"))
+})
