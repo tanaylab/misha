@@ -210,3 +210,7 @@ test_that(".misha_rename_remap_df tolerates 0-row frames (zerolines)", {
     out <- .misha_rename_remap_df(df, old = "chr1", new = "A")
     expect_equal(levels(out$chrom), c("A", "chr2"))
 })
+
+test_that(".misha_rename_remap_df is a no-op on NULL (zeroline path)", {
+    expect_null(.misha_rename_remap_df(NULL, old = "chr1", new = "A"))
+})
