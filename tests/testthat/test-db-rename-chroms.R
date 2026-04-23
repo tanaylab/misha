@@ -863,3 +863,259 @@ test_that("gdb.rename_chroms bails pre-flight when a dir is read-only, leaving D
     }
     expect_false(file.exists(file.path(groot, ".rename_interrupted")))
 })
+
+test_that("gdb.rename_chroms preserves 2D rectangles-track values across rename", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-2d-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    gdb.init(groot)
+    chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+
+    before <- gextract("rects_track", gintervals.2d(chrom, chroms2 = chrom),
+        iterator = "rects_track"
+    )
+
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = chrom, new = "RENAMED_2D", stringsAsFactors = FALSE),
+        force = TRUE
+    )
+    gdb.init(groot)
+
+    after <- gextract("rects_track", gintervals.2d("RENAMED_2D", chroms2 = "RENAMED_2D"),
+        iterator = "rects_track"
+    )
+
+    value_cols <- setdiff(
+        colnames(before),
+        c("chrom1", "start1", "end1", "chrom2", "start2", "end2", "intervalID")
+    )
+    expect_equal(nrow(after), nrow(before))
+    if (length(value_cols) > 0 && nrow(before) > 0) {
+        expect_equal(after[, value_cols, drop = FALSE], before[, value_cols, drop = FALSE])
+    }
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms partial rename leaves unmapped chroms untouched", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-partial-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    # Convert to indexed so chrom_sizes.txt and ALLGENOME agree on the
+    # prefixed form -- avoids misha's per-chrom auto-prefix heuristic, which
+    # the example DB's mixed form triggers.
+    gdb.convert_to_indexed(groot,
+        force = TRUE, validate = FALSE,
+        convert_tracks = TRUE, convert_intervals = TRUE
+    )
+    gdb.init(groot)
+    chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    if (length(chroms) < 2) skip("example DB has <2 chromosomes")
+    keep <- chroms[2]
+    renamed <- chroms[1]
+
+    # Snapshot a sequence of the un-mapped chrom; it must be byte-identical
+    # afterwards.
+    keep_size <- get("ALLGENOME", envir = .misha)[[1]]$end[
+        match(keep, get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    ]
+    probe_end <- min(200L, as.integer(keep_size))
+    seq_keep_before <- gseq.extract(data.frame(
+        chrom = keep, start = 0L, end = probe_end, stringsAsFactors = FALSE
+    ))
+
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = renamed, new = "ONLY_ONE", stringsAsFactors = FALSE),
+        force = TRUE
+    )
+    gdb.init(groot)
+
+    new_chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    expect_true(keep %in% new_chroms)
+    expect_true("ONLY_ONE" %in% new_chroms)
+    expect_false(renamed %in% new_chroms)
+
+    # Un-mapped chrom data is unchanged.
+    seq_keep_after <- gseq.extract(data.frame(
+        chrom = keep, start = 0L, end = probe_end, stringsAsFactors = FALSE
+    ))
+    expect_equal(seq_keep_after, seq_keep_before)
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms removes breadcrumb on success, blocks re-run without force", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-crumb-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    gdb.init(groot)
+    chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = chrom, new = "CRUMB_1", stringsAsFactors = FALSE),
+        force = TRUE
+    )
+    # After success, the breadcrumb must be gone.
+    expect_false(file.exists(file.path(groot, ".rename_interrupted")))
+
+    # Now plant a stale breadcrumb and verify the function refuses.
+    writeLines("stale", file.path(groot, ".rename_interrupted"))
+    expect_error(
+        gdb.rename_chroms(
+            groot = groot,
+            mapping = data.frame(old = "CRUMB_1", new = "CRUMB_2", stringsAsFactors = FALSE)
+        ),
+        "interrupted rename"
+    )
+
+    # With force = TRUE the function proceeds and clears the breadcrumb.
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = "CRUMB_1", new = "CRUMB_2", stringsAsFactors = FALSE),
+        force = TRUE
+    )
+    expect_false(file.exists(file.path(groot, ".rename_interrupted")))
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms round-trips a rename and its inverse back to the original", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-roundtrip-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    # Use indexed format: chrom_sizes.txt and ALLGENOME agree on the prefixed
+    # form, making the A -> B -> A round-trip exactly byte-reversible.
+    gdb.convert_to_indexed(groot,
+        force = TRUE, validate = FALSE,
+        convert_tracks = TRUE, convert_intervals = TRUE
+    )
+    gdb.init(groot)
+    chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+
+    cs_before <- readLines(file.path(groot, "chrom_sizes.txt"))
+    seq_dat_sum_before <- tools::md5sum(file.path(groot, "seq", "genome.seq"))
+
+    # Forward rename.
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = chrom, new = "TMP_NAME", stringsAsFactors = FALSE),
+        force = TRUE
+    )
+    # Reverse.
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = "TMP_NAME", new = chrom, stringsAsFactors = FALSE),
+        force = TRUE
+    )
+
+    # chrom_sizes.txt is byte-identical.
+    expect_equal(readLines(file.path(groot, "chrom_sizes.txt")), cs_before)
+    # Payload files untouched.
+    expect_equal(tools::md5sum(file.path(groot, "seq", "genome.seq")), seq_dat_sum_before)
+
+    # DB reloads cleanly with original chroms.
+    gdb.init(groot)
+    expect_true(chrom %in% as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom))
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms supports renaming many chromosomes in one call", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-bulk-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    gdb.init(groot)
+    chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    new_names <- paste0("R", seq_along(chroms))
+
+    # Baseline extraction for each chrom.
+    before <- lapply(chroms, function(cc) {
+        size <- get("ALLGENOME", envir = .misha)[[1]]$end[
+            match(cc, get("ALLGENOME", envir = .misha)[[1]]$chrom)
+        ]
+        gseq.extract(data.frame(
+            chrom = cc, start = 0L, end = min(50L, as.integer(size)),
+            stringsAsFactors = FALSE
+        ))
+    })
+
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = chroms, new = new_names, stringsAsFactors = FALSE),
+        force = TRUE
+    )
+    gdb.init(groot)
+
+    new_chroms_in_db <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    for (nn in new_names) expect_true(nn %in% new_chroms_in_db)
+    for (old in chroms) expect_false(old %in% new_chroms_in_db)
+
+    # Sequences come out identical under the new names.
+    for (i in seq_along(chroms)) {
+        size <- get("ALLGENOME", envir = .misha)[[1]]$end[
+            match(new_names[i], get("ALLGENOME", envir = .misha)[[1]]$chrom)
+        ]
+        after <- gseq.extract(data.frame(
+            chrom = new_names[i], start = 0L, end = min(50L, as.integer(size)),
+            stringsAsFactors = FALSE
+        ))
+        expect_equal(after, before[[i]],
+            info = sprintf("%s -> %s", chroms[i], new_names[i])
+        )
+    }
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms dry_run prints a plan summary with all affected categories", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-dry2-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    gdb.init(groot)
+    chrom <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom[1])
+
+    out <- capture.output(
+        gdb.rename_chroms(
+            groot = groot,
+            mapping = data.frame(old = chrom, new = "DRY", stringsAsFactors = FALSE),
+            dry_run = TRUE
+        )
+    )
+    blob <- paste(out, collapse = "\n")
+
+    expect_match(blob, "Database: ", fixed = TRUE)
+    expect_match(blob, "Format: per-chromosome")
+    expect_match(blob, "sequence")
+    expect_match(blob, "single-file \\.interv")
+    expect_match(blob, "Chromosomes affected: 1")
+    expect_match(blob, "dry run")
+
+    unlink(db_dir, recursive = TRUE)
+})
