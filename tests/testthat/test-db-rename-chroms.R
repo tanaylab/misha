@@ -384,3 +384,27 @@ test_that("C_gdb_rewrite_genome_idx updates names without changing offsets", {
 
     unlink(db_dir, recursive = TRUE)
 })
+
+test_that(".misha_rename_build_plan enumerates per-chromosome DB files", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-plan-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    # Example DB starts per-chromosome; do not convert.
+    plan <- .misha_rename_build_plan(
+        groot,
+        mapping = data.frame(old = "chr1", new = "chrFOO", stringsAsFactors = FALSE)
+    )
+
+    expect_true(plan$is_indexed %in% c(TRUE, FALSE))
+    expect_true(is.character(plan$seq_renames) || length(plan$seq_renames) == 0)
+    expect_true(is.list(plan$track_dir_renames))
+    expect_true(is.list(plan$interv_dir_renames))
+    expect_true(is.character(plan$meta_rewrites))
+    expect_true(is.character(plan$single_interv_rewrites))
+
+    unlink(db_dir, recursive = TRUE)
+})

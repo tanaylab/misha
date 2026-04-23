@@ -143,3 +143,100 @@
         close(f)
     })
 }
+
+# Build a rename plan describing every filesystem mutation required.
+# Returns a list:
+#   is_indexed              : TRUE/FALSE (genome.idx + genome.seq present?)
+#   seq_renames             : character vector of old per-chrom seq paths (per-chrom DB only)
+#   seq_renames_new         : character vector of new per-chrom seq paths (parallel)
+#   genome_idx_path         : path or NA
+#   track_dir_renames       : named list of data.frame(old, new) per track dir (per-chrom DB only)
+#   interv_dir_renames      : named list of data.frame(old, new) per bigset dir (per-chrom DB only)
+#   meta_rewrites           : character vector of .meta file paths
+#   single_interv_rewrites  : character vector of single-file .interv paths
+.misha_rename_build_plan <- function(groot, mapping) {
+    seq_dir <- file.path(groot, "seq")
+    is_indexed <- file.exists(file.path(seq_dir, "genome.idx")) &&
+                  file.exists(file.path(seq_dir, "genome.seq"))
+
+    plan <- list(
+        is_indexed = is_indexed,
+        seq_renames = character(0),
+        seq_renames_new = character(0),
+        genome_idx_path = if (is_indexed) file.path(seq_dir, "genome.idx") else NA_character_,
+        track_dir_renames = list(),
+        interv_dir_renames = list(),
+        meta_rewrites = character(0),
+        single_interv_rewrites = character(0)
+    )
+
+    if (!is_indexed) {
+        from <- file.path(seq_dir, paste0(mapping$old, ".seq"))
+        to   <- file.path(seq_dir, paste0(mapping$new, ".seq"))
+        keep <- file.exists(from)
+        plan$seq_renames <- from[keep]
+        plan$seq_renames_new <- to[keep]
+    }
+
+    tracks_root <- file.path(groot, "tracks")
+    all_track_dirs <- list.files(tracks_root, pattern = "\\.track$", recursive = TRUE,
+                                 full.names = TRUE, include.dirs = TRUE)
+    all_interv    <- list.files(tracks_root, pattern = "\\.interv$", recursive = TRUE,
+                                full.names = TRUE, include.dirs = TRUE)
+    track_dirs  <- all_track_dirs[file.info(all_track_dirs)$isdir %in% TRUE]
+    interv_dirs <- all_interv[file.info(all_interv)$isdir %in% TRUE]
+    single_interv <- all_interv[!(file.info(all_interv)$isdir %in% TRUE)]
+
+    if (!is_indexed) {
+        per_chrom_files_for_dir <- function(d) {
+            files <- list.files(d, full.names = FALSE)
+            files <- files[!files %in% c(".meta",
+                                         "track.dat", "track.idx",
+                                         "intervals.dat", "intervals.idx",
+                                         "intervals2d.dat", "intervals2d.idx")]
+            old_names <- files
+            new_names <- files
+            idx <- match(old_names, mapping$old)
+            new_names[!is.na(idx)] <- mapping$new[idx[!is.na(idx)]]
+            is_pair <- grepl("-", files, fixed = TRUE)
+            if (any(is_pair)) {
+                parts <- strsplit(files[is_pair], "-", fixed = TRUE)
+                remapped <- vapply(parts, function(p) {
+                    if (length(p) != 2) return(paste(p, collapse = "-"))
+                    i1 <- match(p[1], mapping$old)
+                    i2 <- match(p[2], mapping$old)
+                    if (!is.na(i1)) p[1] <- mapping$new[i1]
+                    if (!is.na(i2)) p[2] <- mapping$new[i2]
+                    paste(p, collapse = "-")
+                }, character(1))
+                new_names[is_pair] <- remapped
+            }
+            changed <- old_names != new_names
+            if (!any(changed)) return(NULL)
+            data.frame(
+                old = file.path(d, old_names[changed]),
+                new = file.path(d, new_names[changed]),
+                stringsAsFactors = FALSE
+            )
+        }
+
+        for (d in track_dirs) {
+            r <- per_chrom_files_for_dir(d)
+            if (!is.null(r)) plan$track_dir_renames[[d]] <- r
+        }
+        for (d in interv_dirs) {
+            r <- per_chrom_files_for_dir(d)
+            if (!is.null(r)) plan$interv_dir_renames[[d]] <- r
+        }
+    }
+
+    plan$meta_rewrites <- c(
+        file.path(track_dirs, ".meta"),
+        file.path(interv_dirs, ".meta")
+    )
+    plan$meta_rewrites <- plan$meta_rewrites[file.exists(plan$meta_rewrites)]
+
+    plan$single_interv_rewrites <- single_interv
+
+    plan
+}
