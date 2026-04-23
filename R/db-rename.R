@@ -114,3 +114,18 @@
     success <- TRUE
     invisible(target)
 }
+
+.misha_rename_rewrite_meta <- function(meta_path, old, new) {
+    f <- file(meta_path, "rb")
+    meta <- unserialize(f)
+    close(f)
+
+    meta$stats <- .misha_rename_remap_df(meta$stats, old = old, new = new)
+    meta$zeroline <- .misha_rename_remap_df(meta$zeroline, old = old, new = new)
+
+    .misha_rename_atomic_rewrite(meta_path, function(tmp_path) {
+        f <- file(tmp_path, "wb")
+        serialize(meta, f)
+        close(f)
+    })
+}

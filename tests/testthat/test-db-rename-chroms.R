@@ -244,3 +244,58 @@ test_that(".misha_rename_atomic_rewrite leaves original intact on writer error",
     expect_length(tmps, 0L)
     unlink(target)
 })
+
+test_that(".misha_rename_rewrite_meta updates stats + zeroline factor levels", {
+    path <- tempfile()
+    dir.create(path)
+    meta_file <- file.path(path, ".meta")
+
+    stats <- data.frame(
+        chrom = factor(c("chr1", "chr2"), levels = c("chr1", "chr2")),
+        size = c(100, 200),
+        stringsAsFactors = FALSE
+    )
+    zeroline <- data.frame(
+        chrom = factor(character(0), levels = c("chr1", "chr2")),
+        start = integer(0), end = integer(0),
+        stringsAsFactors = FALSE
+    )
+    f <- file(meta_file, "wb"); serialize(list(stats = stats, zeroline = zeroline), f); close(f)
+
+    .misha_rename_rewrite_meta(meta_file,
+        old = c("chr1", "chr2"), new = c("A", "B"))
+
+    f <- file(meta_file, "rb"); m <- unserialize(f); close(f)
+    expect_equal(as.character(m$stats$chrom), c("A", "B"))
+    expect_equal(levels(m$zeroline$chrom), c("A", "B"))
+    unlink(path, recursive = TRUE)
+})
+
+test_that(".misha_rename_rewrite_meta handles 2D stats", {
+    path <- tempfile()
+    dir.create(path)
+    meta_file <- file.path(path, ".meta")
+
+    stats <- data.frame(
+        chrom1 = factor(c("chr1"), levels = c("chr1", "chr2")),
+        chrom2 = factor(c("chr2"), levels = c("chr1", "chr2")),
+        size = 5,
+        stringsAsFactors = FALSE
+    )
+    zeroline <- data.frame(
+        chrom1 = factor(character(0), levels = c("chr1", "chr2")),
+        chrom2 = factor(character(0), levels = c("chr1", "chr2")),
+        start1 = integer(0), end1 = integer(0),
+        start2 = integer(0), end2 = integer(0),
+        stringsAsFactors = FALSE
+    )
+    f <- file(meta_file, "wb"); serialize(list(stats = stats, zeroline = zeroline), f); close(f)
+
+    .misha_rename_rewrite_meta(meta_file,
+        old = c("chr1", "chr2"), new = c("A", "B"))
+
+    f <- file(meta_file, "rb"); m <- unserialize(f); close(f)
+    expect_equal(as.character(m$stats$chrom1), "A")
+    expect_equal(as.character(m$stats$chrom2), "B")
+    unlink(path, recursive = TRUE)
+})
