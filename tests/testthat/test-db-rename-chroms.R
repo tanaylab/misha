@@ -117,3 +117,39 @@ test_that(".misha_rename_needs_two_phase returns FALSE for no-op entries", {
     m <- data.frame(old = c("a"), new = c("a"), stringsAsFactors = FALSE)
     expect_false(.misha_rename_needs_two_phase(m))
 })
+
+test_that(".misha_rename_normalize_mapping rejects NA names in vector", {
+    v <- c("1", "2")
+    names(v) <- c("chr1", NA)
+    expect_error(
+        .misha_rename_normalize_mapping(v),
+        "named character vector"
+    )
+})
+
+test_that(".misha_rename_validate_mapping rejects NA old", {
+    m <- data.frame(old = c("chr1", NA), new = c("A", "B"),
+                    stringsAsFactors = FALSE)
+    expect_error(
+        .misha_rename_validate_mapping(m, existing = c("chr1", "chr2")),
+        "NA or empty"
+    )
+})
+
+test_that(".misha_rename_validate_mapping rejects NA new", {
+    m <- data.frame(old = c("chr1", "chr2"), new = c("A", NA),
+                    stringsAsFactors = FALSE)
+    expect_error(
+        .misha_rename_validate_mapping(m, existing = c("chr1", "chr2")),
+        "NA or empty"
+    )
+})
+
+test_that(".misha_rename_validate_mapping rejects empty-string new", {
+    m <- data.frame(old = c("chr1"), new = c(""),
+                    stringsAsFactors = FALSE)
+    expect_error(
+        .misha_rename_validate_mapping(m, existing = c("chr1", "chr2")),
+        "NA or empty"
+    )
+})
