@@ -96,3 +96,24 @@ test_that(".misha_rename_validate_mapping accepts a valid partial rename", {
     )
     expect_silent(.misha_rename_validate_mapping(m, existing = c("chr1", "chr2", "chr3")))
 })
+
+test_that(".misha_rename_needs_two_phase detects swaps", {
+    m <- data.frame(old = c("a", "b"), new = c("b", "a"), stringsAsFactors = FALSE)
+    expect_true(.misha_rename_needs_two_phase(m))
+})
+
+test_that(".misha_rename_needs_two_phase detects cycles of length > 2", {
+    m <- data.frame(old = c("a", "b", "c"), new = c("b", "c", "a"),
+                    stringsAsFactors = FALSE)
+    expect_true(.misha_rename_needs_two_phase(m))
+})
+
+test_that(".misha_rename_needs_two_phase returns FALSE for non-overlapping rename", {
+    m <- data.frame(old = c("a", "b"), new = c("x", "y"), stringsAsFactors = FALSE)
+    expect_false(.misha_rename_needs_two_phase(m))
+})
+
+test_that(".misha_rename_needs_two_phase returns FALSE for no-op entries", {
+    m <- data.frame(old = c("a"), new = c("a"), stringsAsFactors = FALSE)
+    expect_false(.misha_rename_needs_two_phase(m))
+})

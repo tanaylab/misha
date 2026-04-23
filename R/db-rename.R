@@ -66,3 +66,9 @@
 
     invisible(NULL)
 }
+
+.misha_rename_needs_two_phase <- function(mapping) {
+    active <- mapping[mapping$old != mapping$new, , drop = FALSE]
+    if (nrow(active) == 0L) return(FALSE)
+    any(active$new %in% active$old)
+}
