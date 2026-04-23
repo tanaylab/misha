@@ -109,6 +109,7 @@ extern "C" {
     extern SEXP C_gsynth_replace_kmer(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer_dist(SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_ggenome_implant(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gdb_rewrite_genome_idx(SEXP, SEXP, SEXP, SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -122,6 +123,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gcheck_vtrack", (DL_FUNC)&gcheck_vtrack, 2},
     {"C_gcis_decay", (DL_FUNC)&C_gcis_decay, 9},
     {"C_gcompute_strands_autocorr", (DL_FUNC)&C_gcompute_strands_autocorr, 8},
+    {"C_gdb_rewrite_genome_idx", (DL_FUNC)&C_gdb_rewrite_genome_idx, 4},
     // {"gcreate_arrays_track", (DL_FUNC)&gcreate_arrays_track, 7},
     {"gcreate_pwm_energy_multitask", (DL_FUNC)&gcreate_pwm_energy_multitask, 6},
     {"gcreate_pwm_energy", (DL_FUNC)&gcreate_pwm_energy, 6},
