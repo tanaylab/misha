@@ -183,9 +183,11 @@
                                  full.names = TRUE, include.dirs = TRUE)
     all_interv    <- list.files(tracks_root, pattern = "\\.interv$", recursive = TRUE,
                                 full.names = TRUE, include.dirs = TRUE)
-    track_dirs  <- all_track_dirs[file.info(all_track_dirs)$isdir %in% TRUE]
-    interv_dirs <- all_interv[file.info(all_interv)$isdir %in% TRUE]
-    single_interv <- all_interv[!(file.info(all_interv)$isdir %in% TRUE)]
+    track_info  <- file.info(all_track_dirs)$isdir %in% TRUE
+    interv_info <- file.info(all_interv)$isdir %in% TRUE
+    track_dirs    <- all_track_dirs[track_info]
+    interv_dirs   <- all_interv[interv_info]
+    single_interv <- all_interv[!interv_info]
 
     if (!is_indexed) {
         per_chrom_files_for_dir <- function(d) {

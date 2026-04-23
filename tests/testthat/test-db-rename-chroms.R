@@ -385,7 +385,7 @@ test_that("C_gdb_rewrite_genome_idx updates names without changing offsets", {
     unlink(db_dir, recursive = TRUE)
 })
 
-test_that(".misha_rename_build_plan enumerates per-chromosome DB files", {
+test_that(".misha_rename_build_plan enumerates example DB correctly", {
     gdb.init_examples()
     src <- get("GROOT", envir = .misha)
     db_dir <- tempfile("misha-rename-plan-")
@@ -393,18 +393,49 @@ test_that(".misha_rename_build_plan enumerates per-chromosome DB files", {
     file.copy(src, db_dir, recursive = TRUE)
     groot <- file.path(db_dir, basename(src))
 
-    # Example DB starts per-chromosome; do not convert.
     plan <- .misha_rename_build_plan(
         groot,
         mapping = data.frame(old = "chr1", new = "chrFOO", stringsAsFactors = FALSE)
     )
 
-    expect_true(plan$is_indexed %in% c(TRUE, FALSE))
-    expect_true(is.character(plan$seq_renames) || length(plan$seq_renames) == 0)
-    expect_true(is.list(plan$track_dir_renames))
-    expect_true(is.list(plan$interv_dir_renames))
-    expect_true(is.character(plan$meta_rewrites))
-    expect_true(is.character(plan$single_interv_rewrites))
+    # Per-chromosome DB.
+    expect_false(plan$is_indexed)
+    expect_true(is.na(plan$genome_idx_path))
+
+    # seq rename: chr1.seq -> chrFOO.seq (and only that).
+    expect_equal(basename(plan$seq_renames),     "chr1.seq")
+    expect_equal(basename(plan$seq_renames_new), "chrFOO.seq")
+
+    # Every track dir in the example DB should have a chr1 -> chrFOO rename planned.
+    expect_gt(length(plan$track_dir_renames), 0)
+    for (d in names(plan$track_dir_renames)) {
+        r <- plan$track_dir_renames[[d]]
+        # Old files should all contain "chr1" segment; new ones should replace it.
+        expect_true(all(basename(r$old) %in% c("chr1",
+            grep("^chr1", basename(r$old), value = TRUE))) ||
+            any(grepl("chr1", basename(r$old), fixed = TRUE)),
+            info = sprintf("track dir %s: unexpected rename entries", d))
+    }
+
+    # 2D pair rewriting: rects_track.track should contain both chr1-chr1 ->
+    # chrFOO-chrFOO AND chr1-chr2 -> chrFOO-chr2 (directional rename, not just
+    # one side).
+    rects <- plan$track_dir_renames[[grep("rects_track\\.track$",
+                                          names(plan$track_dir_renames),
+                                          value = TRUE)]]
+    if (!is.null(rects)) {
+        old_basenames <- basename(rects$old)
+        new_basenames <- basename(rects$new)
+        # Find any pair file starting with "chr1-"
+        pair_idx <- grep("^chr1-", old_basenames)
+        if (length(pair_idx) > 0) {
+            expect_true(all(grepl("^chrFOO-", new_basenames[pair_idx])),
+                        info = "chr1-* pair files should be renamed to chrFOO-*")
+        }
+    }
+
+    # Single-file interval rewrite: annotations.interv should be in the list.
+    expect_true(any(grepl("annotations\\.interv$", plan$single_interv_rewrites)))
 
     unlink(db_dir, recursive = TRUE)
 })
