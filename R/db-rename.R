@@ -15,13 +15,15 @@
         nm <- names(mapping)
         if (is.null(nm) || any(is.na(nm)) || any(!nzchar(nm))) {
             stop("mapping must be a named character vector (names = old chroms)",
-                 call. = FALSE)
+                call. = FALSE
+            )
         }
         old <- nm
         new <- unname(mapping)
     } else {
         stop("mapping must be a data.frame(old, new) or a named character vector",
-             call. = FALSE)
+            call. = FALSE
+        )
     }
 
     data.frame(old = old, new = new, stringsAsFactors = FALSE)
@@ -33,7 +35,7 @@
     }
 
     bad <- is.na(mapping$old) | !nzchar(mapping$old) |
-           is.na(mapping$new) | !nzchar(mapping$new)
+        is.na(mapping$new) | !nzchar(mapping$new)
     if (any(bad)) {
         stop("mapping contains NA or empty chromosome names", call. = FALSE)
     }
@@ -76,12 +78,16 @@
 
 .misha_rename_needs_two_phase <- function(mapping) {
     active <- mapping[mapping$old != mapping$new, , drop = FALSE]
-    if (nrow(active) == 0L) return(FALSE)
+    if (nrow(active) == 0L) {
+        return(FALSE)
+    }
     any(active$new %in% active$old)
 }
 
 .misha_rename_remap_factor <- function(f, old, new) {
-    if (is.null(f)) return(NULL)
+    if (is.null(f)) {
+        return(NULL)
+    }
     stopifnot(length(old) == length(new), is.factor(f))
     lv <- levels(f)
     idx <- match(lv, old)
@@ -91,7 +97,9 @@
 }
 
 .misha_rename_remap_df <- function(df, old, new) {
-    if (!is.data.frame(df)) return(df)
+    if (!is.data.frame(df)) {
+        return(df)
+    }
     for (col in c("chrom", "chrom1", "chrom2")) {
         if (col %in% colnames(df)) {
             df[[col]] <- .misha_rename_remap_factor(df[[col]], old = old, new = new)
@@ -157,7 +165,7 @@
 .misha_rename_build_plan <- function(groot, mapping) {
     seq_dir <- file.path(groot, "seq")
     is_indexed <- file.exists(file.path(seq_dir, "genome.idx")) &&
-                  file.exists(file.path(seq_dir, "genome.seq"))
+        file.exists(file.path(seq_dir, "genome.seq"))
 
     plan <- list(
         is_indexed = is_indexed,
@@ -172,30 +180,36 @@
 
     if (!is_indexed) {
         from <- file.path(seq_dir, paste0(mapping$old, ".seq"))
-        to   <- file.path(seq_dir, paste0(mapping$new, ".seq"))
+        to <- file.path(seq_dir, paste0(mapping$new, ".seq"))
         keep <- file.exists(from)
         plan$seq_renames <- from[keep]
         plan$seq_renames_new <- to[keep]
     }
 
     tracks_root <- file.path(groot, "tracks")
-    all_track_dirs <- list.files(tracks_root, pattern = "\\.track$", recursive = TRUE,
-                                 full.names = TRUE, include.dirs = TRUE)
-    all_interv    <- list.files(tracks_root, pattern = "\\.interv$", recursive = TRUE,
-                                full.names = TRUE, include.dirs = TRUE)
-    track_info  <- file.info(all_track_dirs)$isdir %in% TRUE
+    all_track_dirs <- list.files(tracks_root,
+        pattern = "\\.track$", recursive = TRUE,
+        full.names = TRUE, include.dirs = TRUE
+    )
+    all_interv <- list.files(tracks_root,
+        pattern = "\\.interv$", recursive = TRUE,
+        full.names = TRUE, include.dirs = TRUE
+    )
+    track_info <- file.info(all_track_dirs)$isdir %in% TRUE
     interv_info <- file.info(all_interv)$isdir %in% TRUE
-    track_dirs    <- all_track_dirs[track_info]
-    interv_dirs   <- all_interv[interv_info]
+    track_dirs <- all_track_dirs[track_info]
+    interv_dirs <- all_interv[interv_info]
     single_interv <- all_interv[!interv_info]
 
     if (!is_indexed) {
         per_chrom_files_for_dir <- function(d) {
             files <- list.files(d, full.names = FALSE)
-            files <- files[!files %in% c(".meta",
-                                         "track.dat", "track.idx",
-                                         "intervals.dat", "intervals.idx",
-                                         "intervals2d.dat", "intervals2d.idx")]
+            files <- files[!files %in% c(
+                ".meta",
+                "track.dat", "track.idx",
+                "intervals.dat", "intervals.idx",
+                "intervals2d.dat", "intervals2d.idx"
+            )]
             old_names <- files
             new_names <- files
             idx <- match(old_names, mapping$old)
@@ -204,7 +218,9 @@
             if (any(is_pair)) {
                 parts <- strsplit(files[is_pair], "-", fixed = TRUE)
                 remapped <- vapply(parts, function(p) {
-                    if (length(p) != 2) return(paste(p, collapse = "-"))
+                    if (length(p) != 2) {
+                        return(paste(p, collapse = "-"))
+                    }
                     i1 <- match(p[1], mapping$old)
                     i2 <- match(p[2], mapping$old)
                     if (!is.na(i1)) p[1] <- mapping$new[i1]
@@ -214,7 +230,9 @@
                 new_names[is_pair] <- remapped
             }
             changed <- old_names != new_names
-            if (!any(changed)) return(NULL)
+            if (!any(changed)) {
+                return(NULL)
+            }
             data.frame(
                 old = file.path(d, old_names[changed]),
                 new = file.path(d, new_names[changed]),
@@ -249,8 +267,10 @@
     # Phase 1: sequence data
     if (plan$is_indexed) {
         if (verbose) message("Rewriting genome.idx...")
-        .gcall("C_gdb_rewrite_genome_idx",
-               plan$genome_idx_path, mapping$old, mapping$new, .misha_env())
+        .gcall(
+            "C_gdb_rewrite_genome_idx",
+            plan$genome_idx_path, mapping$old, mapping$new, .misha_env()
+        )
     } else if (length(plan$seq_renames)) {
         if (verbose) message(sprintf("Renaming %d seq files...", length(plan$seq_renames)))
         ok <- file.rename(plan$seq_renames, plan$seq_renames_new)
@@ -298,8 +318,10 @@
         return(invisible(NULL))
     }
 
-    tag <- sprintf("__misha_rename_%s_%d_",
-                   format(Sys.time(), "%Y%m%d%H%M%S"), Sys.getpid())
+    tag <- sprintf(
+        "__misha_rename_%s_%d_",
+        format(Sys.time(), "%Y%m%d%H%M%S"), Sys.getpid()
+    )
     tmp_names <- paste0(tag, mapping$old)
 
     stage1 <- data.frame(old = mapping$old, new = tmp_names, stringsAsFactors = FALSE)
@@ -353,14 +375,16 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
                               force = FALSE, dry_run = FALSE, verbose = FALSE) {
     if (is.null(mapping)) {
         stop("Usage: gdb.rename_chroms(groot, mapping, force = FALSE, dry_run = FALSE, verbose = FALSE)",
-             call. = FALSE)
+            call. = FALSE
+        )
     }
 
     was_loaded <- FALSE
     if (is.null(groot)) {
         if (!exists("GROOT", envir = .misha) || is.null(get("GROOT", envir = .misha))) {
             stop("No database is currently active. Provide `groot` or call gdb.init() first.",
-                 call. = FALSE)
+                call. = FALSE
+            )
         }
         groot <- get("GROOT", envir = .misha)
         was_loaded <- TRUE
@@ -369,7 +393,7 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
             cur <- get("GROOT", envir = .misha)
             if (!is.null(cur) && nzchar(cur) &&
                 normalizePath(cur, mustWork = FALSE) ==
-                normalizePath(groot, mustWork = FALSE)) {
+                    normalizePath(groot, mustWork = FALSE)) {
                 was_loaded <- TRUE
             }
         }
@@ -383,8 +407,10 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
     if (!file.exists(chrom_sizes_path)) {
         stop(sprintf("chrom_sizes.txt not found: %s", chrom_sizes_path), call. = FALSE)
     }
-    cs <- utils::read.table(chrom_sizes_path, sep = "\t", stringsAsFactors = FALSE,
-                            col.names = c("chrom", "size"))
+    cs <- utils::read.table(chrom_sizes_path,
+        sep = "\t", stringsAsFactors = FALSE,
+        col.names = c("chrom", "size")
+    )
     existing <- cs$chrom
 
     mapping <- .misha_rename_normalize_mapping(mapping)
@@ -400,10 +426,10 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
 
     plan <- .misha_rename_build_plan(groot, mapping)
 
-    n_seq   <- length(plan$seq_renames) + (if (plan$is_indexed) 1L else 0L)
-    n_track <- sum(vapply(plan$track_dir_renames,  nrow, integer(1)))
+    n_seq <- length(plan$seq_renames) + (if (plan$is_indexed) 1L else 0L)
+    n_track <- sum(vapply(plan$track_dir_renames, nrow, integer(1)))
     n_interv <- sum(vapply(plan$interv_dir_renames, nrow, integer(1)))
-    n_meta  <- length(plan$meta_rewrites)
+    n_meta <- length(plan$meta_rewrites)
     n_single <- length(plan$single_interv_rewrites)
 
     summary_str <- sprintf(
@@ -443,8 +469,10 @@ gdb.rename_chroms <- function(groot = NULL, mapping = NULL,
         idx <- match(cs$chrom, mapping$old)
         cs$chrom[!is.na(idx)] <- mapping$new[idx[!is.na(idx)]]
         .misha_rename_atomic_rewrite(chrom_sizes_path, function(tmp_path) {
-            utils::write.table(cs, tmp_path, sep = "\t", quote = FALSE,
-                               row.names = FALSE, col.names = FALSE)
+            utils::write.table(cs, tmp_path,
+                sep = "\t", quote = FALSE,
+                row.names = FALSE, col.names = FALSE
+            )
         })
 
         # Invalidate .db.cache so next gdb.init() rescans.

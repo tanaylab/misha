@@ -103,8 +103,10 @@ test_that(".misha_rename_needs_two_phase detects swaps", {
 })
 
 test_that(".misha_rename_needs_two_phase detects cycles of length > 2", {
-    m <- data.frame(old = c("a", "b", "c"), new = c("b", "c", "a"),
-                    stringsAsFactors = FALSE)
+    m <- data.frame(
+        old = c("a", "b", "c"), new = c("b", "c", "a"),
+        stringsAsFactors = FALSE
+    )
     expect_true(.misha_rename_needs_two_phase(m))
 })
 
@@ -128,8 +130,10 @@ test_that(".misha_rename_normalize_mapping rejects NA names in vector", {
 })
 
 test_that(".misha_rename_validate_mapping rejects NA old", {
-    m <- data.frame(old = c("chr1", NA), new = c("A", "B"),
-                    stringsAsFactors = FALSE)
+    m <- data.frame(
+        old = c("chr1", NA), new = c("A", "B"),
+        stringsAsFactors = FALSE
+    )
     expect_error(
         .misha_rename_validate_mapping(m, existing = c("chr1", "chr2")),
         "NA or empty"
@@ -137,8 +141,10 @@ test_that(".misha_rename_validate_mapping rejects NA old", {
 })
 
 test_that(".misha_rename_validate_mapping rejects NA new", {
-    m <- data.frame(old = c("chr1", "chr2"), new = c("A", NA),
-                    stringsAsFactors = FALSE)
+    m <- data.frame(
+        old = c("chr1", "chr2"), new = c("A", NA),
+        stringsAsFactors = FALSE
+    )
     expect_error(
         .misha_rename_validate_mapping(m, existing = c("chr1", "chr2")),
         "NA or empty"
@@ -146,8 +152,10 @@ test_that(".misha_rename_validate_mapping rejects NA new", {
 })
 
 test_that(".misha_rename_validate_mapping rejects empty-string new", {
-    m <- data.frame(old = c("chr1"), new = c(""),
-                    stringsAsFactors = FALSE)
+    m <- data.frame(
+        old = c("chr1"), new = c(""),
+        stringsAsFactors = FALSE
+    )
     expect_error(
         .misha_rename_validate_mapping(m, existing = c("chr1", "chr2")),
         "NA or empty"
@@ -196,7 +204,8 @@ test_that(".misha_rename_remap_df remaps chrom1/chrom2 in 2D frames", {
     )
     out <- .misha_rename_remap_df(df,
         old = c("chr1", "chr2"),
-        new = c("A",    "B"))
+        new = c("A", "B")
+    )
     expect_equal(as.character(out$chrom1), "A")
     expect_equal(as.character(out$chrom2), "B")
 })
@@ -260,12 +269,17 @@ test_that(".misha_rename_rewrite_meta updates stats + zeroline factor levels", {
         start = integer(0), end = integer(0),
         stringsAsFactors = FALSE
     )
-    f <- file(meta_file, "wb"); serialize(list(stats = stats, zeroline = zeroline), f); close(f)
+    f <- file(meta_file, "wb")
+    serialize(list(stats = stats, zeroline = zeroline), f)
+    close(f)
 
     .misha_rename_rewrite_meta(meta_file,
-        old = c("chr1", "chr2"), new = c("A", "B"))
+        old = c("chr1", "chr2"), new = c("A", "B")
+    )
 
-    f <- file(meta_file, "rb"); m <- unserialize(f); close(f)
+    f <- file(meta_file, "rb")
+    m <- unserialize(f)
+    close(f)
     expect_equal(as.character(m$stats$chrom), c("A", "B"))
     expect_equal(levels(m$zeroline$chrom), c("A", "B"))
     unlink(path, recursive = TRUE)
@@ -289,12 +303,17 @@ test_that(".misha_rename_rewrite_meta handles 2D stats", {
         start2 = integer(0), end2 = integer(0),
         stringsAsFactors = FALSE
     )
-    f <- file(meta_file, "wb"); serialize(list(stats = stats, zeroline = zeroline), f); close(f)
+    f <- file(meta_file, "wb")
+    serialize(list(stats = stats, zeroline = zeroline), f)
+    close(f)
 
     .misha_rename_rewrite_meta(meta_file,
-        old = c("chr1", "chr2"), new = c("A", "B"))
+        old = c("chr1", "chr2"), new = c("A", "B")
+    )
 
-    f <- file(meta_file, "rb"); m <- unserialize(f); close(f)
+    f <- file(meta_file, "rb")
+    m <- unserialize(f)
+    close(f)
     expect_equal(as.character(m$stats$chrom1), "A")
     expect_equal(as.character(m$stats$chrom2), "B")
     unlink(path, recursive = TRUE)
@@ -307,12 +326,17 @@ test_that(".misha_rename_rewrite_single_interv updates factor levels and values"
         start = c(0L, 0L), end = c(100L, 200L),
         stringsAsFactors = FALSE
     )
-    f <- file(path, "wb"); serialize(df, f); close(f)
+    f <- file(path, "wb")
+    serialize(df, f)
+    close(f)
 
     .misha_rename_rewrite_single_interv(path,
-        old = c("chr1", "chr2"), new = c("A", "B"))
+        old = c("chr1", "chr2"), new = c("A", "B")
+    )
 
-    f <- file(path, "rb"); out <- unserialize(f); close(f)
+    f <- file(path, "rb")
+    out <- unserialize(f)
+    close(f)
     expect_equal(as.character(out$chrom), c("A", "B"))
     expect_equal(levels(out$chrom), c("A", "B", "chr3"))
     unlink(path)
@@ -372,11 +396,11 @@ test_that("C_gdb_rewrite_genome_idx updates names without changing offsets", {
     # Offsets/lengths/chromids untouched.
     expect_equal(
         vapply(before, `[[`, integer(1), "chromid"),
-        vapply(after,  `[[`, integer(1), "chromid")
+        vapply(after, `[[`, integer(1), "chromid")
     )
     expect_identical(
         lapply(before, `[[`, "tail"),
-        lapply(after,  `[[`, "tail")
+        lapply(after, `[[`, "tail")
     )
 
     # Checksum was recomputed correctly — gdb.init() validates it.
@@ -403,7 +427,7 @@ test_that(".misha_rename_build_plan enumerates example DB correctly", {
     expect_true(is.na(plan$genome_idx_path))
 
     # seq rename: chr1.seq -> chrFOO.seq (and only that).
-    expect_equal(basename(plan$seq_renames),     "chr1.seq")
+    expect_equal(basename(plan$seq_renames), "chr1.seq")
     expect_equal(basename(plan$seq_renames_new), "chrFOO.seq")
 
     # Every track dir in the example DB should have a chr1 -> chrFOO rename planned.
@@ -411,18 +435,23 @@ test_that(".misha_rename_build_plan enumerates example DB correctly", {
     for (d in names(plan$track_dir_renames)) {
         r <- plan$track_dir_renames[[d]]
         # Old files should all contain "chr1" segment; new ones should replace it.
-        expect_true(all(basename(r$old) %in% c("chr1",
-            grep("^chr1", basename(r$old), value = TRUE))) ||
-            any(grepl("chr1", basename(r$old), fixed = TRUE)),
-            info = sprintf("track dir %s: unexpected rename entries", d))
+        expect_true(
+            all(basename(r$old) %in% c(
+                "chr1",
+                grep("^chr1", basename(r$old), value = TRUE)
+            )) ||
+                any(grepl("chr1", basename(r$old), fixed = TRUE)),
+            info = sprintf("track dir %s: unexpected rename entries", d)
+        )
     }
 
     # 2D pair rewriting: rects_track.track should contain both chr1-chr1 ->
     # chrFOO-chrFOO AND chr1-chr2 -> chrFOO-chr2 (directional rename, not just
     # one side).
     rects <- plan$track_dir_renames[[grep("rects_track\\.track$",
-                                          names(plan$track_dir_renames),
-                                          value = TRUE)]]
+        names(plan$track_dir_renames),
+        value = TRUE
+    )]]
     if (!is.null(rects)) {
         old_basenames <- basename(rects$old)
         new_basenames <- basename(rects$new)
@@ -430,7 +459,8 @@ test_that(".misha_rename_build_plan enumerates example DB correctly", {
         pair_idx <- grep("^chr1-", old_basenames)
         if (length(pair_idx) > 0) {
             expect_true(all(grepl("^chrFOO-", new_basenames[pair_idx])),
-                        info = "chr1-* pair files should be renamed to chrFOO-*")
+                info = "chr1-* pair files should be renamed to chrFOO-*"
+            )
         }
     }
 
@@ -473,7 +503,8 @@ test_that("two-phase plan succeeds for swap", {
     seq_files <- list.files(file.path(groot, "seq"), pattern = "\\.seq$")
     chroms <- sub("\\.seq$", "", seq_files)
     if (length(chroms) < 2) skip("example DB has <2 chromosomes")
-    a <- chroms[1]; b <- chroms[2]
+    a <- chroms[1]
+    b <- chroms[2]
 
     mapping <- data.frame(old = c(a, b), new = c(b, a), stringsAsFactors = FALSE)
 
@@ -498,25 +529,182 @@ test_that("gdb.rename_chroms round-trips on per-chromosome DB", {
 
     # Use chrom_sizes.txt names (canonical source of truth for validation).
     cs <- read.table(file.path(groot, "chrom_sizes.txt"),
-                     stringsAsFactors = FALSE, col.names = c("chrom", "size"))
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
     stopifnot(nrow(cs) >= 2)
-    target <- cs$chrom[1]  # whatever form chrom_sizes.txt uses
+    target <- cs$chrom[1] # whatever form chrom_sizes.txt uses
 
-    mapping <- data.frame(old = target, new = "RENAMED",
-                          stringsAsFactors = FALSE)
+    mapping <- data.frame(
+        old = target, new = "RENAMED",
+        stringsAsFactors = FALSE
+    )
 
     gdb.rename_chroms(groot = groot, mapping = mapping, force = TRUE)
 
     # chrom_sizes.txt must reflect the rename.
     cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
-                      stringsAsFactors = FALSE, col.names = c("chrom", "size"))
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
     expect_true("RENAMED" %in% cs2$chrom)
     expect_false(target %in% cs2$chrom)
-    expect_equal(cs2$size[cs2$chrom == "RENAMED"],
-                 cs$size[cs$chrom == target])
+    expect_equal(
+        cs2$size[cs2$chrom == "RENAMED"],
+        cs$size[cs$chrom == target]
+    )
 
     # Database should re-initialize cleanly.
     expect_silent(gdb.init(groot))
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms round-trips on indexed DB", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-idx-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    gdb.convert_to_indexed(groot,
+        force = TRUE, validate = FALSE,
+        convert_tracks = TRUE, convert_intervals = TRUE
+    )
+    gdb.init(groot)
+
+    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
+    stopifnot(nrow(cs) >= 1)
+    target <- cs$chrom[1]
+
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(old = target, new = "FOO", stringsAsFactors = FALSE),
+        force = TRUE
+    )
+
+    cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
+    expect_true("FOO" %in% cs2$chrom)
+    expect_false(target %in% cs2$chrom)
+    expect_silent(gdb.init(groot))
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms handles a swap", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-swap2-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
+    if (nrow(cs) < 2) skip("example DB has <2 chromosomes")
+    a <- cs$chrom[1]
+    b <- cs$chrom[2]
+    size_a <- cs$size[1]
+    size_b <- cs$size[2]
+
+    gdb.rename_chroms(
+        groot = groot,
+        mapping = data.frame(
+            old = c(a, b), new = c(b, a),
+            stringsAsFactors = FALSE
+        ),
+        force = TRUE
+    )
+
+    cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
+    # After the swap, the size originally attached to `a` in chrom_sizes.txt
+    # should now be attached to `b`, and vice versa.
+    expect_equal(cs2$size[cs2$chrom == b], size_a)
+    expect_equal(cs2$size[cs2$chrom == a], size_b)
+    expect_silent(gdb.init(groot))
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms dry_run does not modify any file", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-dry-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    before_files <- sort(list.files(groot, recursive = TRUE, full.names = TRUE))
+    before_sizes <- file.info(before_files)$size
+    before_mtime <- file.info(before_files)$mtime
+
+    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
+    chrom <- cs$chrom[1]
+    mapping <- data.frame(old = chrom, new = "FOO", stringsAsFactors = FALSE)
+
+    out <- capture.output(
+        gdb.rename_chroms(groot = groot, mapping = mapping, dry_run = TRUE)
+    )
+    expect_true(any(grepl("dry run", out)))
+
+    after_files <- sort(list.files(groot, recursive = TRUE, full.names = TRUE))
+    after_sizes <- file.info(after_files)$size
+    after_mtime <- file.info(after_files)$mtime
+
+    expect_equal(before_files, after_files)
+    expect_equal(before_sizes, after_sizes)
+    expect_equal(before_mtime, after_mtime)
+
+    unlink(db_dir, recursive = TRUE)
+})
+
+test_that("gdb.rename_chroms re-initializes a loaded DB on completion", {
+    gdb.init_examples()
+    src <- get("GROOT", envir = .misha)
+    db_dir <- tempfile("misha-rename-reload-")
+    dir.create(db_dir, recursive = TRUE)
+    file.copy(src, db_dir, recursive = TRUE)
+    groot <- file.path(db_dir, basename(src))
+
+    # Load the copied DB so that `was_loaded = TRUE` in gdb.rename_chroms.
+    gdb.init(groot)
+    expect_equal(
+        normalizePath(get("GROOT", envir = .misha)),
+        normalizePath(groot)
+    )
+
+    cs <- read.table(file.path(groot, "chrom_sizes.txt"),
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
+    chrom <- cs$chrom[1]
+
+    gdb.rename_chroms(
+        groot = NULL, # use active DB
+        mapping = data.frame(
+            old = chrom, new = "RELOADED",
+            stringsAsFactors = FALSE
+        ),
+        force = TRUE
+    )
+
+    # The active DB should still be the same path, but ALLGENOME should
+    # reflect the rename (ALLGENOME is built from chrom_sizes.txt).
+    expect_equal(
+        normalizePath(get("GROOT", envir = .misha)),
+        normalizePath(groot)
+    )
+    cs2 <- read.table(file.path(groot, "chrom_sizes.txt"),
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+    )
+    expect_true("RELOADED" %in% cs2$chrom)
 
     unlink(db_dir, recursive = TRUE)
 })
