@@ -137,7 +137,7 @@
 # Rewrites go through a temp-file + rename pattern, so the CONTAINING directory
 # must allow file creation (not just modification of the existing file).
 .misha_rename_required_dirs <- function(groot, plan) {
-    dirs <- groot  # chrom_sizes.txt rewrite + .rename_interrupted breadcrumb
+    dirs <- groot # chrom_sizes.txt rewrite + .rename_interrupted breadcrumb
     if (plan$is_indexed) {
         dirs <- c(dirs, dirname(plan$genome_idx_path))
     } else if (length(plan$seq_renames)) {
