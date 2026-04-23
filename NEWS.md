@@ -1,3 +1,7 @@
+# misha 5.6.17
+
+* Added `gdb.rename_chroms()` for in-place chromosome renaming in indexed or per-chromosome databases. Supports partial mappings, swaps/permutations, and a `dry_run` preview. Rewrites `chrom_sizes.txt`, `genome.idx` (indexed), per-chromosome sequence/track/interval files (per-chromosome), `.meta`, and single-file `.interv`. Not atomic across the whole DB; leaves a `.rename_interrupted` breadcrumb on failure.
+
 # misha 5.6.16
 
 * `gsynth.sample()` with `output_format = "fasta"` now writes a samtools-compatible `.fai` alongside the FASTA (tracking byte offsets during the write loop, no extra pass over the file). Removes the need to call `samtools faidx` by hand on every sampled genome. Matches the convention already used by `ggenome.implant()`.
