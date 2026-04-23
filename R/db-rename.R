@@ -99,3 +99,18 @@
     }
     df
 }
+
+# Execute `writer(tmp_path)` to produce a new version of `target`, then
+# atomically rename the temp file over the target. On writer error, the
+# temp file is removed and the original target is left untouched.
+.misha_rename_atomic_rewrite <- function(target, writer) {
+    tmp_path <- paste0(target, ".tmp.", Sys.getpid(), ".", as.integer(Sys.time()))
+    success <- FALSE
+    on.exit(if (!success && file.exists(tmp_path)) unlink(tmp_path), add = TRUE)
+    writer(tmp_path)
+    if (!file.rename(tmp_path, target)) {
+        stop(sprintf("failed to rename %s to %s", tmp_path, target), call. = FALSE)
+    }
+    success <- TRUE
+    invisible(target)
+}
