@@ -317,3 +317,70 @@ test_that(".misha_rename_rewrite_single_interv updates factor levels and values"
     expect_equal(levels(out$chrom), c("A", "B", "chr3"))
     unlink(path)
 })
+
+test_that("C_gdb_rewrite_genome_idx updates names without changing offsets", {
+    db_dir <- tempfile("misha-rename-")
+    dir.create(db_dir, recursive = TRUE)
+    gdb.init_examples()
+    orig_groot <- get("GROOT", envir = .misha)
+
+    file.copy(orig_groot, db_dir, recursive = TRUE)
+    new_groot <- file.path(db_dir, basename(orig_groot))
+
+    gdb.convert_to_indexed(new_groot, force = TRUE, validate = FALSE)
+
+    idx_path <- file.path(new_groot, "seq", "genome.idx")
+
+    # Parse genome.idx to capture the "before" state (names, offsets, lengths).
+    parse_idx <- function(path) {
+        con <- file(path, "rb")
+        on.exit(close(con))
+        magic <- rawToChar(readBin(con, "raw", n = 8L))
+        stopifnot(magic == "MISHAIDX")
+        readBin(con, "integer", n = 1L, size = 4L) # version
+        n <- readBin(con, "integer", n = 1L, size = 4L)
+        readBin(con, "integer", n = 2L, size = 4L) # checksum (as 2x int32)
+        entries <- vector("list", n)
+        for (i in seq_len(n)) {
+            chromid <- readBin(con, "integer", n = 1L, size = 4L)
+            name_len <- readBin(con, "integer", n = 1L, size = 2L, signed = FALSE)
+            nm <- if (name_len > 0L) {
+                rawToChar(readBin(con, "raw", n = name_len))
+            } else {
+                ""
+            }
+            # offset/length/reserved are uint64 — read as raw and summarize.
+            tail_raw <- readBin(con, "raw", n = 24L)
+            entries[[i]] <- list(chromid = chromid, name = nm, tail = tail_raw)
+        }
+        entries
+    }
+
+    before <- parse_idx(idx_path)
+    before_names <- vapply(before, `[[`, character(1), "name")
+    stopifnot("chr1" %in% before_names)
+
+    .gcall("C_gdb_rewrite_genome_idx", idx_path, "chr1", "chrFOO", .misha_env())
+
+    after <- parse_idx(idx_path)
+    after_names <- vapply(after, `[[`, character(1), "name")
+
+    # Names for the renamed contig updated; others untouched.
+    expect_true("chrFOO" %in% after_names)
+    expect_false("chr1" %in% after_names)
+    expect_equal(length(before), length(after))
+    # Offsets/lengths/chromids untouched.
+    expect_equal(
+        vapply(before, `[[`, integer(1), "chromid"),
+        vapply(after,  `[[`, integer(1), "chromid")
+    )
+    expect_identical(
+        lapply(before, `[[`, "tail"),
+        lapply(after,  `[[`, "tail")
+    )
+
+    # Checksum was recomputed correctly — gdb.init() validates it.
+    expect_silent(gdb.init(new_groot))
+
+    unlink(db_dir, recursive = TRUE)
+})
