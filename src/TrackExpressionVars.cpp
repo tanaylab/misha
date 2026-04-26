@@ -1749,7 +1749,12 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 						chromids.insert(chromid);
 						if (track_type == GenomeTrack::FIXED_BIN)
 						{
-							gtrack_fbin.init_read((trackpath + "/" + *ifilename).c_str(), chromid);
+							// Metadata-only: this loop only validates bin_size
+							// consistency, so skip the mmap setup that init_read
+							// otherwise does. With many tracks × many
+							// chromosomes the per-call open + mmap + madvise +
+							// close was dominating gextract setup time.
+							gtrack_fbin.init_read_metadata((trackpath + "/" + *ifilename).c_str(), chromid);
 							if (ifilename == filenames.begin())
 							{
 								binsize = gtrack_fbin.get_bin_size();

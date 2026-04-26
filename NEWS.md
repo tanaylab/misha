@@ -1,6 +1,8 @@
 # misha 5.6.17
 
-* Fixed dense-track `gextract` regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Every chromosome transition eagerly paged in every mapped track via `MAP_POPULATE`, costing seconds of kernel time per call even with a warm cache. The `MADV_SEQUENTIAL` hint already in place is enough to drive kernel read-ahead.
+* Fixed dense-track `gextract` regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Two compounding causes:
+  - `MmapFile` used `MAP_POPULATE`, eagerly paging in every mapped track at every chromosome transition (already covered by `MADV_SEQUENTIAL`).
+  - The two track-validation loops in `create_expr_iterator` and `TrackExpressionVars::init` were calling `GenomeTrackFixedBin::init_read()` once per chromosome per track, paying open + mmap + madvise + close + munmap each time, even though they only needed the bin size and file size. Replaced with a metadata-only path that stat()s for size and reads bin_size only once per track. Net effect on Tamar's 51-motif workload: 22s → 0.4s.
 * Added an opt-in performance regression test (`MISHA_PERF_TESTS=true`) covering many-track `gextract` setup overhead.
 
 # misha 5.6.16
