@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.16</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.17</span>
       </span>
     </div>
 
@@ -66,6 +66,15 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.17" id="misha-5617">misha 5.6.17<a class="anchor" aria-label="anchor" href="#misha-5617"></a></h2>
+<ul><li>Fixed dense-track <code>gextract</code> regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Two compounding causes:
+<ul><li>
+<code>MmapFile</code> used <code>MAP_POPULATE</code>, eagerly paging in every mapped track at every chromosome transition (already covered by <code>MADV_SEQUENTIAL</code>).</li>
+<li>The two track-validation loops in <code>create_expr_iterator</code> and <code>TrackExpressionVars::init</code> were calling <code>GenomeTrackFixedBin::init_read()</code> once per chromosome per track, paying open + mmap + madvise + close + munmap each time, even though they only needed the bin size and file size. Replaced with a metadata-only path that stat()s for size and reads bin_size only once per track. Net effect on Tamar’s 51-motif workload: 22s → 0.4s.</li>
+</ul></li>
+<li>Added an opt-in performance regression test (<code>MISHA_PERF_TESTS=true</code>) covering many-track <code>gextract</code> setup overhead.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.16" id="misha-5616">misha 5.6.16<a class="anchor" aria-label="anchor" href="#misha-5616"></a></h2>
 <ul><li>
