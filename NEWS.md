@@ -1,3 +1,8 @@
+# misha 5.6.17
+
+* Fixed dense-track `gextract` regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Every chromosome transition eagerly paged in every mapped track via `MAP_POPULATE`, costing seconds of kernel time per call even with a warm cache. The `MADV_SEQUENTIAL` hint already in place is enough to drive kernel read-ahead.
+* Added an opt-in performance regression test (`MISHA_PERF_TESTS=true`) covering many-track `gextract` setup overhead.
+
 # misha 5.6.16
 
 * `gsynth.sample()` with `output_format = "fasta"` now writes a samtools-compatible `.fai` alongside the FASTA (tracking byte offsets during the write loop, no extra pass over the file). Removes the need to call `samtools faidx` by hand on every sampled genome. Matches the convention already used by `ggenome.implant()`.
