@@ -30,10 +30,19 @@ public:
 	double last_min_pos() const override;
 	void set_master_obj(GenomeTrackFixedBin *master_obj) { m_master_obj = master_obj; m_master_synced = false; }
 
-	void init_read(const char *filename, int chromid) { init_read(filename, "rb", chromid); }
+	void init_read(const char *filename, int chromid) { init_read(filename, "rb", chromid, true); }
 	void init_write(const char *filename, unsigned bin_size, int chromid);
 
-	void init_update(const char *filename, int chromid) { init_read(filename, "rb+", chromid); }
+	void init_update(const char *filename, int chromid) { init_read(filename, "rb+", chromid, true); }
+
+	// Metadata-only init for callers that just need bin_size / num_samples
+	// (e.g. the create_expr_iterator validation loop). Skips the mmap setup
+	// and avoids re-reading the header on every chromosome of the same track —
+	// bin_size is identical across chromosomes, so we cache it on the object
+	// and only stat() subsequent files for size. With many tracks × many
+	// chromosomes this dominated gextract setup time even after MAP_POPULATE
+	// was removed.
+	void init_read_metadata(const char *filename, int chromid);
 
 	unsigned get_bin_size() const { return m_bin_size; }
 	int64_t  get_num_samples() const { return m_num_samples; }
@@ -77,7 +86,7 @@ protected:
 	std::string m_dat_mode;
 	bool        m_dat_open{false};
 
-	void init_read(const char *filename, const char *mode, int chromid);
+	void init_read(const char *filename, const char *mode, int chromid, bool setup_mmap = true);
 
 	// Helper to parse header at current file position
 	void read_header_at_current_pos_(BufferedFile &bf);
