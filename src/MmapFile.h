@@ -45,9 +45,10 @@ public:
         m_size = st.st_size;
         if (m_size == 0) { ::close(m_fd); m_fd = -1; return true; }
         int flags = MAP_PRIVATE;
-#if !defined(__APPLE__)
-        flags |= MAP_POPULATE;  // eagerly page in on Linux (naryn pattern)
-#endif
+        // No MAP_POPULATE: with many tracks per call (e.g. ~50 motif tracks
+        // × ~38MB per chromosome), eager page-in adds seconds of page-table
+        // walking per chromosome transition even with a warm cache. The
+        // MADV_SEQUENTIAL hint below is enough to drive kernel read-ahead.
         m_data = static_cast<uint8_t*>(mmap(nullptr, m_size, PROT_READ, flags, m_fd, 0));
         if (m_data == MAP_FAILED) { m_data = nullptr; ::close(m_fd); m_fd = -1; return false; }
         ::close(m_fd); m_fd = -1;  // fd not needed after mmap (naryn pattern)

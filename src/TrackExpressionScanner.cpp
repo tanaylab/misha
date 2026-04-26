@@ -651,7 +651,12 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 
 					chromids.insert(chromid);
 					if (track_type == GenomeTrack::FIXED_BIN) {
-                        gtrack_fbin.init_read((trackpath + "/" + *ifilename).c_str(), chromid);
+                        // Metadata-only: this loop only validates bin_size and
+                        // num_samples, so skip the mmap setup that init_read
+                        // otherwise does. With many tracks × many chromosomes
+                        // the per-call open+mmap+madvise+close was dominating
+                        // gextract setup time.
+                        gtrack_fbin.init_read_metadata((trackpath + "/" + *ifilename).c_str(), chromid);
                         int64_t expected_num_bins = (int64_t)ceil(all_genome_intervs[chromid].end / (double)gtrack_fbin.get_bin_size());
 
                         if (gtrack_fbin.get_num_samples() != expected_num_bins){
