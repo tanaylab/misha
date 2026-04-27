@@ -47,11 +47,17 @@ public:
         int flags = MAP_PRIVATE;
         // No MAP_POPULATE: with many tracks per call (e.g. ~50 motif tracks
         // × ~38MB per chromosome), eager page-in adds seconds of page-table
-        // walking per chromosome transition even with a warm cache. The
-        // MADV_SEQUENTIAL hint below is enough to drive kernel read-ahead.
+        // walking per chromosome transition even with a warm cache.
         m_data = static_cast<uint8_t*>(mmap(nullptr, m_size, PROT_READ, flags, m_fd, 0));
         if (m_data == MAP_FAILED) { m_data = nullptr; ::close(m_fd); m_fd = -1; return false; }
         ::close(m_fd); m_fd = -1;  // fd not needed after mmap (naryn pattern)
+        // MADV_SEQUENTIAL on NFS triggers a large synchronous read-ahead
+        // window per page fault — devastating for tile-clustered access
+        // patterns (e.g. gextract over hundreds of motif tracks with a
+        // tiled iterator), where we touch only a few KB out of each
+        // ~50 MB chrom file. Measured cold-NFS: SEQUENTIAL=159s,
+        // NORMAL=118s, WILLNEED=117s, RANDOM=4.7s for the same workload.
+        // RANDOM is also no slower than SEQUENTIAL on warm cache.
         madvise(m_data, m_size, sequential ? MADV_SEQUENTIAL : MADV_RANDOM);
         return true;
     }
