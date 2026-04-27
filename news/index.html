@@ -68,7 +68,8 @@
 
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.17" id="misha-5617">misha 5.6.17<a class="anchor" aria-label="anchor" href="#misha-5617"></a></h2>
-<ul><li>Fixed dense-track <code>gextract</code> regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Two compounding causes:
+<ul><li>Fixed <code>gextract</code> over thousands of tracks failing with “Too many open files” (EMFILE). <code>GenomeTrackSparse</code> and <code>GenomeTrackFixedBin</code> (dense) were holding one open <code>FILE*</code> per track for the lifetime of the call, so workloads over hundreds–thousands of motif tracks blew past the default 1024 soft <code>RLIMIT_NOFILE</code>. The <code>BufferedFile</code> handle is now released once it is no longer needed (sparse: after data is loaded into memory; dense: after <code>mmap</code> is set up — reads go through the mapped region). Subsequent chromosome transitions reopen via the same paths. Negligible perf cost.</li>
+<li>Fixed dense-track <code>gextract</code> regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Two compounding causes:
 <ul><li>
 <code>MmapFile</code> used <code>MAP_POPULATE</code>, eagerly paging in every mapped track at every chromosome transition (already covered by <code>MADV_SEQUENTIAL</code>).</li>
 <li>The two track-validation loops in <code>create_expr_iterator</code> and <code>TrackExpressionVars::init</code> were calling <code>GenomeTrackFixedBin::init_read()</code> once per chromosome per track, paying open + mmap + madvise + close + munmap each time, even though they only needed the bin size and file size. Replaced with a metadata-only path that stat()s for size and reads bin_size only once per track. Net effect on Tamar’s 51-motif workload: 22s → 0.4s.</li>
