@@ -20,8 +20,9 @@
 #' @param band optional 2D band parameter
 #' @return one of "tiles" or "tracks"
 #' @keywords internal
-.gmultitasking_strategy <- function(tracks, intervals, file = NULL,
-                                    intervals.set.out = NULL, band = NULL) {
+.gmultitasking_strategy <- function(tracks, intervals, iterator = NULL,
+                                    file = NULL, intervals.set.out = NULL,
+                                    band = NULL) {
     strategy <- getOption("gmultitasking.strategy", "auto")
 
     # Explicit override always wins.
@@ -30,41 +31,63 @@
     }
     if (!identical(strategy, "auto")) {
         warning(
-            sprintf(
-                "Unknown gmultitasking.strategy '%s'; falling back to 'auto'.",
-                as.character(strategy)
-            ),
+            sprintf("Unknown gmultitasking.strategy '%s'; falling back to 'auto'.",
+                    as.character(strategy)),
             call. = FALSE
         )
     }
 
-    # Track-parallel disqualifiers.
-    if (length(tracks) < 2) {
-        return("tiles")
-    }
-    if (!is.null(file) || !is.null(intervals.set.out)) {
-        return("tiles")
-    }
-    if (!is.null(band)) {
-        return("tiles")
-    }
+    # Track-parallel hard disqualifiers (correctness / output-shape).
+    if (!is.null(file) || !is.null(intervals.set.out)) return("tiles")
+    if (!is.null(band)) return("tiles")
 
-    # Number of intervals — works for plain data.frames and big sets we can
-    # measure without forcing a load.
+    # Track-parallel only pays off for INTERVAL-BASED iterators — those that
+    # produce one row per (caller-defined) interval rather than streaming a
+    # bin scan over a chrom range. For streaming iterators (numeric bin size,
+    # numeric 2D rect, or NULL → implicit dense scan) tile-parallel can
+    # split the bin range across `gmax.processes` workers while
+    # track-parallel is capped at `length(tracks)` workers (each scanning
+    # the FULL bin range on its track subset). On a 10.7M-bin streaming
+    # scan this measured 6–17× SLOWER for track-parallel — never auto-trigger.
+    #
+    # Accepted as interval-based:
+    #   - a data.frame (intervals literal)
+    #   - a length-1 character that names a saved intervals set
+    #     (gextract resolves this to the same row-geometry as a data.frame)
+    # Rejected as streaming (or unknown — stay safe):
+    #   - numeric / numeric vector
+    #   - NULL (implicit iterator, depends on track types)
+    #   - character that names a TRACK (dense → streaming; sparse untested
+    #     in this branch — opt in explicitly via options(strategy="tracks"))
+    is_interval_iter <- FALSE
+    if (is.data.frame(iterator)) {
+        is_interval_iter <- TRUE
+    } else if (is.character(iterator) && length(iterator) == 1L) {
+        is_interval_iter <- tryCatch(gintervals.exists(iterator),
+                                     error = function(e) FALSE)
+    }
+    if (!is_interval_iter) return("tiles")
+
+    # Want enough tracks AND enough intervals to amortize fork+merge cost.
+    # Empirical (n106 strategy-matrix bench, 3 chroms, cold + warm cache):
+    #   - 8 tracks × 90K intervals: tracks 1.4× faster cold, neutral warm
+    #   - 15 tracks × 90K intervals: 1.4× cold, 1.0× warm
+    #   - 30 tracks × 90K intervals: 1.3× cold, 1.0× warm
+    #   - dense_iv (105K rows): 1.9-2.1× cold across all sizes
+    # Below 8 tracks the track-parallel parallelism is too capped and the
+    # warm-cache penalty starts to bite.
+    if (length(tracks) < 8) return("tiles")
+
     n_intervals <- tryCatch(
         if (is.data.frame(intervals)) nrow(intervals) else NA_integer_,
         error = function(e) NA_integer_
     )
     if (is.na(n_intervals)) {
-        # Couldn't determine size — fall back to tiles (existing behaviour).
+        # Couldn't size the intervals (big-set on disk) — stay conservative.
         return("tiles")
     }
-
-    # Workload threshold. Below ~1e6 (track, interval) pairs the per-worker
-    # fork + result-merge cost outweighs the I/O parallelism benefit.
-    if ((as.numeric(length(tracks)) * as.numeric(n_intervals)) < 1e6) {
-        return("tiles")
-    }
+    # Even tiny iterators on many tracks aren't worth the fork overhead.
+    if (n_intervals < 1000L) return("tiles")
 
     "tracks"
 }
@@ -82,10 +105,8 @@
                                      band, file, intervals.set.out, envir) {
     if (.Platform$OS.type != "unix") {
         # mclapply forks; on Windows fall back to the regular tile-parallel path.
-        return(.gcall(
-            "gextract_multitask", intervals, tracks, colnames,
-            iterator, band, file, intervals.set.out, envir
-        ))
+        return(.gcall("gextract_multitask", intervals, tracks, colnames,
+                      iterator, band, file, intervals.set.out, envir))
     }
 
     n_workers <- as.integer(.ggetOption("gmax.processes"))
@@ -96,10 +117,8 @@
     # assignment helps balance per-track cost when tracks have similar sizes.
     chunks <- split(tracks, rep(seq_len(n_workers), length.out = length(tracks)))
     if (!is.null(colnames)) {
-        chunks_names <- split(
-            colnames,
-            rep(seq_len(n_workers), length.out = length(colnames))
-        )
+        chunks_names <- split(colnames,
+                              rep(seq_len(n_workers), length.out = length(colnames)))
     } else {
         chunks_names <- replicate(n_workers, NULL, simplify = FALSE)
     }
@@ -108,30 +127,22 @@
     worker <- function(idx) {
         old_mt <- options(gmultitasking = FALSE)
         on.exit(options(old_mt), add = TRUE)
-        .gcall(
-            "C_gextract", intervals, chunks[[idx]], chunks_names[[idx]],
-            iterator, band, NULL, NULL, envir
-        )
+        .gcall("C_gextract", intervals, chunks[[idx]], chunks_names[[idx]],
+               iterator, band, NULL, NULL, envir)
     }
 
     results <- parallel::mclapply(seq_len(n_workers), worker,
-        mc.cores = n_workers, mc.preschedule = FALSE
-    )
+                                  mc.cores = n_workers, mc.preschedule = FALSE)
 
     # Surface any worker errors.
     errs <- vapply(results, inherits, logical(1), what = "try-error")
     if (any(errs)) {
         first_err <- attr(results[[which(errs)[1]]], "condition")
-        stop(if (!is.null(first_err)) {
-            conditionMessage(first_err)
-        } else {
-            "track-parallel gextract worker failed"
-        }, call. = FALSE)
+        stop(if (!is.null(first_err)) conditionMessage(first_err)
+             else "track-parallel gextract worker failed", call. = FALSE)
     }
     nullish <- vapply(results, is.null, logical(1))
-    if (all(nullish)) {
-        return(NULL)
-    }
+    if (all(nullish)) return(NULL)
 
     # Pick the first non-null result as the row scaffold; cbind value columns
     # from every worker.

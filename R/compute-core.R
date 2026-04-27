@@ -97,7 +97,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
         {
             if (!is.null(intervals)) {
                 if (.ggetOption("gmultitasking")) {
-                    strategy <- .gmultitasking_strategy(tracks, intervals, file, intervals.set.out, band)
+                    strategy <- .gmultitasking_strategy(tracks, intervals, iterator, file, intervals.set.out, band)
                     if (identical(strategy, "tracks")) {
                         res <- .gextract_track_parallel(intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
                     } else {
