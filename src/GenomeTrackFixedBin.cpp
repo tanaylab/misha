@@ -1235,6 +1235,16 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 			m_mmap_path.clear();
 		}
 	}
+
+	// When the mmap path is active, m_bfile is dead weight — read_next_bin
+	// and read_bins_bulk both branch through m_mmap_data instead. Close it
+	// so per-track FILE*s do not pile up across thousands of motif tracks
+	// and overflow RLIMIT_NOFILE. Header re-reads on chrom transitions
+	// just reopen via the smart-handle / per-chrom path above.
+	if (m_mmap_data) {
+		m_bfile.close();
+		m_dat_open = false;
+	}
 }
 
 void GenomeTrackFixedBin::init_write(const char *filename, unsigned bin_size, int chromid)

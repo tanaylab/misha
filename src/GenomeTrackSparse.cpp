@@ -228,6 +228,13 @@ void GenomeTrackSparse::read_file_into_mem()
 
 	m_icur_interval = m_intervals.begin();
 	m_loaded = true;
+
+	// All chrom data is now in m_intervals/m_vals; the file handle is no
+	// longer needed. Close it so per-track FILE*s do not pile up across N
+	// motif tracks and overflow RLIMIT_NOFILE. The next chromosome
+	// transition reopens via the smart-handle path in init_read.
+	m_bfile.close();
+	m_dat_open = false;
 }
 
 void GenomeTrackSparse::read_interval(const GInterval &interval)

@@ -1,5 +1,6 @@
 # misha 5.6.17
 
+* Fixed `gextract` over thousands of tracks failing with "Too many open files" (EMFILE). `GenomeTrackSparse` and `GenomeTrackFixedBin` (dense) were holding one open `FILE*` per track for the lifetime of the call, so workloads over hundreds–thousands of motif tracks blew past the default 1024 soft `RLIMIT_NOFILE`. The `BufferedFile` handle is now released once it is no longer needed (sparse: after data is loaded into memory; dense: after `mmap` is set up — reads go through the mapped region). Subsequent chromosome transitions reopen via the same paths. Negligible perf cost.
 * Fixed dense-track `gextract` regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Two compounding causes:
   - `MmapFile` used `MAP_POPULATE`, eagerly paging in every mapped track at every chromosome transition (already covered by `MADV_SEQUENTIAL`).
   - The two track-validation loops in `create_expr_iterator` and `TrackExpressionVars::init` were calling `GenomeTrackFixedBin::init_read()` once per chromosome per track, paying open + mmap + madvise + close + munmap each time, even though they only needed the bin size and file size. Replaced with a metadata-only path that stat()s for size and reads bin_size only once per track. Net effect on Tamar's 51-motif workload: 22s → 0.4s.
