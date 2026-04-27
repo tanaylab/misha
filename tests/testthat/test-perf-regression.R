@@ -239,8 +239,10 @@ test_that("many-track large-iterator gextract: track-parallel >= tile-parallel",
     # Track-parallel must not be more than 2× slower on warm cache. (It's
     # expected to win by ~5× cold; this guards against catastrophic merge or
     # mclapply-overhead regressions on the warm path.)
-    msg <- sprintf("tiles: %.1fms, tracks: %.1fms (ratio %.2fx)",
-                   t_tiles * 1000, t_tracks * 1000, t_tracks / t_tiles)
+    msg <- sprintf(
+        "tiles: %.1fms, tracks: %.1fms (ratio %.2fx)",
+        t_tiles * 1000, t_tracks * 1000, t_tracks / t_tiles
+    )
     if (t_tracks > t_tiles * 2) {
         fail(msg)
     } else {

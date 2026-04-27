@@ -30,16 +30,24 @@
     }
     if (!identical(strategy, "auto")) {
         warning(
-            sprintf("Unknown gmultitasking.strategy '%s'; falling back to 'auto'.",
-                    as.character(strategy)),
+            sprintf(
+                "Unknown gmultitasking.strategy '%s'; falling back to 'auto'.",
+                as.character(strategy)
+            ),
             call. = FALSE
         )
     }
 
     # Track-parallel disqualifiers.
-    if (length(tracks) < 2) return("tiles")
-    if (!is.null(file) || !is.null(intervals.set.out)) return("tiles")
-    if (!is.null(band)) return("tiles")
+    if (length(tracks) < 2) {
+        return("tiles")
+    }
+    if (!is.null(file) || !is.null(intervals.set.out)) {
+        return("tiles")
+    }
+    if (!is.null(band)) {
+        return("tiles")
+    }
 
     # Number of intervals — works for plain data.frames and big sets we can
     # measure without forcing a load.
@@ -74,8 +82,10 @@
                                      band, file, intervals.set.out, envir) {
     if (.Platform$OS.type != "unix") {
         # mclapply forks; on Windows fall back to the regular tile-parallel path.
-        return(.gcall("gextract_multitask", intervals, tracks, colnames,
-                      iterator, band, file, intervals.set.out, envir))
+        return(.gcall(
+            "gextract_multitask", intervals, tracks, colnames,
+            iterator, band, file, intervals.set.out, envir
+        ))
     }
 
     n_workers <- as.integer(.ggetOption("gmax.processes"))
@@ -86,8 +96,10 @@
     # assignment helps balance per-track cost when tracks have similar sizes.
     chunks <- split(tracks, rep(seq_len(n_workers), length.out = length(tracks)))
     if (!is.null(colnames)) {
-        chunks_names <- split(colnames,
-                              rep(seq_len(n_workers), length.out = length(colnames)))
+        chunks_names <- split(
+            colnames,
+            rep(seq_len(n_workers), length.out = length(colnames))
+        )
     } else {
         chunks_names <- replicate(n_workers, NULL, simplify = FALSE)
     }
@@ -96,22 +108,30 @@
     worker <- function(idx) {
         old_mt <- options(gmultitasking = FALSE)
         on.exit(options(old_mt), add = TRUE)
-        .gcall("C_gextract", intervals, chunks[[idx]], chunks_names[[idx]],
-               iterator, band, NULL, NULL, envir)
+        .gcall(
+            "C_gextract", intervals, chunks[[idx]], chunks_names[[idx]],
+            iterator, band, NULL, NULL, envir
+        )
     }
 
     results <- parallel::mclapply(seq_len(n_workers), worker,
-                                  mc.cores = n_workers, mc.preschedule = FALSE)
+        mc.cores = n_workers, mc.preschedule = FALSE
+    )
 
     # Surface any worker errors.
     errs <- vapply(results, inherits, logical(1), what = "try-error")
     if (any(errs)) {
         first_err <- attr(results[[which(errs)[1]]], "condition")
-        stop(if (!is.null(first_err)) conditionMessage(first_err)
-             else "track-parallel gextract worker failed", call. = FALSE)
+        stop(if (!is.null(first_err)) {
+            conditionMessage(first_err)
+        } else {
+            "track-parallel gextract worker failed"
+        }, call. = FALSE)
     }
     nullish <- vapply(results, is.null, logical(1))
-    if (all(nullish)) return(NULL)
+    if (all(nullish)) {
+        return(NULL)
+    }
 
     # Pick the first non-null result as the row scaffold; cbind value columns
     # from every worker.

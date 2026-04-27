@@ -22,7 +22,8 @@ with_strategy <- function(strategy, expr) {
                 values = runif(1), binsize = 50L, defval = 0
             )
         } else {
-            ints <- gintervals(1,
+            ints <- gintervals(
+                1,
                 seq(0, 5e5, by = 200),
                 seq(100, 5e5 + 100, by = 200)
             )
@@ -43,34 +44,44 @@ with_strategy <- function(strategy, expr) {
 test_that("track-parallel returns identical data.frame to tile-parallel", {
     fix <- .mt_fixture()
     on.exit(for (t in fix$tracks) try(gtrack.rm(t, force = TRUE), silent = TRUE),
-            add = TRUE)
+        add = TRUE
+    )
 
-    res_tiles <- with_strategy("tiles",
+    res_tiles <- with_strategy(
+        "tiles",
         gextract(fix$tracks, intervals = fix$scope_medium, iterator = 50)
     )
-    res_tracks <- with_strategy("tracks",
+    res_tracks <- with_strategy(
+        "tracks",
         gextract(fix$tracks, intervals = fix$scope_medium, iterator = 50)
     )
 
     expect_equal(nrow(res_tracks), nrow(res_tiles))
     expect_equal(names(res_tracks), names(res_tiles))
-    expect_equal(res_tracks[, c("chrom", "start", "end")],
-                 res_tiles[, c("chrom", "start", "end")])
+    expect_equal(
+        res_tracks[, c("chrom", "start", "end")],
+        res_tiles[, c("chrom", "start", "end")]
+    )
     for (col in fix$tracks) {
         expect_equal(res_tracks[[col]], res_tiles[[col]],
-                     tolerance = 1e-12, label = col)
+            tolerance = 1e-12, label = col
+        )
     }
 })
 
 test_that("track-parallel respects custom colnames", {
     fix <- .mt_fixture()
     on.exit(for (t in fix$tracks) try(gtrack.rm(t, force = TRUE), silent = TRUE),
-            add = TRUE)
+        add = TRUE
+    )
     custom <- paste0("col_", seq_along(fix$tracks))
 
-    res_tracks <- with_strategy("tracks",
-        gextract(fix$tracks, intervals = fix$scope_small, iterator = 50,
-                 colnames = custom)
+    res_tracks <- with_strategy(
+        "tracks",
+        gextract(fix$tracks,
+            intervals = fix$scope_small, iterator = 50,
+            colnames = custom
+        )
     )
     expect_true(all(custom %in% names(res_tracks)))
     # Column order: interval cols, then values, then intervalID.
@@ -100,7 +111,8 @@ test_that("auto strategy stays on 'tiles' when output is a file", {
     )
     expect_equal(
         .gmultitasking_strategy(rep("trk", 200), iv,
-                                intervals.set.out = "set"),
+            intervals.set.out = "set"
+        ),
         "tiles"
     )
 })
@@ -112,17 +124,21 @@ test_that("auto strategy stays on 'tiles' for single-track queries", {
 
 test_that("auto strategy stays on 'tiles' for 2D band queries", {
     iv <- data.frame(chrom = "chr1", start = 0:9999, end = 1:10000L)
-    expect_equal(.gmultitasking_strategy(rep("trk", 200), iv, band = c(0, 1e6)),
-                 "tiles")
+    expect_equal(
+        .gmultitasking_strategy(rep("trk", 200), iv, band = c(0, 1e6)),
+        "tiles"
+    )
 })
 
 test_that("explicit strategy override wins over heuristic", {
     iv <- gintervals(1, 0, 1000L)
     # Heuristic alone would pick tiles for this size; force tracks.
-    with_strategy("tracks",
+    with_strategy(
+        "tracks",
         expect_equal(.gmultitasking_strategy(c("a", "b"), iv), "tracks")
     )
-    with_strategy("tiles",
+    with_strategy(
+        "tiles",
         expect_equal(.gmultitasking_strategy(c("a", "b"), iv), "tiles")
     )
 })
@@ -130,9 +146,11 @@ test_that("explicit strategy override wins over heuristic", {
 test_that("unknown strategy falls back to auto with warning", {
     iv <- gintervals(1, 0, 1000L)
     with_strategy("nonsense", {
-        expect_warning(s <- .gmultitasking_strategy(c("a", "b"), iv),
-                       "Unknown gmultitasking.strategy")
-        expect_equal(s, "tiles")  # auto would pick tiles for tiny query
+        expect_warning(
+            s <- .gmultitasking_strategy(c("a", "b"), iv),
+            "Unknown gmultitasking.strategy"
+        )
+        expect_equal(s, "tiles") # auto would pick tiles for tiny query
     })
 })
 
@@ -141,12 +159,15 @@ test_that("strategy='tracks' and 'tiles' return identical row counts for tiny it
     # output structure regardless of strategy.
     fix <- .mt_fixture()
     on.exit(for (t in fix$tracks) try(gtrack.rm(t, force = TRUE), silent = TRUE),
-            add = TRUE)
+        add = TRUE
+    )
     tiny <- gintervals(1, 1e6, 1e6 + 250L)
-    res_tiles <- with_strategy("tiles",
+    res_tiles <- with_strategy(
+        "tiles",
         gextract(fix$tracks, intervals = tiny, iterator = 50)
     )
-    res_tracks <- with_strategy("tracks",
+    res_tracks <- with_strategy(
+        "tracks",
         gextract(fix$tracks, intervals = tiny, iterator = 50)
     )
     expect_equal(nrow(res_tracks), nrow(res_tiles))
