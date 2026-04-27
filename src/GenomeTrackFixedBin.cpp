@@ -1214,7 +1214,12 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 		// Only re-mmap if file changed (indexed format reuses same track.dat)
 		if (!m_mmap.is_open() || m_mmap_path != file_path) {
 			m_mmap.close();
-			m_mmap.open(file_path, true /* sequential */);
+			// MADV_RANDOM (sequential=false): tile-clustered access
+			// patterns over many tracks dominate dense gextract; on
+			// NFS, MADV_SEQUENTIAL's read-ahead is 30× slower for that
+			// case and no faster for true sequential scans (which
+			// memcpy from already-resident pages anyway).
+			m_mmap.open(file_path, false /* random */);
 			m_mmap_path = file_path;
 		}
 
