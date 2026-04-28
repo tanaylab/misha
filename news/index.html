@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.19</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.20</span>
       </span>
     </div>
 
@@ -63,9 +63,13 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.6.19/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.20" id="misha-5620">misha 5.6.20<a class="anchor" aria-label="anchor" href="#misha-5620"></a></h2>
+<ul><li>Fixed <code>gquantiles</code> hanging for many minutes on dense <code>binsize=1</code> whole-genome scans. The parent used to merge every non-NaN value into one <code>std::vector&lt;double&gt;</code> and single-thread <code>std::sort</code> it (~21 GB on mm10). Kids now sort their samples buffer before packing, and the parent does a heap-based k-way merge over the per-kid sorted runs. The single-process path (<code>gmultitasking = FALSE</code>) uses <code>std::nth_element</code> per percentile rank instead of a full sort. mm10 dense full-genome <code>gquantiles</code>: was hung, now ~75 s (multitask) / ~270 s (single-process). Sub-sampling fallback (when <code>gmax.data.size</code> forces it) preserved, with <code>samples</code> capacity pre-reserved.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.19" id="misha-5619">misha 5.6.19<a class="anchor" aria-label="anchor" href="#misha-5619"></a></h2>
 <ul><li>Fixed <code>gintervals.load</code> failing with “invalid columns definition” after <code>gintervals.save</code> of a bigset whose input had character <code>chrom</code> (e.g. a tibble from <code>dplyr</code>). On-disk per-chromosome files and the <code>.meta</code> zeroline now both store <code>chrom</code>/<code>chrom1</code>/<code>chrom2</code> as factor with full ALLGENOME levels, and the on-disk frame is normalized to plain <code>data.frame</code>.</li>
