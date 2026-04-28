@@ -14,7 +14,8 @@ prefixes or an array of integers (like: '1' for "chr1")}
 
 \item{ends}{an array of end coordinates. If '-1' chromosome size is assumed.}
 
-\item{strands}{'NULL' or an array consisting of '-1', '0' or '1' values}
+\item{strands}{'NULL', a numeric vector of '-1', '0' or '1' values, or a
+character/factor vector with values "+", "-", ".", "*" or ""}
 }
 \value{
 A data frame representing the intervals.
@@ -34,7 +35,9 @@ must be added after the three obligatory ones.
 
 If 'strands' argument is not 'NULL' an additional column "strand" is added
 to the intervals. The possible values of a strand can be '1' (plus strand),
-'-1' (minus strand) or '0' (unknown).
+'-1' (minus strand) or '0' (unknown). Character values "+", "-", ".", "*"
+and "" (or factors with these levels) are also accepted and converted
+internally to '1', '-1' and '0' respectively.
 }
 \examples{
 \dontshow{
