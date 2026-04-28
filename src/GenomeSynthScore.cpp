@@ -32,6 +32,11 @@ extern "C" {
 /**
  * C_gsynth_score: Score reference sequence under a trained Markov model.
  *
+ * The kernel writes one fixed-bin track file per chromosome listed in
+ * _chromids. The track directory must already exist (the R wrapper
+ * creates it once, even in parallel mode where multiple workers share
+ * the dir).
+ *
  * @param _log_p_list   List of log-p matrices (one per bin); each is
  *                      num_kmers x 4 in column-major R layout.
  * @param _bin_indices  Integer vector of bin indices for each
@@ -39,8 +44,11 @@ extern "C" {
  * @param _iter_starts  Integer vector of iter-position start coords.
  * @param _iter_chroms  Integer vector of iter-position chrom IDs.
  * @param _intervals    R intervals object (regions to score).
- * @param _track_dir    String: misha track NAME (kernel calls
- *                      create_track_dir(envir, name) to mkdir).
+ * @param _track_name   String: misha track name (used to look up the
+ *                      track dir via rdb::track2path).
+ * @param _chromids     Integer vector of chromids (0-based) the kernel
+ *                      should write files for. NULL or empty = all
+ *                      chroms in the chromkey.
  * @param _binsize      Integer: output bin size in bp (resolution).
  * @param _k            Integer: Markov order k.
  * @param _iter_size    Integer: stratum iterator bin size in bp.
@@ -52,7 +60,7 @@ extern "C" {
  */
 SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
                     SEXP _iter_starts, SEXP _iter_chroms,
-                    SEXP _intervals, SEXP _track_dir,
+                    SEXP _intervals, SEXP _track_name, SEXP _chromids,
                     SEXP _binsize, SEXP _k, SEXP _iter_size,
                     SEXP _n_policy, SEXP _sparse_policy,
                     SEXP _envir) {
@@ -130,9 +138,30 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
             }
         }
 
-        // ---- Track name -> create dir (matches gtrack_create_dense) ----
-        const char *track_name = CHAR(STRING_ELT(_track_dir, 0));
-        string track_dir_s = create_track_dir(_envir, track_name);
+        // ---- Resolve track dir. R wrapper has already created it
+        //      (mkdir before fork in parallel mode), so we only need
+        //      the path; do not call create_track_dir which mkdir's
+        //      and would fail concurrently for multiple workers. ----
+        const char *track_name = CHAR(STRING_ELT(_track_name, 0));
+        string track_dir_s = track2path(_envir, track_name);
+
+        // ---- Build list of chromids the kernel should process. ----
+        vector<int> chroms_to_process;
+        if (Rf_isNull(_chromids) || Rf_length(_chromids) == 0) {
+            chroms_to_process.reserve(num_chroms);
+            for (int c = 0; c < num_chroms; ++c) {
+                chroms_to_process.push_back(c);
+            }
+        } else {
+            int *cids = INTEGER(_chromids);
+            int n = Rf_length(_chromids);
+            chroms_to_process.reserve(n);
+            for (int i = 0; i < n; ++i) {
+                if (cids[i] >= 0 && cids[i] < num_chroms) {
+                    chroms_to_process.push_back(cids[i]);
+                }
+            }
+        }
 
         // ---- Per-chromosome 200bp bin lookup (sorted by start) ----
         vector<vector<pair<int64_t, int>>> chrom_bins(num_chroms);
@@ -149,10 +178,10 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
         GenomeSeqFetch seqfetch;
         seqfetch.set_seqdir(string(rdb::get_groot(_envir)) + "/seq");
 
-        // Total bp for progress reporting.
+        // Total bp for progress reporting (only over chroms we'll process).
         uint64_t total_bp = 0;
-        for (int c = 0; c < num_chroms; ++c) {
-            for (const auto &iv : sample_per_chrom[c])
+        for (int chromid : chroms_to_process) {
+            for (const auto &iv : sample_per_chrom[chromid])
                 total_bp += iv.end - iv.start;
         }
         Progress_reporter progress;
@@ -160,11 +189,12 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
 
         const float NaN_FLOAT = numeric_limits<float>::quiet_NaN();
 
-        // Iterate ALL chromosomes in chromkey order (matching
-        // GenomeTrackCreateDense): every chrom gets a track file, even
-        // if no input intervals fall on it (writes all-NaN). Required
-        // so gextract on out-of-input chroms doesn't fail.
-        for (int chromid = 0; chromid < num_chroms; ++chromid) {
+        // Iterate the assigned chromosomes. Every assigned chrom gets a
+        // track file, even if no input intervals fall on it (writes
+        // all-NaN). In parallel mode, workers split the chromkey set
+        // such that every chrom is owned by exactly one worker, so the
+        // resulting track dir always has a file per chrom.
+        for (int chromid : chroms_to_process) {
             int64_t chrom_size = chromkey.get_chrom_size(chromid);
             if (chrom_size <= 0) continue;
 

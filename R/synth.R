@@ -2055,9 +2055,9 @@ gsynth.score <- function(model,
     n_policy_int <- if (n_policy == "uniform") 1L else 0L
     sparse_policy_int <- if (sparse_policy == "uniform") 1L else 0L
 
-    # Track-creation flow mirrors gtrack.create_dense: kernel calls
-    # create_track_dir(envir, name) internally; on success, R registers
-    # the track in the misha db and sets attrs.
+    # ---- Track-creation flow: parent creates the dir once (idempotent
+    # across forked workers in parallel mode), kernel writes per-chrom
+    # files into it, parent registers the track on success.
     if (gtrack.exists(track)) {
         if (!overwrite) {
             stop(sprintf(
@@ -2068,24 +2068,96 @@ gsynth.score <- function(model,
         gtrack.rm(track, force = TRUE)
     }
 
+    track_path <- .track_dir(track)
+    if (!dir.exists(track_path)) {
+        dir.create(track_path, recursive = TRUE, mode = "0777")
+    }
+
+    # ---- Decide serial vs parallel chrom dispatch.
+    # Mirrors misha's general convention: gmultitasking + gmax.processes.
+    # Each chrom is independent (own state, own output file), so chrom-
+    # parallelism scales near-linearly until n_workers ~ #chroms.
+    all_chromids <- seq_along(chrom_key) - 1L # 0-based
+    use_mt <- isTRUE(.ggetOption("gmultitasking", TRUE)) &&
+        length(all_chromids) > 1L
+    n_workers <- if (use_mt) {
+        as.integer(min(.ggetOption("gmax.processes", 1L), length(all_chromids)))
+    } else {
+        1L
+    }
+
     success <- FALSE
     tryCatch(
         {
-            .gcall(
-                "C_gsynth_score",
-                log_p_list,
-                flat_indices,
-                iter_starts,
-                iter_chroms,
-                intervals,
-                track,
-                as.integer(resolution),
-                as.integer(model$k),
-                as.integer(.iterator),
-                n_policy_int,
-                sparse_policy_int,
-                .misha_env()
-            )
+            if (n_workers <= 1L) {
+                # Serial path — single .gcall covering all chroms.
+                .gcall(
+                    "C_gsynth_score",
+                    log_p_list,
+                    flat_indices,
+                    iter_starts,
+                    iter_chroms,
+                    intervals,
+                    track,
+                    all_chromids,
+                    as.integer(resolution),
+                    as.integer(model$k),
+                    as.integer(.iterator),
+                    n_policy_int,
+                    sparse_policy_int,
+                    .misha_env()
+                )
+            } else {
+                # Parallel path — split chroms across workers, each worker
+                # writes its assigned chrom files into the shared track dir.
+                # Round-robin split keeps the largest chroms spread across
+                # workers (chromkey is roughly size-sorted).
+                groups <- split(all_chromids, seq_along(all_chromids) %% n_workers)
+                results <- parallel::mclapply(groups, function(cids) {
+                    tryCatch(
+                        {
+                            .gcall(
+                                "C_gsynth_score",
+                                log_p_list,
+                                flat_indices,
+                                iter_starts,
+                                iter_chroms,
+                                intervals,
+                                track,
+                                as.integer(cids),
+                                as.integer(resolution),
+                                as.integer(model$k),
+                                as.integer(.iterator),
+                                n_policy_int,
+                                sparse_policy_int,
+                                .misha_env()
+                            )
+                            list(ok = TRUE)
+                        },
+                        error = function(e) list(ok = FALSE, msg = conditionMessage(e))
+                    )
+                }, mc.cores = n_workers, mc.preschedule = FALSE)
+
+                fails <- vapply(results, function(r) {
+                    if (inherits(r, "try-error")) {
+                        return(TRUE)
+                    }
+                    if (is.null(r) || !isTRUE(r$ok)) {
+                        return(TRUE)
+                    }
+                    FALSE
+                }, logical(1))
+                if (any(fails)) {
+                    msgs <- vapply(results[fails], function(r) {
+                        if (is.list(r) && !is.null(r$msg)) r$msg else "<unknown>"
+                    }, character(1))
+                    stop(sprintf(
+                        "gsynth.score parallel kernel failed in %d/%d worker(s): %s",
+                        sum(fails), length(results),
+                        paste(unique(msgs), collapse = "; ")
+                    ), call. = FALSE)
+                }
+            }
 
             .gdb.add_track(track)
 
