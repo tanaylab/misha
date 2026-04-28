@@ -1320,6 +1320,12 @@ gsynth.save <- function(model, file, compress = FALSE) {
         dim_sizes = if (n_dims > 0) as.integer(model$dim_sizes) else list(),
         total_bins = as.integer(total_bins),
         pseudocount = if (!is.null(model$pseudocount)) as.numeric(model$pseudocount) else 1.0,
+        prior_mode = if (!is.null(model$prior_mode)) as.character(model$prior_mode) else "uniform",
+        prior = if (!is.null(model$prior)) {
+            apply(model$prior, 1, function(row) as.numeric(row), simplify = FALSE)
+        } else {
+            NULL
+        },
         min_obs = as.integer(if (!is.null(model$min_obs)) model$min_obs else 0L),
         total_kmers = as.numeric(model$total_kmers),
         total_masked = as.numeric(model$total_masked),
@@ -1562,6 +1568,22 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 
     # Build the model object
     pseudocount <- if (!is.null(metadata$pseudocount)) as.numeric(metadata$pseudocount) else 1.0
+
+    # Reconstruct prior; defaults to uniform 1/4 for old .gsm files without it.
+    prior_mode <- if (!is.null(metadata$prior_mode)) as.character(metadata$prior_mode) else "uniform"
+    if (!is.null(metadata$prior)) {
+        prior_rows <- lapply(metadata$prior, function(row) as.numeric(unlist(row)))
+        prior_mat <- do.call(rbind, prior_rows)
+        if (nrow(prior_mat) != total_bins || ncol(prior_mat) != 4L) {
+            stop(sprintf(
+                "Invalid prior in .gsm: got %d x %d, expected %d x 4",
+                nrow(prior_mat), ncol(prior_mat), total_bins
+            ), call. = FALSE)
+        }
+    } else {
+        prior_mat <- matrix(0.25, nrow = total_bins, ncol = 4L)
+    }
+
     model <- list(
         k = k,
         num_kmers = num_kmers,
@@ -1577,6 +1599,8 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         dim_sizes = dim_sizes,
         total_bins = total_bins,
         pseudocount = pseudocount,
+        prior_mode = prior_mode,
+        prior = prior_mat,
         iterator = NULL,
         min_obs = min_obs,
         sparse_bins = sparse_bins
