@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.17</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.18</span>
       </span>
     </div>
 
@@ -66,6 +66,10 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.18" id="misha-5618">misha 5.6.18<a class="anchor" aria-label="anchor" href="#misha-5618"></a></h2>
+<ul><li>Added <code>getOption("gmultitasking.strategy")</code> for <code>gextract</code> (default <code>"auto"</code>). When the workload is large and many-track, <code>auto</code> routes to a track-parallel mode (each <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply</a></code> worker handles a track subset across all tiles) instead of the legacy tile-parallel mode (each fork-kid handles a tile range across all tracks). On the realistic 3,110 motif tracks × 2.19M tiled_peaks workload measured 57.6 min vs ~3.4 h projected for tile-parallel — a 3.5× per-track speedup. Override per-call via <code>options(gmultitasking.strategy = "tracks" | "tiles" | "auto")</code>. The heuristic stays on <code>"tiles"</code> for streaming iterators (numeric / NULL / 2D rect / track-name), single-track or fewer than 8 tracks, file/intervals.set.out output, or 2D band — so nothing else regresses (validated by a 36-cell matrix bench across iterator types × track counts × cache states).</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.17" id="misha-5617">misha 5.6.17<a class="anchor" aria-label="anchor" href="#misha-5617"></a></h2>
 <ul><li>Fixed <code>gextract</code> over thousands of tracks failing with “Too many open files” (EMFILE). <code>GenomeTrackSparse</code> and <code>GenomeTrackFixedBin</code> (dense) were holding one open <code>FILE*</code> per track for the lifetime of the call, so workloads over hundreds–thousands of motif tracks blew past the default 1024 soft <code>RLIMIT_NOFILE</code>. The <code>BufferedFile</code> handle is now released once it is no longer needed (sparse: after data is loaded into memory; dense: after <code>mmap</code> is set up — reads go through the mapped region). Subsequent chromosome transitions reopen via the same paths. Negligible perf cost.</li>
