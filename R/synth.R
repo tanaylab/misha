@@ -1430,6 +1430,12 @@ gsynth.load <- function(file) {
     if (!inherits(model, "gsynth.model")) {
         stop("File does not contain a valid gsynth.model", call. = FALSE)
     }
+    # Backfill prior fields for old RDS models trained before 5.7.0
+    if (is.null(model$prior_mode)) model$prior_mode <- "uniform"
+    if (is.null(model$prior)) {
+        tb <- if (!is.null(model$total_bins)) model$total_bins else model$num_bins
+        model$prior <- matrix(0.25, nrow = tb, ncol = 4L)
+    }
     model
 }
 
