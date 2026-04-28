@@ -21,7 +21,7 @@ When called with no dimension specifications, trains a single unstratified model
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.20</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.21</span>
       </span>
     </div>
 
@@ -87,7 +87,8 @@ When called with no dimension specifications, trains a single unstratified model
 <span>  iterator <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  pseudocount <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  min_obs <span class="op">=</span> <span class="fl">0</span>,</span>
-<span>  k <span class="op">=</span> <span class="fl">5L</span></span>
+<span>  k <span class="op">=</span> <span class="fl">5L</span>,</span>
+<span>  prior <span class="op">=</span> <span class="st">"marginal"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -126,8 +127,9 @@ track values are computed.</p></dd>
 
 
 <dt id="arg-pseudocount">pseudocount<a class="anchor" aria-label="anchor" href="#arg-pseudocount"></a></dt>
-<dd><p>Pseudocount added to all k-mer counts to avoid zero probabilities.
-Default is 1.</p></dd>
+<dd><p>Total Dirichlet concentration alpha used in the
+smoothed posterior <code>P(a|c,b) = (N + alpha * pi_a(b)) /
+(sum_a N + alpha)</code>. Default is 1.</p></dd>
 
 
 <dt id="arg-min-obs">min_obs<a class="anchor" aria-label="anchor" href="#arg-min-obs"></a></dt>
@@ -142,6 +144,24 @@ to uniform sampling unless merged via <code>bin_merge</code>.</p></dd>
 (context of length 5 plus the emitted base) transition probabilities.
 Higher values capture longer-range sequence dependencies but require
 exponentially more memory (\(4^k\) context states).</p></dd>
+
+
+<dt id="arg-prior">prior<a class="anchor" aria-label="anchor" href="#arg-prior"></a></dt>
+<dd><p>Per-base Dirichlet prior \(\pi_a(b)\). One of:</p><ul><li><p><code>"marginal"</code> (default): per-bin empirical base
+        composition learned from the trainer's own counts
+        (post bin-merge). Bins with zero observations fall back to
+        uniform with a warning.</p></li>
+<li><p><code>"global"</code>: a single base composition pooled over
+        all bins, broadcast to every bin.</p></li>
+<li><p><code>NULL</code> or <code>"uniform"</code>: uniform prior
+        (1/4 per base) – the pre-5.6.21 fallback.</p></li>
+<li><p>Length-4 numeric (optionally named A, C, G, T):
+        user-supplied global \(\pi\), broadcast.</p></li>
+<li><p><code>n_bins x 4</code> numeric matrix: user-supplied per-bin
+        \(\pi\).</p></li>
+</ul><p>Together with <code>pseudocount</code>, this defines the Dirichlet
+posterior. To reproduce the pre-5.6.21 Laplace-add-one behavior,
+pass <code>prior = NULL, pseudocount = 4</code>.</p></dd>
 
 </dl></div>
     <div id="value">
@@ -242,6 +262,7 @@ from valid A/C/G/T sequences.</p>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Extracting track values...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Training Markov model...</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>127 bin(s) had zero observations; their prior fell back to uniform 1/4.</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Trained Markov-5 model: 835,310 6-mers across 200 bins (2 dimensions)</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
