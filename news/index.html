@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.18</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.19</span>
       </span>
     </div>
 
@@ -66,6 +66,10 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.19" id="misha-5619">misha 5.6.19<a class="anchor" aria-label="anchor" href="#misha-5619"></a></h2>
+<ul><li>Fixed <code>gintervals.load</code> failing with “invalid columns definition” after <code>gintervals.save</code> of a bigset whose input had character <code>chrom</code> (e.g. a tibble from <code>dplyr</code>). On-disk per-chromosome files and the <code>.meta</code> zeroline now both store <code>chrom</code>/<code>chrom1</code>/<code>chrom2</code> as factor with full ALLGENOME levels, and the on-disk frame is normalized to plain <code>data.frame</code>.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.18" id="misha-5618">misha 5.6.18<a class="anchor" aria-label="anchor" href="#misha-5618"></a></h2>
 <ul><li>Added <code>getOption("gmultitasking.strategy")</code> for <code>gextract</code> (default <code>"auto"</code>). When the workload is large and many-track, <code>auto</code> routes to a track-parallel mode (each <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply</a></code> worker handles a track subset across all tiles) instead of the legacy tile-parallel mode (each fork-kid handles a tile range across all tracks). On the realistic 3,110 motif tracks × 2.19M tiled_peaks workload measured 57.6 min vs ~3.4 h projected for tile-parallel — a 3.5× per-track speedup. Override per-call via <code>options(gmultitasking.strategy = "tracks" | "tiles" | "auto")</code>. The heuristic stays on <code>"tiles"</code> for streaming iterators (numeric / NULL / 2D rect / track-name), single-track or fewer than 8 tracks, file/intervals.set.out output, or 2D band — so nothing else regresses (validated by a 36-cell matrix bench across iterator types × track counts × cache states).</li>
