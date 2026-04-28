@@ -1,0 +1,68 @@
+#!/bin/bash
+# Pre-push hook: validate work that is about to leave the local clone.
+#
+#   - If pushed commits touch src/**, run pkgbuild::compile_dll() so C++
+#     breakage is caught before CI.
+#   - If pushed commits touch R/**, run devtools::document() and abort if
+#     it produces changes to man/ or NAMESPACE — that means roxygen output
+#     is stale relative to R/ source and the docs need to be committed.
+#
+# Tests and R CMD check intentionally stay in CI (too slow to gate every push).
+
+set -e
+
+zero=0000000000000000000000000000000000000000
+need_compile=0
+need_doc=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # Branch deletion: nothing to validate.
+    if [ "$local_sha" = "$zero" ]; then
+        continue
+    fi
+
+    if [ "$remote_sha" = "$zero" ]; then
+        if git rev-parse --verify --quiet origin/master >/dev/null; then
+            range="origin/master..$local_sha"
+        else
+            range="$local_sha -1"
+        fi
+    else
+        range="$remote_sha..$local_sha"
+    fi
+
+    changed=$(git diff --name-only $range 2>/dev/null || true)
+    if printf '%s\n' "$changed" | grep -qE '^src/'; then need_compile=1; fi
+    if printf '%s\n' "$changed" | grep -qE '^R/'; then need_doc=1; fi
+done
+
+if [ "$need_compile" -eq 1 ]; then
+    echo "pre-push: src/ changed — running pkgbuild::compile_dll()..."
+    if ! Rscript -e 'pkgbuild::compile_dll(debug = FALSE)'; then
+        echo ""
+        echo "pre-push: compile_dll failed. Fix the C++ before pushing,"
+        echo "or pass --no-verify if you really know what you're doing."
+        exit 1
+    fi
+fi
+
+if [ "$need_doc" -eq 1 ]; then
+    echo "pre-push: R/ changed — running devtools::document()..."
+    before=$(git status --porcelain -- man/ NAMESPACE)
+    if ! Rscript -e 'suppressMessages(devtools::document())'; then
+        echo "pre-push: devtools::document() failed."
+        exit 1
+    fi
+    after=$(git status --porcelain -- man/ NAMESPACE)
+    if [ "$before" != "$after" ]; then
+        echo ""
+        echo "pre-push: devtools::document() produced changes in man/ or NAMESPACE."
+        echo "Roxygen output is stale relative to R/ source:"
+        git status --porcelain -- man/ NAMESPACE
+        echo ""
+        echo "Commit the regenerated docs and push again."
+        exit 1
+    fi
+fi
+
+exit 0
