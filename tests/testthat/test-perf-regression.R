@@ -178,3 +178,74 @@ test_that("2D gextract on rect track full chr1xchr1 stays fast", {
     measured <- time_op(gextract(rect_tracks[1], intervals = iv2d, iterator = c(1e5, 1e5)))
     expect_perf_baseline(measured, "2D rect extract", baseline_ms = 21)
 })
+
+# ---- gmultitasking.strategy regression ---------------------------------
+#
+# The auto-strategy heuristic must NOT slow down small / few-track queries.
+# These tests pin baselines for queries where 'auto' should pick 'tiles'
+# and where it should pick 'tracks' — both must stay fast.
+
+test_that("single-track gextract with auto strategy stays fast (must pick tiles)", {
+    # 1-track gextract has nothing to track-split; auto must keep using tiles.
+    # If a future change accidentally routes this through mclapply the wall
+    # would jump because of fork+merge overhead.
+    skip_unless_perf()
+    fix <- .perf_setup(n_dense_tracks = 1)
+    on.exit(.perf_cleanup(fix), add = TRUE)
+
+    old <- options(gmultitasking.strategy = "auto")
+    on.exit(options(old), add = TRUE)
+    measured <- time_op(gextract(fix$dense_tracks[1], fix$full_chr1, iterator = 50))
+    expect_perf_baseline(measured, "auto-strategy single-track full-chr", baseline_ms = 2005)
+})
+
+test_that("few-track small-iterator gextract with auto stays on tiles (no track-parallel overhead)", {
+    # 5 tracks × 1000 intervals = 5000 < 1e6 threshold ⇒ auto picks tiles.
+    # Re-uses the small_chr1 setup-overhead baseline.
+    skip_unless_perf()
+    fix <- .perf_setup(n_dense_tracks = 5)
+    on.exit(.perf_cleanup(fix), add = TRUE)
+
+    old <- options(gmultitasking.strategy = "auto")
+    on.exit(options(old), add = TRUE)
+    measured <- time_op(gextract(fix$dense_tracks, fix$small_chr1, iterator = 50))
+    # Generous baseline: 5 tracks should be a fraction of the 30-track 112ms cost.
+    expect_perf_baseline(measured, "auto-strategy few-track small-iter setup", baseline_ms = 60)
+})
+
+test_that("many-track large-iterator gextract: track-parallel >= tile-parallel", {
+    # The flagship case: many tracks × many intervals on a warm-cache test_db.
+    # Even on warm cache the track-parallel path should not be SLOWER than
+    # tile-parallel — if it is, the heuristic or merge step has regressed.
+    skip_unless_perf()
+    fix <- .perf_setup(n_dense_tracks = 30)
+    on.exit(.perf_cleanup(fix), add = TRUE)
+
+    chrom_len <- fix$chrom1_len
+    # Build an iterator scope that crosses the 1e6 threshold so 'auto' picks
+    # tracks: 30 tracks × 50,000 intervals = 1.5e6 ≥ 1e6.
+    starts <- seq.int(0, chrom_len - 100L, length.out = 50000L)
+    starts <- as.integer(starts) - (as.integer(starts) %% 50L)
+    big_scope <- gintervals(1, starts, starts + 50L)
+    big_scope <- big_scope[!duplicated(big_scope$start), ]
+
+    old <- options(gmultitasking.strategy = "tiles")
+    on.exit(options(old), add = TRUE)
+    t_tiles <- time_op(gextract(fix$dense_tracks, intervals = big_scope, iterator = big_scope))
+
+    options(gmultitasking.strategy = "tracks")
+    t_tracks <- time_op(gextract(fix$dense_tracks, intervals = big_scope, iterator = big_scope))
+
+    # Track-parallel must not be more than 2× slower on warm cache. (It's
+    # expected to win by ~5× cold; this guards against catastrophic merge or
+    # mclapply-overhead regressions on the warm path.)
+    msg <- sprintf(
+        "tiles: %.1fms, tracks: %.1fms (ratio %.2fx)",
+        t_tiles * 1000, t_tracks * 1000, t_tracks / t_tiles
+    )
+    if (t_tracks > t_tiles * 2) {
+        fail(msg)
+    } else {
+        succeed(msg)
+    }
+})

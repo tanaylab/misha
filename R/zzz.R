@@ -36,6 +36,15 @@
     options(gmin.scope4process = 10000)
     options(gmultitasking = TRUE)
 
+    # gmultitasking.strategy: how gextract distributes work when gmultitasking
+    # is TRUE. "auto" picks "tracks" (each mclapply worker handles a track
+    # subset) for many-track workloads and "tiles" otherwise (legacy misha
+    # multitask: each fork-kid gets a tile range × all tracks). On cold-NFS
+    # gextract over many dense tracks, "tracks" measured ~5× faster than
+    # "tiles" (n106 cold-cache head-to-head). Use "tiles" or "tracks" to
+    # force a strategy.
+    options(gmultitasking.strategy = "auto")
+
     options(gquantile.edge.data.size = 100000)
     options(gpv.middle.size = 0.96)
     options(gpv.middle.precision = 10^(-4))
