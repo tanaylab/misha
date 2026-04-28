@@ -1,3 +1,9 @@
+# misha 5.6.21
+
+* Added `prior` argument to `gsynth.train()` (default `"marginal"`). Per-bin Dirichlet priors are now learned from the trainer's own counts by default, so unobserved (cell, k-mer-context) entries fall back to the cell's empirical base composition instead of uniform 1/4. Other modes: `"global"`, `NULL`/`"uniform"`, length-4 numeric, and `n_bins x 4` matrix.
+* CDF formula changed from `(N + alpha) / (sum_a N + 4*alpha)` to `(N + alpha * pi_a(b)) / (sum_a N + alpha)` (pi sums to 1). To reproduce the pre-5.6.21 Laplace-add-one behavior, pass `prior = NULL, pseudocount = 4`.
+* `.gsm` metadata gains optional `prior`/`prior_mode` fields; older files load with `prior = uniform` (their on-disk CDF is the truth).
+
 # misha 5.6.20
 
 * Fixed `gquantiles` hanging for many minutes on dense `binsize=1` whole-genome scans. The parent used to merge every non-NaN value into one `std::vector<double>` and single-thread `std::sort` it (~21 GB on mm10). Kids now sort their samples buffer before packing, and the parent does a heap-based k-way merge over the per-kid sorted runs. The single-process path (`gmultitasking = FALSE`) uses `std::nth_element` per percentile rank instead of a full sort. mm10 dense full-genome `gquantiles`: was hung, now ~75 s (multitask) / ~270 s (single-process). Sub-sampling fallback (when `gmax.data.size` forces it) preserved, with `samples` capacity pre-reserved.
