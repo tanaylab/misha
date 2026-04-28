@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.20</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.21</span>
       </span>
     </div>
 
@@ -67,6 +67,13 @@
     </div>
 
     <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.21" id="misha-5621">misha 5.6.21<a class="anchor" aria-label="anchor" href="#misha-5621"></a></h2>
+<ul><li>Added <code>prior</code> argument to <code><a href="../reference/gsynth.train.html">gsynth.train()</a></code> (default <code>"marginal"</code>). Per-bin Dirichlet priors are now learned from the trainer’s own counts by default, so unobserved (cell, k-mer-context) entries fall back to the cell’s empirical base composition instead of uniform 1/4. Other modes: <code>"global"</code>, <code>NULL</code>/<code>"uniform"</code>, length-4 numeric, and <code>n_bins x 4</code> matrix.</li>
+<li>CDF formula changed from <code>(N + alpha) / (sum_a N + 4*alpha)</code> to <code>(N + alpha * pi_a(b)) / (sum_a N + alpha)</code> (pi sums to 1). To reproduce the pre-5.6.21 Laplace-add-one behavior, pass <code>prior = NULL, pseudocount = 4</code>.</li>
+<li>
+<code>.gsm</code> metadata gains optional <code>prior</code>/<code>prior_mode</code> fields; older files load with <code>prior = uniform</code> (their on-disk CDF is the truth).</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.20" id="misha-5620">misha 5.6.20<a class="anchor" aria-label="anchor" href="#misha-5620"></a></h2>
 <ul><li>Fixed <code>gquantiles</code> hanging for many minutes on dense <code>binsize=1</code> whole-genome scans. The parent used to merge every non-NaN value into one <code>std::vector&lt;double&gt;</code> and single-thread <code>std::sort</code> it (~21 GB on mm10). Kids now sort their samples buffer before packing, and the parent does a heap-based k-way merge over the per-kid sorted runs. The single-process path (<code>gmultitasking = FALSE</code>) uses <code>std::nth_element</code> per percentile rank instead of a full sort. mm10 dense full-genome <code>gquantiles</code>: was hung, now ~75 s (multitask) / ~270 s (single-process). Sub-sampling fallback (when <code>gmax.data.size</code> forces it) preserved, with <code>samples</code> capacity pre-reserved.</li>
 </ul></div>
@@ -76,7 +83,11 @@
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.18" id="misha-5618">misha 5.6.18<a class="anchor" aria-label="anchor" href="#misha-5618"></a></h2>
-<ul><li>Added <code>getOption("gmultitasking.strategy")</code> for <code>gextract</code> (default <code>"auto"</code>). When the workload is large and many-track, <code>auto</code> routes to a track-parallel mode (each <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply</a></code> worker handles a track subset across all tiles) instead of the legacy tile-parallel mode (each fork-kid handles a tile range across all tracks). On the realistic 3,110 motif tracks × 2.19M tiled_peaks workload measured 57.6 min vs ~3.4 h projected for tile-parallel — a 3.5× per-track speedup. Override per-call via <code>options(gmultitasking.strategy = "tracks" | "tiles" | "auto")</code>. The heuristic stays on <code>"tiles"</code> for streaming iterators (numeric / NULL / 2D rect / track-name), single-track or fewer than 8 tracks, file/intervals.set.out output, or 2D band — so nothing else regresses (validated by a 36-cell matrix bench across iterator types × track counts × cache states).</li>
+<ul><li>Added <code><a href="../reference/gsynth.score.html">gsynth.score()</a></code>: writes a misha fixed-bin dense track of summed natural-log conditional probability under a trained stratified Markov-k model. Stratum bin is queried at <code>pos - k</code> (the leftmost base of the (k+1)-mer context), matching <code><a href="../reference/gsynth.train.html">gsynth.train()</a></code>’s convention; the chrom-parallel kernel writes one file per chromosome (gated by <code>gmultitasking</code> / <code>gmax.processes</code>). Two scored tracks subtracted at any resolution gives a windowed log-Bayes-factor.</li>
+<li>Added <code>mask</code> argument to <code><a href="../reference/gsynth.score.html">gsynth.score()</a></code>: positions inside <code>mask</code> (e.g. repeats) are NA-poisoned in the output bin. Predicted-base <code>N</code> is unconditional NA — <code>n_policy</code> only applies to N’s in the k-mer context.</li>
+<li>
+<code><a href="../reference/gsynth.sample.html">gsynth.sample()</a></code> now looks up the stratum bin at <code>pos - k</code> to match <code><a href="../reference/gsynth.train.html">gsynth.train()</a></code>. Previously it queried the bin at the predicted-base position, which differed from training at the first <code>k</code> bp of every iter window. Cached <code>.gsm</code> models are unchanged; samples generated with earlier versions had a slight stratum-shift artifact at iter boundaries.</li>
+<li>Added <code>getOption("gmultitasking.strategy")</code> for <code>gextract</code> (default <code>"auto"</code>). When the workload is large and many-track, <code>auto</code> routes to a track-parallel mode (each <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply</a></code> worker handles a track subset across all tiles) instead of the legacy tile-parallel mode (each fork-kid handles a tile range across all tracks). On the realistic 3,110 motif tracks × 2.19M tiled_peaks workload measured 57.6 min vs ~3.4 h projected for tile-parallel — a 3.5× per-track speedup. Override per-call via <code>options(gmultitasking.strategy = "tracks" | "tiles" | "auto")</code>. The heuristic stays on <code>"tiles"</code> for streaming iterators (numeric / NULL / 2D rect / track-name), single-track or fewer than 8 tracks, file/intervals.set.out output, or 2D band — so nothing else regresses (validated by a 36-cell matrix bench across iterator types × track counts × cache states).</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.17" id="misha-5617">misha 5.6.17<a class="anchor" aria-label="anchor" href="#misha-5617"></a></h2>

@@ -25,7 +25,7 @@ policies, any output bin containing an NA per-bp contribution is NA."><!-- mathj
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.20</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.21</span>
       </span>
     </div>
 
@@ -93,6 +93,7 @@ policies, any output bin containing an NA per-bp contribution is NA.</p>
 <span>  <span class="va">track</span>,</span>
 <span>  description <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  intervals <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  mask <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  resolution <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  sparse_policy <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"NA"</span>, <span class="st">"uniform"</span><span class="op">)</span>,</span>
 <span>  n_policy <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"NA"</span>, <span class="st">"uniform"</span><span class="op">)</span>,</span>
@@ -119,7 +120,18 @@ policies, any output bin containing an NA per-bp contribution is NA.</p>
 
 <dt id="arg-intervals">intervals<a class="anchor" aria-label="anchor" href="#arg-intervals"></a></dt>
 <dd><p>Intervals to score. Defaults to
-<code><a href="gintervals.all.html">gintervals.all()</a></code>.</p></dd>
+<code><a href="gintervals.all.html">gintervals.all()</a></code>. Best results when interval
+starts are aligned to multiples of
+<code>model$iterator</code>; otherwise the first stratum
+window is shorter than <code>model$iterator</code> and
+its bin label may differ from training.</p></dd>
+
+
+<dt id="arg-mask">mask<a class="anchor" aria-label="anchor" href="#arg-mask"></a></dt>
+<dd><p>Optional intervals to NA-out in the output (e.g.
+repeats). Intersects with <code>intervals</code> per bp;
+every output bin containing a masked bp becomes
+<code>NaN</code>.</p></dd>
 
 
 <dt id="arg-resolution">resolution<a class="anchor" aria-label="anchor" href="#arg-resolution"></a></dt>
@@ -137,10 +149,11 @@ bp.</p></dd>
 
 
 <dt id="arg-n-policy">n_policy<a class="anchor" aria-label="anchor" href="#arg-n-policy"></a></dt>
-<dd><p>How to score positions whose k-mer context or
-current base contains an N:
-<code>"NA"</code> (default) or <code>"uniform"</code>
-(<code>log(1/4)</code> per bp).</p></dd>
+<dd><p>How to score positions whose k-mer <em>context</em>
+contains an N: <code>"NA"</code> (default) or
+<code>"uniform"</code> (<code>log(1/4)</code> per bp). The
+predicted base itself is always NA when N — the
+model has no \(\log P\) for non-ACGT bases.</p></dd>
 
 
 <dt id="arg-overwrite">overwrite<a class="anchor" aria-label="anchor" href="#arg-overwrite"></a></dt>
