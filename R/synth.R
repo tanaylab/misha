@@ -1489,6 +1489,32 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
     model
 }
 
+#' Internal: build a per-bin log-probability table from a gsynth.model.
+#'
+#' Differences each bin's cdf to recover P(base|context), then takes log.
+#' Sparse bins (cdf rows are NA from training-time min_obs filter) yield
+#' NaN log_p rows, which the C++ kernel uses as the "is sparse" signal.
+#'
+#' @param model A gsynth.model object.
+#' @return list of length total_bins; each element is a num_kmers x 4
+#'         numeric matrix of natural-log conditional probabilities.
+#' @noRd
+.gsynth_build_log_p <- function(model) {
+    stopifnot(inherits(model, "gsynth.model"))
+    cdf_list <- model$model_data$cdf
+    lapply(cdf_list, function(cdf) {
+        # cdf is num_kmers x 4 (cumulative across the 4 bases).
+        # p[, 1] = cdf[, 1]; p[, j] = cdf[, j] - cdf[, j-1] for j>1.
+        p <- cbind(
+            cdf[, 1],
+            cdf[, 2] - cdf[, 1],
+            cdf[, 3] - cdf[, 2],
+            cdf[, 4] - cdf[, 3]
+        )
+        log(p) # NA in cdf -> NaN here
+    })
+}
+
 #' Sample a synthetic genome from a trained Markov model
 #'
 #' Generates a synthetic genome by sampling from a trained stratified Markov
