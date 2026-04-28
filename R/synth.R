@@ -715,6 +715,67 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
     out
 }
 
+# Internal: validate the `prior` argument and split into (mode, matrix) for the C kernel.
+# Returns a list(mode = <"uniform"|"marginal"|"global"|"explicit">, matrix = NULL or n_bins x 4 numeric).
+.gsynth_resolve_prior_arg <- function(prior, total_bins) {
+    if (is.null(prior)) {
+        return(list(mode = "uniform", matrix = NULL))
+    }
+    if (is.character(prior) && length(prior) == 1L) {
+        if (prior == "marginal") {
+            return(list(mode = "marginal", matrix = NULL))
+        }
+        if (prior == "global") {
+            return(list(mode = "global", matrix = NULL))
+        }
+        if (prior == "uniform") {
+            return(list(mode = "uniform", matrix = NULL))
+        }
+        stop(sprintf(
+            "Unknown prior '%s'. Use NULL, 'uniform', 'marginal', 'global', a length-4 numeric, or an n_bins x 4 matrix.",
+            prior
+        ), call. = FALSE)
+    }
+    if (is.numeric(prior) && is.null(dim(prior)) && length(prior) == 4L) {
+        if (!is.null(names(prior))) {
+            ord <- match(c("A", "C", "G", "T"), toupper(names(prior)))
+            if (anyNA(ord)) {
+                stop("Named numeric prior must have names A, C, G, T", call. = FALSE)
+            }
+            prior <- prior[ord]
+        }
+        if (anyNA(prior) || any(prior < 0)) {
+            stop("prior must be non-negative and finite", call. = FALSE)
+        }
+        s <- sum(prior)
+        if (s <= 0) stop("prior must sum to > 0", call. = FALSE)
+        prior <- prior / s
+        mat <- matrix(as.numeric(prior), nrow = total_bins, ncol = 4L, byrow = TRUE)
+        return(list(mode = "explicit", matrix = mat))
+    }
+    if (is.numeric(prior) && length(dim(prior)) == 2L) {
+        if (nrow(prior) != total_bins || ncol(prior) != 4L) {
+            stop(sprintf(
+                "prior matrix must be %d x 4 (got %d x %d)",
+                total_bins, nrow(prior), ncol(prior)
+            ), call. = FALSE)
+        }
+        if (anyNA(prior) || any(prior < 0)) {
+            stop("prior matrix must be non-negative and contain no NAs", call. = FALSE)
+        }
+        rs <- rowSums(prior)
+        if (any(rs <= 0)) {
+            stop("Every row of prior matrix must sum to > 0", call. = FALSE)
+        }
+        prior <- prior / rs
+        return(list(mode = "explicit", matrix = prior))
+    }
+    stop(
+        "prior must be NULL, 'uniform'/'marginal'/'global', a length-4 numeric (optionally named A/C/G/T), or an n_bins x 4 matrix.",
+        call. = FALSE
+    )
+}
+
 #' Train a stratified Markov model from genome sequences
 #'
 #' Computes a Markov model of order \code{k} (default 5) optionally stratified by
@@ -831,67 +892,6 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
 #'     iterator = 200
 #' )
 #'
-# Internal: validate the `prior` argument and split into (mode, matrix) for the C kernel.
-# Returns a list(mode = <"uniform"|"marginal"|"global"|"explicit">, matrix = NULL or n_bins x 4 numeric).
-.gsynth_resolve_prior_arg <- function(prior, total_bins) {
-    if (is.null(prior)) {
-        return(list(mode = "uniform", matrix = NULL))
-    }
-    if (is.character(prior) && length(prior) == 1L) {
-        if (prior == "marginal") {
-            return(list(mode = "marginal", matrix = NULL))
-        }
-        if (prior == "global") {
-            return(list(mode = "global", matrix = NULL))
-        }
-        if (prior == "uniform") {
-            return(list(mode = "uniform", matrix = NULL))
-        }
-        stop(sprintf(
-            "Unknown prior '%s'. Use NULL, 'uniform', 'marginal', 'global', a length-4 numeric, or an n_bins x 4 matrix.",
-            prior
-        ), call. = FALSE)
-    }
-    if (is.numeric(prior) && is.null(dim(prior)) && length(prior) == 4L) {
-        if (!is.null(names(prior))) {
-            ord <- match(c("A", "C", "G", "T"), toupper(names(prior)))
-            if (anyNA(ord)) {
-                stop("Named numeric prior must have names A, C, G, T", call. = FALSE)
-            }
-            prior <- prior[ord]
-        }
-        if (anyNA(prior) || any(prior < 0)) {
-            stop("prior must be non-negative and finite", call. = FALSE)
-        }
-        s <- sum(prior)
-        if (s <= 0) stop("prior must sum to > 0", call. = FALSE)
-        prior <- prior / s
-        mat <- matrix(as.numeric(prior), nrow = total_bins, ncol = 4L, byrow = TRUE)
-        return(list(mode = "explicit", matrix = mat))
-    }
-    if (is.numeric(prior) && length(dim(prior)) == 2L) {
-        if (nrow(prior) != total_bins || ncol(prior) != 4L) {
-            stop(sprintf(
-                "prior matrix must be %d x 4 (got %d x %d)",
-                total_bins, nrow(prior), ncol(prior)
-            ), call. = FALSE)
-        }
-        if (anyNA(prior) || any(prior < 0)) {
-            stop("prior matrix must be non-negative and contain no NAs", call. = FALSE)
-        }
-        rs <- rowSums(prior)
-        if (any(rs <= 0)) {
-            stop("Every row of prior matrix must sum to > 0", call. = FALSE)
-        }
-        prior <- prior / rs
-        return(list(mode = "explicit", matrix = prior))
-    }
-    stop(
-        "prior must be NULL, 'uniform'/'marginal'/'global', a length-4 numeric (optionally named A/C/G/T), or an n_bins x 4 matrix.",
-        call. = FALSE
-    )
-}
-
 #' @seealso \code{\link{gsynth.sample}}, \code{\link{gsynth.save}},
 #'          \code{\link{gsynth.load}}, \code{\link{gsynth.bin_map}}
 #' @export
