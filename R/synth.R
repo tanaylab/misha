@@ -2051,7 +2051,76 @@ gsynth.score <- function(model,
 
     log_p_list <- .gsynth_build_log_p(model)
 
-    stop("kernel not implemented yet (Task 4)", call. = FALSE)
+    # Encode policies for C++: 0 = NA, 1 = uniform.
+    n_policy_int <- if (n_policy == "uniform") 1L else 0L
+    sparse_policy_int <- if (sparse_policy == "uniform") 1L else 0L
+
+    # Track-creation flow mirrors gtrack.create_dense: kernel calls
+    # create_track_dir(envir, name) internally; on success, R registers
+    # the track in the misha db and sets attrs.
+    if (gtrack.exists(track)) {
+        if (!overwrite) {
+            stop(sprintf(
+                "Track '%s' already exists; pass overwrite=TRUE to replace.",
+                track
+            ), call. = FALSE)
+        }
+        gtrack.rm(track, force = TRUE)
+    }
+
+    success <- FALSE
+    tryCatch(
+        {
+            .gcall(
+                "C_gsynth_score",
+                log_p_list,
+                flat_indices,
+                iter_starts,
+                iter_chroms,
+                intervals,
+                track,
+                as.integer(resolution),
+                as.integer(model$k),
+                as.integer(.iterator),
+                n_policy_int,
+                sparse_policy_int,
+                .misha_env()
+            )
+
+            .gdb.add_track(track)
+
+            .gtrack.attr.set(
+                track, "created.by",
+                sprintf(
+                    "gsynth.score(model, '%s', resolution=%d)",
+                    track, resolution
+                ),
+                TRUE
+            )
+            .gtrack.attr.set(track, "created.date", date(), TRUE)
+            .gtrack.attr.set(track, "created.user", Sys.getenv("USER"), TRUE)
+            .gtrack.attr.set(
+                track, "description",
+                if (is.null(description)) "" else as.character(description),
+                TRUE
+            )
+            .gtrack.attr.set(track, "type", "dense", TRUE)
+            .gtrack.attr.set(track, "binsize", as.integer(resolution), TRUE)
+
+            success <- TRUE
+        },
+        finally = {
+            if (!success) {
+                # Best-effort cleanup if kernel or registration failed.
+                track_path <- tryCatch(.track_dir(track),
+                    error = function(e) NULL
+                )
+                if (!is.null(track_path) && dir.exists(track_path)) {
+                    unlink(track_path, recursive = TRUE, force = TRUE)
+                }
+            }
+        }
+    )
 
     invisible(NULL)
 }
