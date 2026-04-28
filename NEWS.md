@@ -1,3 +1,7 @@
+# misha 5.6.20
+
+* Fixed `gquantiles` hanging for many minutes on dense `binsize=1` whole-genome scans. The parent used to merge every non-NaN value into one `std::vector<double>` and single-thread `std::sort` it (~21 GB on mm10). Kids now sort their samples buffer before packing, and the parent does a heap-based k-way merge over the per-kid sorted runs. The single-process path (`gmultitasking = FALSE`) uses `std::nth_element` per percentile rank instead of a full sort. mm10 dense full-genome `gquantiles`: was hung, now ~75 s (multitask) / ~270 s (single-process). Sub-sampling fallback (when `gmax.data.size` forces it) preserved, with `samples` capacity pre-reserved.
+
 # misha 5.6.19
 
 * Fixed `gintervals.load` failing with "invalid columns definition" after `gintervals.save` of a bigset whose input had character `chrom` (e.g. a tibble from `dplyr`). On-disk per-chromosome files and the `.meta` zeroline now both store `chrom`/`chrom1`/`chrom2` as factor with full ALLGENOME levels, and the on-disk frame is normalized to plain `data.frame`.

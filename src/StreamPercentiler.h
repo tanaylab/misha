@@ -49,6 +49,7 @@ public:
 	uint64_t highest_vals_buf_size() const { return m_extreme_vals_buf_size[HIGHEST]; }
 
 	const vector<T> &samples() const { return m_stream_sampler.samples(); }
+	vector<T>       &samples_mutable() { return m_stream_sampler.samples(); }
 	const vector<T> &lowest_vals() const { return m_extreme_vals[LOWEST]; }
 	const vector<T> &highest_vals() const { return m_extreme_vals[HIGHEST]; }
 
