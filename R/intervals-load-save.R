@@ -173,6 +173,13 @@
                         }
                         return(retv <- NULL)
                     }
+                    # Mirror .gintervals.save_file's normalization on disk: chrom
+                    # columns become factors with full ALLGENOME levels and the
+                    # frame becomes a plain data.frame. Without this, inputs with
+                    # character chrom (e.g. a tibble) leave zeroline mismatched
+                    # with the saved per-chromosome files and gintervals.load
+                    # fails with "invalid columns definition".
+                    zeroline <- .gintervals.normalize_for_save(zeroline)
                     .gintervals.big.save_meta(fullpath, stats, zeroline)
 
                     # Finalize indexed format
@@ -568,15 +575,34 @@
     }
 }
 
+# Normalize an intervals frame to the canonical on-disk shape:
+#   - plain data.frame (so C++ grbind on round-trip accepts it),
+#   - chrom (or chrom1/chrom2) as factor with the full ALLGENOME level set
+#     (so per-chromosome files share levels and grbind merges cleanly).
+.gintervals.normalize_for_save <- function(intervs) {
+    if (is.null(intervs)) {
+        return(intervs)
+    }
+    if (!identical(class(intervs), "data.frame")) {
+        intervs <- as.data.frame(intervs, stringsAsFactors = FALSE)
+    }
+    all_levels <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    if (.gintervals.is1d(intervs)) {
+        intervs$chrom <- factor(as.character(intervs$chrom), levels = all_levels)
+    } else if (.gintervals.is2d(intervs)) {
+        intervs$chrom1 <- factor(as.character(intervs$chrom1), levels = all_levels)
+        intervs$chrom2 <- factor(as.character(intervs$chrom2), levels = all_levels)
+    }
+    intervs
+}
+
 .gintervals.save_file <- function(filename, intervs) {
+    intervs <- .gintervals.normalize_for_save(intervs)
     if (nrow(intervs)) {
         if (.gintervals.is1d(intervs)) {
-            intervs$chrom <- as.factor(intervs$chrom)
             point.intervs <- intervs$start == intervs$end
             intervs[point.intervs, ]$end <- intervs[point.intervs, ]$end + 1
         } else {
-            intervs$chrom1 <- as.factor(intervs$chrom1)
-            intervs$chrom2 <- as.factor(intervs$chrom2)
             point.intervs <- intervs$start1 == intervs$end1
             intervs[point.intervs, ]$end1 <- intervs[point.intervs, ]$end1 + 1
             point.intervs <- intervs$start2 == intervs$end2

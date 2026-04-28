@@ -148,6 +148,7 @@ reference:
     contents:
       - gsynth.train
       - gsynth.sample
+      - gsynth.score
       - gsynth.random
       - gsynth.replace_kmer
       - gsynth.save

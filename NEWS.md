@@ -1,3 +1,7 @@
+# misha 5.6.19
+
+* Fixed `gintervals.load` failing with "invalid columns definition" after `gintervals.save` of a bigset whose input had character `chrom` (e.g. a tibble from `dplyr`). On-disk per-chromosome files and the `.meta` zeroline now both store `chrom`/`chrom1`/`chrom2` as factor with full ALLGENOME levels, and the on-disk frame is normalized to plain `data.frame`.
+
 # misha 5.6.18
 
 * Added `getOption("gmultitasking.strategy")` for `gextract` (default `"auto"`). When the workload is large and many-track, `auto` routes to a track-parallel mode (each `parallel::mclapply` worker handles a track subset across all tiles) instead of the legacy tile-parallel mode (each fork-kid handles a tile range across all tracks). On the realistic 3,110 motif tracks × 2.19M tiled_peaks workload measured 57.6 min vs ~3.4 h projected for tile-parallel — a 3.5× per-track speedup. Override per-call via `options(gmultitasking.strategy = "tracks" | "tiles" | "auto")`. The heuristic stays on `"tiles"` for streaming iterators (numeric / NULL / 2D rect / track-name), single-track or fewer than 8 tracks, file/intervals.set.out output, or 2D band — so nothing else regresses (validated by a 36-cell matrix bench across iterator types × track counts × cache states).
