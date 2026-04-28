@@ -1231,6 +1231,21 @@ print.gsynth.model <- function(x, ...) {
     cat(sprintf("Masked positions: %s\n", format(x$total_masked, big.mark = ",")))
     cat(sprintf("N positions: %s\n", format(x$total_n, big.mark = ",")))
 
+    if (!is.null(x$prior_mode)) {
+        cat(sprintf("Prior: %s", x$prior_mode))
+        if (!is.null(x$prior) && x$prior_mode != "uniform") {
+            avg_pi <- colMeans(x$prior)
+            cat(sprintf(
+                "  (mean pi: A=%.3f C=%.3f G=%.3f T=%.3f)",
+                avg_pi[1], avg_pi[2], avg_pi[3], avg_pi[4]
+            ))
+        }
+        cat("\n")
+    }
+    if (!is.null(x$pseudocount)) {
+        cat(sprintf("Pseudocount: %g\n", x$pseudocount))
+    }
+
     # Show per-bin k-mer counts (abbreviated for multi-dimensional)
     if (x$total_bins <= 20) {
         cat("\nPer-bin k-mer counts:\n")
