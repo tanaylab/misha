@@ -72,10 +72,51 @@ public:
 
     /**
      * Normalize counts to probabilities and build CDFs for sampling.
-     * Should be called after all counts are accumulated and bin mapping is applied.
-     * @param pseudocount Value to add to all counts to avoid zero probabilities (default 1)
+     * Should be called after all counts are accumulated, bin mapping is
+     * applied, and the prior has been set (default uniform 1/4 from init()).
+     *
+     * Posterior formula:
+     *     P(a | c, b) = (N(b,c,a) + pseudocount * pi_a(b)) /
+     *                   (sum_a N(b,c,a) + pseudocount)
+     * with pi(b) = m_prior[b] (sums to 1).
+     *
+     * @param pseudocount Total Dirichlet concentration alpha (default 1)
      */
     void normalize_and_build_cdf(double pseudocount = 1.0);
+
+    /**
+     * Set the per-bin prior to uniform (0.25 per base) for all bins.
+     */
+    void set_prior_uniform();
+
+    /**
+     * Set the per-bin prior to a global vector pi (length 4), broadcast to
+     * every bin. The input is re-normalized to sum to 1; if it sums to <=0,
+     * uniform 1/4 is used instead.
+     */
+    void set_prior_global(const std::array<double, NUM_BASES>& pi);
+
+    /**
+     * Set the per-bin prior from an explicit n_bins x 4 matrix. Each row is
+     * re-normalized to sum to 1; rows that sum to <=0 fall back to uniform.
+     */
+    void set_prior_explicit(
+        const std::vector<std::array<double, NUM_BASES>>& pi_per_bin);
+
+    /**
+     * Compute the per-bin prior from the current counts (post bin merge):
+     *     pi_a(b) = sum_c m_counts[b][c*4+a] / sum_{c,a} m_counts[b][c*4+a]
+     * Bins with zero total observations fall back to uniform 1/4.
+     * @return number of bins that fell back to uniform.
+     */
+    int set_prior_from_marginal();
+
+    /**
+     * Compute a single global per-base prior pooled across all bins, and
+     * broadcast it to every bin. Falls back to uniform if total counts == 0.
+     * @return true if the global was non-zero, false if it fell back.
+     */
+    bool set_prior_from_global_marginal();
 
     /**
      * Get the bin index for a track value.
@@ -199,6 +240,9 @@ public:
     const std::vector<std::vector<float>>& get_cdf() const {
         return m_cdf;
     }
+    const std::vector<std::array<double, NUM_BASES>>& get_prior() const {
+        return m_prior;
+    }
 
     /**
      * Serialize the model to a binary file.
@@ -225,6 +269,10 @@ private:
     // Cumulative distribution functions for sampling: cdf[bin][kmer_idx * NUM_BASES + base_idx]
     // For a given context ctx: cdf[bin][ctx*4+0] = P(A), cdf[bin][ctx*4+1] = P(A)+P(C), etc.
     std::vector<std::vector<float>> m_cdf;
+
+    // Per-bin Dirichlet prior pi_a(b). Each inner array sums to 1.
+    // Initialized to uniform (0.25, 0.25, 0.25, 0.25) on init().
+    std::vector<std::array<double, NUM_BASES>> m_prior;
 
     // Statistics
     uint64_t m_total_kmers;
