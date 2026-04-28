@@ -258,3 +258,56 @@ test_that("gsynth.score: sparse_policy='uniform' replaces sparse-bin NaN with lo
         tolerance = 1e-6
     )
 })
+
+test_that("gsynth.score: LLR sanity between two models", {
+    gdb.init_examples()
+    on.exit(
+        {
+            for (t in c("ts_m1", "ts_m2")) {
+                if (gtrack.exists(t)) gtrack.rm(t, force = TRUE)
+            }
+            for (vt in c("g_frac_lt", "c_frac_lt")) {
+                if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+            }
+        },
+        add = TRUE
+    )
+
+    gvtrack.create("g_frac_lt", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac_lt", NULL, "kmer.frac", kmer = "C")
+
+    train_iv <- gintervals(1, 0, 100000)
+
+    model_unstrat <- gsynth.train(
+        intervals = train_iv, iterator = 200, k = 2L
+    )
+    model_gc <- gsynth.train(
+        list(expr = "g_frac_lt + c_frac_lt", breaks = seq(0, 1, 0.1)),
+        intervals = train_iv, iterator = 200, k = 2L
+    )
+
+    gsynth.score(
+        model = model_unstrat, track = "ts_m1",
+        intervals = train_iv, resolution = 200,
+        overwrite = TRUE
+    )
+    gsynth.score(
+        model = model_gc, track = "ts_m2",
+        intervals = train_iv, resolution = 200,
+        overwrite = TRUE
+    )
+
+    diff_vals <- gextract("ts_m2 - ts_m1",
+        intervals = gintervals(1, 1000, 100000),
+        iterator = 200
+    )
+    diff_col <- diff_vals[[ncol(diff_vals)]] # last col is the expression
+    expect_true(any(is.finite(diff_col)))
+
+    # The stratified model fit on the same data should fit the genome
+    # at LEAST as well as the unstratified model on average:
+    # mean LLR (model_gc - model_unstrat) >= 0 (allowing slack for
+    # the per-stratum count splitting noise).
+    finite <- diff_col[is.finite(diff_col)]
+    expect_gte(mean(finite), -1)
+})
