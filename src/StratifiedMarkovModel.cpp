@@ -191,19 +191,25 @@ bool StratifiedMarkovModel::set_prior_from_global_marginal() {
 
 void StratifiedMarkovModel::normalize_and_build_cdf(double pseudocount) {
     for (int b = 0; b < m_num_bins; ++b) {
+        const auto& pi = m_prior[b];
         for (int ctx = 0; ctx < m_num_kmers; ++ctx) {
             int base_offset = ctx * NUM_BASES;
 
-            // Calculate total count for this context (with pseudocounts)
-            double total = 0.0;
+            // Total observed count at (b, ctx)
+            double n_total = 0.0;
             for (int base = 0; base < NUM_BASES; ++base) {
-                total += static_cast<double>(m_counts[b][base_offset + base]) + pseudocount;
+                n_total += static_cast<double>(m_counts[b][base_offset + base]);
             }
+            // Posterior denominator: sum_a N + alpha (pi sums to 1)
+            double total = n_total + pseudocount;
 
-            // Build CDF
+            // Build CDF: P(a) = (N_a + alpha * pi_a) / (sum_a N + alpha)
             double cumsum = 0.0;
             for (int base = 0; base < NUM_BASES; ++base) {
-                double prob = (static_cast<double>(m_counts[b][base_offset + base]) + pseudocount) / total;
+                double prob =
+                    (static_cast<double>(m_counts[b][base_offset + base]) +
+                     pseudocount * pi[base]) /
+                    total;
                 cumsum += prob;
                 m_cdf[b][base_offset + base] = static_cast<float>(cumsum);
             }
