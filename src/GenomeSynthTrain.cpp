@@ -41,6 +41,9 @@ extern "C" {
  * @param _bin_map Integer vector mapping source bins to target bins (-1 = keep)
  * @param _mask R intervals object for mask regions (NULL if no mask)
  * @param _pseudocount Numeric pseudocount for normalization
+ * @param _k Markov order
+ * @param _prior_mode Character: "uniform", "marginal", "global", or "explicit"
+ * @param _prior_matrix Numeric matrix (n_bins x 4) for "explicit" mode, else NULL
  * @param _envir R environment
  *
  * @return A list containing the trained model data
@@ -48,7 +51,8 @@ extern "C" {
 SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
                      SEXP _bin_indices, SEXP _iter_starts, SEXP _iter_chroms,
                      SEXP _breaks, SEXP _bin_map, SEXP _mask,
-                     SEXP _pseudocount, SEXP _k, SEXP _envir) {
+                     SEXP _pseudocount, SEXP _k,
+                     SEXP _prior_mode, SEXP _prior_matrix, SEXP _envir) {
     try {
         RdbInitializer rdb_init;
         IntervUtils iu(_envir);
@@ -101,6 +105,12 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
         }
 
         double pseudocount = Rf_asReal(_pseudocount);
+
+        // Parse prior mode (default uniform if NULL/missing)
+        std::string prior_mode = "uniform";
+        if (!Rf_isNull(_prior_mode) && Rf_length(_prior_mode) > 0) {
+            prior_mode = CHAR(STRING_ELT(_prior_mode, 0));
+        }
 
         // Parse mask intervals if provided
         vector<vector<GInterval>> mask_per_chrom;
@@ -262,13 +272,46 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
         // Apply bin mapping
         model.apply_bin_mapping(bin_map_vec);
 
-        // Normalize and build CDFs
+        // Resolve prior pi(b) from m_counts (post-merge), explicit matrix,
+        // or as a uniform/global broadcast — depending on prior_mode.
+        int marginal_fallbacks = 0;
+        if (prior_mode == "uniform") {
+            model.set_prior_uniform();
+        } else if (prior_mode == "marginal") {
+            marginal_fallbacks = model.set_prior_from_marginal();
+        } else if (prior_mode == "global") {
+            model.set_prior_from_global_marginal();
+        } else if (prior_mode == "explicit") {
+            if (Rf_isNull(_prior_matrix)) {
+                verror("prior_mode='explicit' requires a non-NULL prior_matrix");
+            }
+            int nrow = Rf_nrows(_prior_matrix);
+            int ncol = Rf_ncols(_prior_matrix);
+            int n_bins_out = model.get_num_bins();
+            if (nrow != n_bins_out || ncol != NUM_BASES) {
+                verror("prior_matrix must be %d x %d (got %d x %d)",
+                       n_bins_out, NUM_BASES, nrow, ncol);
+            }
+            std::vector<std::array<double, NUM_BASES>> pi_rows(n_bins_out);
+            double* mat = REAL(_prior_matrix);
+            for (int b = 0; b < n_bins_out; ++b) {
+                for (int a = 0; a < NUM_BASES; ++a) {
+                    // R column-major: [b + a * nrow]
+                    pi_rows[b][a] = mat[b + a * nrow];
+                }
+            }
+            model.set_prior_explicit(pi_rows);
+        } else {
+            verror("Unknown prior_mode: %s", prior_mode.c_str());
+        }
+
+        // Normalize and build CDFs (uses m_prior set above)
         model.normalize_and_build_cdf(pseudocount);
 
         // Build return list
         SEXP answer, names;
-        rprotect(answer = Rf_allocVector(VECSXP, 7));
-        rprotect(names = Rf_allocVector(STRSXP, 7));
+        rprotect(answer = Rf_allocVector(VECSXP, 9));
+        rprotect(names = Rf_allocVector(STRSXP, 9));
 
         // num_bins
         SET_VECTOR_ELT(answer, 0, Rf_ScalarInteger(num_bins));
@@ -353,6 +396,24 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
 
         SET_VECTOR_ELT(answer, 6, r_model_data);
         SET_STRING_ELT(names, 6, Rf_mkChar("model_data"));
+
+        // Resolved per-bin prior matrix (n_bins x 4, column-major for R)
+        SEXP r_prior;
+        rprotect(r_prior = Rf_allocMatrix(REALSXP, num_bins, NUM_BASES));
+        {
+            const auto& prior = model.get_prior();
+            double* prior_data = REAL(r_prior);
+            for (int b = 0; b < num_bins; ++b) {
+                for (int a = 0; a < NUM_BASES; ++a) {
+                    prior_data[b + a * num_bins] = prior[b][a];
+                }
+            }
+        }
+        SET_VECTOR_ELT(answer, 7, r_prior);
+        SET_STRING_ELT(names, 7, Rf_mkChar("prior"));
+
+        SET_VECTOR_ELT(answer, 8, Rf_ScalarInteger(marginal_fallbacks));
+        SET_STRING_ELT(names, 8, Rf_mkChar("marginal_fallbacks"));
 
         Rf_setAttrib(answer, R_NamesSymbol, names);
 
