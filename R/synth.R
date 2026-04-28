@@ -818,14 +818,14 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
 #'          \item \code{"global"}: a single base composition pooled over
 #'                all bins, broadcast to every bin.
 #'          \item \code{NULL} or \code{"uniform"}: uniform prior
-#'                (1/4 per base) -- the pre-5.7.0 fallback.
+#'                (1/4 per base) -- the pre-5.6.21 fallback.
 #'          \item Length-4 numeric (optionally named A, C, G, T):
 #'                user-supplied global \eqn{\pi}, broadcast.
 #'          \item \code{n_bins x 4} numeric matrix: user-supplied per-bin
 #'                \eqn{\pi}.
 #'        }
 #'        Together with \code{pseudocount}, this defines the Dirichlet
-#'        posterior. To reproduce the pre-5.7.0 Laplace-add-one behavior,
+#'        posterior. To reproduce the pre-5.6.21 Laplace-add-one behavior,
 #'        pass \code{prior = NULL, pseudocount = 4}.
 #'
 #' @details
@@ -1445,7 +1445,7 @@ gsynth.load <- function(file) {
     if (!inherits(model, "gsynth.model")) {
         stop("File does not contain a valid gsynth.model", call. = FALSE)
     }
-    # Backfill prior fields for old RDS models trained before 5.7.0
+    # Backfill prior fields for old RDS models trained before 5.6.21
     if (is.null(model$prior_mode)) model$prior_mode <- "uniform"
     if (is.null(model$prior)) {
         tb <- if (!is.null(model$total_bins)) model$total_bins else model$num_bins

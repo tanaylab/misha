@@ -57,14 +57,14 @@ exponentially more memory (\eqn{4^k} context states).}
   \item \code{"global"}: a single base composition pooled over
         all bins, broadcast to every bin.
   \item \code{NULL} or \code{"uniform"}: uniform prior
-        (1/4 per base) -- the pre-5.7.0 fallback.
+        (1/4 per base) -- the pre-5.6.21 fallback.
   \item Length-4 numeric (optionally named A, C, G, T):
         user-supplied global \eqn{\pi}, broadcast.
   \item \code{n_bins x 4} numeric matrix: user-supplied per-bin
         \eqn{\pi}.
 }
 Together with \code{pseudocount}, this defines the Dirichlet
-posterior. To reproduce the pre-5.7.0 Laplace-add-one behavior,
+posterior. To reproduce the pre-5.6.21 Laplace-add-one behavior,
 pass \code{prior = NULL, pseudocount = 4}.}
 }
 \value{
