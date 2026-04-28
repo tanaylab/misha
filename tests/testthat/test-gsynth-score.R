@@ -165,3 +165,96 @@ test_that("gsynth.score: resolution invariance (sum of bp track == windowed trac
     # Sums of 200 floats can accumulate ~1e-5 relative error.
     expect_equal(cmp$w200, cmp$expected, tolerance = 1e-5)
 })
+
+test_that("gsynth.score: first k bp of chromosome are NA", {
+    gdb.init_examples()
+    on.exit(
+        {
+            if (gtrack.exists("ts_chrom_start")) {
+                gtrack.rm("ts_chrom_start", force = TRUE)
+            }
+        },
+        add = TRUE
+    )
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 200,
+        k = 5L # bigger k makes the boundary effect easier to see
+    )
+
+    gsynth.score(
+        model = model, track = "ts_chrom_start",
+        intervals = gintervals(1, 0, 1000),
+        resolution = 1,
+        overwrite = TRUE
+    )
+
+    vals <- gextract("ts_chrom_start",
+        intervals = gintervals(1, 0, 1000),
+        iterator = 1
+    )
+
+    # First k=5 bp must be NA; the rest must be finite.
+    expect_true(all(is.na(vals$ts_chrom_start[1:5])))
+    expect_true(all(is.finite(vals$ts_chrom_start[6:nrow(vals)])))
+})
+
+test_that("gsynth.score: sparse_policy='uniform' replaces sparse-bin NaN with log(1/4)", {
+    gdb.init_examples()
+    on.exit(
+        {
+            for (t in c("ts_sparse_na", "ts_sparse_uniform")) {
+                if (gtrack.exists(t)) gtrack.rm(t, force = TRUE)
+            }
+            for (vt in c("g_frac_sp", "c_frac_sp")) {
+                if (vt %in% gvtrack.ls()) gvtrack.rm(vt)
+            }
+        },
+        add = TRUE
+    )
+
+    gvtrack.create("g_frac_sp", NULL, "kmer.frac", kmer = "G")
+    gvtrack.create("c_frac_sp", NULL, "kmer.frac", kmer = "C")
+
+    # Train with high min_obs and a tiny region so most strata fall
+    # below the threshold and are marked NA.
+    model <- suppressWarnings(gsynth.train(
+        list(expr = "g_frac_sp + c_frac_sp", breaks = seq(0, 1, 0.05)),
+        intervals = gintervals(1, 0, 30000),
+        iterator = 200,
+        k = 2L,
+        min_obs = 1e6 # forces nearly all bins to be sparse
+    ))
+    expect_true(length(model$sparse_bins) > 0L)
+
+    iv <- gintervals(1, 1000, 5000) # avoid chrom-start NA
+
+    gsynth.score(
+        model = model, track = "ts_sparse_na",
+        intervals = iv, resolution = 1,
+        sparse_policy = "NA", overwrite = TRUE
+    )
+    gsynth.score(
+        model = model, track = "ts_sparse_uniform",
+        intervals = iv, resolution = 1,
+        sparse_policy = "uniform", overwrite = TRUE
+    )
+
+    na_vals <- gextract("ts_sparse_na", intervals = iv, iterator = 1)
+    unif_vals <- gextract("ts_sparse_uniform", intervals = iv, iterator = 1)
+
+    # In NA mode, every position whose stratum bin is sparse is NA.
+    # Most positions should be NA given the aggressive min_obs.
+    expect_true(mean(is.na(na_vals$ts_sparse_na)) > 0.5)
+
+    # In uniform mode, those same positions must be log(1/4).
+    sparse_pos <- which(is.na(na_vals$ts_sparse_na) &
+        is.finite(unif_vals$ts_sparse_uniform))
+    expect_true(length(sparse_pos) > 0L)
+    take <- head(sparse_pos, 10)
+    expect_equal(unif_vals$ts_sparse_uniform[take],
+        rep(log(0.25), length(take)),
+        tolerance = 1e-6
+    )
+})
