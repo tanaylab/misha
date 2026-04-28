@@ -311,3 +311,173 @@ test_that("gsynth.score: LLR sanity between two models", {
     finite <- diff_col[is.finite(diff_col)]
     expect_gte(mean(finite), -1)
 })
+
+test_that("gsynth.score uses bin_at(pos - k) (matches train, not predicted-base)", {
+    # Training keys the stratum bin to the leftmost base of the (k+1)-mer
+    # context (genome_pos = start + pos in GenomeSynthTrain.cpp). To honor
+    # cached models scoring must look up the bin at pos - k, not at pos.
+    # Choose a window boundary where bin_at(pos) != bin_at(pos - k) and
+    # assert the score matches the training-convention bin's log_p.
+    gdb.init_examples()
+    on.exit(
+        {
+            if (gtrack.exists("zz_offby_k")) gtrack.rm("zz_offby_k", force = TRUE)
+            if ("g_frac_off" %in% gvtrack.ls()) gvtrack.rm("g_frac_off")
+        },
+        add = TRUE
+    )
+
+    gvtrack.create("g_frac_off", NULL, "kmer.frac", kmer = "G")
+    iv <- gintervals(1, 0, 50000)
+
+    model <- gsynth.train(
+        list(expr = "g_frac_off", breaks = c(0, 0.2, 0.5, 1.0)),
+        intervals = iv, iterator = 200, k = 5L, pseudocount = 1
+    )
+
+    gsynth.score(model, "zz_offby_k",
+        intervals = iv, resolution = 1, overwrite = TRUE
+    )
+    sv <- gextract("zz_offby_k",
+        intervals = iv, iterator = 1, colnames = "logp"
+    )
+
+    g_per_win <- gextract("g_frac_off",
+        intervals = iv, iterator = 200, colnames = "g"
+    )
+    g_per_win$bin <- findInterval(g_per_win$g,
+        c(0, 0.2, 0.5, 1.0),
+        rightmost.closed = TRUE
+    )
+
+    # Pick the first iter boundary where the bin actually changes.
+    transitions <- which(diff(g_per_win$bin) != 0)
+    skip_if(length(transitions) == 0L, "no bin transition in this region")
+    boundary_idx <- transitions[1]
+    boundary_pos <- g_per_win$start[boundary_idx + 1L]
+    prev_bin <- g_per_win$bin[boundary_idx]
+    next_bin <- g_per_win$bin[boundary_idx + 1L]
+    expect_false(prev_bin == next_bin)
+
+    seq_chunk <- toupper(gseq.extract(
+        gintervals(1, boundary_pos - 5L, boundary_pos + 1L)
+    ))
+    ctx <- substr(seq_chunk, 1L, 5L)
+    base <- substr(seq_chunk, 6L, 6L)
+    base_map <- c(A = 0L, C = 1L, G = 2L, T = 3L)
+    ctx_idx <- 0L
+    for (ch in strsplit(ctx, "")[[1]]) {
+        ctx_idx <- bitwShiftL(ctx_idx, 2L) + base_map[[ch]]
+    }
+    base_idx <- base_map[[base]] + 1L
+
+    cdf_to_logp <- function(cdf) {
+        log(cbind(
+            cdf[, 1], cdf[, 2] - cdf[, 1],
+            cdf[, 3] - cdf[, 2], cdf[, 4] - cdf[, 3]
+        ))
+    }
+    expected <- cdf_to_logp(model$model_data$cdf[[prev_bin]])[
+        ctx_idx + 1L, base_idx
+    ]
+
+    score_val <- sv$logp[sv$start == boundary_pos]
+    # Compare at float precision (track is float-stored).
+    expect_equal(score_val, expected, tolerance = 1e-5)
+})
+
+test_that("gsynth.score honors mask parameter (masked bp -> NA)", {
+    gdb.init_examples()
+    on.exit(
+        {
+            if (gtrack.exists("zz_mask")) gtrack.rm("zz_mask", force = TRUE)
+        },
+        add = TRUE
+    )
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 200, k = 2L
+    )
+
+    test_iv <- gintervals(1, 1000, 5000)
+    mask_iv <- gintervals(1, 2000, 3000)
+
+    gsynth.score(
+        model = model, track = "zz_mask",
+        intervals = test_iv,
+        mask = mask_iv,
+        resolution = 1,
+        overwrite = TRUE
+    )
+
+    vals <- gextract("zz_mask",
+        intervals = test_iv, iterator = 1, colnames = "v"
+    )
+    masked_idx <- vals$start >= 2000L & vals$start < 3000L
+    expect_true(all(is.na(vals$v[masked_idx])))
+    expect_true(all(is.finite(vals$v[!masked_idx])))
+})
+
+test_that("gsynth.score: gap between sub-chrom intervals -> NA bins in gap", {
+    # When intervals contain gaps, no positions in the gap should be scored
+    # and no bin info from inside the gap should leak across the boundary.
+    gdb.init_examples()
+    on.exit(
+        {
+            if (gtrack.exists("zz_gap")) gtrack.rm("zz_gap", force = TRUE)
+        },
+        add = TRUE
+    )
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 200, k = 2L
+    )
+
+    iv1 <- gintervals(1, 1000, 2000)
+    iv2 <- gintervals(1, 4000, 5000)
+    test_iv <- rbind(iv1, iv2)
+
+    gsynth.score(
+        model = model, track = "zz_gap",
+        intervals = test_iv, resolution = 1,
+        overwrite = TRUE
+    )
+
+    # Reading over [2000, 4000) (the gap) must yield NA.
+    gap_vals <- gextract("zz_gap",
+        intervals = gintervals(1, 2000, 4000),
+        iterator = 1, colnames = "v"
+    )
+    expect_true(all(is.na(gap_vals$v)))
+})
+
+test_that("gsynth.score: sub-chrom interval gets bin info upstream (no NA at start)", {
+    # With the off-by-k fix bin lookup is at pos - k, which lands in the iter
+    # window before the user interval. The R wrapper extends gextract upstream
+    # by iter_size so positions at the very start of a sub-chrom interval are
+    # not silently NA-poisoned.
+    gdb.init_examples()
+    on.exit(
+        {
+            if (gtrack.exists("zz_subchrom")) gtrack.rm("zz_subchrom", force = TRUE)
+        },
+        add = TRUE
+    )
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 200, k = 2L
+    )
+
+    test_iv <- gintervals(1, 1000, 1100) # multiple of 200, away from chrom 0
+    gsynth.score(
+        model = model, track = "zz_subchrom",
+        intervals = test_iv, resolution = 1, overwrite = TRUE
+    )
+    vals <- gextract("zz_subchrom",
+        intervals = test_iv, iterator = 1, colnames = "v"
+    )
+    expect_true(all(is.finite(vals$v)))
+})
