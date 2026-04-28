@@ -1921,6 +1921,141 @@ gsynth.sample <- function(model,
     invisible(NULL)
 }
 
+#' Score the genome under a trained gsynth model
+#'
+#' Writes a misha fixed-bin dense track whose value at each output bin
+#' is the summed natural-log conditional probability of the reference
+#' sequence under the trained Markov model:
+#' \deqn{T(a) = \sum_{i=a}^{a+r-1} \log P_M(\mathrm{seq}[i] \mid
+#'             \mathrm{seq}[i-k..i-1], b(i))}
+#' where \eqn{b(i)} is the model's stratum bin (constant within each
+#' \code{model$iterator}-bp window). The first \eqn{k} bp of every
+#' chromosome are NA (no upstream context available); under default
+#' policies, any output bin containing an NA per-bp contribution is NA.
+#'
+#' Two models scored against the same reference give a windowed log
+#' Bayes factor as a track expression:
+#' \preformatted{
+#'     gsynth.score(genome_model, "genome_score")
+#'     gsynth.score(cre_model,    "cre_score")
+#'     gextract("cre_score - genome_score", iterator=1000, ...)
+#' }
+#'
+#' @param model       A \code{gsynth.model} object (from
+#'                    \code{\link{gsynth.train}}).
+#' @param track       Name of the misha track to create.
+#' @param description Optional track description.
+#' @param intervals   Intervals to score. Defaults to
+#'                    \code{gintervals.all()}.
+#' @param resolution  Output bin size in bp. Defaults to
+#'                    \code{model$iterator}. \code{1} produces a per-bp
+#'                    track; any positive integer is allowed.
+#' @param sparse_policy How to score positions whose stratum bin is
+#'                    sparse in the model:
+#'                    \code{"NA"} (default) propagates NA;
+#'                    \code{"uniform"} contributes \code{log(1/4)} per
+#'                    bp.
+#' @param n_policy    How to score positions whose k-mer context or
+#'                    current base contains an N:
+#'                    \code{"NA"} (default) or \code{"uniform"}
+#'                    (\code{log(1/4)} per bp).
+#' @param overwrite   If \code{TRUE}, replace an existing track of the
+#'                    same name.
+#'
+#' @return Invisibly \code{NULL}. Side effect: creates the named misha
+#'         track. Output bins are written as \code{NaN} where the sum
+#'         is undefined (out of intervals, or any per-bp NA).
+#'
+#' @seealso \code{\link{gsynth.train}}, \code{\link{gsynth.sample}}
+#' @export
+gsynth.score <- function(model,
+                         track,
+                         description = NULL,
+                         intervals = NULL,
+                         resolution = NULL,
+                         sparse_policy = c("NA", "uniform"),
+                         n_policy = c("NA", "uniform"),
+                         overwrite = FALSE) {
+    .gcheckroot()
+
+    if (!inherits(model, "gsynth.model")) {
+        stop("model must be a gsynth.model object", call. = FALSE)
+    }
+    if (missing(track) || !is.character(track) || length(track) != 1L ||
+        is.na(track) || nchar(track) == 0L) {
+        stop("track is required (single non-empty string)", call. = FALSE)
+    }
+    if (is.null(resolution)) {
+        resolution <- as.integer(model$iterator)
+    }
+    if (!is.numeric(resolution) || length(resolution) != 1L ||
+        is.na(resolution) || resolution != as.integer(resolution) ||
+        resolution < 1L) {
+        stop("resolution must be a positive integer (>= 1)", call. = FALSE)
+    }
+    resolution <- as.integer(resolution)
+
+    sparse_policy <- match.arg(sparse_policy)
+    n_policy <- match.arg(n_policy)
+
+    if (is.null(intervals)) {
+        intervals <- gintervals.all()
+    }
+
+    # ---- stratum extraction (mirrors gsynth.sample) ----
+    .iterator <- model$iterator
+    if (is.null(.iterator)) {
+        stop("Model iterator is NULL. Model may be corrupted.", call. = FALSE)
+    }
+    n_dims <- model$n_dims
+    dim_sizes <- model$dim_sizes
+
+    if (n_dims == 0) {
+        iter_info <- gextract("1", intervals = intervals, iterator = .iterator)
+        if (is.null(iter_info) || nrow(iter_info) == 0) {
+            stop("No positions extracted. Check intervals.", call. = FALSE)
+        }
+        n_positions <- nrow(iter_info)
+        flat_indices <- rep(1L, n_positions)
+        chrom_sizes <- gintervals.chrom_sizes(intervals)
+        chrom_key <- levels(chrom_sizes$chrom)
+        iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
+        iter_starts <- as.integer(iter_info$start)
+    } else {
+        exprs <- sapply(model$dim_specs, function(d) d$expr)
+        track_data <- gextract(exprs, intervals = intervals, iterator = .iterator)
+        if (is.null(track_data) || nrow(track_data) == 0) {
+            stop("No track data extracted. Check intervals.", call. = FALSE)
+        }
+        n_positions <- nrow(track_data)
+        per_dim_indices <- matrix(NA_integer_, nrow = n_positions, ncol = n_dims)
+        for (d in seq_len(n_dims)) {
+            spec <- model$dim_specs[[d]]
+            tv <- track_data[[spec$expr]]
+            bi <- findInterval(tv, spec$breaks, rightmost.closed = TRUE)
+            bi[bi == 0] <- NA
+            bi[bi > spec$num_bins] <- NA
+            valid <- !is.na(bi) & bi >= 1 & bi <= spec$num_bins
+            if (any(valid)) bi[valid] <- spec$bin_map[bi[valid]]
+            per_dim_indices[, d] <- bi
+        }
+        flat_indices <- .compute_flat_indices(per_dim_indices, dim_sizes)
+        chrom_sizes <- gintervals.chrom_sizes(intervals)
+        chrom_key <- levels(chrom_sizes$chrom)
+        iter_chroms <- match(as.character(track_data$chrom), chrom_key) - 1L
+        iter_starts <- as.integer(track_data$start)
+    }
+
+    flat_indices[is.na(flat_indices)] <- 0L
+    flat_indices <- as.integer(flat_indices) - 1L # 0-based for C++
+
+    log_p_list <- .gsynth_build_log_p(model)
+
+    stop("kernel not implemented yet (Task 4)", call. = FALSE)
+
+    invisible(NULL)
+}
+
 #' Generate random genome sequences
 #'
 #' Generates random DNA sequences based on nucleotide probabilities without

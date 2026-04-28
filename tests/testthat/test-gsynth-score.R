@@ -34,3 +34,31 @@ test_that(".gsynth_build_log_p recovers log probabilities from cdf", {
     gvtrack.rm("g_frac")
     gvtrack.rm("c_frac")
 })
+
+test_that("gsynth.score validates required arguments", {
+    gdb.init_examples()
+
+    # Build a tiny model to use as input.
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 200,
+        k = 2L
+    )
+
+    expect_error(
+        gsynth.score(model = "not a model", track = "x"),
+        "model must be a gsynth.model"
+    )
+    expect_error(
+        gsynth.score(model = model),
+        "track is required"
+    )
+    expect_error(
+        gsynth.score(model = model, track = "x", resolution = -1),
+        "resolution must be"
+    )
+    expect_error(
+        gsynth.score(model = model, track = "x", resolution = 1.5),
+        "resolution must be"
+    )
+})
