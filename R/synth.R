@@ -737,8 +737,9 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
 #' @param intervals Genomic intervals to process. If NULL, uses all chromosomes.
 #' @param iterator Iterator for track evaluation, determines the resolution at which
 #'        track values are computed.
-#' @param pseudocount Pseudocount added to all k-mer counts to avoid zero probabilities.
-#'        Default is 1.
+#' @param pseudocount Total Dirichlet concentration alpha used in the
+#'        smoothed posterior \code{P(a|c,b) = (N + alpha * pi_a(b)) /
+#'        (sum_a N + alpha)}. Default is 1.
 #' @param min_obs Minimum number of observations ((k+1)-mers) required per bin. Bins
 #'        with fewer observations will be marked as NA (not learned) and a warning will
 #'        be issued. Default is 0 (no minimum). During sampling, NA bins will fall back
@@ -747,6 +748,24 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
 #'        (context of length 5 plus the emitted base) transition probabilities.
 #'        Higher values capture longer-range sequence dependencies but require
 #'        exponentially more memory (\eqn{4^k} context states).
+#' @param prior Per-base Dirichlet prior \eqn{\pi_a(b)}. One of:
+#'        \itemize{
+#'          \item \code{"marginal"} (default): per-bin empirical base
+#'                composition learned from the trainer's own counts
+#'                (post bin-merge). Bins with zero observations fall back to
+#'                uniform with a warning.
+#'          \item \code{"global"}: a single base composition pooled over
+#'                all bins, broadcast to every bin.
+#'          \item \code{NULL} or \code{"uniform"}: uniform prior
+#'                (1/4 per base) -- the pre-5.7.0 fallback.
+#'          \item Length-4 numeric (optionally named A, C, G, T):
+#'                user-supplied global \eqn{\pi}, broadcast.
+#'          \item \code{n_bins x 4} numeric matrix: user-supplied per-bin
+#'                \eqn{\pi}.
+#'        }
+#'        Together with \code{pseudocount}, this defines the Dirichlet
+#'        posterior. To reproduce the pre-5.7.0 Laplace-add-one behavior,
+#'        pass \code{prior = NULL, pseudocount = 4}.
 #'
 #' @details
 #' \strong{Strand symmetry:} The training process counts both the forward strand
@@ -812,6 +831,67 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
 #'     iterator = 200
 #' )
 #'
+# Internal: validate the `prior` argument and split into (mode, matrix) for the C kernel.
+# Returns a list(mode = <"uniform"|"marginal"|"global"|"explicit">, matrix = NULL or n_bins x 4 numeric).
+.gsynth_resolve_prior_arg <- function(prior, total_bins) {
+    if (is.null(prior)) {
+        return(list(mode = "uniform", matrix = NULL))
+    }
+    if (is.character(prior) && length(prior) == 1L) {
+        if (prior == "marginal") {
+            return(list(mode = "marginal", matrix = NULL))
+        }
+        if (prior == "global") {
+            return(list(mode = "global", matrix = NULL))
+        }
+        if (prior == "uniform") {
+            return(list(mode = "uniform", matrix = NULL))
+        }
+        stop(sprintf(
+            "Unknown prior '%s'. Use NULL, 'uniform', 'marginal', 'global', a length-4 numeric, or an n_bins x 4 matrix.",
+            prior
+        ), call. = FALSE)
+    }
+    if (is.numeric(prior) && is.null(dim(prior)) && length(prior) == 4L) {
+        if (!is.null(names(prior))) {
+            ord <- match(c("A", "C", "G", "T"), toupper(names(prior)))
+            if (anyNA(ord)) {
+                stop("Named numeric prior must have names A, C, G, T", call. = FALSE)
+            }
+            prior <- prior[ord]
+        }
+        if (anyNA(prior) || any(prior < 0)) {
+            stop("prior must be non-negative and finite", call. = FALSE)
+        }
+        s <- sum(prior)
+        if (s <= 0) stop("prior must sum to > 0", call. = FALSE)
+        prior <- prior / s
+        mat <- matrix(as.numeric(prior), nrow = total_bins, ncol = 4L, byrow = TRUE)
+        return(list(mode = "explicit", matrix = mat))
+    }
+    if (is.numeric(prior) && length(dim(prior)) == 2L) {
+        if (nrow(prior) != total_bins || ncol(prior) != 4L) {
+            stop(sprintf(
+                "prior matrix must be %d x 4 (got %d x %d)",
+                total_bins, nrow(prior), ncol(prior)
+            ), call. = FALSE)
+        }
+        if (anyNA(prior) || any(prior < 0)) {
+            stop("prior matrix must be non-negative and contain no NAs", call. = FALSE)
+        }
+        rs <- rowSums(prior)
+        if (any(rs <= 0)) {
+            stop("Every row of prior matrix must sum to > 0", call. = FALSE)
+        }
+        prior <- prior / rs
+        return(list(mode = "explicit", matrix = prior))
+    }
+    stop(
+        "prior must be NULL, 'uniform'/'marginal'/'global', a length-4 numeric (optionally named A/C/G/T), or an n_bins x 4 matrix.",
+        call. = FALSE
+    )
+}
+
 #' @seealso \code{\link{gsynth.sample}}, \code{\link{gsynth.save}},
 #'          \code{\link{gsynth.load}}, \code{\link{gsynth.bin_map}}
 #' @export
@@ -821,7 +901,8 @@ gsynth.train <- function(...,
                          iterator = NULL,
                          pseudocount = 1,
                          min_obs = 0,
-                         k = 5L) {
+                         k = 5L,
+                         prior = "marginal") {
     .gcheckroot()
 
     # Validate k (Markov order)
@@ -993,6 +1074,9 @@ gsynth.train <- function(...,
     # We've already applied bin_map in R, so just pass identity mapping
     bin_map_vec <- seq_len(total_bins) - 1L # 0-based identity
 
+    # Resolve prior into (mode, matrix) for the C kernel
+    prior_resolved <- .gsynth_resolve_prior_arg(prior, total_bins)
+
     message("Training Markov model...")
 
     # Call C++ training function
@@ -1014,6 +1098,8 @@ gsynth.train <- function(...,
         mask,
         as.numeric(pseudocount),
         as.integer(k),
+        as.character(prior_resolved$mode),
+        prior_resolved$matrix,
         .misha_env()
     )
 
@@ -1029,6 +1115,17 @@ gsynth.train <- function(...,
 
     # Store all breaks for reference
     result$breaks <- NULL # Remove single breaks
+
+    # Store prior on the model (resolved matrix arrives as result$prior from C++)
+    result$prior_mode <- prior_resolved$mode
+    result$pseudocount <- as.numeric(pseudocount)
+    if (!is.null(result$marginal_fallbacks) &&
+        result$marginal_fallbacks > 0L) {
+        warning(sprintf(
+            "%d bin(s) had zero observations; their prior fell back to uniform 1/4.",
+            result$marginal_fallbacks
+        ), call. = FALSE)
+    }
 
     # Check for sparse bins (fewer than min_obs observations)
     result$min_obs <- min_obs
