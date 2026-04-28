@@ -313,11 +313,16 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
 
                 // Generate n_samples samples for this interval
                 for (int sample_idx = 0; sample_idx < n_samples; ++sample_idx) {
-                    // Reset bin cursor for each sample
+                    // Reset bin cursor for each sample. Bin queries use
+                    // pos - k (the leftmost base of the (k+1)-mer
+                    // context), matching the convention used by training.
+                    // Initialize against the first query position the
+                    // sampling loop will see.
                     size_t bin_cursor = 0;
+                    int64_t first_query = interval_start;  // pos - k for pos = interval_start + k
                     if (!bins.empty()) {
                         while (bin_cursor + 1 < bins.size() &&
-                               interval_start >= bins[bin_cursor + 1].first) {
+                               first_query >= bins[bin_cursor + 1].first) {
                             ++bin_cursor;
                         }
                     }
@@ -362,15 +367,21 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                             continue;
                         }
 
-                        // Find bin for this position using a forward cursor
+                        // Find bin for this position using a forward
+                        // cursor. Use pos - k (context-leftmost) to match
+                        // training; this keeps the per-bin transition
+                        // tables aligned with the same iter window the
+                        // training counts were attributed to.
+                        int64_t bin_query_pos = pos - k;
                         int bin_idx = -1;
                         if (!bins.empty()) {
                             while (bin_cursor + 1 < bins.size() &&
-                                   pos >= bins[bin_cursor + 1].first) {
+                                   bin_query_pos >= bins[bin_cursor + 1].first) {
                                 ++bin_cursor;
                             }
-                            if (pos >= bins[bin_cursor].first &&
-                                pos < bins[bin_cursor].first + iter_size) {
+                            if (bin_query_pos >= bins[bin_cursor].first &&
+                                bin_query_pos <
+                                    bins[bin_cursor].first + iter_size) {
                                 bin_idx = bins[bin_cursor].second;
                             }
                         }

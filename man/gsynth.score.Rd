@@ -9,6 +9,7 @@ gsynth.score(
   track,
   description = NULL,
   intervals = NULL,
+  mask = NULL,
   resolution = NULL,
   sparse_policy = c("NA", "uniform"),
   n_policy = c("NA", "uniform"),
@@ -24,7 +25,16 @@ gsynth.score(
 \item{description}{Optional track description.}
 
 \item{intervals}{Intervals to score. Defaults to
-\code{gintervals.all()}.}
+\code{gintervals.all()}. Best results when interval
+starts are aligned to multiples of
+\code{model$iterator}; otherwise the first stratum
+window is shorter than \code{model$iterator} and
+its bin label may differ from training.}
+
+\item{mask}{Optional intervals to NA-out in the output (e.g.
+repeats). Intersects with \code{intervals} per bp;
+every output bin containing a masked bp becomes
+\code{NaN}.}
 
 \item{resolution}{Output bin size in bp. Defaults to
 \code{model$iterator}. \code{1} produces a per-bp
@@ -36,10 +46,11 @@ sparse in the model:
 \code{"uniform"} contributes \code{log(1/4)} per
 bp.}
 
-\item{n_policy}{How to score positions whose k-mer context or
-current base contains an N:
-\code{"NA"} (default) or \code{"uniform"}
-(\code{log(1/4)} per bp).}
+\item{n_policy}{How to score positions whose k-mer \emph{context}
+contains an N: \code{"NA"} (default) or
+\code{"uniform"} (\code{log(1/4)} per bp). The
+predicted base itself is always NA when N — the
+model has no \eqn{\log P} for non-ACGT bases.}
 
 \item{overwrite}{If \code{TRUE}, replace an existing track of the
 same name.}

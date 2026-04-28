@@ -1946,7 +1946,15 @@ gsynth.sample <- function(model,
 #' @param track       Name of the misha track to create.
 #' @param description Optional track description.
 #' @param intervals   Intervals to score. Defaults to
-#'                    \code{gintervals.all()}.
+#'                    \code{gintervals.all()}. Best results when interval
+#'                    starts are aligned to multiples of
+#'                    \code{model$iterator}; otherwise the first stratum
+#'                    window is shorter than \code{model$iterator} and
+#'                    its bin label may differ from training.
+#' @param mask        Optional intervals to NA-out in the output (e.g.
+#'                    repeats). Intersects with \code{intervals} per bp;
+#'                    every output bin containing a masked bp becomes
+#'                    \code{NaN}.
 #' @param resolution  Output bin size in bp. Defaults to
 #'                    \code{model$iterator}. \code{1} produces a per-bp
 #'                    track; any positive integer is allowed.
@@ -1955,10 +1963,11 @@ gsynth.sample <- function(model,
 #'                    \code{"NA"} (default) propagates NA;
 #'                    \code{"uniform"} contributes \code{log(1/4)} per
 #'                    bp.
-#' @param n_policy    How to score positions whose k-mer context or
-#'                    current base contains an N:
-#'                    \code{"NA"} (default) or \code{"uniform"}
-#'                    (\code{log(1/4)} per bp).
+#' @param n_policy    How to score positions whose k-mer \emph{context}
+#'                    contains an N: \code{"NA"} (default) or
+#'                    \code{"uniform"} (\code{log(1/4)} per bp). The
+#'                    predicted base itself is always NA when N — the
+#'                    model has no \eqn{\log P} for non-ACGT bases.
 #' @param overwrite   If \code{TRUE}, replace an existing track of the
 #'                    same name.
 #'
@@ -1972,6 +1981,7 @@ gsynth.score <- function(model,
                          track,
                          description = NULL,
                          intervals = NULL,
+                         mask = NULL,
                          resolution = NULL,
                          sparse_policy = c("NA", "uniform"),
                          n_policy = c("NA", "uniform"),
@@ -2010,8 +2020,23 @@ gsynth.score <- function(model,
     n_dims <- model$n_dims
     dim_sizes <- model$dim_sizes
 
+    # Bin lookup queries pos - k (the leftmost base of the (k+1)-mer
+    # context) to match training. Extend gextract upstream by one
+    # iter_size so the first k bp of every interval get bin info from
+    # the prior iter window — matching what training saw on the same
+    # genome. Clamped to chromosome start.
+    .k <- as.integer(model$k)
+    strata_intervals <- intervals
+    if (is.numeric(.iterator) && length(.iterator) == 1L && .iterator > 0L) {
+        strata_intervals$start <- as.integer(pmax(
+            0L, as.integer(strata_intervals$start) - as.integer(.iterator)
+        ))
+    }
+
     if (n_dims == 0) {
-        iter_info <- gextract("1", intervals = intervals, iterator = .iterator)
+        iter_info <- gextract("1",
+            intervals = strata_intervals, iterator = .iterator
+        )
         if (is.null(iter_info) || nrow(iter_info) == 0) {
             stop("No positions extracted. Check intervals.", call. = FALSE)
         }
@@ -2023,7 +2048,9 @@ gsynth.score <- function(model,
         iter_starts <- as.integer(iter_info$start)
     } else {
         exprs <- sapply(model$dim_specs, function(d) d$expr)
-        track_data <- gextract(exprs, intervals = intervals, iterator = .iterator)
+        track_data <- gextract(exprs,
+            intervals = strata_intervals, iterator = .iterator
+        )
         if (is.null(track_data) || nrow(track_data) == 0) {
             stop("No track data extracted. Check intervals.", call. = FALSE)
         }
@@ -2105,6 +2132,7 @@ gsynth.score <- function(model,
                     as.integer(.iterator),
                     n_policy_int,
                     sparse_policy_int,
+                    mask,
                     .misha_env()
                 )
             } else {
@@ -2130,6 +2158,7 @@ gsynth.score <- function(model,
                                 as.integer(.iterator),
                                 n_policy_int,
                                 sparse_policy_int,
+                                mask,
                                 .misha_env()
                             )
                             list(ok = TRUE)

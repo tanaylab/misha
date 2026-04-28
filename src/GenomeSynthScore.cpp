@@ -19,6 +19,7 @@
 #include "GenomeChromKey.h"
 #include "GenomeSeqFetch.h"
 #include "GenomeTrackFixedBin.h"
+#include "MaskUtils.h"
 #include "rdbinterval.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
@@ -52,8 +53,12 @@ extern "C" {
  * @param _binsize      Integer: output bin size in bp (resolution).
  * @param _k            Integer: Markov order k.
  * @param _iter_size    Integer: stratum iterator bin size in bp.
- * @param _n_policy     Integer: 0 = NA, 1 = uniform.
+ * @param _n_policy     Integer: context-N policy (0 = NA, 1 = uniform).
+ *                      Predicted-base-N is always NA regardless of this
+ *                      flag — the model has no log P for non-ACGT bases.
  * @param _sparse_policy Integer: 0 = NA, 1 = uniform.
+ * @param _mask         R intervals object (positions to mark NA in the
+ *                      output). NULL = no mask.
  * @param _envir        R environment.
  *
  * @return R_NilValue on success.
@@ -62,7 +67,7 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
                     SEXP _iter_starts, SEXP _iter_chroms,
                     SEXP _intervals, SEXP _track_name, SEXP _chromids,
                     SEXP _binsize, SEXP _k, SEXP _iter_size,
-                    SEXP _n_policy, SEXP _sparse_policy,
+                    SEXP _n_policy, SEXP _sparse_policy, SEXP _mask,
                     SEXP _envir) {
     try {
         RdbInitializer rdb_init;
@@ -94,7 +99,10 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
         if (num_bins <= 0) verror("log_p_list is empty");
 
         // Flat layout: log_p[bin][ctx * NUM_BASES + base].
-        // Track per-bin "is sparse" flag: bin sparse if any cell is NaN.
+        // A sparse bin (training-time min_obs filter) is marked by setting
+        // every cell of cdf to NA in R, so log_p is NaN throughout. Detect
+        // sparsity by checking the first cell only — full-bin NaN is the
+        // only way the value is NaN given pseudocount > 0.
         vector<vector<float>> log_p(num_bins);
         vector<bool> bin_is_sparse(num_bins, false);
         for (int b = 0; b < num_bins; ++b) {
@@ -105,12 +113,12 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
                        b + 1, Rf_length(m), num_kmers * NUM_BASES);
             }
             double *p = REAL(m);
+            bin_is_sparse[b] = std::isnan(p[0]);
             log_p[b].resize(num_kmers * NUM_BASES);
             for (int ctx = 0; ctx < num_kmers; ++ctx) {
                 for (int base = 0; base < NUM_BASES; ++base) {
                     // R matrices are column-major: [row + col * nrow]
                     double v = p[ctx + base * num_kmers];
-                    if (std::isnan(v)) bin_is_sparse[b] = true;
                     log_p[b][ctx * NUM_BASES + base] = (float)v;
                 }
             }
@@ -135,6 +143,20 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
                 const GInterval &iv = si->cur_interval();
                 if (iv.chromid >= 0 && iv.chromid < num_chroms)
                     sample_per_chrom[iv.chromid].push_back(iv);
+            }
+        }
+
+        // ---- Parse mask intervals (positions to NA-mark in the output) ----
+        vector<vector<GInterval>> mask_per_chrom(num_chroms);
+        if (!Rf_isNull(_mask)) {
+            GIntervalsFetcher1D *mi = NULL;
+            iu.convert_rintervs(_mask, &mi, NULL);
+            unique_ptr<GIntervalsFetcher1D> mguard(mi);
+            mi->sort();
+            for (mi->begin_iter(); !mi->isend(); mi->next()) {
+                const GInterval &iv = mi->cur_interval();
+                if (iv.chromid >= 0 && iv.chromid < num_chroms)
+                    mask_per_chrom[iv.chromid].push_back(iv);
             }
         }
 
@@ -214,6 +236,7 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
 
             const vector<GInterval> &ivs = sample_per_chrom[chromid];
             const vector<pair<int64_t, int>> &bins = chrom_bins[chromid];
+            const vector<GInterval> &mask_ivs = mask_per_chrom[chromid];
 
             for (size_t iv_idx = 0; iv_idx < ivs.size(); ++iv_idx) {
                 const GInterval &iv = ivs[iv_idx];
@@ -228,14 +251,20 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
                 vector<char> seq;
                 seqfetch.read_interval(read_iv, chromkey, seq);
 
-                // Forward cursor over the 200bp bin lookup.
+                // Forward cursor over the iter-size bin lookup. Bin queries
+                // use pos - k (the leftmost base of the (k+1)-mer context),
+                // matching the convention used by training. Initialize the
+                // cursor against the first query position the loop will see.
                 size_t bin_cursor = 0;
+                int64_t first_query = start - k;
                 if (!bins.empty()) {
                     while (bin_cursor + 1 < bins.size() &&
-                           start >= bins[bin_cursor + 1].first) {
+                           first_query >= bins[bin_cursor + 1].first) {
                         ++bin_cursor;
                     }
                 }
+
+                size_t mask_cursor = 0;
 
                 for (int64_t pos = start; pos < end; ++pos) {
                     int64_t out_bin = pos / binsize;
@@ -245,6 +274,13 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
 
                     if (any_na[out_bin]) {
                         // already poisoned — no need to score this bp
+                        continue;
+                    }
+
+                    // Mask check (unconditional NA, before any model work).
+                    if (!mask_ivs.empty() &&
+                        is_position_masked(pos, mask_ivs, mask_cursor)) {
+                        any_na[out_bin] = true;
                         continue;
                     }
 
@@ -264,27 +300,39 @@ SEXP C_gsynth_score(SEXP _log_p_list, SEXP _bin_indices,
                     int base_idx = StratifiedMarkovModel::encode_base(
                         seq[rel]);
 
-                    // Stratum bin lookup at this 200bp window.
+                    // Predicted-base-N is unconditional NA: the model has
+                    // no log P for non-ACGT bases. Substituting log(1/4)
+                    // would be a fabrication so we never gate this on
+                    // n_policy.
+                    if (base_idx < 0) {
+                        any_na[out_bin] = true;
+                        continue;
+                    }
+
+                    // Stratum bin lookup at pos - k (context-leftmost
+                    // position) to match training's convention.
+                    int64_t bin_query_pos = pos - k;
                     int stratum_bin = -1;
                     if (!bins.empty()) {
                         while (bin_cursor + 1 < bins.size() &&
-                               pos >= bins[bin_cursor + 1].first) {
+                               bin_query_pos >= bins[bin_cursor + 1].first) {
                             ++bin_cursor;
                         }
-                        if (pos >= bins[bin_cursor].first &&
-                            pos < bins[bin_cursor].first + iter_size) {
+                        if (bin_query_pos >= bins[bin_cursor].first &&
+                            bin_query_pos <
+                                bins[bin_cursor].first + iter_size) {
                             stratum_bin = bins[bin_cursor].second;
                         }
                     }
 
-                    bool n_invalid = (ctx_idx < 0 || base_idx < 0);
+                    bool ctx_n = (ctx_idx < 0);
                     bool stratum_invalid =
                         (stratum_bin < 0 || stratum_bin >= num_bins);
                     bool sparse = (!stratum_invalid &&
                                    bin_is_sparse[stratum_bin]);
 
                     float contrib;
-                    if (n_invalid) {
+                    if (ctx_n) {
                         if (n_policy == 1) {
                             contrib = UNIFORM_LOGP;
                         } else {
