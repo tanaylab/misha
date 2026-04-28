@@ -107,3 +107,61 @@ test_that("gsynth.score writes a queryable track end-to-end", {
     # also much worse than perfect, so allow a wide range.
     expect_true(all(rest > -1000 & rest < -50))
 })
+
+test_that("gsynth.score: resolution invariance (sum of bp track == windowed track)", {
+    gdb.init_examples()
+    on.exit(
+        {
+            for (t in c("ts_bp", "ts_w200")) {
+                if (gtrack.exists(t)) gtrack.rm(t, force = TRUE)
+            }
+        },
+        add = TRUE
+    )
+
+    model <- gsynth.train(
+        intervals = gintervals(1, 0, 50000),
+        iterator = 200,
+        k = 2L
+    )
+
+    test_iv <- gintervals(1, 1000, 5000) # avoid chrom-start NA region
+
+    gsynth.score(
+        model = model, track = "ts_bp",
+        intervals = test_iv, resolution = 1,
+        overwrite = TRUE
+    )
+    gsynth.score(
+        model = model, track = "ts_w200",
+        intervals = test_iv, resolution = 200,
+        overwrite = TRUE
+    )
+
+    bp <- gextract("ts_bp", intervals = test_iv, iterator = 1)
+    w200 <- gextract("ts_w200", intervals = test_iv, iterator = 200)
+
+    # Sum the bp track in non-overlapping width-200 windows aligned to
+    # multiples of 200 from chrom start. The interval starts at 1000
+    # (multiple of 200) so windows align perfectly.
+    expect_equal(nrow(bp), test_iv$end - test_iv$start)
+
+    expected <- tapply(
+        bp$ts_bp,
+        (bp$start %/% 200) * 200,
+        function(v) {
+            if (any(is.na(v))) NA_real_ else sum(v)
+        }
+    )
+
+    cmp <- merge(
+        data.frame(
+            start = as.integer(names(expected)),
+            expected = as.numeric(expected)
+        ),
+        data.frame(start = w200$start, w200 = w200$ts_w200),
+        by = "start"
+    )
+    # Sums of 200 floats can accumulate ~1e-5 relative error.
+    expect_equal(cmp$w200, cmp$expected, tolerance = 1e-5)
+})
