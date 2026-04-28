@@ -11,7 +11,8 @@ gsynth.train(
   iterator = NULL,
   pseudocount = 1,
   min_obs = 0,
-  k = 5L
+  k = 5L,
+  prior = "marginal"
 )
 }
 \arguments{
@@ -33,8 +34,9 @@ will not contribute to k-mer counts. Can be computed using \code{gscreen()}.}
 \item{iterator}{Iterator for track evaluation, determines the resolution at which
 track values are computed.}
 
-\item{pseudocount}{Pseudocount added to all k-mer counts to avoid zero probabilities.
-Default is 1.}
+\item{pseudocount}{Total Dirichlet concentration alpha used in the
+smoothed posterior \code{P(a|c,b) = (N + alpha * pi_a(b)) /
+(sum_a N + alpha)}. Default is 1.}
 
 \item{min_obs}{Minimum number of observations ((k+1)-mers) required per bin. Bins
 with fewer observations will be marked as NA (not learned) and a warning will
@@ -45,6 +47,25 @@ to uniform sampling unless merged via \code{bin_merge}.}
 (context of length 5 plus the emitted base) transition probabilities.
 Higher values capture longer-range sequence dependencies but require
 exponentially more memory (\eqn{4^k} context states).}
+
+\item{prior}{Per-base Dirichlet prior \eqn{\pi_a(b)}. One of:
+\itemize{
+  \item \code{"marginal"} (default): per-bin empirical base
+        composition learned from the trainer's own counts
+        (post bin-merge). Bins with zero observations fall back to
+        uniform with a warning.
+  \item \code{"global"}: a single base composition pooled over
+        all bins, broadcast to every bin.
+  \item \code{NULL} or \code{"uniform"}: uniform prior
+        (1/4 per base) -- the pre-5.7.0 fallback.
+  \item Length-4 numeric (optionally named A, C, G, T):
+        user-supplied global \eqn{\pi}, broadcast.
+  \item \code{n_bins x 4} numeric matrix: user-supplied per-bin
+        \eqn{\pi}.
+}
+Together with \code{pseudocount}, this defines the Dirichlet
+posterior. To reproduce the pre-5.7.0 Laplace-add-one behavior,
+pass \code{prior = NULL, pseudocount = 4}.}
 }
 \value{
 A \code{gsynth.model} object containing:
