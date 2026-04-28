@@ -1,3 +1,7 @@
+# misha 5.6.18
+
+* Added `getOption("gmultitasking.strategy")` for `gextract` (default `"auto"`). When the workload is large and many-track, `auto` routes to a track-parallel mode (each `parallel::mclapply` worker handles a track subset across all tiles) instead of the legacy tile-parallel mode (each fork-kid handles a tile range across all tracks). On the realistic 3,110 motif tracks × 2.19M tiled_peaks workload measured 57.6 min vs ~3.4 h projected for tile-parallel — a 3.5× per-track speedup. Override per-call via `options(gmultitasking.strategy = "tracks" | "tiles" | "auto")`. The heuristic stays on `"tiles"` for streaming iterators (numeric / NULL / 2D rect / track-name), single-track or fewer than 8 tracks, file/intervals.set.out output, or 2D band — so nothing else regresses (validated by a 36-cell matrix bench across iterator types × track counts × cache states).
+
 # misha 5.6.17
 
 * Fixed `gextract` over thousands of tracks failing with "Too many open files" (EMFILE). `GenomeTrackSparse` and `GenomeTrackFixedBin` (dense) were holding one open `FILE*` per track for the lifetime of the call, so workloads over hundreds–thousands of motif tracks blew past the default 1024 soft `RLIMIT_NOFILE`. The `BufferedFile` handle is now released once it is no longer needed (sparse: after data is loaded into memory; dense: after `mmap` is set up — reads go through the mapped region). Subsequent chromosome transitions reopen via the same paths. Negligible perf cost.
