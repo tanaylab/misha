@@ -121,7 +121,7 @@ inline void GInterval::verify(const GenomeChromKey &chromkey, bool check_chrom_b
 	if (start < 0)
 		TGLError<GInterval>(BAD_INTERVAL, "Interval (%s, %ld, %ld): start coordinate must be greater or equal than zero", chromkey.id2chrom(chromid).c_str(), start, end);
 	if (start >= end)
-		TGLError<GInterval>(BAD_INTERVAL, "Interval (%s, %ld, %ld): start coordinate must be lesser than end coordinate", chromkey.id2chrom(chromid).c_str(), start, end);
+		TGLError<GInterval>(BAD_INTERVAL, "Interval (%s, %ld, %ld): start coordinate must be lesser than end coordinate. misha uses 0-based, half-open [start, end) coordinates; if your input is 1-based (GFF/GTF/VCF), subtract 1 from start.", chromkey.id2chrom(chromid).c_str(), start, end);
 	if (check_chrom_boundary && (uint64_t)end > chromkey.get_chrom_size(chromid))
 		TGLError<GInterval>(BAD_INTERVAL, "Interval (%s, %ld, %ld): end coordinate exceeds chromosome boundaries", chromkey.id2chrom(chromid).c_str(), start, end);
 }

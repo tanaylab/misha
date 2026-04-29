@@ -316,6 +316,8 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 		if (strands_is_factor)
 			strand_levels = Rf_getAttrib(strands, R_LevelsSymbol);
 
+		unsigned zero_length_bumped = 0;
+
 		for (unsigned i = 0; i < num_intervals; i++) {
 			if ((Rf_isFactor(chroms) && INTEGER(chroms)[i] < 0) ||
 				(Rf_isReal(starts) && std::isnan(REAL(starts)[i])) || (Rf_isReal(ends) && std::isnan(REAL(ends)[i])) ||
@@ -360,12 +362,16 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 					REAL(ends)[i]++;
 				else
 					INTEGER(ends)[i]++;
+				zero_length_bumped++;
 			}
 
 			if (verify)
 				interval.verify(chromkey ? *chromkey : m_iu.get_chromkey());
 			intervals->push_back(interval);
 		}
+
+		if (zero_length_bumped > 0)
+			Rf_warning("%u interval(s) had start == end and were extended by 1bp on load. misha does not support zero-length intervals; if this is unintended, fix the source data.", zero_length_bumped);
 	}
 
 	if (intervs_type_mask == (rdb::IntervUtils::INTERVS1D | rdb::IntervUtils::INTERVS2D))
