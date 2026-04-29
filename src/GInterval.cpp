@@ -113,3 +113,16 @@ char GInterval::char2strand(char c)
 	return 0;
 }
 
+char GInterval::str2strand(const char *s)
+{
+	if (s == NULL || s[0] == '\0')
+		return 0;
+	if (s[1] == '\0') {
+		if (s[0] == '+') return 1;
+		if (s[0] == '-') return -1;
+		if (s[0] == '.' || s[0] == '*') return 0;
+	}
+	TGLError<GInterval>(BAD_STRAND, "Bad strand value \"%s\" (expected \"+\", \"-\", \".\", \"*\" or \"\")", s);
+	return 0;
+}
+

@@ -72,6 +72,9 @@ struct GInterval : public Segment {
 
 	static char char2strand(char c);
 
+	// Parse a strand string: "+" -> 1, "-" -> -1, "."/"*"/"" -> 0. Errors on anything else.
+	static char str2strand(const char *s);
+
 	char *debug_str(const GenomeChromKey &chromkey) const {
 		static char str[200];
 		snprintf(str, sizeof(str), "(%s, %" PRId64 ", %" PRId64 ")", chromkey.id2chrom(chromid).c_str(), start, end);
