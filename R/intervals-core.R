@@ -29,13 +29,27 @@
     }
 
     if (!is.null(strands)) {
-        if (!is.numeric(intervals$strand)) {
-            stop("Invalid strand values", call. = FALSE)
+        if (is.factor(intervals$strand)) {
+            intervals$strand <- as.character(intervals$strand)
         }
-
-        err.intervs <- intervals[intervals$strand != as.integer(intervals$strand) | intervals$strand < -1 | intervals$strand > 1, ]
-        if (nrow(err.intervs) > 0) {
-            stop(sprintf("Invalid strand value %g of interval (%s, %g, %g)", err.intervs$strand[1], err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]))
+        if (is.character(intervals$strand)) {
+            mapped <- rep(NA_integer_, length(intervals$strand))
+            mapped[intervals$strand == "+"] <- 1L
+            mapped[intervals$strand == "-"] <- -1L
+            mapped[intervals$strand == "." | intervals$strand == "*" | intervals$strand == ""] <- 0L
+            bad <- is.na(mapped)
+            if (any(bad)) {
+                i <- which(bad)[1]
+                stop(sprintf("Invalid strand value \"%s\" of interval (%s, %g, %g)", intervals$strand[i], intervals$chrom[i], intervals$start[i], intervals$end[i]), call. = FALSE)
+            }
+            intervals$strand <- as.numeric(mapped)
+        } else if (!is.numeric(intervals$strand)) {
+            stop("Invalid strand values", call. = FALSE)
+        } else {
+            err.intervs <- intervals[intervals$strand != as.integer(intervals$strand) | intervals$strand < -1 | intervals$strand > 1, ]
+            if (nrow(err.intervs) > 0) {
+                stop(sprintf("Invalid strand value %g of interval (%s, %g, %g)", err.intervs$strand[1], err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]))
+            }
         }
     }
 
@@ -78,13 +92,16 @@
 #'
 #' If 'strands' argument is not 'NULL' an additional column "strand" is added
 #' to the intervals. The possible values of a strand can be '1' (plus strand),
-#' '-1' (minus strand) or '0' (unknown).
+#' '-1' (minus strand) or '0' (unknown). Character values "+", "-", ".", "*"
+#' and "" (or factors with these levels) are also accepted and converted
+#' internally to '1', '-1' and '0' respectively.
 #'
 #' @param chroms chromosomes - an array of strings with or without "chr"
 #' prefixes or an array of integers (like: '1' for "chr1")
 #' @param starts an array of start coordinates
 #' @param ends an array of end coordinates. If '-1' chromosome size is assumed.
-#' @param strands 'NULL' or an array consisting of '-1', '0' or '1' values
+#' @param strands 'NULL', a numeric vector of '-1', '0' or '1' values, or a
+#' character/factor vector with values "+", "-", ".", "*" or ""
 #' @return A data frame representing the intervals.
 #' @seealso \code{\link{gintervals.2d}}, \code{\link{gintervals.force_range}}
 #' @keywords ~intervals

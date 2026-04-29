@@ -1,3 +1,7 @@
+# misha 5.6.22
+
+* Intervals' `strand` column now accepts character (`"+"`, `"-"`, `"."`, `"*"`, `""`) or factor input in addition to numeric `1`/`-1`/`0`. Strings are normalized to the numeric convention at the R→C++ boundary; output stays numeric.
+
 # misha 5.6.21
 
 * Added `prior` argument to `gsynth.train()` (default `"marginal"`). Per-bin Dirichlet priors are now learned from the trainer's own counts by default, so unobserved (cell, k-mer-context) entries fall back to the cell's empirical base composition instead of uniform 1/4. Other modes: `"global"`, `NULL`/`"uniform"`, length-4 numeric, and `n_bins x 4` matrix.
