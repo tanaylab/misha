@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.22</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.23</span>
       </span>
     </div>
 
@@ -66,6 +66,12 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.23" id="misha-5623">misha 5.6.23<a class="anchor" aria-label="anchor" href="#misha-5623"></a></h2>
+<ul><li>Improved error messages: “start exceeds or equals to end” now mentions misha’s 0-based half-open convention and the GFF/VCF 1-based hint; “chromosome does not exist” lists known chromosomes and points to <code>CHROM_ALIAS</code>.</li>
+<li>C++ converter now emits an R warning (“N intervals had start == end and were extended by 1bp”) when zero-length intervals from a loaded file are auto-bumped — previously this happened silently.</li>
+<li>Added <code><a href="../reference/gintervals.import_bed.html">gintervals.import_bed()</a></code>, <code><a href="../reference/gintervals.import_gff.html">gintervals.import_gff()</a></code>, <code><a href="../reference/gintervals.import_vcf.html">gintervals.import_vcf()</a></code> for direct import from common interval file formats. All three normalize chromosome names via the existing <code>CHROM_ALIAS</code> mechanism (so <code>chr1</code> ↔︎ <code>1</code> works), apply misha’s 0-based half-open convention (subtracting 1 from start for the 1-based GFF/GTF/VCF inputs), and preserve common metadata columns (<code>name</code>/<code>score</code>/<code>strand</code> for BED; <code>type</code>/<code>source</code>/<code>score</code>/<code>attrs</code> for GFF; <code>id</code>/<code>ref</code>/<code>alt</code>/<code>qual</code>/<code>filter</code>/<code>info</code> for VCF).</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.22" id="misha-5622">misha 5.6.22<a class="anchor" aria-label="anchor" href="#misha-5622"></a></h2>
 <ul><li>Intervals’ <code>strand</code> column now accepts character (<code>"+"</code>, <code>"-"</code>, <code>"."</code>, <code>"*"</code>, <code>""</code>) or factor input in addition to numeric <code>1</code>/<code>-1</code>/<code>0</code>. Strings are normalized to the numeric convention at the R→C++ boundary; output stays numeric.</li>
