@@ -25,7 +25,10 @@
 
     err.intervs <- intervals[intervals$start >= intervals$end, ]
     if (nrow(err.intervs) > 0) {
-        stop(sprintf("Invalid interval (%s, %g, %g): start coordinate exceeds or equals to end coordinate", err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = FALSE)
+        stop(sprintf(
+            "Invalid interval (%s, %g, %g): start coordinate exceeds or equals to end coordinate. Note: misha uses 0-based, half-open [start, end) coordinates (like BED). If your input is 1-based (GFF/GTF/VCF), subtract 1 from start.",
+            err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]
+        ), call. = FALSE)
     }
 
     if (!is.null(strands)) {

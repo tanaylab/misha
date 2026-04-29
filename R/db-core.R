@@ -8,6 +8,10 @@
     allchroms <- get("ALLGENOME", envir = .misha)[[1]]$chrom
     uniq <- unique(chroms)
 
+    # chr-prefix toggling (chr1 <-> 1, chrX <-> X) and mitochondrial aliasing
+    # (M <-> MT <-> chrM) are handled here via CHROM_ALIAS, which gsetroot
+    # populates from .compute_chrom_aliases at DB-load time. Don't re-implement
+    # those toggles below.
     if (exists("CHROM_ALIAS", envir = .misha, inherits = FALSE)) {
         alias_map <- get("CHROM_ALIAS", envir = .misha)
         if (length(alias_map)) {
@@ -48,7 +52,12 @@
 
     err.chroms <- chroms[is.na(indices)]
     if (length(err.chroms) > 0) {
-        stop(sprintf("Chromosome %s does not exist in the database", err.chroms[1]))
+        sample_known <- utils::head(as.character(allchroms), 5)
+        more <- if (length(allchroms) > 5) sprintf(", ... (%d total)", length(allchroms)) else ""
+        stop(sprintf(
+            "Chromosome %s does not exist in the database. Known chromosomes: %s%s. To register custom names, set .misha$CHROM_ALIAS.",
+            err.chroms[1], paste(sample_known, collapse = ", "), more
+        ), call. = FALSE)
     }
     allchroms[indices]
 }
