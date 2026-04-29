@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.21</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.22</span>
       </span>
     </div>
 
@@ -66,6 +66,10 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.22" id="misha-5622">misha 5.6.22<a class="anchor" aria-label="anchor" href="#misha-5622"></a></h2>
+<ul><li>Intervals’ <code>strand</code> column now accepts character (<code>"+"</code>, <code>"-"</code>, <code>"."</code>, <code>"*"</code>, <code>""</code>) or factor input in addition to numeric <code>1</code>/<code>-1</code>/<code>0</code>. Strings are normalized to the numeric convention at the R→C++ boundary; output stays numeric.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.21" id="misha-5621">misha 5.6.21<a class="anchor" aria-label="anchor" href="#misha-5621"></a></h2>
 <ul><li>Added <code>prior</code> argument to <code><a href="../reference/gsynth.train.html">gsynth.train()</a></code> (default <code>"marginal"</code>). Per-bin Dirichlet priors are now learned from the trainer’s own counts by default, so unobserved (cell, k-mer-context) entries fall back to the cell’s empirical base composition instead of uniform 1/4. Other modes: <code>"global"</code>, <code>NULL</code>/<code>"uniform"</code>, length-4 numeric, and <code>n_bins x 4</code> matrix.</li>
