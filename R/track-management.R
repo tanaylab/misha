@@ -615,6 +615,15 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         }
         .gtrack.copy.raw_dir(src_dir, dest_dir)
         if (dest_indexed && !src_indexed) {
+            # gtrack.2d.convert_to_indexed reads GROOT directly in C++, so it
+            # only works when dest_db is the active database. Cross-db 2D
+            # conversion is a follow-up.
+            if (dest_db != get("GROOT", envir = .misha)) {
+                stop(sprintf(
+                    "Cross-db copy of 2D track %s with format conversion to a non-active dataset is not yet supported.",
+                    destname
+                ), call. = FALSE)
+            }
             .with_db_context(dest_db, function() {
                 gtrack.2d.convert_to_indexed(destname, remove.old = TRUE)
             })
@@ -663,7 +672,17 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     }
 
     if (dest_indexed) {
-        .with_db_context(dest_db, function() gtrack.convert_to_indexed(destname))
+        if (track_type %in% c("dense", "sparse", "array")) {
+            .gtrack.pack_per_chrom_to_indexed(dest_dir, dest_chroms, track_type)
+        } else {
+            # 2D types: fall back to the existing path. The 2D code currently has the
+            # same GROOT-coupling caveat as the 1D path; for now require dest_db == GROOT
+            # for 2D indexed conversion.
+            stop(sprintf(
+                "Cross-db copy of 2D track %s with format conversion to a non-active dataset is not yet supported.",
+                destname
+            ), call. = FALSE)
+        }
     }
     invisible()
 }

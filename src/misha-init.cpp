@@ -67,6 +67,7 @@ extern "C" {
     extern SEXP gtrackcreate(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_convert_to_indexed_format(SEXP, SEXP, SEXP);
     extern SEXP gtrack_split_indexed_to_per_chrom(SEXP, SEXP, SEXP);
+    extern SEXP gtrack_pack_per_chrom_to_indexed(SEXP, SEXP, SEXP);
     extern SEXP gtrack2d_convert_to_indexed(SEXP, SEXP, SEXP);
     extern SEXP gtrack_create_empty_indexed(SEXP, SEXP);
     extern SEXP ginterv_convert(SEXP, SEXP, SEXP);
@@ -175,6 +176,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtrackcreate", (DL_FUNC)&gtrackcreate, 5},
     {"gtrack_convert_to_indexed_format", (DL_FUNC)&gtrack_convert_to_indexed_format, 3},
     {"gtrack_split_indexed_to_per_chrom", (DL_FUNC)&gtrack_split_indexed_to_per_chrom, 3},
+    {"gtrack_pack_per_chrom_to_indexed", (DL_FUNC)&gtrack_pack_per_chrom_to_indexed, 3},
     {"gtrack2d_convert_to_indexed", (DL_FUNC)&gtrack2d_convert_to_indexed, 3},
     {"gtrack_create_empty_indexed", (DL_FUNC)&gtrack_create_empty_indexed, 2},
     {"ginterv_convert", (DL_FUNC)&ginterv_convert, 3},

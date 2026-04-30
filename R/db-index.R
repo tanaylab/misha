@@ -1003,6 +1003,18 @@ gtrack.convert_to_indexed <- function(track = NULL) {
     invisible()
 }
 
+.gtrack.pack_per_chrom_to_indexed <- function(track_dir, chrom_names, track_type) {
+    if (!dir.exists(track_dir)) {
+        stop(sprintf("Track directory does not exist: %s", track_dir), call. = FALSE)
+    }
+    .gcall(
+        "gtrack_pack_per_chrom_to_indexed",
+        track_dir, as.character(chrom_names), as.character(track_type),
+        .misha_env()
+    )
+    invisible()
+}
+
 #' Convert 1D interval set to indexed format
 #'
 #' Converts a per-chromosome interval set to indexed format
