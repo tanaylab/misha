@@ -646,3 +646,30 @@ gdb.mark_cache_dirty <- function() {
     .gcheckroot()
     invisible(.gdb.cache_mark_dirty())
 }
+
+# Check whether a database at the given path is in indexed format.
+# Unlike .gdb.is_indexed(), does not depend on the loaded GROOT.
+.gdb.is_indexed_at <- function(groot) {
+    if (is.null(groot) || !nzchar(groot)) {
+        return(FALSE)
+    }
+    seq_dir <- file.path(groot, "seq")
+    if (!dir.exists(seq_dir)) {
+        return(FALSE)
+    }
+    file.exists(file.path(seq_dir, "genome.idx")) &&
+        file.exists(file.path(seq_dir, "genome.seq"))
+}
+
+# Read chromosome names (in declaration order) from a db's chrom_sizes.txt.
+.gdb.chrom_names_at <- function(groot) {
+    cs <- file.path(groot, "chrom_sizes.txt")
+    if (!file.exists(cs)) {
+        stop(sprintf("chrom_sizes.txt missing in %s", groot), call. = FALSE)
+    }
+    df <- utils::read.table(cs,
+        header = FALSE, stringsAsFactors = FALSE,
+        col.names = c("chrom", "size")
+    )
+    as.character(df$chrom)
+}
