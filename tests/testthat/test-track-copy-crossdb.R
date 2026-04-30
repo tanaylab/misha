@@ -312,3 +312,66 @@ test_that("gtrack.copy: src 'chr1' -> dest '1' handles prefix variant via rename
         expect_equal(gextract("t_copy", gintervals("1", 0, 100))$t_copy[1], 7)
     })
 })
+
+test_that("gtrack.copy: vector src with prefix dest", {
+    withr::with_tempdir({
+        create_test_db("a")
+        create_test_db("b")
+        gsetroot("a")
+        gtrack.create_sparse("x", "x", gintervals(1, 0, 100), 1)
+        gtrack.create_sparse("y", "y", gintervals(1, 0, 100), 2)
+
+        out <- gtrack.copy(c("x", "y"), dest = "ns", db = normalizePath("b"))
+
+        expect_setequal(out, c("ns.x", "ns.y"))
+        gsetroot("b")
+        expect_true(gtrack.exists("ns.x"))
+        expect_true(gtrack.exists("ns.y"))
+        expect_equal(gextract("ns.x", gintervals(1, 0, 100))$ns.x[1], 1)
+        expect_equal(gextract("ns.y", gintervals(1, 0, 100))$ns.y[1], 2)
+    })
+})
+
+test_that("gtrack.copy: vector src with NULL dest keeps names", {
+    withr::with_tempdir({
+        create_test_db("a")
+        create_test_db("b")
+        gsetroot("a")
+        gtrack.create_sparse("x", "x", gintervals(1, 0, 100), 1)
+        gtrack.create_sparse("y", "y", gintervals(1, 0, 100), 2)
+
+        gtrack.copy(c("x", "y"), db = normalizePath("b"))
+
+        gsetroot("b")
+        expect_true(gtrack.exists("x"))
+        expect_true(gtrack.exists("y"))
+        expect_equal(gextract("x", gintervals(1, 0, 100))$x[1], 1)
+        expect_equal(gextract("y", gintervals(1, 0, 100))$y[1], 2)
+    })
+})
+
+test_that("gtrack.copy: overwrite=FALSE errors on existing dest, overwrite=TRUE replaces", {
+    withr::with_tempdir({
+        create_test_db("a")
+        create_test_db("b")
+        gsetroot("a")
+        gtrack.create_sparse("x", "x", gintervals(1, 0, 100), 1)
+
+        # First copy succeeds
+        gtrack.copy("x", "x_copy", db = normalizePath("b"))
+
+        # Second copy without overwrite errors
+        expect_error(
+            gtrack.copy("x", "x_copy", db = normalizePath("b")),
+            "already exists"
+        )
+
+        # Replace source with different value, then overwrite=TRUE
+        gtrack.rm("x", force = TRUE)
+        gtrack.create_sparse("x", "x", gintervals(1, 0, 100), 99)
+
+        gtrack.copy("x", "x_copy", db = normalizePath("b"), overwrite = TRUE)
+        gsetroot("b")
+        expect_equal(gextract("x_copy", gintervals(1, 0, 100))$x_copy[1], 99)
+    })
+})
