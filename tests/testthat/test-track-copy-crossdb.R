@@ -120,3 +120,35 @@ test_that("split_indexed_to_per_chrom with remove_indexed=FALSE keeps track.dat/
         expect_true("chr1" %in% list.files(track_dir))
     })
 })
+
+test_that("split_indexed_to_per_chrom errors on chromid out of range and preserves indexed pair", {
+    withr::with_tempdir({
+        create_test_db("db_oor")
+        gsetroot("db_oor")
+        # Create a track with data on BOTH chr1 and chr2 so that the index references
+        # chrom_id 0 AND chrom_id 1. Passing only one chrom name will trigger the guard.
+        intervs <- rbind(gintervals(1, 0, 1000), gintervals(2, 0, 1000))
+        gtrack.create_sparse("t_oor", "test", intervs, c(1, 1))
+        gtrack.convert_to_indexed("t_oor")
+        track_dir <- file.path(normalizePath("db_oor"), "tracks", "t_oor.track")
+
+        # Sanity: indexed pair exists
+        expect_true(file.exists(file.path(track_dir, "track.idx")))
+        expect_true(file.exists(file.path(track_dir, "track.dat")))
+
+        # Pass only one chrom name -- must fail with a clear message
+        expect_error(
+            misha:::.gtrack.split_indexed_to_per_chrom(track_dir, "only_one_chrom",
+                remove_indexed = TRUE
+            ),
+            "chrom_id"
+        )
+
+        # Indexed pair must still be intact (the splitter must NOT delete on error)
+        expect_true(file.exists(file.path(track_dir, "track.idx")))
+        expect_true(file.exists(file.path(track_dir, "track.dat")))
+
+        # No leftover .tmp files
+        expect_length(list.files(track_dir, pattern = "\\.tmp$"), 0)
+    })
+})
