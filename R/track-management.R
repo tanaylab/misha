@@ -387,19 +387,28 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
     invisible()
 }
 
-#' Copies a track
+#' Copies one or more tracks
 #'
-#' Creates a copy of an existing track.
+#' Creates a copy of an existing track, optionally to a different database.
+#' Transparently handles format mismatches (per-chromosome vs indexed) and
+#' chromosome-order differences between source and destination databases.
 #'
-#' This function creates a copy of a track. The new track is created in the
-#' current working directory (.misha$GWD), which may be in a different database than
-#' the source track when multiple databases are connected.
+#' Chromosomes that exist in the source database but not in the destination
+#' are dropped with a warning.
 #'
-#' @param src source track name
-#' @param dest destination track name
-#' @return None.
-#' @seealso \code{\link{gtrack.mv}}, \code{\link{gtrack.rm}},
-#' \code{\link{gtrack.exists}}, \code{\link{gtrack.ls}}
+#' @param src source track name(s). Either a single name or a character
+#'   vector of names.
+#' @param dest destination name. If \code{src} is a single name, this is the
+#'   destination track name (defaults to \code{src}). If \code{src} is a
+#'   vector, \code{dest} is treated as a namespace prefix (e.g. \code{"ns"}
+#'   produces \code{"ns.track1"}, \code{"ns.track2"}, ...). NULL keeps each
+#'   track's name.
+#' @param db destination database root. Must be the current \code{GROOT} or a
+#'   member of \code{GDATASETS}. NULL means the current working directory db.
+#' @param overwrite if TRUE, replace an existing destination track.
+#'
+#' @return invisibly, the character vector of created track names.
+#' @seealso \code{\link{gtrack.mv}}, \code{\link{gtrack.rm}}
 #' @keywords ~track
 #' @examples
 #' \dontshow{
@@ -412,76 +421,240 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
 #' gtrack.rm("dense_track_copy", force = TRUE)
 #'
 #' @export gtrack.copy
-gtrack.copy <- function(src = NULL, dest = NULL) {
-    if (is.null(substitute(src)) || is.null(substitute(dest))) {
-        stop("Usage: gtrack.copy(src, dest)", call. = FALSE)
+gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
+    if (is.null(substitute(src))) {
+        stop("Usage: gtrack.copy(src, dest = NULL, db = NULL, overwrite = FALSE)", call. = FALSE)
     }
     .gcheckroot()
 
-    srcname <- do.call(.gexpr2str, list(substitute(src)), envir = parent.frame())
-    destname <- do.call(.gexpr2str, list(substitute(dest)), envir = parent.frame())
-
-    if (srcname == destname) {
-        stop("Source and destination track names are the same", call. = FALSE)
+    # Resolve src names: support both unquoted single name (back-compat) and
+    # character vectors.
+    if (is.character(src) && length(src) > 1) {
+        srcnames <- src
+    } else if (is.character(src)) {
+        srcnames <- src
+    } else {
+        srcnames <- do.call(.gexpr2str, list(substitute(src)), envir = parent.frame())
     }
 
-    # Check source exists
+    if (is.null(dest)) {
+        destnames <- srcnames
+    } else if (length(srcnames) == 1) {
+        destnames <- if (is.character(dest)) {
+            dest
+        } else {
+            do.call(.gexpr2str, list(substitute(dest)), envir = parent.frame())
+        }
+    } else {
+        if (!is.character(dest) || length(dest) != 1) {
+            stop("When copying multiple tracks, 'dest' must be a single namespace prefix or NULL.",
+                call. = FALSE
+            )
+        }
+        destnames <- paste(dest, srcnames, sep = ".")
+    }
+
+    dest_db <- .gtrack.copy.resolve_dest_db(db)
+    .gcheck_write_permission(file.path(dest_db, "tracks"), "copy track to")
+
+    created <- character(0)
+    for (i in seq_along(srcnames)) {
+        created <- c(created, .gtrack.copy.one(srcnames[i], destnames[i], dest_db, overwrite))
+    }
+
+    invisible(created)
+}
+
+# Resolve the destination db path. NULL -> the db that owns the current GWD.
+# Otherwise validate that the explicit path is loaded.
+.gtrack.copy.resolve_dest_db <- function(db) {
+    if (is.null(db)) {
+        gwd <- get("GWD", envir = .misha)
+        groot <- get("GROOT", envir = .misha)
+        gdatasets <- get("GDATASETS", envir = .misha)
+        if (is.null(gdatasets)) gdatasets <- character(0)
+        for (g in c(groot, gdatasets)) {
+            if (.gpath_is_within(gwd, file.path(g, "tracks"))) {
+                return(g)
+            }
+        }
+        return(groot)
+    }
+    db <- normalizePath(db, mustWork = TRUE)
+    groot <- get("GROOT", envir = .misha)
+    gdatasets <- get("GDATASETS", envir = .misha)
+    if (is.null(gdatasets)) gdatasets <- character(0)
+    if (!(db %in% c(groot, gdatasets))) {
+        stop(sprintf(
+            "Destination db %s is not the current GROOT and not a loaded dataset; load it with gdataset.load() first.",
+            db
+        ), call. = FALSE)
+    }
+    db
+}
+
+# Copy a single track. Returns the destination track name on success.
+.gtrack.copy.one <- function(srcname, destname, dest_db, overwrite) {
     if (!(srcname %in% get("GTRACKS", envir = .misha))) {
         stop(sprintf("Track %s does not exist", srcname), call. = FALSE)
     }
 
-    # Check destination doesn't exist
-    if (destname %in% get("GTRACKS", envir = .misha)) {
-        stop(sprintf("Track %s already exists", destname), call. = FALSE)
+    src_db <- .gtrack_db_path(srcname)
+    if (is.null(src_db)) src_db <- get("GROOT", envir = .misha)
+
+    if (srcname == destname && identical(src_db, dest_db)) {
+        stop(sprintf("Source and destination are the same track: %s", srcname), call. = FALSE)
+    }
+
+    # Check destination existence
+    existing_db <- .gtrack_db_path(destname)
+    if (!is.null(existing_db) && identical(existing_db, dest_db)) {
+        if (!overwrite) {
+            stop(sprintf(
+                "Track %s already exists in %s; use overwrite=TRUE to replace.",
+                destname, dest_db
+            ), call. = FALSE)
+        }
+        gtrack.rm(destname, force = TRUE, db = dest_db)
     }
 
     src_dir <- .track_dir(srcname)
-
-    # Destination is in current GWD (may be different database)
-    gwd <- get("GWD", envir = .misha)
-    dest_dir <- file.path(gwd, paste0(gsub("\\.", "/", destname), ".track"))
-
-    # Check write permission for destination
-    .gcheck_write_permission(gwd, "copy track to")
-
-    # Create destination parent directory if needed
+    dest_dir <- file.path(dest_db, "tracks", paste0(gsub("\\.", "/", destname), ".track"))
     dest_parent <- dirname(dest_dir)
     if (!dir.exists(dest_parent)) {
         dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
     }
 
-    # Create destination directory
-    if (!dir.create(dest_dir, showWarnings = FALSE)) {
-        if (!dir.exists(dest_dir)) {
-            stop(sprintf("Failed to create destination directory for track %s", destname), call. = FALSE)
-        }
+    src_indexed <- file.exists(file.path(src_dir, "track.idx"))
+    dest_indexed <- .gdb.is_indexed_at(dest_db)
+    src_chroms <- .gdb.chrom_names_at(src_db)
+    dest_chroms <- .gdb.chrom_names_at(dest_db)
+
+    info <- gtrack.info(srcname)
+
+    # 2D track guard
+    if (info$type %in% c("rectangles", "points") &&
+        !identical(src_chroms, dest_chroms)) {
+        stop(sprintf(
+            "Cross-db copy of 2D track %s requires identical chromosome order in source and destination.",
+            srcname
+        ), call. = FALSE)
     }
 
-    # Copy contents of source track to destination
-    src_contents <- list.files(src_dir, full.names = TRUE, all.files = TRUE, no.. = TRUE)
-    for (item in src_contents) {
+    # Legacy single-file (1D) tracks: refuse if dest is indexed
+    if (info$type %in% c("dense", "sparse", "array") && !dir.exists(src_dir)) {
+        if (dest_indexed) {
+            stop(sprintf(
+                "Track %s is in legacy single-file format; convert with gtrack.convert(\"%s\") first.",
+                srcname, srcname
+            ), call. = FALSE)
+        }
+        if (!file.copy(src_dir, dest_dir, copy.mode = TRUE)) {
+            stop(sprintf("Failed to copy %s to %s", srcname, destname), call. = FALSE)
+        }
+        .gdb.add_track(destname, dest_db)
+        return(destname)
+    }
+
+    .gtrack.copy.pipeline(
+        src_dir, dest_dir, src_chroms, dest_chroms,
+        src_indexed, dest_indexed, info$type, destname, dest_db
+    )
+    .gdb.add_track(destname, dest_db)
+    destname
+}
+
+# The full per-track copy pipeline:
+#   copy dir -> [decode if src indexed] -> [drop unmapped chroms] -> [encode if dest indexed]
+.gtrack.copy.pipeline <- function(src_dir, dest_dir,
+                                  src_chroms, dest_chroms,
+                                  src_indexed, dest_indexed,
+                                  track_type, destname, dest_db) {
+    same_order <- identical(src_chroms, dest_chroms)
+
+    # Fast path: same format + same chrom order
+    if (same_order && (src_indexed == dest_indexed)) {
+        .gtrack.copy.raw_dir(src_dir, dest_dir)
+        return(invisible())
+    }
+
+    # 2D track: at this point we know either format or chrom order differs.
+    # If chrom orders differ, we already errored in .gtrack.copy.one.
+    if (track_type %in% c("rectangles", "points")) {
+        if (src_indexed && !dest_indexed) {
+            stop(sprintf(
+                "Cross-db copy of indexed 2D track %s into a per-chromosome database is not yet supported.",
+                destname
+            ), call. = FALSE)
+        }
+        .gtrack.copy.raw_dir(src_dir, dest_dir)
+        if (dest_indexed && !src_indexed) {
+            .with_db_context(dest_db, function() {
+                gtrack.2d.convert_to_indexed(destname, remove.old = TRUE)
+            })
+        }
+        return(invisible())
+    }
+
+    # 1D pipeline
+    .gtrack.copy.raw_dir(src_dir, dest_dir)
+
+    if (src_indexed) {
+        .gtrack.split_indexed_to_per_chrom(dest_dir, src_chroms, remove_indexed = TRUE)
+    }
+
+    # Drop per-chrom files for chroms not in dest_chroms.
+    # Tolerate the chr-prefix variant the indexed-conversion code already tolerates
+    # (see src/GenomeTrackIndexedFormat.cpp:218-234).
+    files_in_dir <- list.files(dest_dir, full.names = FALSE)
+    dest_with_variants <- unique(c(
+        dest_chroms,
+        ifelse(startsWith(dest_chroms, "chr"), substr(dest_chroms, 4, nchar(dest_chroms)),
+            paste0("chr", dest_chroms)
+        )
+    ))
+    internal <- c("track.idx", "track.dat", ".attrs", ".vars", ".meta")
+    candidates_for_drop <- setdiff(files_in_dir, internal)
+    dropped <- candidates_for_drop[!(candidates_for_drop %in% dest_with_variants)]
+    if (length(dropped) > 0) {
+        warning(sprintf(
+            "gtrack.copy(%s): dropped chromosomes not present in destination: %s",
+            destname, paste(dropped, collapse = ", ")
+        ), call. = FALSE)
+        for (f in dropped) unlink(file.path(dest_dir, f))
+    }
+
+    if (dest_indexed) {
+        .with_db_context(dest_db, function() gtrack.convert_to_indexed(destname))
+    }
+    invisible()
+}
+
+# Raw file copy of an entire .track directory.
+.gtrack.copy.raw_dir <- function(src_dir, dest_dir) {
+    if (!dir.create(dest_dir, showWarnings = FALSE) && !dir.exists(dest_dir)) {
+        stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
+    }
+    contents <- list.files(src_dir, full.names = TRUE, all.files = TRUE, no.. = TRUE)
+    for (item in contents) {
         if (!file.copy(item, dest_dir, recursive = TRUE, copy.mode = TRUE)) {
             unlink(dest_dir, recursive = TRUE)
-            stop(sprintf("Failed to copy track %s to %s", srcname, destname), call. = FALSE)
+            stop(sprintf("Failed to copy %s into %s", item, dest_dir), call. = FALSE)
         }
     }
+}
 
-    # Update cache - determine which database the dest is in
-    dest_db <- NULL
-    groot <- get("GROOT", envir = .misha)
-    gdatasets <- get("GDATASETS", envir = .misha)
-    if (is.null(gdatasets)) gdatasets <- character(0)
-    groots <- c(groot, gdatasets)
-    for (g in groots) {
-        if (.gpath_is_within(gwd, file.path(g, "tracks"))) {
-            dest_db <- g
-            break
-        }
+# Temporarily switch GWD to the given db's tracks/ for the duration of fn().
+# Mirrors .with_track_context (R/db-cache.R:297) but for an explicit dest db path.
+.with_db_context <- function(dest_db, fn) {
+    correct_gwd <- file.path(dest_db, "tracks")
+    current_gwd <- get("GWD", envir = .misha)
+    if (correct_gwd == current_gwd) {
+        return(fn())
     }
-
-    .gdb.add_track(destname, dest_db)
-
-    invisible()
+    assign("GWD", correct_gwd, envir = .misha)
+    on.exit(assign("GWD", current_gwd, envir = .misha), add = TRUE)
+    fn()
 }
 
 #' Deletes a track
