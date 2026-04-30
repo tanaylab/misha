@@ -992,6 +992,9 @@ gtrack.convert_to_indexed <- function(track = NULL) {
 }
 
 .gtrack.split_indexed_to_per_chrom <- function(track_dir, chrom_names, remove_indexed = TRUE) {
+    if (!dir.exists(track_dir)) {
+        stop(sprintf("Track directory does not exist: %s", track_dir), call. = FALSE)
+    }
     .gcall(
         "gtrack_split_indexed_to_per_chrom",
         track_dir, as.character(chrom_names), isTRUE(remove_indexed),

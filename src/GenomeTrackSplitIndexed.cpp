@@ -8,8 +8,6 @@
 #include <cstdio>
 #include <cstring>
 #include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <string>
 #include <vector>
@@ -61,7 +59,8 @@ SEXP gtrack_split_indexed_to_per_chrom(SEXP _track_dir, SEXP _chrom_names, SEXP 
             if (entry.length == 0) continue;
             if (entry.chrom_id >= (uint32_t)n_chroms) {
                 fclose(dat_fp);
-                verror("track.idx references chrom_id %u but only %d chrom names supplied",
+                verror("track.idx references chrom_id %u but only %d chrom names supplied "
+                       "(internal mismatch or corrupt index)",
                        entry.chrom_id, n_chroms);
             }
 
@@ -97,6 +96,8 @@ SEXP gtrack_split_indexed_to_per_chrom(SEXP _track_dir, SEXP _chrom_names, SEXP 
                 remaining -= got;
             }
 
+            // Per-file fsync + atomic rename: each per-chrom file is canonical db state;
+            // we accept N fsyncs (one per non-empty contig) for crash-safe individual files.
             fflush(out_fp);
             fsync(fileno(out_fp));
             fclose(out_fp);
