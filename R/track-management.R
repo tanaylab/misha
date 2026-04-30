@@ -527,23 +527,25 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         stop(sprintf("Source and destination are the same track: %s", srcname), call. = FALSE)
     }
 
-    # Check destination existence
-    existing_db <- .gtrack_db_path(destname)
-    if (!is.null(existing_db) && identical(existing_db, dest_db)) {
+    src_dir <- .track_dir(srcname)
+    dest_dir <- file.path(dest_db, "tracks", paste0(gsub("\\.", "/", destname), ".track"))
+    dest_parent <- dirname(dest_dir)
+    if (!dir.exists(dest_parent)) {
+        dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
+    }
+
+    # Use the filesystem as the source of truth for "destination already exists".
+    # An in-memory cache check is fragile when dest_db is not in GDATASETS.
+    if (dir.exists(dest_dir)) {
         if (!overwrite) {
             stop(sprintf(
                 "Track %s already exists in %s; use overwrite=TRUE to replace.",
                 destname, dest_db
             ), call. = FALSE)
         }
-        gtrack.rm(destname, force = TRUE, db = dest_db)
-    }
-
-    src_dir <- .track_dir(srcname)
-    dest_dir <- file.path(dest_db, "tracks", paste0(gsub("\\.", "/", destname), ".track"))
-    dest_parent <- dirname(dest_dir)
-    if (!dir.exists(dest_parent)) {
-        dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
+        # Bypass gtrack.rm (which insists db is loaded) and clean up directly.
+        unlink(dest_dir, recursive = TRUE)
+        .gdb.rm_track(destname, trackdir = dest_dir, db = dest_db)
     }
 
     src_indexed <- file.exists(file.path(src_dir, "track.idx"))
