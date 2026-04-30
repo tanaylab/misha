@@ -677,7 +677,9 @@ gdb.mark_cache_dirty <- function() {
     df <- utils::read.table(
         cs,
         header = FALSE, sep = "\t",
-        stringsAsFactors = FALSE, col.names = c("chrom", "size")
+        stringsAsFactors = FALSE,
+        colClasses = c("character", "integer"),
+        col.names = c("chrom", "size")
     )
     df$chrom
 }
