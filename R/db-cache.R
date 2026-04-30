@@ -661,15 +661,18 @@ gdb.mark_cache_dirty <- function() {
         file.exists(file.path(seq_dir, "genome.seq"))
 }
 
-# Read chromosome names (in declaration order) from a db's chrom_sizes.txt.
+# Read chromosome names verbatim from chrom_sizes.txt (no "chr" prefix
+# normalization), in declaration order. Callers that need normalization
+# must apply it themselves.
 .gdb.chrom_names_at <- function(groot) {
     cs <- file.path(groot, "chrom_sizes.txt")
     if (!file.exists(cs)) {
         stop(sprintf("chrom_sizes.txt missing in %s", groot), call. = FALSE)
     }
-    df <- utils::read.table(cs,
-        header = FALSE, stringsAsFactors = FALSE,
-        col.names = c("chrom", "size")
+    df <- utils::read.table(
+        cs,
+        header = FALSE, sep = "\t",
+        stringsAsFactors = FALSE, col.names = c("chrom", "size")
     )
-    as.character(df$chrom)
+    df$chrom
 }
