@@ -1,0 +1,1061 @@
+# Build a misha genome from a name.
+#
+# Public surface (exported):
+#   gdb.build_genome()           — build from registry-resolved recipe
+#   gdb.list_genomes()           — list resolvable genome names
+#   gdb.genome_info()            — show resolved recipe without building
+#   gdb.install_gff3_converter() — pre-install UCSC's gff3ToGenePred binary
+#
+# Spec: dev/notes/specs/2026-04-30_genome-build-design.md
+
+# ---------------------------------------------------------------------------
+# Internal constants
+# ---------------------------------------------------------------------------
+
+.MISHA_GENOME_SOURCES <- c("ucsc", "ncbi", "s3", "manual", "local")
+
+# UCSC gff3ToGenePred binary URLs (no version tag — UCSC overwrites in place).
+# SHAs pinned at implementation time (2026-04-30); a UCSC rebuild will trigger
+# an integrity error pointing users at MISHA_GFF3_TO_GENEPRED.
+.GFF3_TO_GENEPRED_URLS <- list(
+    linux_x86_64 = "https://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/gff3ToGenePred",
+    macos_x86_64 = "https://hgdownload.soe.ucsc.edu/admin/exe/macOSX.x86_64/gff3ToGenePred",
+    macos_arm64  = "https://hgdownload.soe.ucsc.edu/admin/exe/macOSX.arm64/gff3ToGenePred"
+)
+
+.GFF3_TO_GENEPRED_SHA256 <- list(
+    linux_x86_64 = "8a62fde0c395078ae173f36762bd554804ec1e86b9d737292dd504b05570e678",
+    macos_x86_64 = "db1a34d01f00fa21cafc995d16b065b860a89650b4a9804a6bdf6585c0224cb4",
+    macos_arm64  = "9896c1566f06b9779ff7031ae00e6abd18f00111eafc2774510e13dece25c9df"
+)
+
+.UCSC_GOLDENPATH <- "https://hgdownload.soe.ucsc.edu/goldenPath"
+.NCBI_DATASETS_API <- "https://api.ncbi.nlm.nih.gov/datasets/v2"
+
+.GFF3_TO_GENEPRED_ENV <- "MISHA_GFF3_TO_GENEPRED"
+
+# RefSeqLink columns we expose as gene annotations (used by UCSC backend).
+.UCSC_NCBI_REFSEQ_LINK_COLS <- c("name", "product", "mrnaAcc", "protAcc")
+
+# ---------------------------------------------------------------------------
+# Architecture / platform detection
+# ---------------------------------------------------------------------------
+
+.detect_arch <- function() {
+    sys <- tolower(Sys.info()[["sysname"]])
+    machine <- tolower(Sys.info()[["machine"]])
+
+    if (sys == "linux" && machine %in% c("x86_64", "amd64")) {
+        return("linux_x86_64")
+    }
+    if (sys == "darwin" && machine %in% c("x86_64", "amd64")) {
+        return("macos_x86_64")
+    }
+    if (sys == "darwin" && machine %in% c("arm64", "aarch64")) {
+        return("macos_arm64")
+    }
+    stop(sprintf(
+        "No prebuilt gff3ToGenePred binary for %s/%s. Set %s to a binary you provide (e.g. via conda: ucsc-gff3togenepred).",
+        sys, machine, .GFF3_TO_GENEPRED_ENV
+    ), call. = FALSE)
+}
+
+# ---------------------------------------------------------------------------
+# Registry parsing and resolution
+# ---------------------------------------------------------------------------
+
+# Normalize a raw registry entry to a recipe list with $source set.
+# Accepts:
+#   - character scalar  -> {source: local, path: <string>}  (legacy form)
+#   - named list with $source
+.normalize_recipe <- function(entry, name) {
+    if (is.character(entry) && length(entry) == 1) {
+        return(list(source = "local", path = entry))
+    }
+    if (!is.list(entry)) {
+        stop(sprintf(
+            "Genome '%s' has invalid registry entry: expected string or mapping, got %s",
+            name, class(entry)[[1]]
+        ), call. = FALSE)
+    }
+    if (is.null(entry$source) || !is.character(entry$source) || length(entry$source) != 1) {
+        stop(sprintf("Genome '%s' is missing required 'source:' field", name), call. = FALSE)
+    }
+    if (!entry$source %in% .MISHA_GENOME_SOURCES) {
+        stop(sprintf(
+            "Genome '%s' has unknown source '%s'. Valid sources: %s",
+            name, entry$source, paste(.MISHA_GENOME_SOURCES, collapse = ", ")
+        ), call. = FALSE)
+    }
+    entry
+}
+
+.validate_recipe <- function(recipe, name) {
+    src <- recipe$source
+    miss <- function(field) {
+        stop(sprintf("Genome '%s' (source: %s) is missing required field '%s'", name, src, field), call. = FALSE)
+    }
+    if (src == "ucsc") {
+        if (is.null(recipe$assembly)) miss("assembly")
+    } else if (src == "ncbi") {
+        if (is.null(recipe$accession)) miss("accession")
+        if (!grepl("^GC[FA]_[0-9]+\\.[0-9]+$", recipe$accession)) {
+            stop(sprintf(
+                "Genome '%s': accession '%s' does not match GC[FA]_<digits>.<digits>",
+                name, recipe$accession
+            ), call. = FALSE)
+        }
+    } else if (src == "s3") {
+        if (is.null(recipe$assembly)) miss("assembly")
+    } else if (src == "local") {
+        if (is.null(recipe$path)) miss("path")
+    } else if (src == "manual") {
+        if (is.null(recipe$fasta)) miss("fasta")
+    }
+    invisible(recipe)
+}
+
+# Read a single registry YAML file. Returns a named list <name> -> recipe (raw,
+# not yet validated).
+.parse_genome_registry <- function(path) {
+    if (!file.exists(path)) {
+        stop(sprintf("Registry file does not exist: %s", path), call. = FALSE)
+    }
+    y <- tryCatch(
+        yaml::read_yaml(path),
+        error = function(e) stop(sprintf("Failed to parse YAML registry %s: %s", path, conditionMessage(e)), call. = FALSE)
+    )
+    if (is.null(y$genome)) {
+        return(list())
+    }
+    if (!is.list(y$genome) || is.null(names(y$genome))) {
+        stop(sprintf("Registry %s: 'genome:' must be a named mapping", path), call. = FALSE)
+    }
+    y$genome
+}
+
+# Walk up from getwd() to git root looking for a misha.yaml.
+.find_project_misha_yaml <- function() {
+    dir <- normalizePath(getwd(), mustWork = FALSE)
+    while (TRUE) {
+        candidate <- file.path(dir, "misha.yaml")
+        if (file.exists(candidate)) {
+            return(candidate)
+        }
+        if (file.exists(file.path(dir, ".git"))) {
+            return(NULL)
+        }
+        parent <- dirname(dir)
+        if (parent == dir) {
+            return(NULL)
+        }
+        dir <- parent
+    }
+}
+
+.builtin_registry_path <- function() {
+    system.file("genomes.yaml", package = "misha")
+}
+
+# Resolve `name` through the chain. Returns a list:
+#   list(recipe = <list>, resolved_from = <character>)
+.resolve_genome <- function(name, registry = NULL) {
+    if (!is.character(name) || length(name) != 1 || !nzchar(name)) {
+        stop("name must be a non-empty string", call. = FALSE)
+    }
+
+    sources <- list()
+    if (!is.null(registry)) {
+        sources[[length(sources) + 1]] <- list(label = sprintf("registry arg (%s)", registry), path = registry)
+    }
+    opt <- getOption("misha.genome_registry")
+    if (!is.null(opt)) {
+        sources[[length(sources) + 1]] <- list(label = sprintf("getOption('misha.genome_registry') (%s)", opt), path = opt)
+    }
+    proj <- .find_project_misha_yaml()
+    if (!is.null(proj)) {
+        sources[[length(sources) + 1]] <- list(label = sprintf("project misha.yaml (%s)", proj), path = proj)
+    }
+    builtin <- .builtin_registry_path()
+    if (nzchar(builtin)) {
+        sources[[length(sources) + 1]] <- list(label = "built-in (inst/genomes.yaml)", path = builtin)
+    }
+
+    for (src in sources) {
+        entries <- tryCatch(.parse_genome_registry(src$path), error = function(e) {
+            stop(sprintf("Error reading %s: %s", src$label, conditionMessage(e)), call. = FALSE)
+        })
+        if (name %in% names(entries)) {
+            recipe <- .normalize_recipe(entries[[name]], name)
+            .validate_recipe(recipe, name)
+            return(list(recipe = recipe, resolved_from = src$label))
+        }
+    }
+
+    # Pattern fallback for NCBI accessions.
+    if (grepl("^GC[FA]_[0-9]+\\.[0-9]+$", name)) {
+        recipe <- list(source = "ncbi", accession = name)
+        return(list(recipe = recipe, resolved_from = "pattern fallback (NCBI accession)"))
+    }
+
+    stop(sprintf(
+        "Genome '%s' not found in any registry. Searched: %s. To define it, add an entry to a misha.yaml or use gdb.create() directly.",
+        name, paste(vapply(sources, `[[`, character(1), "label"), collapse = "; ")
+    ), call. = FALSE)
+}
+
+# ---------------------------------------------------------------------------
+# gff3ToGenePred binary management
+# ---------------------------------------------------------------------------
+
+.gff3_to_genepred_cache_dir <- function() {
+    file.path(tools::R_user_dir("misha", "cache"), "bin")
+}
+
+.gff3_to_genepred_cache_path <- function() {
+    file.path(.gff3_to_genepred_cache_dir(), "gff3ToGenePred")
+}
+
+# Returns absolute path to a usable gff3ToGenePred binary, or NULL if none
+# is available. Never downloads — caller decides whether to install.
+.gff3_to_genepred_path <- function() {
+    env <- Sys.getenv(.GFF3_TO_GENEPRED_ENV, unset = "")
+    if (nzchar(env)) {
+        if (!file.exists(env)) {
+            stop(sprintf("%s points at non-existent file: %s", .GFF3_TO_GENEPRED_ENV, env), call. = FALSE)
+        }
+        return(normalizePath(env, mustWork = TRUE))
+    }
+    cached <- .gff3_to_genepred_cache_path()
+    if (!file.exists(cached)) {
+        return(NULL)
+    }
+    arch <- .detect_arch()
+    expected_sha <- .GFF3_TO_GENEPRED_SHA256[[arch]]
+    actual_sha <- digest::digest(file = cached, algo = "sha256")
+    if (!identical(actual_sha, expected_sha)) {
+        return(NULL) # Caller will re-prompt.
+    }
+    cached
+}
+
+.prompt_yes_no <- function(message, default_yes = TRUE) {
+    if (!interactive()) {
+        return(FALSE)
+    }
+    suffix <- if (default_yes) "[Y/n]" else "[y/N]"
+    ans <- readline(prompt = paste0(message, " ", suffix, ": "))
+    ans <- tolower(trimws(ans))
+    if (!nzchar(ans)) {
+        return(default_yes)
+    }
+    ans %in% c("y", "yes")
+}
+
+# Install (download + verify + cache) the binary. Returns the cache path.
+# Errors if user declines or session is non-interactive.
+.install_gff3_converter <- function(force = FALSE) {
+    arch <- .detect_arch()
+    url <- .GFF3_TO_GENEPRED_URLS[[arch]]
+    expected_sha <- .GFF3_TO_GENEPRED_SHA256[[arch]]
+    cache_dir <- .gff3_to_genepred_cache_dir()
+    cache_path <- .gff3_to_genepred_cache_path()
+
+    if (!force) {
+        message(sprintf(
+            "misha needs UCSC's gff3ToGenePred binary (%s) to build genomes from NCBI sources.",
+            arch
+        ))
+        message(sprintf("  source: %s", url))
+        message(sprintf("  cache:  %s  (~25 MB)", cache_path))
+        if (!.prompt_yes_no("Download now?")) {
+            stop(sprintf(
+                "Cannot proceed without gff3ToGenePred. Set %s to a binary you provide, or call gdb.install_gff3_converter(force = TRUE).",
+                .GFF3_TO_GENEPRED_ENV
+            ), call. = FALSE)
+        }
+    }
+
+    dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE, mode = "0755")
+    tmp <- tempfile(tmpdir = cache_dir, fileext = ".part")
+    on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
+
+    utils::download.file(url, tmp, mode = "wb", quiet = FALSE)
+
+    actual_sha <- digest::digest(file = tmp, algo = "sha256")
+    if (!identical(actual_sha, expected_sha)) {
+        stop(sprintf(
+            "gff3ToGenePred binary integrity check failed.\n  expected: %s\n  got:      %s\nUCSC may have published a new build. Set %s to override, or update misha.",
+            expected_sha, actual_sha, .GFF3_TO_GENEPRED_ENV
+        ), call. = FALSE)
+    }
+
+    file.rename(tmp, cache_path)
+    Sys.chmod(cache_path, mode = "0755")
+    message(sprintf("Installed gff3ToGenePred to %s", cache_path))
+    cache_path
+}
+
+# Resolve a path, installing if needed (with consent).
+.gff3_to_genepred_resolve_or_install <- function(force_install = FALSE) {
+    p <- .gff3_to_genepred_path()
+    if (!is.null(p) && !force_install) {
+        return(p)
+    }
+    .install_gff3_converter(force = force_install)
+}
+
+# ---------------------------------------------------------------------------
+# Helpers for downloads + post-build annotation loading
+# ---------------------------------------------------------------------------
+
+# Download URL to a destination (binary mode). Returns dest path.
+.download_to <- function(url, dest, verbose = TRUE) {
+    if (verbose) message(sprintf("Downloading %s ...", url))
+    utils::download.file(url, dest, mode = "wb", quiet = !verbose)
+    dest
+}
+
+# True if URL is reachable (HEAD) without 4xx/5xx.
+.url_reachable <- function(url, timeout_sec = 30) {
+    h <- tryCatch(
+        curl::new_handle(nobody = TRUE, timeout = timeout_sec, failonerror = TRUE),
+        error = function(e) NULL
+    )
+    if (is.null(h)) {
+        return(FALSE)
+    }
+    ok <- tryCatch(
+        {
+            curl::curl_fetch_memory(url, handle = h)
+            TRUE
+        },
+        error = function(e) FALSE
+    )
+    ok
+}
+
+# Decompress a .gz file (file -> file with .gz removed). Returns the new path.
+.gunzip_to_file <- function(gz_path, out_path = sub("\\.gz$", "", gz_path)) {
+    con_in <- gzfile(gz_path, "rb")
+    on.exit(close(con_in), add = TRUE)
+    con_out <- file(out_path, "wb")
+    on.exit(close(con_out), add = TRUE)
+    repeat {
+        chunk <- readBin(con_in, raw(), n = 1024 * 1024)
+        if (length(chunk) == 0) break
+        writeBin(chunk, con_out)
+    }
+    out_path
+}
+
+# Parse UCSC rmsk.txt(.gz) — 17 columns. Returns a data.frame with intervals
+# columns plus name/class/family. Strand is normalized to numeric (1/-1/0).
+.parse_ucsc_rmsk <- function(file) {
+    cols <- c(
+        "bin", "swScore", "milliDiv", "milliDel", "milliIns",
+        "genoName", "genoStart", "genoEnd", "genoLeft", "strand",
+        "repName", "repClass", "repFamily", "repStart", "repEnd",
+        "repLeft", "id"
+    )
+    df <- utils::read.table(file,
+        sep = "\t", header = FALSE, col.names = cols,
+        quote = "", comment.char = "", stringsAsFactors = FALSE,
+        na.strings = character(0)
+    )
+    data.frame(
+        chrom = df$genoName,
+        start = df$genoStart,
+        end = df$genoEnd,
+        strand = ifelse(df$strand == "+", 1L, ifelse(df$strand == "-", -1L, 0L)),
+        name = df$repName,
+        class = df$repClass,
+        family = df$repFamily,
+        stringsAsFactors = FALSE
+    )
+}
+
+.parse_ucsc_cpg_island <- function(file) {
+    cols <- c(
+        "bin", "chrom", "chromStart", "chromEnd", "name",
+        "length", "cpgNum", "gcNum", "perCpg", "perGc", "obsExp"
+    )
+    df <- utils::read.table(file,
+        sep = "\t", header = FALSE, col.names = cols,
+        quote = "", comment.char = "", stringsAsFactors = FALSE,
+        na.strings = character(0)
+    )
+    data.frame(
+        chrom = df$chrom,
+        start = df$chromStart,
+        end = df$chromEnd,
+        name = df$name,
+        length = df$length,
+        cpgNum = df$cpgNum,
+        perCpg = df$perCpg,
+        perGc = df$perGc,
+        obsExp = df$obsExp,
+        stringsAsFactors = FALSE
+    )
+}
+
+.parse_ucsc_cytoband <- function(file) {
+    cols <- c("chrom", "chromStart", "chromEnd", "name", "gieStain")
+    df <- utils::read.table(file,
+        sep = "\t", header = FALSE, col.names = cols,
+        quote = "", comment.char = "", stringsAsFactors = FALSE,
+        na.strings = character(0)
+    )
+    data.frame(
+        chrom = df$chrom,
+        start = df$chromStart,
+        end = df$chromEnd,
+        name = df$name,
+        stain = df$gieStain,
+        stringsAsFactors = FALSE
+    )
+}
+
+# Save a parsed-table data.frame as a misha intervals set (post-build,
+# requires gdb.init has already been called on the new groot).
+# Drops rows whose chrom is not in ALLGENOME (different sources sometimes
+# include haplotype/alt contigs not present in the assembled FASTA).
+.save_post_build_intervals <- function(intervals_set_name, df, verbose = TRUE) {
+    if (!exists("ALLGENOME", envir = .misha)) {
+        stop(".save_post_build_intervals called without an active GROOT", call. = FALSE)
+    }
+    chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    keep <- df$chrom %in% chroms
+    if (any(!keep) && verbose) {
+        message(sprintf(
+            "  %s: dropped %d/%d rows on contigs not in ALLGENOME",
+            intervals_set_name, sum(!keep), nrow(df)
+        ))
+    }
+    df <- df[keep, , drop = FALSE]
+    if (nrow(df) == 0) {
+        if (verbose) message(sprintf("  %s: no rows remained after filtering, skipping", intervals_set_name))
+        return(invisible(NULL))
+    }
+    df$chrom <- factor(df$chrom, levels = chroms)
+    gintervals.save(intervals_set_name, df)
+    if (verbose) message(sprintf("  %s: saved %d intervals", intervals_set_name, nrow(df)))
+    invisible(NULL)
+}
+
+# Write genome_info.yaml — a record of where this groot came from.
+.write_genome_info <- function(groot, name, recipe, annotations, files = list()) {
+    info <- list(
+        name = name,
+        source = recipe$source,
+        downloaded_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+        misha_version = as.character(utils::packageVersion("misha")),
+        annotations = as.list(annotations),
+        recipe = recipe,
+        files = files
+    )
+    yaml::write_yaml(info, file.path(groot, "genome_info.yaml"))
+    invisible(NULL)
+}
+
+# ---------------------------------------------------------------------------
+# UCSC backend
+# ---------------------------------------------------------------------------
+
+# Returns a named list of URLs for an assembly + requested annotations.
+.ucsc_urls <- function(assembly, annotations, single_fasta = TRUE) {
+    base <- sprintf("%s/%s", .UCSC_GOLDENPATH, assembly)
+    out <- list()
+    if (single_fasta) {
+        out$fasta <- sprintf("%s/bigZips/%s.fa.gz", base, assembly)
+    } # per-chromosome list is built dynamically (see .ucsc_per_chrom_fasta)
+    if ("genes" %in% annotations) {
+        out$genes <- sprintf("%s/database/ncbiRefSeq.txt.gz", base)
+        out$annots <- sprintf("%s/database/ncbiRefSeqLink.txt.gz", base)
+    }
+    if ("rmsk" %in% annotations) {
+        out$rmsk <- sprintf("%s/database/rmsk.txt.gz", base)
+    }
+    if ("cpgIsland" %in% annotations) {
+        out$cpgIsland <- sprintf("%s/database/cpgIslandExt.txt.gz", base)
+    }
+    if ("cytoband" %in% annotations) {
+        out$cytoband <- sprintf("%s/database/cytoBandIdeo.txt.gz", base)
+    }
+    out
+}
+
+# Fallback list of per-chromosome FASTA URLs (used if single FASTA is not
+# available). We don't enumerate ahead; we rely on .gseq.import to accept a
+# wildcard URL pattern. UCSC's chromosomes/ directory lists chr*.fa.gz.
+.ucsc_per_chrom_fasta_listing <- function(assembly) {
+    listing_url <- sprintf("%s/%s/chromosomes/", .UCSC_GOLDENPATH, assembly)
+    h <- curl::new_handle(timeout = 60)
+    raw <- tryCatch(
+        rawToChar(curl::curl_fetch_memory(listing_url, handle = h)$content),
+        error = function(e) ""
+    )
+    if (!nzchar(raw)) {
+        stop(sprintf(
+            "Could not fetch per-chromosome FASTA listing %s (and bigZips/<assembly>.fa.gz also unavailable)",
+            listing_url
+        ), call. = FALSE)
+    }
+    fnames <- unique(stringi_extract_fa_gz(raw))
+    if (!length(fnames)) {
+        stop(sprintf("No chr*.fa.gz files found at %s", listing_url), call. = FALSE)
+    }
+    paste0(listing_url, fnames)
+}
+
+# Tiny self-contained extractor for chr*.fa.gz filenames out of an HTML/index
+# listing. Avoids a stringi dependency.
+stringi_extract_fa_gz <- function(text) {
+    matches <- regmatches(text, gregexpr("chr[A-Za-z0-9._]+\\.fa\\.gz", text, perl = TRUE))[[1]]
+    matches
+}
+
+.run_ucsc_backend <- function(name, recipe, path, annotations, format, verbose) {
+    assembly <- recipe$assembly
+    urls <- .ucsc_urls(assembly, annotations, single_fasta = TRUE)
+
+    if (verbose) message(sprintf("UCSC backend: assembly=%s -> %s", assembly, path))
+
+    fasta_arg <- if (.url_reachable(urls$fasta)) {
+        urls$fasta
+    } else {
+        if (verbose) message(sprintf("  %s not available, falling back to per-chromosome", urls$fasta))
+        .ucsc_per_chrom_fasta_listing(assembly)
+    }
+
+    annots_file <- urls$annots
+    annots_names <- if (!is.null(annots_file)) .UCSC_NCBI_REFSEQ_LINK_COLS else NULL
+
+    gdb.create(
+        groot        = path,
+        fasta        = fasta_arg,
+        genes.file   = urls$genes,
+        annots.file  = annots_file,
+        annots.names = annots_names,
+        format       = format,
+        verbose      = verbose
+    )
+
+    # Switch to the new groot for post-build annotation loading.
+    gdb.init(path, rescan = TRUE)
+
+    files_record <- list(
+        fasta = list(url = if (length(fasta_arg) == 1) fasta_arg else paste(fasta_arg, collapse = ",")),
+        genes = list(url = urls$genes %||% NA_character_),
+        annots = list(url = urls$annots %||% NA_character_)
+    )
+
+    if ("rmsk" %in% annotations && !is.null(urls$rmsk)) {
+        tryCatch(
+            {
+                tmp <- tempfile(fileext = ".gz")
+                on.exit(unlink(tmp), add = TRUE)
+                .download_to(urls$rmsk, tmp, verbose = verbose)
+                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
+                df <- .parse_ucsc_rmsk(unz)
+                .save_post_build_intervals("rmsk", df, verbose = verbose)
+                files_record$rmsk <- list(url = urls$rmsk)
+            },
+            error = function(e) {
+                warning(sprintf("rmsk load failed for %s: %s", assembly, conditionMessage(e)), call. = FALSE)
+            }
+        )
+    }
+
+    if ("cpgIsland" %in% annotations && !is.null(urls$cpgIsland)) {
+        tryCatch(
+            {
+                tmp <- tempfile(fileext = ".gz")
+                on.exit(unlink(tmp), add = TRUE)
+                .download_to(urls$cpgIsland, tmp, verbose = verbose)
+                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
+                df <- .parse_ucsc_cpg_island(unz)
+                .save_post_build_intervals("cpgIsland", df, verbose = verbose)
+                files_record$cpgIsland <- list(url = urls$cpgIsland)
+            },
+            error = function(e) {
+                warning(sprintf("cpgIsland load failed for %s: %s", assembly, conditionMessage(e)), call. = FALSE)
+            }
+        )
+    }
+
+    if ("cytoband" %in% annotations && !is.null(urls$cytoband)) {
+        tryCatch(
+            {
+                tmp <- tempfile(fileext = ".gz")
+                on.exit(unlink(tmp), add = TRUE)
+                .download_to(urls$cytoband, tmp, verbose = verbose)
+                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
+                df <- .parse_ucsc_cytoband(unz)
+                .save_post_build_intervals("cytoband", df, verbose = verbose)
+                files_record$cytoband <- list(url = urls$cytoband)
+            },
+            error = function(e) {
+                warning(sprintf("cytoband load failed for %s: %s", assembly, conditionMessage(e)), call. = FALSE)
+            }
+        )
+    }
+
+    .write_genome_info(path, name, recipe, annotations, files_record)
+    invisible(NULL)
+}
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+# ---------------------------------------------------------------------------
+# NCBI Datasets backend
+# ---------------------------------------------------------------------------
+
+.ncbi_datasets_zip_url <- function(accession) {
+    sprintf(
+        "%s/genome/accession/%s/download?include_annotation_type=GENOME_FASTA,GENOME_GFF",
+        .NCBI_DATASETS_API, accession
+    )
+}
+
+.run_ncbi_backend <- function(name, recipe, path, annotations, format, verbose) {
+    accession <- recipe$accession
+    converter <- .gff3_to_genepred_resolve_or_install()
+
+    if (verbose) message(sprintf("NCBI backend: accession=%s -> %s", accession, path))
+
+    workdir <- tempfile("misha_ncbi_")
+    dir.create(workdir, recursive = TRUE)
+    on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
+
+    zip_path <- file.path(workdir, "datasets.zip")
+    .download_to(.ncbi_datasets_zip_url(accession), zip_path, verbose = verbose)
+
+    extract_dir <- file.path(workdir, "extract")
+    dir.create(extract_dir)
+    utils::unzip(zip_path, exdir = extract_dir)
+
+    fasta_files <- list.files(extract_dir,
+        pattern = "\\.(fna|fasta|fa)(\\.gz)?$",
+        recursive = TRUE, full.names = TRUE
+    )
+    gff_files <- list.files(extract_dir,
+        pattern = "\\.gff(\\.gz)?$",
+        recursive = TRUE, full.names = TRUE
+    )
+
+    if (!length(fasta_files)) {
+        stop(sprintf("No FASTA file found in NCBI Datasets payload for %s", accession), call. = FALSE)
+    }
+    fasta_file <- fasta_files[[1]]
+    if (grepl("\\.gz$", fasta_file)) {
+        fasta_file <- .gunzip_to_file(fasta_file)
+    }
+
+    genepred_file <- NULL
+    if ("genes" %in% annotations && length(gff_files)) {
+        gff_file <- gff_files[[1]]
+        if (grepl("\\.gz$", gff_file)) {
+            gff_file <- .gunzip_to_file(gff_file)
+        }
+        genepred_file <- file.path(workdir, "annot.genePred")
+        if (verbose) message(sprintf("  Running gff3ToGenePred on %s", basename(gff_file)))
+        ret <- system2(converter,
+            args = c(shQuote(gff_file), shQuote(genepred_file)),
+            stdout = if (verbose) "" else FALSE,
+            stderr = if (verbose) "" else FALSE
+        )
+        if (ret != 0) {
+            stop(sprintf("gff3ToGenePred failed (exit %d) on %s", ret, gff_file), call. = FALSE)
+        }
+    } else if ("genes" %in% annotations) {
+        warning(sprintf("No GFF3 found for %s; building seq-only genome (no genes/exons/utr*)", accession), call. = FALSE)
+    }
+
+    gdb.create(
+        groot       = path,
+        fasta       = fasta_file,
+        genes.file  = genepred_file,
+        annots.file = NULL,
+        format      = format,
+        verbose     = verbose
+    )
+
+    gdb.init(path, rescan = TRUE)
+
+    if ("cpgIsland" %in% annotations) {
+        warning("cpgIsland not available from NCBI Datasets; skipping.", call. = FALSE)
+    }
+    if ("cytoband" %in% annotations) {
+        warning("cytoband not available from NCBI Datasets; skipping.", call. = FALSE)
+    }
+    if ("rmsk" %in% annotations) {
+        warning("rmsk loading from NCBI is not implemented in v1; skipping. Use the UCSC backend or the manual recipe to load repeats.", call. = FALSE)
+    }
+
+    .write_genome_info(
+        path, name, recipe, annotations,
+        list(
+            fasta = list(name = basename(fasta_file)),
+            genes = list(name = basename(genepred_file %||% ""))
+        )
+    )
+    invisible(NULL)
+}
+
+# ---------------------------------------------------------------------------
+# s3 / manual / local backends
+# ---------------------------------------------------------------------------
+
+.run_s3_backend <- function(name, recipe, path, annotations, format, verbose) {
+    if (verbose) message(sprintf("S3 backend: aliasing to gdb.create_genome(%s)", recipe$assembly))
+    parent_dir <- dirname(path)
+    if (!dir.exists(parent_dir)) {
+        dir.create(parent_dir, recursive = TRUE)
+    }
+    if (basename(path) != recipe$assembly) {
+        warning(sprintf(
+            "S3 backend extracts to <path>/%s; got path=%s. Final groot at %s/%s.",
+            recipe$assembly, path, path, recipe$assembly
+        ), call. = FALSE)
+    }
+    gdb.create_genome(recipe$assembly, path = parent_dir)
+    invisible(NULL)
+}
+
+.run_local_backend <- function(name, recipe, path, annotations, format, verbose) {
+    src <- recipe$path
+    if (!dir.exists(src)) {
+        stop(sprintf("Local groot does not exist: %s", src), call. = FALSE)
+    }
+    if (!file.exists(file.path(src, "chrom_sizes.txt"))) {
+        stop(sprintf("Path %s does not look like a misha groot (no chrom_sizes.txt)", src), call. = FALSE)
+    }
+    if (verbose) message(sprintf("Local backend: gdb.init(%s)", src))
+    gdb.init(src, rescan = TRUE)
+    invisible(NULL)
+}
+
+.run_manual_backend <- function(name, recipe, path, annotations, format, verbose) {
+    fasta <- recipe$fasta
+    genes_file <- recipe$genes
+    genes_format <- recipe$genes_format %||% "genepred"
+
+    if (!is.null(genes_file) && genes_format == "gff3") {
+        converter <- .gff3_to_genepred_resolve_or_install()
+        workdir <- tempfile("misha_manual_")
+        dir.create(workdir, recursive = TRUE)
+        on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
+
+        local_gff <- file.path(workdir, "input.gff")
+        .download_to(genes_file, local_gff, verbose = verbose)
+        if (grepl("\\.gz$", genes_file)) {
+            local_gff <- .gunzip_to_file(
+                local_gff,
+                file.path(workdir, "input.gff3")
+            )
+        }
+        local_gp <- file.path(workdir, "input.genePred")
+        ret <- system2(converter,
+            args = c(shQuote(local_gff), shQuote(local_gp)),
+            stdout = if (verbose) "" else FALSE,
+            stderr = if (verbose) "" else FALSE
+        )
+        if (ret != 0) {
+            stop(sprintf("gff3ToGenePred failed (exit %d)", ret), call. = FALSE)
+        }
+        genes_file <- local_gp
+    } else if (!is.null(genes_file) && genes_format != "genepred") {
+        stop(sprintf(
+            "Unsupported genes_format '%s'. Supported: genepred, gff3.",
+            genes_format
+        ), call. = FALSE)
+    }
+
+    annots_file <- recipe$annots_file
+    annots_names <- recipe$annots_names
+
+    gdb.create(
+        groot        = path,
+        fasta        = fasta,
+        genes.file   = genes_file,
+        annots.file  = annots_file,
+        annots.names = annots_names,
+        format       = format,
+        verbose      = verbose
+    )
+
+    gdb.init(path, rescan = TRUE)
+
+    if ("rmsk" %in% annotations && !is.null(recipe$rmsk)) {
+        tryCatch(
+            {
+                tmp <- tempfile(fileext = ".gz")
+                on.exit(unlink(tmp), add = TRUE)
+                .download_to(recipe$rmsk, tmp, verbose = verbose)
+                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
+                .save_post_build_intervals("rmsk", .parse_ucsc_rmsk(unz), verbose = verbose)
+            },
+            error = function(e) warning(sprintf("rmsk load failed: %s", conditionMessage(e)), call. = FALSE)
+        )
+    }
+    if ("cpgIsland" %in% annotations && !is.null(recipe$cpgIsland)) {
+        tryCatch(
+            {
+                tmp <- tempfile(fileext = ".gz")
+                on.exit(unlink(tmp), add = TRUE)
+                .download_to(recipe$cpgIsland, tmp, verbose = verbose)
+                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
+                .save_post_build_intervals("cpgIsland", .parse_ucsc_cpg_island(unz), verbose = verbose)
+            },
+            error = function(e) warning(sprintf("cpgIsland load failed: %s", conditionMessage(e)), call. = FALSE)
+        )
+    }
+    if ("cytoband" %in% annotations && !is.null(recipe$cytoband)) {
+        tryCatch(
+            {
+                tmp <- tempfile(fileext = ".gz")
+                on.exit(unlink(tmp), add = TRUE)
+                .download_to(recipe$cytoband, tmp, verbose = verbose)
+                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
+                .save_post_build_intervals("cytoband", .parse_ucsc_cytoband(unz), verbose = verbose)
+            },
+            error = function(e) warning(sprintf("cytoband load failed: %s", conditionMessage(e)), call. = FALSE)
+        )
+    }
+
+    .write_genome_info(path, name, recipe, annotations, list())
+    invisible(NULL)
+}
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+#' Build a misha genome database from a name
+#'
+#' Builds a misha genomic database for a named assembly by downloading FASTA
+#' and (optionally) gene annotations, repeats, CpG islands, and cytobands from
+#' UCSC golden path or NCBI Datasets, then dispatching to \code{\link{gdb.create}}.
+#'
+#' Compared to \code{\link{gdb.create_genome}} (which downloads a pre-baked
+#' tarball from S3), \code{gdb.build_genome} builds from upstream sources at
+#' call time and supports any UCSC golden-path assembly or any NCBI assembly
+#' accession.
+#'
+#' \strong{Name resolution.} \code{name} is resolved through a chain:
+#' \enumerate{
+#'   \item the \code{registry} argument, if given;
+#'   \item \code{getOption("misha.genome_registry")};
+#'   \item a project-local \code{misha.yaml} (walked up to git root);
+#'   \item the package's built-in \code{inst/genomes.yaml};
+#'   \item if \code{name} matches \code{GC[FA]_<digits>.<digits>}, it is
+#'     synthesized as \code{\{source: ncbi, accession: <name>\}}.
+#' }
+#'
+#' \strong{Backends.}
+#' \describe{
+#'   \item{\code{ucsc}}{Golden path. Pulls
+#'     \code{ncbiRefSeq.txt.gz} (genes, RefSeq), \code{ncbiRefSeqLink.txt.gz}
+#'     (gene annotations), \code{rmsk.txt.gz}, \code{cpgIslandExt.txt.gz},
+#'     \code{cytoBandIdeo.txt.gz} as requested.}
+#'   \item{\code{ncbi}}{NCBI Datasets API. FASTA and GFF3 (RefSeq). Requires
+#'     the \code{gff3ToGenePred} binary, downloaded on demand to
+#'     \code{tools::R_user_dir("misha", "cache")} after user consent.
+#'     \code{rmsk}/\code{cpgIsland}/\code{cytoband} are not loaded for NCBI
+#'     assemblies in this version.}
+#'   \item{\code{s3}}{Alias for \code{\link{gdb.create_genome}} (pre-baked
+#'     tarball).}
+#'   \item{\code{local}}{No download — \code{\link{gdb.init}} an existing
+#'     groot at the registry-specified path.}
+#'   \item{\code{manual}}{Use registry-supplied URLs verbatim.}
+#' }
+#'
+#' On success a \code{genome_info.yaml} file is written at the groot root,
+#' recording the source, recipe, and download time, and \code{\link{gdb.init}}
+#' is called on the new groot.
+#'
+#' @param name Genome name. Either a registry key (e.g. \code{"hg38"},
+#'   \code{"UM_NZW_1.0"}) or an NCBI accession (e.g. \code{"GCF_009806435.1"}).
+#' @param path Output directory for the new groot. Must not exist.
+#' @param registry Optional path to a YAML registry file. Overrides the
+#'   resolution chain.
+#' @param annotations Character vector; subset of
+#'   \code{c("genes","rmsk","cpgIsland","cytoband")}. Annotations not
+#'   available from the chosen source emit a warning and are skipped.
+#' @param format Database format: \code{"indexed"} (default) or
+#'   \code{"per-chromosome"}. \code{NULL} uses
+#'   \code{getOption("gmulticontig.indexed_format", TRUE)}.
+#' @param verbose If \code{TRUE}, prints progress messages.
+#' @return None; called for side effects (creates groot, then
+#'   \code{gdb.init}s it).
+#'
+#' @seealso \code{\link{gdb.create}}, \code{\link{gdb.create_genome}},
+#'   \code{\link{gdb.list_genomes}}, \code{\link{gdb.genome_info}},
+#'   \code{\link{gdb.install_gff3_converter}}.
+#'
+#' @examples
+#' \dontrun{
+#' # Standard UCSC assembly (whitelisted in inst/genomes.yaml)
+#' gdb.build_genome("hg38", path = "~/genomes/hg38")
+#'
+#' # Any NCBI assembly by accession
+#' gdb.build_genome("GCF_009806435.1", path = "~/genomes/UM_NZW_1.0")
+#'
+#' # Sequence-only build (no gene annotation tracks)
+#' gdb.build_genome("dm6", path = "/tmp/dm6", annotations = character(0))
+#' }
+#'
+#' @export
+gdb.build_genome <- function(name,
+                             path = name,
+                             registry = NULL,
+                             annotations = c("genes", "rmsk", "cpgIsland", "cytoband"),
+                             format = NULL,
+                             verbose = TRUE) {
+    if (file.exists(path)) {
+        stop(sprintf("Output path '%s' already exists; refusing to overwrite. Choose a fresh path.", path), call. = FALSE)
+    }
+    annotations <- match.arg(annotations,
+        choices = c("genes", "rmsk", "cpgIsland", "cytoband"),
+        several.ok = TRUE
+    )
+    res <- .resolve_genome(name, registry = registry)
+    recipe <- res$recipe
+    if (verbose) {
+        message(sprintf("Resolved '%s' from %s -> source=%s", name, res$resolved_from, recipe$source))
+    }
+
+    dispatcher <- switch(recipe$source,
+        ucsc = .run_ucsc_backend,
+        ncbi = .run_ncbi_backend,
+        s3 = .run_s3_backend,
+        local = .run_local_backend,
+        manual = .run_manual_backend,
+        stop(sprintf("Internal error: no backend for source '%s'", recipe$source), call. = FALSE)
+    )
+    dispatcher(name, recipe, path, annotations, format, verbose)
+    invisible(NULL)
+}
+
+
+#' List resolvable genome names
+#'
+#' Returns a data frame describing every genome resolvable from the active
+#' registry chain (see \code{\link{gdb.build_genome}} for the chain order).
+#'
+#' @param registry Optional path to an explicit registry YAML, overriding the
+#'   resolution chain.
+#' @return A data frame with columns:
+#'   \itemize{
+#'     \item \code{name} — registry key.
+#'     \item \code{source} — backend (\code{ucsc}, \code{ncbi}, \code{s3},
+#'       \code{local}, \code{manual}).
+#'     \item \code{detail} — assembly / accession / path.
+#'     \item \code{resolved_from} — which registry the entry came from.
+#'   }
+#'
+#' @seealso \code{\link{gdb.build_genome}}, \code{\link{gdb.genome_info}}.
+#'
+#' @examples
+#' gdb.list_genomes()
+#'
+#' @export
+gdb.list_genomes <- function(registry = NULL) {
+    sources <- list()
+    if (!is.null(registry)) {
+        sources[[length(sources) + 1]] <- list(label = sprintf("registry arg (%s)", registry), path = registry)
+    }
+    opt <- getOption("misha.genome_registry")
+    if (!is.null(opt)) {
+        sources[[length(sources) + 1]] <- list(label = sprintf("getOption (%s)", opt), path = opt)
+    }
+    proj <- .find_project_misha_yaml()
+    if (!is.null(proj)) {
+        sources[[length(sources) + 1]] <- list(label = sprintf("project (%s)", proj), path = proj)
+    }
+    builtin <- .builtin_registry_path()
+    if (nzchar(builtin)) {
+        sources[[length(sources) + 1]] <- list(label = "built-in", path = builtin)
+    }
+
+    rows <- list()
+    seen <- character(0)
+    for (src in sources) {
+        entries <- .parse_genome_registry(src$path)
+        for (nm in names(entries)) {
+            if (nm %in% seen) next
+            seen <- c(seen, nm)
+            recipe <- tryCatch(.normalize_recipe(entries[[nm]], nm), error = function(e) NULL)
+            if (is.null(recipe)) next
+            detail <- recipe$assembly %||% recipe$accession %||% recipe$path %||%
+                (if (!is.null(recipe$fasta)) paste(head(recipe$fasta, 1), collapse = ",") else NA_character_)
+            rows[[length(rows) + 1]] <- data.frame(
+                name = nm,
+                source = recipe$source,
+                detail = detail,
+                resolved_from = src$label,
+                stringsAsFactors = FALSE
+            )
+        }
+    }
+    if (!length(rows)) {
+        return(data.frame(name = character(), source = character(), detail = character(), resolved_from = character(), stringsAsFactors = FALSE))
+    }
+    do.call(rbind, rows)
+}
+
+
+#' Inspect a resolved genome recipe without building
+#'
+#' Resolves \code{name} through the registry chain and returns the recipe (a
+#' list) along with the source it was resolved from. Useful for previewing
+#' what \code{\link{gdb.build_genome}} would do.
+#'
+#' @param name Genome name.
+#' @param registry Optional path to an explicit registry YAML.
+#' @return A list with components \code{recipe} (the resolved recipe) and
+#'   \code{resolved_from} (the registry source).
+#'
+#' @seealso \code{\link{gdb.build_genome}}, \code{\link{gdb.list_genomes}}.
+#'
+#' @examples
+#' gdb.genome_info("hg38")
+#' gdb.genome_info("GCF_009806435.1")
+#'
+#' @export
+gdb.genome_info <- function(name, registry = NULL) {
+    .resolve_genome(name, registry = registry)
+}
+
+
+#' Pre-install UCSC's gff3ToGenePred binary
+#'
+#' Downloads UCSC's \code{gff3ToGenePred} static binary (~25 MB) into
+#' \code{tools::R_user_dir("misha", "cache")/bin/}, verifies its SHA256, and
+#' makes it executable. Used by \code{\link{gdb.build_genome}} when the
+#' \code{ncbi} backend (or the \code{manual} backend with
+#' \code{genes_format: gff3}) is invoked. Calling it directly is useful in CI
+#' or in non-interactive scripts where the consent prompt would otherwise
+#' fail.
+#'
+#' Override the binary location by setting environment variable
+#' \code{MISHA_GFF3_TO_GENEPRED} to a binary you provide (for example, one
+#' installed via \code{conda install -c bioconda ucsc-gff3togenepred}). This
+#' is the recommended workaround on systems whose glibc is older than the one
+#' UCSC's prebuilt binary requires.
+#'
+#' @param force If \code{TRUE}, skip the consent prompt and re-download even
+#'   if the binary is already cached.
+#' @return The cache path of the installed binary (invisibly).
+#'
+#' @examples
+#' \dontrun{
+#' gdb.install_gff3_converter()
+#' Sys.setenv(MISHA_GFF3_TO_GENEPRED = "/path/to/your/gff3ToGenePred")
+#' }
+#'
+#' @export
+gdb.install_gff3_converter <- function(force = FALSE) {
+    invisible(.install_gff3_converter(force = force))
+}
