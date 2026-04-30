@@ -493,10 +493,23 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     gdatasets <- get("GDATASETS", envir = .misha)
     if (is.null(gdatasets)) gdatasets <- character(0)
     if (!(db %in% c(groot, gdatasets))) {
-        stop(sprintf(
-            "Destination db %s is not the current GROOT and not a loaded dataset; load it with gdataset.load() first.",
-            db
-        ), call. = FALSE)
+        # Cross-genome destinations cannot be loaded via gdataset.load() (which
+        # enforces matching chrom_sizes.txt). For gtrack.copy we only require
+        # the destination to look like a valid misha db: chrom_sizes.txt and
+        # tracks/ must exist. Other invariants (chrom names, indexed format)
+        # are picked up by the pipeline.
+        if (!file.exists(file.path(db, "chrom_sizes.txt"))) {
+            stop(sprintf(
+                "Destination db %s does not contain a chrom_sizes.txt file.",
+                db
+            ), call. = FALSE)
+        }
+        if (!dir.exists(file.path(db, "tracks"))) {
+            stop(sprintf(
+                "Destination db %s does not contain a tracks/ directory.",
+                db
+            ), call. = FALSE)
+        }
     }
     db
 }
@@ -671,6 +684,24 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         ), call. = FALSE)
     }
 
+    # Canonicalize remaining per-chrom filenames to dest's preferred form.
+    # After the drop pass, surviving files may be named by src's convention
+    # (e.g. "chr1") while dest expects another (e.g. "1"). Rename so the
+    # pack helper or downstream readers find them.
+    remaining <- setdiff(list.files(dest_dir, full.names = FALSE), internal)
+    for (f in remaining) {
+        canonical <- .gtrack.copy.match_chrom_alias(f, dest_chroms)
+        if (!is.null(canonical) && canonical != f) {
+            ok <- file.rename(file.path(dest_dir, f), file.path(dest_dir, canonical))
+            if (!ok) {
+                stop(sprintf(
+                    "Failed to rename %s -> %s in %s",
+                    f, canonical, dest_dir
+                ), call. = FALSE)
+            }
+        }
+    }
+
     if (dest_indexed) {
         if (track_type %in% c("dense", "sparse", "array")) {
             .gtrack.pack_per_chrom_to_indexed(dest_dir, dest_chroms, track_type)
@@ -699,6 +730,28 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             stop(sprintf("Failed to copy %s into %s", item, dest_dir), call. = FALSE)
         }
     }
+}
+
+# Given a per-chrom filename and the destination's chrom list, return the
+# destination chrom name that this file represents (tolerating chr-prefix
+# variation). Returns NULL if no match.
+.gtrack.copy.match_chrom_alias <- function(filename, dest_chroms) {
+    if (filename %in% dest_chroms) {
+        return(filename)
+    }
+    # Try toggling the "chr" prefix
+    if (startsWith(filename, "chr")) {
+        stripped <- substring(filename, 4)
+        if (stripped %in% dest_chroms) {
+            return(stripped)
+        }
+    } else {
+        prefixed <- paste0("chr", filename)
+        if (prefixed %in% dest_chroms) {
+            return(prefixed)
+        }
+    }
+    NULL
 }
 
 # Temporarily switch GWD to the given db's tracks/ for the duration of fn().

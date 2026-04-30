@@ -236,3 +236,79 @@ test_that("gtrack.copy: per-chrom dense src to indexed dest converts on the fly"
         expect_true(all(result$d_copy == 1))
     })
 })
+
+test_that("gtrack.copy drops chromosomes not present in destination, with a warning", {
+    withr::with_tempdir({
+        # src has chr1, chr2, chr3; dest has only chr1, chr2
+        create_test_db("src3", chrom_sizes = data.frame(
+            chrom = c("chr1", "chr2", "chr3"), size = c(10000, 10000, 10000)
+        ))
+        create_test_db("dest2", chrom_sizes = data.frame(
+            chrom = c("chr1", "chr2"), size = c(10000, 10000)
+        ))
+        gsetroot("src3")
+        gtrack.create_sparse(
+            "t", "src",
+            rbind(gintervals(1, 0, 100), gintervals(3, 0, 100)),
+            c(5, 5)
+        )
+
+        expect_warning(
+            gtrack.copy("t", "t_copy", db = normalizePath("dest2")),
+            "chr3"
+        )
+        gsetroot("dest2")
+        # Track exists; values for chr1 are 5, chr3 is gone (doesn't exist in dest)
+        expect_true(gtrack.exists("t_copy"))
+        expect_equal(gextract("t_copy", gintervals(1, 0, 100))$t_copy[1], 5)
+    })
+})
+
+test_that("gtrack.copy: indexed -> indexed with different chrom order remaps via two-stage pipeline", {
+    withr::with_tempdir({
+        # src order: chr1, chr2; dest order: chr2, chr1
+        create_test_db("src_idx", chrom_sizes = data.frame(
+            chrom = c("chr1", "chr2"), size = c(10000, 10000)
+        ))
+        create_test_db("dest_idx", chrom_sizes = data.frame(
+            chrom = c("chr2", "chr1"), size = c(10000, 10000)
+        ))
+        gdb.init("src_idx")
+        gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+        gtrack.create_sparse(
+            "t", "src",
+            rbind(gintervals(1, 0, 100), gintervals(2, 0, 100)),
+            c(13, 13)
+        )
+        gdb.init("dest_idx")
+        gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+        gsetroot("src_idx")
+
+        gtrack.copy("t", "t_copy", db = normalizePath("dest_idx"))
+
+        gsetroot("dest_idx")
+        expect_true(gtrack.exists("t_copy"))
+        expect_equal(gextract("t_copy", gintervals(1, 0, 100))$t_copy[1], 13)
+        expect_equal(gextract("t_copy", gintervals(2, 0, 100))$t_copy[1], 13)
+    })
+})
+
+test_that("gtrack.copy: src 'chr1' -> dest '1' handles prefix variant via rename", {
+    withr::with_tempdir({
+        create_test_db("src_chrprefix", chrom_sizes = data.frame(
+            chrom = c("chr1", "chr2"), size = c(10000, 10000)
+        ))
+        create_test_db("dest_noprefix", chrom_sizes = data.frame(
+            chrom = c("1", "2"), size = c(10000, 10000)
+        ))
+        gsetroot("src_chrprefix")
+        gtrack.create_sparse("t", "src", gintervals(1, 0, 100), 7)
+
+        gtrack.copy("t", "t_copy", db = normalizePath("dest_noprefix"))
+
+        gsetroot("dest_noprefix")
+        expect_true(gtrack.exists("t_copy"))
+        # Chrom is "1" (no prefix) in dest
+        expect_equal(gextract("t_copy", gintervals("1", 0, 100))$t_copy[1], 7)
+    })
+})
