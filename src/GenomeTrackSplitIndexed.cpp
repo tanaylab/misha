@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <errno.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <string>
 #include <vector>
@@ -259,8 +260,8 @@ SEXP gtrack_pack_per_chrom_to_indexed(SEXP _track_dir, SEXP _chrom_names, SEXP _
         }
         checksum = crc64.finalize_incremental(checksum);
 
-        // Header layout: magic(8) + version(4) + tracktype(4) + numcontigs(4) + flags(8) = 28 bytes before checksum
-        if (fseek(idx_fp, 8 + 4 + 4 + 4 + 8, SEEK_SET) != 0) {
+        // Seek to checksum field; layout documented in TrackIndex.h.
+        if (fseek(idx_fp, IDX_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
             fclose(dat_fp); fclose(idx_fp);
             verror("Failed to seek to checksum position");
         }
@@ -277,6 +278,15 @@ SEXP gtrack_pack_per_chrom_to_indexed(SEXP _track_dir, SEXP _chrom_names, SEXP _
             verror("Failed to rename %s to %s: %s", dat_path_tmp.c_str(), dat_path.c_str(), strerror(errno));
         if (rename(idx_path_tmp.c_str(), idx_path.c_str()) != 0)
             verror("Failed to rename %s to %s: %s", idx_path_tmp.c_str(), idx_path.c_str(), strerror(errno));
+
+        // Validate track.dat size matches what we wrote, before destroying source files.
+        struct stat dat_stat;
+        if (stat(dat_path.c_str(), &dat_stat) != 0)
+            verror("Failed to stat %s after pack: %s", dat_path.c_str(), strerror(errno));
+        if ((uint64_t)dat_stat.st_size != current_offset)
+            verror("track.dat size mismatch after pack: expected %llu bytes, got %llu bytes",
+                   (unsigned long long)current_offset,
+                   (unsigned long long)dat_stat.st_size);
 
         // Remove old per-chrom files (always remove; this is a destructive pack)
         for (const string &p : chr_files_to_remove) unlink(p.c_str());
