@@ -152,3 +152,20 @@ test_that("split_indexed_to_per_chrom errors on chromid out of range and preserv
         expect_length(list.files(track_dir, pattern = "\\.tmp$"), 0)
     })
 })
+
+test_that("gtrack.copy with db= lands the track in the named dataset", {
+    withr::with_tempdir({
+        create_test_db("workdb")
+        create_test_db("otherdb")
+        gsetroot("workdb")
+        gdataset.load(normalizePath("otherdb"))
+        gtrack.create_sparse("src_t", "src", gintervals(1, 0, 1000), 9)
+
+        gtrack.copy("src_t", "copied_t", db = normalizePath("otherdb"))
+
+        expect_true(gtrack.exists("copied_t"))
+        expect_equal(gtrack.dataset("copied_t"), normalizePath("otherdb"))
+        expect_equal(gtrack.dataset("src_t"), normalizePath("workdb"))
+        expect_equal(gextract("copied_t", gintervals(1, 0, 500))$copied_t[1], 9)
+    })
+})
