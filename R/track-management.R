@@ -396,6 +396,11 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
 #' Chromosomes that exist in the source database but not in the destination
 #' are dropped with a warning.
 #'
+#' @details
+#' For 2D tracks (rectangles, points), cross-database copy requires identical
+#' chromosome order in source and destination. Format conversion (per-chromosome
+#' to indexed) is supported only when the destination is the active database.
+#'
 #' @param src source track name(s). Either a single name or a character
 #'   vector of names.
 #' @param dest destination name. If \code{src} is a single name, this is the
@@ -575,7 +580,17 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         if (!file.copy(src_dir, dest_dir, copy.mode = TRUE)) {
             stop(sprintf("Failed to copy %s to %s", srcname, destname), call. = FALSE)
         }
-        .gdb.add_track(destname, dest_db)
+        groot <- get("GROOT", envir = .misha)
+        gdatasets <- get("GDATASETS", envir = .misha)
+        if (is.null(gdatasets)) gdatasets <- character(0)
+        if (dest_db %in% c(groot, gdatasets)) {
+            .gdb.add_track(destname, dest_db)
+        } else {
+            # Cross-db copy to an unloaded path: skip in-memory registration to
+            # avoid state leakage; mark the dest db's cache dirty so a later
+            # gsetroot/gdataset.load will pick up the new track on rescan.
+            .gdb.cache_mark_dirty(dest_db)
+        }
         return(destname)
     }
 
@@ -586,7 +601,18 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     if (!dir.create(dest_dir, showWarnings = FALSE) && !dir.exists(dest_dir)) {
         stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
     }
-    .gdb.add_track(destname, dest_db)
+    groot <- get("GROOT", envir = .misha)
+    gdatasets <- get("GDATASETS", envir = .misha)
+    if (is.null(gdatasets)) gdatasets <- character(0)
+    dest_db_loaded <- dest_db %in% c(groot, gdatasets)
+    if (dest_db_loaded) {
+        .gdb.add_track(destname, dest_db)
+    } else {
+        # Cross-db copy to an unloaded path: skip in-memory registration to
+        # avoid state leakage; mark the dest db's cache dirty so a later
+        # gsetroot/gdataset.load will pick up the new track on rescan.
+        .gdb.cache_mark_dirty(dest_db)
+    }
     tryCatch(
         .gtrack.copy.pipeline(
             src_dir, dest_dir, src_chroms, dest_chroms,
@@ -598,7 +624,9 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             # Order matters: .gdb.rm_track only updates caches when the trackdir
             # is gone, so unlink first.
             unlink(dest_dir, recursive = TRUE)
-            .gdb.rm_track(destname, db = dest_db)
+            if (dest_db_loaded) {
+                .gdb.rm_track(destname, db = dest_db)
+            }
             stop(e)
         }
     )

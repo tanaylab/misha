@@ -32,6 +32,11 @@ chromosome-order differences between source and destination databases.
 \details{
 Chromosomes that exist in the source database but not in the destination
 are dropped with a warning.
+
+
+For 2D tracks (rectangles, points), cross-database copy requires identical
+chromosome order in source and destination. Format conversion (per-chromosome
+to indexed) is supported only when the destination is the active database.
 }
 \examples{
 \dontshow{

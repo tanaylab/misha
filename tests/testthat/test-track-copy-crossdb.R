@@ -375,3 +375,55 @@ test_that("gtrack.copy: overwrite=FALSE errors on existing dest, overwrite=TRUE 
         expect_equal(gextract("x_copy", gintervals(1, 0, 100))$x_copy[1], 99)
     })
 })
+
+test_that("gtrack.copy: .attrs and .vars survive cross-db split+pack roundtrip", {
+    withr::with_tempdir({
+        create_test_db("perchrom")
+        create_test_db("indexed")
+        gdb.init("indexed")
+        gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+        gsetroot("perchrom")
+        gtrack.create_sparse("t_attr", "src", gintervals(1, 0, 100), 5)
+        gtrack.attr.set("t_attr", "experiment", "foo")
+        gtrack.var.set("t_attr", "extra_metadata", list(x = 1, y = "hello"))
+
+        gtrack.copy("t_attr", "t_attr_copy", db = normalizePath("indexed"))
+
+        gsetroot("indexed")
+        expect_true(gtrack.exists("t_attr_copy"))
+        expect_equal(gtrack.attr.get("t_attr_copy", "experiment"), "foo")
+        expect_equal(
+            gtrack.var.get("t_attr_copy", "extra_metadata"),
+            list(x = 1, y = "hello")
+        )
+    })
+})
+
+test_that("split followed by pack reproduces the original indexed pair byte-for-byte", {
+    withr::with_tempdir({
+        create_test_db("rt")
+        gsetroot("rt")
+        gtrack.create_sparse(
+            "t_rt", "src",
+            rbind(gintervals(1, 0, 100), gintervals(2, 0, 100)),
+            c(7, 7)
+        )
+        track_dir <- file.path(normalizePath("rt"), "tracks", "t_rt.track")
+        gtrack.convert_to_indexed("t_rt")
+
+        # Snapshot original indexed bytes
+        idx_before <- readBin(file.path(track_dir, "track.idx"), "raw", n = 1e8)
+        dat_before <- readBin(file.path(track_dir, "track.dat"), "raw", n = 1e8)
+
+        chrom_names <- misha:::.gdb.chrom_names_at(normalizePath("rt"))
+        misha:::.gtrack.split_indexed_to_per_chrom(track_dir, chrom_names, remove_indexed = TRUE)
+        # Determine track type from a per-chrom file (sparse here)
+        misha:::.gtrack.pack_per_chrom_to_indexed(track_dir, chrom_names, "sparse")
+
+        idx_after <- readBin(file.path(track_dir, "track.idx"), "raw", n = 1e8)
+        dat_after <- readBin(file.path(track_dir, "track.dat"), "raw", n = 1e8)
+
+        expect_equal(idx_after, idx_before)
+        expect_equal(dat_after, dat_before)
+    })
+})

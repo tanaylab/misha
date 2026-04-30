@@ -75,6 +75,11 @@ SEXP gtrack_split_indexed_to_per_chrom(SEXP _track_dir, SEXP _chrom_names, SEXP 
                 verror("Failed to create %s: %s", out_path_tmp.c_str(), strerror(errno));
             }
 
+            // Length=0 entries arise when the source had no per-chrom file at convert time.
+            // We still touch an output file (atomic via tmp+rename above) so that downstream
+            // per-chrom invariants hold, but we write zero bytes. In practice this is
+            // unreachable for tracks created via gtrack.create_*, which always writes a
+            // 4-byte format-signature header for every chromosome.
             if (entry.length > 0) {
                 if (fseeko(dat_fp, (off_t)entry.offset, SEEK_SET) != 0) {
                     fclose(out_fp); fclose(dat_fp);
