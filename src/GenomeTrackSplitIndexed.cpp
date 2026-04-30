@@ -13,6 +13,9 @@
 #include <string>
 #include <vector>
 
+// Note: do NOT #include <Rinternals.h> directly. It defines a length(x) macro
+// that collides with TrackContigEntry::length in TrackIndex.h. R's headers are
+// pulled in transitively via rdbutils.h.
 #include "TrackIndex.h"
 #include "TGLException.h"
 #include "rdbutils.h"
