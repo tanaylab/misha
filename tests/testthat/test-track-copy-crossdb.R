@@ -212,3 +212,27 @@ test_that("gtrack.copy: indexed src to per-chrom dest splits on the fly", {
         expect_equal(gextract("t_copy", gintervals(1, 0, 500))$t_copy[1], 22)
     })
 })
+
+test_that("gtrack.copy: per-chrom dense src to indexed dest converts on the fly", {
+    withr::with_tempdir({
+        create_test_db("perchrom_src_dense")
+        create_test_db("indexed_dest_dense")
+        gdb.init("indexed_dest_dense")
+        gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+        gsetroot("perchrom_src_dense")
+        gdataset.load(normalizePath("indexed_dest_dense"))
+
+        # Dense track via gtrack.create with a fixed-bin iterator
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create("d", "dense", "1", iterator = 100)
+
+        gtrack.copy("d", "d_copy", db = normalizePath("indexed_dest_dense"))
+
+        dest_dir <- file.path(normalizePath("indexed_dest_dense"), "tracks", "d_copy.track")
+        expect_true(file.exists(file.path(dest_dir, "track.idx")))
+        expect_true(file.exists(file.path(dest_dir, "track.dat")))
+        # Values intact for dense track
+        result <- gextract("d_copy", gintervals(1, 0, 500), iterator = 100)
+        expect_true(all(result$d_copy == 1))
+    })
+})
