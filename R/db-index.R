@@ -991,6 +991,15 @@ gtrack.convert_to_indexed <- function(track = NULL) {
     invisible(0)
 }
 
+.gtrack.split_indexed_to_per_chrom <- function(track_dir, chrom_names, remove_indexed = TRUE) {
+    .gcall(
+        "gtrack_split_indexed_to_per_chrom",
+        track_dir, as.character(chrom_names), isTRUE(remove_indexed),
+        .misha_env()
+    )
+    invisible()
+}
+
 #' Convert 1D interval set to indexed format
 #'
 #' Converts a per-chromosome interval set to indexed format
