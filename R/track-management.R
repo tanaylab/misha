@@ -429,18 +429,25 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 
     # Resolve src names: support both unquoted single name (back-compat) and
     # character vectors.
-    if (is.character(src) && length(src) > 1) {
-        srcnames <- src
-    } else if (is.character(src)) {
+    if (is.character(src)) {
         srcnames <- src
     } else {
         srcnames <- do.call(.gexpr2str, list(substitute(src)), envir = parent.frame())
+    }
+
+    if (length(srcnames) == 0) {
+        return(invisible(character(0)))
     }
 
     if (is.null(dest)) {
         destnames <- srcnames
     } else if (length(srcnames) == 1) {
         destnames <- if (is.character(dest)) {
+            if (length(dest) != 1) {
+                stop("When copying a single track, 'dest' must be a single name or NULL.",
+                    call. = FALSE
+                )
+            }
             dest
         } else {
             do.call(.gexpr2str, list(substitute(dest)), envir = parent.frame())
@@ -451,7 +458,8 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 call. = FALSE
             )
         }
-        destnames <- paste(dest, srcnames, sep = ".")
+        prefix <- sub("\\.+$", "", dest)
+        destnames <- paste(prefix, srcnames, sep = ".")
     }
 
     dest_db <- .gtrack.copy.resolve_dest_db(db)
@@ -556,11 +564,29 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
         return(destname)
     }
 
-    .gtrack.copy.pipeline(
-        src_dir, dest_dir, src_chroms, dest_chroms,
-        src_indexed, dest_indexed, info$type, destname, dest_db
-    )
+    # Register destination first so convert-to-indexed (called inside pipeline)
+    # can find it in GTRACKS. .gdb.add_track only registers if the trackdir
+    # already exists, so create it now -- .gtrack.copy.raw_dir tolerates a
+    # pre-existing empty dest_dir.
+    if (!dir.create(dest_dir, showWarnings = FALSE) && !dir.exists(dest_dir)) {
+        stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
+    }
     .gdb.add_track(destname, dest_db)
+    tryCatch(
+        .gtrack.copy.pipeline(
+            src_dir, dest_dir, src_chroms, dest_chroms,
+            src_indexed, dest_indexed, info$type, destname, dest_db
+        ),
+        error = function(e) {
+            # Roll back the registration if the pipeline failed; the dest dir may
+            # still exist but is in an inconsistent state -- best-effort cleanup.
+            # Order matters: .gdb.rm_track only updates caches when the trackdir
+            # is gone, so unlink first.
+            unlink(dest_dir, recursive = TRUE)
+            .gdb.rm_track(destname, db = dest_db)
+            stop(e)
+        }
+    )
     destname
 }
 
@@ -613,7 +639,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             paste0("chr", dest_chroms)
         )
     ))
-    internal <- c("track.idx", "track.dat", ".attrs", ".vars", ".meta")
+    internal <- .TRACK_INTERNAL_FILES
     candidates_for_drop <- setdiff(files_in_dir, internal)
     dropped <- candidates_for_drop[!(candidates_for_drop %in% dest_with_variants)]
     if (length(dropped) > 0) {
@@ -622,6 +648,18 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             destname, paste(dropped, collapse = ", ")
         ), call. = FALSE)
         for (f in dropped) unlink(file.path(dest_dir, f))
+    }
+
+    remaining_per_chrom_files <- setdiff(
+        list.files(dest_dir, full.names = FALSE),
+        internal
+    )
+    if (length(candidates_for_drop) > 0 && length(remaining_per_chrom_files) == 0) {
+        unlink(dest_dir, recursive = TRUE)
+        stop(sprintf(
+            "gtrack.copy(%s): no chromosomes from source database are present in destination; refusing to create empty track.",
+            destname
+        ), call. = FALSE)
     }
 
     if (dest_indexed) {

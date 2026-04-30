@@ -647,6 +647,11 @@ gdb.mark_cache_dirty <- function() {
     invisible(.gdb.cache_mark_dirty())
 }
 
+# Names of files that live inside a track directory but are not per-chromosome
+# data: the indexed-format pair, attribute/var sidecars, and the meta file used
+# by big interval sets. Keep in sync with src/ when adding new sidecar files.
+.TRACK_INTERNAL_FILES <- c("track.idx", "track.dat", ".attrs", ".vars", ".meta")
+
 # Check whether a database at the given path is in indexed format.
 # Unlike .gdb.is_indexed(), does not depend on the loaded GROOT.
 .gdb.is_indexed_at <- function(groot) {
