@@ -169,3 +169,46 @@ test_that("gtrack.copy with db= lands the track in the named dataset", {
         expect_equal(gextract("copied_t", gintervals(1, 0, 500))$copied_t[1], 9)
     })
 })
+
+test_that("gtrack.copy: per-chrom src to indexed dest converts on the fly", {
+    withr::with_tempdir({
+        create_test_db("perchrom_src")
+        create_test_db("indexed_dest")
+        gdb.init("indexed_dest")
+        gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+        gsetroot("perchrom_src")
+        gdataset.load(normalizePath("indexed_dest"))
+        gtrack.create_sparse("t", "src", gintervals(1, 0, 1000), 11)
+
+        gtrack.copy("t", "t_copy", db = normalizePath("indexed_dest"))
+
+        # Destination should be in indexed format
+        dest_dir <- file.path(normalizePath("indexed_dest"), "tracks", "t_copy.track")
+        expect_true(file.exists(file.path(dest_dir, "track.idx")))
+        expect_true(file.exists(file.path(dest_dir, "track.dat")))
+        # Per-chrom files should be gone
+        expect_length(list.files(dest_dir, pattern = "^chr"), 0)
+        # Values intact
+        expect_equal(gextract("t_copy", gintervals(1, 0, 500))$t_copy[1], 11)
+    })
+})
+
+test_that("gtrack.copy: indexed src to per-chrom dest splits on the fly", {
+    withr::with_tempdir({
+        create_test_db("indexed_src")
+        create_test_db("perchrom_dest")
+        gdb.init("indexed_src")
+        gdb.convert_to_indexed(force = TRUE, verbose = FALSE)
+        gtrack.create_sparse("t", "src", gintervals(1, 0, 1000), 22)
+        gsetroot("perchrom_dest")
+        gdataset.load(normalizePath("indexed_src"))
+
+        gtrack.copy("t", "t_copy", db = normalizePath("perchrom_dest"))
+
+        dest_dir <- file.path(normalizePath("perchrom_dest"), "tracks", "t_copy.track")
+        expect_false(file.exists(file.path(dest_dir, "track.idx")))
+        # Per-chrom files present (chr1 should exist; chr2 may not since data is only on chr1)
+        expect_true(any(c("chr1", "chr2") %in% list.files(dest_dir)))
+        expect_equal(gextract("t_copy", gintervals(1, 0, 500))$t_copy[1], 22)
+    })
+})
