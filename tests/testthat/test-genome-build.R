@@ -292,6 +292,101 @@ test_that("gdb.genome_info on NCBI accession uses pattern fallback", {
 })
 
 # ---------------------------------------------------------------------------
+# UCSC TSV preprocessing helpers
+# ---------------------------------------------------------------------------
+
+test_that(".heal_ucsc_tsv_escapes collapses backslash-newline / -tab / stray CR", {
+    in_path <- tempfile(fileext = ".txt")
+    out_path <- tempfile(fileext = ".txt")
+    on.exit(unlink(c(in_path, out_path)))
+    # Three pathological lines:
+    #   1. clean line
+    #   2. line with backslash-newline split (Windows-style: \\\r\n)
+    #   3. line with backslash-tab split
+    f <- file(in_path, "wb")
+    writeBin(charToRaw("clean\trow\tone\n"), f)
+    # row 2: cols [a, b, c\<CR><LF>more, d]
+    writeBin(charToRaw("a\tb\tc\\\r\nmore\td\n"), f)
+    # row 3: cols [x, y, z\<TAB>extra, w]
+    writeBin(charToRaw("x\ty\tz\\\textra\tw\n"), f)
+    close(f)
+
+    misha:::.heal_ucsc_tsv_escapes(in_path, out_path)
+    healed <- readLines(out_path, warn = FALSE)
+    expect_equal(length(healed), 3)
+    expect_equal(healed[1], "clean\trow\tone")
+    expect_match(healed[2], "^a\tb\tc more\td$")
+    expect_match(healed[3], "^x\ty\tz extra\tw$")
+})
+
+test_that(".normalize_ucsc_tsv pads short rows and joins overflow", {
+    in_path <- tempfile(fileext = ".txt")
+    out_path <- tempfile(fileext = ".txt")
+    on.exit(unlink(c(in_path, out_path)))
+    writeLines(c(
+        "a\tb\tc", # short: NF=3
+        "1\t2\t3\t4", # exact: NF=4
+        "x\ty\tz\tw\textra" # overflow: NF=5
+    ), in_path)
+    misha:::.normalize_ucsc_tsv(in_path, out_path, n_cols = 4)
+    out <- readLines(out_path, warn = FALSE)
+    expect_equal(length(out), 3)
+    # Each line must have exactly 3 tabs (4 fields). Use char count instead
+    # of strsplit (which drops trailing empties).
+    n_tabs <- vapply(out, function(s) sum(charToRaw(s) == as.raw(0x09)), integer(1))
+    expect_equal(unname(n_tabs), c(3L, 3L, 3L))
+    # short row padded with empty tail
+    expect_equal(out[1], "a\tb\tc\t")
+    # exact row preserved
+    expect_equal(out[2], "1\t2\t3\t4")
+    # overflow joined into last col
+    expect_equal(out[3], "x\ty\tz\tw extra")
+})
+
+test_that(".normalize_ucsc_genepred handles 15-col (gff3ToGenePred) and 16-col (UCSC table)", {
+    in15 <- tempfile(fileext = ".txt")
+    in16 <- tempfile(fileext = ".txt")
+    out15 <- tempfile(fileext = ".txt")
+    out16 <- tempfile(fileext = ".txt")
+    on.exit(unlink(c(in15, in16, out15, out16)))
+
+    # 15-col: gff3ToGenePred output (no bin column)
+    writeLines(paste(c(
+        "NM_001", "chr1", "+", "100", "200", "120", "180", "1",
+        "100,", "200,", "0", "GENE1", "cmpl", "cmpl", "0,"
+    ), collapse = "\t"), in15)
+    misha:::.normalize_ucsc_genepred(in15, out15)
+    fields <- strsplit(readLines(out15, warn = FALSE), "\t", fixed = TRUE)[[1]]
+    expect_equal(length(fields), 12)
+    expect_equal(fields[1], "NM_001") # ID = name
+    expect_equal(fields[2], "chr1") # CHROM
+    expect_equal(fields[3], "+") # STRAND
+
+    # 16-col: UCSC table (with bin column)
+    writeLines(paste(c(
+        "585", "NM_001", "chr1", "+", "100", "200", "120", "180",
+        "1", "100,", "200,", "0", "GENE1", "cmpl", "cmpl", "0,"
+    ), collapse = "\t"), in16)
+    misha:::.normalize_ucsc_genepred(in16, out16)
+    fields16 <- strsplit(readLines(out16, warn = FALSE), "\t", fixed = TRUE)[[1]]
+    expect_equal(length(fields16), 12)
+    expect_equal(fields16[1], "NM_001") # ID = name (bin dropped)
+    expect_equal(fields16[2], "chr1")
+    expect_equal(fields16[3], "+")
+})
+
+test_that(".normalize_ucsc_genepred rejects unsupported column count", {
+    in_path <- tempfile(fileext = ".txt")
+    out_path <- tempfile(fileext = ".txt")
+    on.exit(unlink(c(in_path, out_path)))
+    writeLines("a\tb\tc\td", in_path) # 4 cols, unsupported
+    expect_error(
+        misha:::.normalize_ucsc_genepred(in_path, out_path),
+        "unsupported column count 4"
+    )
+})
+
+# ---------------------------------------------------------------------------
 # Stub-based dispatch sanity check
 # ---------------------------------------------------------------------------
 

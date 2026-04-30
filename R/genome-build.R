@@ -35,7 +35,13 @@
 .GFF3_TO_GENEPRED_ENV <- "MISHA_GFF3_TO_GENEPRED"
 
 # RefSeqLink columns we expose as gene annotations (used by UCSC backend).
-.UCSC_NCBI_REFSEQ_LINK_COLS <- c("name", "product", "mrnaAcc", "protAcc")
+# Schema: 19 columns as ncbiRefSeqLink.txt.gz ships them. The C++ importer
+# requires the count to match exactly.
+.UCSC_NCBI_REFSEQ_LINK_COLS <- c(
+    "id", "status", "name", "product", "mrnaAcc", "protAcc", "locusLinkId",
+    "omimId", "hgnc", "genbank", "pseudo", "gbkey", "source", "gene_biotype",
+    "gene_synonym", "ncrna_class", "note", "description", "externalId"
+)
 
 # ---------------------------------------------------------------------------
 # Architecture / platform detection
@@ -316,23 +322,123 @@
     dest
 }
 
-# True if URL is reachable (HEAD) without 4xx/5xx.
-.url_reachable <- function(url, timeout_sec = 30) {
-    h <- tryCatch(
-        curl::new_handle(nobody = TRUE, timeout = timeout_sec, failonerror = TRUE),
-        error = function(e) NULL
-    )
-    if (is.null(h)) {
-        return(FALSE)
+# Heal UCSC TSV escape artifacts in description/note fields:
+#   - backslash + (CR? + LF)  -> space    (line continuation)
+#   - backslash + tab          -> space    (intra-field tab escape)
+#   - stray CR (carriage return) -> nothing  (Windows line endings R's
+#     readLines() would otherwise treat as line terminators)
+#
+# Loads the whole file into memory; UCSC tables are small (a few MB) so
+# this is fine in practice and lets us do the regex fixups on the full
+# string without chunk-boundary worries.
+.heal_ucsc_tsv_escapes <- function(in_path, out_path) {
+    con_in <- if (grepl("\\.gz$", in_path)) gzfile(in_path, "rb") else file(in_path, "rb")
+    on.exit(close(con_in), add = TRUE)
+    bytes <- raw(0)
+    repeat {
+        chunk <- readBin(con_in, raw(), n = 1024L * 1024L)
+        if (!length(chunk)) break
+        bytes <- c(bytes, chunk)
     }
-    ok <- tryCatch(
-        {
-            curl::curl_fetch_memory(url, handle = h)
-            TRUE
-        },
-        error = function(e) FALSE
-    )
-    ok
+    s <- rawToChar(bytes)
+    # Order matters: do CRLF before LF so we consume the whole sequence.
+    s <- gsub("\\\\\r\n", " ", s, perl = TRUE)
+    s <- gsub("\\\\\n", " ", s, perl = TRUE)
+    s <- gsub("\\\\\t", " ", s, perl = TRUE)
+    s <- gsub("\r", "", s, perl = TRUE, fixed = FALSE)
+    con_out <- file(out_path, "wb")
+    on.exit(close(con_out), add = TRUE)
+    writeBin(charToRaw(s), con_out)
+    out_path
+}
+
+# Normalize a UCSC TSV table to exactly N columns per row. UCSC sometimes
+# ships rows with stray embedded tabs (e.g. in description fields) — these
+# lines have NF != expected count and would crash the C++ importer's strict
+# column-count check. Short rows are padded with empty strings; long rows
+# have their trailing extras joined back into the last column with " ".
+.normalize_ucsc_tsv <- function(in_path, out_path, n_cols) {
+    con_in <- if (grepl("\\.gz$", in_path)) gzfile(in_path, "rt") else file(in_path, "rt")
+    on.exit(close(con_in), add = TRUE)
+    con_out <- file(out_path, "wt")
+    on.exit(close(con_out), add = TRUE)
+    repeat {
+        lines <- readLines(con_in, n = 50000L, warn = FALSE)
+        if (!length(lines)) break
+        fields <- strsplit(lines, "\t", fixed = TRUE)
+        out <- vapply(fields, function(x) {
+            if (length(x) == n_cols) {
+                paste(x, collapse = "\t")
+            } else if (length(x) < n_cols) {
+                paste(c(x, rep("", n_cols - length(x))), collapse = "\t")
+            } else {
+                # Join overflow into the last column so the row has exactly n_cols fields.
+                paste(c(x[seq_len(n_cols - 1)], paste(x[n_cols:length(x)], collapse = " ")),
+                    collapse = "\t"
+                )
+            }
+        }, character(1))
+        writeLines(out, con_out)
+    }
+    out_path
+}
+
+# Trim a genePred-format file to the classic 12-col layout the C++
+# gintervals_import_genes expects. Two input shapes are handled:
+#   - 16 cols: UCSC extended genePred with leading bin column (ncbiRefSeq,
+#     refGene, knownGene from goldenPath/database/). Take cols 2-13.
+#   - 15 cols: extended genePred without bin (gff3ToGenePred output, NCBI).
+#     Take cols 1-12.
+# In both cases the resulting 12 cols are:
+#   [name, chrom, strand, txStart, txEnd, cdsStart, cdsEnd, exonCount,
+#    exonStarts, exonEnds, score, name2]
+# Cols 11-12 occupy the C++ importer's PROTEINID/ALIGNID slots — read but
+# unused, so populating with score/name2 is harmless.
+#
+# Accepts .txt or .txt.gz, writes a .txt with 12-col content. Streams the
+# input so memory stays bounded.
+.normalize_ucsc_genepred <- function(in_path, out_path) {
+    con_in <- if (grepl("\\.gz$", in_path)) gzfile(in_path, "rt") else file(in_path, "rt")
+    on.exit(close(con_in), add = TRUE)
+    con_out <- file(out_path, "wt")
+    on.exit(close(con_out), add = TRUE)
+
+    chunk_size <- 50000L
+    take_range <- NULL
+    repeat {
+        lines <- readLines(con_in, n = chunk_size, warn = FALSE)
+        if (!length(lines)) break
+        fields <- strsplit(lines, "\t", fixed = TRUE)
+        nf <- vapply(fields, length, integer(1))
+        if (is.null(take_range)) {
+            shape <- nf[[1]]
+            take_range <- if (shape == 16L) {
+                2:13
+            } else if (shape == 15L) {
+                1:12
+            } else if (shape == 12L) {
+                1:12
+            } else {
+                stop(sprintf(
+                    "genePred file %s: unsupported column count %d (expected 12, 15, or 16)",
+                    in_path, shape
+                ), call. = FALSE)
+            }
+        }
+        bad <- nf < max(take_range)
+        if (any(bad)) {
+            stop(sprintf(
+                "genePred file %s: row %d has only %d fields, need at least %d",
+                in_path, which(bad)[1], nf[which(bad)[1]], max(take_range)
+            ), call. = FALSE)
+        }
+        trimmed <- vapply(
+            fields, function(x) paste(x[take_range], collapse = "\t"),
+            character(1)
+        )
+        writeLines(trimmed, con_out)
+    }
+    out_path
 }
 
 # Decompress a .gz file (file -> file with .gz removed). Returns the new path.
@@ -485,57 +591,53 @@
     out
 }
 
-# Fallback list of per-chromosome FASTA URLs (used if single FASTA is not
-# available). We don't enumerate ahead; we rely on .gseq.import to accept a
-# wildcard URL pattern. UCSC's chromosomes/ directory lists chr*.fa.gz.
-.ucsc_per_chrom_fasta_listing <- function(assembly) {
-    listing_url <- sprintf("%s/%s/chromosomes/", .UCSC_GOLDENPATH, assembly)
-    h <- curl::new_handle(timeout = 60)
-    raw <- tryCatch(
-        rawToChar(curl::curl_fetch_memory(listing_url, handle = h)$content),
-        error = function(e) ""
-    )
-    if (!nzchar(raw)) {
-        stop(sprintf(
-            "Could not fetch per-chromosome FASTA listing %s (and bigZips/<assembly>.fa.gz also unavailable)",
-            listing_url
-        ), call. = FALSE)
-    }
-    fnames <- unique(stringi_extract_fa_gz(raw))
-    if (!length(fnames)) {
-        stop(sprintf("No chr*.fa.gz files found at %s", listing_url), call. = FALSE)
-    }
-    paste0(listing_url, fnames)
-}
-
-# Tiny self-contained extractor for chr*.fa.gz filenames out of an HTML/index
-# listing. Avoids a stringi dependency.
-stringi_extract_fa_gz <- function(text) {
-    matches <- regmatches(text, gregexpr("chr[A-Za-z0-9._]+\\.fa\\.gz", text, perl = TRUE))[[1]]
-    matches
-}
-
 .run_ucsc_backend <- function(name, recipe, path, annotations, format, verbose) {
     assembly <- recipe$assembly
     urls <- .ucsc_urls(assembly, annotations, single_fasta = TRUE)
 
     if (verbose) message(sprintf("UCSC backend: assembly=%s -> %s", assembly, path))
 
-    fasta_arg <- if (.url_reachable(urls$fasta)) {
-        urls$fasta
-    } else {
-        if (verbose) message(sprintf("  %s not available, falling back to per-chromosome", urls$fasta))
-        .ucsc_per_chrom_fasta_listing(assembly)
-    }
+    # Pre-download FASTA + genes + annots locally. The underlying gdb.create()
+    # / .gseq.import path only handles ftp:// or local files; passing https://
+    # URLs straight through would fail. By downloading first, we get
+    # protocol-agnostic behavior and let gdb.create() use its indexed-format
+    # multi-FASTA fast path (which requires file.exists()).
+    workdir <- tempfile("misha_ucsc_")
+    dir.create(workdir, recursive = TRUE)
+    on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
 
-    annots_file <- urls$annots
-    annots_names <- if (!is.null(annots_file)) .UCSC_NCBI_REFSEQ_LINK_COLS else NULL
+    local_fasta <- file.path(workdir, sprintf("%s.fa.gz", assembly))
+    .download_to(urls$fasta, local_fasta, verbose = verbose)
+
+    local_genes <- NULL
+    if (!is.null(urls$genes)) {
+        raw_genes <- file.path(workdir, "ncbiRefSeq.txt.gz")
+        .download_to(urls$genes, raw_genes, verbose = verbose)
+        local_genes <- file.path(workdir, "ncbiRefSeq.12col.txt")
+        if (verbose) message("  Trimming extended-genePred (16 cols) to classic 12-col format ...")
+        .normalize_ucsc_genepred(raw_genes, local_genes)
+    }
+    local_annots <- NULL
+    annots_names <- NULL
+    if (!is.null(urls$annots)) {
+        raw_annots <- file.path(workdir, "ncbiRefSeqLink.raw.txt.gz")
+        .download_to(urls$annots, raw_annots, verbose = verbose)
+        healed <- file.path(workdir, "ncbiRefSeqLink.healed.txt")
+        if (verbose) message("  Healing UCSC escape artifacts in ncbiRefSeqLink ...")
+        .heal_ucsc_tsv_escapes(raw_annots, healed)
+        local_annots <- file.path(workdir, "ncbiRefSeqLink.normalized.txt")
+        if (verbose) message("  Normalizing ncbiRefSeqLink to fixed column count ...")
+        .normalize_ucsc_tsv(healed, local_annots,
+            n_cols = length(.UCSC_NCBI_REFSEQ_LINK_COLS)
+        )
+        annots_names <- .UCSC_NCBI_REFSEQ_LINK_COLS
+    }
 
     gdb.create(
         groot        = path,
-        fasta        = fasta_arg,
-        genes.file   = urls$genes,
-        annots.file  = annots_file,
+        fasta        = local_fasta,
+        genes.file   = local_genes,
+        annots.file  = local_annots,
         annots.names = annots_names,
         format       = format,
         verbose      = verbose
@@ -545,7 +647,7 @@ stringi_extract_fa_gz <- function(text) {
     gdb.init(path, rescan = TRUE)
 
     files_record <- list(
-        fasta = list(url = if (length(fasta_arg) == 1) fasta_arg else paste(fasta_arg, collapse = ",")),
+        fasta = list(url = urls$fasta),
         genes = list(url = urls$genes %||% NA_character_),
         annots = list(url = urls$annots %||% NA_character_)
     )
@@ -658,16 +760,20 @@ stringi_extract_fa_gz <- function(text) {
         if (grepl("\\.gz$", gff_file)) {
             gff_file <- .gunzip_to_file(gff_file)
         }
-        genepred_file <- file.path(workdir, "annot.genePred")
+        raw_genepred <- file.path(workdir, "annot.raw.genePred")
         if (verbose) message(sprintf("  Running gff3ToGenePred on %s", basename(gff_file)))
         ret <- system2(converter,
-            args = c(shQuote(gff_file), shQuote(genepred_file)),
+            args = c(shQuote(gff_file), shQuote(raw_genepred)),
             stdout = if (verbose) "" else FALSE,
             stderr = if (verbose) "" else FALSE
         )
         if (ret != 0) {
             stop(sprintf("gff3ToGenePred failed (exit %d) on %s", ret, gff_file), call. = FALSE)
         }
+        # gff3ToGenePred emits 15-col extended genePred — trim to the 12 cols
+        # the C++ importer expects.
+        genepred_file <- file.path(workdir, "annot.genePred")
+        .normalize_ucsc_genepred(raw_genepred, genepred_file)
     } else if ("genes" %in% annotations) {
         warning(sprintf("No GFF3 found for %s; building seq-only genome (no genes/exons/utr*)", accession), call. = FALSE)
     }
