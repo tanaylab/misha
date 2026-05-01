@@ -101,6 +101,16 @@ If the NCBI payload lacks a sequence report, the build falls back to
 \code{"accession"} with a warning. The full mapping (canonical, RefSeq,
 GenBank, sequenceName, role) is written to
 \code{<groot>/chrom_aliases.tsv} for downstream tooling.
+
+\strong{Alias loading.} On every \code{\link{gdb.init}}, if a
+\code{chrom_aliases.tsv} is present at the groot, its
+\code{refseqAccession} / \code{genbankAccession} / \code{sequenceName} /
+\code{chrName} columns are added to \code{.misha$CHROM_ALIAS} as aliases
+pointing at the canonical contig name. This makes
+\code{gintervals("NC_067374.1", ...)},
+\code{gintervals("CM028932.1", ...)}, and
+\code{gintervals("contig_2989", ...)} all resolve to the same canonical
+chromosome as \code{gintervals("chr1", ...)} or \code{gintervals("1", ...)}.
 }
 \examples{
 \dontrun{

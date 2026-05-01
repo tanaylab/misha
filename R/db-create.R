@@ -155,7 +155,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
             # Compute chromosome aliases early so we can add them to factor levels
             canonical_names <- as.character(chrom.sizes$chrom)
-            alias_map <- .compute_chrom_aliases(canonical_names)
+            alias_map <- .compute_chrom_aliases(canonical_names, groot = groot)
             all_chrom_names <- unique(c(canonical_names, names(alias_map)))
 
             # before calling gintervals.import_genes new ALLGENOME must be set
@@ -197,7 +197,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
             assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
             assign("GROOT", groot, envir = .misha)
-            .store_chrom_aliases(levels(intervals$chrom))
+            .store_chrom_aliases(levels(intervals$chrom), groot = groot)
 
             if (!is.null(genes.file)) {
                 intervs <- gintervals.import_genes(genes.file, annots.file, annots.names)

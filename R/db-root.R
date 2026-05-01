@@ -117,10 +117,12 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         canonical_names[needs_prefix] <- paste0("chr", canonical_names[needs_prefix])
     }
 
-    # Always compute chromosome aliases for better usability
-    # This allows users to use both "chr1" and "1" interchangeably
-    # and ensures aliases remain available after database conversion
-    alias_map <- .compute_chrom_aliases(canonical_names)
+    # Always compute chromosome aliases for better usability.
+    # This allows users to use both "chr1" and "1" interchangeably and
+    # ensures aliases remain available after database conversion. When a
+    # <groot>/chrom_aliases.tsv exists (written by gdb.build_genome for
+    # NCBI sources), refseq/GenBank/sequenceName aliases are added too.
+    alias_map <- .compute_chrom_aliases(canonical_names, groot = groot)
 
     # Include both canonical names and aliases in factor levels
     # This allows gintervals.all() to work with both forms

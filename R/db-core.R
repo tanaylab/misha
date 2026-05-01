@@ -121,7 +121,7 @@
     TRUE
 }
 
-.compute_chrom_aliases <- function(chroms) {
+.compute_chrom_aliases <- function(chroms, groot = NULL) {
     chroms <- unique(as.character(chroms))
 
     # Pre-compute all string transformations (vectorized)
@@ -191,13 +191,64 @@
         }
     }
 
+    # Optional pass: load <groot>/chrom_aliases.tsv (written by gdb.build_genome
+    # for NCBI-sourced genomes) and add accession / GenBank / sequenceName /
+    # chrName aliases pointing to the canonical name. The TSV's `canonical`
+    # column is the on-disk chrom name; aliases that already resolve via the
+    # chr-prefix or mitochondrial passes above are skipped.
+    if (!is.null(groot) && length(groot) == 1L && nzchar(groot)) {
+        tsv_path <- file.path(groot, "chrom_aliases.tsv")
+        if (file.exists(tsv_path)) {
+            tsv <- tryCatch(
+                utils::read.table(tsv_path,
+                    sep = "\t", header = TRUE,
+                    quote = "", comment.char = "",
+                    stringsAsFactors = FALSE,
+                    colClasses = "character",
+                    na.strings = character(0)
+                ),
+                error = function(e) NULL
+            )
+            if (!is.null(tsv) && nrow(tsv) && "canonical" %in% names(tsv)) {
+                # Only consider rows whose canonical actually appears among the
+                # passed-in chroms; defends against stale TSVs from earlier
+                # builds with different naming.
+                keep <- tsv$canonical %in% chroms
+                tsv <- tsv[keep, , drop = FALSE]
+                # Columns whose values become aliases pointing at canonical.
+                alias_cols <- intersect(
+                    c("refseqAccession", "genbankAccession", "sequenceName", "chrName"),
+                    names(tsv)
+                )
+                for (col in alias_cols) {
+                    vals <- tsv[[col]]
+                    targets <- tsv$canonical
+                    for (j in seq_along(vals)) {
+                        name <- vals[j]
+                        if (is.na(name) || !nzchar(name)) next
+                        if (exists(name, envir = seen, inherits = FALSE)) next
+                        seen[[name]] <- TRUE
+                        idx <- idx + 1
+                        if (idx > length(alias_names)) {
+                            # Grow buffers in chunks.
+                            alias_names <- c(alias_names, character(length(alias_names)))
+                            alias_targets <- c(alias_targets, character(length(alias_targets)))
+                        }
+                        alias_names[idx] <- name
+                        alias_targets[idx] <- targets[j]
+                    }
+                }
+            }
+        }
+    }
+
     # Build final named vector
     alias <- stats::setNames(alias_targets[1:idx], alias_names[1:idx])
     alias
 }
 
-.store_chrom_aliases <- function(chroms) {
-    alias_map <- .compute_chrom_aliases(chroms)
+.store_chrom_aliases <- function(chroms, groot = NULL) {
+    alias_map <- .compute_chrom_aliases(chroms, groot = groot)
     assign("CHROM_ALIAS", alias_map, envir = .misha)
 }
 

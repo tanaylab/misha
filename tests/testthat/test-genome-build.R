@@ -506,6 +506,81 @@ test_that(".rename_gff3_seqids rewrites col 1 and preserves comments", {
 })
 
 # ---------------------------------------------------------------------------
+# .compute_chrom_aliases TSV augmentation
+# ---------------------------------------------------------------------------
+
+test_that(".compute_chrom_aliases without groot still does chr-prefix + MT toggles", {
+    a <- misha:::.compute_chrom_aliases(c("1", "X", "MT"))
+    # Each canonical maps to itself
+    expect_equal(unname(a[["1"]]), "1")
+    expect_equal(unname(a[["X"]]), "X")
+    expect_equal(unname(a[["MT"]]), "MT")
+    # chr-prefix aliases
+    expect_equal(unname(a[["chr1"]]), "1")
+    expect_equal(unname(a[["chrX"]]), "X")
+    # mitochondrial aliases
+    expect_equal(unname(a[["M"]]), "MT")
+    expect_equal(unname(a[["chrM"]]), "MT")
+})
+
+test_that(".compute_chrom_aliases adds refseq/genbank/sequenceName/chrName when chrom_aliases.tsv is present", {
+    g <- tempfile()
+    dir.create(g)
+    on.exit(unlink(g, recursive = TRUE))
+    writeLines(c(
+        "canonical\trefseqAccession\tgenbankAccession\tsequenceName\tchrName\trole\tlength",
+        "1\tNC_067374.1\tCM028932.1\tcontig_2989\t1\tassembled-molecule\t208594813",
+        "MT\tNC_001913.1\tAJ001588.1\tMT\tMT\tassembled-molecule\t17245"
+    ), file.path(g, "chrom_aliases.tsv"))
+
+    a <- misha:::.compute_chrom_aliases(c("1", "MT"), groot = g)
+
+    # Existing aliases still resolve.
+    expect_equal(unname(a[["1"]]), "1")
+    expect_equal(unname(a[["chr1"]]), "1")
+    expect_equal(unname(a[["chrM"]]), "MT")
+    # New TSV-driven aliases.
+    expect_equal(unname(a[["NC_067374.1"]]), "1")
+    expect_equal(unname(a[["CM028932.1"]]), "1")
+    expect_equal(unname(a[["contig_2989"]]), "1")
+    expect_equal(unname(a[["NC_001913.1"]]), "MT")
+})
+
+test_that(".compute_chrom_aliases ignores TSV rows whose canonical is not among `chroms`", {
+    # Defensive: a stale TSV referring to renamed chroms must not be applied.
+    g <- tempfile()
+    dir.create(g)
+    on.exit(unlink(g, recursive = TRUE))
+    writeLines(c(
+        "canonical\trefseqAccession\tgenbankAccession\tsequenceName\tchrName\trole\tlength",
+        "ANCIENT_NAME\tNC_999999.1\t.\t.\t.\tassembled\t1"
+    ), file.path(g, "chrom_aliases.tsv"))
+    a <- misha:::.compute_chrom_aliases(c("1"), groot = g)
+    expect_false("NC_999999.1" %in% names(a))
+})
+
+test_that(".compute_chrom_aliases skips alias names that already exist (e.g. canonical itself)", {
+    # If the TSV's refseqAccession happens to equal the canonical (e.g. when
+    # chrom_naming = 'accession'), don't overwrite it.
+    g <- tempfile()
+    dir.create(g)
+    on.exit(unlink(g, recursive = TRUE))
+    writeLines(c(
+        "canonical\trefseqAccession\tgenbankAccession\tsequenceName\tchrName\trole\tlength",
+        "NC_067374.1\tNC_067374.1\tCM028932.1\tcontig_2989\t1\tassembled-molecule\t208594813"
+    ), file.path(g, "chrom_aliases.tsv"))
+    a <- misha:::.compute_chrom_aliases(c("NC_067374.1"), groot = g)
+    expect_equal(unname(a[["NC_067374.1"]]), "NC_067374.1")
+    expect_equal(unname(a[["CM028932.1"]]), "NC_067374.1")
+    expect_equal(unname(a[["contig_2989"]]), "NC_067374.1")
+    # `1` is the chrName -> aliases to NC_067374.1.
+    expect_equal(unname(a[["1"]]), "NC_067374.1")
+    # And chr1 falls out of the chr-prefix toggle on chrName.
+    # (chr-prefix pass only acts on canonical, so chr1 isn't auto-added here;
+    # that's fine — accession naming is the explicit opt-out path.)
+})
+
+# ---------------------------------------------------------------------------
 # Stub-based dispatch sanity check
 # ---------------------------------------------------------------------------
 

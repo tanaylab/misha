@@ -1248,6 +1248,16 @@
 #' GenBank, sequenceName, role) is written to
 #' \code{<groot>/chrom_aliases.tsv} for downstream tooling.
 #'
+#' \strong{Alias loading.} On every \code{\link{gdb.init}}, if a
+#' \code{chrom_aliases.tsv} is present at the groot, its
+#' \code{refseqAccession} / \code{genbankAccession} / \code{sequenceName} /
+#' \code{chrName} columns are added to \code{.misha$CHROM_ALIAS} as aliases
+#' pointing at the canonical contig name. This makes
+#' \code{gintervals("NC_067374.1", ...)},
+#' \code{gintervals("CM028932.1", ...)}, and
+#' \code{gintervals("contig_2989", ...)} all resolve to the same canonical
+#' chromosome as \code{gintervals("chr1", ...)} or \code{gintervals("1", ...)}.
+#'
 #' @param name Genome name. Either a registry key (e.g. \code{"hg38"},
 #'   \code{"UM_NZW_1.0"}) or an NCBI accession (e.g. \code{"GCF_009806435.1"}).
 #' @param path Output directory for the new groot. Must not exist.
