@@ -55,6 +55,21 @@ test_that(".validate_recipe enforces per-source required fields", {
     expect_silent(misha:::.validate_recipe(list(source = "ucsc", assembly = "hg38"), "x"))
     expect_silent(misha:::.validate_recipe(list(source = "ncbi", accession = "GCF_000001405.40"), "x"))
     expect_silent(misha:::.validate_recipe(list(source = "manual", fasta = "url"), "x"))
+
+    # NCBI chrom_naming
+    expect_error(
+        misha:::.validate_recipe(list(
+            source = "ncbi", accession = "GCF_000001405.40",
+            chrom_naming = "bad"
+        ), "x"),
+        "chrom_naming"
+    )
+    expect_silent(misha:::.validate_recipe(
+        list(source = "ncbi", accession = "GCF_000001405.40", chrom_naming = "ucsc"), "x"
+    ))
+    expect_silent(misha:::.validate_recipe(
+        list(source = "ncbi", accession = "GCF_000001405.40", chrom_naming = "sequence_name"), "x"
+    ))
 })
 
 test_that(".parse_genome_registry handles valid + invalid YAML", {
@@ -384,6 +399,110 @@ test_that(".normalize_ucsc_genepred rejects unsupported column count", {
         misha:::.normalize_ucsc_genepred(in_path, out_path),
         "unsupported column count 4"
     )
+})
+
+# ---------------------------------------------------------------------------
+# NCBI sequence_report parsing + rename-map building + stream rewrites
+# ---------------------------------------------------------------------------
+
+write_temp_seqrep <- function() {
+    f <- tempfile(fileext = ".jsonl")
+    writeLines(c(
+        '{"refseqAccession":"NC_067374.1","genbankAccession":"CM028932.1","chrName":"1","sequenceName":"contig_2989","role":"assembled-molecule","length":208594813}',
+        '{"refseqAccession":"NC_001913.1","genbankAccession":"CM_NA","chrName":"MT","sequenceName":"mito","role":"assembled-molecule","length":17245}',
+        '{"refseqAccession":"NW_026256937.1","genbankAccession":"VIYN02000001.1","chrName":"Un","sequenceName":"contig_1","role":"unplaced-scaffold","length":1333029}'
+    ), f)
+    f
+}
+
+test_that(".parse_ncbi_sequence_report extracts the right fields", {
+    f <- write_temp_seqrep()
+    on.exit(unlink(f))
+    df <- misha:::.parse_ncbi_sequence_report(f)
+    expect_equal(nrow(df), 3)
+    expect_equal(df$refseqAccession, c("NC_067374.1", "NC_001913.1", "NW_026256937.1"))
+    expect_equal(df$chrName, c("1", "MT", "Un"))
+    expect_equal(df$role, c("assembled-molecule", "assembled-molecule", "unplaced-scaffold"))
+    expect_equal(df$length[1], 208594813)
+})
+
+test_that(".build_ncbi_rename_map dispatches per chrom_naming", {
+    f <- write_temp_seqrep()
+    on.exit(unlink(f))
+    seqrep <- misha:::.parse_ncbi_sequence_report(f)
+
+    seq_map <- misha:::.build_ncbi_rename_map(seqrep, "sequence_name")
+    expect_equal(unname(seq_map[["NC_067374.1"]]), "1")
+    expect_equal(unname(seq_map[["NC_001913.1"]]), "MT")
+    # Unplaced falls back to refseq accession (chrName=Un would collide).
+    expect_equal(unname(seq_map[["NW_026256937.1"]]), "NW_026256937.1")
+
+    ucsc_map <- misha:::.build_ncbi_rename_map(seqrep, "ucsc")
+    expect_equal(unname(ucsc_map[["NC_067374.1"]]), "chr1")
+    expect_equal(unname(ucsc_map[["NC_001913.1"]]), "chrM") # not chrMT
+    expect_equal(unname(ucsc_map[["NW_026256937.1"]]), "chrUn_NW026256937v1")
+
+    acc_map <- misha:::.build_ncbi_rename_map(seqrep, "accession")
+    expect_equal(unname(acc_map[["NC_067374.1"]]), "NC_067374.1")
+})
+
+test_that(".build_ncbi_rename_map errors on duplicate target names", {
+    # Two assembled molecules with the same chrName would collide.
+    f <- tempfile(fileext = ".jsonl")
+    on.exit(unlink(f))
+    writeLines(c(
+        '{"refseqAccession":"NC_001.1","chrName":"1","role":"assembled-molecule","length":1}',
+        '{"refseqAccession":"NC_002.1","chrName":"1","role":"assembled-molecule","length":1}'
+    ), f)
+    seqrep <- misha:::.parse_ncbi_sequence_report(f)
+    expect_error(
+        misha:::.build_ncbi_rename_map(seqrep, "sequence_name"),
+        "duplicate names"
+    )
+})
+
+test_that(".rename_fasta_headers rewrites ID and preserves body", {
+    in_path <- tempfile(fileext = ".fa")
+    out_path <- tempfile(fileext = ".fa")
+    on.exit(unlink(c(in_path, out_path)))
+    writeLines(c(
+        ">NC_067374.1 chr 1 some description",
+        "ACGTACGT",
+        "GGGGCCCC",
+        ">NC_001913.1",
+        "ATGCATGC",
+        ">NW_unmapped.1 unmapped contig",
+        "TTTT"
+    ), in_path)
+    rmap <- c("NC_067374.1" = "1", "NC_001913.1" = "MT")
+    misha:::.rename_fasta_headers(in_path, out_path, rmap, verbose = FALSE)
+    out <- readLines(out_path, warn = FALSE)
+    expect_equal(out[1], ">1") # description dropped
+    expect_equal(out[4], ">MT")
+    expect_equal(out[6], ">NW_unmapped.1") # unmapped: ID kept, description dropped
+    expect_equal(out[2], "ACGTACGT") # body preserved
+    expect_equal(out[3], "GGGGCCCC")
+})
+
+test_that(".rename_gff3_seqids rewrites col 1 and preserves comments", {
+    in_path <- tempfile(fileext = ".gff")
+    out_path <- tempfile(fileext = ".gff")
+    on.exit(unlink(c(in_path, out_path)))
+    writeLines(c(
+        "##gff-version 3",
+        "#!processor RefSeq",
+        "NC_067374.1\tRefSeq\tgene\t100\t200\t.\t+\t.\tID=g1",
+        "NC_067374.1\tRefSeq\texon\t100\t200\t.\t+\t.\tID=e1;Parent=g1",
+        "NC_unmapped.1\tRefSeq\tgene\t1\t10\t.\t+\t.\tID=g2"
+    ), in_path)
+    rmap <- c("NC_067374.1" = "1")
+    misha:::.rename_gff3_seqids(in_path, out_path, rmap, verbose = FALSE)
+    out <- readLines(out_path, warn = FALSE)
+    expect_equal(out[1], "##gff-version 3") # comments preserved
+    expect_equal(out[2], "#!processor RefSeq")
+    expect_match(out[3], "^1\t") # renamed
+    expect_match(out[4], "^1\t")
+    expect_match(out[5], "^NC_unmapped.1\t") # unmapped passed through
 })
 
 # ---------------------------------------------------------------------------

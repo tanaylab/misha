@@ -32,6 +32,10 @@
 .UCSC_GOLDENPATH <- "https://hgdownload.soe.ucsc.edu/goldenPath"
 .NCBI_DATASETS_API <- "https://api.ncbi.nlm.nih.gov/datasets/v2"
 
+# NCBI backend chromosome naming options. See ?gdb.build_genome.
+.NCBI_CHROM_NAMING_VALUES <- c("sequence_name", "ucsc", "accession")
+.NCBI_DEFAULT_CHROM_NAMING <- "sequence_name"
+
 .GFF3_TO_GENEPRED_ENV <- "MISHA_GFF3_TO_GENEPRED"
 
 # RefSeqLink columns we expose as gene annotations (used by UCSC backend).
@@ -109,6 +113,14 @@
             stop(sprintf(
                 "Genome '%s': accession '%s' does not match GC[FA]_<digits>.<digits>",
                 name, recipe$accession
+            ), call. = FALSE)
+        }
+        if (!is.null(recipe$chrom_naming) &&
+            !recipe$chrom_naming %in% .NCBI_CHROM_NAMING_VALUES) {
+            stop(sprintf(
+                "Genome '%s': chrom_naming '%s' invalid. Valid values: %s",
+                name, recipe$chrom_naming,
+                paste(.NCBI_CHROM_NAMING_VALUES, collapse = ", ")
             ), call. = FALSE)
         }
     } else if (src == "s3") {
@@ -715,16 +727,205 @@
 
 .ncbi_datasets_zip_url <- function(accession) {
     sprintf(
-        "%s/genome/accession/%s/download?include_annotation_type=GENOME_FASTA,GENOME_GFF",
+        "%s/genome/accession/%s/download?include_annotation_type=GENOME_FASTA,GENOME_GFF,SEQUENCE_REPORT",
         .NCBI_DATASETS_API, accession
     )
 }
 
+# Parse NCBI Datasets sequence_report.jsonl into a data.frame.
+# Returns: data.frame(refseqAccession, genbankAccession, chrName, sequenceName,
+# role, length).
+.parse_ncbi_sequence_report <- function(path) {
+    if (!file.exists(path)) {
+        stop(sprintf("Sequence report not found: %s", path), call. = FALSE)
+    }
+    lines <- readLines(path, warn = FALSE)
+    lines <- lines[nzchar(lines)]
+    parsed <- lapply(lines, function(l) {
+        # Tiny JSON parser via yaml (yaml is a JSON superset; already a dep).
+        yaml::yaml.load(l)
+    })
+    pull <- function(field, default = NA_character_) {
+        vapply(parsed, function(r) {
+            v <- r[[field]]
+            if (is.null(v) || !length(v)) default else as.character(v)[[1]]
+        }, character(1))
+    }
+    pull_int <- function(field) {
+        vapply(parsed, function(r) {
+            v <- r[[field]]
+            if (is.null(v) || !length(v)) NA_real_ else as.numeric(v)[[1]]
+        }, numeric(1))
+    }
+    data.frame(
+        refseqAccession  = pull("refseqAccession"),
+        genbankAccession = pull("genbankAccession"),
+        chrName          = pull("chrName"),
+        sequenceName     = pull("sequenceName"),
+        role             = pull("role"),
+        length           = pull_int("length"),
+        stringsAsFactors = FALSE
+    )
+}
+
+# UCSC-style canonical name from a sequence_report row.
+# Assembled molecules: chr1, chrX, chrM (UCSC uses chrM not chrMT).
+# Unplaced: chrUn_<accession_underscore_dot_to_v>, e.g. NW_026256937.1 -> chrUn_NW026256937v1.
+# Unlocalized: chr<chrom>_<acc>_random.
+.ncbi_to_ucsc_name <- function(refseq_acc, chr_name, role) {
+    # Build the UCSC-friendly suffix from an accession: drop underscore + dot,
+    # encode version as v<N>: "NW_026256937.1" -> "NW026256937v1".
+    encode_acc <- function(acc) {
+        s <- gsub("_", "", acc, fixed = TRUE)
+        s <- sub("\\.([0-9]+)$", "v\\1", s)
+        s
+    }
+    if (role == "assembled-molecule") {
+        if (chr_name %in% c("MT", "M")) {
+            return("chrM")
+        }
+        return(paste0("chr", chr_name))
+    }
+    if (role == "unlocalized-scaffold") {
+        return(paste0("chr", chr_name, "_", encode_acc(refseq_acc), "_random"))
+    }
+    paste0("chrUn_", encode_acc(refseq_acc))
+}
+
+# Build a named character vector: original FASTA/GFF id -> target canonical
+# chrom name, given the desired chrom_naming and a parsed sequence report.
+# Always indexed by the refseqAccession used in the FASTA/GFF (the field NCBI
+# uses as the seqid).
+.build_ncbi_rename_map <- function(seqrep, chrom_naming) {
+    chrom_naming <- match.arg(chrom_naming, .NCBI_CHROM_NAMING_VALUES)
+    targets <- if (chrom_naming == "accession") {
+        seqrep$refseqAccession
+    } else if (chrom_naming == "sequence_name") {
+        # Use NCBI chrName for assembled molecules; refseq accession for
+        # everything else (chrName="Un" would collide).
+        ifelse(seqrep$role == "assembled-molecule",
+            seqrep$chrName,
+            seqrep$refseqAccession
+        )
+    } else { # ucsc
+        mapply(.ncbi_to_ucsc_name,
+            seqrep$refseqAccession, seqrep$chrName, seqrep$role,
+            USE.NAMES = FALSE
+        )
+    }
+    if (anyDuplicated(targets)) {
+        dups <- unique(targets[duplicated(targets)])
+        stop(sprintf(
+            "chrom_naming='%s' produced duplicate names: %s",
+            chrom_naming, paste(utils::head(dups, 5), collapse = ", ")
+        ), call. = FALSE)
+    }
+    setNames(targets, seqrep$refseqAccession)
+}
+
+# Stream-rewrite FASTA: replace headers ">acc ..." with ">new_name". Works
+# on plain or .gz input; output is plain.
+.rename_fasta_headers <- function(in_path, out_path, rename_map, verbose = TRUE) {
+    con_in <- if (grepl("\\.gz$", in_path)) gzfile(in_path, "rt") else file(in_path, "rt")
+    on.exit(close(con_in), add = TRUE)
+    con_out <- file(out_path, "wt")
+    on.exit(close(con_out), add = TRUE)
+    n_renamed <- 0L
+    n_unmapped <- 0L
+    repeat {
+        lines <- readLines(con_in, n = 100000L, warn = FALSE)
+        if (!length(lines)) break
+        is_header <- startsWith(lines, ">")
+        if (any(is_header)) {
+            headers <- lines[is_header]
+            ids <- sub("^>([^[:space:]]+).*$", "\\1", headers, perl = TRUE)
+            new <- rename_map[ids]
+            unmapped <- is.na(new)
+            new[unmapped] <- ids[unmapped]
+            n_renamed <- n_renamed + sum(!unmapped)
+            n_unmapped <- n_unmapped + sum(unmapped)
+            lines[is_header] <- paste0(">", new)
+        }
+        writeLines(lines, con_out)
+    }
+    if (verbose) {
+        message(sprintf(
+            "  Renamed %d FASTA contigs (%d unmapped, kept original id).",
+            n_renamed, n_unmapped
+        ))
+    }
+    invisible(out_path)
+}
+
+# Stream-rewrite GFF3: replace seqid (col 1) using rename_map. Comment lines
+# preserved unchanged. Lines whose seqid isn't in the map are kept as-is.
+.rename_gff3_seqids <- function(in_path, out_path, rename_map, verbose = TRUE) {
+    con_in <- if (grepl("\\.gz$", in_path)) gzfile(in_path, "rt") else file(in_path, "rt")
+    on.exit(close(con_in), add = TRUE)
+    con_out <- file(out_path, "wt")
+    on.exit(close(con_out), add = TRUE)
+    n_renamed <- 0L
+    n_unmapped <- 0L
+    repeat {
+        lines <- readLines(con_in, n = 100000L, warn = FALSE)
+        if (!length(lines)) break
+        is_data <- nzchar(lines) & !startsWith(lines, "#")
+        if (any(is_data)) {
+            data_lines <- lines[is_data]
+            tab_pos <- regexpr("\t", data_lines, fixed = TRUE)
+            seqids <- ifelse(tab_pos > 0, substring(data_lines, 1, tab_pos - 1), data_lines)
+            rest <- ifelse(tab_pos > 0, substring(data_lines, tab_pos), "")
+            new <- rename_map[seqids]
+            unmapped <- is.na(new)
+            new[unmapped] <- seqids[unmapped]
+            n_renamed <- n_renamed + sum(!unmapped)
+            n_unmapped <- n_unmapped + sum(unmapped)
+            lines[is_data] <- paste0(new, rest)
+        }
+        writeLines(lines, con_out)
+    }
+    if (verbose) {
+        message(sprintf(
+            "  Rewrote %d GFF3 records' seqids (%d unmapped passed through).",
+            n_renamed, n_unmapped
+        ))
+    }
+    invisible(out_path)
+}
+
+# Persist the full sequence-report mapping (canonical, refseq, genbank,
+# sequenceName, role, length) as a TSV at <groot>/chrom_aliases.tsv. Provides
+# a self-describing aliases table for downstream tooling and future hooks
+# into .compute_chrom_aliases.
+.write_chrom_aliases_tsv <- function(groot, seqrep, rename_map) {
+    df <- data.frame(
+        canonical        = unname(rename_map[seqrep$refseqAccession]),
+        refseqAccession  = seqrep$refseqAccession,
+        genbankAccession = seqrep$genbankAccession,
+        sequenceName     = seqrep$sequenceName,
+        chrName          = seqrep$chrName,
+        role             = seqrep$role,
+        length           = seqrep$length,
+        stringsAsFactors = FALSE
+    )
+    utils::write.table(
+        df, file.path(groot, "chrom_aliases.tsv"),
+        sep = "\t", quote = FALSE, row.names = FALSE
+    )
+    invisible(NULL)
+}
+
 .run_ncbi_backend <- function(name, recipe, path, annotations, format, verbose) {
     accession <- recipe$accession
+    chrom_naming <- recipe$chrom_naming %||% .NCBI_DEFAULT_CHROM_NAMING
     converter <- .gff3_to_genepred_resolve_or_install()
 
-    if (verbose) message(sprintf("NCBI backend: accession=%s -> %s", accession, path))
+    if (verbose) {
+        message(sprintf(
+            "NCBI backend: accession=%s -> %s (chrom_naming=%s)",
+            accession, path, chrom_naming
+        ))
+    }
 
     workdir <- tempfile("misha_ncbi_")
     dir.create(workdir, recursive = TRUE)
@@ -745,6 +946,10 @@
         pattern = "\\.gff(\\.gz)?$",
         recursive = TRUE, full.names = TRUE
     )
+    seqrep_files <- list.files(extract_dir,
+        pattern = "sequence_report\\.jsonl$",
+        recursive = TRUE, full.names = TRUE
+    )
 
     if (!length(fasta_files)) {
         stop(sprintf("No FASTA file found in NCBI Datasets payload for %s", accession), call. = FALSE)
@@ -754,11 +959,45 @@
         fasta_file <- .gunzip_to_file(fasta_file)
     }
 
+    # Build the rename map from the sequence report. If absent (rare for
+    # modern assemblies), fall back to "accession" naming with a warning.
+    seqrep <- NULL
+    rename_map <- NULL
+    if (length(seqrep_files)) {
+        seqrep <- .parse_ncbi_sequence_report(seqrep_files[[1]])
+        rename_map <- .build_ncbi_rename_map(seqrep, chrom_naming)
+        if (verbose) {
+            message(sprintf(
+                "  Sequence report: %d contigs (%d assembled, %d other)",
+                nrow(seqrep),
+                sum(seqrep$role == "assembled-molecule"),
+                sum(seqrep$role != "assembled-molecule")
+            ))
+        }
+    } else if (chrom_naming != "accession") {
+        warning(sprintf(
+            "No sequence_report.jsonl in NCBI payload for %s; falling back to chrom_naming='accession'.",
+            accession
+        ), call. = FALSE)
+        chrom_naming <- "accession"
+    }
+
+    if (!is.null(rename_map) && chrom_naming != "accession") {
+        renamed_fasta <- file.path(workdir, "renamed.fna")
+        .rename_fasta_headers(fasta_file, renamed_fasta, rename_map, verbose = verbose)
+        fasta_file <- renamed_fasta
+    }
+
     genepred_file <- NULL
     if ("genes" %in% annotations && length(gff_files)) {
         gff_file <- gff_files[[1]]
         if (grepl("\\.gz$", gff_file)) {
             gff_file <- .gunzip_to_file(gff_file)
+        }
+        if (!is.null(rename_map) && chrom_naming != "accession") {
+            renamed_gff <- file.path(workdir, "renamed.gff")
+            .rename_gff3_seqids(gff_file, renamed_gff, rename_map, verbose = verbose)
+            gff_file <- renamed_gff
         }
         raw_genepred <- file.path(workdir, "annot.raw.genePred")
         if (verbose) message(sprintf("  Running gff3ToGenePred on %s", basename(gff_file)))
@@ -788,6 +1027,11 @@
     )
 
     gdb.init(path, rescan = TRUE)
+
+    if (!is.null(seqrep) && !is.null(rename_map)) {
+        .write_chrom_aliases_tsv(path, seqrep, rename_map)
+        if (verbose) message(sprintf("  Wrote chrom_aliases.tsv (%d rows).", nrow(seqrep)))
+    }
 
     if ("cpgIsland" %in% annotations) {
         warning("cpgIsland not available from NCBI Datasets; skipping.", call. = FALSE)
@@ -969,7 +1213,10 @@
 #'     the \code{gff3ToGenePred} binary, downloaded on demand to
 #'     \code{tools::R_user_dir("misha", "cache")} after user consent.
 #'     \code{rmsk}/\code{cpgIsland}/\code{cytoband} are not loaded for NCBI
-#'     assemblies in this version.}
+#'     assemblies in this version. Recipe field \code{chrom_naming} controls
+#'     how the FASTA contigs are named on disk (see "Chromosome naming"
+#'     below); the full sequence-report mapping is persisted at
+#'     \code{<groot>/chrom_aliases.tsv}.}
 #'   \item{\code{s3}}{Alias for \code{\link{gdb.create_genome}} (pre-baked
 #'     tarball).}
 #'   \item{\code{local}}{No download — \code{\link{gdb.init}} an existing
@@ -980,6 +1227,26 @@
 #' On success a \code{genome_info.yaml} file is written at the groot root,
 #' recording the source, recipe, and download time, and \code{\link{gdb.init}}
 #' is called on the new groot.
+#'
+#' \strong{Chromosome naming (NCBI backend).} The recipe field
+#' \code{chrom_naming} controls how the on-disk canonical contig names are
+#' chosen. NCBI ships its FASTAs/GFFs keyed by RefSeq accession (e.g.
+#' \code{NC_067374.1}); the sequence-report metadata maps these to friendlier
+#' names. Allowed values:
+#' \describe{
+#'   \item{\code{"sequence_name"} (default)}{NCBI's \code{chrName} for
+#'     assembled molecules (\code{1}, \code{2}, ..., \code{X}, \code{MT});
+#'     RefSeq accession for unplaced/unlocalized scaffolds. Misha's existing
+#'     \code{CHROM_ALIAS} mechanism then resolves \code{chr1 <-> 1} and
+#'     \code{chrM <-> M <-> MT} automatically.}
+#'   \item{\code{"ucsc"}}{UCSC-style names: \code{chr1}, \code{chr2}, ...,
+#'     \code{chrX}, \code{chrM}, \code{chrUn_<acc>v<n>} for unplaced.}
+#'   \item{\code{"accession"}}{Keep RefSeq accessions verbatim (no rename).}
+#' }
+#' If the NCBI payload lacks a sequence report, the build falls back to
+#' \code{"accession"} with a warning. The full mapping (canonical, RefSeq,
+#' GenBank, sequenceName, role) is written to
+#' \code{<groot>/chrom_aliases.tsv} for downstream tooling.
 #'
 #' @param name Genome name. Either a registry key (e.g. \code{"hg38"},
 #'   \code{"UM_NZW_1.0"}) or an NCBI accession (e.g. \code{"GCF_009806435.1"}).

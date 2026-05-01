@@ -12,6 +12,7 @@
 # Per-source required fields:
 #   ucsc:    assembly
 #   ncbi:    accession (must match ^GC[FA]_[0-9]+\.[0-9]+$)
+#            optional chrom_naming: sequence_name (default) | ucsc | accession
 #   s3:      assembly (mapped to gdb.create_genome())
 #   local:   path (existing groot)
 #   manual:  fasta (string or list); optional genes/genes_format/annots_file/

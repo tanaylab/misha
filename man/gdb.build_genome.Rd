@@ -67,7 +67,10 @@ accession.
     the \code{gff3ToGenePred} binary, downloaded on demand to
     \code{tools::R_user_dir("misha", "cache")} after user consent.
     \code{rmsk}/\code{cpgIsland}/\code{cytoband} are not loaded for NCBI
-    assemblies in this version.}
+    assemblies in this version. Recipe field \code{chrom_naming} controls
+    how the FASTA contigs are named on disk (see "Chromosome naming"
+    below); the full sequence-report mapping is persisted at
+    \code{<groot>/chrom_aliases.tsv}.}
   \item{\code{s3}}{Alias for \code{\link{gdb.create_genome}} (pre-baked
     tarball).}
   \item{\code{local}}{No download — \code{\link{gdb.init}} an existing
@@ -78,6 +81,26 @@ accession.
 On success a \code{genome_info.yaml} file is written at the groot root,
 recording the source, recipe, and download time, and \code{\link{gdb.init}}
 is called on the new groot.
+
+\strong{Chromosome naming (NCBI backend).} The recipe field
+\code{chrom_naming} controls how the on-disk canonical contig names are
+chosen. NCBI ships its FASTAs/GFFs keyed by RefSeq accession (e.g.
+\code{NC_067374.1}); the sequence-report metadata maps these to friendlier
+names. Allowed values:
+\describe{
+  \item{\code{"sequence_name"} (default)}{NCBI's \code{chrName} for
+    assembled molecules (\code{1}, \code{2}, ..., \code{X}, \code{MT});
+    RefSeq accession for unplaced/unlocalized scaffolds. Misha's existing
+    \code{CHROM_ALIAS} mechanism then resolves \code{chr1 <-> 1} and
+    \code{chrM <-> M <-> MT} automatically.}
+  \item{\code{"ucsc"}}{UCSC-style names: \code{chr1}, \code{chr2}, ...,
+    \code{chrX}, \code{chrM}, \code{chrUn_<acc>v<n>} for unplaced.}
+  \item{\code{"accession"}}{Keep RefSeq accessions verbatim (no rename).}
+}
+If the NCBI payload lacks a sequence report, the build falls back to
+\code{"accession"} with a warning. The full mapping (canonical, RefSeq,
+GenBank, sequenceName, role) is written to
+\code{<groot>/chrom_aliases.tsv} for downstream tooling.
 }
 \examples{
 \dontrun{
