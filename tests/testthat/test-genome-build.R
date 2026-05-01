@@ -561,7 +561,7 @@ test_that(".compute_chrom_aliases ignores TSV rows whose canonical is not among 
 
 test_that(".compute_chrom_aliases skips alias names that already exist (e.g. canonical itself)", {
     # If the TSV's refseqAccession happens to equal the canonical (e.g. when
-    # chrom_naming = 'accession'), don't overwrite it.
+    # chrom_naming = 'accession'), don't enter it as a self-mapping.
     g <- tempfile()
     dir.create(g)
     on.exit(unlink(g, recursive = TRUE))
@@ -573,11 +573,7 @@ test_that(".compute_chrom_aliases skips alias names that already exist (e.g. can
     expect_equal(unname(a[["NC_067374.1"]]), "NC_067374.1")
     expect_equal(unname(a[["CM028932.1"]]), "NC_067374.1")
     expect_equal(unname(a[["contig_2989"]]), "NC_067374.1")
-    # `1` is the chrName -> aliases to NC_067374.1.
     expect_equal(unname(a[["1"]]), "NC_067374.1")
-    # And chr1 falls out of the chr-prefix toggle on chrName.
-    # (chr-prefix pass only acts on canonical, so chr1 isn't auto-added here;
-    # that's fine — accession naming is the explicit opt-out path.)
 })
 
 # ---------------------------------------------------------------------------

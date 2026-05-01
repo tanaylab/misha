@@ -82,6 +82,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("ALLGENOME", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)
     assign("CHROM_ALIAS", NULL, envir = .misha)
+    .refresh_chrom_alias_env()
     assign("GTRACK_DATASET", NULL, envir = .misha)
     assign("GINTERVALS_DATASET", NULL, envir = .misha)
     assign("GDATASETS", character(0), envir = .misha)
@@ -182,7 +183,16 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
     assign("GROOT", groot, envir = .misha)
     assign("GWD", groot, envir = .misha)
-    assign("CHROM_ALIAS", alias_map, envir = .misha)
+    # Split the alias map: only the basic toggles (chr-prefix + MT) go into
+    # CHROM_ALIAS for the C++ side; the env mirror gets everything (including
+    # any TSV-derived NCBI/GenBank/sequenceName aliases) for the R-side
+    # .gchroms() to consult at query time.
+    n_basic <- attr(alias_map, "n_basic")
+    if (is.null(n_basic) || n_basic > length(alias_map)) n_basic <- length(alias_map)
+    cpp_map <- if (n_basic > 0L) alias_map[seq_len(n_basic)] else stats::setNames(character(0), character(0))
+    attr(cpp_map, "n_basic") <- NULL
+    assign("CHROM_ALIAS", cpp_map, envir = .misha)
+    .refresh_chrom_alias_env(full_alias_map = alias_map)
 
     # Check if database cache is dirty
     if (.gdb.cache_is_dirty(groot)) {
@@ -230,6 +240,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
                 assign("GROOT", NULL, envir = .misha)
                 assign("GWD", NULL, envir = .misha)
                 assign("CHROM_ALIAS", NULL, envir = .misha)
+                .refresh_chrom_alias_env()
                 assign("DB_IS_PER_CHROMOSOME", NULL, envir = .misha)
                 assign("GTRACK_DATASET", NULL, envir = .misha)
                 assign("GINTERVALS_DATASET", NULL, envir = .misha)

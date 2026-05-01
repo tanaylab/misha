@@ -111,6 +111,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
     tryCatch(
         {
             assign("CHROM_ALIAS", NULL, envir = .misha)
+            .refresh_chrom_alias_env()
             assign("DB_IS_PER_CHROMOSOME", FALSE, envir = .misha)
             dir.create(groot, showWarnings = FALSE, recursive = TRUE, mode = "0777")
             dir.create(paste(groot, "pssms", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
@@ -222,6 +223,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             assign("ALLGENOME", allgenome.old, envir = .misha)
             assign("GROOT", groot.old, envir = .misha)
             assign("CHROM_ALIAS", chrom_alias.old, envir = .misha)
+            .refresh_chrom_alias_env()
             assign("DB_IS_PER_CHROMOSOME", db_per_chromosome.old, envir = .misha)
             if (!success) {
                 unlink(groot, recursive = TRUE)

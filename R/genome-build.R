@@ -719,7 +719,7 @@
     invisible(NULL)
 }
 
-`%||%` <- function(a, b) if (is.null(a)) b else a
+# `%||%` is defined in db-core.R (shared utility).
 
 # ---------------------------------------------------------------------------
 # NCBI Datasets backend
