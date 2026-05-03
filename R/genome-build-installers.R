@@ -37,6 +37,16 @@
         return(invisible(NULL))
     }
     df$chrom <- factor(df$chrom, levels = chroms)
+    # Dotted set names map to filesystem subdirectories under tracks/.
+    # Create them if needed so gintervals.save() doesn't error on a fresh groot.
+    parts <- strsplit(name, ".", fixed = TRUE)[[1L]]
+    if (length(parts) > 1L) {
+        rel_dir <- do.call(file.path, as.list(parts[-length(parts)]))
+        abs_dir <- file.path(get("GROOT", envir = .misha), "tracks", rel_dir)
+        if (!dir.exists(abs_dir)) {
+            dir.create(abs_dir, recursive = TRUE, mode = "0755")
+        }
+    }
     gintervals.save(name, df)
     if (verbose) message(sprintf("  %s: saved %d intervals", name, nrow(df)))
     invisible(NULL)
