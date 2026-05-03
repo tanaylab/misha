@@ -1312,3 +1312,285 @@ gdb.install_gff3_converter <- function(force = FALSE) {
 gdb.install_gtf_converter <- function(force = FALSE) {
     invisible(.install_gtf_converter(force = force))
 }
+
+#' Install interval sets onto an existing groot
+#'
+#' Given an existing groot and a source recipe (or registry name, or accession),
+#' fetches the relevant annotation files and installs interval sets — one or
+#' more of \code{genes / rmsk / cgi / cytoband}.
+#'
+#' Decoupled from \code{\link{gdb.build_genome}} so that:
+#' \itemize{
+#'   \item users with a private FASTA build can layer canonical annotations onto it;
+#'   \item failed installs can be resumed without re-fetching the FASTA;
+#'   \item the same groot can host annotations from multiple sources under
+#'         different prefixes (e.g. \code{intervs.global.}, \code{intervs.repeats.}).
+#' }
+#'
+#' @param groot Path to a misha groot. \code{NULL} uses the active groot.
+#' @param source Either a registry name, a recipe \code{list}, or a bare
+#'   \code{GC[FA]_<digits>.<digits>} accession.
+#' @param sets Subset of \code{c("genes", "rmsk", "cgi", "cytoband")}.
+#' @param prefix Character scalar prepended verbatim to each set name. Include
+#'   the trailing dot if you want one (e.g. \code{"intervs.global."}).
+#' @param gene_sets Named character vector mapping
+#'   \code{c("tss", "exons", "utr3", "utr5")} to the on-disk set name. \code{NA}
+#'   value skips that role.
+#' @param gtf_priority Character vector ordering GTF source preference for
+#'   sources that ship multiple GTFs (currently \code{ucsc-hub}). First found wins.
+#' @param overwrite If \code{FALSE} (default), error on existing target sets.
+#'   If \code{TRUE}, remove existing sets before saving.
+#' @param registry Optional path to a registry YAML; overrides the resolution chain.
+#' @param verbose If \code{TRUE}, prints progress.
+#' @return Invisible \code{NULL}. Side effects: writes \code{.interv} files under
+#'   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
+#'   \code{<groot>/genome_info.yaml}, and re-initializes the active groot.
+#'
+#' @seealso \code{\link{gdb.build_genome}}, \code{\link{gdb.install_gtf_converter}}.
+#'
+#' @examples
+#' \dontrun{
+#' # Standalone install on an existing groot.
+#' gdb.install_intervals(
+#'     groot  = "/genomes/arctic_fox",
+#'     source = "GCA_004023825.1",
+#'     prefix = "intervs.global."
+#' )
+#'
+#' # Layered: private FASTA groot + intervals from a UCSC hub assembly.
+#' gdb.install_intervals(
+#'     groot  = "/genomes/my_private",
+#'     source = list(source = "ucsc-hub", accession = "GCF_009806435.1"),
+#'     sets   = c("genes", "rmsk")
+#' )
+#' }
+#' @export
+gdb.install_intervals <- function(groot,
+                                  source,
+                                  sets = c("genes", "rmsk", "cgi", "cytoband"),
+                                  prefix = "",
+                                  gene_sets = c(
+                                      tss = "tss", exons = "exons",
+                                      utr3 = "utr3", utr5 = "utr5"
+                                  ),
+                                  gtf_priority = c(
+                                      "ncbiRefSeq", "bestRefSeq",
+                                      "ensGene", "augustus", "xenoRefGene"
+                                  ),
+                                  overwrite = FALSE,
+                                  registry = NULL,
+                                  verbose = TRUE) {
+    sets <- match.arg(sets,
+        choices = c("genes", "rmsk", "cgi", "cytoband"),
+        several.ok = TRUE
+    )
+    if (!is.null(groot)) {
+        if (!dir.exists(groot) ||
+            !file.exists(file.path(groot, "chrom_sizes.txt"))) {
+            stop(sprintf(
+                "'%s' is not a misha groot (no chrom_sizes.txt). ",
+                groot
+            ), call. = FALSE)
+        }
+        gdb.init(groot, rescan = TRUE)
+    } else if (!exists("GROOT", envir = .misha)) {
+        stop("No active groot and no `groot` argument supplied.", call. = FALSE)
+    }
+    groot <- get("GROOT", envir = .misha)
+
+    # Resolve source: list -> use as recipe; string -> registry/pattern.
+    recipe <- if (is.list(source)) {
+        .normalize_recipe(source, "<arg>")
+        .validate_recipe(source, "<arg>")
+        source
+    } else if (is.character(source) && length(source) == 1L) {
+        res <- .resolve_genome(source, registry = registry)
+        if (verbose) {
+            message(sprintf(
+                "Resolved source '%s' from %s -> source=%s",
+                source, res$resolved_from, res$recipe$source
+            ))
+        }
+        res$recipe
+    } else {
+        stop("`source` must be a length-1 character or a recipe list.", call. = FALSE)
+    }
+
+    if (recipe$source %in% c("local", "s3")) {
+        stop(sprintf("source '%s' has no fetchable intervals.", recipe$source),
+            call. = FALSE
+        )
+    }
+
+    workdir <- tempfile("misha_install_intervals_")
+    dir.create(workdir, recursive = TRUE)
+    on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
+
+    fetcher <- switch(recipe$source,
+        ucsc = .ucsc_fetch_assets,
+        `ucsc-hub` = function(r, s, w, v) .hub_fetch_assets(r, s, w, gtf_priority, v),
+        ncbi = .ncbi_fetch_assets,
+        manual = .manual_fetch_assets,
+        stop(sprintf("No fetcher for source '%s'", recipe$source), call. = FALSE)
+    )
+    assets <- fetcher(recipe, sets, workdir, verbose)
+
+    # chromAlias: detect groot column and source columns; build translator closure.
+    groot_chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    alias_df <- assets$chrom_alias$df
+    groot_col <- if (!is.null(alias_df)) .detect_alias_column(alias_df, groot_chroms) else NA_character_
+    if (!is.null(alias_df) && is.na(groot_col)) {
+        scores <- attr(groot_col, "scores")
+        stop(sprintf(
+            "chromAlias has no column with 100%% coverage of groot chroms.\nPer-column overlap counts: %s\nFirst 5 unmapped groot chroms: %s",
+            paste(sprintf("%s=%d/%d", names(scores), scores, length(groot_chroms)), collapse = ", "),
+            paste(utils::head(setdiff(groot_chroms, unlist(alias_df, use.names = FALSE)), 5L),
+                collapse = ", "
+            )
+        ), call. = FALSE)
+    }
+    if (!is.null(alias_df)) {
+        .merge_chrom_aliases_tsv(groot, alias_df, groot_col, source_label = recipe$source)
+        gdb.init(groot, rescan = TRUE) # reload CHROM_ALIAS
+    }
+
+    # Helper: per-asset translator. Detects the asset's own source column, asserts 100%.
+    make_translator <- function(asset_chroms, asset_label) {
+        if (is.null(alias_df)) {
+            return(NULL)
+        }
+        src_col <- .detect_alias_column(alias_df, unique(asset_chroms))
+        if (is.na(src_col)) {
+            scores <- attr(src_col, "scores")
+            stop(sprintf(
+                "chromAlias has no column with 100%% coverage of distinct chroms in %s.\nPer-column overlap counts: %s\nFirst 5 unmapped chroms: %s",
+                asset_label,
+                paste(sprintf("%s=%d/%d", names(scores), scores, length(unique(asset_chroms))),
+                    collapse = ", "
+                ),
+                paste(
+                    utils::head(setdiff(
+                        unique(asset_chroms),
+                        unlist(alias_df, use.names = FALSE)
+                    ), 5L),
+                    collapse = ", "
+                )
+            ), call. = FALSE)
+        }
+        function(rows, chrom_col) {
+            .translate_chroms(rows, chrom_col, alias_df, src_col, groot_col)
+        }
+    }
+
+    # Genes.
+    if ("genes" %in% sets && !is.null(assets$genes)) {
+        # Sample first ~100 chroms from genePred/GTF/GFF for translator detection.
+        chroms <- .sample_chroms_from_file(assets$genes$file, assets$genes$format)
+        translator <- make_translator(chroms, "genes file")
+        asset <- c(assets$genes, list(translate = translator))
+        .install_genes_set(asset,
+            prefix = prefix, gene_sets = gene_sets,
+            overwrite = overwrite, verbose = verbose
+        )
+    }
+    # rmsk.
+    if ("rmsk" %in% sets && !is.null(assets$rmsk)) {
+        df <- if (assets$rmsk$format == "rmsk-out") {
+            .parse_rm_out(assets$rmsk$file, verbose)
+        } else {
+            .parse_ucsc_rmsk(assets$rmsk$file)
+        }
+        if (!is.null(alias_df)) {
+            translator <- make_translator(unique(df$chrom), "rmsk")
+            df <- translator(df, "chrom")
+        }
+        .install_rmsk_set(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
+    }
+    # cgi.
+    if ("cgi" %in% sets && !is.null(assets$cgi)) {
+        df <- .parse_ucsc_cpg_island(assets$cgi$file)
+        if (!is.null(alias_df)) {
+            translator <- make_translator(unique(df$chrom), "cgi")
+            df <- translator(df, "chrom")
+        }
+        .install_cgi_set(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
+    }
+    # cytoband.
+    if ("cytoband" %in% sets && !is.null(assets$cytoband)) {
+        df <- .parse_ucsc_cytoband(assets$cytoband$file)
+        if (!is.null(alias_df)) {
+            translator <- make_translator(unique(df$chrom), "cytoband")
+            df <- translator(df, "chrom")
+        }
+        .install_cytoband_set(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
+    }
+
+    # Provenance: append to genome_info.yaml.
+    .append_tracks_to_genome_info(groot, recipe, sets, prefix)
+
+    # Final reload + summary.
+    gdb.init(groot, rescan = TRUE)
+    if (verbose) .install_intervals_summary(groot, recipe, sets, prefix)
+    invisible(NULL)
+}
+
+# Sample distinct chroms from a genePred/GTF/GFF for translator detection.
+# Reads up to 50,000 lines.
+.sample_chroms_from_file <- function(file, format) {
+    con <- if (grepl("\\.gz$", file)) gzfile(file, "rt") else file(file, "rt")
+    on.exit(close(con), add = TRUE)
+    chroms <- character(0)
+    chunk_size <- 50000L
+    repeat {
+        lines <- readLines(con, n = chunk_size, warn = FALSE)
+        if (!length(lines)) break
+        # genePred: chrom in column 2; GTF/GFF: column 1.
+        col_idx <- if (format == "genepred") 2L else 1L
+        # Skip comment lines.
+        lines <- lines[!startsWith(lines, "#") & nzchar(lines)]
+        if (!length(lines)) next
+        f <- strsplit(lines, "\t", fixed = TRUE)
+        chroms <- unique(c(
+            chroms,
+            vapply(
+                f, function(x) if (length(x) >= col_idx) x[[col_idx]] else NA_character_,
+                character(1)
+            )
+        ))
+        if (length(chroms) > 5000L) break # plenty for detection
+    }
+    chroms[!is.na(chroms) & nzchar(chroms)]
+}
+
+.install_intervals_summary <- function(groot, recipe, sets, prefix) {
+    message("\ngdb.install_intervals: completed")
+    message(sprintf("  groot:   %s", groot))
+    message(sprintf(
+        "  source:  %s%s", recipe$source,
+        if (!is.null(recipe$accession)) {
+            sprintf(" (%s)", recipe$accession)
+        } else if (!is.null(recipe$assembly)) {
+            sprintf(" (%s)", recipe$assembly)
+        } else {
+            ""
+        }
+    ))
+    message(sprintf("  prefix:  %s", if (nzchar(prefix)) sprintf("\"%s\"", prefix) else "(none)"))
+    message(sprintf("  sets:    %s", paste(sets, collapse = ", ")))
+}
+
+.append_tracks_to_genome_info <- function(groot, recipe, sets, prefix) {
+    info_path <- file.path(groot, "genome_info.yaml")
+    info <- if (file.exists(info_path)) yaml::read_yaml(info_path) else list()
+    if (is.null(info$tracks)) info$tracks <- list()
+    ts <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+    for (s in sets) {
+        info$tracks[[length(info$tracks) + 1L]] <- list(
+            set          = paste0(prefix, s),
+            source       = recipe$source,
+            installed_at = ts
+        )
+    }
+    yaml::write_yaml(info, info_path)
+    invisible(NULL)
+}
