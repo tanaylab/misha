@@ -19,3 +19,34 @@ test_that(".parse_ucsc_chromalias handles gzipped input", {
     expect_equal(nrow(df), 4L)
     expect_equal(df$ucsc[[1L]], "chr1")
 })
+
+test_that(".detect_alias_column returns the column with 100% coverage", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    df <- .parse_ucsc_chromalias(f)
+    expect_equal(.detect_alias_column(df, c("chr1", "chr2", "chr3", "chrM")), "ucsc")
+    expect_equal(.detect_alias_column(df, c("1", "2", "3", "MT")), "assembly")
+    expect_equal(.detect_alias_column(
+        df,
+        c("NC_067374.1", "NC_067375.1", "NC_067376.1", "NC_067377.1")
+    ), "refseq")
+})
+
+test_that(".detect_alias_column returns NA when no column has 100% coverage", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    df <- .parse_ucsc_chromalias(f)
+    res <- .detect_alias_column(df, c("chr1", "chr2", "chr3", "chrM", "chrX")) # chrX absent
+    expect_true(is.na(res))
+    expect_true(!is.null(attr(res, "scores")))
+    expect_equal(attr(res, "scores")[["ucsc"]], 4L) # 4 of 5 hits
+})
+
+test_that(".detect_alias_column ties broken by column order (first wins)", {
+    df <- data.frame(a = c("x", "y"), b = c("x", "y"), stringsAsFactors = FALSE)
+    expect_equal(.detect_alias_column(df, c("x", "y")), "a")
+})
+
+test_that(".detect_alias_column on empty target errors", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    df <- .parse_ucsc_chromalias(f)
+    expect_error(.detect_alias_column(df, character(0)), "empty target")
+})

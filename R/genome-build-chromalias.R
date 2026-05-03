@@ -41,3 +41,25 @@
     names(df) <- schemes
     df
 }
+
+# Returns the (unique) column whose values contain *every* target_chrom.
+# Ties broken by column order. NA with attributes(scores=, overlap=) when no
+# column achieves 100% coverage — caller produces the diagnostic.
+.detect_alias_column <- function(alias_df, target_chroms) {
+    if (!length(target_chroms)) {
+        stop(".detect_alias_column called with empty target chrom set", call. = FALSE)
+    }
+    scores <- vapply(
+        alias_df,
+        function(col) length(intersect(col, target_chroms)),
+        integer(1)
+    )
+    full <- names(alias_df)[scores == length(target_chroms)]
+    if (!length(full)) {
+        return(structure(NA_character_,
+            scores = scores,
+            overlap = max(scores) / length(target_chroms)
+        ))
+    }
+    full[[1L]]
+}
