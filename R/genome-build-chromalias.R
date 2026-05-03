@@ -82,7 +82,7 @@
 # column of alias_df to the canonical name in groot_col. Existing rows are
 # preserved; new rows are added; conflicts (existing alias mapping to a
 # different canonical) are warned and skipped.
-.merge_chrom_aliases_tsv <- function(groot, alias_df, groot_col, source_label = "build") {
+.merge_chrom_aliases_tsv <- function(groot, alias_df, groot_col) {
     out_path <- file.path(groot, "chrom_aliases.tsv")
     existing <- if (file.exists(out_path)) {
         utils::read.table(out_path,

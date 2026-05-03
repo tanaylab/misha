@@ -998,7 +998,7 @@ gdb.install_intervals <- function(groot,
         ), call. = FALSE)
     }
     if (!is.null(alias_df)) {
-        .merge_chrom_aliases_tsv(groot, alias_df, groot_col, source_label = recipe$source)
+        .merge_chrom_aliases_tsv(groot, alias_df, groot_col)
         gdb.init(groot, rescan = TRUE) # reload CHROM_ALIAS
     }
 
