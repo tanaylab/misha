@@ -141,3 +141,74 @@ test_that(".install_cytoband_set saves cytoband", {
     .install_cytoband_set(df, prefix = "", overwrite = FALSE, verbose = FALSE)
     expect_true(gintervals.exists("cytoband"))
 })
+
+test_that(".install_genes_set with default gene_sets produces tss/exons/utr3/utr5", {
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    # gintervals.import_genes needs <groot>/downloads.
+    dir.create(file.path(groot, "downloads"), showWarnings = FALSE)
+    gdb.init(groot, rescan = TRUE)
+
+    # Minimal 12-col genePred: name chrom strand txStart txEnd cdsStart cdsEnd
+    #                          exonCount exonStarts exonEnds score name2
+    gp <- tempfile(fileext = ".genePred")
+    writeLines(c(
+        "tx1\tchr1\t+\t100\t500\t150\t450\t1\t100,\t500,\t0\tgene1"
+    ), gp)
+
+    .install_genes_set(
+        list(file = gp, format = "genepred"),
+        prefix = "",
+        gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
+        overwrite = FALSE, verbose = FALSE
+    )
+    expect_true(gintervals.exists("tss"))
+    expect_true(gintervals.exists("exons"))
+    expect_true(gintervals.exists("utr3"))
+    expect_true(gintervals.exists("utr5"))
+})
+
+test_that(".install_genes_set with NA in gene_sets skips that role", {
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    dir.create(file.path(groot, "downloads"), showWarnings = FALSE)
+    gdb.init(groot, rescan = TRUE)
+
+    gp <- tempfile(fileext = ".genePred")
+    writeLines(c(
+        "tx1\tchr1\t+\t100\t500\t150\t450\t1\t100,\t500,\t0\tgene1"
+    ), gp)
+
+    .install_genes_set(
+        list(file = gp, format = "genepred"),
+        prefix = "",
+        gene_sets = c(tss = "tss", exons = "exon", utr3 = NA, utr5 = NA),
+        overwrite = FALSE, verbose = FALSE
+    )
+    expect_true(gintervals.exists("tss"))
+    expect_true(gintervals.exists("exon")) # renamed
+    expect_false(gintervals.exists("exons")) # not present
+    expect_false(gintervals.exists("utr3"))
+    expect_false(gintervals.exists("utr5"))
+})
+
+test_that(".install_genes_set creates intermediate dirs for dotted prefix", {
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    dir.create(file.path(groot, "downloads"), showWarnings = FALSE)
+    gdb.init(groot, rescan = TRUE)
+
+    gp <- tempfile(fileext = ".genePred")
+    writeLines(c(
+        "tx1\tchr1\t+\t100\t500\t150\t450\t1\t100,\t500,\t0\tgene1"
+    ), gp)
+
+    .install_genes_set(
+        list(file = gp, format = "genepred"),
+        prefix = "intervs.global.",
+        gene_sets = c(tss = "tss", exons = "exon", utr3 = NA, utr5 = NA),
+        overwrite = FALSE, verbose = FALSE
+    )
+    expect_true(file.exists(file.path(.misha$GROOT, "tracks/intervs/global/tss.interv")))
+    expect_true(file.exists(file.path(.misha$GROOT, "tracks/intervs/global/exon.interv")))
+})
