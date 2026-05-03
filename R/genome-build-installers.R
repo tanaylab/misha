@@ -47,3 +47,38 @@
 .save_post_build_intervals <- function(intervals_set_name, df, verbose = TRUE) {
     .save_intervals(intervals_set_name, df, overwrite = FALSE, verbose = verbose)
 }
+
+# Save the combined `<prefix>rmsk` and a `<prefix>rmsk_<class>` per unique class.
+# Class normalization: lowercase; trailing '?' -> '_qmark'.
+# df must already be chrom-translated and contain columns:
+#   chrom start end strand name class family
+.install_rmsk_set <- function(df, prefix = "", overwrite = FALSE, verbose = TRUE) {
+    cols <- c("chrom", "start", "end", "strand", "name", "class", "family")
+    if (!all(cols %in% names(df))) {
+        stop(sprintf(
+            ".install_rmsk_set: df missing columns: %s",
+            paste(setdiff(cols, names(df)), collapse = ", ")
+        ), call. = FALSE)
+    }
+    df <- df[, cols, drop = FALSE]
+
+    # Bump big-set option for the duration; restore on exit.
+    old_big <- getOption("gbig.intervals.size")
+    options(gbig.intervals.size = max(if (is.null(old_big)) 0 else old_big, 1e9))
+    on.exit(options(gbig.intervals.size = old_big), add = TRUE)
+
+    .save_intervals(paste0(prefix, "rmsk"), df,
+        overwrite = overwrite, verbose = verbose
+    )
+
+    classes <- unique(df$class)
+    classes <- classes[!is.na(classes) & nzchar(classes)]
+    for (cls in classes) {
+        sub <- df[!is.na(df$class) & df$class == cls, , drop = FALSE]
+        suffix <- gsub("\\?$", "_qmark", tolower(cls))
+        .save_intervals(sprintf("%srmsk_%s", prefix, suffix), sub,
+            overwrite = overwrite, verbose = verbose
+        )
+    }
+    invisible(NULL)
+}
