@@ -245,3 +245,44 @@
     }
     out
 }
+
+# Manual fetcher: takes the recipe URLs verbatim, downloads them, returns
+# uniform asset shape. Used by the manual source backend.
+# Note: %||% is defined in R/db-core.R (shared utility).
+.manual_fetch_assets <- function(recipe, sets, workdir, verbose = TRUE) {
+    out <- list(chrom_alias = NULL)
+
+    if ("genes" %in% sets && !is.null(recipe$genes)) {
+        local <- file.path(workdir, "genes_input")
+        .download_to(recipe$genes, local, verbose = verbose)
+        if (grepl("\\.gz$", recipe$genes)) local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
+        fmt <- recipe$genes_format %||% "genepred"
+        if (!fmt %in% c("genepred", "gtf", "gff3")) {
+            stop(sprintf(
+                "Unsupported genes_format '%s'. Supported: genepred, gtf, gff3.",
+                fmt
+            ), call. = FALSE)
+        }
+        out$genes <- list(file = local, format = fmt, gtf_source = "manual")
+    }
+    if ("rmsk" %in% sets && !is.null(recipe$rmsk)) {
+        local <- file.path(workdir, "rmsk_input")
+        .download_to(recipe$rmsk, local, verbose = verbose)
+        if (grepl("\\.gz$", recipe$rmsk)) local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
+        # Per recipe schema: only UCSC 17-col format supported in manual.
+        out$rmsk <- list(file = local, format = "rmsk-ucsc-17col")
+    }
+    if ("cgi" %in% sets && !is.null(recipe$cgi)) {
+        local <- file.path(workdir, "cgi_input")
+        .download_to(recipe$cgi, local, verbose = verbose)
+        if (grepl("\\.gz$", recipe$cgi)) local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
+        out$cgi <- list(file = local, format = "ucsc-cpg-11col")
+    }
+    if ("cytoband" %in% sets && !is.null(recipe$cytoband)) {
+        local <- file.path(workdir, "cytoband_input")
+        .download_to(recipe$cytoband, local, verbose = verbose)
+        if (grepl("\\.gz$", recipe$cytoband)) local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
+        out$cytoband <- list(file = local, format = "ucsc-cytoband-5col")
+    }
+    out
+}
