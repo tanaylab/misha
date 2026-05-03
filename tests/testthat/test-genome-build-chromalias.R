@@ -1,0 +1,21 @@
+test_that(".parse_ucsc_chromalias reads header with leading # and returns one column per scheme", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    df <- .parse_ucsc_chromalias(f)
+    expect_named(df, c("ucsc", "assembly", "genbank", "refseq"))
+    expect_equal(nrow(df), 4L)
+    expect_equal(df$ucsc, c("chr1", "chr2", "chr3", "chrM"))
+    expect_equal(df$refseq, c("NC_067374.1", "NC_067375.1", "NC_067376.1", "NC_067377.1"))
+})
+
+test_that(".parse_ucsc_chromalias handles gzipped input", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    gz <- tempfile(fileext = ".txt.gz")
+    on.exit(unlink(gz))
+    src <- readBin(f, raw(), n = file.info(f)$size)
+    con <- gzfile(gz, "wb")
+    writeBin(src, con)
+    close(con)
+    df <- .parse_ucsc_chromalias(gz)
+    expect_equal(nrow(df), 4L)
+    expect_equal(df$ucsc[[1L]], "chr1")
+})

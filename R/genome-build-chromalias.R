@@ -1,2 +1,43 @@
 # R/genome-build-chromalias.R
 # Source-agnostic chromosome-alias parsing, column detection, and translation.
+
+# Parse a UCSC chromAlias.txt(.gz). Header line begins with '# '; remaining lines
+# are tab-separated, one row per contig, one column per naming scheme.
+# Returns a data.frame with one named character column per scheme.
+.parse_ucsc_chromalias <- function(path) {
+    if (!file.exists(path)) {
+        stop(sprintf("chromAlias file does not exist: %s", path), call. = FALSE)
+    }
+    con <- if (grepl("\\.gz$", path)) gzfile(path, "rt") else file(path, "rt")
+    on.exit(close(con), add = TRUE)
+    # First non-empty line is the header (starts with '#').
+    header_line <- ""
+    repeat {
+        l <- readLines(con, n = 1L, warn = FALSE)
+        if (!length(l)) {
+            stop(sprintf("chromAlias file %s is empty", path), call. = FALSE)
+        }
+        if (nzchar(l)) {
+            header_line <- l
+            break
+        }
+    }
+    schemes <- strsplit(sub("^#\\s*", "", header_line), "\t", fixed = TRUE)[[1L]]
+    schemes <- trimws(schemes)
+    body <- readLines(con, warn = FALSE)
+    body <- body[nzchar(body)]
+    fields <- strsplit(body, "\t", fixed = TRUE)
+    n_cols <- length(schemes)
+    short <- vapply(fields, length, integer(1)) < n_cols
+    if (any(short)) {
+        # Pad short rows with empty strings so all rows have n_cols entries.
+        fields[short] <- lapply(
+            fields[short],
+            function(x) c(x, rep("", n_cols - length(x)))
+        )
+    }
+    mat <- do.call(rbind, lapply(fields, `[`, seq_len(n_cols)))
+    df <- as.data.frame(mat, stringsAsFactors = FALSE)
+    names(df) <- schemes
+    df
+}
