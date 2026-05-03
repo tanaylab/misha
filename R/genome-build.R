@@ -1301,3 +1301,23 @@ gdb.genome_info <- function(name, registry = NULL) {
 gdb.install_gff3_converter <- function(force = FALSE) {
     invisible(.install_gff3_converter(force = force))
 }
+
+#' Pre-install UCSC's gtfToGenePred binary
+#'
+#' Mirrors \code{\link{gdb.install_gff3_converter}}. Required for the
+#' \code{ucsc-hub} backend's \code{genes} set (UCSC mammal hubs ship GTFs).
+#'
+#' Override the binary location by setting environment variable
+#' \code{MISHA_GTF_TO_GENEPRED}.
+#'
+#' @param force If \code{TRUE}, skip consent prompt and re-download even if cached.
+#' @return The cache path (invisibly).
+#' @examples
+#' \dontrun{
+#' gdb.install_gtf_converter()
+#' Sys.setenv(MISHA_GTF_TO_GENEPRED = "/path/to/your/gtfToGenePred")
+#' }
+#' @export
+gdb.install_gtf_converter <- function(force = FALSE) {
+    invisible(.install_gtf_converter(force = force))
+}

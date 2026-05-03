@@ -142,3 +142,100 @@
     }
     .install_gff3_converter(force = force_install)
 }
+
+# ---------------------------------------------------------------------------
+# gtfToGenePred binary management
+# ---------------------------------------------------------------------------
+
+# UCSC gtfToGenePred binary URLs (no version tag — UCSC overwrites in place).
+# SHAs pinned at implementation time (2026-05-03); a UCSC rebuild will trigger
+# an integrity error pointing users at MISHA_GTF_TO_GENEPRED.
+.GTF_TO_GENEPRED_URLS <- list(
+    linux_x86_64 = "https://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/gtfToGenePred",
+    macos_x86_64 = "https://hgdownload.soe.ucsc.edu/admin/exe/macOSX.x86_64/gtfToGenePred",
+    macos_arm64  = "https://hgdownload.soe.ucsc.edu/admin/exe/macOSX.arm64/gtfToGenePred"
+)
+
+.GTF_TO_GENEPRED_SHA256 <- list(
+    linux_x86_64 = "17932c3b0deb755e961a3f2cfbfef995113f770b334ff90f6359e860e2d3f949",
+    macos_x86_64 = "eff2fb6e0bae40f0453ce79b1d751e32fc43cfa3632c15e89ca2735a2788ccb3",
+    macos_arm64  = "d0da218eef522c8de3c7f05f98ed0946e3eb864413e20c9415d8ad139bb1a478"
+)
+
+.GTF_TO_GENEPRED_ENV <- "MISHA_GTF_TO_GENEPRED"
+
+.gtf_to_genepred_cache_path <- function() {
+    file.path(.gff3_to_genepred_cache_dir(), "gtfToGenePred")
+}
+
+# Returns absolute path to a usable gtfToGenePred binary, or NULL if none
+# is available. Never downloads — caller decides whether to install.
+.gtf_to_genepred_path <- function() {
+    env <- Sys.getenv(.GTF_TO_GENEPRED_ENV, unset = "")
+    if (nzchar(env)) {
+        if (!file.exists(env)) {
+            stop(sprintf("%s points at non-existent file: %s", .GTF_TO_GENEPRED_ENV, env), call. = FALSE)
+        }
+        return(normalizePath(env, mustWork = TRUE))
+    }
+    cached <- .gtf_to_genepred_cache_path()
+    if (!file.exists(cached)) {
+        return(NULL)
+    }
+    arch <- .detect_arch()
+    expected_sha <- .GTF_TO_GENEPRED_SHA256[[arch]]
+    actual_sha <- digest::digest(file = cached, algo = "sha256")
+    if (!identical(actual_sha, expected_sha)) {
+        return(NULL) # Caller will re-prompt.
+    }
+    cached
+}
+
+# Install (download + verify + cache) the binary. Returns the cache path.
+# Errors if user declines or session is non-interactive.
+.install_gtf_converter <- function(force = FALSE) {
+    arch <- .detect_arch()
+    url <- .GTF_TO_GENEPRED_URLS[[arch]]
+    expected_sha <- .GTF_TO_GENEPRED_SHA256[[arch]]
+    cache_dir <- .gff3_to_genepred_cache_dir()
+    cache_path <- .gtf_to_genepred_cache_path()
+
+    if (!force) {
+        message(sprintf("misha needs UCSC's gtfToGenePred binary (%s) to import hub GTFs.", arch))
+        message(sprintf("  source: %s", url))
+        message(sprintf("  cache:  %s", cache_path))
+        if (!.prompt_yes_no("Download now?")) {
+            stop(sprintf(
+                "Cannot proceed without gtfToGenePred. Set %s to a binary you provide, or call gdb.install_gtf_converter(force = TRUE).",
+                .GTF_TO_GENEPRED_ENV
+            ), call. = FALSE)
+        }
+    }
+
+    dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE, mode = "0755")
+    tmp <- tempfile(tmpdir = cache_dir, fileext = ".part")
+    on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
+    utils::download.file(url, tmp, mode = "wb", quiet = FALSE)
+
+    actual_sha <- digest::digest(file = tmp, algo = "sha256")
+    if (!identical(actual_sha, expected_sha)) {
+        stop(sprintf(
+            "gtfToGenePred binary integrity check failed.\n  expected: %s\n  got:      %s\nUCSC may have published a new build. Set %s to override, or update misha.",
+            expected_sha, actual_sha, .GTF_TO_GENEPRED_ENV
+        ), call. = FALSE)
+    }
+
+    file.rename(tmp, cache_path)
+    Sys.chmod(cache_path, mode = "0755")
+    message(sprintf("Installed gtfToGenePred to %s", cache_path))
+    cache_path
+}
+
+# Resolve a path, installing if needed (with consent).
+.gtf_to_genepred_resolve_or_install <- function(force_install = FALSE) {
+    p <- .gtf_to_genepred_path()
+    if (!is.null(p) && !force_install) {
+        return(p)
+    }
+    .install_gtf_converter(force = force_install)
+}
