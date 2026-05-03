@@ -8,125 +8,63 @@ gdb.build_genome(
   name,
   path = name,
   registry = NULL,
-  annotations = c("genes", "rmsk", "cpgIsland", "cytoband"),
+  sets = c("genes", "rmsk", "cgi", "cytoband"),
+  prefix = "",
+  gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
+  gtf_priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene"),
   format = NULL,
   verbose = TRUE
 )
 }
 \arguments{
-\item{name}{Genome name. Either a registry key (e.g. \code{"hg38"},
-\code{"UM_NZW_1.0"}) or an NCBI accession (e.g. \code{"GCF_009806435.1"}).}
+\item{name}{Genome name (registry key, alias, or \code{GC[FA]_*} accession).}
 
-\item{path}{Output directory for the new groot. Must not exist.}
+\item{path}{Output directory; must not exist.}
 
-\item{registry}{Optional path to a YAML registry file. Overrides the
-resolution chain.}
+\item{registry}{Optional path to an explicit registry YAML.}
 
-\item{annotations}{Character vector; subset of
-\code{c("genes","rmsk","cpgIsland","cytoband")}. Annotations not
-available from the chosen source emit a warning and are skipped.}
+\item{sets}{Subset of \code{c("genes", "rmsk", "cgi", "cytoband")}.
+Empty vector \code{character(0)} = sequence-only build.}
 
-\item{format}{Database format: \code{"indexed"} (default) or
-\code{"per-chromosome"}. \code{NULL} uses
+\item{prefix}{Character scalar prepended to set names (see
+\code{\link{gdb.install_intervals}}).}
+
+\item{gene_sets}{Named character vector mapping the four
+\code{gintervals.import_genes()} roles to on-disk set names; \code{NA} skips
+a role.}
+
+\item{gtf_priority}{Character vector ordering GTF source preference.}
+
+\item{format}{\code{"indexed"} or \code{"per-chromosome"}; \code{NULL} =>
 \code{getOption("gmulticontig.indexed_format", TRUE)}.}
 
-\item{verbose}{If \code{TRUE}, prints progress messages.}
+\item{verbose}{If \code{TRUE}, prints progress.}
 }
 \value{
-None; called for side effects (creates groot, then
-  \code{gdb.init}s it).
+None (invisible \code{NULL}).
 }
 \description{
-Builds a misha genomic database for a named assembly by downloading FASTA
-and (optionally) gene annotations, repeats, CpG islands, and cytobands from
-UCSC golden path or NCBI Datasets, then dispatching to \code{\link{gdb.create}}.
+Builds a misha genomic database for a named assembly. Resolves the name
+through the registry chain (or pattern-fallback for \code{GC[FA]_*}
+accessions), downloads the FASTA, calls \code{\link{gdb.create}} to build
+the seq-only groot, then dispatches to \code{\link{gdb.install_intervals}}
+for the requested sets.
 }
 \details{
-Compared to \code{\link{gdb.create_genome}} (which downloads a pre-baked
-tarball from S3), \code{gdb.build_genome} builds from upstream sources at
-call time and supports any UCSC golden-path assembly or any NCBI assembly
-accession.
-
-\strong{Name resolution.} \code{name} is resolved through a chain:
-\enumerate{
-  \item the \code{registry} argument, if given;
-  \item \code{getOption("misha.genome_registry")};
-  \item a project-local \code{misha.yaml} (walked up to git root);
-  \item the package's built-in \code{inst/genomes.yaml};
-  \item if \code{name} matches \code{GC[FA]_<digits>.<digits>}, it is
-    synthesized as \code{\{source: ncbi, accession: <name>\}}.
-}
-
-\strong{Backends.}
-\describe{
-  \item{\code{ucsc}}{Golden path. Pulls
-    \code{ncbiRefSeq.txt.gz} (genes, RefSeq), \code{ncbiRefSeqLink.txt.gz}
-    (gene annotations), \code{rmsk.txt.gz}, \code{cpgIslandExt.txt.gz},
-    \code{cytoBandIdeo.txt.gz} as requested.}
-  \item{\code{ncbi}}{NCBI Datasets API. FASTA and GFF3 (RefSeq). Requires
-    the \code{gff3ToGenePred} binary, downloaded on demand to
-    \code{tools::R_user_dir("misha", "cache")} after user consent.
-    \code{rmsk}/\code{cpgIsland}/\code{cytoband} are not loaded for NCBI
-    assemblies in this version. Recipe field \code{chrom_naming} controls
-    how the FASTA contigs are named on disk (see "Chromosome naming"
-    below); the full sequence-report mapping is persisted at
-    \code{<groot>/chrom_aliases.tsv}.}
-  \item{\code{s3}}{Alias for \code{\link{gdb.create_genome}} (pre-baked
-    tarball).}
-  \item{\code{local}}{No download — \code{\link{gdb.init}} an existing
-    groot at the registry-specified path.}
-  \item{\code{manual}}{Use registry-supplied URLs verbatim.}
-}
-
-On success a \code{genome_info.yaml} file is written at the groot root,
-recording the source, recipe, and download time, and \code{\link{gdb.init}}
-is called on the new groot.
-
-\strong{Chromosome naming (NCBI backend).} The recipe field
-\code{chrom_naming} controls how the on-disk canonical contig names are
-chosen. NCBI ships its FASTAs/GFFs keyed by RefSeq accession (e.g.
-\code{NC_067374.1}); the sequence-report metadata maps these to friendlier
-names. Allowed values:
-\describe{
-  \item{\code{"sequence_name"} (default)}{NCBI's \code{chrName} for
-    assembled molecules (\code{1}, \code{2}, ..., \code{X}, \code{MT});
-    RefSeq accession for unplaced/unlocalized scaffolds. Misha's existing
-    \code{CHROM_ALIAS} mechanism then resolves \code{chr1 <-> 1} and
-    \code{chrM <-> M <-> MT} automatically.}
-  \item{\code{"ucsc"}}{UCSC-style names: \code{chr1}, \code{chr2}, ...,
-    \code{chrX}, \code{chrM}, \code{chrUn_<acc>v<n>} for unplaced.}
-  \item{\code{"accession"}}{Keep RefSeq accessions verbatim (no rename).}
-}
-If the NCBI payload lacks a sequence report, the build falls back to
-\code{"accession"} with a warning. The full mapping (canonical, RefSeq,
-GenBank, sequenceName, role) is written to
-\code{<groot>/chrom_aliases.tsv} for downstream tooling.
-
-\strong{Alias loading.} On every \code{\link{gdb.init}}, if a
-\code{chrom_aliases.tsv} is present at the groot, its
-\code{refseqAccession} / \code{genbankAccession} / \code{sequenceName} /
-\code{chrName} columns are added to \code{.misha$CHROM_ALIAS} as aliases
-pointing at the canonical contig name. This makes
-\code{gintervals("NC_067374.1", ...)},
-\code{gintervals("CM028932.1", ...)}, and
-\code{gintervals("contig_2989", ...)} all resolve to the same canonical
-chromosome as \code{gintervals("chr1", ...)} or \code{gintervals("1", ...)}.
+For details on resolution, sources, sets, and chromosome-alias handling,
+see \code{\link{gdb.install_intervals}}.
 }
 \examples{
 \dontrun{
-# Standard UCSC assembly (whitelisted in inst/genomes.yaml)
 gdb.build_genome("hg38", path = "~/genomes/hg38")
-
-# Any NCBI assembly by accession
-gdb.build_genome("GCF_009806435.1", path = "~/genomes/UM_NZW_1.0")
-
-# Sequence-only build (no gene annotation tracks)
-gdb.build_genome("dm6", path = "/tmp/dm6", annotations = character(0))
+gdb.build_genome("GCA_004023825.1",
+    path   = "~/genomes/arctic_fox",
+    prefix = "intervs.global."
+)
 }
 
 }
 \seealso{
-\code{\link{gdb.create}}, \code{\link{gdb.create_genome}},
-  \code{\link{gdb.list_genomes}}, \code{\link{gdb.genome_info}},
-  \code{\link{gdb.install_gff3_converter}}.
+\code{\link{gdb.install_intervals}}, \code{\link{gdb.create}},
+  \code{\link{gdb.list_genomes}}, \code{\link{gdb.genome_info}}.
 }
