@@ -13,6 +13,7 @@ gdb.install_intervals(
   gtf_priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene"),
   overwrite = FALSE,
   registry = NULL,
+  min_coverage = 1,
   verbose = TRUE
 )
 }
@@ -38,6 +39,14 @@ sources that ship multiple GTFs (currently \code{ucsc-hub}). First found wins.}
 If \code{TRUE}, remove existing sets before saving.}
 
 \item{registry}{Optional path to a registry YAML; overrides the resolution chain.}
+
+\item{min_coverage}{Minimum fraction of groot chroms that must appear in a
+chromAlias column for that column to be picked as the canonical mapping
+(and similarly for the source-file's chroms). Default \code{1.0} (strict).
+Set lower (e.g. \code{0.99}) to install onto groots whose chrom names
+cover only most of an alias column — typical for Cactus-derived legacy
+groots where UCSC has dropped a handful of tiny scaffolds. Unmapped
+contigs simply receive no annotations.}
 
 \item{verbose}{If \code{TRUE}, prints progress.}
 }

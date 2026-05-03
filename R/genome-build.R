@@ -889,6 +889,13 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #' @param overwrite If \code{FALSE} (default), error on existing target sets.
 #'   If \code{TRUE}, remove existing sets before saving.
 #' @param registry Optional path to a registry YAML; overrides the resolution chain.
+#' @param min_coverage Minimum fraction of groot chroms that must appear in a
+#'   chromAlias column for that column to be picked as the canonical mapping
+#'   (and similarly for the source-file's chroms). Default \code{1.0} (strict).
+#'   Set lower (e.g. \code{0.99}) to install onto groots whose chrom names
+#'   cover only most of an alias column — typical for Cactus-derived legacy
+#'   groots where UCSC has dropped a handful of tiny scaffolds. Unmapped
+#'   contigs simply receive no annotations.
 #' @param verbose If \code{TRUE}, prints progress.
 #' @return Invisible \code{NULL}. Side effects: writes \code{.interv} files under
 #'   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
@@ -927,11 +934,15 @@ gdb.install_intervals <- function(groot,
                                   ),
                                   overwrite = FALSE,
                                   registry = NULL,
+                                  min_coverage = 1.0,
                                   verbose = TRUE) {
     sets <- match.arg(sets,
         choices = c("genes", "rmsk", "cgi", "cytoband"),
         several.ok = TRUE
     )
+    if (!is.numeric(min_coverage) || min_coverage <= 0 || min_coverage > 1) {
+        stop("`min_coverage` must be in (0, 1].", call. = FALSE)
+    }
     if (!is.null(groot)) {
         if (!dir.exists(groot) ||
             !file.exists(file.path(groot, "chrom_sizes.txt"))) {
@@ -986,11 +997,16 @@ gdb.install_intervals <- function(groot,
     # chromAlias: detect groot column and source columns; build translator closure.
     groot_chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
     alias_df <- assets$chrom_alias$df
-    groot_col <- if (!is.null(alias_df)) .detect_alias_column(alias_df, groot_chroms) else NA_character_
+    groot_col <- if (!is.null(alias_df)) {
+        .detect_alias_column(alias_df, groot_chroms, min_coverage = min_coverage)
+    } else {
+        NA_character_
+    }
     if (!is.null(alias_df) && is.na(groot_col)) {
         scores <- attr(groot_col, "scores")
         stop(sprintf(
-            "chromAlias has no column with 100%% coverage of groot chroms.\nPer-column overlap counts: %s\nFirst 5 unmapped groot chroms: %s",
+            "chromAlias has no column with %.0f%% coverage of groot chroms.\nPer-column overlap counts: %s\nFirst 5 unmapped groot chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.95).",
+            100 * min_coverage,
             paste(sprintf("%s=%d/%d", names(scores), scores, length(groot_chroms)), collapse = ", "),
             paste(utils::head(setdiff(groot_chroms, unlist(alias_df, use.names = FALSE)), 5L),
                 collapse = ", "
@@ -998,20 +1014,32 @@ gdb.install_intervals <- function(groot,
         ), call. = FALSE)
     }
     if (!is.null(alias_df)) {
-        .merge_chrom_aliases_tsv(groot, alias_df, groot_col)
+        groot_overlap <- attr(groot_col, "overlap")
+        if (verbose && !is.null(groot_overlap) && groot_overlap < 1.0) {
+            n_unmapped <- length(groot_chroms) - attr(groot_col, "scores")[[as.character(groot_col)]]
+            message(sprintf(
+                "  chromAlias '%s' covers %.2f%% of groot chroms; %d unmapped contigs will receive no annotations.",
+                as.character(groot_col), 100 * groot_overlap, n_unmapped
+            ))
+        }
+        .merge_chrom_aliases_tsv(groot, alias_df, as.character(groot_col))
         gdb.init(groot, rescan = TRUE) # reload CHROM_ALIAS
     }
 
-    # Helper: per-asset translator. Detects the asset's own source column, asserts 100%.
+    # Helper: per-asset translator. Detects the asset's own source column at
+    # the same `min_coverage` threshold as the groot side.
     make_translator <- function(asset_chroms, asset_label) {
         if (is.null(alias_df)) {
             return(NULL)
         }
-        src_col <- .detect_alias_column(alias_df, unique(asset_chroms))
+        src_col <- .detect_alias_column(alias_df, unique(asset_chroms),
+            min_coverage = min_coverage
+        )
         if (is.na(src_col)) {
             scores <- attr(src_col, "scores")
             stop(sprintf(
-                "chromAlias has no column with 100%% coverage of distinct chroms in %s.\nPer-column overlap counts: %s\nFirst 5 unmapped chroms: %s",
+                "chromAlias has no column with %.0f%% coverage of distinct chroms in %s.\nPer-column overlap counts: %s\nFirst 5 unmapped chroms: %s",
+                100 * min_coverage,
                 asset_label,
                 paste(sprintf("%s=%d/%d", names(scores), scores, length(unique(asset_chroms))),
                     collapse = ", "
@@ -1025,8 +1053,11 @@ gdb.install_intervals <- function(groot,
                 )
             ), call. = FALSE)
         }
+        # Strip attributes for stable indexing into alias_df.
+        src_col_chr <- as.character(src_col)
+        groot_col_chr <- as.character(groot_col)
         function(rows, chrom_col) {
-            .translate_chroms(rows, chrom_col, alias_df, src_col, groot_col)
+            .translate_chroms(rows, chrom_col, alias_df, src_col_chr, groot_col_chr)
         }
     }
 

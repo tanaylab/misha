@@ -42,10 +42,12 @@
     df
 }
 
-# Returns the (unique) column whose values contain *every* target_chrom.
-# Ties broken by column order. NA with attributes(scores=, overlap=) when no
-# column achieves 100% coverage — caller produces the diagnostic.
-.detect_alias_column <- function(alias_df, target_chroms) {
+# Returns the column whose values cover at least `min_coverage` of target_chroms.
+# Among columns meeting the threshold, the one with highest coverage wins; ties
+# broken by column order. Default `min_coverage = 1.0` keeps strict semantics.
+# NA with attributes(scores=, overlap=) when no column meets the threshold —
+# caller produces the diagnostic.
+.detect_alias_column <- function(alias_df, target_chroms, min_coverage = 1.0) {
     if (!length(target_chroms)) {
         stop(".detect_alias_column called with empty target chrom set", call. = FALSE)
     }
@@ -54,14 +56,19 @@
         function(col) length(intersect(col, target_chroms)),
         integer(1)
     )
-    full <- names(alias_df)[scores == length(target_chroms)]
-    if (!length(full)) {
+    coverages <- scores / length(target_chroms)
+    valid <- which(coverages >= min_coverage)
+    if (!length(valid)) {
         return(structure(NA_character_,
             scores = scores,
-            overlap = max(scores) / length(target_chroms)
+            overlap = max(coverages)
         ))
     }
-    full[[1L]]
+    best <- valid[which.max(coverages[valid])]
+    structure(names(alias_df)[best],
+        scores = scores,
+        overlap = unname(coverages[best])
+    )
 }
 
 # Translate `rows[[chrom_col]]` from source_col naming scheme to groot_col naming

@@ -23,12 +23,44 @@ test_that(".parse_ucsc_chromalias handles gzipped input", {
 test_that(".detect_alias_column returns the column with 100% coverage", {
     f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
     df <- .parse_ucsc_chromalias(f)
-    expect_equal(.detect_alias_column(df, c("chr1", "chr2", "chr3", "chrM")), "ucsc")
-    expect_equal(.detect_alias_column(df, c("1", "2", "3", "MT")), "assembly")
-    expect_equal(.detect_alias_column(
-        df,
-        c("NC_067374.1", "NC_067375.1", "NC_067376.1", "NC_067377.1")
-    ), "refseq")
+    expect_equal(.detect_alias_column(df, c("chr1", "chr2", "chr3", "chrM")), "ucsc",
+        ignore_attr = TRUE
+    )
+    expect_equal(.detect_alias_column(df, c("1", "2", "3", "MT")), "assembly",
+        ignore_attr = TRUE
+    )
+    expect_equal(
+        .detect_alias_column(
+            df,
+            c("NC_067374.1", "NC_067375.1", "NC_067376.1", "NC_067377.1")
+        ),
+        "refseq",
+        ignore_attr = TRUE
+    )
+})
+
+test_that(".detect_alias_column with min_coverage < 1.0 picks highest partial match", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    df <- .parse_ucsc_chromalias(f)
+    # 4-of-5 in ucsc column (chrX absent); strict 100% gives NA, 0.5 threshold
+    # picks ucsc.
+    res <- .detect_alias_column(df,
+        c("chr1", "chr2", "chr3", "chrM", "chrX"),
+        min_coverage = 0.75
+    )
+    expect_equal(as.character(res), "ucsc")
+    expect_equal(attr(res, "overlap"), 4 / 5)
+    expect_equal(attr(res, "scores")[["ucsc"]], 4L)
+})
+
+test_that(".detect_alias_column with min_coverage = 1.0 stays strict", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    df <- .parse_ucsc_chromalias(f)
+    res <- .detect_alias_column(df,
+        c("chr1", "chr2", "chr3", "chrM", "chrX"),
+        min_coverage = 1.0
+    )
+    expect_true(is.na(res))
 })
 
 test_that(".detect_alias_column returns NA when no column has 100% coverage", {
@@ -42,7 +74,7 @@ test_that(".detect_alias_column returns NA when no column has 100% coverage", {
 
 test_that(".detect_alias_column ties broken by column order (first wins)", {
     df <- data.frame(a = c("x", "y"), b = c("x", "y"), stringsAsFactors = FALSE)
-    expect_equal(.detect_alias_column(df, c("x", "y")), "a")
+    expect_equal(.detect_alias_column(df, c("x", "y")), "a", ignore_attr = TRUE)
 })
 
 test_that(".detect_alias_column on empty target errors", {
