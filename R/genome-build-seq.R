@@ -109,3 +109,115 @@
     }
     out
 }
+
+.build_seq_ucsc <- function(recipe, path, format, verbose) {
+    assembly <- recipe$assembly
+    base <- sprintf("%s/%s", .UCSC_GOLDENPATH, assembly)
+    workdir <- tempfile("misha_ucsc_seq_")
+    dir.create(workdir, recursive = TRUE)
+    on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
+    local_fa <- file.path(workdir, sprintf("%s.fa.gz", assembly))
+    .download_to(sprintf("%s/bigZips/%s.fa.gz", base, assembly), local_fa, verbose = verbose)
+    gdb.create(
+        groot = path, fasta = local_fa, genes.file = NULL,
+        annots.file = NULL, format = format, verbose = verbose
+    )
+    list(
+        files_record = list(fasta = list(url = sprintf("%s/bigZips/%s.fa.gz", base, assembly))),
+        chrom_alias_df = NULL
+    )
+}
+
+.build_seq_ncbi <- function(recipe, path, format, verbose) {
+    accession <- recipe$accession
+    chrom_naming <- recipe$chrom_naming %||% .NCBI_DEFAULT_CHROM_NAMING
+    workdir <- tempfile("misha_ncbi_seq_")
+    dir.create(workdir, recursive = TRUE)
+    on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
+    zip_path <- file.path(workdir, "datasets.zip")
+    .download_to(.ncbi_datasets_zip_url(accession), zip_path, verbose = verbose)
+    extract_dir <- file.path(workdir, "extract")
+    dir.create(extract_dir)
+    utils::unzip(zip_path, exdir = extract_dir)
+
+    fasta_files <- list.files(extract_dir,
+        pattern = "\\.(fna|fasta|fa)(\\.gz)?$",
+        recursive = TRUE, full.names = TRUE
+    )
+    if (!length(fasta_files)) {
+        stop(sprintf("No FASTA in NCBI Datasets payload for %s", accession), call. = FALSE)
+    }
+    fasta_file <- fasta_files[[1L]]
+    if (grepl("\\.gz$", fasta_file)) fasta_file <- .gunzip_to_file(fasta_file)
+
+    seqrep_files <- list.files(extract_dir,
+        pattern = "sequence_report\\.jsonl$",
+        recursive = TRUE, full.names = TRUE
+    )
+    seqrep <- if (length(seqrep_files)) .parse_ncbi_sequence_report(seqrep_files[[1L]]) else NULL
+    rename_map <- NULL
+    if (!is.null(seqrep)) {
+        rename_map <- .build_ncbi_rename_map(seqrep, chrom_naming)
+    } else if (chrom_naming != "accession") {
+        warning(sprintf(
+            "No sequence_report in NCBI payload for %s; falling back to chrom_naming='accession'.",
+            accession
+        ), call. = FALSE)
+        chrom_naming <- "accession"
+    }
+
+    if (!is.null(rename_map) && chrom_naming != "accession") {
+        renamed <- file.path(workdir, "renamed.fna")
+        .rename_fasta_headers(fasta_file, renamed, rename_map, verbose = verbose)
+        fasta_file <- renamed
+    }
+
+    gdb.create(
+        groot = path, fasta = fasta_file, genes.file = NULL,
+        annots.file = NULL, format = format, verbose = verbose
+    )
+
+    if (!is.null(seqrep) && !is.null(rename_map)) {
+        .write_chrom_aliases_tsv(path, seqrep, rename_map)
+    }
+
+    list(
+        files_record = list(fasta = list(name = basename(fasta_file))),
+        chrom_alias_df = NULL # NCBI uses sequence_report -> chrom_aliases.tsv directly
+    )
+}
+
+.build_seq_manual <- function(recipe, path, format, verbose) {
+    gdb.create(
+        groot = path, fasta = recipe$fasta, genes.file = NULL,
+        annots.file = NULL, format = format, verbose = verbose
+    )
+    list(
+        files_record = list(fasta = list(url = recipe$fasta)),
+        chrom_alias_df = NULL
+    )
+}
+
+.build_seq_s3 <- function(recipe, path, format, verbose) {
+    parent_dir <- dirname(path)
+    if (!dir.exists(parent_dir)) dir.create(parent_dir, recursive = TRUE)
+    if (basename(path) != recipe$assembly) {
+        warning(sprintf(
+            "S3 backend extracts to %s/%s; got path=%s.",
+            parent_dir, recipe$assembly, path
+        ), call. = FALSE)
+    }
+    gdb.create_genome(recipe$assembly, path = parent_dir)
+    list(files_record = list(s3 = recipe$assembly), chrom_alias_df = NULL)
+}
+
+.build_seq_local <- function(recipe, path, format, verbose) {
+    if (!dir.exists(recipe$path)) {
+        stop(sprintf("Local groot does not exist: %s", recipe$path), call. = FALSE)
+    }
+    if (!file.exists(file.path(recipe$path, "chrom_sizes.txt"))) {
+        stop(sprintf("Path %s does not look like a misha groot", recipe$path), call. = FALSE)
+    }
+    gdb.init(recipe$path, rescan = TRUE)
+    list(files_record = list(local = recipe$path), chrom_alias_df = NULL)
+}
