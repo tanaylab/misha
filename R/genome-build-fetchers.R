@@ -137,3 +137,111 @@
 
     out
 }
+
+# Build the same URLs the existing UCSC golden-path backend uses, download
+# only the annotation files needed for `sets`, and return uniform asset shape.
+# (FASTA download is the seq-builder's job, not the fetcher's.)
+.ucsc_fetch_assets <- function(recipe, sets, workdir, verbose = TRUE) {
+    assembly <- recipe$assembly
+    base <- sprintf("%s/%s", .UCSC_GOLDENPATH, assembly)
+    out <- list()
+
+    # UCSC golden path doesn't ship chromAlias in the same shape as hubs.
+    # For now, omit. Existing seq-build path uses .compute_chrom_aliases.
+    out$chrom_alias <- NULL
+
+    if ("genes" %in% sets) {
+        url <- sprintf("%s/database/ncbiRefSeq.txt.gz", base)
+        local <- file.path(workdir, "ncbiRefSeq.txt.gz")
+        .download_to(url, local, verbose = verbose)
+        # Trim extended-genePred 16->12 cols.
+        gp <- file.path(workdir, "ncbiRefSeq.12col.txt")
+        .normalize_ucsc_genepred(local, gp)
+        out$genes <- list(file = gp, format = "genepred", gtf_source = "ncbiRefSeq")
+
+        annots_url <- sprintf("%s/database/ncbiRefSeqLink.txt.gz", base)
+        raw <- file.path(workdir, "ncbiRefSeqLink.raw.txt.gz")
+        .download_to(annots_url, raw, verbose = verbose)
+        healed <- file.path(workdir, "ncbiRefSeqLink.healed.txt")
+        .heal_ucsc_tsv_escapes(raw, healed)
+        norm <- file.path(workdir, "ncbiRefSeqLink.normalized.txt")
+        .normalize_ucsc_tsv(healed, norm, n_cols = length(.UCSC_NCBI_REFSEQ_LINK_COLS))
+        out$genes_annots <- list(
+            file = norm, format = "ucsc-refseq-link",
+            names = .UCSC_NCBI_REFSEQ_LINK_COLS
+        )
+    }
+    if ("rmsk" %in% sets) {
+        url <- sprintf("%s/database/rmsk.txt.gz", base)
+        local <- file.path(workdir, "rmsk.txt.gz")
+        .download_to(url, local, verbose = verbose)
+        out$rmsk <- list(file = local, format = "rmsk-ucsc-17col")
+    }
+    if ("cgi" %in% sets) {
+        url <- sprintf("%s/database/cpgIslandExt.txt.gz", base)
+        local <- file.path(workdir, "cpgIslandExt.txt.gz")
+        .download_to(url, local, verbose = verbose)
+        out$cgi <- list(file = local, format = "ucsc-cpg-11col")
+    }
+    if ("cytoband" %in% sets) {
+        url <- sprintf("%s/database/cytoBandIdeo.txt.gz", base)
+        local <- file.path(workdir, "cytoBandIdeo.txt.gz")
+        .download_to(url, local, verbose = verbose)
+        out$cytoband <- list(file = local, format = "ucsc-cytoband-5col")
+    }
+    out
+}
+
+# NCBI Datasets fetcher. The existing backend already extracts the zip and finds
+# the GFF; we reuse that logic. For seq-only builds, only chromAlias-equivalent
+# (sequence_report.jsonl) is fetched.
+.ncbi_fetch_assets <- function(recipe, sets, workdir, verbose = TRUE) {
+    accession <- recipe$accession
+    zip_path <- file.path(workdir, "datasets.zip")
+    .download_to(.ncbi_datasets_zip_url(accession), zip_path, verbose = verbose)
+    extract_dir <- file.path(workdir, "extract")
+    dir.create(extract_dir, recursive = TRUE)
+    utils::unzip(zip_path, exdir = extract_dir)
+
+    out <- list(chrom_alias = NULL)
+
+    seqrep <- list.files(extract_dir,
+        pattern = "sequence_report\\.jsonl$",
+        recursive = TRUE, full.names = TRUE
+    )
+    if (length(seqrep)) {
+        out$ncbi_sequence_report <- list(
+            file = seqrep[[1L]],
+            df = .parse_ncbi_sequence_report(seqrep[[1L]])
+        )
+    }
+
+    if ("genes" %in% sets) {
+        gff <- list.files(extract_dir,
+            pattern = "\\.gff(\\.gz)?$",
+            recursive = TRUE, full.names = TRUE
+        )
+        if (length(gff)) {
+            f <- gff[[1L]]
+            if (grepl("\\.gz$", f)) f <- .gunzip_to_file(f)
+            out$genes <- list(file = f, format = "gff3", gtf_source = "RefSeq")
+        } else {
+            warning(sprintf(
+                "'genes' requested but no GFF in NCBI payload for %s; skipping.",
+                accession
+            ), call. = FALSE)
+        }
+    }
+    if ("rmsk" %in% sets) {
+        warning("'rmsk' from NCBI is not implemented (v1); skipping. Use ucsc-hub or manual.",
+            call. = FALSE
+        )
+    }
+    if ("cgi" %in% sets) {
+        warning("'cgi' is not available from NCBI Datasets; skipping.", call. = FALSE)
+    }
+    if ("cytoband" %in% sets) {
+        warning("'cytoband' is not available from NCBI Datasets; skipping.", call. = FALSE)
+    }
+    out
+}
