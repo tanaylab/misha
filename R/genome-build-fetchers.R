@@ -43,10 +43,13 @@
 
 # From a list of filenames in a hub's genes/ subdir, pick the first matching
 # entry of `priority`. Returns list(file = "<path>", source = "<which>") or NULL.
+# Matches both bare (`.ensGene.gtf.gz`) and version-suffixed
+# (`.ensGene.2020_05.gtf.gz`) filenames; UCSC publishes both shapes.
 .pick_gtf <- function(files, priority) {
+    base <- sub("\\.gtf(\\.gz)?$", "", files)
     for (src in priority) {
-        pat <- sprintf("\\.%s\\.gtf(\\.gz)?$", src)
-        hit <- files[grepl(pat, files)]
+        pat <- sprintf("\\.%s(\\.[^.]+)*$", src)
+        hit <- files[grepl(pat, base)]
         if (length(hit)) {
             return(list(file = hit[[1L]], source = src))
         }

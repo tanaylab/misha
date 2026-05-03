@@ -52,3 +52,17 @@ test_that(".pick_gtf returns NULL when nothing matches", {
     )
     expect_null(res)
 })
+
+test_that(".pick_gtf matches version-suffixed GTF names (.ensGene.2020_05.gtf.gz)", {
+    # Real Arctic fox hub layout — ensGene comes with a date suffix.
+    files <- c(
+        "genes/GCA_004023825.1_VulLag_v1_BIUU.augustus.gtf.gz",
+        "genes/GCA_004023825.1_VulLag_v1_BIUU.ensGene.2020_05.gtf.gz",
+        "genes/GCA_004023825.1_VulLag_v1_BIUU.xenoRefGene.gtf.gz"
+    )
+    res <- .pick_gtf(files,
+        priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene")
+    )
+    expect_equal(res$source, "ensGene")
+    expect_match(res$file, "ensGene\\.2020_05")
+})
