@@ -177,6 +177,7 @@ reference:
       - gdb.get_readonly_attrs
       - gdb.info
       - gdb.init
+      - gdb.init_examples
       - gdb.install_gff3_converter
       - gdb.install_gtf_converter
       - gdb.install_intervals
