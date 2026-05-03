@@ -178,6 +178,8 @@ reference:
       - gdb.info
       - gdb.init
       - gdb.install_gff3_converter
+      - gdb.install_gtf_converter
+      - gdb.install_intervals
       - gdb.list_genomes
       - gdb.mark_cache_dirty
       - gdb.reload
