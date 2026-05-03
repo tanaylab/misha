@@ -82,3 +82,11 @@
     }
     invisible(NULL)
 }
+
+.install_cgi_set <- function(df, prefix = "", overwrite = FALSE, verbose = TRUE) {
+    .save_intervals(paste0(prefix, "cgi"), df, overwrite = overwrite, verbose = verbose)
+}
+
+.install_cytoband_set <- function(df, prefix = "", overwrite = FALSE, verbose = TRUE) {
+    .save_intervals(paste0(prefix, "cytoband"), df, overwrite = overwrite, verbose = verbose)
+}

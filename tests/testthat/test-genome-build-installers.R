@@ -113,3 +113,31 @@ test_that(".install_rmsk_set respects prefix", {
     expect_true(gintervals.exists("intervs.global.rmsk"))
     expect_true(gintervals.exists("intervs.global.rmsk_sine"))
 })
+
+test_that(".install_cgi_set saves cgi (not cpgIsland)", {
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    gdb.init(groot, rescan = TRUE)
+    df <- data.frame(
+        chrom = "chr1", start = 100L, end = 200L,
+        name = "cgi-1", length = 100L, cpgNum = 10L,
+        perCpg = 0.5, perGc = 0.6, obsExp = 0.7,
+        stringsAsFactors = FALSE
+    )
+    .install_cgi_set(df, prefix = "", overwrite = FALSE, verbose = FALSE)
+    expect_true(gintervals.exists("cgi"))
+    expect_false(gintervals.exists("cpgIsland"))
+})
+
+test_that(".install_cytoband_set saves cytoband", {
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    gdb.init(groot, rescan = TRUE)
+    df <- data.frame(
+        chrom = "chr1", start = 0L, end = 1000L,
+        name = "p1", stain = "gneg",
+        stringsAsFactors = FALSE
+    )
+    .install_cytoband_set(df, prefix = "", overwrite = FALSE, verbose = FALSE)
+    expect_true(gintervals.exists("cytoband"))
+})
