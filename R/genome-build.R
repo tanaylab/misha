@@ -185,10 +185,13 @@
         }
     }
 
-    # Pattern fallback for NCBI accessions.
+    # Pattern fallback for UCSC mammal hub accessions.
     if (grepl("^GC[FA]_[0-9]+\\.[0-9]+$", name)) {
-        recipe <- list(source = "ncbi", accession = name)
-        return(list(recipe = recipe, resolved_from = "pattern fallback (NCBI accession)"))
+        recipe <- list(source = "ucsc-hub", accession = name)
+        return(list(
+            recipe = recipe,
+            resolved_from = "pattern fallback (UCSC mammal hub accession)"
+        ))
     }
 
     stop(sprintf(

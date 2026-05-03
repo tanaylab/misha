@@ -122,14 +122,14 @@ test_that(".resolve_genome falls back to built-in registry", {
     expect_match(res$resolved_from, "built-in")
 })
 
-test_that(".resolve_genome pattern fallback for NCBI accessions", {
+test_that(".resolve_genome pattern fallback for GC[FA]_* accessions routes to ucsc-hub", {
     res <- misha:::.resolve_genome("GCF_009806435.1")
-    expect_equal(res$recipe$source, "ncbi")
+    expect_equal(res$recipe$source, "ucsc-hub")
     expect_equal(res$recipe$accession, "GCF_009806435.1")
     expect_match(res$resolved_from, "pattern fallback")
 
     res2 <- misha:::.resolve_genome("GCA_000001405.29")
-    expect_equal(res2$recipe$source, "ncbi")
+    expect_equal(res2$recipe$source, "ucsc-hub")
 })
 
 test_that(".resolve_genome errors clearly for unknown name", {
@@ -300,9 +300,9 @@ test_that("gdb.genome_info returns a recipe", {
     expect_equal(info$recipe$assembly, "hg38")
 })
 
-test_that("gdb.genome_info on NCBI accession uses pattern fallback", {
+test_that("gdb.genome_info on GC[FA]_* accession uses pattern fallback to ucsc-hub", {
     info <- gdb.genome_info("GCF_009806435.1")
-    expect_equal(info$recipe$source, "ncbi")
+    expect_equal(info$recipe$source, "ucsc-hub")
     expect_equal(info$recipe$accession, "GCF_009806435.1")
 })
 
