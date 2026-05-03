@@ -411,33 +411,6 @@
     )
 }
 
-# Save a parsed-table data.frame as a misha intervals set (post-build,
-# requires gdb.init has already been called on the new groot).
-# Drops rows whose chrom is not in ALLGENOME (different sources sometimes
-# include haplotype/alt contigs not present in the assembled FASTA).
-.save_post_build_intervals <- function(intervals_set_name, df, verbose = TRUE) {
-    if (!exists("ALLGENOME", envir = .misha)) {
-        stop(".save_post_build_intervals called without an active GROOT", call. = FALSE)
-    }
-    chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
-    keep <- df$chrom %in% chroms
-    if (any(!keep) && verbose) {
-        message(sprintf(
-            "  %s: dropped %d/%d rows on contigs not in ALLGENOME",
-            intervals_set_name, sum(!keep), nrow(df)
-        ))
-    }
-    df <- df[keep, , drop = FALSE]
-    if (nrow(df) == 0) {
-        if (verbose) message(sprintf("  %s: no rows remained after filtering, skipping", intervals_set_name))
-        return(invisible(NULL))
-    }
-    df$chrom <- factor(df$chrom, levels = chroms)
-    gintervals.save(intervals_set_name, df)
-    if (verbose) message(sprintf("  %s: saved %d intervals", intervals_set_name, nrow(df)))
-    invisible(NULL)
-}
-
 # Write genome_info.yaml — a record of where this groot came from.
 .write_genome_info <- function(groot, name, recipe, annotations, files = list()) {
     info <- list(
