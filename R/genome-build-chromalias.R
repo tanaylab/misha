@@ -77,3 +77,55 @@
     rows[[chrom_col]] <- map[rows[[chrom_col]]]
     rows
 }
+
+# Extend (or create) <groot>/chrom_aliases.tsv with rows mapping every alias
+# column of alias_df to the canonical name in groot_col. Existing rows are
+# preserved; new rows are added; conflicts (existing alias mapping to a
+# different canonical) are warned and skipped.
+.merge_chrom_aliases_tsv <- function(groot, alias_df, groot_col, source_label = "build") {
+    out_path <- file.path(groot, "chrom_aliases.tsv")
+    existing <- if (file.exists(out_path)) {
+        utils::read.table(out_path,
+            sep = "\t", header = TRUE,
+            stringsAsFactors = FALSE, quote = "", comment.char = ""
+        )
+    } else {
+        data.frame(
+            canonical = character(0), alias = character(0),
+            source = character(0), stringsAsFactors = FALSE
+        )
+    }
+    canonical <- alias_df[[groot_col]]
+    new_rows <- list()
+    conflicts <- 0L
+    for (col in setdiff(names(alias_df), groot_col)) {
+        vals <- alias_df[[col]]
+        keep <- nzchar(vals) & !is.na(vals)
+        if (!any(keep)) next
+        df <- data.frame(
+            canonical = canonical[keep],
+            alias = vals[keep],
+            source = col,
+            stringsAsFactors = FALSE
+        )
+        # Detect conflicts against existing entries.
+        idx <- match(df$alias, existing$alias)
+        is_existing <- !is.na(idx)
+        if (any(is_existing)) {
+            conflict_mask <- existing$canonical[idx[is_existing]] != df$canonical[is_existing]
+            conflicts <- conflicts + sum(conflict_mask, na.rm = TRUE)
+            df <- df[!is_existing | !conflict_mask, , drop = FALSE]
+            df <- df[!df$alias %in% existing$alias, , drop = FALSE] # dedupe non-conflicts too
+        }
+        new_rows[[length(new_rows) + 1L]] <- df
+    }
+    if (conflicts > 0L) {
+        warning(sprintf(
+            "chrom_aliases.tsv: %d alias->canonical conflict(s) preserved as existing.",
+            conflicts
+        ), call. = FALSE)
+    }
+    out <- rbind(existing, do.call(rbind, new_rows))
+    utils::write.table(out, out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+    invisible(out_path)
+}
