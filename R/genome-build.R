@@ -412,13 +412,13 @@
 }
 
 # Write genome_info.yaml — a record of where this groot came from.
-.write_genome_info <- function(groot, name, recipe, annotations, files = list()) {
+.write_genome_info <- function(groot, name, recipe, sets, files = list()) {
     info <- list(
         name = name,
         source = recipe$source,
         downloaded_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
         misha_version = as.character(utils::packageVersion("misha")),
-        annotations = as.list(annotations),
+        sets = as.list(sets),
         recipe = recipe,
         files = files
     )
@@ -426,154 +426,6 @@
     invisible(NULL)
 }
 
-# ---------------------------------------------------------------------------
-# UCSC backend
-# ---------------------------------------------------------------------------
-
-# Returns a named list of URLs for an assembly + requested annotations.
-.ucsc_urls <- function(assembly, annotations, single_fasta = TRUE) {
-    base <- sprintf("%s/%s", .UCSC_GOLDENPATH, assembly)
-    out <- list()
-    if (single_fasta) {
-        out$fasta <- sprintf("%s/bigZips/%s.fa.gz", base, assembly)
-    } # per-chromosome list is built dynamically (see .ucsc_per_chrom_fasta)
-    if ("genes" %in% annotations) {
-        out$genes <- sprintf("%s/database/ncbiRefSeq.txt.gz", base)
-        out$annots <- sprintf("%s/database/ncbiRefSeqLink.txt.gz", base)
-    }
-    if ("rmsk" %in% annotations) {
-        out$rmsk <- sprintf("%s/database/rmsk.txt.gz", base)
-    }
-    if ("cpgIsland" %in% annotations) {
-        out$cpgIsland <- sprintf("%s/database/cpgIslandExt.txt.gz", base)
-    }
-    if ("cytoband" %in% annotations) {
-        out$cytoband <- sprintf("%s/database/cytoBandIdeo.txt.gz", base)
-    }
-    out
-}
-
-.run_ucsc_backend <- function(name, recipe, path, annotations, format, verbose) {
-    assembly <- recipe$assembly
-    urls <- .ucsc_urls(assembly, annotations, single_fasta = TRUE)
-
-    if (verbose) message(sprintf("UCSC backend: assembly=%s -> %s", assembly, path))
-
-    # Pre-download FASTA + genes + annots locally. The underlying gdb.create()
-    # / .gseq.import path only handles ftp:// or local files; passing https://
-    # URLs straight through would fail. By downloading first, we get
-    # protocol-agnostic behavior and let gdb.create() use its indexed-format
-    # multi-FASTA fast path (which requires file.exists()).
-    workdir <- tempfile("misha_ucsc_")
-    dir.create(workdir, recursive = TRUE)
-    on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
-
-    local_fasta <- file.path(workdir, sprintf("%s.fa.gz", assembly))
-    .download_to(urls$fasta, local_fasta, verbose = verbose)
-
-    local_genes <- NULL
-    if (!is.null(urls$genes)) {
-        raw_genes <- file.path(workdir, "ncbiRefSeq.txt.gz")
-        .download_to(urls$genes, raw_genes, verbose = verbose)
-        local_genes <- file.path(workdir, "ncbiRefSeq.12col.txt")
-        if (verbose) message("  Trimming extended-genePred (16 cols) to classic 12-col format ...")
-        .normalize_ucsc_genepred(raw_genes, local_genes)
-    }
-    local_annots <- NULL
-    annots_names <- NULL
-    if (!is.null(urls$annots)) {
-        raw_annots <- file.path(workdir, "ncbiRefSeqLink.raw.txt.gz")
-        .download_to(urls$annots, raw_annots, verbose = verbose)
-        healed <- file.path(workdir, "ncbiRefSeqLink.healed.txt")
-        if (verbose) message("  Healing UCSC escape artifacts in ncbiRefSeqLink ...")
-        .heal_ucsc_tsv_escapes(raw_annots, healed)
-        local_annots <- file.path(workdir, "ncbiRefSeqLink.normalized.txt")
-        if (verbose) message("  Normalizing ncbiRefSeqLink to fixed column count ...")
-        .normalize_ucsc_tsv(healed, local_annots,
-            n_cols = length(.UCSC_NCBI_REFSEQ_LINK_COLS)
-        )
-        annots_names <- .UCSC_NCBI_REFSEQ_LINK_COLS
-    }
-
-    gdb.create(
-        groot        = path,
-        fasta        = local_fasta,
-        genes.file   = local_genes,
-        annots.file  = local_annots,
-        annots.names = annots_names,
-        format       = format,
-        verbose      = verbose
-    )
-
-    # Switch to the new groot for post-build annotation loading.
-    gdb.init(path, rescan = TRUE)
-
-    files_record <- list(
-        fasta = list(url = urls$fasta),
-        genes = list(url = urls$genes %||% NA_character_),
-        annots = list(url = urls$annots %||% NA_character_)
-    )
-
-    if ("rmsk" %in% annotations && !is.null(urls$rmsk)) {
-        tryCatch(
-            {
-                tmp <- tempfile(fileext = ".gz")
-                on.exit(unlink(tmp), add = TRUE)
-                .download_to(urls$rmsk, tmp, verbose = verbose)
-                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
-                df <- .parse_ucsc_rmsk(unz)
-                .save_post_build_intervals("rmsk", df, verbose = verbose)
-                files_record$rmsk <- list(url = urls$rmsk)
-            },
-            error = function(e) {
-                warning(sprintf("rmsk load failed for %s: %s", assembly, conditionMessage(e)), call. = FALSE)
-            }
-        )
-    }
-
-    if ("cpgIsland" %in% annotations && !is.null(urls$cpgIsland)) {
-        tryCatch(
-            {
-                tmp <- tempfile(fileext = ".gz")
-                on.exit(unlink(tmp), add = TRUE)
-                .download_to(urls$cpgIsland, tmp, verbose = verbose)
-                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
-                df <- .parse_ucsc_cpg_island(unz)
-                .save_post_build_intervals("cpgIsland", df, verbose = verbose)
-                files_record$cpgIsland <- list(url = urls$cpgIsland)
-            },
-            error = function(e) {
-                warning(sprintf("cpgIsland load failed for %s: %s", assembly, conditionMessage(e)), call. = FALSE)
-            }
-        )
-    }
-
-    if ("cytoband" %in% annotations && !is.null(urls$cytoband)) {
-        tryCatch(
-            {
-                tmp <- tempfile(fileext = ".gz")
-                on.exit(unlink(tmp), add = TRUE)
-                .download_to(urls$cytoband, tmp, verbose = verbose)
-                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
-                df <- .parse_ucsc_cytoband(unz)
-                .save_post_build_intervals("cytoband", df, verbose = verbose)
-                files_record$cytoband <- list(url = urls$cytoband)
-            },
-            error = function(e) {
-                warning(sprintf("cytoband load failed for %s: %s", assembly, conditionMessage(e)), call. = FALSE)
-            }
-        )
-    }
-
-    .write_genome_info(path, name, recipe, annotations, files_record)
-    invisible(NULL)
-}
-
-# `%||%` is defined in db-core.R (shared utility).
-
-# ---------------------------------------------------------------------------
-# NCBI Datasets backend
-# ---------------------------------------------------------------------------
 
 .ncbi_datasets_zip_url <- function(accession) {
     sprintf(
@@ -765,409 +617,105 @@
     invisible(NULL)
 }
 
-.run_ncbi_backend <- function(name, recipe, path, annotations, format, verbose) {
-    accession <- recipe$accession
-    chrom_naming <- recipe$chrom_naming %||% .NCBI_DEFAULT_CHROM_NAMING
-    converter <- .gff3_to_genepred_resolve_or_install()
-
-    if (verbose) {
-        message(sprintf(
-            "NCBI backend: accession=%s -> %s (chrom_naming=%s)",
-            accession, path, chrom_naming
-        ))
-    }
-
-    workdir <- tempfile("misha_ncbi_")
-    dir.create(workdir, recursive = TRUE)
-    on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
-
-    zip_path <- file.path(workdir, "datasets.zip")
-    .download_to(.ncbi_datasets_zip_url(accession), zip_path, verbose = verbose)
-
-    extract_dir <- file.path(workdir, "extract")
-    dir.create(extract_dir)
-    utils::unzip(zip_path, exdir = extract_dir)
-
-    fasta_files <- list.files(extract_dir,
-        pattern = "\\.(fna|fasta|fa)(\\.gz)?$",
-        recursive = TRUE, full.names = TRUE
-    )
-    gff_files <- list.files(extract_dir,
-        pattern = "\\.gff(\\.gz)?$",
-        recursive = TRUE, full.names = TRUE
-    )
-    seqrep_files <- list.files(extract_dir,
-        pattern = "sequence_report\\.jsonl$",
-        recursive = TRUE, full.names = TRUE
-    )
-
-    if (!length(fasta_files)) {
-        stop(sprintf("No FASTA file found in NCBI Datasets payload for %s", accession), call. = FALSE)
-    }
-    fasta_file <- fasta_files[[1]]
-    if (grepl("\\.gz$", fasta_file)) {
-        fasta_file <- .gunzip_to_file(fasta_file)
-    }
-
-    # Build the rename map from the sequence report. If absent (rare for
-    # modern assemblies), fall back to "accession" naming with a warning.
-    seqrep <- NULL
-    rename_map <- NULL
-    if (length(seqrep_files)) {
-        seqrep <- .parse_ncbi_sequence_report(seqrep_files[[1]])
-        rename_map <- .build_ncbi_rename_map(seqrep, chrom_naming)
-        if (verbose) {
-            message(sprintf(
-                "  Sequence report: %d contigs (%d assembled, %d other)",
-                nrow(seqrep),
-                sum(seqrep$role == "assembled-molecule"),
-                sum(seqrep$role != "assembled-molecule")
-            ))
-        }
-    } else if (chrom_naming != "accession") {
-        warning(sprintf(
-            "No sequence_report.jsonl in NCBI payload for %s; falling back to chrom_naming='accession'.",
-            accession
-        ), call. = FALSE)
-        chrom_naming <- "accession"
-    }
-
-    if (!is.null(rename_map) && chrom_naming != "accession") {
-        renamed_fasta <- file.path(workdir, "renamed.fna")
-        .rename_fasta_headers(fasta_file, renamed_fasta, rename_map, verbose = verbose)
-        fasta_file <- renamed_fasta
-    }
-
-    genepred_file <- NULL
-    if ("genes" %in% annotations && length(gff_files)) {
-        gff_file <- gff_files[[1]]
-        if (grepl("\\.gz$", gff_file)) {
-            gff_file <- .gunzip_to_file(gff_file)
-        }
-        if (!is.null(rename_map) && chrom_naming != "accession") {
-            renamed_gff <- file.path(workdir, "renamed.gff")
-            .rename_gff3_seqids(gff_file, renamed_gff, rename_map, verbose = verbose)
-            gff_file <- renamed_gff
-        }
-        raw_genepred <- file.path(workdir, "annot.raw.genePred")
-        if (verbose) message(sprintf("  Running gff3ToGenePred on %s", basename(gff_file)))
-        ret <- system2(converter,
-            args = c(shQuote(gff_file), shQuote(raw_genepred)),
-            stdout = if (verbose) "" else FALSE,
-            stderr = if (verbose) "" else FALSE
-        )
-        if (ret != 0) {
-            stop(sprintf("gff3ToGenePred failed (exit %d) on %s", ret, gff_file), call. = FALSE)
-        }
-        # gff3ToGenePred emits 15-col extended genePred — trim to the 12 cols
-        # the C++ importer expects.
-        genepred_file <- file.path(workdir, "annot.genePred")
-        .normalize_ucsc_genepred(raw_genepred, genepred_file)
-    } else if ("genes" %in% annotations) {
-        warning(sprintf("No GFF3 found for %s; building seq-only genome (no genes/exons/utr*)", accession), call. = FALSE)
-    }
-
-    gdb.create(
-        groot       = path,
-        fasta       = fasta_file,
-        genes.file  = genepred_file,
-        annots.file = NULL,
-        format      = format,
-        verbose     = verbose
-    )
-
-    gdb.init(path, rescan = TRUE)
-
-    if (!is.null(seqrep) && !is.null(rename_map)) {
-        .write_chrom_aliases_tsv(path, seqrep, rename_map)
-        if (verbose) message(sprintf("  Wrote chrom_aliases.tsv (%d rows).", nrow(seqrep)))
-    }
-
-    if ("cpgIsland" %in% annotations) {
-        warning("cpgIsland not available from NCBI Datasets; skipping.", call. = FALSE)
-    }
-    if ("cytoband" %in% annotations) {
-        warning("cytoband not available from NCBI Datasets; skipping.", call. = FALSE)
-    }
-    if ("rmsk" %in% annotations) {
-        warning("rmsk loading from NCBI is not implemented in v1; skipping. Use the UCSC backend or the manual recipe to load repeats.", call. = FALSE)
-    }
-
-    .write_genome_info(
-        path, name, recipe, annotations,
-        list(
-            fasta = list(name = basename(fasta_file)),
-            genes = list(name = basename(genepred_file %||% ""))
-        )
-    )
-    invisible(NULL)
-}
-
-# ---------------------------------------------------------------------------
-# s3 / manual / local backends
-# ---------------------------------------------------------------------------
-
-.run_s3_backend <- function(name, recipe, path, annotations, format, verbose) {
-    if (verbose) message(sprintf("S3 backend: aliasing to gdb.create_genome(%s)", recipe$assembly))
-    parent_dir <- dirname(path)
-    if (!dir.exists(parent_dir)) {
-        dir.create(parent_dir, recursive = TRUE)
-    }
-    if (basename(path) != recipe$assembly) {
-        warning(sprintf(
-            "S3 backend extracts to <path>/%s; got path=%s. Final groot at %s/%s.",
-            recipe$assembly, path, path, recipe$assembly
-        ), call. = FALSE)
-    }
-    gdb.create_genome(recipe$assembly, path = parent_dir)
-    invisible(NULL)
-}
-
-.run_local_backend <- function(name, recipe, path, annotations, format, verbose) {
-    src <- recipe$path
-    if (!dir.exists(src)) {
-        stop(sprintf("Local groot does not exist: %s", src), call. = FALSE)
-    }
-    if (!file.exists(file.path(src, "chrom_sizes.txt"))) {
-        stop(sprintf("Path %s does not look like a misha groot (no chrom_sizes.txt)", src), call. = FALSE)
-    }
-    if (verbose) message(sprintf("Local backend: gdb.init(%s)", src))
-    gdb.init(src, rescan = TRUE)
-    invisible(NULL)
-}
-
-.run_manual_backend <- function(name, recipe, path, annotations, format, verbose) {
-    fasta <- recipe$fasta
-    genes_file <- recipe$genes
-    genes_format <- recipe$genes_format %||% "genepred"
-
-    if (!is.null(genes_file) && genes_format == "gff3") {
-        converter <- .gff3_to_genepred_resolve_or_install()
-        workdir <- tempfile("misha_manual_")
-        dir.create(workdir, recursive = TRUE)
-        on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
-
-        local_gff <- file.path(workdir, "input.gff")
-        .download_to(genes_file, local_gff, verbose = verbose)
-        if (grepl("\\.gz$", genes_file)) {
-            local_gff <- .gunzip_to_file(
-                local_gff,
-                file.path(workdir, "input.gff3")
-            )
-        }
-        local_gp <- file.path(workdir, "input.genePred")
-        ret <- system2(converter,
-            args = c(shQuote(local_gff), shQuote(local_gp)),
-            stdout = if (verbose) "" else FALSE,
-            stderr = if (verbose) "" else FALSE
-        )
-        if (ret != 0) {
-            stop(sprintf("gff3ToGenePred failed (exit %d)", ret), call. = FALSE)
-        }
-        genes_file <- local_gp
-    } else if (!is.null(genes_file) && genes_format != "genepred") {
-        stop(sprintf(
-            "Unsupported genes_format '%s'. Supported: genepred, gff3.",
-            genes_format
-        ), call. = FALSE)
-    }
-
-    annots_file <- recipe$annots_file
-    annots_names <- recipe$annots_names
-
-    gdb.create(
-        groot        = path,
-        fasta        = fasta,
-        genes.file   = genes_file,
-        annots.file  = annots_file,
-        annots.names = annots_names,
-        format       = format,
-        verbose      = verbose
-    )
-
-    gdb.init(path, rescan = TRUE)
-
-    if ("rmsk" %in% annotations && !is.null(recipe$rmsk)) {
-        tryCatch(
-            {
-                tmp <- tempfile(fileext = ".gz")
-                on.exit(unlink(tmp), add = TRUE)
-                .download_to(recipe$rmsk, tmp, verbose = verbose)
-                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
-                .save_post_build_intervals("rmsk", .parse_ucsc_rmsk(unz), verbose = verbose)
-            },
-            error = function(e) warning(sprintf("rmsk load failed: %s", conditionMessage(e)), call. = FALSE)
-        )
-    }
-    if ("cpgIsland" %in% annotations && !is.null(recipe$cpgIsland)) {
-        tryCatch(
-            {
-                tmp <- tempfile(fileext = ".gz")
-                on.exit(unlink(tmp), add = TRUE)
-                .download_to(recipe$cpgIsland, tmp, verbose = verbose)
-                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
-                .save_post_build_intervals("cpgIsland", .parse_ucsc_cpg_island(unz), verbose = verbose)
-            },
-            error = function(e) warning(sprintf("cpgIsland load failed: %s", conditionMessage(e)), call. = FALSE)
-        )
-    }
-    if ("cytoband" %in% annotations && !is.null(recipe$cytoband)) {
-        tryCatch(
-            {
-                tmp <- tempfile(fileext = ".gz")
-                on.exit(unlink(tmp), add = TRUE)
-                .download_to(recipe$cytoband, tmp, verbose = verbose)
-                unz <- .gunzip_to_file(tmp, sub("\\.gz$", "", tmp))
-                .save_post_build_intervals("cytoband", .parse_ucsc_cytoband(unz), verbose = verbose)
-            },
-            error = function(e) warning(sprintf("cytoband load failed: %s", conditionMessage(e)), call. = FALSE)
-        )
-    }
-
-    .write_genome_info(path, name, recipe, annotations, list())
-    invisible(NULL)
-}
-
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 #' Build a misha genome database from a name
 #'
-#' Builds a misha genomic database for a named assembly by downloading FASTA
-#' and (optionally) gene annotations, repeats, CpG islands, and cytobands from
-#' UCSC golden path or NCBI Datasets, then dispatching to \code{\link{gdb.create}}.
+#' Builds a misha genomic database for a named assembly. Resolves the name
+#' through the registry chain (or pattern-fallback for \code{GC[FA]_*}
+#' accessions), downloads the FASTA, calls \code{\link{gdb.create}} to build
+#' the seq-only groot, then dispatches to \code{\link{gdb.install_intervals}}
+#' for the requested sets.
 #'
-#' Compared to \code{\link{gdb.create_genome}} (which downloads a pre-baked
-#' tarball from S3), \code{gdb.build_genome} builds from upstream sources at
-#' call time and supports any UCSC golden-path assembly or any NCBI assembly
-#' accession.
+#' For details on resolution, sources, sets, and chromosome-alias handling,
+#' see \code{\link{gdb.install_intervals}}.
 #'
-#' \strong{Name resolution.} \code{name} is resolved through a chain:
-#' \enumerate{
-#'   \item the \code{registry} argument, if given;
-#'   \item \code{getOption("misha.genome_registry")};
-#'   \item a project-local \code{misha.yaml} (walked up to git root);
-#'   \item the package's built-in \code{inst/genomes.yaml};
-#'   \item if \code{name} matches \code{GC[FA]_<digits>.<digits>}, it is
-#'     synthesized as \code{\{source: ncbi, accession: <name>\}}.
-#' }
-#'
-#' \strong{Backends.}
-#' \describe{
-#'   \item{\code{ucsc}}{Golden path. Pulls
-#'     \code{ncbiRefSeq.txt.gz} (genes, RefSeq), \code{ncbiRefSeqLink.txt.gz}
-#'     (gene annotations), \code{rmsk.txt.gz}, \code{cpgIslandExt.txt.gz},
-#'     \code{cytoBandIdeo.txt.gz} as requested.}
-#'   \item{\code{ncbi}}{NCBI Datasets API. FASTA and GFF3 (RefSeq). Requires
-#'     the \code{gff3ToGenePred} binary, downloaded on demand to
-#'     \code{tools::R_user_dir("misha", "cache")} after user consent.
-#'     \code{rmsk}/\code{cpgIsland}/\code{cytoband} are not loaded for NCBI
-#'     assemblies in this version. Recipe field \code{chrom_naming} controls
-#'     how the FASTA contigs are named on disk (see "Chromosome naming"
-#'     below); the full sequence-report mapping is persisted at
-#'     \code{<groot>/chrom_aliases.tsv}.}
-#'   \item{\code{s3}}{Alias for \code{\link{gdb.create_genome}} (pre-baked
-#'     tarball).}
-#'   \item{\code{local}}{No download — \code{\link{gdb.init}} an existing
-#'     groot at the registry-specified path.}
-#'   \item{\code{manual}}{Use registry-supplied URLs verbatim.}
-#' }
-#'
-#' On success a \code{genome_info.yaml} file is written at the groot root,
-#' recording the source, recipe, and download time, and \code{\link{gdb.init}}
-#' is called on the new groot.
-#'
-#' \strong{Chromosome naming (NCBI backend).} The recipe field
-#' \code{chrom_naming} controls how the on-disk canonical contig names are
-#' chosen. NCBI ships its FASTAs/GFFs keyed by RefSeq accession (e.g.
-#' \code{NC_067374.1}); the sequence-report metadata maps these to friendlier
-#' names. Allowed values:
-#' \describe{
-#'   \item{\code{"sequence_name"} (default)}{NCBI's \code{chrName} for
-#'     assembled molecules (\code{1}, \code{2}, ..., \code{X}, \code{MT});
-#'     RefSeq accession for unplaced/unlocalized scaffolds. Misha's existing
-#'     \code{CHROM_ALIAS} mechanism then resolves \code{chr1 <-> 1} and
-#'     \code{chrM <-> M <-> MT} automatically.}
-#'   \item{\code{"ucsc"}}{UCSC-style names: \code{chr1}, \code{chr2}, ...,
-#'     \code{chrX}, \code{chrM}, \code{chrUn_<acc>v<n>} for unplaced.}
-#'   \item{\code{"accession"}}{Keep RefSeq accessions verbatim (no rename).}
-#' }
-#' If the NCBI payload lacks a sequence report, the build falls back to
-#' \code{"accession"} with a warning. The full mapping (canonical, RefSeq,
-#' GenBank, sequenceName, role) is written to
-#' \code{<groot>/chrom_aliases.tsv} for downstream tooling.
-#'
-#' \strong{Alias loading.} On every \code{\link{gdb.init}}, if a
-#' \code{chrom_aliases.tsv} is present at the groot, its
-#' \code{refseqAccession} / \code{genbankAccession} / \code{sequenceName} /
-#' \code{chrName} columns are added to \code{.misha$CHROM_ALIAS} as aliases
-#' pointing at the canonical contig name. This makes
-#' \code{gintervals("NC_067374.1", ...)},
-#' \code{gintervals("CM028932.1", ...)}, and
-#' \code{gintervals("contig_2989", ...)} all resolve to the same canonical
-#' chromosome as \code{gintervals("chr1", ...)} or \code{gintervals("1", ...)}.
-#'
-#' @param name Genome name. Either a registry key (e.g. \code{"hg38"},
-#'   \code{"UM_NZW_1.0"}) or an NCBI accession (e.g. \code{"GCF_009806435.1"}).
-#' @param path Output directory for the new groot. Must not exist.
-#' @param registry Optional path to a YAML registry file. Overrides the
-#'   resolution chain.
-#' @param annotations Character vector; subset of
-#'   \code{c("genes","rmsk","cpgIsland","cytoband")}. Annotations not
-#'   available from the chosen source emit a warning and are skipped.
-#' @param format Database format: \code{"indexed"} (default) or
-#'   \code{"per-chromosome"}. \code{NULL} uses
+#' @param name Genome name (registry key, alias, or \code{GC[FA]_*} accession).
+#' @param path Output directory; must not exist.
+#' @param registry Optional path to an explicit registry YAML.
+#' @param sets Subset of \code{c("genes", "rmsk", "cgi", "cytoband")}.
+#'   Empty vector \code{character(0)} = sequence-only build.
+#' @param prefix Character scalar prepended to set names (see
+#'   \code{\link{gdb.install_intervals}}).
+#' @param gene_sets Named character vector mapping the four
+#'   \code{gintervals.import_genes()} roles to on-disk set names; \code{NA} skips
+#'   a role.
+#' @param gtf_priority Character vector ordering GTF source preference.
+#' @param format \code{"indexed"} or \code{"per-chromosome"}; \code{NULL} =>
 #'   \code{getOption("gmulticontig.indexed_format", TRUE)}.
-#' @param verbose If \code{TRUE}, prints progress messages.
-#' @return None; called for side effects (creates groot, then
-#'   \code{gdb.init}s it).
+#' @param verbose If \code{TRUE}, prints progress.
+#' @return None (invisible \code{NULL}).
 #'
-#' @seealso \code{\link{gdb.create}}, \code{\link{gdb.create_genome}},
-#'   \code{\link{gdb.list_genomes}}, \code{\link{gdb.genome_info}},
-#'   \code{\link{gdb.install_gff3_converter}}.
+#' @seealso \code{\link{gdb.install_intervals}}, \code{\link{gdb.create}},
+#'   \code{\link{gdb.list_genomes}}, \code{\link{gdb.genome_info}}.
 #'
 #' @examples
 #' \dontrun{
-#' # Standard UCSC assembly (whitelisted in inst/genomes.yaml)
 #' gdb.build_genome("hg38", path = "~/genomes/hg38")
-#'
-#' # Any NCBI assembly by accession
-#' gdb.build_genome("GCF_009806435.1", path = "~/genomes/UM_NZW_1.0")
-#'
-#' # Sequence-only build (no gene annotation tracks)
-#' gdb.build_genome("dm6", path = "/tmp/dm6", annotations = character(0))
+#' gdb.build_genome("GCA_004023825.1",
+#'     path   = "~/genomes/arctic_fox",
+#'     prefix = "intervs.global."
+#' )
 #' }
 #'
 #' @export
 gdb.build_genome <- function(name,
                              path = name,
                              registry = NULL,
-                             annotations = c("genes", "rmsk", "cpgIsland", "cytoband"),
+                             sets = c("genes", "rmsk", "cgi", "cytoband"),
+                             prefix = "",
+                             gene_sets = c(
+                                 tss = "tss", exons = "exons",
+                                 utr3 = "utr3", utr5 = "utr5"
+                             ),
+                             gtf_priority = c(
+                                 "ncbiRefSeq", "bestRefSeq",
+                                 "ensGene", "augustus", "xenoRefGene"
+                             ),
                              format = NULL,
                              verbose = TRUE) {
     if (file.exists(path)) {
-        stop(sprintf("Output path '%s' already exists; refusing to overwrite. Choose a fresh path.", path), call. = FALSE)
+        stop(sprintf(
+            "Output path '%s' already exists; refusing to overwrite. Choose a fresh path.",
+            path
+        ), call. = FALSE)
     }
-    annotations <- match.arg(annotations,
-        choices = c("genes", "rmsk", "cpgIsland", "cytoband"),
-        several.ok = TRUE
-    )
+    if (length(sets)) {
+        sets <- match.arg(sets,
+            choices = c("genes", "rmsk", "cgi", "cytoband"),
+            several.ok = TRUE
+        )
+    }
+
     res <- .resolve_genome(name, registry = registry)
     recipe <- res$recipe
     if (verbose) {
-        message(sprintf("Resolved '%s' from %s -> source=%s", name, res$resolved_from, recipe$source))
+        message(sprintf(
+            "Resolved '%s' from %s -> source=%s",
+            name, res$resolved_from, recipe$source
+        ))
     }
 
-    dispatcher <- switch(recipe$source,
-        ucsc = .run_ucsc_backend,
-        ncbi = .run_ncbi_backend,
-        s3 = .run_s3_backend,
-        local = .run_local_backend,
-        manual = .run_manual_backend,
-        stop(sprintf("Internal error: no backend for source '%s'", recipe$source), call. = FALSE)
-    )
-    dispatcher(name, recipe, path, annotations, format, verbose)
+    seq_info <- .build_seq(recipe, path, format = format, verbose = verbose)
+    gdb.init(path, rescan = TRUE)
+
+    if (length(sets)) {
+        gdb.install_intervals(
+            groot        = path,
+            source       = recipe,
+            sets         = sets,
+            prefix       = prefix,
+            gene_sets    = gene_sets,
+            gtf_priority = gtf_priority,
+            overwrite    = FALSE,
+            registry     = NULL,
+            verbose      = verbose
+        )
+    }
+
+    .write_genome_info(path, name, recipe, sets, files = seq_info$files_record)
     invisible(NULL)
 }
 

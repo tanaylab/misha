@@ -42,12 +42,6 @@
     invisible(NULL)
 }
 
-# DEPRECATED shim: kept until existing backends are migrated to the new installers.
-# Remove when backends are rewired in Phase D/E (Task 22).
-.save_post_build_intervals <- function(intervals_set_name, df, verbose = TRUE) {
-    .save_intervals(intervals_set_name, df, overwrite = FALSE, verbose = verbose)
-}
-
 # Save the combined `<prefix>rmsk` and a `<prefix>rmsk_<class>` per unique class.
 # Class normalization: lowercase; trailing '?' -> '_qmark'.
 # df must already be chrom-translated and contain columns:

@@ -137,30 +137,6 @@ test_that(".resolve_genome errors clearly for unknown name", {
 })
 
 # ---------------------------------------------------------------------------
-# UCSC URL builder
-# ---------------------------------------------------------------------------
-
-test_that(".ucsc_urls constructs the right URLs for hg38", {
-    urls <- misha:::.ucsc_urls("hg38",
-        annotations = c("genes", "rmsk", "cpgIsland", "cytoband")
-    )
-    expect_match(urls$fasta, "/goldenPath/hg38/bigZips/hg38\\.fa\\.gz$")
-    expect_match(urls$genes, "/database/ncbiRefSeq\\.txt\\.gz$")
-    expect_match(urls$annots, "/database/ncbiRefSeqLink\\.txt\\.gz$")
-    expect_match(urls$rmsk, "/database/rmsk\\.txt\\.gz$")
-    expect_match(urls$cpgIsland, "/database/cpgIslandExt\\.txt\\.gz$")
-    expect_match(urls$cytoband, "/database/cytoBandIdeo\\.txt\\.gz$")
-})
-
-test_that(".ucsc_urls omits annotations not requested", {
-    urls <- misha:::.ucsc_urls("mm10", annotations = c("genes"))
-    expect_true(!is.null(urls$genes))
-    expect_null(urls$rmsk)
-    expect_null(urls$cpgIsland)
-    expect_null(urls$cytoband)
-})
-
-# ---------------------------------------------------------------------------
 # Architecture detection
 # ---------------------------------------------------------------------------
 
