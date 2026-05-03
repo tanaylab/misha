@@ -12,7 +12,7 @@
 # Internal constants
 # ---------------------------------------------------------------------------
 
-.MISHA_GENOME_SOURCES <- c("ucsc", "ncbi", "s3", "manual", "local")
+.MISHA_GENOME_SOURCES <- c("ucsc", "ucsc-hub", "ncbi", "s3", "manual", "local")
 
 .UCSC_GOLDENPATH <- "https://hgdownload.soe.ucsc.edu/goldenPath"
 .NCBI_DATASETS_API <- "https://api.ncbi.nlm.nih.gov/datasets/v2"
@@ -67,6 +67,21 @@
     }
     if (src == "ucsc") {
         if (is.null(recipe$assembly)) miss("assembly")
+    } else if (src == "ucsc-hub") {
+        if (is.null(recipe$accession)) miss("accession")
+        if (!grepl("^GC[FA]_[0-9]+\\.[0-9]+$", recipe$accession)) {
+            stop(sprintf(
+                "Genome '%s': accession '%s' does not match GC[FA]_<digits>.<digits>",
+                name, recipe$accession
+            ), call. = FALSE)
+        }
+        if (!is.null(recipe$chrom_naming) &&
+            !recipe$chrom_naming %in% c("ucsc", "accession", "sequence_name")) {
+            stop(sprintf(
+                "Genome '%s': chrom_naming '%s' invalid for ucsc-hub.",
+                name, recipe$chrom_naming
+            ), call. = FALSE)
+        }
     } else if (src == "ncbi") {
         if (is.null(recipe$accession)) miss("accession")
         if (!grepl("^GC[FA]_[0-9]+\\.[0-9]+$", recipe$accession)) {
