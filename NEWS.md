@@ -5,6 +5,7 @@
 * `rmsk` now produces both a combined `<prefix>rmsk` set and per-class subsets `<prefix>rmsk_<class>` (e.g. `rmsk_sine`, `rmsk_line`).
 * Renames in `gdb.build_genome()`: `annotations` → `sets`; track `cpgIsland` → `cgi`.
 * Added `gdb.install_gff3_converter()` and `gdb.install_gtf_converter()` to pre-install UCSC binary helpers (`gff3ToGenePred`, `gtfToGenePred`). Override paths via `MISHA_GFF3_TO_GENEPRED` / `MISHA_GTF_TO_GENEPRED`.
+* Known limitation: UCSC's prebuilt `gff3ToGenePred` and `gtfToGenePred` binaries require glibc ≥ 2.34. On older systems (e.g. CentOS 8), `conda install -c bioconda ucsc-gff3togenepred ucsc-gtftogenepred` and point `MISHA_GFF3_TO_GENEPRED` / `MISHA_GTF_TO_GENEPRED` at the env's `bin/` paths.
 
 # misha 5.6.25
 
