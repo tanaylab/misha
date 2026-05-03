@@ -63,3 +63,17 @@
     }
     full[[1L]]
 }
+
+# Translate `rows[[chrom_col]]` from source_col naming scheme to groot_col naming
+# scheme via alias_df. If source_col == groot_col, no-op. Caller MUST ensure
+# every rows[[chrom_col]] value is present in alias_df[[source_col]] (use
+# .detect_alias_column with 100% threshold first); this function does not handle
+# missing keys.
+.translate_chroms <- function(rows, chrom_col, alias_df, source_col, groot_col) {
+    if (identical(source_col, groot_col)) {
+        return(rows)
+    }
+    map <- setNames(alias_df[[groot_col]], alias_df[[source_col]])
+    rows[[chrom_col]] <- map[rows[[chrom_col]]]
+    rows
+}

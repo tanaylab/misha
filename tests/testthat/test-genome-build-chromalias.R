@@ -50,3 +50,23 @@ test_that(".detect_alias_column on empty target errors", {
     df <- .parse_ucsc_chromalias(f)
     expect_error(.detect_alias_column(df, character(0)), "empty target")
 })
+
+test_that(".translate_chroms is a no-op when source_col == groot_col", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    alias_df <- .parse_ucsc_chromalias(f)
+    rows <- data.frame(chrom = c("chr1", "chr2"), x = 1:2, stringsAsFactors = FALSE)
+    out <- .translate_chroms(rows, "chrom", alias_df, "ucsc", "ucsc")
+    expect_identical(out, rows)
+})
+
+test_that(".translate_chroms maps via alias table when columns differ", {
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    alias_df <- .parse_ucsc_chromalias(f)
+    rows <- data.frame(
+        chrom = c("NC_067374.1", "NC_067375.1"), x = 1:2,
+        stringsAsFactors = FALSE
+    )
+    out <- .translate_chroms(rows, "chrom", alias_df, "refseq", "ucsc")
+    expect_equal(out$chrom, c("chr1", "chr2"))
+    expect_equal(out$x, 1:2)
+})
