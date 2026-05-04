@@ -1,3 +1,7 @@
+# misha 5.6.25
+
+* `gsynth.sample()` and `gsynth.random()` now preserve `N` (and lowercase `n`) positions from the original reference by default. Previously, every position was filled with a sampled/random ACGT base, so reference gaps and centromeres came out as fabricated nucleotides. Pass `preserve_n = FALSE` to restore the legacy behavior.
+
 # misha 5.6.24
 
 * Fixed `gquantiles` (`gmultitasking = FALSE`) hanging for hours on the first `global.percentile.max` lookup of a fresh dense track. `.gtrack.prepare.pvals` asks for ~12k percentiles, and the single-process fast path introduced in 5.6.20 walked the unsorted suffix with one `nth_element` per target rank — O(k·N) work that hit ~10¹² compares on full-genome dense tracks. Above ~2·log₂(N) target ranks the fast path now sorts the reservoir once and indexes; below it, the suffix walk is preserved (still ~3× faster than sorting for the typical 21-percentile call). Single-process and multitask results remain bit-identical.

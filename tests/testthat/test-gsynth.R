@@ -320,7 +320,7 @@ test_that("gsynth.sample produces output file", {
     # Check FASTA format
     lines <- readLines(output_fasta, n = 2)
     expect_true(grepl("^>", lines[1]))
-    expect_true(grepl("^[ACGT]+$", lines[2]))
+    expect_true(grepl("^[ACGTN]+$", lines[2]))
 
     # Clean up
     unlink(output_fasta)
@@ -482,7 +482,7 @@ test_that("gsynth.sample produces valid DNA sequences", {
     full_seq <- paste(seq_lines, collapse = "")
 
     # Should only contain A, C, G, T
-    expect_true(grepl("^[ACGT]+$", full_seq))
+    expect_true(grepl("^[ACGTN]+$", full_seq))
 
     # Should have correct length
     expect_equal(nchar(full_seq), 10000)
@@ -981,7 +981,7 @@ test_that("gsynth.train with GC and CG stratification (user use case)", {
     lines <- readLines(output_fasta)
     seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
     expect_equal(nchar(seq_content), 10000)
-    expect_true(grepl("^[ACGT]+$", seq_content))
+    expect_true(grepl("^[ACGTN]+$", seq_content))
 
     unlink(output_fasta)
     gvtrack.rm("g_frac")
@@ -1032,7 +1032,7 @@ test_that("gsynth.sample from model with bin_merge produces valid sequences", {
     lines <- readLines(output_fasta)
     seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
     expect_equal(nchar(seq_content), 5000)
-    expect_true(grepl("^[ACGT]+$", seq_content))
+    expect_true(grepl("^[ACGTN]+$", seq_content))
 
     unlink(output_fasta)
     gvtrack.rm("g_frac")
@@ -1170,7 +1170,7 @@ test_that("gsynth.sample from 3D model works correctly", {
     lines <- readLines(output_fasta)
     seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
     expect_equal(nchar(seq_content), 5000)
-    expect_true(grepl("^[ACGT]+$", seq_content))
+    expect_true(grepl("^[ACGTN]+$", seq_content))
 
     unlink(output_fasta)
     gvtrack.rm("g_frac")
@@ -1456,7 +1456,7 @@ test_that("gsynth.sample warns when using sparse bins", {
     expect_true(file.exists(output_fasta))
     lines <- readLines(output_fasta)
     seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
-    expect_true(grepl("^[ACGT]+$", seq_content))
+    expect_true(grepl("^[ACGTN]+$", seq_content))
 
     unlink(output_fasta)
     gvtrack.rm("test_vt")
@@ -1638,7 +1638,7 @@ test_that("gsynth.sample with bin_merge at sampling time", {
     lines <- readLines(output_fasta)
     seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
     expect_equal(nchar(seq_content), 5000)
-    expect_true(grepl("^[ACGT]+$", seq_content))
+    expect_true(grepl("^[ACGTN]+$", seq_content))
 
     unlink(output_fasta)
     gvtrack.rm("g_frac")
@@ -1798,7 +1798,7 @@ test_that("gsynth.sample bin_merge handles sparse bins from training", {
     lines <- readLines(output_fasta)
     seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
     expect_equal(nchar(seq_content), 5000)
-    expect_true(grepl("^[ACGT]+$", seq_content))
+    expect_true(grepl("^[ACGTN]+$", seq_content))
 
     unlink(output_fasta)
     gvtrack.rm("test_vt")
@@ -1832,7 +1832,7 @@ test_that("gsynth.sample returns vector with output_format='vector'", {
     expect_type(seqs, "character")
     expect_equal(length(seqs), 1)
     expect_equal(nchar(seqs[1]), 1000)
-    expect_true(grepl("^[ACGT]+$", seqs[1]))
+    expect_true(grepl("^[ACGTN]+$", seqs[1]))
 
     gvtrack.rm("test_vt")
 })
@@ -1867,7 +1867,7 @@ test_that("gsynth.sample n_samples generates multiple sequences", {
     expect_equal(length(seqs), 5)
     for (i in seq_along(seqs)) {
         expect_equal(nchar(seqs[i]), 500)
-        expect_true(grepl("^[ACGT]+$", seqs[i]))
+        expect_true(grepl("^[ACGTN]+$", seqs[i]))
     }
 
     # Each sample should be different (they use different random sequences)
@@ -1955,7 +1955,7 @@ test_that("gsynth.sample n_samples with multiple intervals", {
     # Each should be 500bp
     for (i in seq_along(seqs)) {
         expect_equal(nchar(seqs[i]), 500)
-        expect_true(grepl("^[ACGT]+$", seqs[i]))
+        expect_true(grepl("^[ACGTN]+$", seqs[i]))
     }
 
     gvtrack.rm("test_vt")
@@ -2103,7 +2103,7 @@ test_that("gsynth.sample works with 0D model", {
     expect_type(seqs, "character")
     expect_equal(length(seqs), 1)
     expect_true(all(nchar(seqs) > 0))
-    expect_true(all(grepl("^[ACGT]+$", seqs)))
+    expect_true(all(grepl("^[ACGTN]+$", seqs)))
     expect_equal(nchar(seqs[1]), 10000)
 })
 
@@ -2231,7 +2231,7 @@ test_that("0D model with n_samples generates multiple sequences", {
     expect_equal(length(seqs), 5)
     for (i in seq_along(seqs)) {
         expect_equal(nchar(seqs[i]), 1000)
-        expect_true(grepl("^[ACGT]+$", seqs[i]))
+        expect_true(grepl("^[ACGTN]+$", seqs[i]))
     }
 
     # Each sample should be different
@@ -2390,7 +2390,7 @@ test_that("gsynth.random generates sequences with uniform probabilities", {
     expect_type(seqs, "character")
     expect_equal(length(seqs), 1)
     expect_equal(nchar(seqs[1]), 10000)
-    expect_true(grepl("^[ACGT]+$", seqs[1]))
+    expect_true(grepl("^[ACGTN]+$", seqs[1]))
 })
 
 test_that("gsynth.random respects nucleotide probabilities", {
@@ -2472,7 +2472,7 @@ test_that("gsynth.random normalizes probabilities", {
     )
 
     expect_equal(nchar(seqs[1]), 1000)
-    expect_true(grepl("^[ACGT]+$", seqs[1]))
+    expect_true(grepl("^[ACGTN]+$", seqs[1]))
 })
 
 test_that("gsynth.random with n_samples generates multiple sequences", {
@@ -2488,7 +2488,7 @@ test_that("gsynth.random with n_samples generates multiple sequences", {
     expect_equal(length(seqs), 5)
     for (i in seq_along(seqs)) {
         expect_equal(nchar(seqs[i]), 500)
-        expect_true(grepl("^[ACGT]+$", seqs[i]))
+        expect_true(grepl("^[ACGTN]+$", seqs[i]))
     }
 
     # Sequences should be different
@@ -2540,7 +2540,7 @@ test_that("gsynth.random writes FASTA output", {
     lines <- readLines(output_fasta)
     expect_true(grepl("^>", lines[1]))
     seq_content <- paste(lines[!grepl("^>", lines)], collapse = "")
-    expect_true(grepl("^[ACGT]+$", seq_content))
+    expect_true(grepl("^[ACGTN]+$", seq_content))
     expect_equal(nchar(seq_content), 1000)
 
     unlink(output_fasta)
@@ -3337,12 +3337,13 @@ test_that("gsynth.sample FASTA output writes a samtools-compatible .fai alongsid
     # Single-record file: header at byte 0, first base at byte len(">name\n").
     expect_equal(fai$offset[1], 1L + nchar(fai$name[1]) + 1L)
 
-    # Seek to offset and read linebases bytes; they must be ACGT.
+    # Seek to offset and read linebases bytes; they must be valid base
+    # characters (ACGT plus possibly N if preserve_n carried over a gap).
     con <- file(out_fa, "rb")
     seek(con, where = fai$offset[1], origin = "start")
     bytes <- rawToChar(readBin(con, what = "raw", n = fai$linebases[1]))
     close(con)
-    expect_true(grepl("^[ACGT]+$", bytes))
+    expect_true(grepl("^[ACGTN]+$", bytes))
 
     unlink(c(out_fa, fai_path))
     gvtrack.rm("g_frac")
