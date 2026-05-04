@@ -157,10 +157,8 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 
 		// Fast path: the entire stream fits in the reservoir, so sp.samples()
 		// holds every non-NaN value with no sub-sampling. Compute percentiles
-		// via nth_element on the unsorted suffix instead of the O(N log N)
-		// std::sort that StreamPercentiler::get_percentile would otherwise run
-		// on first call. For 21 evenly-spaced percentiles this is ~3x faster
-		// (≈ 11N partition work vs ≈ 31N sort work for N=2.65e9).
+		// without the O(N log N) std::sort that StreamPercentiler::get_percentile
+		// would otherwise run on first call.
 		bool use_nth_element_path = sp.stream_size() > 0 &&
 		                            sp.stream_size() <= sp.max_rnd_sampling_buf_size();
 		if (use_nth_element_path) {
@@ -179,18 +177,33 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 			sort(targets.begin(), targets.end());
 			targets.erase(unique(targets.begin(), targets.end()), targets.end());
 
-			// Walk targets in ascending order, partitioning only the unconsumed
-			// suffix each time. After nth_element on [prev_end, end) at rank r,
-			// samples[r] is the r-th smallest globally and the suffix
-			// (r, end) is bounded below by it, so the next nth_element starts
-			// at r+1 instead of begin.
 			vector<double> values_at_targets(targets.size());
-			uint64_t prev_end = 0;
-			for (size_t t = 0; t < targets.size(); ++t) {
-				uint64_t r = targets[t];
-				nth_element(samples.begin() + prev_end, samples.begin() + r, samples.end());
-				values_at_targets[t] = samples[r];
-				prev_end = r + 1;
+
+			// nth_element-on-suffix is O(k * N) on average; std::sort is O(N log N).
+			// Crossover at k ≈ log2(N). Above the crossover (e.g. .gtrack.prepare.pvals
+			// asks for ~12k percentiles, ~24k unique target ranks), one sort is
+			// far cheaper than k incremental partitions. For typical 21-percentile
+			// gquantiles calls the suffix walk is still ~3x faster than a full sort.
+			const size_t log2N = (N <= 2) ? 1 : (size_t)ceil(log2((double)N));
+			const size_t crossover = max<size_t>(64, 2 * log2N);
+
+			if (targets.size() <= crossover) {
+				// Walk targets in ascending order, partitioning only the unconsumed
+				// suffix each time. After nth_element on [prev_end, end) at rank r,
+				// samples[r] is the r-th smallest globally and the suffix
+				// (r, end) is bounded below by it, so the next nth_element starts
+				// at r+1 instead of begin.
+				uint64_t prev_end = 0;
+				for (size_t t = 0; t < targets.size(); ++t) {
+					uint64_t r = targets[t];
+					nth_element(samples.begin() + prev_end, samples.begin() + r, samples.end());
+					values_at_targets[t] = samples[r];
+					prev_end = r + 1;
+				}
+			} else {
+				sort(samples.begin(), samples.end());
+				for (size_t t = 0; t < targets.size(); ++t)
+					values_at_targets[t] = samples[targets[t]];
 			}
 
 			for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {

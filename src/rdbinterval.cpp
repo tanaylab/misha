@@ -323,11 +323,20 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 			const uint64_t min_bins_per_kid = 50000;
 			uint64_t by_bins = max<uint64_t>(1, (total_bins + min_bins_per_kid - 1) / min_bins_per_kid);
 
-			if (min_scope > 0 && (uint64_t)range > min_scope) {
-				uint64_t by_scope = (uint64_t)((range + (int64_t)min_scope - 1) / (int64_t)min_scope);
+			// Floor for bp/kid: with iterator=1, min_bins_per_kid=50000 alone caps
+			// each kid at 50 kbp of scope, which on a fast per-bp operation (PWM
+			// scoring at ~200 ns/bp ≈ 10 ms work) is dwarfed by the per-kid
+			// fork+setup cost (~15 ms). On 5 Mb scopes that meant max_processes
+			// kids running ~10 ms of work each — measured 50% slower than the
+			// unsplit path. 500 kbp/kid keeps each fork in the >100 ms work range
+			// for fast PWM scans while leaving big workloads (e.g. chr15
+			// iter=20 with 390 vtracks) capped by max_processes as before.
+			const uint64_t min_bp_per_kid_range_split = 500000;
+			uint64_t scope_floor = max(min_scope, min_bp_per_kid_range_split);
+
+			if ((uint64_t)range > scope_floor) {
+				uint64_t by_scope = (uint64_t)((range + scope_floor - 1) / scope_floor);
 				desired_kids = (int)min<uint64_t>(max_num_pids, min(by_scope, by_bins));
-			} else if (min_scope == 0) {
-				desired_kids = (int)min<uint64_t>(max_num_pids, by_bins);
 			}
 			desired_kids = max(desired_kids, 1);
 
