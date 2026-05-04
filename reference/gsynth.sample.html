@@ -19,7 +19,7 @@ genome within each stratification bin."><!-- mathjax --><script src="https://cdn
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.24</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.25</span>
       </span>
     </div>
 
@@ -81,6 +81,7 @@ genome within each stratification bin.</p>
 <span>  output_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  output_format <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"misha"</span>, <span class="st">"fasta"</span>, <span class="st">"vector"</span><span class="op">)</span>,</span>
 <span>  mask_copy <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  preserve_n <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  seed <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  intervals <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  n_samples <span class="op">=</span> <span class="fl">1</span>,</span>
@@ -117,6 +118,16 @@ Note: mask_copy intervals should be non-overlapping and sorted by start
 position within each chromosome. Overlapping intervals may result in
 only the first overlapping region being copied, with subsequent overlaps
 skipped due to cursor advancement during sequential processing.</p></dd>
+
+
+<dt id="arg-preserve-n">preserve_n<a class="anchor" aria-label="anchor" href="#arg-preserve-n"></a></dt>
+<dd><p>Logical; default <code>TRUE</code>. When <code>TRUE</code>, positions
+whose original reference is <code>N</code> (or <code>n</code>) are written to the
+output verbatim instead of being filled in with a sampled ACGT base.
+Case is preserved (so soft-masked <code>n</code> round-trips). <code>mask_copy</code>
+regions take precedence: inside a <code>mask_copy</code> interval the original
+byte is copied regardless. Set to <code>FALSE</code> to restore the
+pre-5.6.22 behavior of treating every position as something to sample.</p></dd>
 
 
 <dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>
@@ -177,11 +188,16 @@ function also writes a samtools-compatible <code>.fai</code> file alongside the
 FASTA (byte offsets are tracked during the write loop, so this is
 effectively free). The index is suitable for any downstream tool that
 expects a samtools-indexed reference.</p>
-<p><strong>N bases during sampling:</strong> When the sampler needs to initialize the
-first k-mer context and encounters regions with only N bases, it falls back
-to uniform random base selection until a valid context is established.
-Similarly, if a bin has no learned statistics (sparse bin with NA CDF),
-uniform sampling is used for that position.</p>
+<p><strong>N bases during sampling:</strong> By default (<code>preserve_n = TRUE</code>)
+positions whose original reference is N are copied verbatim into the
+output, so gaps and centromeres remain N rather than being fabricated as
+ACGT. Where the sampler still has to fill an N-adjacent k-mer context
+(the first k bp inside an interval, or any k-mer window containing a
+preserved N), it falls back to uniform random base selection until a
+valid context is re-established. Similarly, if a bin has no learned
+statistics (sparse bin with NA CDF), uniform sampling is used for that
+position. Pass <code>preserve_n = FALSE</code> to recover the pre-5.6.22
+behavior of sampling every position regardless of the reference.</p>
 <p><strong>Sparse bins:</strong> If the model has sparse bins (from <code>min_obs</code> during
 training), a warning is issued when sampling regions that fall into these bins.
 Consider using <code>bin_merge</code> to redirect sparse bins to well-populated ones.</p>
@@ -240,7 +256,7 @@ Consider using <code>bin_merge</code> to redirect sparse bins to well-populated 
 <span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>16 sparse bins (with &lt; 1000 observations) will be used during sampling.</span>
 <span class="r-wrn co"><span class="r-pr">#&gt;</span> These bins will use uniform base distribution. Consider using bin_merge to merge them.</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Sampling synthetic genome...</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Synthetic genome written to: /tmp/RtmpTbUnvB/synthetic_genome.fa</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Synthetic genome written to: /tmp/RtmpPxLuIy/synthetic_genome.fa</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
