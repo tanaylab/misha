@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.23</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.24</span>
       </span>
     </div>
 
@@ -89,7 +89,7 @@
       <h1 data-toc-skip>Manual</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.6.23/vignettes/Manual.Rmd" class="external-link"><code>vignettes/Manual.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/vignettes/Manual.Rmd" class="external-link"><code>vignettes/Manual.Rmd</code></a></small>
       <div class="hidden name"><code>Manual.Rmd</code></div>
 
     </div>
@@ -882,18 +882,18 @@ values
 where
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>V</mi><mi>i</mi></msub><annotation encoding="application/x-tex">V_i</annotation></semantics></math>
 maps to an interval
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">[</mo><mi>b</mi><mi>i</mi><mi>n</mi><mi>s</mi><mi>i</mi><mi>z</mi><mi>e</mi><mo>*</mo><mi>i</mi><mo>,</mo><mi>b</mi><mi>i</mi><mi>n</mi><mi>s</mi><mi>i</mi><mi>z</mi><mi>e</mi><mo>*</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo>+</mo><mn>1</mn><mo stretchy="true" form="postfix">)</mo></mrow><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">[binsize * i, binsize * (i+1))</annotation></semantics></math>.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">[</mo><mi>b</mi><mi>i</mi><mi>n</mi><mi>s</mi><mi>i</mi><mi>z</mi><mi>e</mi><mo>*</mo><mi>i</mi><mo>,</mo><mi>b</mi><mi>i</mi><mi>n</mi><mi>s</mi><mi>i</mi><mi>z</mi><mi>e</mi><mo>*</mo><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix">)</mo><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">[binsize * i, binsize * (i+1))</annotation></semantics></math>.
 Dense track files do not store interval coordinates, allowing them to
 represent large amounts of numeric data compactly. The size of a Dense
 track is inversely proportional to the bin size. Random access to a
 value at a given coordinate has constant complexity, i.e.,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math>.</p>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mn>1</mn><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math>.</p>
 <p>Sparse tracks offer more flexibility compared to Dense tracks. Each
 numeric value can map to a genomic interval of any size. The size of a
 Sparse track is proportional to the number of numeric values (excluding
 <code>NaN</code>s). On the downside, the complexity of random access to
 a value at a given coordinate is
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mi>o</mi><mi>g</mi><mi>N</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(logN)</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>l</mi><mi>o</mi><mi>g</mi><mi>N</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(logN)</annotation></semantics></math>,
 where
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
 is the number of values in the track.</p>
@@ -922,8 +922,8 @@ is the number of values in the track.</p>
 </tr>
 <tr class="odd">
 <td>Random access complexity</td>
-<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math></td>
-<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mi>o</mi><mi>g</mi><mi>N</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(logN)</annotation></semantics></math></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mn>1</mn><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>l</mi><mi>o</mi><mi>g</mi><mi>N</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(logN)</annotation></semantics></math></td>
 </tr>
 <tr class="even">
 <td>Disk usage</td>
@@ -1263,7 +1263,7 @@ covers
 different intervals in <code>array_track</code>:
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>I</mi><mn>0</mn></msub><mo>,</mo><mi>.</mi><mi>.</mi><mi>.</mi><mo>,</mo><msub><mi>I</mi><mi>n</mi></msub></mrow><annotation encoding="application/x-tex">I_0, ..., I_n</annotation></semantics></math>.
 The value of <code>myvtrack</code> in a track expression would be then:
-<math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mi>m</mi><mi>a</mi><mi>x</mi><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>V</mi><mrow><mi>i</mi><mo>,</mo><mn>2</mn></mrow></msub><mo>,</mo><msub><mi>V</mi><mrow><mi>i</mi><mo>,</mo><mn>5</mn></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex"> \sum_{i=1}^{n}max(V_{i,2}, V_{i,5}) </annotation></semantics></math>
+<math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mi>m</mi><mi>a</mi><mi>x</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>V</mi><mrow><mi>i</mi><mo>,</mo><mn>2</mn></mrow></msub><mo>,</mo><msub><mi>V</mi><mrow><mi>i</mi><mo>,</mo><mn>5</mn></mrow></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex"> \sum_{i=1}^{n}max(V_{i,2}, V_{i,5}) </annotation></semantics></math>
 where
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>V</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub><annotation encoding="application/x-tex">V_{i,j}</annotation></semantics></math>
 is a value of the track in column
@@ -1606,7 +1606,7 @@ applied to them: a <em>band</em>.</p>
 <p>A band is a pair of integers:
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>D</mi><mn>1</mn></msub><mo>,</mo><msub><mi>D</mi><mn>2</mn></msub></mrow><annotation encoding="application/x-tex">D_1, D_2</annotation></semantics></math>.
 We say that a 2D iterator interval
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="true" form="prefix">(</mo><mi>c</mi><mi>h</mi><mi>r</mi><mi>o</mi><msub><mi>m</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><mi>c</mi><mi>h</mi><mi>r</mi><mi>o</mi><msub><mi>m</mi><mn>2</mn></msub><mo>,</mo><msub><mi>y</mi><mn>1</mn></msub><mo>,</mo><msub><mi>y</mi><mn>2</mn></msub><mo stretchy="true" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(chrom_1, x_1, x_2, chrom_2, y_1, y_2)</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">(</mo><mi>c</mi><mi>h</mi><mi>r</mi><mi>o</mi><msub><mi>m</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>x</mi><mn>2</mn></msub><mo>,</mo><mi>c</mi><mi>h</mi><mi>r</mi><mi>o</mi><msub><mi>m</mi><mn>2</mn></msub><mo>,</mo><msub><mi>y</mi><mn>1</mn></msub><mo>,</mo><msub><mi>y</mi><mn>2</mn></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(chrom_1, x_1, x_2, chrom_2, y_1, y_2)</annotation></semantics></math>
 intersects a band if and only if the next two conditions are true:</p>
 <ol style="list-style-type: decimal">
 <li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>c</mi><mi>h</mi><mi>r</mi><mi>o</mi><msub><mi>m</mi><mn>1</mn></msub><mo>=</mo><mi>c</mi><mi>h</mi><mi>r</mi><mi>o</mi><msub><mi>m</mi><mn>2</mn></msub></mrow><annotation encoding="application/x-tex">chrom_1 = chrom_2</annotation></semantics></math></li>
