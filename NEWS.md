@@ -9,6 +9,10 @@
 
 # misha 5.6.23
 
+* `gtrack.copy()` gained a `db` argument to copy tracks across databases,
+  and `overwrite` to replace existing destinations. Format conversion
+  (per-chromosome ↔ indexed) and chromosome-order remap are handled
+  automatically. Multi-track input is also supported.
 * Improved error messages: "start exceeds or equals to end" now mentions misha's 0-based half-open convention and the GFF/VCF 1-based hint; "chromosome does not exist" lists known chromosomes and points to `CHROM_ALIAS`.
 * C++ converter now emits an R warning ("N intervals had start == end and were extended by 1bp") when zero-length intervals from a loaded file are auto-bumped — previously this happened silently.
 * Added `gintervals.import_bed()`, `gintervals.import_gff()`, `gintervals.import_vcf()` for direct import from common interval file formats. All three normalize chromosome names via the existing `CHROM_ALIAS` mechanism (so `chr1` ↔ `1` works), apply misha's 0-based half-open convention (subtracting 1 from start for the 1-based GFF/GTF/VCF inputs), and preserve common metadata columns (`name`/`score`/`strand` for BED; `type`/`source`/`score`/`attrs` for GFF; `id`/`ref`/`alt`/`qual`/`filter`/`info` for VCF).

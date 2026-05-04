@@ -28,14 +28,6 @@
 using namespace std;
 using namespace rdb;
 
-// Offset to checksum field in index header
-static const size_t IDX_HEADER_SIZE_TO_CHECKSUM =
-    8 +                    // Magic header
-    sizeof(uint32_t) +     // Version
-    sizeof(uint32_t) +     // Track type
-    sizeof(uint32_t) +     // Num contigs
-    sizeof(uint64_t);      // Flags
-
 // Helper function to write index header
 static void write_index_header(FILE *fp, MishaTrackType track_type, uint32_t num_contigs, uint64_t checksum) {
     // Magic header

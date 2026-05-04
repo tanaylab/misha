@@ -646,3 +646,40 @@ gdb.mark_cache_dirty <- function() {
     .gcheckroot()
     invisible(.gdb.cache_mark_dirty())
 }
+
+# Names of files that live inside a track directory but are not per-chromosome
+# data: the indexed-format pair, attribute/var sidecars, and the meta file used
+# by big interval sets. Keep in sync with src/ when adding new sidecar files.
+.TRACK_INTERNAL_FILES <- c("track.idx", "track.dat", ".attributes", "vars", ".meta")
+
+# Check whether a database at the given path is in indexed format.
+# Unlike .gdb.is_indexed(), does not depend on the loaded GROOT.
+.gdb.is_indexed_at <- function(groot) {
+    if (is.null(groot) || !nzchar(groot)) {
+        return(FALSE)
+    }
+    seq_dir <- file.path(groot, "seq")
+    if (!dir.exists(seq_dir)) {
+        return(FALSE)
+    }
+    file.exists(file.path(seq_dir, "genome.idx")) &&
+        file.exists(file.path(seq_dir, "genome.seq"))
+}
+
+# Read chromosome names verbatim from chrom_sizes.txt (no "chr" prefix
+# normalization), in declaration order. Callers that need normalization
+# must apply it themselves.
+.gdb.chrom_names_at <- function(groot) {
+    cs <- file.path(groot, "chrom_sizes.txt")
+    if (!file.exists(cs)) {
+        stop(sprintf("chrom_sizes.txt missing in %s", groot), call. = FALSE)
+    }
+    df <- utils::read.table(
+        cs,
+        header = FALSE, sep = "\t",
+        stringsAsFactors = FALSE,
+        colClasses = c("character", "integer"),
+        col.names = c("chrom", "size")
+    )
+    df$chrom
+}
