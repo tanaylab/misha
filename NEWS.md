@@ -1,3 +1,7 @@
+# misha 5.6.24
+
+* Fixed `gquantiles` (`gmultitasking = FALSE`) hanging for hours on the first `global.percentile.max` lookup of a fresh dense track. `.gtrack.prepare.pvals` asks for ~12k percentiles, and the single-process fast path introduced in 5.6.20 walked the unsorted suffix with one `nth_element` per target rank — O(k·N) work that hit ~10¹² compares on full-genome dense tracks. Above ~2·log₂(N) target ranks the fast path now sorts the reservoir once and indexes; below it, the suffix walk is preserved (still ~3× faster than sorting for the typical 21-percentile call). Single-process and multitask results remain bit-identical.
+
 # misha 5.6.23
 
 * Improved error messages: "start exceeds or equals to end" now mentions misha's 0-based half-open convention and the GFF/VCF 1-based hint; "chromosome does not exist" lists known chromosomes and points to `CHROM_ALIAS`.
