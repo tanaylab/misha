@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.24</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.25</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.25" id="misha-5625">misha 5.6.25<a class="anchor" aria-label="anchor" href="#misha-5625"></a></h2>
+<ul><li>
+<code><a href="../reference/gsynth.sample.html">gsynth.sample()</a></code> and <code><a href="../reference/gsynth.random.html">gsynth.random()</a></code> now preserve <code>N</code> (and lowercase <code>n</code>) positions from the original reference by default. Previously, every position was filled with a sampled/random ACGT base, so reference gaps and centromeres came out as fabricated nucleotides. Pass <code>preserve_n = FALSE</code> to restore the legacy behavior.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.24" id="misha-5624">misha 5.6.24<a class="anchor" aria-label="anchor" href="#misha-5624"></a></h2>
 <ul><li>Fixed <code>gquantiles</code> (<code>gmultitasking = FALSE</code>) hanging for hours on the first <code>global.percentile.max</code> lookup of a fresh dense track. <code>.gtrack.prepare.pvals</code> asks for ~12k percentiles, and the single-process fast path introduced in 5.6.20 walked the unsorted suffix with one <code>nth_element</code> per target rank — O(k·N) work that hit ~10¹² compares on full-genome dense tracks. Above ~2·log₂(N) target ranks the fast path now sorts the reservoir once and indexes; below it, the suffix walk is preserved (still ~3× faster than sorting for the typical 21-percentile call). Single-process and multitask results remain bit-identical.</li>
