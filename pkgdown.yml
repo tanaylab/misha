@@ -1,4 +1,4 @@
-pandoc: 3.1.11
+pandoc: 3.8.3
 pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
@@ -6,4 +6,4 @@ articles:
   Genomes: Genomes.html
   Manual: Manual.html
   Misha-Basics: Misha-Basics.html
-last_built: 2026-04-29T07:57Z
+last_built: 2026-05-04T14:51Z
