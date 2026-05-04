@@ -101,6 +101,8 @@ extern "C" {
  * @param _n_samples Integer: number of samples to generate per interval
  * @param _k Integer: Markov order k
  * @param _iter_size Integer: iterator bin size in bp (e.g., model$iterator)
+ * @param _preserve_n Logical: if TRUE, copy N (or n) from the original
+ *        reference into the output instead of sampling at those positions
  * @param _envir R environment
  *
  * @return R_NilValue on success for file output, or character vector for
@@ -110,7 +112,7 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                       SEXP _iter_starts, SEXP _iter_chroms, SEXP _intervals,
                       SEXP _mask_copy, SEXP _output_path,
                       SEXP _output_format, SEXP _n_samples, SEXP _k,
-                      SEXP _iter_size, SEXP _envir) {
+                      SEXP _iter_size, SEXP _preserve_n, SEXP _envir) {
     try {
         struct RNGStateGuard {
             bool active = false;
@@ -231,6 +233,9 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
             n_samples = 1;
         }
 
+        // Whether to copy original-reference N positions into the output.
+        bool preserve_n = (Rf_asLogical(_preserve_n) == TRUE);
+
         // Vector to collect sequences when output_format = 2 (vector mode)
         vector<string> collected_seqs;
 
@@ -304,9 +309,11 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
 
                 int64_t interval_len = interval_end - interval_start;
 
-                // Load original sequence for mask_copy regions (only once per interval)
+                // Load original sequence whenever we need to consult it:
+                // for mask_copy regions, or for preserve_n's per-position
+                // N check. One indexed read per interval; cached internally.
                 vector<char> original_seq;
-                if (!mask_copy_ivs.empty()) {
+                if (!mask_copy_ivs.empty() || preserve_n) {
                     GInterval interval(chromid, interval_start, interval_end, 0);
                     seqfetch.read_interval(interval, chromkey, original_seq);
                 }
@@ -344,10 +351,19 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                         if (is_position_masked(pos, mask_copy_ivs, mask_cursor) &&
                             i < (int64_t)original_seq.size()) {
                             synth_seq[i] = original_seq[i];
-                        } else {
-                            synth_seq[i] = StratifiedMarkovModel::decode_base(
-                                static_cast<int>(unif_rand() * NUM_BASES));
+                            continue;
                         }
+                        // preserve_n: keep N (or n) from the reference rather
+                        // than fabricating an ACGT base at a gap position.
+                        if (preserve_n && i < (int64_t)original_seq.size()) {
+                            char orig = original_seq[i];
+                            if (orig == 'N' || orig == 'n') {
+                                synth_seq[i] = orig;
+                                continue;
+                            }
+                        }
+                        synth_seq[i] = StratifiedMarkovModel::decode_base(
+                            static_cast<int>(unif_rand() * NUM_BASES));
                     }
 
                     // Sample remaining bases using Markov chain
@@ -365,6 +381,16 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
                                     static_cast<int>(unif_rand() * NUM_BASES));
                             }
                             continue;
+                        }
+
+                        // preserve_n: keep N (or n) from the reference rather
+                        // than fabricating an ACGT base at a gap position.
+                        if (preserve_n && rel_pos < (int64_t)original_seq.size()) {
+                            char orig = original_seq[rel_pos];
+                            if (orig == 'N' || orig == 'n') {
+                                synth_seq[rel_pos] = orig;
+                                continue;
+                            }
                         }
 
                         // Find bin for this position using a forward

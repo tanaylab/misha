@@ -1679,6 +1679,13 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 #'        position within each chromosome. Overlapping intervals may result in
 #'        only the first overlapping region being copied, with subsequent overlaps
 #'        skipped due to cursor advancement during sequential processing.
+#' @param preserve_n Logical; default \code{TRUE}. When \code{TRUE}, positions
+#'        whose original reference is \code{N} (or \code{n}) are written to the
+#'        output verbatim instead of being filled in with a sampled ACGT base.
+#'        Case is preserved (so soft-masked \code{n} round-trips). \code{mask_copy}
+#'        regions take precedence: inside a \code{mask_copy} interval the original
+#'        byte is copied regardless. Set to \code{FALSE} to restore the
+#'        pre-5.6.22 behavior of treating every position as something to sample.
 #' @param seed Random seed for reproducibility. If NULL, uses current random state.
 #' @param intervals Genomic intervals to sample. If NULL, uses all chromosomes.
 #' @param n_samples Number of samples to generate per interval. Default is 1.
@@ -1721,11 +1728,16 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 #' effectively free). The index is suitable for any downstream tool that
 #' expects a samtools-indexed reference.
 #'
-#' \strong{N bases during sampling:} When the sampler needs to initialize the
-#' first k-mer context and encounters regions with only N bases, it falls back
-#' to uniform random base selection until a valid context is established.
-#' Similarly, if a bin has no learned statistics (sparse bin with NA CDF),
-#' uniform sampling is used for that position.
+#' \strong{N bases during sampling:} By default (\code{preserve_n = TRUE})
+#' positions whose original reference is N are copied verbatim into the
+#' output, so gaps and centromeres remain N rather than being fabricated as
+#' ACGT. Where the sampler still has to fill an N-adjacent k-mer context
+#' (the first k bp inside an interval, or any k-mer window containing a
+#' preserved N), it falls back to uniform random base selection until a
+#' valid context is re-established. Similarly, if a bin has no learned
+#' statistics (sparse bin with NA CDF), uniform sampling is used for that
+#' position. Pass \code{preserve_n = FALSE} to recover the pre-5.6.22
+#' behavior of sampling every position regardless of the reference.
 #'
 #' \strong{Sparse bins:} If the model has sparse bins (from \code{min_obs} during
 #' training), a warning is issued when sampling regions that fall into these bins.
@@ -1778,12 +1790,17 @@ gsynth.sample <- function(model,
                           output_path = NULL,
                           output_format = c("misha", "fasta", "vector"),
                           mask_copy = NULL,
+                          preserve_n = TRUE,
                           seed = NULL,
                           intervals = NULL,
                           n_samples = 1,
                           bin_merge = NULL,
                           cell_merge = NULL) {
     .gcheckroot()
+
+    if (!is.logical(preserve_n) || length(preserve_n) != 1L || is.na(preserve_n)) {
+        stop("preserve_n must be a single non-NA logical (TRUE or FALSE)", call. = FALSE)
+    }
 
     if (!inherits(model, "gsynth.model")) {
         stop("model must be a gsynth.model object", call. = FALSE)
@@ -2050,6 +2067,7 @@ gsynth.sample <- function(model,
         n_samples,
         as.integer(k),
         as.integer(model$iterator),
+        as.logical(preserve_n),
         .misha_env()
     )
 
@@ -2392,6 +2410,11 @@ gsynth.score <- function(model,
 #' @param mask_copy Optional intervals to copy from the original genome instead of
 #'        random sampling. Use this to preserve specific regions exactly as they
 #'        appear in the reference.
+#' @param preserve_n Logical; default \code{TRUE}. When \code{TRUE}, positions
+#'        whose original reference is \code{N} (or \code{n}) are written to the
+#'        output verbatim rather than filled with a random ACGT base. Same
+#'        semantics as in \code{\link{gsynth.sample}}; \code{mask_copy}
+#'        intervals take precedence.
 #' @param seed Random seed for reproducibility. If NULL, uses current random state.
 #' @param n_samples Number of samples to generate per interval. Default is 1.
 #' @param iterator Iterator for position resolution. Default is 1 (base-pair resolution).
@@ -2444,10 +2467,15 @@ gsynth.random <- function(intervals = NULL,
                           output_format = c("misha", "fasta", "vector"),
                           nuc_probs = c(A = 0.25, C = 0.25, G = 0.25, T = 0.25),
                           mask_copy = NULL,
+                          preserve_n = TRUE,
                           seed = NULL,
                           n_samples = 1,
                           iterator = 1) {
     .gcheckroot()
+
+    if (!is.logical(preserve_n) || length(preserve_n) != 1L || is.na(preserve_n)) {
+        stop("preserve_n must be a single non-NA logical (TRUE or FALSE)", call. = FALSE)
+    }
 
     output_format <- match.arg(output_format)
 
@@ -2515,6 +2543,7 @@ gsynth.random <- function(intervals = NULL,
                 output_format = "vector",
                 nuc_probs = nuc_probs,
                 mask_copy = chunk_mask,
+                preserve_n = preserve_n,
                 seed = chunk_seed,
                 n_samples = n_samples,
                 iterator = iterator
@@ -2528,6 +2557,7 @@ gsynth.random <- function(intervals = NULL,
                 output_format = output_format,
                 nuc_probs = nuc_probs,
                 mask_copy = chunk_mask,
+                preserve_n = preserve_n,
                 seed = chunk_seed,
                 n_samples = n_samples,
                 iterator = iterator
@@ -2639,6 +2669,7 @@ gsynth.random <- function(intervals = NULL,
         n_samples,
         as.integer(random_k),
         iter_size_int,
+        as.logical(preserve_n),
         .misha_env()
     )
 

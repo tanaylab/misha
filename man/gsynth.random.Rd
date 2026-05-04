@@ -10,6 +10,7 @@ gsynth.random(
   output_format = c("misha", "fasta", "vector"),
   nuc_probs = c(A = 0.25, C = 0.25, G = 0.25, T = 0.25),
   mask_copy = NULL,
+  preserve_n = TRUE,
   seed = NULL,
   n_samples = 1,
   iterator = 1
@@ -38,6 +39,12 @@ Probabilities are automatically normalized to sum to 1. Default is uniform
 \item{mask_copy}{Optional intervals to copy from the original genome instead of
 random sampling. Use this to preserve specific regions exactly as they
 appear in the reference.}
+
+\item{preserve_n}{Logical; default \code{TRUE}. When \code{TRUE}, positions
+whose original reference is \code{N} (or \code{n}) are written to the
+output verbatim rather than filled with a random ACGT base. Same
+semantics as in \code{\link{gsynth.sample}}; \code{mask_copy}
+intervals take precedence.}
 
 \item{seed}{Random seed for reproducibility. If NULL, uses current random state.}
 

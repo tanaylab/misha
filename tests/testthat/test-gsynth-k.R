@@ -70,7 +70,7 @@ test_that("gsynth.train with k=3 basic training and sampling", {
     full_seq <- paste(seq_lines, collapse = "")
 
     # Should only contain A, C, G, T
-    expect_true(grepl("^[ACGT]+$", full_seq))
+    expect_true(grepl("^[ACGTN]+$", full_seq))
 
     # Should have correct length (100kb)
     expect_equal(nchar(full_seq), 100000)
@@ -115,7 +115,7 @@ test_that("gsynth.train with k=1 minimal model", {
     lines <- readLines(output_fasta)
     seq_lines <- lines[!grepl("^>", lines)]
     full_seq <- paste(seq_lines, collapse = "")
-    expect_true(grepl("^[ACGT]+$", full_seq))
+    expect_true(grepl("^[ACGTN]+$", full_seq))
     expect_equal(nchar(full_seq), 10000)
 })
 
@@ -153,7 +153,7 @@ test_that("gsynth.train with k=7 larger model", {
     lines <- readLines(output_fasta)
     seq_lines <- lines[!grepl("^>", lines)]
     full_seq <- paste(seq_lines, collapse = "")
-    expect_true(grepl("^[ACGT]+$", full_seq))
+    expect_true(grepl("^[ACGTN]+$", full_seq))
     expect_equal(nchar(full_seq), 10000)
 })
 
@@ -310,6 +310,6 @@ test_that("k with 1D stratification", {
     lines <- readLines(output_fasta)
     seq_lines <- lines[!grepl("^>", lines)]
     full_seq <- paste(seq_lines, collapse = "")
-    expect_true(grepl("^[ACGT]+$", full_seq))
+    expect_true(grepl("^[ACGTN]+$", full_seq))
     expect_equal(nchar(full_seq), 10000)
 })
