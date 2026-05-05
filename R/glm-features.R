@@ -20,6 +20,13 @@
 #'   higher-energy).
 #' @param gc_track GC content track name (default \code{"seq.G_or_C"}).
 #' @param gc_scale_factor Scale factor for GC features (default 10).
+#' @param n_threads Integer scalar: number of worker threads. Defaults to
+#'   \code{getOption("gmax.processes", 1L)} for consistency with the rest
+#'   of misha. Pass \code{n_threads = 0L} to auto-detect
+#'   (\code{min(n_peaks, hardware_concurrency, 40)}). Each thread holds
+#'   its own per-chromosome mmap of the motif and GC tracks; for the
+#'   typical 191-motif workload that's a few hundred MB resident per
+#'   thread (mmap, so most of it stays in the OS page cache).
 #'
 #' @return A numeric matrix with one row per interval and columns for:
 #'   \itemize{
@@ -54,7 +61,8 @@ glm_extract_features <- function(
       list(L = 2, k = 1, x_0 = 10, pre_shift = 0, post_shift = 0)
   ),
   gc_track = "seq.G_or_C",
-  gc_scale_factor = 10
+  gc_scale_factor = 10,
+  n_threads = getOption("gmax.processes", 1L)
 ) {
     # Validate inputs
     stopifnot(is.character(track_names), length(track_names) > 0)
@@ -123,6 +131,7 @@ glm_extract_features <- function(
         transform_mat,
         as.character(gc_track),
         as.numeric(gc_scale_factor),
+        as.integer(n_threads),
         .misha_env()
     )
 

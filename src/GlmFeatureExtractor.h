@@ -44,7 +44,8 @@ public:
         const std::string &gc_track_name,
         double gc_scale_factor,
         double *output,
-        int n_cols
+        int n_cols,
+        int n_threads = 1
     );
 
 private:
@@ -60,9 +61,14 @@ private:
     };
 
     void open_track(TrackHandle &handle, int chromid);
+    // Worker-callable version: takes the chromkey directly so multiple
+    // threads don't race on m_iu.get_chromkey() (which is itself harmless
+    // but keeps the worker free of any shared mutable state).
+    static void open_track_static(TrackHandle &handle, int chromid,
+                                  const GenomeChromKey &chromkey);
 
-    double aggregate_lse(const TrackHandle &handle, int64_t start, int64_t end);
-    double aggregate_sum(const TrackHandle &handle, int64_t start, int64_t end);
+    static double aggregate_lse(const TrackHandle &handle, int64_t start, int64_t end);
+    static double aggregate_sum(const TrackHandle &handle, int64_t start, int64_t end);
 
     // Binary search: find first interval index where intervals[i].end > pos
     static size_t sparse_lower_bound(const GIntervals &intervals, int64_t pos);

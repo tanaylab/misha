@@ -12,6 +12,10 @@
 #include <limits>
 #include <algorithm>
 #include <numeric>
+#include <atomic>
+#include <thread>
+#include <stdexcept>
+#include <mutex>
 
 using namespace rdb;
 using namespace std;
@@ -19,9 +23,9 @@ using namespace std;
 // ---------------------------------------------------------------------------
 // Track opening — handles both FixedBin and Sparse tracks
 // ---------------------------------------------------------------------------
-void GlmFeatureExtractor::open_track(TrackHandle &handle, int chromid)
+void GlmFeatureExtractor::open_track_static(TrackHandle &handle, int chromid,
+                                             const GenomeChromKey &chromkey)
 {
-    const GenomeChromKey &chromkey = m_iu.get_chromkey();
     string resolved = GenomeTrack::find_existing_1d_filename(chromkey, handle.track_dir, chromid);
     string filename = handle.track_dir + "/" + resolved;
 
@@ -41,9 +45,17 @@ void GlmFeatureExtractor::open_track(TrackHandle &handle, int chromid)
         handle.track = t;
         handle.sparse = t.get();
     } else {
-        verror("Track %s has unsupported type (expected dense or sparse)",
-               handle.track_dir.c_str());
+        // Worker context: throw a plain runtime_error so we don't longjmp
+        // out of a non-main thread via verror().
+        throw std::runtime_error(
+            std::string("Track ") + handle.track_dir +
+            " has unsupported type (expected dense or sparse)");
     }
+}
+
+void GlmFeatureExtractor::open_track(TrackHandle &handle, int chromid)
+{
+    open_track_static(handle, chromid, m_iu.get_chromkey());
 }
 
 // ---------------------------------------------------------------------------
@@ -198,49 +210,45 @@ void GlmFeatureExtractor::extract(
     const string &gc_track_name,
     double gc_scale_factor,
     double *output,
-    int n_cols)
+    int n_cols,
+    int n_threads)
 {
     int n_motifs = (int)track_names.size();
     int n_transforms = (int)transforms.size();
 
-    // Tile geometry: for each peak, we center n_tiles tiles of width tile_size
-    // symmetrically around the peak midpoint, with tile_size spacing and an
-    // outer flank of flank_size on each side. The first tile starts at
-    // center - peak_half - flank_size, stepping by tile_size. Peak width may
-    // vary per peak, so we compute tile_start[i] per-peak below.
-
-    // Number of tiles per peak (assuming all peaks same size)
-    // peak_size = end - start (e.g., 300)
-    // extended = peak_size + 2*flank
-    // n_tiles = extended / tile_size
-    // We'll compute n_tiles from the first peak and assume uniform
+    // Tile geometry: peaks of uniform width get n_tiles symmetric tiles of
+    // tile_size, with flank_size of outer flank on each side.
     int first_peak_size = (int)(peak_ends[0] - peak_starts[0]);
     int extended = first_peak_size + 2 * flank_size;
     int n_tiles = extended / tile_size;
 
-    // Verify column count
     int n_gc_inter = n_tiles * (n_tiles - 1) / 2;
     int expected_cols = n_motifs * n_tiles * n_transforms + n_tiles + n_gc_inter;
     if (n_cols != expected_cols) {
         verror("Column count mismatch: expected %d, got %d", expected_cols, n_cols);
     }
 
-    // Resolve all track paths
+    // Resolve all track paths up-front on the main thread (R-env access is
+    // not safe to call from worker threads — track2path / get_type touch the
+    // R interpreter via the misha environment).
     SEXP envir = m_iu.get_env();
     const GenomeChromKey &chromkey = m_iu.get_chromkey();
 
-    vector<TrackHandle> motif_handles(n_motifs);
+    vector<string> motif_dirs(n_motifs);
+    vector<GenomeTrack::Type> motif_types(n_motifs);
     for (int m = 0; m < n_motifs; m++) {
-        motif_handles[m].track_dir = track2path(envir, track_names[m]);
-        motif_handles[m].type = GenomeTrack::get_type(
-            motif_handles[m].track_dir.c_str(), chromkey, false);
+        motif_dirs[m] = track2path(envir, track_names[m]);
+        motif_types[m] = GenomeTrack::get_type(motif_dirs[m].c_str(), chromkey, false);
     }
+    string gc_dir = track2path(envir, gc_track_name);
+    GenomeTrack::Type gc_type =
+        GenomeTrack::get_type(gc_dir.c_str(), chromkey, false);
 
-    TrackHandle gc_handle;
-    gc_handle.track_dir = track2path(envir, gc_track_name);
-    gc_handle.type = GenomeTrack::get_type(gc_handle.track_dir.c_str(), chromkey, false);
-
-    // Sort peaks by chromosome for efficient track access
+    // Sort peaks by (chrom, start). Each contiguous chromosome run lets a
+    // worker open all motif/GC tracks once and process many peaks before
+    // re-opening for the next chromosome. The atomic counter below also
+    // hands out chunks of consecutive sorted indices, so within a chunk a
+    // worker typically stays on a single chromosome.
     vector<int> peak_order(n_peaks);
     iota(peak_order.begin(), peak_order.end(), 0);
     sort(peak_order.begin(), peak_order.end(), [&](int a, int b) {
@@ -249,92 +257,164 @@ void GlmFeatureExtractor::extract(
         return peak_starts[a] < peak_starts[b];
     });
 
-    // Initialize output to 0
     memset(output, 0, sizeof(double) * (int64_t)n_peaks * n_cols);
 
-    // Column layout (all column-major, stride = n_peaks):
-    //   motif block: n_motifs * n_tiles * n_transforms columns
-    //     col = (tile * n_motifs + motif) * n_transforms + transform
-    //   gc block: n_tiles columns starting at motif_block_size
-    //   gc_inter block: n_gc_inter columns starting at motif_block_size + n_tiles
     int motif_block_size = n_motifs * n_tiles * n_transforms;
     int gc_block_start = motif_block_size;
     int gc_inter_start = gc_block_start + n_tiles;
 
-    int current_chrom = -1;
+    if (n_threads < 1) n_threads = 1;
+    if (n_threads > n_peaks) n_threads = n_peaks;
 
-    for (int oi = 0; oi < n_peaks; oi++) {
-        int pi = peak_order[oi]; // original peak index (= output row)
-        int chromid = peak_chromids[pi];
-
-        // Open tracks for new chromosome
-        if (chromid != current_chrom) {
-            current_chrom = chromid;
-            for (int m = 0; m < n_motifs; m++) {
-                open_track(motif_handles[m], chromid);
-            }
-            open_track(gc_handle, chromid);
-        }
-
-        int64_t peak_center = (peak_starts[pi] + peak_ends[pi]) / 2;
-        int peak_size = (int)(peak_ends[pi] - peak_starts[pi]);
-        int half = peak_size / 2;
-
-        // Temporary GC values for this peak (for interaction computation)
-        vector<double> gc_vals(n_tiles, 0.0);
-
-        for (int ti = 0; ti < n_tiles; ti++) {
-            // Tile window
-            int64_t tile_start = peak_center - half - flank_size + (int64_t)ti * tile_size;
-            int64_t tile_end = tile_start + tile_size;
-
-            // --- GC feature ---
-            double gc_raw = aggregate_sum(gc_handle, tile_start, tile_end);
-            double gc_scaled;
-            if (isnan(gc_raw)) {
-                gc_scaled = 0.0;
-            } else {
-                gc_scaled = (gc_raw / tile_size) * gc_scale_factor;
-            }
-            gc_vals[ti] = gc_scaled;
-
-            // Write GC column
-            int gc_col = gc_block_start + ti;
-            output[pi + (int64_t)gc_col * n_peaks] = gc_scaled;
-
-            // --- Motif features ---
-            for (int m = 0; m < n_motifs; m++) {
-                double raw = aggregate_lse(motif_handles[m], tile_start, tile_end);
-
-                double scaled;
-                if (isnan(raw) || !isfinite(raw)) {
-                    scaled = 0.0;
-                } else {
-                    scaled = apply_scaling(raw, scaling[m]);
-                }
-
-                // Apply each transform and write
-                for (int t = 0; t < n_transforms; t++) {
-                    double transformed = apply_transform(scaled, transforms[t]);
-                    if (!isfinite(transformed)) transformed = 0.0;
-
-                    int col = (ti * n_motifs + m) * n_transforms + t;
-                    output[pi + (int64_t)col * n_peaks] = transformed;
-                }
-            }
-        }
-
-        // --- GC interactions (pairwise products) ---
-        int inter_idx = 0;
-        for (int a = 0; a < n_tiles; a++) {
-            for (int b = a + 1; b < n_tiles; b++) {
-                int col = gc_inter_start + inter_idx;
-                output[pi + (int64_t)col * n_peaks] =
-                    gc_vals[a] * gc_vals[b] / gc_scale_factor;
-                inter_idx++;
-            }
+    // Group peak_order indices by chromosome run. peak_order is already
+    // sorted by (chromid, start), so each chromosome is a contiguous slice.
+    struct ChromRun { int chromid; int oi_lo; int oi_hi; };
+    std::vector<ChromRun> chrom_runs;
+    {
+        int run_lo = 0;
+        while (run_lo < n_peaks) {
+            int chromid = peak_chromids[peak_order[run_lo]];
+            int run_hi = run_lo + 1;
+            while (run_hi < n_peaks &&
+                   peak_chromids[peak_order[run_hi]] == chromid)
+                ++run_hi;
+            chrom_runs.push_back({chromid, run_lo, run_hi});
+            run_lo = run_hi;
         }
     }
+
+    std::mutex err_mtx;
+    std::string first_error;
+
+    // Per-chromosome processing: open all motif + GC handles ONCE (single
+    // thread), pre-materialize sparse tracks, then fan out the peak loop
+    // across worker threads that share the read-only handles. This avoids
+    // the previous per-thread re-open cost (191 mmap setups × N_threads ×
+    // N_chroms) which made >4-thread runs scale negatively.
+    //
+    // Thread safety:
+    //   - GenomeTrackFixedBin::get_mmap_bins_ptr is `const` and only reads
+    //     the mmap region — safe for concurrent calls.
+    //   - GenomeTrackSparse::get_intervals/get_vals are lazy on first call;
+    //     we trigger them from the main thread before fan-out so the
+    //     workers see fully-loaded vectors.
+    //   - Output rows are disjoint per peak (no write contention).
+    //
+    // Per-chromosome handle release: shared_ptr<GenomeTrack> goes out of
+    // scope at the end of each iteration, freeing the previous chrom's
+    // mmap mappings before the next chrom is opened.
+    constexpr int CHUNK = 256;
+
+    for (const auto &run : chrom_runs) {
+        int chromid = run.chromid;
+
+        std::vector<TrackHandle> motif_handles(n_motifs);
+        TrackHandle gc_handle;
+        try {
+            for (int m = 0; m < n_motifs; m++) {
+                motif_handles[m].track_dir = motif_dirs[m];
+                motif_handles[m].type = motif_types[m];
+                open_track_static(motif_handles[m], chromid, chromkey);
+                if (motif_handles[m].sparse) {
+                    motif_handles[m].sparse->get_intervals();
+                    motif_handles[m].sparse->get_vals();
+                }
+            }
+            gc_handle.track_dir = gc_dir;
+            gc_handle.type = gc_type;
+            open_track_static(gc_handle, chromid, chromkey);
+            if (gc_handle.sparse) {
+                gc_handle.sparse->get_intervals();
+                gc_handle.sparse->get_vals();
+            }
+        } catch (TGLException &e) {
+            verror("%s", e.msg());
+        } catch (const std::exception &e) {
+            verror("%s", e.what());
+        }
+
+        std::atomic<int> next_chunk{0};
+        const int n_run_peaks = run.oi_hi - run.oi_lo;
+
+        auto worker = [&]() {
+            try {
+                std::vector<double> gc_vals(n_tiles, 0.0);
+                while (true) {
+                    int chunk_idx = next_chunk.fetch_add(1, std::memory_order_relaxed);
+                    int rel_lo = chunk_idx * CHUNK;
+                    if (rel_lo >= n_run_peaks) break;
+                    int rel_hi = std::min(rel_lo + CHUNK, n_run_peaks);
+
+                    for (int rel = rel_lo; rel < rel_hi; rel++) {
+                        int pi = peak_order[run.oi_lo + rel];
+
+                        int64_t peak_center = (peak_starts[pi] + peak_ends[pi]) / 2;
+                        int peak_size = (int)(peak_ends[pi] - peak_starts[pi]);
+                        int half = peak_size / 2;
+
+                        for (int ti = 0; ti < n_tiles; ti++) {
+                            int64_t tile_start = peak_center - half - flank_size +
+                                                 (int64_t)ti * tile_size;
+                            int64_t tile_end = tile_start + tile_size;
+
+                            double gc_raw = aggregate_sum(gc_handle, tile_start, tile_end);
+                            double gc_scaled = isnan(gc_raw) ? 0.0
+                                : (gc_raw / tile_size) * gc_scale_factor;
+                            gc_vals[ti] = gc_scaled;
+
+                            int gc_col = gc_block_start + ti;
+                            output[pi + (int64_t)gc_col * n_peaks] = gc_scaled;
+
+                            for (int m = 0; m < n_motifs; m++) {
+                                double raw = aggregate_lse(motif_handles[m], tile_start, tile_end);
+                                double scaled = (isnan(raw) || !isfinite(raw))
+                                    ? 0.0 : apply_scaling(raw, scaling[m]);
+
+                                for (int t = 0; t < n_transforms; t++) {
+                                    double transformed = apply_transform(scaled, transforms[t]);
+                                    if (!isfinite(transformed)) transformed = 0.0;
+                                    int col = (ti * n_motifs + m) * n_transforms + t;
+                                    output[pi + (int64_t)col * n_peaks] = transformed;
+                                }
+                            }
+                        }
+
+                        int inter_idx = 0;
+                        for (int a = 0; a < n_tiles; a++) {
+                            for (int b = a + 1; b < n_tiles; b++) {
+                                int col = gc_inter_start + inter_idx;
+                                output[pi + (int64_t)col * n_peaks] =
+                                    gc_vals[a] * gc_vals[b] / gc_scale_factor;
+                                inter_idx++;
+                            }
+                        }
+                    }
+                }
+            } catch (TGLException &e) {
+                std::lock_guard<std::mutex> lk(err_mtx);
+                if (first_error.empty()) first_error = e.msg();
+            } catch (const std::exception &e) {
+                std::lock_guard<std::mutex> lk(err_mtx);
+                if (first_error.empty()) first_error = e.what();
+            } catch (...) {
+                std::lock_guard<std::mutex> lk(err_mtx);
+                if (first_error.empty()) first_error = "unknown error in worker thread";
+            }
+        };
+
+        int run_threads = std::min(n_threads, n_run_peaks);
+        if (run_threads <= 1) {
+            worker();
+        } else {
+            std::vector<std::thread> threads;
+            threads.reserve(run_threads);
+            for (int i = 0; i < run_threads; i++) threads.emplace_back(worker);
+            for (auto &t : threads) t.join();
+        }
+        if (!first_error.empty()) break;
+    }
+
+    if (!first_error.empty()) verror("%s", first_error.c_str());
 }
 
 // ---------------------------------------------------------------------------
@@ -353,6 +433,7 @@ extern "C" SEXP C_glm_extract_features(
     SEXP _transforms,      // numeric matrix: n_transforms x 5 (L, k, x_0, pre_shift, post_shift)
     SEXP _gc_track,        // character scalar
     SEXP _gc_scale_factor, // numeric scalar
+    SEXP _n_threads,       // integer scalar (0 = auto)
     SEXP _envir)           // R environment
 {
     try {
@@ -422,6 +503,22 @@ extern "C" SEXP C_glm_extract_features(
         string gc_track = CHAR(STRING_ELT(_gc_track, 0));
         double gc_scale_factor = REAL(_gc_scale_factor)[0];
 
+        // Thread count. 0 = auto: min(n_peaks, hardware_concurrency, 40).
+        // Negative or NA values fall back to 1 (silent, matching glm_batch_quantiles).
+        int n_threads_req = INTEGER(_n_threads)[0];
+        int n_threads;
+        if (n_threads_req == NA_INTEGER || n_threads_req < 0) {
+            n_threads = 1;
+        } else if (n_threads_req == 0) {
+            unsigned hw = std::thread::hardware_concurrency();
+            if (hw == 0) hw = 4;
+            n_threads = (int)std::min((unsigned)n_peaks, std::min(hw, 40u));
+            if (n_threads < 1) n_threads = 1;
+        } else {
+            n_threads = std::min(n_threads_req, n_peaks);
+            if (n_threads < 1) n_threads = 1;
+        }
+
         // Compute output dimensions
         int first_peak_size = (int)(ends[0] - starts[0]);
         int extended = first_peak_size + 2 * flank_size;
@@ -449,7 +546,8 @@ extern "C" SEXP C_glm_extract_features(
             gc_track,
             gc_scale_factor,
             output,
-            n_cols
+            n_cols,
+            n_threads
         );
 
         return result;
