@@ -23,7 +23,7 @@ glm_pred.create(
   interaction_weights = NULL,
   interaction_trans_family = NULL,
   inter_trans_params = NULL,
-  selector_track = NULL,
+  selector_tracks = NULL,
   selector_breaks = NULL
 )
 }
@@ -78,15 +78,17 @@ M rows and K columns.}
 
 \item{inter_trans_params}{list of lists (M or NULL) Logistic params per interaction}
 
-\item{selector_track}{character(1) or NULL Name of a fixed-bin (dense)
-track used for per-position model selection. At each genomic position,
-the selector track value is binned via \code{selector_breaks} to choose
-which bin's weights (column of the weight matrix) to use. When NULL
-(default), K = 1 and a single set of weights is applied everywhere.}
+\item{selector_tracks}{character(M) or NULL Names of fixed-bin (dense) tracks
+used for per-position model selection. With M selectors, strata are the
+Cartesian product of per-selector bins (column-major: first selector varies
+fastest). When NULL (default), K = 1 and a single set of weights is applied
+everywhere.}
 
-\item{selector_breaks}{numeric vector of length K+1 defining K bins, or
-NULL. Break points use \code{cut(include.lowest = TRUE, right = TRUE)}
-semantics. Required when \code{selector_track} is specified.}
+\item{selector_breaks}{list of M numeric vectors, or NULL. Each element is
+the break vector (length K_m + 1, K_m >= 1) for the corresponding selector
+track in \code{selector_tracks}. Break points use
+\code{cut(include.lowest = TRUE, right = TRUE)} semantics. Required and
+length-matched to \code{selector_tracks} when that is non-NULL.}
 }
 \value{
 Invisibly returns \code{name}.
