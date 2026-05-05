@@ -36,9 +36,9 @@ glm_pred.create(
 
 \item{weights}{numeric(N) or matrix(N, K) LM coefficients per entry.
 For a single model (no selector), a plain numeric vector of length N.
-When \code{selector_track} is specified, must be a matrix with N rows
-and K columns (one column per selector bin), so each position uses the
-weights from the bin selected by the selector track value.}
+When \code{selector_tracks} is specified, must be a matrix with N rows
+and K columns (one column per compound stratum), so each position uses
+the weights from the bin selected by the per-position selector tuple.}
 
 \item{bias}{numeric(1) or numeric(K) Intercept term (default 0). For a
 single model, a scalar. When a selector is used, can be numeric(K) to
@@ -71,7 +71,7 @@ cap-normalize scaling).}
 
 \item{interaction_weights}{numeric(M) or matrix(M, K) or NULL Per-interaction
 LM coefficients. For a single model, a numeric vector of length M.
-When \code{selector_track} is specified (K > 1), must be a matrix with
+When \code{selector_tracks} is specified (K > 1), must be a matrix with
 M rows and K columns.}
 
 \item{interaction_trans_family}{character(M or 1 or NULL) Transform for interactions}
