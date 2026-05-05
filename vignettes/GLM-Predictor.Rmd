@@ -151,17 +151,29 @@ $$
 
 ## Selector-Stratified Models
 
-When a `selector_track` and `selector_breaks` are provided, the model becomes position-dependent: at each position $p$, a selector track value is binned into one of $K$ bins, and the corresponding column of weights is used.
+When `selector_tracks` (a length-$M$ character vector) and `selector_breaks` (a length-$M$ list of break vectors) are provided, the model becomes position-dependent: at each position $p$, every selector track value is binned independently, and the resulting tuple selects one of $K = \prod_{m=1}^{M} K_m$ compound strata. The compound bin index uses **column-major flatten** (first selector varies fastest):
 
-Let $v(p)$ be the selector track value at position $p$, and let $b(p) \in \{1, \ldots, K\}$ be the bin assigned by `selector_breaks`. The formula becomes:
+$$
+b(p) = \sum_{m=1}^{M} \bigl(b_m(p) - 1\bigr) \cdot \prod_{m' < m} K_{m'}
+$$
+
+so $b(p) \in \{0, \ldots, K-1\}$. The model formula becomes:
 
 $$
 \hat{y}(p) = \beta_{0,b} + \sum_{i=1}^{N} w_{i,b} \cdot f_i\!\bigl(\operatorname{scale}_i(\operatorname{smooth}_i(p))\bigr) + \sum_{m=1}^{M} u_{m,b} \cdot g_m\!\bigl(\operatorname{product}_m(p)\bigr)
 $$
 
-where $b = b(p)$. Note that only the weights and bias vary across bins — the pipeline structure (tracks, shifts, capping, transforms) is shared. If $v(p)$ falls outside the break range or is non-finite, the position emits `NaN`.
+where $b = b(p)$. Only the weights and bias vary across strata — the pipeline structure (tracks, shifts, capping, transforms) is shared. If **any** selector value $v_m(p)$ falls outside its break range or is non-finite, the position emits `NaN`.
 
-The `weights` parameter is then an $N \times K$ matrix (one column per bin), `bias` is a length-$K$ vector, and `interaction_weights` is an $M \times K$ matrix.
+The `weights` parameter is then an $N \times K$ matrix (one column per compound stratum), `bias` is a length-$K$ vector, and `interaction_weights` is an $M_{\text{int}} \times K$ matrix. To build $K$ in R from a multi-axis array, use the column-major flatten:
+
+```r
+# (N × K_1 × K_2 × ... × K_M) array, then flatten to (N × K) matrix.
+w   <- array(coef, dim = c(N, K_1, K_2))   # extend for more selectors
+weights <- matrix(w, nrow = N)              # R's default = column-major
+```
+
+The single-selector case ($M = 1$) is just a length-1 `selector_tracks` and a length-1 `selector_breaks` list.
 
 ## NaN Handling
 
