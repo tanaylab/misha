@@ -297,3 +297,68 @@ test_that("glm_extract_features resolves chromids via misha chromkey, not input 
     # to the old bug would zero them all out because we'd be reading chrM).
     expect_gt(sum(abs(cpp_full[chrX_rows, ])), 0)
 })
+
+test_that("glm_extract_features is bit-identical across thread counts", {
+    skip_if(!dir.exists(local_mm10_db), "Local mm10 misha db not available")
+    gdb.init(local_mm10_db)
+    gdataset.load(mm10_trackdb)
+    options(gmax.data.size = 1e9)
+
+    motifs <- c("JASPAR_Zic2", "HOMER_Unknown_ESC_element", "JOLMA_ZIC3_mono_full")
+    track_dir <- "th_epi.all_db_motifs"
+    track_names <- paste0(track_dir, ".", motifs)
+
+    # Enough peaks across enough chroms to actually engage > 1 worker
+    set.seed(7)
+    chr1_peaks <- data.frame(
+        chrom = "chr1",
+        start = sort(sample(seq(5e6, 50e6, by = 1000), 200))
+    )
+    chr2_peaks <- data.frame(
+        chrom = "chr2",
+        start = sort(sample(seq(5e6, 50e6, by = 1000), 200))
+    )
+    chrx_peaks <- data.frame(
+        chrom = "chrX",
+        start = sort(sample(seq(5e6, 50e6, by = 1000), 200))
+    )
+    peaks <- rbind(chr1_peaks, chr2_peaks, chrx_peaks)
+    peaks$end <- peaks$start + 300L
+
+    for (motif in motifs) {
+        gvtrack.create(vtrack = motif, src = paste0(track_dir, ".", motif), func = "lse")
+    }
+    shift <- (300 - 20) / 2
+    gw_max_q <- sapply(motifs, function(motif) {
+        gvtrack.iterator(motif, sshift = -shift, eshift = shift)
+        gquantiles(motif, percentiles = 0.9999, iterator = 20)
+    })
+    names(gw_max_q) <- motifs
+    max_cap <- gw_max_q
+    names(max_cap) <- track_names
+
+    out_1 <- glm_extract_features(
+        track_names = track_names, intervals = peaks,
+        tile_size = 200L, flank_size = 350L,
+        max_cap = max_cap, dis_from_cap = 10, scale_factor = 10,
+        gc_track = "seq.G_or_C", gc_scale_factor = 10,
+        n_threads = 1L
+    )
+    out_4 <- glm_extract_features(
+        track_names = track_names, intervals = peaks,
+        tile_size = 200L, flank_size = 350L,
+        max_cap = max_cap, dis_from_cap = 10, scale_factor = 10,
+        gc_track = "seq.G_or_C", gc_scale_factor = 10,
+        n_threads = 4L
+    )
+    out_auto <- glm_extract_features(
+        track_names = track_names, intervals = peaks,
+        tile_size = 200L, flank_size = 350L,
+        max_cap = max_cap, dis_from_cap = 10, scale_factor = 10,
+        gc_track = "seq.G_or_C", gc_scale_factor = 10,
+        n_threads = 0L
+    )
+
+    expect_identical(out_1, out_4)
+    expect_identical(out_1, out_auto)
+})
