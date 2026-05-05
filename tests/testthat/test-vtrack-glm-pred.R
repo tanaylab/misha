@@ -611,7 +611,7 @@ test_that("glm_pred.create validates selector_track requires selector_breaks", {
             tracks = "test.fixedbin",
             inner_func = "sum",
             weights = 1,
-            selector_track = "test.fixedbin"
+            selector_tracks = "test.fixedbin"
         ),
         "selector_breaks"
     )
@@ -623,10 +623,10 @@ test_that("glm_pred.create validates selector_breaks requires 2+ elements", {
             tracks = "test.fixedbin",
             inner_func = "sum",
             weights = 1,
-            selector_track = "test.fixedbin",
-            selector_breaks = 0.5
+            selector_tracks = "test.fixedbin",
+            selector_breaks = list(0.5)
         ),
-        "at least 2"
+        "length >= 2"
     )
 })
 
@@ -636,8 +636,8 @@ test_that("glm_pred.create validates selector_track must be dense", {
             tracks = "test.fixedbin",
             inner_func = "sum",
             weights = matrix(c(1, 2), nrow = 1),
-            selector_track = "test.sparse",
-            selector_breaks = c(0, 0.5, 1)
+            selector_tracks = "test.sparse",
+            selector_breaks = list(c(0, 0.5, 1))
         ),
         "fixed-bin.*dense"
     )
@@ -649,8 +649,8 @@ test_that("glm_pred.create validates weights must be matrix when K > 1", {
             tracks = "test.fixedbin",
             inner_func = "sum",
             weights = 1,
-            selector_track = "test.fixedbin",
-            selector_breaks = c(0, 0.5, 1)
+            selector_tracks = "test.fixedbin",
+            selector_breaks = list(c(0, 0.5, 1))
         ),
         "matrix"
     )
@@ -662,8 +662,8 @@ test_that("glm_pred.create validates weight matrix dimensions", {
             tracks = "test.fixedbin",
             inner_func = "sum",
             weights = matrix(c(1, 2, 3), nrow = 1, ncol = 3),
-            selector_track = "test.fixedbin",
-            selector_breaks = c(0, 0.5, 1)
+            selector_tracks = "test.fixedbin",
+            selector_breaks = list(c(0, 0.5, 1))
         ),
         "1 x 2"
     )
@@ -694,8 +694,8 @@ test_that("glm_pred with selector_track selects per-bin weights", {
         inner_func = "sum",
         weights = W,
         bias = b,
-        selector_track = "test.fixedbin",
-        selector_breaks = c(0, 0.1, 1.0)
+        selector_tracks = "test.fixedbin",
+        selector_breaks = list(c(0, 0.1, 1.0))
     )
 
     intervals <- gintervals(1, 0, 500)
@@ -743,8 +743,8 @@ test_that("glm_pred.info reconstructs weight matrix for K > 1", {
         inner_func = "sum",
         weights = W,
         bias = c(0.1, 0.2),
-        selector_track = "test.fixedbin",
-        selector_breaks = c(0, 0.5, 1.0)
+        selector_tracks = "test.fixedbin",
+        selector_breaks = list(c(0, 0.5, 1.0))
     )
 
     info <- glm_pred.info("vt_sel_info")
@@ -756,8 +756,8 @@ test_that("glm_pred.info reconstructs weight matrix for K > 1", {
     expect_equal(info$params$weights[1, 1], 2.0)
     expect_equal(info$params$weights[1, 2], 5.0)
     expect_equal(info$params$bias, c(0.1, 0.2))
-    expect_equal(info$params$selector_track, "test.fixedbin")
-    expect_equal(info$params$selector_breaks, c(0, 0.5, 1.0))
+    expect_equal(info$params$selector_tracks, "test.fixedbin")
+    expect_equal(info$params$selector_breaks, list(c(0, 0.5, 1.0)))
 })
 
 # ============================================================
@@ -778,8 +778,8 @@ test_that("glm_pred selector emits NaN for out-of-range selector values", {
         inner_func = "sum",
         weights = W,
         bias = 0,
-        selector_track = "test.fixedbin",
-        selector_breaks = c(0.3, 0.5, 1.0)
+        selector_tracks = "test.fixedbin",
+        selector_breaks = list(c(0.3, 0.5, 1.0))
     )
 
     intervals <- gintervals(1, 0, 5000)
@@ -835,8 +835,8 @@ test_that("glm_pred K=2 interactions use per-bin weights", {
         scale_factor = sf,
         interactions = list(c(1L, 2L)),
         interaction_weights = IW,
-        selector_track = "test.fixedbin",
-        selector_breaks = c(0, 0.1, 1.0)
+        selector_tracks = "test.fixedbin",
+        selector_breaks = list(c(0, 0.1, 1.0))
     )
 
     # Verify it produces output (functional test - C++ handles the per-bin logic)
@@ -869,8 +869,8 @@ test_that("glm_pred with selector uses per-bin bias", {
         inner_func = "sum",
         weights = W,
         bias = b,
-        selector_track = "test.fixedbin",
-        selector_breaks = c(0, 0.1, 1.0)
+        selector_tracks = "test.fixedbin",
+        selector_breaks = list(c(0, 0.1, 1.0))
     )
 
     intervals <- gintervals(1, 0, 500)
@@ -915,7 +915,7 @@ test_that("glm_pred without selector still works (K=1 backward compat)", {
     # Check that num_bins defaults to 1
     info <- glm_pred.info("vt_no_sel")
     expect_equal(info$params$num_bins, 1)
-    expect_null(info$params$selector_track)
+    expect_null(info$params$selector_tracks)
     expect_null(info$params$selector_breaks)
 
     # Still produces correct output
