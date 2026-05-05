@@ -437,6 +437,104 @@
     )
 }
 
+# Fetch NCBI Datasets /dataset_report for an accession. Returns the parsed
+# top-level list (yaml::yaml.load handles JSON, which is a YAML subset, and
+# is already in Imports). Throws on network/parse failure; callers wrap in
+# tryCatch.
+.ncbi_dataset_report <- function(accession, timeout = 30) {
+    url <- sprintf(
+        "%s/genome/accession/%s/dataset_report",
+        .NCBI_DATASETS_API, accession
+    )
+    h <- curl::new_handle()
+    curl::handle_setopt(h, timeout = timeout, useragent = "misha")
+    resp <- curl::curl_fetch_memory(url, handle = h)
+    if (resp$status_code >= 400) {
+        stop(sprintf("dataset_report HTTP %d for %s", resp$status_code, accession),
+            call. = FALSE
+        )
+    }
+    yaml::yaml.load(rawToChar(resp$content))
+}
+
+# Pure: extract annotation provenance + organism info from a parsed
+# dataset_report list. has_annotation is TRUE iff the assembly has any
+# annotation provider on file (NCBI RefSeq or community submitter).
+.ncbi_parse_annotation_info <- function(report) {
+    reports <- report$reports %||% list()
+    rep <- if (length(reports)) reports[[1L]] else list()
+    ai <- rep$annotation_info %||% list()
+    org <- rep$organism %||% list()
+    provider <- as.character(ai$provider %||% "")
+    list(
+        has_annotation  = nzchar(provider),
+        provider        = provider,
+        annotation_name = as.character(ai$name %||% ""),
+        organism_name   = as.character(org$organism_name %||% ""),
+        organism_tax_id = if (is.null(org$tax_id)) NA_integer_ else as.integer(org$tax_id)
+    )
+}
+
+# Pure: decide what to do with the requested `sets` given the parsed
+# annotation info. Trims 'genes' if the assembly has no annotation, and
+# emits an actionable warning naming the accession (and any RefSeq-companion
+# hint the caller resolved).
+.ncbi_resolve_sets_with_preflight <- function(sets, info, accession, hint = "") {
+    out <- list(sets = sets, warnings = character(0))
+    if ("genes" %in% sets && !info$has_annotation) {
+        msg <- sprintf(
+            "NCBI accession %s has no annotation (annotation_info empty). 'genes' will be skipped.",
+            accession
+        )
+        if (nzchar(hint)) {
+            msg <- paste0(msg, "\n  Annotated alternative: ", hint)
+        }
+        out$warnings <- c(out$warnings, msg)
+        out$sets <- setdiff(sets, "genes")
+    }
+    out
+}
+
+# Look up a RefSeq-annotated assembly for the same taxon and return a short
+# hint string, e.g. "GCF_000003025.6 (NCBI Sus scrofa Annotation Release 106)".
+# Returns "" on any failure or if the suggestion would be the same accession.
+# Best-effort: callers must tolerate "".
+.ncbi_suggest_annotated_alternative <- function(tax_id, current_accession,
+                                                timeout = 15) {
+    if (is.na(tax_id)) {
+        return("")
+    }
+    url <- sprintf(
+        "%s/genome/taxon/%d/dataset_report?filters.has_annotation=true&page_size=1",
+        .NCBI_DATASETS_API, as.integer(tax_id)
+    )
+    h <- curl::new_handle()
+    curl::handle_setopt(h, timeout = timeout, useragent = "misha")
+    resp <- tryCatch(curl::curl_fetch_memory(url, handle = h), error = function(e) NULL)
+    if (is.null(resp) || resp$status_code >= 400) {
+        return("")
+    }
+    j <- tryCatch(yaml::yaml.load(rawToChar(resp$content)),
+        error = function(e) NULL
+    )
+    reports <- j$reports %||% list()
+    if (!length(reports)) {
+        return("")
+    }
+    rep <- reports[[1L]]
+    suggested <- as.character(rep$accession %||% "")
+    if (!nzchar(suggested) || identical(suggested, current_accession)) {
+        return("")
+    }
+    nm <- (rep$annotation_info %||% list())$name %||%
+        (rep$annotation_info %||% list())$provider %||% ""
+    if (nzchar(nm)) {
+        sprintf("%s (%s)", suggested, nm)
+    } else {
+        suggested
+    }
+}
+
 # Parse NCBI Datasets sequence_report.jsonl into a data.frame.
 # Returns: data.frame(refseqAccession, genbankAccession, chrName, sequenceName,
 # role, length).

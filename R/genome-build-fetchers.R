@@ -200,6 +200,33 @@
 # (sequence_report.jsonl) is fetched.
 .ncbi_fetch_assets <- function(recipe, sets, workdir, verbose = TRUE) {
     accession <- recipe$accession
+    # Pre-flight: hit /dataset_report (a few KB) to learn whether 'genes' can
+    # actually be installed before downloading 800+ MB. About 80% of the
+    # Phylo447/Zoonomia community-submitted assemblies (Sanger TOL et al.) on
+    # NCBI ship without any annotation at all; pulling the FASTA only to find
+    # there's no GFF is pure waste. The check is best-effort: any failure
+    # (network, parse) falls through to the original code path.
+    if ("genes" %in% sets) {
+        report <- tryCatch(.ncbi_dataset_report(accession),
+            error = function(e) NULL
+        )
+        if (!is.null(report)) {
+            info <- .ncbi_parse_annotation_info(report)
+            hint <- if (!info$has_annotation) {
+                .ncbi_suggest_annotated_alternative(info$organism_tax_id, accession)
+            } else {
+                ""
+            }
+            res <- .ncbi_resolve_sets_with_preflight(sets, info,
+                accession = accession, hint = hint
+            )
+            for (w in res$warnings) warning(w, call. = FALSE)
+            sets <- res$sets
+        }
+    }
+    if (!length(sets)) {
+        return(list(chrom_alias = NULL))
+    }
     zip_path <- file.path(workdir, "datasets.zip")
     .download_to(.ncbi_datasets_zip_url(accession), zip_path, verbose = verbose)
     extract_dir <- file.path(workdir, "extract")
