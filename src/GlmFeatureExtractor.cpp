@@ -342,7 +342,7 @@ void GlmFeatureExtractor::extract(
 // ---------------------------------------------------------------------------
 extern "C" SEXP C_glm_extract_features(
     SEXP _track_names,     // character vector
-    SEXP _chroms,          // integer vector (chromosome IDs, 0-based)
+    SEXP _chroms,          // character vector (chromosome names)
     SEXP _starts,          // numeric vector (int64 as double)
     SEXP _ends,            // numeric vector (int64 as double)
     SEXP _tile_size,       // integer scalar
@@ -366,9 +366,22 @@ extern "C" SEXP C_glm_extract_features(
             track_names[i] = CHAR(STRING_ELT(_track_names, i));
         }
 
-        // Parse intervals
+        // Parse intervals: resolve chromosome names to chromkey IDs here so
+        // callers don't have to know misha's internal chromid layout (which
+        // is the chromkey insertion order, not any subset ordering).
+        if (TYPEOF(_chroms) != STRSXP) {
+            verror("'chroms' must be a character vector of chromosome names");
+        }
         int n_peaks = Rf_length(_chroms);
-        const int *chromids = INTEGER(_chroms);
+        const GenomeChromKey &chromkey_for_ids = iu.get_chromkey();
+        vector<int> chromids(n_peaks);
+        for (int i = 0; i < n_peaks; i++) {
+            SEXP s = STRING_ELT(_chroms, i);
+            if (s == NA_STRING) {
+                verror("chroms[%d] is NA", i + 1);
+            }
+            chromids[i] = chromkey_for_ids.chrom2id(CHAR(s));
+        }
         const double *starts_d = REAL(_starts);
         const double *ends_d = REAL(_ends);
 
@@ -425,7 +438,7 @@ extern "C" SEXP C_glm_extract_features(
         GlmFeatureExtractor extractor(iu);
         extractor.extract(
             track_names,
-            chromids,
+            chromids.data(),
             starts.data(),
             ends.data(),
             n_peaks,
