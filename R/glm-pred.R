@@ -43,14 +43,16 @@
 #'   M rows and K columns.
 #' @param interaction_trans_family character(M or 1 or NULL) Transform for interactions
 #' @param inter_trans_params list of lists (M or NULL) Logistic params per interaction
-#' @param selector_track character(1) or NULL Name of a fixed-bin (dense)
-#'   track used for per-position model selection. At each genomic position,
-#'   the selector track value is binned via \code{selector_breaks} to choose
-#'   which bin's weights (column of the weight matrix) to use. When NULL
-#'   (default), K = 1 and a single set of weights is applied everywhere.
-#' @param selector_breaks numeric vector of length K+1 defining K bins, or
-#'   NULL. Break points use \code{cut(include.lowest = TRUE, right = TRUE)}
-#'   semantics. Required when \code{selector_track} is specified.
+#' @param selector_tracks character(M) or NULL Names of fixed-bin (dense) tracks
+#'   used for per-position model selection. With M selectors, strata are the
+#'   Cartesian product of per-selector bins (column-major: first selector varies
+#'   fastest). When NULL (default), K = 1 and a single set of weights is applied
+#'   everywhere.
+#' @param selector_breaks list of M numeric vectors, or NULL. Each element is
+#'   the break vector (length K_m + 1, K_m >= 1) for the corresponding selector
+#'   track in \code{selector_tracks}. Break points use
+#'   \code{cut(include.lowest = TRUE, right = TRUE)} semantics. Required and
+#'   length-matched to \code{selector_tracks} when that is non-NULL.
 #'
 #' @return Invisibly returns \code{name}.
 #' @export
@@ -72,7 +74,7 @@ glm_pred.create <- function(name,
                             interaction_weights = NULL,
                             interaction_trans_family = NULL,
                             inter_trans_params = NULL,
-                            selector_track = NULL,
+                            selector_tracks = NULL,
                             selector_breaks = NULL) {
     .gcheckroot()
 
@@ -112,31 +114,50 @@ glm_pred.create <- function(name,
         )
     }
 
-    # --- Validate selector track and determine K ---
+    # --- Validate selector tracks and determine K_total = prod K_m (Cartesian product) ---
     K <- 1L
-    if (!is.null(selector_track)) {
+    K_per <- integer(0)
+    if (!is.null(selector_tracks)) {
         if (is.null(selector_breaks)) {
-            stop("'selector_breaks' required when 'selector_track' is specified", call. = FALSE)
+            stop("'selector_breaks' required when 'selector_tracks' is specified", call. = FALSE)
         }
-        if (!is.character(selector_track) || length(selector_track) != 1) {
-            stop("'selector_track' must be a single character string", call. = FALSE)
+        if (!is.character(selector_tracks) || length(selector_tracks) < 1) {
+            stop("'selector_tracks' must be a character vector of length >= 1", call. = FALSE)
         }
-        if (!is.numeric(selector_breaks) || length(selector_breaks) < 2) {
-            stop("'selector_breaks' must be a numeric vector with at least 2 elements", call. = FALSE)
-        }
-        K <- length(selector_breaks) - 1L
-
-        # Validate selector track exists and is fixed-bin
-        if (!(selector_track %in% gtrack.ls())) {
-            stop(sprintf("Selector track '%s' not found", selector_track), call. = FALSE)
-        }
-        sel_info <- gtrack.info(selector_track)
-        if (sel_info$type != "dense") {
+        if (!is.list(selector_breaks) || length(selector_breaks) != length(selector_tracks)) {
             stop(sprintf(
-                "Selector track '%s' must be a fixed-bin (dense) track, got '%s'",
-                selector_track, sel_info$type
+                "'selector_breaks' must be a list of length %d (one per selector)",
+                length(selector_tracks)
             ), call. = FALSE)
         }
+        existing_tracks <- gtrack.ls()
+        K_per <- integer(length(selector_tracks))
+        for (m in seq_along(selector_tracks)) {
+            tname <- selector_tracks[m]
+            br <- selector_breaks[[m]]
+            if (!is.numeric(br) || length(br) < 2) {
+                stop(sprintf(
+                    "'selector_breaks[[%d]]' must be a numeric vector of length >= 2",
+                    m
+                ), call. = FALSE)
+            }
+            if (is.unsorted(br, strictly = TRUE)) {
+                stop(sprintf("'selector_breaks[[%d]]' must be strictly increasing", m), call. = FALSE)
+            }
+            if (!(tname %in% existing_tracks)) {
+                stop(sprintf("Selector track '%s' not found", tname), call. = FALSE)
+            }
+            sel_info <- gtrack.info(tname)
+            if (sel_info$type != "dense") {
+                stop(sprintf(
+                    "Selector track '%s' must be a fixed-bin (dense) track, got '%s'",
+                    tname, sel_info$type
+                ), call. = FALSE)
+            }
+            K_per[m] <- length(br) - 1L
+        }
+        K <- as.integer(prod(K_per))
+        if (K < 1L) stop("Product of selector bin counts must be >= 1", call. = FALSE)
     }
 
     # --- Validate weights (vector or matrix depending on K) ---
@@ -318,9 +339,9 @@ glm_pred.create <- function(name,
     )
 
     # Add selector params if present
-    if (!is.null(selector_track)) {
-        params$selector_track <- selector_track
-        params$selector_breaks <- as.numeric(selector_breaks)
+    if (!is.null(selector_tracks)) {
+        params$selector_tracks <- as.character(selector_tracks)
+        params$selector_breaks <- lapply(selector_breaks, as.numeric)
     }
 
     # Add kernel params if present
