@@ -926,3 +926,135 @@ test_that("glm_pred without selector still works (K=1 backward compat)", {
 })
 
 # ============================================================
+# Category 20: Multi-selector — Cartesian product strata
+# ============================================================
+
+# Mirrors BinFinder::val2bin(right=TRUE, include_lowest=TRUE).
+# Returns 1-based bin index or NA for NaN/OOR.
+.val2bin_finder <- function(v, breaks) {
+    as.integer(cut(v, breaks, include.lowest = TRUE, right = TRUE))
+}
+
+test_that("glm_pred multi-selector: Cartesian product strata, hand-computed result", {
+    # Two selectors. Both reuse test.fixedbin (values in [0, 0.26]) so per-position
+    # bin indices are correlated, but the test still validates the column-major
+    # compound-index math against a hand computation.
+    src <- "test.fixedbin"
+    sel1 <- "test.fixedbin"
+    sel2 <- "test.fixedbin"
+
+    breaks1 <- c(0, 0.1, 0.3) # K1 = 2 bins
+    breaks2 <- c(0, 0.05, 0.15, 0.3) # K2 = 3 bins
+    K1 <- length(breaks1) - 1L
+    K2 <- length(breaks2) - 1L
+    K_total <- K1 * K2 # 6
+
+    # Distinct alpha and beta per stratum so a wrong index pattern shows up.
+    alpha <- matrix(seq(0.1, by = 0.1, length.out = K_total), nrow = 1L, ncol = K_total)
+    beta <- as.numeric(seq(10, by = 10, length.out = K_total))
+
+    glm_pred.create(
+        name = "vt_multi",
+        tracks = src,
+        inner_func = "sum",
+        weights = alpha,
+        bias = beta,
+        trans_family = NA_character_,
+        selector_tracks = c(sel1, sel2),
+        selector_breaks = list(breaks1, breaks2)
+    )
+    on.exit(gvtrack.rm("vt_multi"), add = TRUE)
+
+    intervals <- gintervals(1, 0, 5000)
+    iter <- 50L
+    df <- gextract(c("vt_multi", sel1, src),
+        intervals = intervals,
+        iterator = iter,
+        colnames = c("vt", "s", "x")
+    )
+
+    # Both selectors read the same value here, so b1 and b2 derive from df$s.
+    b1 <- .val2bin_finder(df$s, breaks1)
+    b2 <- .val2bin_finder(df$s, breaks2)
+
+    # Compound index column-major: stride1 = 1, stride2 = K1
+    k <- (b1 - 1L) + (b2 - 1L) * K1
+    expected <- ifelse(is.na(k), NA_real_,
+        beta[k + 1L] + alpha[1L, k + 1L] * df$x
+    )
+
+    expect_equal(df$vt, expected, tolerance = 1e-8)
+})
+
+test_that("glm_pred multi-selector: any-NaN or any-OOR selector -> NaN output", {
+    src <- "test.fixedbin"
+    sel <- "test.fixedbin"
+    # test.fixedbin has values in [0, 0.26]. Pick breaks where many positions
+    # fall outside (0.3, 1.0] to guarantee OOR coverage.
+    breaks <- c(0.3, 0.5, 1.0)
+    weights <- matrix(rep(1.0, 4L), nrow = 1L) # K_total = 2 x 2 = 4
+    bias <- c(0, 0, 0, 0)
+
+    glm_pred.create(
+        name = "vt_oor",
+        tracks = src,
+        inner_func = "sum",
+        weights = weights,
+        bias = bias,
+        trans_family = NA_character_,
+        selector_tracks = c(sel, sel),
+        selector_breaks = list(breaks, breaks)
+    )
+    on.exit(gvtrack.rm("vt_oor"), add = TRUE)
+
+    intervals <- gintervals(1, 0, 5000)
+    iter <- 50L
+    df <- gextract(c("vt_oor", sel),
+        intervals = intervals,
+        iterator = iter,
+        colnames = c("vt", "s")
+    )
+
+    # in_range matches BinFinder::val2bin: include_lowest at 0.3, then (0.3, 1.0].
+    # Since both selectors read the same s value, in-range for either ↔ in-range for both.
+    in_range <- !is.na(.val2bin_finder(df$s, breaks))
+    expect_true(all(is.na(df$vt[!in_range])))
+    expect_true(all(!is.na(df$vt[in_range])))
+    # And exercise the OOR path: at least one position must be out of range.
+    expect_true(any(!in_range))
+})
+
+test_that("glm_pred M=1 multi-selector matches single-selector hand computation", {
+    src <- "test.fixedbin"
+    sel <- "test.fixedbin"
+    breaks <- c(0, 0.1, 0.3)
+    w <- matrix(c(2.0, 5.0), nrow = 1L)
+    b <- c(0.5, 1.5)
+
+    glm_pred.create(
+        name = "vt_m1",
+        tracks = src,
+        inner_func = "sum",
+        weights = w,
+        bias = b,
+        trans_family = NA_character_,
+        selector_tracks = sel,
+        selector_breaks = list(breaks)
+    )
+    on.exit(gvtrack.rm("vt_m1"), add = TRUE)
+
+    intervals <- gintervals(1, 0, 5000)
+    iter <- 50L
+    df <- gextract(c("vt_m1", sel, src),
+        intervals = intervals,
+        iterator = iter,
+        colnames = c("vt", "s", "x")
+    )
+
+    bin <- .val2bin_finder(df$s, breaks)
+    expected <- ifelse(is.na(bin), NA_real_, b[bin] + w[1L, bin] * df$x)
+
+    expect_equal(df$vt, expected, tolerance = 1e-8)
+})
+
+# ============================================================
