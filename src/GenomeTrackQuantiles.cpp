@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <queue>
 #include <vector>
 
 #include "rdbinterval.h"
@@ -153,10 +155,77 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 
 		vector<double> medians(percentiles.size(), numeric_limits<float>::quiet_NaN());
 
-		if (calc_medians(sp, percentiles, medians, 0)){
-			Rf_warning("Data size (%llu) exceeds the limit (%llu).\n"
-					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
-					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)sp.stream_size(), (unsigned long long)iu.get_max_data_size());
+		// Fast path: the entire stream fits in the reservoir, so sp.samples()
+		// holds every non-NaN value with no sub-sampling. Compute percentiles
+		// without the O(N log N) std::sort that StreamPercentiler::get_percentile
+		// would otherwise run on first call.
+		bool use_nth_element_path = sp.stream_size() > 0 &&
+		                            sp.stream_size() <= sp.max_rnd_sampling_buf_size();
+		if (use_nth_element_path) {
+			vector<double> &samples = sp.samples_mutable();
+			uint64_t N = samples.size();
+
+			// Target ranks (i1, i2 pairs from linear interpolation), unique sorted ascending.
+			vector<uint64_t> targets;
+			targets.reserve(percentiles.size() * 2);
+			for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
+				double pct = max(0.0, min(1.0, ip->percentile));
+				double idx = (double)(N - 1) * pct;
+				targets.push_back((uint64_t)floor(idx));
+				targets.push_back((uint64_t)ceil(idx));
+			}
+			sort(targets.begin(), targets.end());
+			targets.erase(unique(targets.begin(), targets.end()), targets.end());
+
+			vector<double> values_at_targets(targets.size());
+
+			// nth_element-on-suffix is O(k * N) on average; std::sort is O(N log N).
+			// Crossover at k ≈ log2(N). Above the crossover (e.g. .gtrack.prepare.pvals
+			// asks for ~12k percentiles, ~24k unique target ranks), one sort is
+			// far cheaper than k incremental partitions. For typical 21-percentile
+			// gquantiles calls the suffix walk is still ~3x faster than a full sort.
+			const size_t log2N = (N <= 2) ? 1 : (size_t)ceil(log2((double)N));
+			const size_t crossover = max<size_t>(64, 2 * log2N);
+
+			if (targets.size() <= crossover) {
+				// Walk targets in ascending order, partitioning only the unconsumed
+				// suffix each time. After nth_element on [prev_end, end) at rank r,
+				// samples[r] is the r-th smallest globally and the suffix
+				// (r, end) is bounded below by it, so the next nth_element starts
+				// at r+1 instead of begin.
+				uint64_t prev_end = 0;
+				for (size_t t = 0; t < targets.size(); ++t) {
+					uint64_t r = targets[t];
+					nth_element(samples.begin() + prev_end, samples.begin() + r, samples.end());
+					values_at_targets[t] = samples[r];
+					prev_end = r + 1;
+				}
+			} else {
+				sort(samples.begin(), samples.end());
+				for (size_t t = 0; t < targets.size(); ++t)
+					values_at_targets[t] = samples[targets[t]];
+			}
+
+			for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
+				double pct = max(0.0, min(1.0, ip->percentile));
+				double idx = (double)(N - 1) * pct;
+				uint64_t i1 = (uint64_t)floor(idx);
+				uint64_t i2 = (uint64_t)ceil(idx);
+				double w = idx - (double)i1;
+				auto pos1 = lower_bound(targets.begin(), targets.end(), i1) - targets.begin();
+				auto pos2 = lower_bound(targets.begin(), targets.end(), i2) - targets.begin();
+				medians[ip->index] = values_at_targets[pos1] * (1.0 - w) +
+				                     values_at_targets[pos2] * w;
+			}
+		} else {
+			// Sub-sampling case (stream > reservoir): existing path uses tail
+			// buffers (lowest_vals/highest_vals) plus a single sort of the
+			// reservoir-sized samples vector inside StreamPercentiler.
+			if (calc_medians(sp, percentiles, medians, 0)){
+				Rf_warning("Data size (%llu) exceeds the limit (%llu).\n"
+						"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
+						"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)sp.stream_size(), (unsigned long long)iu.get_max_data_size());
+			}
 		}
 
 		// assemble the answer
@@ -246,6 +315,13 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 						sp.add(val, unif_rand);
 				}
 
+				// Sort kid sample buffer in place so the parent can perform a
+				// k-way merge instead of one giant single-threaded sort over
+				// all kids' values (which on a dense binsize=1 mm10 track is
+				// ~21 GB of doubles and was the cause of multi-minute hangs).
+				// Each kid sorts ~max_reservoir/num_kids elements in parallel.
+				sort(sp.samples_mutable().begin(), sp.samples_mutable().end());
+
 				void *result = allocate_res(0);
 				uint64_t kid_stream_size = sp.stream_size();
 				uint64_t kid_samples_size = sp.samples().size();
@@ -292,72 +368,185 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 					}
 				}
 
-				for (int i = 0; i < get_num_kids(); ++i) {
-					if (!kids_stream_size[i]) 
-						continue;
-
-					double *kid_samples = kids_vals[i];
-					double *kid_lowest_vals = kid_samples + kids_samples_size[i];
-					double *kid_highest_vals = kid_lowest_vals + kids_lowest_vals_size[i];
-					double kid_sampling_rate = kids_samples_size[i] / (double)kids_stream_size[i];
-
-					if (kid_sampling_rate == min_sampling_rate)
-						samples.insert(samples.end(), kid_samples, kid_samples + kids_samples_size[i]);
-					else {
-						double sampling_ratio = min_sampling_rate / kid_sampling_rate;
-						for (uint64_t j = 0; j < kids_samples_size[i]; ++j) {
-							if (unif_rand() < sampling_ratio)
-								samples.push_back(kid_samples[j]);
-						}
+				// Fast path: if no kid sub-sampled (min_sampling_rate == 1), every
+				// non-NaN value in the stream is present in some kid's samples
+				// buffer, and each kid has already sorted its buffer in-place
+				// inside shared memory. We can compute exact percentiles via a
+				// k-way merge over the per-kid sorted runs without ever
+				// materialising a single concatenated samples vector. This
+				// avoids both the giant std::vector::insert reallocations
+				// (~21 GB on dense binsize=1 mm10) and the single-threaded
+				// std::sort over all values that previously dominated wall
+				// time.
+				if (min_sampling_rate >= 1.0) {
+					struct Run { const double *cur; const double *end; };
+					vector<Run> runs;
+					runs.reserve(get_num_kids());
+					for (int i = 0; i < get_num_kids(); ++i) {
+						if (!kids_samples_size[i]) continue;
+						const double *base = kids_vals[i];
+						runs.push_back({base, base + kids_samples_size[i]});
 					}
 
-					if (min_sampling_rate < 1) {
+					// Targets are the (index1, index2) pairs needed by linear
+					// interpolation in StreamPercentiler::get_percentile, in
+					// strictly ascending unique order so a single linear walk
+					// over the merged stream is enough.
+					vector<uint64_t> targets;
+					targets.reserve(percentiles.size() * 2);
+					if (stream_size > 0) {
+						for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
+							double pct = max(0.0, min(1.0, ip->percentile));
+							double idx = (double)(stream_size - 1) * pct;
+							targets.push_back((uint64_t)floor(idx));
+							targets.push_back((uint64_t)ceil(idx));
+						}
+						sort(targets.begin(), targets.end());
+						targets.erase(unique(targets.begin(), targets.end()), targets.end());
+					}
+
+					// Min-heap of (value, run_idx). For dense full-genome scans
+					// the heap size is ~num_kids (≤ chromosomes for the typical
+					// per-chrom split), so log K is small (~6 for K=89), and
+					// the merge cost is O(N log K) which is meaningfully less
+					// than the previous O(N log N) sort for N = 2.65e9.
+					struct HeapEntry {
+						double val; int run_idx;
+						bool operator>(const HeapEntry &o) const { return val > o.val; }
+					};
+					priority_queue<HeapEntry, vector<HeapEntry>, greater<HeapEntry>> heap;
+					for (int r = 0; r < (int)runs.size(); ++r) {
+						if (runs[r].cur != runs[r].end)
+							heap.push({*runs[r].cur, r});
+					}
+
+					vector<double> values_at_targets;
+					values_at_targets.reserve(targets.size());
+					uint64_t cur_rank = 0;
+					size_t target_i = 0;
+					while (!heap.empty() && target_i < targets.size()) {
+						HeapEntry e = heap.top();
+						heap.pop();
+
+						// e.val is the value at rank cur_rank. Capture it for
+						// every target index that equals cur_rank (target_i is
+						// monotone non-decreasing because targets is sorted).
+						while (target_i < targets.size() && targets[target_i] == cur_rank) {
+							values_at_targets.push_back(e.val);
+							++target_i;
+						}
+
+						Run &rn = runs[e.run_idx];
+						++rn.cur;
+						if (rn.cur != rn.end)
+							heap.push({*rn.cur, e.run_idx});
+						++cur_rank;
+					}
+
+					// Linear interpolation between (index1, index2) per percentile,
+					// matching StreamPercentiler::get_percentile semantics.
+					for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
+						if (stream_size == 0) {
+							medians[ip->index] = numeric_limits<double>::quiet_NaN();
+							continue;
+						}
+						double pct = max(0.0, min(1.0, ip->percentile));
+						double idx = (double)(stream_size - 1) * pct;
+						uint64_t i1 = (uint64_t)floor(idx);
+						uint64_t i2 = (uint64_t)ceil(idx);
+						double w = idx - (double)i1;
+						auto pos1 = lower_bound(targets.begin(), targets.end(), i1) - targets.begin();
+						auto pos2 = lower_bound(targets.begin(), targets.end(), i2) - targets.begin();
+						double v1 = values_at_targets[pos1];
+						double v2 = values_at_targets[pos2];
+						medians[ip->index] = v1 * (1.0 - w) + v2 * w;
+					}
+				} else {
+					// Sub-sampling path: kid streams exceeded their reservoir, so
+					// each kid holds a thinned random subset plus actual tail
+					// values in lowest_vals/highest_vals. Pre-reserve the parent
+					// samples vector to avoid the O(N) reallocations that
+					// previously dominated the merge alongside the sort.
+					uint64_t expected_samples = 0;
+					for (int i = 0; i < get_num_kids(); ++i) {
+						if (!kids_stream_size[i]) continue;
+						double kid_sampling_rate = kids_samples_size[i] / (double)kids_stream_size[i];
+						if (kid_sampling_rate == min_sampling_rate)
+							expected_samples += kids_samples_size[i];
+						else
+							expected_samples += (uint64_t)((double)kids_samples_size[i] * (min_sampling_rate / kid_sampling_rate) * 1.05) + 16;
+					}
+					samples.reserve(expected_samples);
+
+					for (int i = 0; i < get_num_kids(); ++i) {
+						if (!kids_stream_size[i])
+							continue;
+
+						double *kid_samples = kids_vals[i];
+						double *kid_lowest_vals = kid_samples + kids_samples_size[i];
+						double *kid_highest_vals = kid_lowest_vals + kids_lowest_vals_size[i];
+						double kid_sampling_rate = kids_samples_size[i] / (double)kids_stream_size[i];
+
+						if (kid_sampling_rate == min_sampling_rate)
+							samples.insert(samples.end(), kid_samples, kid_samples + kids_samples_size[i]);
+						else {
+							double sampling_ratio = min_sampling_rate / kid_sampling_rate;
+							for (uint64_t j = 0; j < kids_samples_size[i]; ++j) {
+								if (unif_rand() < sampling_ratio)
+									samples.push_back(kid_samples[j]);
+							}
+						}
+
 						if (was_lowest_vals_buf_used) {
-							if (kids_lowest_vals_size[i]) 
+							if (kids_lowest_vals_size[i])
 								lowest_vals.insert(lowest_vals.end(), kid_lowest_vals, kid_lowest_vals + kids_lowest_vals_size[i]);
 							else {
-								if (kids_samples_size[i] <= kid_lowest_vals_buf_size) 
+								if (kids_samples_size[i] <= kid_lowest_vals_buf_size)
 									lowest_vals.insert(lowest_vals.end(), kid_samples, kid_samples + kids_samples_size[i]);
 								else {
-									partial_sort(kid_samples, kid_samples + kid_lowest_vals_buf_size, kid_samples + kids_samples_size[i], less<double>());
+									// kid samples are already sorted ascending in this build,
+									// so the smallest kid_lowest_vals_buf_size values are the prefix.
 									lowest_vals.insert(lowest_vals.end(), kid_samples, kid_samples + kid_lowest_vals_buf_size);
 								}
 							}
 						}
 
 						if (was_highest_vals_buf_used) {
-							if (kids_highest_vals_size[i]) 
+							if (kids_highest_vals_size[i])
 								highest_vals.insert(highest_vals.end(), kid_highest_vals, kid_highest_vals + kids_highest_vals_size[i]);
 							else {
-								if (kids_samples_size[i] <= kid_highest_vals_buf_size) 
+								if (kids_samples_size[i] <= kid_highest_vals_buf_size)
 									highest_vals.insert(highest_vals.end(), kid_samples, kid_samples + kids_samples_size[i]);
 								else {
-									partial_sort(kid_samples, kid_samples + kid_highest_vals_buf_size, kid_samples + kids_samples_size[i], greater<double>());
-									highest_vals.insert(highest_vals.end(), kid_samples, kid_samples + kid_highest_vals_buf_size);
+									// kid samples are sorted ascending; the largest
+									// kid_highest_vals_buf_size values are the suffix.
+									highest_vals.insert(highest_vals.end(),
+									                    kid_samples + kids_samples_size[i] - kid_highest_vals_buf_size,
+									                    kid_samples + kids_samples_size[i]);
 								}
 							}
 						}
 					}
+
+					// only kid_lowest_vals_buf_size of all lowest values are really the lowest among all the samples
+					if (was_lowest_vals_buf_used) {
+						partial_sort(lowest_vals.begin(), lowest_vals.begin() + kid_lowest_vals_buf_size, lowest_vals.end(), less<double>());
+						lowest_vals.resize(kid_lowest_vals_buf_size);
+					}
+
+					if (was_highest_vals_buf_used) {
+						partial_sort(highest_vals.begin(), highest_vals.begin() + kid_highest_vals_buf_size, highest_vals.end(), greater<double>());
+						highest_vals.resize(kid_highest_vals_buf_size);
+					}
+
+					StreamPercentiler<double> sp;
+					sp.init_with_swap(stream_size, samples, lowest_vals, highest_vals);
+
+					// calculate the percentiles
+					if (calc_medians(sp, percentiles, medians, 0))
+						Rf_warning("The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
+								"(The limit can be controlled by gmax.data.size limit)");
 				}
-
-				// only kid_lowest_vals_buf_size of all lowest values are really the lowest among all the samples
-				if (was_lowest_vals_buf_used) {
-					partial_sort(lowest_vals.begin(), lowest_vals.begin() + kid_lowest_vals_buf_size, lowest_vals.end(), less<double>());
-					lowest_vals.resize(kid_lowest_vals_buf_size);
-				}
-
-				if (was_highest_vals_buf_used) {
-					partial_sort(highest_vals.begin(), highest_vals.begin() + kid_highest_vals_buf_size, highest_vals.end(), greater<double>());
-					highest_vals.resize(kid_highest_vals_buf_size);
-				}
-
-				StreamPercentiler<double> sp;
-				sp.init_with_swap(stream_size, samples, lowest_vals, highest_vals);
-
-				// calculate the percentiles
-				if (calc_medians(sp, percentiles, medians, 0))
-					Rf_warning("The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
-							"(The limit can be controlled by gmax.data.size limit)");
 			}
 		}
 

@@ -51,6 +51,9 @@ void StratifiedMarkovModel::init(int num_bins, const std::vector<double>& breaks
         m_cdf[b].assign(m_num_kmers * NUM_BASES, 0.0f);
     }
 
+    // Default per-bin prior: uniform (will be overridden by setter before normalize)
+    m_prior.assign(num_bins, {0.25, 0.25, 0.25, 0.25});
+
     m_total_kmers = 0;
 }
 
@@ -108,21 +111,105 @@ void StratifiedMarkovModel::apply_bin_mapping(const std::vector<int>& bin_map) {
     m_per_bin_kmers = std::move(new_per_bin_kmers);
 }
 
+void StratifiedMarkovModel::set_prior_uniform() {
+    for (auto& row : m_prior) {
+        row = {0.25, 0.25, 0.25, 0.25};
+    }
+}
+
+namespace {
+void normalize_row_or_uniform(std::array<double, NUM_BASES>& row) {
+    double s = 0.0;
+    for (int a = 0; a < NUM_BASES; ++a) s += row[a];
+    if (s <= 0.0) {
+        row = {0.25, 0.25, 0.25, 0.25};
+    } else {
+        for (int a = 0; a < NUM_BASES; ++a) row[a] /= s;
+    }
+}
+}  // namespace
+
+void StratifiedMarkovModel::set_prior_global(
+    const std::array<double, NUM_BASES>& pi) {
+    std::array<double, NUM_BASES> row = pi;
+    normalize_row_or_uniform(row);
+    for (auto& r : m_prior) r = row;
+}
+
+void StratifiedMarkovModel::set_prior_explicit(
+    const std::vector<std::array<double, NUM_BASES>>& pi_per_bin) {
+    if (static_cast<int>(pi_per_bin.size()) != m_num_bins) {
+        throw std::invalid_argument("prior matrix row count must match num_bins");
+    }
+    for (int b = 0; b < m_num_bins; ++b) {
+        m_prior[b] = pi_per_bin[b];
+        normalize_row_or_uniform(m_prior[b]);
+    }
+}
+
+int StratifiedMarkovModel::set_prior_from_marginal() {
+    int fallback_count = 0;
+    for (int b = 0; b < m_num_bins; ++b) {
+        std::array<double, NUM_BASES> sums = {0.0, 0.0, 0.0, 0.0};
+        for (int ctx = 0; ctx < m_num_kmers; ++ctx) {
+            int off = ctx * NUM_BASES;
+            for (int a = 0; a < NUM_BASES; ++a) {
+                sums[a] += static_cast<double>(m_counts[b][off + a]);
+            }
+        }
+        double total = sums[0] + sums[1] + sums[2] + sums[3];
+        if (total <= 0.0) {
+            m_prior[b] = {0.25, 0.25, 0.25, 0.25};
+            ++fallback_count;
+        } else {
+            for (int a = 0; a < NUM_BASES; ++a) m_prior[b][a] = sums[a] / total;
+        }
+    }
+    return fallback_count;
+}
+
+bool StratifiedMarkovModel::set_prior_from_global_marginal() {
+    std::array<double, NUM_BASES> sums = {0.0, 0.0, 0.0, 0.0};
+    for (int b = 0; b < m_num_bins; ++b) {
+        for (int ctx = 0; ctx < m_num_kmers; ++ctx) {
+            int off = ctx * NUM_BASES;
+            for (int a = 0; a < NUM_BASES; ++a) {
+                sums[a] += static_cast<double>(m_counts[b][off + a]);
+            }
+        }
+    }
+    double total = sums[0] + sums[1] + sums[2] + sums[3];
+    if (total <= 0.0) {
+        for (auto& r : m_prior) r = {0.25, 0.25, 0.25, 0.25};
+        return false;
+    }
+    std::array<double, NUM_BASES> pi;
+    for (int a = 0; a < NUM_BASES; ++a) pi[a] = sums[a] / total;
+    for (auto& r : m_prior) r = pi;
+    return true;
+}
+
 void StratifiedMarkovModel::normalize_and_build_cdf(double pseudocount) {
     for (int b = 0; b < m_num_bins; ++b) {
+        const auto& pi = m_prior[b];
         for (int ctx = 0; ctx < m_num_kmers; ++ctx) {
             int base_offset = ctx * NUM_BASES;
 
-            // Calculate total count for this context (with pseudocounts)
-            double total = 0.0;
+            // Total observed count at (b, ctx)
+            double n_total = 0.0;
             for (int base = 0; base < NUM_BASES; ++base) {
-                total += static_cast<double>(m_counts[b][base_offset + base]) + pseudocount;
+                n_total += static_cast<double>(m_counts[b][base_offset + base]);
             }
+            // Posterior denominator: sum_a N + alpha (pi sums to 1)
+            double total = n_total + pseudocount;
 
-            // Build CDF
+            // Build CDF: P(a) = (N_a + alpha * pi_a) / (sum_a N + alpha)
             double cumsum = 0.0;
             for (int base = 0; base < NUM_BASES; ++base) {
-                double prob = (static_cast<double>(m_counts[b][base_offset + base]) + pseudocount) / total;
+                double prob =
+                    (static_cast<double>(m_counts[b][base_offset + base]) +
+                     pseudocount * pi[base]) /
+                    total;
                 cumsum += prob;
                 m_cdf[b][base_offset + base] = static_cast<float>(cumsum);
             }

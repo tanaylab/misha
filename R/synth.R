@@ -715,6 +715,67 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
     out
 }
 
+# Internal: validate the `prior` argument and split into (mode, matrix) for the C kernel.
+# Returns a list(mode = <"uniform"|"marginal"|"global"|"explicit">, matrix = NULL or n_bins x 4 numeric).
+.gsynth_resolve_prior_arg <- function(prior, total_bins) {
+    if (is.null(prior)) {
+        return(list(mode = "uniform", matrix = NULL))
+    }
+    if (is.character(prior) && length(prior) == 1L) {
+        if (prior == "marginal") {
+            return(list(mode = "marginal", matrix = NULL))
+        }
+        if (prior == "global") {
+            return(list(mode = "global", matrix = NULL))
+        }
+        if (prior == "uniform") {
+            return(list(mode = "uniform", matrix = NULL))
+        }
+        stop(sprintf(
+            "Unknown prior '%s'. Use NULL, 'uniform', 'marginal', 'global', a length-4 numeric, or an n_bins x 4 matrix.",
+            prior
+        ), call. = FALSE)
+    }
+    if (is.numeric(prior) && is.null(dim(prior)) && length(prior) == 4L) {
+        if (!is.null(names(prior))) {
+            ord <- match(c("A", "C", "G", "T"), toupper(names(prior)))
+            if (anyNA(ord)) {
+                stop("Named numeric prior must have names A, C, G, T", call. = FALSE)
+            }
+            prior <- prior[ord]
+        }
+        if (anyNA(prior) || any(prior < 0)) {
+            stop("prior must be non-negative and finite", call. = FALSE)
+        }
+        s <- sum(prior)
+        if (s <= 0) stop("prior must sum to > 0", call. = FALSE)
+        prior <- prior / s
+        mat <- matrix(as.numeric(prior), nrow = total_bins, ncol = 4L, byrow = TRUE)
+        return(list(mode = "explicit", matrix = mat))
+    }
+    if (is.numeric(prior) && length(dim(prior)) == 2L) {
+        if (nrow(prior) != total_bins || ncol(prior) != 4L) {
+            stop(sprintf(
+                "prior matrix must be %d x 4 (got %d x %d)",
+                total_bins, nrow(prior), ncol(prior)
+            ), call. = FALSE)
+        }
+        if (anyNA(prior) || any(prior < 0)) {
+            stop("prior matrix must be non-negative and contain no NAs", call. = FALSE)
+        }
+        rs <- rowSums(prior)
+        if (any(rs <= 0)) {
+            stop("Every row of prior matrix must sum to > 0", call. = FALSE)
+        }
+        prior <- prior / rs
+        return(list(mode = "explicit", matrix = prior))
+    }
+    stop(
+        "prior must be NULL, 'uniform'/'marginal'/'global', a length-4 numeric (optionally named A/C/G/T), or an n_bins x 4 matrix.",
+        call. = FALSE
+    )
+}
+
 #' Train a stratified Markov model from genome sequences
 #'
 #' Computes a Markov model of order \code{k} (default 5) optionally stratified by
@@ -737,8 +798,9 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
 #' @param intervals Genomic intervals to process. If NULL, uses all chromosomes.
 #' @param iterator Iterator for track evaluation, determines the resolution at which
 #'        track values are computed.
-#' @param pseudocount Pseudocount added to all k-mer counts to avoid zero probabilities.
-#'        Default is 1.
+#' @param pseudocount Total Dirichlet concentration alpha used in the
+#'        smoothed posterior \code{P(a|c,b) = (N + alpha * pi_a(b)) /
+#'        (sum_a N + alpha)}. Default is 1.
 #' @param min_obs Minimum number of observations ((k+1)-mers) required per bin. Bins
 #'        with fewer observations will be marked as NA (not learned) and a warning will
 #'        be issued. Default is 0 (no minimum). During sampling, NA bins will fall back
@@ -747,6 +809,24 @@ gsynth.forbid_kmer <- function(model, pattern, check = TRUE) {
 #'        (context of length 5 plus the emitted base) transition probabilities.
 #'        Higher values capture longer-range sequence dependencies but require
 #'        exponentially more memory (\eqn{4^k} context states).
+#' @param prior Per-base Dirichlet prior \eqn{\pi_a(b)}. One of:
+#'        \itemize{
+#'          \item \code{"marginal"} (default): per-bin empirical base
+#'                composition learned from the trainer's own counts
+#'                (post bin-merge). Bins with zero observations fall back to
+#'                uniform with a warning.
+#'          \item \code{"global"}: a single base composition pooled over
+#'                all bins, broadcast to every bin.
+#'          \item \code{NULL} or \code{"uniform"}: uniform prior
+#'                (1/4 per base) -- the pre-5.6.21 fallback.
+#'          \item Length-4 numeric (optionally named A, C, G, T):
+#'                user-supplied global \eqn{\pi}, broadcast.
+#'          \item \code{n_bins x 4} numeric matrix: user-supplied per-bin
+#'                \eqn{\pi}.
+#'        }
+#'        Together with \code{pseudocount}, this defines the Dirichlet
+#'        posterior. To reproduce the pre-5.6.21 Laplace-add-one behavior,
+#'        pass \code{prior = NULL, pseudocount = 4}.
 #'
 #' @details
 #' \strong{Strand symmetry:} The training process counts both the forward strand
@@ -821,7 +901,8 @@ gsynth.train <- function(...,
                          iterator = NULL,
                          pseudocount = 1,
                          min_obs = 0,
-                         k = 5L) {
+                         k = 5L,
+                         prior = "marginal") {
     .gcheckroot()
 
     # Validate k (Markov order)
@@ -993,6 +1074,9 @@ gsynth.train <- function(...,
     # We've already applied bin_map in R, so just pass identity mapping
     bin_map_vec <- seq_len(total_bins) - 1L # 0-based identity
 
+    # Resolve prior into (mode, matrix) for the C kernel
+    prior_resolved <- .gsynth_resolve_prior_arg(prior, total_bins)
+
     message("Training Markov model...")
 
     # Call C++ training function
@@ -1014,6 +1098,8 @@ gsynth.train <- function(...,
         mask,
         as.numeric(pseudocount),
         as.integer(k),
+        as.character(prior_resolved$mode),
+        prior_resolved$matrix,
         .misha_env()
     )
 
@@ -1029,6 +1115,17 @@ gsynth.train <- function(...,
 
     # Store all breaks for reference
     result$breaks <- NULL # Remove single breaks
+
+    # Store prior on the model (resolved matrix arrives as result$prior from C++)
+    result$prior_mode <- prior_resolved$mode
+    result$pseudocount <- as.numeric(pseudocount)
+    if (!is.null(result$marginal_fallbacks) &&
+        result$marginal_fallbacks > 0L) {
+        warning(sprintf(
+            "%d bin(s) had zero observations; their prior fell back to uniform 1/4.",
+            result$marginal_fallbacks
+        ), call. = FALSE)
+    }
 
     # Check for sparse bins (fewer than min_obs observations)
     result$min_obs <- min_obs
@@ -1134,6 +1231,21 @@ print.gsynth.model <- function(x, ...) {
     cat(sprintf("Masked positions: %s\n", format(x$total_masked, big.mark = ",")))
     cat(sprintf("N positions: %s\n", format(x$total_n, big.mark = ",")))
 
+    if (!is.null(x$prior_mode)) {
+        cat(sprintf("Prior: %s", x$prior_mode))
+        if (!is.null(x$prior) && x$prior_mode != "uniform") {
+            avg_pi <- colMeans(x$prior)
+            cat(sprintf(
+                "  (mean pi: A=%.3f C=%.3f G=%.3f T=%.3f)",
+                avg_pi[1], avg_pi[2], avg_pi[3], avg_pi[4]
+            ))
+        }
+        cat("\n")
+    }
+    if (!is.null(x$pseudocount)) {
+        cat(sprintf("Pseudocount: %g\n", x$pseudocount))
+    }
+
     # Show per-bin k-mer counts (abbreviated for multi-dimensional)
     if (x$total_bins <= 20) {
         cat("\nPer-bin k-mer counts:\n")
@@ -1223,6 +1335,12 @@ gsynth.save <- function(model, file, compress = FALSE) {
         dim_sizes = if (n_dims > 0) as.integer(model$dim_sizes) else list(),
         total_bins = as.integer(total_bins),
         pseudocount = if (!is.null(model$pseudocount)) as.numeric(model$pseudocount) else 1.0,
+        prior_mode = if (!is.null(model$prior_mode)) as.character(model$prior_mode) else "uniform",
+        prior = if (!is.null(model$prior)) {
+            apply(model$prior, 1, function(row) as.numeric(row), simplify = FALSE)
+        } else {
+            NULL
+        },
         min_obs = as.integer(if (!is.null(model$min_obs)) model$min_obs else 0L),
         total_kmers = as.numeric(model$total_kmers),
         total_masked = as.numeric(model$total_masked),
@@ -1326,6 +1444,12 @@ gsynth.load <- function(file) {
     model <- readRDS(file)
     if (!inherits(model, "gsynth.model")) {
         stop("File does not contain a valid gsynth.model", call. = FALSE)
+    }
+    # Backfill prior fields for old RDS models trained before 5.6.21
+    if (is.null(model$prior_mode)) model$prior_mode <- "uniform"
+    if (is.null(model$prior)) {
+        tb <- if (!is.null(model$total_bins)) model$total_bins else model$num_bins
+        model$prior <- matrix(0.25, nrow = tb, ncol = 4L)
     }
     model
 }
@@ -1465,6 +1589,22 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 
     # Build the model object
     pseudocount <- if (!is.null(metadata$pseudocount)) as.numeric(metadata$pseudocount) else 1.0
+
+    # Reconstruct prior; defaults to uniform 1/4 for old .gsm files without it.
+    prior_mode <- if (!is.null(metadata$prior_mode)) as.character(metadata$prior_mode) else "uniform"
+    if (!is.null(metadata$prior)) {
+        prior_rows <- lapply(metadata$prior, function(row) as.numeric(unlist(row)))
+        prior_mat <- do.call(rbind, prior_rows)
+        if (nrow(prior_mat) != total_bins || ncol(prior_mat) != 4L) {
+            stop(sprintf(
+                "Invalid prior in .gsm: got %d x %d, expected %d x 4",
+                nrow(prior_mat), ncol(prior_mat), total_bins
+            ), call. = FALSE)
+        }
+    } else {
+        prior_mat <- matrix(0.25, nrow = total_bins, ncol = 4L)
+    }
+
     model <- list(
         k = k,
         num_kmers = num_kmers,
@@ -1480,6 +1620,8 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
         dim_sizes = dim_sizes,
         total_bins = total_bins,
         pseudocount = pseudocount,
+        prior_mode = prior_mode,
+        prior = prior_mat,
         iterator = NULL,
         min_obs = min_obs,
         sparse_bins = sparse_bins
@@ -1487,6 +1629,32 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 
     class(model) <- "gsynth.model"
     model
+}
+
+#' Internal: build a per-bin log-probability table from a gsynth.model.
+#'
+#' Differences each bin's cdf to recover P(base|context), then takes log.
+#' Sparse bins (cdf rows are NA from training-time min_obs filter) yield
+#' NaN log_p rows, which the C++ kernel uses as the "is sparse" signal.
+#'
+#' @param model A gsynth.model object.
+#' @return list of length total_bins; each element is a num_kmers x 4
+#'         numeric matrix of natural-log conditional probabilities.
+#' @noRd
+.gsynth_build_log_p <- function(model) {
+    stopifnot(inherits(model, "gsynth.model"))
+    cdf_list <- model$model_data$cdf
+    lapply(cdf_list, function(cdf) {
+        # cdf is num_kmers x 4 (cumulative across the 4 bases).
+        # p[, 1] = cdf[, 1]; p[, j] = cdf[, j] - cdf[, j-1] for j>1.
+        p <- cbind(
+            cdf[, 1],
+            cdf[, 2] - cdf[, 1],
+            cdf[, 3] - cdf[, 2],
+            cdf[, 4] - cdf[, 3]
+        )
+        log(p) # NA in cdf -> NaN here
+    })
 }
 
 #' Sample a synthetic genome from a trained Markov model
@@ -1511,6 +1679,13 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 #'        position within each chromosome. Overlapping intervals may result in
 #'        only the first overlapping region being copied, with subsequent overlaps
 #'        skipped due to cursor advancement during sequential processing.
+#' @param preserve_n Logical; default \code{TRUE}. When \code{TRUE}, positions
+#'        whose original reference is \code{N} (or \code{n}) are written to the
+#'        output verbatim instead of being filled in with a sampled ACGT base.
+#'        Case is preserved (so soft-masked \code{n} round-trips). \code{mask_copy}
+#'        regions take precedence: inside a \code{mask_copy} interval the original
+#'        byte is copied regardless. Set to \code{FALSE} to restore the
+#'        pre-5.6.22 behavior of treating every position as something to sample.
 #' @param seed Random seed for reproducibility. If NULL, uses current random state.
 #' @param intervals Genomic intervals to sample. If NULL, uses all chromosomes.
 #' @param n_samples Number of samples to generate per interval. Default is 1.
@@ -1553,11 +1728,16 @@ gsynth.convert <- function(input_file, output_file, compress = FALSE) {
 #' effectively free). The index is suitable for any downstream tool that
 #' expects a samtools-indexed reference.
 #'
-#' \strong{N bases during sampling:} When the sampler needs to initialize the
-#' first k-mer context and encounters regions with only N bases, it falls back
-#' to uniform random base selection until a valid context is established.
-#' Similarly, if a bin has no learned statistics (sparse bin with NA CDF),
-#' uniform sampling is used for that position.
+#' \strong{N bases during sampling:} By default (\code{preserve_n = TRUE})
+#' positions whose original reference is N are copied verbatim into the
+#' output, so gaps and centromeres remain N rather than being fabricated as
+#' ACGT. Where the sampler still has to fill an N-adjacent k-mer context
+#' (the first k bp inside an interval, or any k-mer window containing a
+#' preserved N), it falls back to uniform random base selection until a
+#' valid context is re-established. Similarly, if a bin has no learned
+#' statistics (sparse bin with NA CDF), uniform sampling is used for that
+#' position. Pass \code{preserve_n = FALSE} to recover the pre-5.6.22
+#' behavior of sampling every position regardless of the reference.
 #'
 #' \strong{Sparse bins:} If the model has sparse bins (from \code{min_obs} during
 #' training), a warning is issued when sampling regions that fall into these bins.
@@ -1610,12 +1790,17 @@ gsynth.sample <- function(model,
                           output_path = NULL,
                           output_format = c("misha", "fasta", "vector"),
                           mask_copy = NULL,
+                          preserve_n = TRUE,
                           seed = NULL,
                           intervals = NULL,
                           n_samples = 1,
                           bin_merge = NULL,
                           cell_merge = NULL) {
     .gcheckroot()
+
+    if (!is.logical(preserve_n) || length(preserve_n) != 1L || is.na(preserve_n)) {
+        stop("preserve_n must be a single non-NA logical (TRUE or FALSE)", call. = FALSE)
+    }
 
     if (!inherits(model, "gsynth.model")) {
         stop("model must be a gsynth.model object", call. = FALSE)
@@ -1882,6 +2067,7 @@ gsynth.sample <- function(model,
         n_samples,
         as.integer(k),
         as.integer(model$iterator),
+        as.logical(preserve_n),
         .misha_env()
     )
 
@@ -1891,6 +2077,311 @@ gsynth.sample <- function(model,
     }
 
     message(sprintf("Synthetic genome written to: %s", output_path))
+
+    invisible(NULL)
+}
+
+#' Score the genome under a trained gsynth model
+#'
+#' Writes a misha fixed-bin dense track whose value at each output bin
+#' is the summed natural-log conditional probability of the reference
+#' sequence under the trained Markov model:
+#' \deqn{T(a) = \sum_{i=a}^{a+r-1} \log P_M(\mathrm{seq}[i] \mid
+#'             \mathrm{seq}[i-k..i-1], b(i))}
+#' where \eqn{b(i)} is the model's stratum bin (constant within each
+#' \code{model$iterator}-bp window). The first \eqn{k} bp of every
+#' chromosome are NA (no upstream context available); under default
+#' policies, any output bin containing an NA per-bp contribution is NA.
+#'
+#' Two models scored against the same reference give a windowed log
+#' Bayes factor as a track expression:
+#' \preformatted{
+#'     gsynth.score(genome_model, "genome_score")
+#'     gsynth.score(cre_model,    "cre_score")
+#'     gextract("cre_score - genome_score", iterator=1000, ...)
+#' }
+#'
+#' @param model       A \code{gsynth.model} object (from
+#'                    \code{\link{gsynth.train}}).
+#' @param track       Name of the misha track to create.
+#' @param description Optional track description.
+#' @param intervals   Intervals to score. Defaults to
+#'                    \code{gintervals.all()}. Best results when interval
+#'                    starts are aligned to multiples of
+#'                    \code{model$iterator}; otherwise the first stratum
+#'                    window is shorter than \code{model$iterator} and
+#'                    its bin label may differ from training.
+#' @param mask        Optional intervals to NA-out in the output (e.g.
+#'                    repeats). Intersects with \code{intervals} per bp;
+#'                    every output bin containing a masked bp becomes
+#'                    \code{NaN}.
+#' @param resolution  Output bin size in bp. Defaults to
+#'                    \code{model$iterator}. \code{1} produces a per-bp
+#'                    track; any positive integer is allowed.
+#' @param sparse_policy How to score positions whose stratum bin is
+#'                    sparse in the model:
+#'                    \code{"NA"} (default) propagates NA;
+#'                    \code{"uniform"} contributes \code{log(1/4)} per
+#'                    bp.
+#' @param n_policy    How to score positions whose k-mer \emph{context}
+#'                    contains an N: \code{"NA"} (default) or
+#'                    \code{"uniform"} (\code{log(1/4)} per bp). The
+#'                    predicted base itself is always NA when N — the
+#'                    model has no \eqn{\log P} for non-ACGT bases.
+#' @param overwrite   If \code{TRUE}, replace an existing track of the
+#'                    same name.
+#'
+#' @return Invisibly \code{NULL}. Side effect: creates the named misha
+#'         track. Output bins are written as \code{NaN} where the sum
+#'         is undefined (out of intervals, or any per-bp NA).
+#'
+#' @seealso \code{\link{gsynth.train}}, \code{\link{gsynth.sample}}
+#' @export
+gsynth.score <- function(model,
+                         track,
+                         description = NULL,
+                         intervals = NULL,
+                         mask = NULL,
+                         resolution = NULL,
+                         sparse_policy = c("NA", "uniform"),
+                         n_policy = c("NA", "uniform"),
+                         overwrite = FALSE) {
+    .gcheckroot()
+
+    if (!inherits(model, "gsynth.model")) {
+        stop("model must be a gsynth.model object", call. = FALSE)
+    }
+    if (missing(track) || !is.character(track) || length(track) != 1L ||
+        is.na(track) || nchar(track) == 0L) {
+        stop("track is required (single non-empty string)", call. = FALSE)
+    }
+    if (is.null(resolution)) {
+        resolution <- as.integer(model$iterator)
+    }
+    if (!is.numeric(resolution) || length(resolution) != 1L ||
+        is.na(resolution) || resolution != as.integer(resolution) ||
+        resolution < 1L) {
+        stop("resolution must be a positive integer (>= 1)", call. = FALSE)
+    }
+    resolution <- as.integer(resolution)
+
+    sparse_policy <- match.arg(sparse_policy)
+    n_policy <- match.arg(n_policy)
+
+    if (is.null(intervals)) {
+        intervals <- gintervals.all()
+    }
+
+    # ---- stratum extraction (mirrors gsynth.sample) ----
+    .iterator <- model$iterator
+    if (is.null(.iterator)) {
+        stop("Model iterator is NULL. Model may be corrupted.", call. = FALSE)
+    }
+    n_dims <- model$n_dims
+    dim_sizes <- model$dim_sizes
+
+    # Bin lookup queries pos - k (the leftmost base of the (k+1)-mer
+    # context) to match training. Extend gextract upstream by one
+    # iter_size so the first k bp of every interval get bin info from
+    # the prior iter window — matching what training saw on the same
+    # genome. Clamped to chromosome start.
+    .k <- as.integer(model$k)
+    strata_intervals <- intervals
+    if (is.numeric(.iterator) && length(.iterator) == 1L && .iterator > 0L) {
+        strata_intervals$start <- as.integer(pmax(
+            0L, as.integer(strata_intervals$start) - as.integer(.iterator)
+        ))
+    }
+
+    if (n_dims == 0) {
+        iter_info <- gextract("1",
+            intervals = strata_intervals, iterator = .iterator
+        )
+        if (is.null(iter_info) || nrow(iter_info) == 0) {
+            stop("No positions extracted. Check intervals.", call. = FALSE)
+        }
+        n_positions <- nrow(iter_info)
+        flat_indices <- rep(1L, n_positions)
+        chrom_sizes <- gintervals.chrom_sizes(intervals)
+        chrom_key <- levels(chrom_sizes$chrom)
+        iter_chroms <- match(as.character(iter_info$chrom), chrom_key) - 1L
+        iter_starts <- as.integer(iter_info$start)
+    } else {
+        exprs <- sapply(model$dim_specs, function(d) d$expr)
+        track_data <- gextract(exprs,
+            intervals = strata_intervals, iterator = .iterator
+        )
+        if (is.null(track_data) || nrow(track_data) == 0) {
+            stop("No track data extracted. Check intervals.", call. = FALSE)
+        }
+        n_positions <- nrow(track_data)
+        per_dim_indices <- matrix(NA_integer_, nrow = n_positions, ncol = n_dims)
+        for (d in seq_len(n_dims)) {
+            spec <- model$dim_specs[[d]]
+            tv <- track_data[[spec$expr]]
+            bi <- findInterval(tv, spec$breaks, rightmost.closed = TRUE)
+            bi[bi == 0] <- NA
+            bi[bi > spec$num_bins] <- NA
+            valid <- !is.na(bi) & bi >= 1 & bi <= spec$num_bins
+            if (any(valid)) bi[valid] <- spec$bin_map[bi[valid]]
+            per_dim_indices[, d] <- bi
+        }
+        flat_indices <- .compute_flat_indices(per_dim_indices, dim_sizes)
+        chrom_sizes <- gintervals.chrom_sizes(intervals)
+        chrom_key <- levels(chrom_sizes$chrom)
+        iter_chroms <- match(as.character(track_data$chrom), chrom_key) - 1L
+        iter_starts <- as.integer(track_data$start)
+    }
+
+    flat_indices[is.na(flat_indices)] <- 0L
+    flat_indices <- as.integer(flat_indices) - 1L # 0-based for C++
+
+    log_p_list <- .gsynth_build_log_p(model)
+
+    # Encode policies for C++: 0 = NA, 1 = uniform.
+    n_policy_int <- if (n_policy == "uniform") 1L else 0L
+    sparse_policy_int <- if (sparse_policy == "uniform") 1L else 0L
+
+    # ---- Track-creation flow: parent creates the dir once (idempotent
+    # across forked workers in parallel mode), kernel writes per-chrom
+    # files into it, parent registers the track on success.
+    if (gtrack.exists(track)) {
+        if (!overwrite) {
+            stop(sprintf(
+                "Track '%s' already exists; pass overwrite=TRUE to replace.",
+                track
+            ), call. = FALSE)
+        }
+        gtrack.rm(track, force = TRUE)
+    }
+
+    track_path <- .track_dir(track)
+    if (!dir.exists(track_path)) {
+        dir.create(track_path, recursive = TRUE, mode = "0777")
+    }
+
+    # ---- Decide serial vs parallel chrom dispatch.
+    # Mirrors misha's general convention: gmultitasking + gmax.processes.
+    # Each chrom is independent (own state, own output file), so chrom-
+    # parallelism scales near-linearly until n_workers ~ #chroms.
+    all_chromids <- seq_along(chrom_key) - 1L # 0-based
+    use_mt <- isTRUE(.ggetOption("gmultitasking", TRUE)) &&
+        length(all_chromids) > 1L
+    n_workers <- if (use_mt) {
+        as.integer(min(.ggetOption("gmax.processes", 1L), length(all_chromids)))
+    } else {
+        1L
+    }
+
+    success <- FALSE
+    tryCatch(
+        {
+            if (n_workers <= 1L) {
+                # Serial path — single .gcall covering all chroms.
+                .gcall(
+                    "C_gsynth_score",
+                    log_p_list,
+                    flat_indices,
+                    iter_starts,
+                    iter_chroms,
+                    intervals,
+                    track,
+                    all_chromids,
+                    as.integer(resolution),
+                    as.integer(model$k),
+                    as.integer(.iterator),
+                    n_policy_int,
+                    sparse_policy_int,
+                    mask,
+                    .misha_env()
+                )
+            } else {
+                # Parallel path — split chroms across workers, each worker
+                # writes its assigned chrom files into the shared track dir.
+                # Round-robin split keeps the largest chroms spread across
+                # workers (chromkey is roughly size-sorted).
+                groups <- split(all_chromids, seq_along(all_chromids) %% n_workers)
+                results <- parallel::mclapply(groups, function(cids) {
+                    tryCatch(
+                        {
+                            .gcall(
+                                "C_gsynth_score",
+                                log_p_list,
+                                flat_indices,
+                                iter_starts,
+                                iter_chroms,
+                                intervals,
+                                track,
+                                as.integer(cids),
+                                as.integer(resolution),
+                                as.integer(model$k),
+                                as.integer(.iterator),
+                                n_policy_int,
+                                sparse_policy_int,
+                                mask,
+                                .misha_env()
+                            )
+                            list(ok = TRUE)
+                        },
+                        error = function(e) list(ok = FALSE, msg = conditionMessage(e))
+                    )
+                }, mc.cores = n_workers, mc.preschedule = FALSE)
+
+                fails <- vapply(results, function(r) {
+                    if (inherits(r, "try-error")) {
+                        return(TRUE)
+                    }
+                    if (is.null(r) || !isTRUE(r$ok)) {
+                        return(TRUE)
+                    }
+                    FALSE
+                }, logical(1))
+                if (any(fails)) {
+                    msgs <- vapply(results[fails], function(r) {
+                        if (is.list(r) && !is.null(r$msg)) r$msg else "<unknown>"
+                    }, character(1))
+                    stop(sprintf(
+                        "gsynth.score parallel kernel failed in %d/%d worker(s): %s",
+                        sum(fails), length(results),
+                        paste(unique(msgs), collapse = "; ")
+                    ), call. = FALSE)
+                }
+            }
+
+            .gdb.add_track(track)
+
+            .gtrack.attr.set(
+                track, "created.by",
+                sprintf(
+                    "gsynth.score(model, '%s', resolution=%d)",
+                    track, resolution
+                ),
+                TRUE
+            )
+            .gtrack.attr.set(track, "created.date", date(), TRUE)
+            .gtrack.attr.set(track, "created.user", Sys.getenv("USER"), TRUE)
+            .gtrack.attr.set(
+                track, "description",
+                if (is.null(description)) "" else as.character(description),
+                TRUE
+            )
+            .gtrack.attr.set(track, "type", "dense", TRUE)
+            .gtrack.attr.set(track, "binsize", as.integer(resolution), TRUE)
+
+            success <- TRUE
+        },
+        finally = {
+            if (!success) {
+                # Best-effort cleanup if kernel or registration failed.
+                track_path <- tryCatch(.track_dir(track),
+                    error = function(e) NULL
+                )
+                if (!is.null(track_path) && dir.exists(track_path)) {
+                    unlink(track_path, recursive = TRUE, force = TRUE)
+                }
+            }
+        }
+    )
 
     invisible(NULL)
 }
@@ -1919,6 +2410,11 @@ gsynth.sample <- function(model,
 #' @param mask_copy Optional intervals to copy from the original genome instead of
 #'        random sampling. Use this to preserve specific regions exactly as they
 #'        appear in the reference.
+#' @param preserve_n Logical; default \code{TRUE}. When \code{TRUE}, positions
+#'        whose original reference is \code{N} (or \code{n}) are written to the
+#'        output verbatim rather than filled with a random ACGT base. Same
+#'        semantics as in \code{\link{gsynth.sample}}; \code{mask_copy}
+#'        intervals take precedence.
 #' @param seed Random seed for reproducibility. If NULL, uses current random state.
 #' @param n_samples Number of samples to generate per interval. Default is 1.
 #' @param iterator Iterator for position resolution. Default is 1 (base-pair resolution).
@@ -1971,10 +2467,15 @@ gsynth.random <- function(intervals = NULL,
                           output_format = c("misha", "fasta", "vector"),
                           nuc_probs = c(A = 0.25, C = 0.25, G = 0.25, T = 0.25),
                           mask_copy = NULL,
+                          preserve_n = TRUE,
                           seed = NULL,
                           n_samples = 1,
                           iterator = 1) {
     .gcheckroot()
+
+    if (!is.logical(preserve_n) || length(preserve_n) != 1L || is.na(preserve_n)) {
+        stop("preserve_n must be a single non-NA logical (TRUE or FALSE)", call. = FALSE)
+    }
 
     output_format <- match.arg(output_format)
 
@@ -2042,6 +2543,7 @@ gsynth.random <- function(intervals = NULL,
                 output_format = "vector",
                 nuc_probs = nuc_probs,
                 mask_copy = chunk_mask,
+                preserve_n = preserve_n,
                 seed = chunk_seed,
                 n_samples = n_samples,
                 iterator = iterator
@@ -2055,6 +2557,7 @@ gsynth.random <- function(intervals = NULL,
                 output_format = output_format,
                 nuc_probs = nuc_probs,
                 mask_copy = chunk_mask,
+                preserve_n = preserve_n,
                 seed = chunk_seed,
                 n_samples = n_samples,
                 iterator = iterator
@@ -2166,6 +2669,7 @@ gsynth.random <- function(intervals = NULL,
         n_samples,
         as.integer(random_k),
         iter_size_int,
+        as.logical(preserve_n),
         .misha_env()
     )
 

@@ -1,0 +1,64 @@
+#!/bin/bash
+# Pre-commit hook:
+#   1. Block commits that include files under dev/ (dev/ has its own git repo
+#      and must never be tracked in the main repo).
+#   2. Run styler on staged R-family files so committed code matches the CI
+#      style pass.
+
+set -e
+
+# --- 1. Block dev/ ----------------------------------------------------------
+dev_files=$(git diff --cached --name-only --diff-filter=ACM | grep '^dev/' || true)
+if [ -n "$dev_files" ]; then
+    echo "ERROR: Refusing to commit files under dev/:"
+    echo "$dev_files"
+    echo ""
+    echo "dev/ must never be tracked in the main repo (it has its own git)."
+    echo "Use 'git reset HEAD <file>' to unstage."
+    exit 1
+fi
+
+# --- 2. Style staged R files -----------------------------------------------
+staged_r=$(git diff --cached --name-only --diff-filter=ACM \
+    | grep -Ei '\.(r|rmd|qmd|rmarkdown|rnw|rprofile)$' || true)
+
+if [ -z "$staged_r" ]; then
+    exit 0
+fi
+
+# Skip files that have unstaged changes — styling them would silently sweep
+# unstaged hunks into the commit.
+unstaged=$(git diff --name-only)
+to_style=()
+skipped=()
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if printf '%s\n' "$unstaged" | grep -qx "$f"; then
+        skipped+=("$f")
+    else
+        to_style+=("$f")
+    fi
+done <<< "$staged_r"
+
+if [ ${#skipped[@]} -gt 0 ]; then
+    echo "pre-commit: skipping styler on files with unstaged changes:"
+    printf '  %s\n' "${skipped[@]}"
+fi
+
+if [ ${#to_style[@]} -eq 0 ]; then
+    exit 0
+fi
+
+# Build R c("a","b",...) literal
+files_r=$(printf '"%s",' "${to_style[@]}")
+files_r="c(${files_r%,})"
+
+if ! Rscript -e "suppressPackageStartupMessages({ styler::cache_activate(); styler::style_file(${files_r}, indent_by = 4) })"; then
+    echo "pre-commit: styler failed; aborting commit."
+    exit 1
+fi
+
+# Re-stage anything styler rewrote.
+git add -- "${to_style[@]}"
+
+exit 0

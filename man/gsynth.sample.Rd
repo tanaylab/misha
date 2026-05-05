@@ -9,6 +9,7 @@ gsynth.sample(
   output_path = NULL,
   output_format = c("misha", "fasta", "vector"),
   mask_copy = NULL,
+  preserve_n = TRUE,
   seed = NULL,
   intervals = NULL,
   n_samples = 1,
@@ -36,6 +37,14 @@ Note: mask_copy intervals should be non-overlapping and sorted by start
 position within each chromosome. Overlapping intervals may result in
 only the first overlapping region being copied, with subsequent overlaps
 skipped due to cursor advancement during sequential processing.}
+
+\item{preserve_n}{Logical; default \code{TRUE}. When \code{TRUE}, positions
+whose original reference is \code{N} (or \code{n}) are written to the
+output verbatim instead of being filled in with a sampled ACGT base.
+Case is preserved (so soft-masked \code{n} round-trips). \code{mask_copy}
+regions take precedence: inside a \code{mask_copy} interval the original
+byte is copied regardless. Set to \code{FALSE} to restore the
+pre-5.6.22 behavior of treating every position as something to sample.}
 
 \item{seed}{Random seed for reproducibility. If NULL, uses current random state.}
 
@@ -93,11 +102,16 @@ FASTA (byte offsets are tracked during the write loop, so this is
 effectively free). The index is suitable for any downstream tool that
 expects a samtools-indexed reference.
 
-\strong{N bases during sampling:} When the sampler needs to initialize the
-first k-mer context and encounters regions with only N bases, it falls back
-to uniform random base selection until a valid context is established.
-Similarly, if a bin has no learned statistics (sparse bin with NA CDF),
-uniform sampling is used for that position.
+\strong{N bases during sampling:} By default (\code{preserve_n = TRUE})
+positions whose original reference is N are copied verbatim into the
+output, so gaps and centromeres remain N rather than being fabricated as
+ACGT. Where the sampler still has to fill an N-adjacent k-mer context
+(the first k bp inside an interval, or any k-mer window containing a
+preserved N), it falls back to uniform random base selection until a
+valid context is re-established. Similarly, if a bin has no learned
+statistics (sparse bin with NA CDF), uniform sampling is used for that
+position. Pass \code{preserve_n = FALSE} to recover the pre-5.6.22
+behavior of sampling every position regardless of the reference.
 
 \strong{Sparse bins:} If the model has sparse bins (from \code{min_obs} during
 training), a warning is issued when sampling regions that fall into these bins.

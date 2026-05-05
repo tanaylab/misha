@@ -63,7 +63,8 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 
 		for (int i = 0; i < Rf_length(rintervals); i++) {
 			if (!strcmp(CHAR(STRING_ELT(colnames, i)), "strand")) {
-				if (Rf_length(VECTOR_ELT(rintervals, i)) != Rf_length(VECTOR_ELT(rintervals, GInterval::CHROM)))
+				strands = VECTOR_ELT(rintervals, i);
+				if (Rf_length(strands) != Rf_length(VECTOR_ELT(rintervals, GInterval::CHROM)))
 					verror("%sNumber of rows in column %s differs than the number of rows in column strand", error_msg_prefix, GInterval::COL_NAMES[GInterval::CHROM]);
 				break;
 			}
@@ -74,7 +75,8 @@ unsigned IntervalConverter::get_rintervs_type_mask(SEXP rintervals, const char *
 				verror("%sNumber of rows in column %s differs than the number of rows in column %s", error_msg_prefix, GInterval::COL_NAMES[i - 1], GInterval::COL_NAMES[i]);
 		}
 
-		if ((!Rf_isReal(starts) && !Rf_isInteger(starts)) || (!Rf_isReal(ends) && !Rf_isInteger(ends)) || (strands != R_NilValue && !Rf_isReal(strands) && !Rf_isInteger(strands)))
+		if ((!Rf_isReal(starts) && !Rf_isInteger(starts)) || (!Rf_isReal(ends) && !Rf_isInteger(ends)) ||
+			(strands != R_NilValue && !Rf_isReal(strands) && !Rf_isInteger(strands) && !Rf_isString(strands) && !Rf_isFactor(strands)))
 			verror("%sInvalid format of intervals argument", error_msg_prefix);
 
 	} else if (type == rdb::IntervUtils::INTERVS2D) {
@@ -308,6 +310,14 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 			}
 		}
 
+		SEXP strand_levels = R_NilValue;
+		bool strands_is_string = strands != R_NilValue && Rf_isString(strands);
+		bool strands_is_factor = strands != R_NilValue && Rf_isFactor(strands);
+		if (strands_is_factor)
+			strand_levels = Rf_getAttrib(strands, R_LevelsSymbol);
+
+		unsigned zero_length_bumped = 0;
+
 		for (unsigned i = 0; i < num_intervals; i++) {
 			if ((Rf_isFactor(chroms) && INTEGER(chroms)[i] < 0) ||
 				(Rf_isReal(starts) && std::isnan(REAL(starts)[i])) || (Rf_isReal(ends) && std::isnan(REAL(ends)[i])) ||
@@ -328,8 +338,21 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 			int64_t end = (int64_t)(Rf_isReal(ends) ? REAL(ends)[i] : INTEGER(ends)[i]);
 			char strand = 0;
 
-			if (strands != R_NilValue)
-				strand = (char)(Rf_isReal(strands) ? REAL(strands)[i] : INTEGER(strands)[i]);
+			if (strands != R_NilValue) {
+				if (strands_is_string) {
+					SEXP elt = STRING_ELT(strands, i);
+					if (elt == NA_STRING)
+						verror("%sInvalid strand value (NA) at index %d", error_msg_prefix, i + 1);
+					strand = GInterval::str2strand(CHAR(elt));
+				} else if (strands_is_factor) {
+					int level_idx = INTEGER(strands)[i];
+					if (level_idx == NA_INTEGER)
+						verror("%sInvalid strand value (NA) at index %d", error_msg_prefix, i + 1);
+					strand = GInterval::str2strand(CHAR(STRING_ELT(strand_levels, level_idx - 1)));
+				} else {
+					strand = (char)(Rf_isReal(strands) ? REAL(strands)[i] : INTEGER(strands)[i]);
+				}
+			}
 
 			GInterval interval(chromid, start, end, strand, (void *)(intptr_t)i);
 
@@ -339,12 +362,16 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 					REAL(ends)[i]++;
 				else
 					INTEGER(ends)[i]++;
+				zero_length_bumped++;
 			}
 
 			if (verify)
 				interval.verify(chromkey ? *chromkey : m_iu.get_chromkey());
 			intervals->push_back(interval);
 		}
+
+		if (zero_length_bumped > 0)
+			Rf_warning("%u interval(s) had start == end and were extended by 1bp on load. misha does not support zero-length intervals; if this is unintended, fix the source data.", zero_length_bumped);
 	}
 
 	if (intervs_type_mask == (rdb::IntervUtils::INTERVS1D | rdb::IntervUtils::INTERVS2D))
