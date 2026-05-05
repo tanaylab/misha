@@ -282,11 +282,14 @@
     }
     n_basic <- idx
 
-    # Optional pass: load <groot>/chrom_aliases.tsv (written by gdb.build_genome
-    # for NCBI-sourced genomes) and add accession / GenBank / sequenceName /
-    # chrName aliases pointing to the canonical name. The TSV's `canonical`
-    # column is the on-disk chrom name; aliases that already resolve via the
-    # chr-prefix or mitochondrial passes above are skipped.
+    # Optional pass: load <groot>/chrom_aliases.tsv and add aliases pointing at
+    # canonical chrom names. Two on-disk shapes are handled:
+    #   - Wide (NCBI builds): canonical, refseqAccession, genbankAccession,
+    #     sequenceName, chrName, role, length.
+    #   - Long (ucsc-hub builds): canonical, alias, source -- one row per
+    #     (canonical, alias) pair.
+    # Aliases that already resolve via the chr-prefix or mitochondrial passes
+    # above are skipped.
     if (!is.null(groot) && length(groot) == 1L && nzchar(groot)) {
         tsv_path <- file.path(groot, "chrom_aliases.tsv")
         if (file.exists(tsv_path)) {
@@ -300,33 +303,43 @@
                 ),
                 error = function(e) NULL
             )
+            add_alias <- function(name, target) {
+                if (is.na(name) || !nzchar(name)) {
+                    return(invisible(FALSE))
+                }
+                if (exists(name, envir = seen, inherits = FALSE)) {
+                    return(invisible(FALSE))
+                }
+                seen[[name]] <- TRUE
+                idx <<- idx + 1
+                if (idx > length(alias_names)) {
+                    alias_names <<- c(alias_names, character(length(alias_names)))
+                    alias_targets <<- c(alias_targets, character(length(alias_targets)))
+                }
+                alias_names[idx] <<- name
+                alias_targets[idx] <<- target
+                invisible(TRUE)
+            }
             if (!is.null(tsv) && nrow(tsv) && "canonical" %in% names(tsv)) {
-                # Only consider rows whose canonical actually appears among the
-                # passed-in chroms; defends against stale TSVs from earlier
-                # builds with different naming.
                 keep <- tsv$canonical %in% chroms
                 tsv <- tsv[keep, , drop = FALSE]
-                # Columns whose values become aliases pointing at canonical.
-                alias_cols <- intersect(
-                    c("refseqAccession", "genbankAccession", "sequenceName", "chrName"),
-                    names(tsv)
-                )
-                for (col in alias_cols) {
-                    vals <- tsv[[col]]
-                    targets <- tsv$canonical
-                    for (j in seq_along(vals)) {
-                        name <- vals[j]
-                        if (is.na(name) || !nzchar(name)) next
-                        if (exists(name, envir = seen, inherits = FALSE)) next
-                        seen[[name]] <- TRUE
-                        idx <- idx + 1
-                        if (idx > length(alias_names)) {
-                            # Grow buffers in chunks.
-                            alias_names <- c(alias_names, character(length(alias_names)))
-                            alias_targets <- c(alias_targets, character(length(alias_targets)))
+                if (all(c("alias", "source") %in% names(tsv))) {
+                    # Long format: one alias->canonical per row.
+                    for (j in seq_len(nrow(tsv))) {
+                        add_alias(tsv$alias[j], tsv$canonical[j])
+                    }
+                } else {
+                    # Wide format: explicit alias-bearing columns.
+                    alias_cols <- intersect(
+                        c("refseqAccession", "genbankAccession", "sequenceName", "chrName"),
+                        names(tsv)
+                    )
+                    for (col in alias_cols) {
+                        vals <- tsv[[col]]
+                        targets <- tsv$canonical
+                        for (j in seq_along(vals)) {
+                            add_alias(vals[j], targets[j])
                         }
-                        alias_names[idx] <- name
-                        alias_targets[idx] <- targets[j]
                     }
                 }
             }

@@ -103,6 +103,28 @@ test_that(".translate_chroms maps via alias table when columns differ", {
     expect_equal(out$x, 1:2)
 })
 
+test_that(".resolve_hub_target_col maps known friendly names", {
+    cols <- c("ucsc", "assembly", "genbank", "refseq", "ncbi")
+    expect_equal(.resolve_hub_target_col("ucsc", src_col = "refseq", alias_cols = cols), "ucsc")
+    expect_equal(.resolve_hub_target_col("sequence_name", src_col = "refseq", alias_cols = cols), "assembly")
+    # 'accession' = keep src_col (no rename).
+    expect_equal(.resolve_hub_target_col("accession", src_col = "refseq", alias_cols = cols), "refseq")
+})
+
+test_that(".resolve_hub_target_col accepts arbitrary column names like 'genbank'", {
+    cols <- c("ucsc", "assembly", "genbank", "refseq", "ncbi")
+    expect_equal(.resolve_hub_target_col("genbank", src_col = "refseq", alias_cols = cols), "genbank")
+    expect_equal(.resolve_hub_target_col("refseq", src_col = "ucsc", alias_cols = cols), "refseq")
+})
+
+test_that(".resolve_hub_target_col returns NA with a reason when column absent", {
+    cols <- c("ucsc", "assembly", "refseq")
+    res <- .resolve_hub_target_col("genbank", src_col = "refseq", alias_cols = cols)
+    expect_true(is.na(res))
+    expect_match(attr(res, "reason"), "no 'genbank' column")
+    expect_match(attr(res, "reason"), "ucsc, assembly, refseq")
+})
+
 test_that(".merge_chrom_aliases_tsv writes one row per (canonical, alias) when no existing file", {
     f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
     alias_df <- .parse_ucsc_chromalias(f)

@@ -60,18 +60,11 @@
                 call. = FALSE
             )
         } else {
-            target_col <- if (chrom_naming == "ucsc") {
-                "ucsc"
-            } else if (chrom_naming == "sequence_name") {
-                "assembly"
-            } else {
-                src_col
-            }
-            if (!target_col %in% names(alias_df)) {
-                warning(sprintf(
-                    "chromAlias has no '%s' column; FASTA kept as-is.",
-                    target_col
-                ), call. = FALSE)
+            target_col <- .resolve_hub_target_col(chrom_naming, src_col, names(alias_df))
+            if (is.na(target_col)) {
+                warning(attr(target_col, "reason"), " FASTA kept as-is.",
+                    call. = FALSE
+                )
             } else if (target_col != src_col) {
                 map <- setNames(alias_df[[target_col]], alias_df[[src_col]])
                 renamed <- file.path(workdir, "renamed.fa")

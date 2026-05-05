@@ -1,5 +1,7 @@
 # misha 5.6.26
 
+* Fixed: `chrom_aliases.tsv` written by `ucsc-hub` builds (long-format `canonical/alias/source`) was never loaded as runtime aliases — `.compute_chrom_aliases` only knew the NCBI wide format. Reader now handles both shapes, so e.g. `gchroms("JH880237.1")` resolves on a Bos-mutus-from-hub groot.
+* `gdb.build_genome()` gains a top-level `chrom_naming` argument and accepts any chromAlias column name for `ucsc-hub` (notably `"genbank"`, matching HAL/Cactus canonical names) in addition to the previous `ucsc`/`accession`/`sequence_name`. Mismatches surface at build time with the list of available columns.
 * Added `gdb.build_genome(name)` for build-from-source genome creation. Resolves a name through a registry chain (explicit arg, `getOption("misha.genome_registry")`, project-local `misha.yaml`, built-in `inst/genomes.yaml`) or pattern-falls-back for `GC[FA]_<digits>.<digits>` accessions to the new `ucsc-hub` source. Backends: `ucsc` (golden path), `ucsc-hub` (224/241 Zoonomia mammals), `ncbi` (Datasets API), `manual`, `local`, `s3`. Companions: `gdb.list_genomes()`, `gdb.genome_info()`.
 * Added `gdb.install_intervals()` — install gene/rmsk/cgi/cytoband interval sets onto an existing groot. Lets you layer canonical annotations onto a private FASTA build, resume failed installs without re-fetching, or host annotations from multiple sources under different prefixes.
 * `rmsk` now produces both a combined `<prefix>rmsk` set and per-class subsets `<prefix>rmsk_<class>` (e.g. `rmsk_sine`, `rmsk_line`).

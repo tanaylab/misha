@@ -12,6 +12,7 @@ gdb.build_genome(
   prefix = "",
   gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
   gtf_priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene"),
+  chrom_naming = NULL,
   format = NULL,
   verbose = TRUE
 )
@@ -34,6 +35,15 @@ Empty vector \code{character(0)} = sequence-only build.}
 a role.}
 
 \item{gtf_priority}{Character vector ordering GTF source preference.}
+
+\item{chrom_naming}{Optional override for the recipe's \code{chrom_naming}.
+Selects which name space the canonical chrom names should come from. For
+\code{ucsc-hub}: any chromAlias column (\code{"ucsc"}, \code{"genbank"},
+\code{"refseq"}, \code{"ncbi"}), plus the friendly aliases
+\code{"sequence_name"} (= \code{"assembly"}) and \code{"accession"} (keep
+the FASTA's source column). For \code{ncbi}: \code{"sequence_name"} (default),
+\code{"ucsc"}, or \code{"accession"}. \code{NULL} (default) keeps whatever
+the recipe specifies.}
 
 \item{format}{\code{"indexed"} or \code{"per-chromosome"}; \code{NULL} =>
 \code{getOption("gmulticontig.indexed_format", TRUE)}.}
@@ -60,6 +70,12 @@ gdb.build_genome("hg38", path = "~/genomes/hg38")
 gdb.build_genome("GCA_004023825.1",
     path   = "~/genomes/arctic_fox",
     prefix = "intervs.global."
+)
+# Match HAL/Cactus canonical names (GenBank accessions like JH880237.1):
+gdb.build_genome("GCF_000298355.1",
+    path         = "~/genomes/Bos_mutus",
+    chrom_naming = "genbank",
+    prefix       = "intervs.global."
 )
 }
 

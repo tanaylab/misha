@@ -75,12 +75,15 @@
                 name, recipe$accession
             ), call. = FALSE)
         }
-        if (!is.null(recipe$chrom_naming) &&
-            !recipe$chrom_naming %in% c("ucsc", "accession", "sequence_name")) {
-            stop(sprintf(
-                "Genome '%s': chrom_naming '%s' invalid for ucsc-hub.",
-                name, recipe$chrom_naming
-            ), call. = FALSE)
+        if (!is.null(recipe$chrom_naming)) {
+            if (!is.character(recipe$chrom_naming) ||
+                length(recipe$chrom_naming) != 1L ||
+                !nzchar(recipe$chrom_naming)) {
+                stop(sprintf(
+                    "Genome '%s': chrom_naming must be a non-empty single string.",
+                    name
+                ), call. = FALSE)
+            }
         }
     } else if (src == "ncbi") {
         if (is.null(recipe$accession)) miss("accession")
@@ -643,6 +646,14 @@
 #'   \code{gintervals.import_genes()} roles to on-disk set names; \code{NA} skips
 #'   a role.
 #' @param gtf_priority Character vector ordering GTF source preference.
+#' @param chrom_naming Optional override for the recipe's \code{chrom_naming}.
+#'   Selects which name space the canonical chrom names should come from. For
+#'   \code{ucsc-hub}: any chromAlias column (\code{"ucsc"}, \code{"genbank"},
+#'   \code{"refseq"}, \code{"ncbi"}), plus the friendly aliases
+#'   \code{"sequence_name"} (= \code{"assembly"}) and \code{"accession"} (keep
+#'   the FASTA's source column). For \code{ncbi}: \code{"sequence_name"} (default),
+#'   \code{"ucsc"}, or \code{"accession"}. \code{NULL} (default) keeps whatever
+#'   the recipe specifies.
 #' @param format \code{"indexed"} or \code{"per-chromosome"}; \code{NULL} =>
 #'   \code{getOption("gmulticontig.indexed_format", TRUE)}.
 #' @param verbose If \code{TRUE}, prints progress.
@@ -657,6 +668,12 @@
 #' gdb.build_genome("GCA_004023825.1",
 #'     path   = "~/genomes/arctic_fox",
 #'     prefix = "intervs.global."
+#' )
+#' # Match HAL/Cactus canonical names (GenBank accessions like JH880237.1):
+#' gdb.build_genome("GCF_000298355.1",
+#'     path         = "~/genomes/Bos_mutus",
+#'     chrom_naming = "genbank",
+#'     prefix       = "intervs.global."
 #' )
 #' }
 #'
@@ -674,6 +691,7 @@ gdb.build_genome <- function(name,
                                  "ncbiRefSeq", "bestRefSeq",
                                  "ensGene", "augustus", "xenoRefGene"
                              ),
+                             chrom_naming = NULL,
                              format = NULL,
                              verbose = TRUE) {
     if (file.exists(path)) {
@@ -691,6 +709,10 @@ gdb.build_genome <- function(name,
 
     res <- .resolve_genome(name, registry = registry)
     recipe <- res$recipe
+    if (!is.null(chrom_naming)) {
+        recipe$chrom_naming <- chrom_naming
+        .validate_recipe(recipe, name)
+    }
     if (verbose) {
         message(sprintf(
             "Resolved '%s' from %s -> source=%s",

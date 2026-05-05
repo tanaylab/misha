@@ -535,6 +535,40 @@ test_that(".compute_chrom_aliases ignores TSV rows whose canonical is not among 
     expect_false("NC_999999.1" %in% names(a))
 })
 
+test_that(".compute_chrom_aliases reads long-format chrom_aliases.tsv (canonical/alias/source)", {
+    # Long format is what .merge_chrom_aliases_tsv writes for ucsc-hub builds:
+    # one row per (canonical, alias) with `source` recording the column it came
+    # from. Reader must load each alias->canonical regardless of source.
+    g <- tempfile()
+    dir.create(g)
+    on.exit(unlink(g, recursive = TRUE))
+    writeLines(c(
+        "canonical\talias\tsource",
+        "NW_005392810v1\tNW_005392810.1\trefseq",
+        "NW_005392810v1\tscaffold9_1\tassembly",
+        "NW_005392810v1\tJH880237.1\tgenbank",
+        "chrM\tMT\tassembly"
+    ), file.path(g, "chrom_aliases.tsv"))
+
+    a <- misha:::.compute_chrom_aliases(c("NW_005392810v1", "chrM"), groot = g)
+
+    expect_equal(unname(a[["NW_005392810.1"]]), "NW_005392810v1")
+    expect_equal(unname(a[["scaffold9_1"]]), "NW_005392810v1")
+    expect_equal(unname(a[["JH880237.1"]]), "NW_005392810v1")
+})
+
+test_that(".compute_chrom_aliases ignores long-format rows whose canonical is not among `chroms`", {
+    g <- tempfile()
+    dir.create(g)
+    on.exit(unlink(g, recursive = TRUE))
+    writeLines(c(
+        "canonical\talias\tsource",
+        "STALE\tJH999999.1\tgenbank"
+    ), file.path(g, "chrom_aliases.tsv"))
+    a <- misha:::.compute_chrom_aliases(c("NW_005392810v1"), groot = g)
+    expect_false("JH999999.1" %in% names(a))
+})
+
 test_that(".compute_chrom_aliases skips alias names that already exist (e.g. canonical itself)", {
     # If the TSV's refseqAccession happens to equal the canonical (e.g. when
     # chrom_naming = 'accession'), don't enter it as a self-mapping.

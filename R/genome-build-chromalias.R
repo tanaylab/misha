@@ -1,6 +1,40 @@
 # R/genome-build-chromalias.R
 # Source-agnostic chromosome-alias parsing, column detection, and translation.
 
+# Resolve which chromAlias column a ucsc-hub build should use as the canonical
+# chrom-name source, given a user-facing `chrom_naming` label, the FASTA's own
+# source column (auto-detected), and the columns available in chromAlias.
+#
+# Friendly aliases:
+#   "ucsc"          -> column "ucsc"
+#   "sequence_name" -> column "assembly"
+#   "accession"     -> keep src_col (no FASTA rename)
+# Anything else is treated as a literal chromAlias column name (e.g. "genbank",
+# "refseq", "ncbi"). HAL/Cactus pipelines typically key on GenBank accessions,
+# so chrom_naming = "genbank" matches what halStats reports.
+#
+# Returns the target column name, or NA_character_ with a `reason` attribute
+# describing why no column was resolvable.
+.resolve_hub_target_col <- function(chrom_naming, src_col, alias_cols) {
+    if (chrom_naming == "accession") {
+        return(src_col)
+    }
+    target <- switch(chrom_naming,
+        ucsc          = "ucsc",
+        sequence_name = "assembly",
+        chrom_naming
+    )
+    if (!target %in% alias_cols) {
+        return(structure(NA_character_,
+            reason = sprintf(
+                "chromAlias has no '%s' column (available: %s).",
+                target, paste(alias_cols, collapse = ", ")
+            )
+        ))
+    }
+    target
+}
+
 # Parse a UCSC chromAlias.txt(.gz). Header line begins with '# '; remaining lines
 # are tab-separated, one row per contig, one column per naming scheme.
 # Returns a data.frame with one named character column per scheme.
