@@ -2418,32 +2418,38 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 		}
 	}
 
-	// Open selector track for GLM predict vars
+	// Open selector tracks for GLM predict vars (M >= 0)
 	for (auto &var : m_track_vars) {
 		if (var.val_func != Track_var::GLM_PREDICT) continue;
-		if (var.glm_selector_track_name.empty()) continue;
-		try {
-			string track_dir = track2path(m_iu.get_env(), var.glm_selector_track_name);
-			GenomeTrack::Type ttype = GenomeTrack::get_type(track_dir.c_str(), m_iu.get_chromkey(), false);
-			string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
-			string filename(track_dir + "/" + resolved);
-			var.glm_selector_handle = init_1d_track_with_shared_backend(filename, interval.chromid, ttype);
-			if (!var.glm_selector_handle)
-				verror("GLM selector track '%s' returned null handle for chrom %s",
-				       var.glm_selector_track_name.c_str(),
-				       m_iu.get_chromkey().id2chrom(interval.chromid).c_str());
-			GenomeTrack *raw = var.glm_selector_handle.get();
-			var.glm_selector_fixedbin = dynamic_cast<GenomeTrackFixedBin*>(raw);
-			if (!var.glm_selector_fixedbin)
-				verror("GLM selector track '%s' is not a fixed-bin track for chrom %s",
-				       var.glm_selector_track_name.c_str(),
-				       m_iu.get_chromkey().id2chrom(interval.chromid).c_str());
-			var.glm_selector_bin_size = var.glm_selector_fixedbin->get_bin_size();
-		} catch (TGLException &e) {
-			verror("GLM selector track '%s' failed to open for chrom %s: %s",
-			       var.glm_selector_track_name.c_str(),
-			       m_iu.get_chromkey().id2chrom(interval.chromid).c_str(),
-			       e.msg());
+		const int M = (int)var.glm_selector_track_names.size();
+		if (M == 0) continue;
+
+		var.glm_selector_handles.assign(M, nullptr);
+		var.glm_selector_fixedbins.assign(M, nullptr);
+		var.glm_selector_bin_sizes.assign(M, 0u);
+
+		const string &chrom_str = m_iu.get_chromkey().id2chrom(interval.chromid);
+		for (int m = 0; m < M; ++m) {
+			const string &tname = var.glm_selector_track_names[m];
+			try {
+				string track_dir = track2path(m_iu.get_env(), tname);
+				GenomeTrack::Type ttype = GenomeTrack::get_type(track_dir.c_str(), m_iu.get_chromkey(), false);
+				string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
+				string filename(track_dir + "/" + resolved);
+				var.glm_selector_handles[m] = init_1d_track_with_shared_backend(filename, interval.chromid, ttype);
+				if (!var.glm_selector_handles[m])
+					verror("GLM selector track '%s' returned null handle for chrom %s",
+					       tname.c_str(), chrom_str.c_str());
+				GenomeTrack *raw = var.glm_selector_handles[m].get();
+				var.glm_selector_fixedbins[m] = dynamic_cast<GenomeTrackFixedBin*>(raw);
+				if (!var.glm_selector_fixedbins[m])
+					verror("GLM selector track '%s' is not a fixed-bin track for chrom %s",
+					       tname.c_str(), chrom_str.c_str());
+				var.glm_selector_bin_sizes[m] = var.glm_selector_fixedbins[m]->get_bin_size();
+			} catch (TGLException &e) {
+				verror("GLM selector track '%s' failed to open for chrom %s: %s",
+				       tname.c_str(), chrom_str.c_str(), e.msg());
+			}
 		}
 	}
 
