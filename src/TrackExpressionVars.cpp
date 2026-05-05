@@ -1155,22 +1155,43 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
                 }
             }
 
-            // --- selector_track and selector_breaks (optional) ---
-            int st_idx = findListElementIndex(rparams, "selector_track");
+            // --- selector_tracks (CHARACTER vector len M) and selector_breaks (LIST of REAL vectors len M) ---
+            int st_idx = findListElementIndex(rparams, "selector_tracks");
+            int sb_idx = findListElementIndex(rparams, "selector_breaks");
             if (st_idx >= 0) {
                 SEXP rst = VECTOR_ELT(rparams, st_idx);
-                if (!Rf_isNull(rst) && Rf_isString(rst) && Rf_length(rst) == 1) {
-                    var.glm_selector_track_name = CHAR(STRING_ELT(rst, 0));
-                }
-            }
+                if (!Rf_isNull(rst)) {
+                    if (!Rf_isString(rst))
+                        verror("'selector_tracks' must be a character vector");
+                    int M = Rf_length(rst);
+                    if (M < 1)
+                        verror("'selector_tracks' must have length >= 1 when present");
+                    if (sb_idx < 0)
+                        verror("'selector_breaks' is required when 'selector_tracks' is present");
+                    SEXP rsb = VECTOR_ELT(rparams, sb_idx);
+                    if (!Rf_isVectorList(rsb) || Rf_length(rsb) != M)
+                        verror("'selector_breaks' must be a list of length %d (one per selector)", M);
 
-            int sb_idx = findListElementIndex(rparams, "selector_breaks");
-            if (sb_idx >= 0 && !var.glm_selector_track_name.empty()) {
-                SEXP rsb = VECTOR_ELT(rparams, sb_idx);
-                if (!Rf_isNull(rsb) && Rf_isReal(rsb)) {
-                    int nbr = Rf_length(rsb);
-                    vector<double> breaks(REAL(rsb), REAL(rsb) + nbr);
-                    var.glm_selector_binfinder.init(breaks, true, true);
+                    var.glm_selector_track_names.resize(M);
+                    var.glm_selector_binfinders.resize(M);
+                    var.glm_selector_strides.assign(M, 0);
+
+                    int64_t K_total = 1;
+                    for (int m = 0; m < M; ++m) {
+                        var.glm_selector_track_names[m] = CHAR(STRING_ELT(rst, m));
+                        SEXP rbm = VECTOR_ELT(rsb, m);
+                        if (!Rf_isReal(rbm) || Rf_length(rbm) < 2)
+                            verror("'selector_breaks[[%d]]' must be a numeric vector of length >= 2", m + 1);
+                        int nbr = Rf_length(rbm);
+                        std::vector<double> breaks(REAL(rbm), REAL(rbm) + nbr);
+                        var.glm_selector_binfinders[m].init(breaks, true, true);
+                        int K_m = nbr - 1;
+                        var.glm_selector_strides[m] = (size_t)K_total;
+                        K_total *= K_m;
+                    }
+                    if (K_total != var.glm_num_bins)
+                        verror("Compound bin count from selectors (%lld) does not match weights/bias (%d)",
+                               (long long)K_total, var.glm_num_bins);
                 }
             }
 
