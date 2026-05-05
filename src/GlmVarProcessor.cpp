@@ -44,23 +44,27 @@ void GlmVarProcessor::process_single_glm_var(
 
     int64_t center = (interval.start + interval.end) / 2;
 
-    // ---- Selector: determine active bin (or NaN if missing/out-of-range) ----
-    int b = -1;
-    if (var.glm_selector_fixedbin && var.glm_selector_bin_size > 0) {
-        int64_t sel_bin = center / (int64_t)var.glm_selector_bin_size;
+    // ---- Multi-selector: compound bin = sum_m b_m * stride_m, NaN propagation ----
+    int b = 0;
+    const int nsel = (int)var.glm_selector_fixedbins.size();
+    bool selector_failed = false;
+    for (int m_sel = 0; m_sel < nsel; ++m_sel) {
+        GenomeTrackFixedBin *sel = var.glm_selector_fixedbins[m_sel];
+        unsigned bs = var.glm_selector_bin_sizes[m_sel];
+        if (!sel || bs == 0) { selector_failed = true; break; }
+        int64_t sel_bin = center / (int64_t)bs;
         int64_t raw_count;
-        const float *ptr = var.glm_selector_fixedbin->get_mmap_bins_ptr(sel_bin, 1, raw_count);
-        if (ptr && raw_count > 0 && std::isfinite(ptr[0])) {
-            int bin = var.glm_selector_binfinder.val2bin((double)ptr[0]);
-            if (bin >= 0 && bin < var.glm_num_bins) b = bin;
-        }
+        const float *ptr = sel->get_mmap_bins_ptr(sel_bin, 1, raw_count);
+        if (!ptr || raw_count <= 0 || !std::isfinite(ptr[0])) { selector_failed = true; break; }
+        int bm = var.glm_selector_binfinders[m_sel].val2bin((double)ptr[0]);
+        if (bm < 0) { selector_failed = true; break; }
+        b += bm * (int)var.glm_selector_strides[m_sel];
     }
-    if (var.glm_num_bins > 1 && b < 0) {
+    if (selector_failed) {
         var.var[idx] = NAN;
         return;
     }
-    // For K=1 (no selector), b is always 0
-    if (b < 0) b = 0;
+    // For nsel == 0 (no selector), b stays 0 — valid since glm_num_bins == 1.
 
     double result = var.glm_bias[b];
     bool has_interactions = !var.glm_interactions.empty();
