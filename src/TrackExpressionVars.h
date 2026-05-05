@@ -250,11 +250,12 @@ public:
         std::vector<GlmTrackGroup> glm_track_groups;      // built at parse time
         std::vector<double> glm_bias;          // length K (1 for no selector)
         int glm_num_bins{1};                   // K (1 = no selector)
-        std::string glm_selector_track_name;
-        GenomeTrackFixedBin *glm_selector_fixedbin{nullptr};
-        std::shared_ptr<GenomeTrack> glm_selector_handle;
-        unsigned glm_selector_bin_size{0};
-        BinFinder glm_selector_binfinder;
+        std::vector<std::string> glm_selector_track_names;                      // length M (M >= 0)
+        std::vector<GenomeTrackFixedBin*> glm_selector_fixedbins;               // length M, set in start_chrom
+        std::vector<std::shared_ptr<GenomeTrack>> glm_selector_handles;         // length M, set in start_chrom
+        std::vector<unsigned> glm_selector_bin_sizes;                           // length M, set in start_chrom
+        std::vector<BinFinder> glm_selector_binfinders;                         // length M, set at parse time
+        std::vector<size_t> glm_selector_strides;                               // length M, computed at parse time
         double glm_scale_factor{10.0};
         std::vector<double> glm_scaled_cache; // scratch: post-scaling values for interactions
     };
