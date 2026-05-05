@@ -75,12 +75,16 @@ glm_extract_features <- function(
         stop("All intervals must have the same width")
     }
 
-    # Convert chromosome names to 0-based IDs
-    chrom_sizes <- gintervals.chrom_sizes(intervals)
-    chrom_ids <- match(as.character(intervals$chrom), chrom_sizes$chrom) - 1L
-
-    if (any(is.na(chrom_ids))) {
-        stop("Some chromosome names not found in the genome database")
+    # Pass chromosome names through to C++, which resolves them via misha's
+    # internal chromkey (chromkey.chrom2id). Earlier versions resolved to
+    # integer IDs in R using a positional match against
+    # gintervals.chrom_sizes(intervals) — but that only reflects the order
+    # of chromosomes present in the input subset, not the chromkey insertion
+    # order, so any missing chromosome (e.g., chrM/chrY excluded upstream)
+    # silently shifted all later chromids by one.
+    chrom_names <- as.character(intervals$chrom)
+    if (any(is.na(chrom_names))) {
+        stop("Some chromosome names are NA")
     }
 
     # Order max_cap to match track_names
@@ -108,7 +112,7 @@ glm_extract_features <- function(
     result <- .gcall(
         "C_glm_extract_features",
         as.character(track_names),
-        as.integer(chrom_ids),
+        chrom_names,
         as.numeric(intervals$start),
         as.numeric(intervals$end),
         as.integer(tile_size),
