@@ -40,13 +40,14 @@ If \code{TRUE}, remove existing sets before saving.}
 
 \item{registry}{Optional path to a registry YAML; overrides the resolution chain.}
 
-\item{min_coverage}{Minimum fraction of groot chroms that must appear in a
-chromAlias column for that column to be picked as the canonical mapping
-(and similarly for the source-file's chroms). Default \code{1.0} (strict).
-Set lower (e.g. \code{0.99}) to install onto groots whose chrom names
-cover only most of an alias column — typical for Cactus-derived legacy
-groots where UCSC has dropped a handful of tiny scaffolds. Unmapped
-contigs simply receive no annotations.}
+\item{min_coverage}{Minimum fraction that must be covered by a chromAlias
+column for it to be picked as the canonical mapping. Default \code{1.0}
+(strict). On the groot side this is bp-weighted (fraction of genome
+basepairs covered) — a long-tail of small unmapped contigs (e.g. a 16 kb
+mitochondrion missing from UCSC's \code{genbank} column out of a 3 Gb
+genome) costs ~0.0005% rather than ~1/N. On the source-file side
+(asset chroms read from a GTF/GFF) the metric is the count-weighted
+fraction of distinct names. Unmapped contigs receive no annotations.}
 
 \item{verbose}{If \code{TRUE}, prints progress.}
 }

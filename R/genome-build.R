@@ -1026,13 +1026,14 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #' @param overwrite If \code{FALSE} (default), error on existing target sets.
 #'   If \code{TRUE}, remove existing sets before saving.
 #' @param registry Optional path to a registry YAML; overrides the resolution chain.
-#' @param min_coverage Minimum fraction of groot chroms that must appear in a
-#'   chromAlias column for that column to be picked as the canonical mapping
-#'   (and similarly for the source-file's chroms). Default \code{1.0} (strict).
-#'   Set lower (e.g. \code{0.99}) to install onto groots whose chrom names
-#'   cover only most of an alias column — typical for Cactus-derived legacy
-#'   groots where UCSC has dropped a handful of tiny scaffolds. Unmapped
-#'   contigs simply receive no annotations.
+#' @param min_coverage Minimum fraction that must be covered by a chromAlias
+#'   column for it to be picked as the canonical mapping. Default \code{1.0}
+#'   (strict). On the groot side this is bp-weighted (fraction of genome
+#'   basepairs covered) — a long-tail of small unmapped contigs (e.g. a 16 kb
+#'   mitochondrion missing from UCSC's \code{genbank} column out of a 3 Gb
+#'   genome) costs ~0.0005% rather than ~1/N. On the source-file side
+#'   (asset chroms read from a GTF/GFF) the metric is the count-weighted
+#'   fraction of distinct names. Unmapped contigs receive no annotations.
 #' @param verbose If \code{TRUE}, prints progress.
 #' @return Invisible \code{NULL}. Side effects: writes \code{.interv} files under
 #'   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
@@ -1132,19 +1133,30 @@ gdb.install_intervals <- function(groot,
     assets <- fetcher(recipe, sets, workdir, verbose)
 
     # chromAlias: detect groot column and source columns; build translator closure.
-    groot_chroms <- as.character(get("ALLGENOME", envir = .misha)[[1]]$chrom)
+    # Coverage is bp-weighted on the groot side -- a long-tail of small unmapped
+    # contigs (e.g. a 16 kb mitochondrion missing from UCSC's genbank column)
+    # then costs ~0.0005% instead of ~1/N, which is the meaningful figure for
+    # whole-genome work.
+    allg <- get("ALLGENOME", envir = .misha)[[1]]
+    groot_chroms <- as.character(allg$chrom)
+    groot_lengths <- as.numeric(allg$end - allg$start)
     alias_df <- assets$chrom_alias$df
     groot_col <- if (!is.null(alias_df)) {
-        .detect_alias_column(alias_df, groot_chroms, min_coverage = min_coverage)
+        .detect_alias_column(alias_df, groot_chroms,
+            min_coverage = min_coverage, chrom_lengths = groot_lengths
+        )
     } else {
         NA_character_
     }
     if (!is.null(alias_df) && is.na(groot_col)) {
         scores <- attr(groot_col, "scores")
+        total_bp <- sum(groot_lengths)
         stop(sprintf(
-            "chromAlias has no column with %.0f%% coverage of groot chroms.\nPer-column overlap counts: %s\nFirst 5 unmapped groot chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.95).",
+            "chromAlias has no column with %.0f%% bp coverage of groot.\nPer-column bp coverage: %s\nFirst 5 unmapped groot chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.99).",
             100 * min_coverage,
-            paste(sprintf("%s=%d/%d", names(scores), scores, length(groot_chroms)), collapse = ", "),
+            paste(sprintf("%s=%.4f%%", names(scores), 100 * scores / total_bp),
+                collapse = ", "
+            ),
             paste(utils::head(setdiff(groot_chroms, unlist(alias_df, use.names = FALSE)), 5L),
                 collapse = ", "
             )
@@ -1153,9 +1165,9 @@ gdb.install_intervals <- function(groot,
     if (!is.null(alias_df)) {
         groot_overlap <- attr(groot_col, "overlap")
         if (verbose && !is.null(groot_overlap) && groot_overlap < 1.0) {
-            n_unmapped <- length(groot_chroms) - attr(groot_col, "scores")[[as.character(groot_col)]]
+            n_unmapped <- sum(!groot_chroms %in% alias_df[[as.character(groot_col)]])
             message(sprintf(
-                "  chromAlias '%s' covers %.2f%% of groot chroms; %d unmapped contigs will receive no annotations.",
+                "  chromAlias '%s' covers %.4f%% of groot bp; %d unmapped contigs will receive no annotations.",
                 as.character(groot_col), 100 * groot_overlap, n_unmapped
             ))
         }

@@ -79,29 +79,56 @@
 # Returns the column whose values cover at least `min_coverage` of target_chroms.
 # Among columns meeting the threshold, the one with highest coverage wins; ties
 # broken by column order. Default `min_coverage = 1.0` keeps strict semantics.
-# NA with attributes(scores=, overlap=) when no column meets the threshold —
-# caller produces the diagnostic.
-.detect_alias_column <- function(alias_df, target_chroms, min_coverage = 1.0) {
+#
+# Coverage is bp-weighted when `chrom_lengths` is supplied (a numeric aligned
+# with `target_chroms`) -- a long-tail of small unmapped contigs (e.g. a 16 kb
+# mitochondrion missing from UCSC's genbank column out of a 3 Gb genome) then
+# costs the score ~0.0005% instead of ~1/N. Without lengths, falls back to
+# count-based: fraction of distinct chrom names covered.
+#
+# Returns the column name with attributes(scores=, overlap=, bp_weighted=) on
+# success, or NA_character_ with the same attributes when no column meets the
+# threshold (caller produces the diagnostic).
+.detect_alias_column <- function(alias_df, target_chroms, min_coverage = 1.0,
+                                 chrom_lengths = NULL) {
     if (!length(target_chroms)) {
         stop(".detect_alias_column called with empty target chrom set", call. = FALSE)
     }
-    scores <- vapply(
-        alias_df,
-        function(col) length(intersect(col, target_chroms)),
-        integer(1)
-    )
-    coverages <- scores / length(target_chroms)
+    bp_weighted <- !is.null(chrom_lengths)
+    if (bp_weighted) {
+        if (length(chrom_lengths) != length(target_chroms)) {
+            stop(sprintf(
+                ".detect_alias_column: chrom_lengths (%d) must align with target_chroms (%d)",
+                length(chrom_lengths), length(target_chroms)
+            ), call. = FALSE)
+        }
+        weights <- as.numeric(chrom_lengths)
+        total <- sum(weights)
+        scores <- vapply(alias_df, function(col) {
+            sum(weights[target_chroms %in% col])
+        }, numeric(1))
+    } else {
+        scores <- vapply(
+            alias_df,
+            function(col) length(intersect(col, target_chroms)),
+            integer(1)
+        )
+        total <- length(target_chroms)
+    }
+    coverages <- scores / total
     valid <- which(coverages >= min_coverage)
     if (!length(valid)) {
         return(structure(NA_character_,
             scores = scores,
-            overlap = max(coverages)
+            overlap = max(coverages),
+            bp_weighted = bp_weighted
         ))
     }
     best <- valid[which.max(coverages[valid])]
     structure(names(alias_df)[best],
         scores = scores,
-        overlap = unname(coverages[best])
+        overlap = unname(coverages[best]),
+        bp_weighted = bp_weighted
     )
 }
 

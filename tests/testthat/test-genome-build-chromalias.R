@@ -72,6 +72,60 @@ test_that(".detect_alias_column returns NA when no column has 100% coverage", {
     expect_equal(attr(res, "scores")[["ucsc"]], 4L) # 4 of 5 hits
 })
 
+test_that(".detect_alias_column with chrom_lengths returns bp-weighted coverage", {
+    # Bos-mutus-style scenario: groot has been renamed to genbank names where
+    # available, but the 16 kb MT contig kept its refseq id because genbank
+    # was empty for that row. So groot chroms span both name spaces. Each
+    # column then covers exactly 1/2 by count (50%); by bp the genbank column
+    # covers ~99.9984% (1 Gb of (1 Gb + 16 kb)) while refseq covers ~0.0016%.
+    df <- data.frame(
+        refseq = c("NC_006380.3", "NW_005392810.1"),
+        genbank = c("", "JH880237.1"),
+        stringsAsFactors = FALSE
+    )
+    target <- c("NC_006380.3", "JH880237.1")
+    lengths <- c(16000, 1e9)
+
+    # Count mode: both columns at 50%, both fail strict 0.99.
+    res_count <- .detect_alias_column(df, target, min_coverage = 0.99)
+    expect_true(is.na(res_count))
+
+    # Bp mode: genbank at ~99.9984% passes, refseq at ~0.0016% fails.
+    res_bp <- .detect_alias_column(df, target,
+        min_coverage = 0.99, chrom_lengths = lengths
+    )
+    expect_equal(as.character(res_bp), "genbank")
+    expect_equal(unname(attr(res_bp, "scores")[["genbank"]]), 1e9)
+    expect_true(attr(res_bp, "overlap") > 0.99)
+    expect_true(attr(res_bp, "bp_weighted"))
+})
+
+test_that(".detect_alias_column with chrom_lengths still rejects gross mismatches", {
+    df <- data.frame(
+        a = c("x", "y"),
+        b = c("p", "q"),
+        stringsAsFactors = FALSE
+    )
+    res <- .detect_alias_column(df, c("x", "y"),
+        min_coverage = 0.99, chrom_lengths = c(1, 1)
+    )
+    expect_equal(as.character(res), "a")
+
+    res2 <- .detect_alias_column(df, c("x", "z"),
+        min_coverage = 0.99, chrom_lengths = c(1, 1)
+    )
+    # 'z' missing from both columns -> 50% bp coverage, fails 0.99.
+    expect_true(is.na(res2))
+})
+
+test_that(".detect_alias_column errors when chrom_lengths length mismatches target", {
+    df <- data.frame(a = c("x", "y"), stringsAsFactors = FALSE)
+    expect_error(
+        .detect_alias_column(df, c("x", "y"), chrom_lengths = c(1, 2, 3)),
+        "chrom_lengths"
+    )
+})
+
 test_that(".detect_alias_column ties broken by column order (first wins)", {
     df <- data.frame(a = c("x", "y"), b = c("x", "y"), stringsAsFactors = FALSE)
     expect_equal(.detect_alias_column(df, c("x", "y")), "a", ignore_attr = TRUE)
