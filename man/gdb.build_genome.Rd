@@ -13,6 +13,7 @@ gdb.build_genome(
   gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
   gtf_priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene"),
   chrom_naming = NULL,
+  min_coverage = 1,
   format = NULL,
   verbose = TRUE
 )
@@ -44,6 +45,13 @@ Selects which name space the canonical chrom names should come from. For
 the FASTA's source column). For \code{ncbi}: \code{"sequence_name"} (default),
 \code{"ucsc"}, or \code{"accession"}. \code{NULL} (default) keeps whatever
 the recipe specifies.}
+
+\item{min_coverage}{Minimum fraction of groot chroms that must appear in a
+chromAlias column for that column to be picked as canonical (forwarded to
+\code{\link{gdb.install_intervals}}). Default \code{1.0} (strict). Lower
+to e.g. \code{0.99} when a column has small gaps -- typical when a target
+column doesn't span every contig (e.g. UCSC's \code{genbank} column has
+no value for the mitochondrion in many hubs, leaving 1 stray chrom).}
 
 \item{format}{\code{"indexed"} or \code{"per-chromosome"}; \code{NULL} =>
 \code{getOption("gmulticontig.indexed_format", TRUE)}.}

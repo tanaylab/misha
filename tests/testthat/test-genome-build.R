@@ -460,6 +460,28 @@ test_that(".rename_fasta_headers rewrites ID and preserves body", {
     expect_equal(out[3], "GGGGCCCC")
 })
 
+test_that(".rename_fasta_headers treats empty target as unmapped (keeps original)", {
+    # UCSC chromAlias has gaps: e.g. Bos mutus's MT row has refseq=NC_006380.3
+    # but genbank="". When chrom_naming="genbank" we used to rewrite the header
+    # to ">", which misha's FASTA loader silently substituted with the default
+    # name "contig". Empty target must be treated as no-rename instead.
+    in_path <- tempfile(fileext = ".fa")
+    out_path <- tempfile(fileext = ".fa")
+    on.exit(unlink(c(in_path, out_path)))
+    writeLines(c(
+        ">NC_006380.3 mitochondrion",
+        "AAAA",
+        ">NW_005392810.1 main contig",
+        "CCCC"
+    ), in_path)
+    # Map present but MT target is empty.
+    rmap <- c("NC_006380.3" = "", "NW_005392810.1" = "JH880237.1")
+    misha:::.rename_fasta_headers(in_path, out_path, rmap, verbose = FALSE)
+    out <- readLines(out_path, warn = FALSE)
+    expect_equal(out[1], ">NC_006380.3") # empty target -> kept
+    expect_equal(out[3], ">JH880237.1") # non-empty target -> renamed
+})
+
 test_that(".rename_gff3_seqids rewrites col 1 and preserves comments", {
     in_path <- tempfile(fileext = ".gff")
     out_path <- tempfile(fileext = ".gff")

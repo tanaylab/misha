@@ -643,7 +643,12 @@
             headers <- lines[is_header]
             ids <- sub("^>([^[:space:]]+).*$", "\\1", headers, perl = TRUE)
             new <- rename_map[ids]
-            unmapped <- is.na(new)
+            # Treat both NA (key absent) and empty (key present but no target)
+            # as "unmapped, keep original". UCSC chromAlias has gaps -- e.g.
+            # Bos mutus's MT row has refseq=NC_006380.3 but genbank="". A
+            # naive rename would rewrite the header to ">", which misha's
+            # FASTA loader then surfaces as the default chrom name "contig".
+            unmapped <- is.na(new) | !nzchar(new)
             new[unmapped] <- ids[unmapped]
             n_renamed <- n_renamed + sum(!unmapped)
             n_unmapped <- n_unmapped + sum(unmapped)
@@ -744,6 +749,12 @@
 #'   \code{gintervals.import_genes()} roles to on-disk set names; \code{NA} skips
 #'   a role.
 #' @param gtf_priority Character vector ordering GTF source preference.
+#' @param min_coverage Minimum fraction of groot chroms that must appear in a
+#'   chromAlias column for that column to be picked as canonical (forwarded to
+#'   \code{\link{gdb.install_intervals}}). Default \code{1.0} (strict). Lower
+#'   to e.g. \code{0.99} when a column has small gaps -- typical when a target
+#'   column doesn't span every contig (e.g. UCSC's \code{genbank} column has
+#'   no value for the mitochondrion in many hubs, leaving 1 stray chrom).
 #' @param chrom_naming Optional override for the recipe's \code{chrom_naming}.
 #'   Selects which name space the canonical chrom names should come from. For
 #'   \code{ucsc-hub}: any chromAlias column (\code{"ucsc"}, \code{"genbank"},
@@ -790,8 +801,13 @@ gdb.build_genome <- function(name,
                                  "ensGene", "augustus", "xenoRefGene"
                              ),
                              chrom_naming = NULL,
+                             min_coverage = 1.0,
                              format = NULL,
                              verbose = TRUE) {
+    if (!is.numeric(min_coverage) || length(min_coverage) != 1L ||
+        min_coverage <= 0 || min_coverage > 1) {
+        stop("`min_coverage` must be a single number in (0, 1].", call. = FALSE)
+    }
     if (file.exists(path)) {
         stop(sprintf(
             "Output path '%s' already exists; refusing to overwrite. Choose a fresh path.",
@@ -831,6 +847,7 @@ gdb.build_genome <- function(name,
             gtf_priority = gtf_priority,
             overwrite    = FALSE,
             registry     = NULL,
+            min_coverage = min_coverage,
             verbose      = verbose
         )
     }
