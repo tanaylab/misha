@@ -181,7 +181,8 @@ test_that(".translate_chroms_per_row resolves any naming via cross-column lookup
         chrom = c("NW_X.1", "chrM", "unknown"), x = 1:3,
         stringsAsFactors = FALSE
     )
-    out <- .translate_chroms_per_row(rows, "chrom", alias_df, "canonical")
+    rev_idx <- .build_alias_rev_index(alias_df, "canonical")
+    out <- .translate_chroms_per_row(rows, "chrom", rev_idx)
     expect_equal(out$chrom, c("JH_X.1", "NC_006380.3", NA_character_))
     expect_equal(out$x, 1:3)
 })

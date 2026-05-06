@@ -29,10 +29,7 @@
         size = max(length(alias_map), 1L)
     )
     if (length(alias_map)) {
-        nm <- names(alias_map)
-        for (i in seq_along(alias_map)) {
-            env[[nm[i]]] <- alias_map[[i]]
-        }
+        list2env(as.list(alias_map), envir = env)
     }
     assign("CHROM_ALIAS_ENV", env, envir = .misha)
     invisible(NULL)
@@ -204,9 +201,13 @@
 #   - The full map (including TSV extras) goes to .misha$CHROM_ALIAS_ENV, used
 #     by the R-side .gchroms() for query-time alias resolution. The C++ side
 #     never sees it.
-# Self-mapping entries (chrom -> chrom) are deliberately omitted: canonical
-# names already resolve via m_chrom_key / ALLGENOME, so storing them would
-# only inflate per-call overhead.
+# Self-mapping entries (chrom -> chrom) are kept in the alias map so that
+# .gchroms() always takes the alias-resolution path for canonical names; that
+# path returns chroms typed by ALLGENOME's factor, while the fast "all
+# canonical" early-return would otherwise hand back the input character
+# vector and silently strip factor-ness from gextract output. The C++
+# add_chrom_alias no-ops on entries whose alias already names a chrom, so
+# self-entries cost only a no-op lookup on the C++ side.
 .compute_chrom_aliases <- function(chroms, groot = NULL) {
     chroms <- unique(as.character(chroms))
 
@@ -217,67 +218,37 @@
     upper_unprefixed <- toupper(unprefixed)
     upper_chroms <- toupper(chroms)
 
-    # Build alias mappings efficiently using environment for O(1) existence checks
     seen <- new.env(hash = TRUE, parent = emptyenv())
 
-    # Pre-allocate result vectors (estimate ~4 entries per chromosome)
+    # Pre-allocate result vectors (estimate ~4 entries per chromosome:
+    # self + chr-prefix toggle + up to 2 MT aliases).
     max_aliases <- length(chroms) * 4
     alias_names <- character(max_aliases)
     alias_targets <- character(max_aliases)
-    idx <- 0
+    idx <- 0L
     # Mark where the basic-toggle pass ends so .store_chrom_aliases can split
     # the result into the C++-facing CHROM_ALIAS (basic only) and the R-side
     # CHROM_ALIAS_ENV (full).
     n_basic <- 0L
 
-    # Inline alias addition to avoid <<- (CRAN compliance)
-    # First pass: add all chromosomes mapping to themselves
-    for (i in seq_along(chroms)) {
-        chrom <- chroms[i]
-        if (!exists(chrom, envir = seen, inherits = FALSE)) {
-            seen[[chrom]] <- TRUE
-            idx <- idx + 1
-            alias_names[idx] <- chrom
-            alias_targets[idx] <- chrom
+    add_basic <- function(name, target) {
+        if (!nzchar(name) || exists(name, envir = seen, inherits = FALSE)) {
+            return(invisible(FALSE))
         }
+        seen[[name]] <- TRUE
+        idx <<- idx + 1L
+        alias_names[idx] <<- name
+        alias_targets[idx] <<- target
+        invisible(TRUE)
     }
 
-    # Second pass: add aliases using pre-computed vectorized values
     for (i in seq_along(chroms)) {
         chrom <- chroms[i]
-
-        # Add unprefixed alias
-        if (unprefixed[i] != chrom) {
-            name <- unprefixed[i]
-            if (nzchar(name) && !exists(name, envir = seen, inherits = FALSE)) {
-                seen[[name]] <- TRUE
-                idx <- idx + 1
-                alias_names[idx] <- name
-                alias_targets[idx] <- chrom
-            }
-        }
-
-        # Add prefixed alias
-        if (prefixed[i] != chrom) {
-            name <- prefixed[i]
-            if (nzchar(name) && !exists(name, envir = seen, inherits = FALSE)) {
-                seen[[name]] <- TRUE
-                idx <- idx + 1
-                alias_names[idx] <- name
-                alias_targets[idx] <- chrom
-            }
-        }
-
-        # Add mitochondrial aliases
+        add_basic(chrom, chrom)
+        add_basic(unprefixed[i], chrom)
+        add_basic(prefixed[i], chrom)
         if (upper_unprefixed[i] %in% c("M", "MT") || upper_chroms[i] %in% c("CHRM", "CHRMT")) {
-            for (mt_alias in c("M", "MT", "chrM")) {
-                if (!exists(mt_alias, envir = seen, inherits = FALSE)) {
-                    seen[[mt_alias]] <- TRUE
-                    idx <- idx + 1
-                    alias_names[idx] <- mt_alias
-                    alias_targets[idx] <- chrom
-                }
-            }
+            for (mt_alias in c("M", "MT", "chrM")) add_basic(mt_alias, chrom)
         }
     }
     n_basic <- idx

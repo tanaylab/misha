@@ -102,18 +102,28 @@
         }
     }
 
-    if ("rmsk" %in% sets) {
-        rmsk_file <- files[grepl("\\.repeatMasker\\.out\\.gz$", files)]
-        if (length(rmsk_file)) {
-            local <- file.path(workdir, basename(rmsk_file[[1L]]))
-            .download_to(paste0(base, rmsk_file[[1L]]), local, verbose = verbose)
-            out$rmsk <- list(file = local, format = "rmsk-out")
-        } else {
+    # Pick one filename out of `files` matching `pattern`, download it from
+    # `base`, and return list(file=<local>, format=<format>) -- or warn-and-NULL
+    # when nothing matches. `label_pattern` is the human-readable fragment for
+    # the warning ("repeatMasker.out.gz", not the regex).
+    grab_optional <- function(set_label, pattern, label_pattern, format) {
+        hit <- files[grepl(pattern, files)]
+        if (!length(hit)) {
             warning(sprintf(
-                "'rmsk' requested but no repeatMasker.out.gz at %s; skipping.",
-                base
+                "'%s' requested but no %s at %s; skipping.",
+                set_label, label_pattern, base
             ), call. = FALSE)
+            return(NULL)
         }
+        local <- file.path(workdir, basename(hit[[1L]]))
+        .download_to(paste0(base, hit[[1L]]), local, verbose = verbose)
+        list(file = local, format = format)
+    }
+
+    if ("rmsk" %in% sets) {
+        out$rmsk <- grab_optional(
+            "rmsk", "\\.repeatMasker\\.out\\.gz$", "repeatMasker.out.gz", "rmsk-out"
+        )
     }
 
     if ("genes" %in% sets) {
@@ -138,17 +148,9 @@
     }
 
     if ("cgi" %in% sets) {
-        cgi_file <- files[grepl("\\.cpgIslandExt\\.txt\\.gz$", files)]
-        if (length(cgi_file)) {
-            local <- file.path(workdir, basename(cgi_file[[1L]]))
-            .download_to(paste0(base, cgi_file[[1L]]), local, verbose = verbose)
-            out$cgi <- list(file = local, format = "ucsc-cpg-11col")
-        } else {
-            warning(sprintf(
-                "'cgi' requested but no cpgIslandExt.txt.gz at %s; skipping.",
-                base
-            ), call. = FALSE)
-        }
+        out$cgi <- grab_optional(
+            "cgi", "\\.cpgIslandExt\\.txt\\.gz$", "cpgIslandExt.txt.gz", "ucsc-cpg-11col"
+        )
     }
 
     if ("cytoband" %in% sets) {
@@ -191,24 +193,15 @@
             names = .UCSC_NCBI_REFSEQ_LINK_COLS
         )
     }
-    if ("rmsk" %in% sets) {
-        url <- sprintf("%s/database/rmsk.txt.gz", base)
-        local <- file.path(workdir, "rmsk.txt.gz")
+    download_table <- function(table_name, format) {
+        url <- sprintf("%s/database/%s.txt.gz", base, table_name)
+        local <- file.path(workdir, paste0(table_name, ".txt.gz"))
         .download_to(url, local, verbose = verbose)
-        out$rmsk <- list(file = local, format = "rmsk-ucsc-17col")
+        list(file = local, format = format)
     }
-    if ("cgi" %in% sets) {
-        url <- sprintf("%s/database/cpgIslandExt.txt.gz", base)
-        local <- file.path(workdir, "cpgIslandExt.txt.gz")
-        .download_to(url, local, verbose = verbose)
-        out$cgi <- list(file = local, format = "ucsc-cpg-11col")
-    }
-    if ("cytoband" %in% sets) {
-        url <- sprintf("%s/database/cytoBandIdeo.txt.gz", base)
-        local <- file.path(workdir, "cytoBandIdeo.txt.gz")
-        .download_to(url, local, verbose = verbose)
-        out$cytoband <- list(file = local, format = "ucsc-cytoband-5col")
-    }
+    if ("rmsk" %in% sets) out$rmsk <- download_table("rmsk", "rmsk-ucsc-17col")
+    if ("cgi" %in% sets) out$cgi <- download_table("cpgIslandExt", "ucsc-cpg-11col")
+    if ("cytoband" %in% sets) out$cytoband <- download_table("cytoBandIdeo", "ucsc-cytoband-5col")
     out
 }
 
@@ -293,16 +286,36 @@
     out
 }
 
+# Download `url` to <workdir>/<stem>_input; gunzip in place when the URL ends
+# in .gz. Returns the final local path (post-gunzip if applicable).
+.fetch_with_optional_gunzip <- function(url, workdir, stem, verbose = TRUE) {
+    local <- file.path(workdir, paste0(stem, "_input"))
+    .download_to(url, local, verbose = verbose)
+    if (grepl("\\.gz$", url)) {
+        local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
+    }
+    local
+}
+
 # Manual fetcher: takes the recipe URLs verbatim, downloads them, returns
 # uniform asset shape. Used by the manual source backend.
 # Note: %||% is defined in R/db-core.R (shared utility).
 .manual_fetch_assets <- function(recipe, sets, workdir, verbose = TRUE) {
     out <- list(chrom_alias = NULL)
-
+    # Trivial-format sets: download (gunzipping when needed), tag with format.
+    simple_specs <- list(
+        rmsk     = "rmsk-ucsc-17col",
+        cgi      = "ucsc-cpg-11col",
+        cytoband = "ucsc-cytoband-5col"
+    )
+    for (key in names(simple_specs)) {
+        url <- recipe[[key]]
+        if (!key %in% sets || is.null(url)) next
+        local <- .fetch_with_optional_gunzip(url, workdir, key, verbose = verbose)
+        out[[key]] <- list(file = local, format = simple_specs[[key]])
+    }
     if ("genes" %in% sets && !is.null(recipe$genes)) {
-        local <- file.path(workdir, "genes_input")
-        .download_to(recipe$genes, local, verbose = verbose)
-        if (grepl("\\.gz$", recipe$genes)) local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
+        local <- .fetch_with_optional_gunzip(recipe$genes, workdir, "genes", verbose = verbose)
         fmt <- recipe$genes_format %||% "genepred"
         if (!fmt %in% c("genepred", "gtf", "gff3")) {
             stop(sprintf(
@@ -311,25 +324,6 @@
             ), call. = FALSE)
         }
         out$genes <- list(file = local, format = fmt, gtf_source = "manual")
-    }
-    if ("rmsk" %in% sets && !is.null(recipe$rmsk)) {
-        local <- file.path(workdir, "rmsk_input")
-        .download_to(recipe$rmsk, local, verbose = verbose)
-        if (grepl("\\.gz$", recipe$rmsk)) local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
-        # Per recipe schema: only UCSC 17-col format supported in manual.
-        out$rmsk <- list(file = local, format = "rmsk-ucsc-17col")
-    }
-    if ("cgi" %in% sets && !is.null(recipe$cgi)) {
-        local <- file.path(workdir, "cgi_input")
-        .download_to(recipe$cgi, local, verbose = verbose)
-        if (grepl("\\.gz$", recipe$cgi)) local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
-        out$cgi <- list(file = local, format = "ucsc-cpg-11col")
-    }
-    if ("cytoband" %in% sets && !is.null(recipe$cytoband)) {
-        local <- file.path(workdir, "cytoband_input")
-        .download_to(recipe$cytoband, local, verbose = verbose)
-        if (grepl("\\.gz$", recipe$cytoband)) local <- .gunzip_to_file(local, paste0(local, ".unzipped"))
-        out$cytoband <- list(file = local, format = "ucsc-cytoband-5col")
     }
     out
 }

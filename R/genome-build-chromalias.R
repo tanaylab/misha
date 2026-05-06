@@ -124,12 +124,13 @@
             sum(weights[target_chroms %in% col])
         }, numeric(1))
     } else {
+        unique_targets <- unique(target_chroms)
         scores <- vapply(
             alias_df,
-            function(col) length(intersect(col, target_chroms)),
+            function(col) sum(unique_targets %in% col),
             integer(1)
         )
-        total <- length(target_chroms)
+        total <- length(unique_targets)
     }
     coverages <- scores / total
     valid <- which(coverages >= min_coverage)
@@ -185,30 +186,36 @@
     canonical
 }
 
-# Per-row asset translation. For each value in `rows[[chrom_col]]`, find the
-# alias_df row whose ANY column equals that value, then return that row's
-# canonical (alias_df[[canonical_col]]). Allows GFFs that mix naming schemes
-# to import cleanly. Unmatched chroms become NA -- caller decides whether to
-# drop or warn.
-.translate_chroms_per_row <- function(rows, chrom_col, alias_df, canonical_col) {
-    # Reverse index: every non-empty cell -> its row index. First occurrence wins.
+# Build a reverse index for cross-column per-row alias translation: maps every
+# non-empty cell of `alias_df` (excluding `canonical_col`) directly to the
+# row's canonical name. First occurrence of any duplicate value wins.
+.build_alias_rev_index <- function(alias_df, canonical_col) {
     cols <- setdiff(names(alias_df), canonical_col)
+    canonical <- as.character(alias_df[[canonical_col]])
     rev_idx <- new.env(hash = TRUE, parent = emptyenv())
     for (col in cols) {
         vals <- alias_df[[col]]
         for (i in seq_along(vals)) {
             v <- vals[i]
             if (!is.na(v) && nzchar(v) && !exists(v, envir = rev_idx, inherits = FALSE)) {
-                assign(v, i, envir = rev_idx)
+                assign(v, canonical[i], envir = rev_idx)
             }
         }
     }
+    rev_idx
+}
+
+# Per-row asset translation. For each value in `rows[[chrom_col]]`, look up
+# the canonical name via `rev_idx` (built once per gdb.install_intervals call
+# by .build_alias_rev_index). Unmatched chroms become NA -- caller decides
+# whether to drop or warn.
+.translate_chroms_per_row <- function(rows, chrom_col, rev_idx) {
     asset_names <- as.character(rows[[chrom_col]])
     out <- vapply(asset_names, function(nm) {
         if (is.na(nm) || !nzchar(nm) || !exists(nm, envir = rev_idx, inherits = FALSE)) {
             return(NA_character_)
         }
-        as.character(alias_df[[canonical_col]][get(nm, envir = rev_idx)])
+        get(nm, envir = rev_idx)
     }, character(1), USE.NAMES = FALSE)
     rows[[chrom_col]] <- out
     rows

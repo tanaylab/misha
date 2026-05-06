@@ -226,13 +226,13 @@
 .heal_ucsc_tsv_escapes <- function(in_path, out_path) {
     con_in <- if (grepl("\\.gz$", in_path)) gzfile(in_path, "rb") else file(in_path, "rb")
     on.exit(close(con_in), add = TRUE)
-    bytes <- raw(0)
+    chunks <- list()
     repeat {
-        chunk <- readBin(con_in, raw(), n = 1024L * 1024L)
+        chunk <- readBin(con_in, raw(), n = 4L * 1024L * 1024L)
         if (!length(chunk)) break
-        bytes <- c(bytes, chunk)
+        chunks[[length(chunks) + 1L]] <- chunk
     }
-    s <- rawToChar(bytes)
+    s <- if (length(chunks)) rawToChar(unlist(chunks, use.names = FALSE)) else ""
     # Order matters: do CRLF before LF so we consume the whole sequence.
     s <- gsub("\\\\\r\n", " ", s, perl = TRUE)
     s <- gsub("\\\\\n", " ", s, perl = TRUE)
@@ -1234,6 +1234,14 @@ gdb.install_intervals <- function(groot,
         gdb.init(groot, rescan = TRUE) # reload CHROM_ALIAS
     }
 
+    # When match_by_length is on, build the cross-column reverse index once
+    # so we don't rebuild it per asset.
+    rev_idx <- if (!is.null(alias_df) && match_by_length) {
+        .build_alias_rev_index(alias_df, canonical_col)
+    } else {
+        NULL
+    }
+
     # Helper: per-asset translator.
     # When match_by_length is on, translate per-row across all alias columns
     # so a GFF in any naming scheme (or mixed schemes) imports cleanly. Else
@@ -1244,7 +1252,7 @@ gdb.install_intervals <- function(groot,
         }
         if (match_by_length) {
             return(function(rows, chrom_col) {
-                .translate_chroms_per_row(rows, chrom_col, alias_df, canonical_col)
+                .translate_chroms_per_row(rows, chrom_col, rev_idx)
             })
         }
         src_col <- .detect_alias_column(alias_df, unique(asset_chroms),
@@ -1286,36 +1294,33 @@ gdb.install_intervals <- function(groot,
             overwrite = overwrite, verbose = verbose
         )
     }
-    # rmsk.
-    if ("rmsk" %in% sets && !is.null(assets$rmsk)) {
-        df <- if (assets$rmsk$format == "rmsk-out") {
-            .parse_rm_out(assets$rmsk$file, verbose)
-        } else {
-            .parse_ucsc_rmsk(assets$rmsk$file)
-        }
+    # rmsk / cgi / cytoband: identical pipeline (parse -> translate -> install).
+    # Genes is structurally different (streamed, translator passed as asset).
+    simple_set_specs <- list(
+        rmsk = list(
+            parser = function(a) {
+                if (a$format == "rmsk-out") .parse_rm_out(a$file, verbose) else .parse_ucsc_rmsk(a$file)
+            },
+            installer = .install_rmsk_set
+        ),
+        cgi = list(
+            parser = function(a) .parse_ucsc_cpg_island(a$file),
+            installer = .install_cgi_set
+        ),
+        cytoband = list(
+            parser = function(a) .parse_ucsc_cytoband(a$file),
+            installer = .install_cytoband_set
+        )
+    )
+    for (key in names(simple_set_specs)) {
+        if (!(key %in% sets) || is.null(assets[[key]])) next
+        spec <- simple_set_specs[[key]]
+        df <- spec$parser(assets[[key]])
         if (!is.null(alias_df)) {
-            translator <- make_translator(unique(df$chrom), "rmsk")
+            translator <- make_translator(unique(df$chrom), key)
             df <- translator(df, "chrom")
         }
-        .install_rmsk_set(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
-    }
-    # cgi.
-    if ("cgi" %in% sets && !is.null(assets$cgi)) {
-        df <- .parse_ucsc_cpg_island(assets$cgi$file)
-        if (!is.null(alias_df)) {
-            translator <- make_translator(unique(df$chrom), "cgi")
-            df <- translator(df, "chrom")
-        }
-        .install_cgi_set(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
-    }
-    # cytoband.
-    if ("cytoband" %in% sets && !is.null(assets$cytoband)) {
-        df <- .parse_ucsc_cytoband(assets$cytoband$file)
-        if (!is.null(alias_df)) {
-            translator <- make_translator(unique(df$chrom), "cytoband")
-            df <- translator(df, "chrom")
-        }
-        .install_cytoband_set(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
+        spec$installer(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
     }
 
     # Provenance: append to genome_info.yaml.
