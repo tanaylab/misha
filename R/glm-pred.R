@@ -4,6 +4,110 @@
 # Fused GLM linear prediction: per-position computation of
 # bias + Σ(weight × transform(scale(smooth(track)))) + Σ(inter_weight × transform(product))
 
+# Cut() labels for a break vector - same labels glm_pred uses for stratum binning
+# (matches BinFinder::val2bin with include_lowest=true, right=true on the C++ side).
+.glm_pred_cut_labels <- function(breaks) {
+    midpoints <- breaks[-length(breaks)] + diff(breaks) / 2
+    levels(cut(midpoints, breaks = breaks, include.lowest = TRUE, right = TRUE))
+}
+
+# Validate / auto-derive dimnames for a stratified weights / bias / interaction array.
+# x: numeric array. Plain numeric vector accepted only when M=1 and there is no leading axis (bias).
+# K_per: integer vector of expected trailing-axis lengths (length M).
+# selector_tracks: character vector of expected trailing-axis names (length M).
+# selector_breaks: list of break vectors (length M) - labels are derived from these.
+# leading_dim: integer expected leading-axis length, or NA when there is no leading axis.
+# leading_name: character(1) name to assign to leading axis when present and unnamed.
+# param: character(1) - parameter name used in error messages.
+.glm_pred_normalize_strata_array <- function(x, K_per, selector_tracks, selector_breaks,
+                                             leading_dim, leading_name, param) {
+    M <- length(selector_tracks)
+    has_leading <- !is.na(leading_dim)
+    expected_dim <- if (has_leading) c(leading_dim, K_per) else K_per
+
+    if (!is.numeric(x)) {
+        stop(sprintf("'%s' must be numeric", param), call. = FALSE)
+    }
+
+    actual_dim <- dim(x)
+    if (is.null(actual_dim)) {
+        # Plain numeric vector. Allowed only for bias (no leading axis) at M=1.
+        if (has_leading) {
+            stop(sprintf(
+                "'%s' must be an array with dim = c(%s); got a length-%d numeric vector. To migrate from a flat matrix, use array(%s, dim = c(%s)) instead of matrix(%s, nrow = %d).",
+                param, paste(expected_dim, collapse = ", "), length(x),
+                param, paste(expected_dim, collapse = ", "),
+                param, expected_dim[1L]
+            ), call. = FALSE)
+        }
+        if (M != 1L) {
+            stop(sprintf(
+                "'%s' must be an array with dim = c(%s); got a length-%d numeric vector.",
+                param, paste(expected_dim, collapse = ", "), length(x)
+            ), call. = FALSE)
+        }
+        if (length(x) != K_per[1L]) {
+            stop(sprintf(
+                "'%s' must be numeric of length %d (or scalar); got length %d.",
+                param, K_per[1L], length(x)
+            ), call. = FALSE)
+        }
+        dim(x) <- K_per
+    } else if (length(actual_dim) != length(expected_dim) || any(actual_dim != expected_dim)) {
+        migration_hint <- if (M >= 2L && has_leading && length(actual_dim) == 2L) {
+            sprintf(
+                " To migrate from a flat matrix, use array(%s, dim = c(%s)) instead of matrix(%s, nrow = %d).",
+                param, paste(expected_dim, collapse = ", "), param, expected_dim[1L]
+            )
+        } else {
+            ""
+        }
+        stop(sprintf(
+            "'%s' must be an array with dim = c(%s); got dim = c(%s).%s",
+            param, paste(expected_dim, collapse = ", "),
+            paste(actual_dim, collapse = ", "), migration_hint
+        ), call. = FALSE)
+    }
+
+    dn <- dimnames(x)
+    if (is.null(dn)) dn <- vector("list", length(expected_dim))
+    dn_names <- names(dn)
+    if (is.null(dn_names)) dn_names <- character(length(expected_dim))
+
+    for (m in seq_len(M)) {
+        ax <- if (has_leading) m + 1L else m
+        expected_labs <- .glm_pred_cut_labels(selector_breaks[[m]])
+        if (is.null(dn[[ax]])) {
+            dn[[ax]] <- expected_labs
+        } else if (!identical(as.character(dn[[ax]]), expected_labs)) {
+            stop(sprintf(
+                "dimnames(%s)[[%d]] does not match cut() labels for selector_breaks[[%d]]; expected c(%s), got c(%s). Either omit dimnames (auto-derived) or match the cut() labels exactly.",
+                param, ax, m,
+                paste(sprintf('"%s"', expected_labs), collapse = ", "),
+                paste(sprintf('"%s"', dn[[ax]]), collapse = ", ")
+            ), call. = FALSE)
+        }
+        if (is.na(dn_names[ax]) || dn_names[ax] == "") {
+            dn_names[ax] <- selector_tracks[m]
+        } else if (dn_names[ax] != selector_tracks[m]) {
+            stop(sprintf(
+                "names(dimnames(%s))[%d] must be '%s'; got '%s'. Either omit dimnames (auto-derived) or match the selector_tracks name exactly.",
+                param, ax, selector_tracks[m], dn_names[ax]
+            ), call. = FALSE)
+        }
+    }
+    if (has_leading) {
+        if (is.na(dn_names[1L]) || dn_names[1L] == "") {
+            dn_names[1L] <- leading_name
+        }
+    }
+
+    names(dn) <- dn_names
+    dimnames(x) <- dn
+    storage.mode(x) <- "double"
+    x
+}
+
 #' Create a GLM predictor virtual track
 #'
 #' Creates a virtual track that computes a fused generalized linear model
@@ -14,14 +118,29 @@
 #' @param name character(1) Virtual track name
 #' @param tracks character(N) Genomic track names (repeated OK)
 #' @param inner_func character(N) \code{"sum"} or \code{"lse"} per entry
-#' @param weights numeric(N) or matrix(N, K) LM coefficients per entry.
-#'   For a single model (no selector), a plain numeric vector of length N.
-#'   When \code{selector_tracks} is specified, must be a matrix with N rows
-#'   and K columns (one column per compound stratum), so each position uses
-#'   the weights from the bin selected by the per-position selector tuple.
-#' @param bias numeric(1) or numeric(K) Intercept term (default 0). For a
-#'   single model, a scalar. When a selector is used, can be numeric(K) to
-#'   provide a per-bin intercept; a scalar is recycled to length K.
+#' @param weights LM coefficients per entry. Shape depends on selectors:
+#'   \itemize{
+#'     \item No selector: \code{numeric(N)}.
+#'     \item One selector (M=1): \code{matrix(N, K_1)}.
+#'     \item Two or more selectors (M>=2): array with
+#'       \code{dim = c(N, K_1, ..., K_M)}. Plain
+#'       \code{N x prod(K_m)} matrices are rejected to avoid flatten-order
+#'       ambiguity. Build with \code{array(coefs, dim = c(N, K_1, ..., K_M))}.
+#'   }
+#'   When a selector is specified, trailing-axis dimnames are auto-derived
+#'   from \code{selector_breaks} (\code{cut(include.lowest=TRUE, right=TRUE)}
+#'   labels) and trailing-axis names from \code{selector_tracks}. If you
+#'   supply your own dimnames they must match exactly; mismatches error
+#'   with the offending axis named.
+#' @param bias Intercept term (default 0). Shape depends on selectors:
+#'   \itemize{
+#'     \item No selector: \code{numeric(1)}.
+#'     \item One selector (M=1): scalar (recycled) or \code{numeric(K_1)}.
+#'     \item Two or more selectors (M>=2): scalar (recycled to all strata)
+#'       or array with \code{dim = c(K_1, ..., K_M)}.
+#'   }
+#'   Auto-derived dimnames mirror those of \code{weights} on the trailing
+#'   axes.
 #' @param kernels list of numeric vectors (N or 1, recycled) Sub-bin kernel
 #'   weights, or NULL for direct aggregation
 #' @param kernel_bins numeric(B) Offsets relative to shift window center, or NULL
@@ -37,10 +156,16 @@
 #'   cap-normalize scaling).
 #' @param scale_factor numeric(1) Global scale factor (default 10)
 #' @param interactions list of integer(2) (M or NULL) Pairs of entry indices (1-based)
-#' @param interaction_weights numeric(M) or matrix(M, K) or NULL Per-interaction
-#'   LM coefficients. For a single model, a numeric vector of length M.
-#'   When \code{selector_tracks} is specified (K > 1), must be a matrix with
-#'   M rows and K columns.
+#' @param interaction_weights Per-interaction LM coefficients. Shape mirrors
+#'   \code{weights} with the leading axis being the interaction index:
+#'   \itemize{
+#'     \item No selector: \code{numeric(M_int)}.
+#'     \item One selector (M=1): \code{matrix(M_int, K_1)}.
+#'     \item Two or more selectors (M>=2): array with
+#'       \code{dim = c(M_int, K_1, ..., K_M)}.
+#'   }
+#'   Same dimnames rules as \code{weights}; leading axis name is
+#'   \code{"interaction"}.
 #' @param interaction_trans_family character(M or 1 or NULL) Transform for interactions
 #' @param inter_trans_params list of lists (M or NULL) Logistic params per interaction
 #' @param selector_tracks character(M) or NULL Names of fixed-bin (dense) tracks
@@ -160,25 +285,37 @@ glm_pred.create <- function(name,
         if (K < 1L) stop("Product of selector bin counts must be >= 1", call. = FALSE)
     }
 
-    # --- Validate weights (vector or matrix depending on K) ---
-    if (is.matrix(weights)) {
-        if (nrow(weights) != N || ncol(weights) != K) {
-            stop(sprintf("'weights' matrix must be %d x %d (N x K)", N, K), call. = FALSE)
+    # --- Validate weights and bias ---
+    if (is.null(selector_tracks)) {
+        # No selector: weights = numeric(N), bias = numeric(1).
+        if (!is.numeric(weights) || !is.null(dim(weights)) || length(weights) != N) {
+            stop(sprintf(
+                "'weights' must be a numeric vector of length %d when no selector is specified", N
+            ), call. = FALSE)
         }
+        if (!is.numeric(bias) || length(bias) != 1L) {
+            stop("'bias' must be a numeric scalar when no selector is specified", call. = FALSE)
+        }
+        weights <- as.numeric(weights)
+        bias <- as.numeric(bias)
     } else {
-        if (!is.numeric(weights) || length(weights) != N) {
-            stop(sprintf("'weights' must be numeric of length %d", N), call. = FALSE)
+        weights <- .glm_pred_normalize_strata_array(
+            weights,
+            K_per = K_per, selector_tracks = selector_tracks, selector_breaks = selector_breaks,
+            leading_dim = N, leading_name = "entry", param = "weights"
+        )
+        if (!is.numeric(bias)) {
+            stop("'bias' must be numeric", call. = FALSE)
         }
-        if (K > 1) {
-            stop("'weights' must be a matrix when selector_tracks is specified", call. = FALSE)
+        if (length(bias) == 1L) {
+            bias <- array(rep(as.numeric(bias), prod(K_per)), dim = K_per)
         }
+        bias <- .glm_pred_normalize_strata_array(
+            bias,
+            K_per = K_per, selector_tracks = selector_tracks, selector_breaks = selector_breaks,
+            leading_dim = NA_integer_, leading_name = NA_character_, param = "bias"
+        )
     }
-
-    # --- Validate bias (scalar or length K) ---
-    if (!is.numeric(bias) || !(length(bias) %in% c(1L, K))) {
-        stop(sprintf("'bias' must be numeric of length 1 or %d", K), call. = FALSE)
-    }
-    if (length(bias) == 1 && K > 1) bias <- rep(bias, K)
 
     if (!is.numeric(scale_factor) || length(scale_factor) != 1 || scale_factor <= 0) {
         stop("'scale_factor' must be a positive numeric scalar", call. = FALSE)
@@ -318,11 +455,14 @@ glm_pred.create <- function(name,
     }, numeric(1))
 
     # --- Build params list for C++ ---
+    # weights / bias / interaction_weights keep their array shape (with auto-derived
+    # dimnames) when a selector is specified. C++ reads via REAL(), which gives the
+    # column-major underlying buffer regardless of dim/dimnames attributes.
     params <- list(
         tracks = tracks,
         inner_func = inner_func,
-        weights = as.numeric(weights),
-        bias = as.numeric(bias),
+        weights = weights,
+        bias = bias,
         num_bins = as.integer(K),
         scale_factor = as.numeric(scale_factor),
         sshifts = as.numeric(sshifts),
@@ -358,14 +498,23 @@ glm_pred.create <- function(name,
             stop("'interactions' must be a list of integer(2) pairs", call. = FALSE)
         }
         M <- length(interactions)
-        if (is.matrix(interaction_weights)) {
-            if (nrow(interaction_weights) != M || ncol(interaction_weights) != K) {
-                stop(sprintf("'interaction_weights' matrix must be %d x %d", M, K), call. = FALSE)
+        if (is.null(selector_tracks)) {
+            if (!is.numeric(interaction_weights) || !is.null(dim(interaction_weights)) ||
+                length(interaction_weights) != M) {
+                stop(sprintf(
+                    "'interaction_weights' must be a numeric vector of length %d when no selector is specified",
+                    M
+                ), call. = FALSE)
             }
+            interaction_weights <- as.numeric(interaction_weights)
         } else {
-            if (!is.numeric(interaction_weights) || length(interaction_weights) != M) {
-                stop(sprintf("'interaction_weights' must be numeric of length %d", M), call. = FALSE)
-            }
+            interaction_weights <- .glm_pred_normalize_strata_array(
+                interaction_weights,
+                K_per = K_per,
+                selector_tracks = selector_tracks, selector_breaks = selector_breaks,
+                leading_dim = M, leading_name = "interaction",
+                param = "interaction_weights"
+            )
         }
 
         inter_i <- vapply(interactions, `[`, integer(1), 1L)
@@ -377,7 +526,7 @@ glm_pred.create <- function(name,
 
         params$inter_i <- as.integer(inter_i)
         params$inter_j <- as.integer(inter_j)
-        params$inter_weights <- as.numeric(interaction_weights)
+        params$inter_weights <- interaction_weights
 
         # Process interaction transforms
         if (is.null(interaction_trans_family)) {
@@ -455,24 +604,16 @@ glm_pred.ls <- function() {
 
 #' Get info for a GLM predictor virtual track
 #'
-#' Returns the virtual track definition. When the track uses a selector
-#' (K > 1 bins), weights and interaction weights are reshaped back to
-#' matrices with N (or M) rows and K columns.
+#' Returns the virtual track definition. When the track uses one or more
+#' selectors, \code{weights}, \code{bias}, and \code{interaction_weights}
+#' are returned as labeled arrays with \code{dim = c(N, K_1, ..., K_M)}
+#' (or \code{c(K_1, ..., K_M)} for \code{bias}), with axis names taken
+#' from \code{selector_tracks} and axis labels derived from
+#' \code{selector_breaks} via \code{cut()} semantics.
 #'
 #' @param name character(1) Virtual track name
 #' @return List with virtual track definition.
 #' @export
 glm_pred.info <- function(name) {
-    info <- gvtrack.info(name)
-    K <- info$params$num_bins
-    if (!is.null(K) && K > 1) {
-        N <- length(info$params$tracks)
-        info$params$weights <- matrix(info$params$weights, nrow = N, ncol = K)
-        if (!is.null(info$params$inter_weights)) {
-            M <- length(info$params$inter_i)
-            info$params$inter_weights <- matrix(info$params$inter_weights, nrow = M, ncol = K)
-        }
-        info$params$bias <- as.numeric(info$params$bias)
-    }
-    info
+    gvtrack.info(name)
 }
