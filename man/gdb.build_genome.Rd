@@ -15,7 +15,7 @@ gdb.build_genome(
   chrom_naming = NULL,
   target_chroms = NULL,
   min_coverage = 1,
-  match_by_length = FALSE,
+  match_by_length = TRUE,
   format = NULL,
   verbose = TRUE
 )
@@ -64,10 +64,11 @@ column doesn't span every contig (e.g. UCSC's \code{genbank} column has
 no value for the mitochondrion in many hubs, leaving 1 stray chrom).}
 
 \item{match_by_length}{Forwarded to \code{\link{gdb.install_intervals}}.
-When \code{TRUE}, complements column-based canonical detection with a
-per-row length match for alias rows the chosen column couldn't cover,
-and switches asset translation to a cross-column per-row lookup so
-GFFs in any naming scheme import cleanly. Default \code{FALSE}.}
+When \code{TRUE} (default), complements column-based canonical detection
+with a per-row length match for alias rows the chosen column couldn't
+cover, and switches asset translation to a cross-column per-row lookup
+so GFFs in any naming scheme import cleanly. Set \code{FALSE} for the
+stricter single-column-only behavior.}
 
 \item{format}{\code{"indexed"} or \code{"per-chromosome"}; \code{NULL} =>
 \code{getOption("gmulticontig.indexed_format", TRUE)}.}

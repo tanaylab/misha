@@ -756,10 +756,11 @@
 #'   column doesn't span every contig (e.g. UCSC's \code{genbank} column has
 #'   no value for the mitochondrion in many hubs, leaving 1 stray chrom).
 #' @param match_by_length Forwarded to \code{\link{gdb.install_intervals}}.
-#'   When \code{TRUE}, complements column-based canonical detection with a
-#'   per-row length match for alias rows the chosen column couldn't cover,
-#'   and switches asset translation to a cross-column per-row lookup so
-#'   GFFs in any naming scheme import cleanly. Default \code{FALSE}.
+#'   When \code{TRUE} (default), complements column-based canonical detection
+#'   with a per-row length match for alias rows the chosen column couldn't
+#'   cover, and switches asset translation to a cross-column per-row lookup
+#'   so GFFs in any naming scheme import cleanly. Set \code{FALSE} for the
+#'   stricter single-column-only behavior.
 #' @param target_chroms Optional character vector of chrom names the resulting
 #'   groot should align to (typically the output of \code{halStats
 #'   --sequenceStats}, the chrom names in a HAL file you intend to liftover
@@ -815,7 +816,7 @@ gdb.build_genome <- function(name,
                              chrom_naming = NULL,
                              target_chroms = NULL,
                              min_coverage = 1.0,
-                             match_by_length = FALSE,
+                             match_by_length = TRUE,
                              format = NULL,
                              verbose = TRUE) {
     if (!is.numeric(min_coverage) || length(min_coverage) != 1L ||
@@ -1071,15 +1072,16 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #'   genome) costs ~0.0005% rather than ~1/N. On the source-file side
 #'   (asset chroms read from a GTF/GFF) the metric is the count-weighted
 #'   fraction of distinct names. Unmapped contigs receive no annotations.
-#' @param match_by_length If \code{TRUE}, complement the column-based canonical
-#'   detection with a per-row length-based fill: alias rows whose chosen
-#'   column is empty are paired with a groot chrom of the same length, but
-#'   only when the length is unique on both sides (ambiguous lengths are
-#'   skipped, never guessed). Asset translation also switches to a per-row
-#'   cross-column lookup, so a GFF in any naming scheme (or mixed schemes)
-#'   imports cleanly. Currently honored only by the \code{ucsc-hub} backend
-#'   (which ships per-contig lengths in \code{<acc>.chrom.sizes.txt});
-#'   ignored elsewhere with a notice.
+#' @param match_by_length If \code{TRUE} (default), complement the
+#'   column-based canonical detection with a per-row length-based fill:
+#'   alias rows whose chosen column is empty are paired with a groot chrom
+#'   of the same length, but only when the length is unique on both sides
+#'   (ambiguous lengths are skipped, never guessed). Asset translation also
+#'   switches to a per-row cross-column lookup, so a GFF in any naming
+#'   scheme (or mixed schemes) imports cleanly. Currently honored only by
+#'   the \code{ucsc-hub} backend (which ships per-contig lengths in
+#'   \code{<acc>.chrom.sizes.txt}); other backends are unaffected. Set
+#'   \code{FALSE} for the stricter single-column-only behavior.
 #' @param verbose If \code{TRUE}, prints progress.
 #' @return Invisible \code{NULL}. Side effects: writes \code{.interv} files under
 #'   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
@@ -1120,7 +1122,7 @@ gdb.install_intervals <- function(groot,
                                   registry = NULL,
                                   target_chroms = NULL,
                                   min_coverage = 1.0,
-                                  match_by_length = FALSE,
+                                  match_by_length = TRUE,
                                   verbose = TRUE) {
     sets <- match.arg(sets,
         choices = c("genes", "rmsk", "cgi", "cytoband"),
