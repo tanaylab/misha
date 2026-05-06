@@ -34,15 +34,30 @@ glm_pred.create(
 
 \item{inner_func}{character(N) \code{"sum"} or \code{"lse"} per entry}
 
-\item{weights}{numeric(N) or matrix(N, K) LM coefficients per entry.
-For a single model (no selector), a plain numeric vector of length N.
-When \code{selector_tracks} is specified, must be a matrix with N rows
-and K columns (one column per compound stratum), so each position uses
-the weights from the bin selected by the per-position selector tuple.}
+\item{weights}{LM coefficients per entry. Shape depends on selectors:
+\itemize{
+  \item No selector: \code{numeric(N)}.
+  \item One selector (M=1): \code{matrix(N, K_1)}.
+  \item Two or more selectors (M>=2): array with
+    \code{dim = c(N, K_1, ..., K_M)}. Plain
+    \code{N x prod(K_m)} matrices are rejected to avoid flatten-order
+    ambiguity. Build with \code{array(coefs, dim = c(N, K_1, ..., K_M))}.
+}
+When a selector is specified, trailing-axis dimnames are auto-derived
+from \code{selector_breaks} (\code{cut(include.lowest=TRUE, right=TRUE)}
+labels) and trailing-axis names from \code{selector_tracks}. If you
+supply your own dimnames they must match exactly; mismatches error
+with the offending axis named.}
 
-\item{bias}{numeric(1) or numeric(K) Intercept term (default 0). For a
-single model, a scalar. When a selector is used, can be numeric(K) to
-provide a per-bin intercept; a scalar is recycled to length K.}
+\item{bias}{Intercept term (default 0). Shape depends on selectors:
+\itemize{
+  \item No selector: \code{numeric(1)}.
+  \item One selector (M=1): scalar (recycled) or \code{numeric(K_1)}.
+  \item Two or more selectors (M>=2): scalar (recycled to all strata)
+    or array with \code{dim = c(K_1, ..., K_M)}.
+}
+Auto-derived dimnames mirror those of \code{weights} on the trailing
+axes.}
 
 \item{kernels}{list of numeric vectors (N or 1, recycled) Sub-bin kernel
 weights, or NULL for direct aggregation}
@@ -69,10 +84,16 @@ cap-normalize scaling).}
 
 \item{interactions}{list of integer(2) (M or NULL) Pairs of entry indices (1-based)}
 
-\item{interaction_weights}{numeric(M) or matrix(M, K) or NULL Per-interaction
-LM coefficients. For a single model, a numeric vector of length M.
-When \code{selector_tracks} is specified (K > 1), must be a matrix with
-M rows and K columns.}
+\item{interaction_weights}{Per-interaction LM coefficients. Shape mirrors
+\code{weights} with the leading axis being the interaction index:
+\itemize{
+  \item No selector: \code{numeric(M_int)}.
+  \item One selector (M=1): \code{matrix(M_int, K_1)}.
+  \item Two or more selectors (M>=2): array with
+    \code{dim = c(M_int, K_1, ..., K_M)}.
+}
+Same dimnames rules as \code{weights}; leading axis name is
+\code{"interaction"}.}
 
 \item{interaction_trans_family}{character(M or 1 or NULL) Transform for interactions}
 
