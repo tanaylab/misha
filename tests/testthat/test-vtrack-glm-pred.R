@@ -665,7 +665,7 @@ test_that("glm_pred.create validates weight matrix dimensions", {
             selector_tracks = "test.fixedbin",
             selector_breaks = list(c(0, 0.5, 1))
         ),
-        "1 x 2"
+        "dim = c\\(1, 2\\)"
     )
 })
 
@@ -753,9 +753,9 @@ test_that("glm_pred.info reconstructs weight matrix for K > 1", {
     expect_true(is.matrix(info$params$weights))
     expect_equal(nrow(info$params$weights), 1)
     expect_equal(ncol(info$params$weights), 2)
-    expect_equal(info$params$weights[1, 1], 2.0)
-    expect_equal(info$params$weights[1, 2], 5.0)
-    expect_equal(info$params$bias, c(0.1, 0.2))
+    expect_equal(info$params$weights[1, 1], 2.0, ignore_attr = TRUE)
+    expect_equal(info$params$weights[1, 2], 5.0, ignore_attr = TRUE)
+    expect_equal(as.numeric(info$params$bias), c(0.1, 0.2))
     expect_equal(info$params$selector_tracks, "test.fixedbin")
     expect_equal(info$params$selector_breaks, list(c(0, 0.5, 1.0)))
 })
@@ -849,8 +849,8 @@ test_that("glm_pred K=2 interactions use per-bin weights", {
     expect_true(is.matrix(info$params$inter_weights))
     expect_equal(nrow(info$params$inter_weights), 1)
     expect_equal(ncol(info$params$inter_weights), 2)
-    expect_equal(info$params$inter_weights[1, 1], 0.4)
-    expect_equal(info$params$inter_weights[1, 2], 0.8)
+    expect_equal(info$params$inter_weights[1, 1], 0.4, ignore_attr = TRUE)
+    expect_equal(info$params$inter_weights[1, 2], 0.8, ignore_attr = TRUE)
 })
 
 # ============================================================
@@ -926,7 +926,7 @@ test_that("glm_pred without selector still works (K=1 backward compat)", {
 })
 
 # ============================================================
-# Category 20: Multi-selector — Cartesian product strata
+# Category 20: Multi-selector - Cartesian product strata
 # ============================================================
 
 # Mirrors BinFinder::val2bin(right=TRUE, include_lowest=TRUE).
@@ -950,8 +950,8 @@ test_that("glm_pred multi-selector: Cartesian product strata, hand-computed resu
     K_total <- K1 * K2 # 6
 
     # Distinct alpha and beta per stratum so a wrong index pattern shows up.
-    alpha <- matrix(seq(0.1, by = 0.1, length.out = K_total), nrow = 1L, ncol = K_total)
-    beta <- as.numeric(seq(10, by = 10, length.out = K_total))
+    alpha <- array(seq(0.1, by = 0.1, length.out = K_total), dim = c(1L, K1, K2))
+    beta <- array(seq(10, by = 10, length.out = K_total), dim = c(K1, K2))
 
     glm_pred.create(
         name = "vt_multi",
@@ -977,10 +977,11 @@ test_that("glm_pred multi-selector: Cartesian product strata, hand-computed resu
     b1 <- .val2bin_finder(df$s, breaks1)
     b2 <- .val2bin_finder(df$s, breaks2)
 
-    # Compound index column-major: stride1 = 1, stride2 = K1
+    # Compound index column-major: stride1 = 1, stride2 = K1.
+    # Flat-index into alpha/beta arrays: column-major flatten matches the C++ stride math.
     k <- (b1 - 1L) + (b2 - 1L) * K1
     expected <- ifelse(is.na(k), NA_real_,
-        beta[k + 1L] + alpha[1L, k + 1L] * df$x
+        as.numeric(beta)[k + 1L] + as.numeric(alpha)[k + 1L] * df$x
     )
 
     expect_equal(df$vt, expected, tolerance = 1e-8)
@@ -992,8 +993,9 @@ test_that("glm_pred multi-selector: any-NaN or any-OOR selector -> NaN output", 
     # test.fixedbin has values in [0, 0.26]. Pick breaks where many positions
     # fall outside (0.3, 1.0] to guarantee OOR coverage.
     breaks <- c(0.3, 0.5, 1.0)
-    weights <- matrix(rep(1.0, 4L), nrow = 1L) # K_total = 2 x 2 = 4
-    bias <- c(0, 0, 0, 0)
+    K1 <- length(breaks) - 1L # 2
+    weights <- array(rep(1.0, 4L), dim = c(1L, K1, K1)) # 1 x 2 x 2
+    bias <- 0 # scalar recycled to the K1 x K1 stratum grid
 
     glm_pred.create(
         name = "vt_oor",
@@ -1055,6 +1057,243 @@ test_that("glm_pred M=1 multi-selector matches single-selector hand computation"
     expected <- ifelse(is.na(bin), NA_real_, b[bin] + w[1L, bin] * df$x)
 
     expect_equal(df$vt, expected, tolerance = 1e-8)
+})
+
+# ============================================================
+# Category 21: Multi-selector - array shape on input/output (named strata)
+# ============================================================
+
+# Helper: cut() levels for a break vector - same labels glm_pred auto-derives.
+.cut_labels <- function(br) {
+    levels(cut(br[-length(br)] + diff(br) / 2,
+        breaks = br,
+        include.lowest = TRUE, right = TRUE
+    ))
+}
+
+test_that("glm_pred M>=2: array(N, K_1, K_2) input round-trips with auto-derived dimnames", {
+    src <- "test.fixedbin"
+    breaks1 <- c(0, 0.1, 0.3)
+    breaks2 <- c(0, 0.05, 0.15, 0.3)
+    K1 <- length(breaks1) - 1L
+    K2 <- length(breaks2) - 1L
+    N <- 1L
+
+    coefs <- seq(0.1, by = 0.1, length.out = N * K1 * K2)
+    W <- array(coefs, dim = c(N, K1, K2))
+    b_arr <- array(seq(10, by = 10, length.out = K1 * K2), dim = c(K1, K2))
+
+    glm_pred.create(
+        name = "vt_arr_m2",
+        tracks = src,
+        inner_func = "sum",
+        weights = W,
+        bias = b_arr,
+        trans_family = NA_character_,
+        selector_tracks = c("test.fixedbin", "test.fixedbin"),
+        selector_breaks = list(breaks1, breaks2)
+    )
+    on.exit(gvtrack.rm("vt_arr_m2"), add = TRUE)
+
+    info <- glm_pred.info("vt_arr_m2")
+    w_out <- info$params$weights
+    b_out <- info$params$bias
+
+    # Shape preserved.
+    expect_equal(dim(w_out), c(N, K1, K2))
+    expect_equal(dim(b_out), c(K1, K2))
+
+    # Auto-derived axis names from selector_tracks.
+    expect_equal(names(dimnames(w_out)), c("entry", "test.fixedbin", "test.fixedbin"))
+    expect_equal(names(dimnames(b_out)), c("test.fixedbin", "test.fixedbin"))
+
+    # Auto-derived axis labels from cut() on selector_breaks.
+    expect_equal(dimnames(w_out)[[2]], .cut_labels(breaks1))
+    expect_equal(dimnames(w_out)[[3]], .cut_labels(breaks2))
+    expect_equal(dimnames(b_out)[[1]], .cut_labels(breaks1))
+    expect_equal(dimnames(b_out)[[2]], .cut_labels(breaks2))
+
+    # Numeric content unchanged (column-major flatten matches input).
+    expect_equal(as.numeric(w_out), as.numeric(W))
+    expect_equal(as.numeric(b_out), as.numeric(b_arr))
+})
+
+test_that("glm_pred M>=2: user-supplied matching dimnames round-trip exactly", {
+    src <- "test.fixedbin"
+    breaks1 <- c(0, 0.1, 0.3)
+    breaks2 <- c(0, 0.05, 0.15, 0.3)
+    K1 <- length(breaks1) - 1L
+    K2 <- length(breaks2) - 1L
+    N <- 1L
+    sel_names <- c("test.fixedbin", "test.fixedbin")
+
+    W <- array(as.numeric(seq_len(N * K1 * K2)), dim = c(N, K1, K2))
+    dimnames(W) <- setNames(
+        list(NULL, .cut_labels(breaks1), .cut_labels(breaks2)),
+        c("entry", sel_names)
+    )
+
+    expect_silent(
+        glm_pred.create(
+            name = "vt_arr_dn",
+            tracks = src,
+            inner_func = "sum",
+            weights = W,
+            bias = 0,
+            trans_family = NA_character_,
+            selector_tracks = sel_names,
+            selector_breaks = list(breaks1, breaks2)
+        )
+    )
+    on.exit(gvtrack.rm("vt_arr_dn"), add = TRUE)
+
+    out <- glm_pred.info("vt_arr_dn")$params$weights
+    expect_identical(out, W)
+})
+
+test_that("glm_pred M>=2: flat N x K_total matrix is rejected with migration hint", {
+    expect_error(
+        glm_pred.create(
+            name = "vt_bad_flat",
+            tracks = "test.fixedbin",
+            inner_func = "sum",
+            weights = matrix(seq_len(6), nrow = 1L, ncol = 6L),
+            bias = 0,
+            selector_tracks = c("test.fixedbin", "test.fixedbin"),
+            selector_breaks = list(c(0, 0.1, 0.3), c(0, 0.05, 0.15, 0.3))
+        ),
+        "array\\(weights, dim = c\\(1, 2, 3\\)\\)"
+    )
+})
+
+test_that("glm_pred M>=2: shuffled trailing-axis labels error pinpoints the axis", {
+    breaks1 <- c(0, 0.1, 0.3)
+    breaks2 <- c(0, 0.05, 0.15, 0.3)
+    K1 <- length(breaks1) - 1L
+    K2 <- length(breaks2) - 1L
+
+    W <- array(seq_len(K1 * K2), dim = c(1L, K1, K2))
+    bad_labels <- rev(.cut_labels(breaks2))
+    dimnames(W) <- list(NULL, .cut_labels(breaks1), bad_labels)
+
+    expect_error(
+        glm_pred.create(
+            name = "vt_bad_lab",
+            tracks = "test.fixedbin",
+            inner_func = "sum",
+            weights = W,
+            bias = 0,
+            selector_tracks = c("test.fixedbin", "test.fixedbin"),
+            selector_breaks = list(breaks1, breaks2)
+        ),
+        "dimnames\\(weights\\)\\[\\[3\\]\\] does not match cut\\(\\) labels for selector_breaks\\[\\[2\\]\\]"
+    )
+})
+
+test_that("glm_pred M>=2: wrong trailing-axis name errors", {
+    breaks1 <- c(0, 0.1, 0.3)
+    breaks2 <- c(0, 0.05, 0.15, 0.3)
+    K1 <- length(breaks1) - 1L
+    K2 <- length(breaks2) - 1L
+
+    W <- array(seq_len(K1 * K2), dim = c(1L, K1, K2))
+    dimnames(W) <- setNames(
+        list(NULL, .cut_labels(breaks1), .cut_labels(breaks2)),
+        c("entry", "test.fixedbin", "wrong_name")
+    )
+
+    expect_error(
+        glm_pred.create(
+            name = "vt_bad_nm",
+            tracks = "test.fixedbin",
+            inner_func = "sum",
+            weights = W,
+            bias = 0,
+            selector_tracks = c("test.fixedbin", "test.fixedbin"),
+            selector_breaks = list(breaks1, breaks2)
+        ),
+        "names\\(dimnames\\(weights\\)\\)\\[3\\] must be 'test.fixedbin'; got 'wrong_name'"
+    )
+})
+
+test_that("glm_pred M>=2: bias as flat numeric vector is rejected", {
+    breaks1 <- c(0, 0.1, 0.3)
+    breaks2 <- c(0, 0.05, 0.15, 0.3)
+    K1 <- length(breaks1) - 1L
+    K2 <- length(breaks2) - 1L
+
+    W <- array(seq_len(K1 * K2), dim = c(1L, K1, K2))
+
+    expect_error(
+        glm_pred.create(
+            name = "vt_bad_bias",
+            tracks = "test.fixedbin",
+            inner_func = "sum",
+            weights = W,
+            bias = seq_len(K1 * K2), # flat vector, ambiguous flatten
+            selector_tracks = c("test.fixedbin", "test.fixedbin"),
+            selector_breaks = list(breaks1, breaks2)
+        ),
+        "'bias' must be an array with dim = c\\(2, 3\\)"
+    )
+})
+
+test_that("glm_pred M>=2: interaction_weights array round-trips with auto-derived dimnames", {
+    src <- "test.fixedbin"
+    breaks1 <- c(0, 0.1, 0.3)
+    breaks2 <- c(0, 0.05, 0.15, 0.3)
+    K1 <- length(breaks1) - 1L
+    K2 <- length(breaks2) - 1L
+    N <- 2L
+    M_int <- 1L
+
+    W <- array(0.0, dim = c(N, K1, K2))
+    IW <- array(seq(0.1, by = 0.1, length.out = M_int * K1 * K2), dim = c(M_int, K1, K2))
+
+    glm_pred.create(
+        name = "vt_arr_inter",
+        tracks = c(src, src),
+        inner_func = c("sum", "sum"),
+        weights = W,
+        bias = 0,
+        interactions = list(c(1L, 2L)),
+        interaction_weights = IW,
+        trans_family = NA_character_,
+        selector_tracks = c("test.fixedbin", "test.fixedbin"),
+        selector_breaks = list(breaks1, breaks2)
+    )
+    on.exit(gvtrack.rm("vt_arr_inter"), add = TRUE)
+
+    info <- glm_pred.info("vt_arr_inter")
+    iw_out <- info$params$inter_weights
+    expect_equal(dim(iw_out), c(M_int, K1, K2))
+    expect_equal(names(dimnames(iw_out)), c("interaction", "test.fixedbin", "test.fixedbin"))
+    expect_equal(dimnames(iw_out)[[2]], .cut_labels(breaks1))
+    expect_equal(dimnames(iw_out)[[3]], .cut_labels(breaks2))
+    expect_equal(as.numeric(iw_out), as.numeric(IW))
+})
+
+test_that("glm_pred M>=2: scalar bias is recycled and labeled across all strata", {
+    breaks1 <- c(0, 0.1, 0.3)
+    breaks2 <- c(0, 0.05, 0.15, 0.3)
+    K1 <- length(breaks1) - 1L
+    K2 <- length(breaks2) - 1L
+
+    glm_pred.create(
+        name = "vt_scalar_bias",
+        tracks = "test.fixedbin",
+        inner_func = "sum",
+        weights = array(0.0, dim = c(1L, K1, K2)),
+        bias = 7.5,
+        selector_tracks = c("test.fixedbin", "test.fixedbin"),
+        selector_breaks = list(breaks1, breaks2)
+    )
+    on.exit(gvtrack.rm("vt_scalar_bias"), add = TRUE)
+
+    b <- glm_pred.info("vt_scalar_bias")$params$bias
+    expect_equal(dim(b), c(K1, K2))
+    expect_equal(names(dimnames(b)), c("test.fixedbin", "test.fixedbin"))
+    expect_true(all(as.numeric(b) == 7.5))
 })
 
 # ============================================================

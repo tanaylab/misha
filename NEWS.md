@@ -1,3 +1,7 @@
+# misha 5.6.26
+
+* `glm_pred.create()` (multi-selector) now takes `weights`, `bias`, and `interaction_weights` as labeled multi-axis arrays with `dim = c(N, K_1, ..., K_M)` (or `c(M_int, K_1, ..., K_M)` for interactions; `bias` drops the leading axis). Trailing-axis names and bin labels are auto-derived from `selector_tracks` and `selector_breaks`, so `glm_pred.info()` round-trips a fully labeled object. The pre-release flat `N x prod(K_m)` matrix shape is no longer accepted for `M >= 2`; replace `matrix(coefs, nrow = N)` with `array(coefs, dim = c(N, K_1, ..., K_M))`. Single-selector (`M = 1`) still accepts a plain `matrix(N, K_1)`. Scalar `bias` (default `0`) is recycled to all strata.
+
 # misha 5.6.25
 
 * `gsynth.sample()` and `gsynth.random()` now preserve `N` (and lowercase `n`) positions from the original reference by default. Previously, every position was filled with a sampled/random ACGT base, so reference gaps and centromeres came out as fabricated nucleotides. Pass `preserve_n = FALSE` to restore the legacy behavior.

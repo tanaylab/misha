@@ -13,7 +13,10 @@ glm_pred.info(name)
 List with virtual track definition.
 }
 \description{
-Returns the virtual track definition. When the track uses a selector
-(K > 1 bins), weights and interaction weights are reshaped back to
-matrices with N (or M) rows and K columns.
+Returns the virtual track definition. When the track uses one or more
+selectors, \code{weights}, \code{bias}, and \code{interaction_weights}
+are returned as labeled arrays with \code{dim = c(N, K_1, ..., K_M)}
+(or \code{c(K_1, ..., K_M)} for \code{bias}), with axis names taken
+from \code{selector_tracks} and axis labels derived from
+\code{selector_breaks} via \code{cut()} semantics.
 }
