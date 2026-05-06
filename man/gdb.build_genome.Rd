@@ -14,6 +14,7 @@ gdb.build_genome(
   gtf_priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene"),
   chrom_naming = NULL,
   min_coverage = 1,
+  match_by_length = FALSE,
   format = NULL,
   verbose = TRUE
 )
@@ -52,6 +53,12 @@ chromAlias column for that column to be picked as canonical (forwarded to
 to e.g. \code{0.99} when a column has small gaps -- typical when a target
 column doesn't span every contig (e.g. UCSC's \code{genbank} column has
 no value for the mitochondrion in many hubs, leaving 1 stray chrom).}
+
+\item{match_by_length}{Forwarded to \code{\link{gdb.install_intervals}}.
+When \code{TRUE}, complements column-based canonical detection with a
+per-row length match for alias rows the chosen column couldn't cover,
+and switches asset translation to a cross-column per-row lookup so
+GFFs in any naming scheme import cleanly. Default \code{FALSE}.}
 
 \item{format}{\code{"indexed"} or \code{"per-chromosome"}; \code{NULL} =>
 \code{getOption("gmulticontig.indexed_format", TRUE)}.}

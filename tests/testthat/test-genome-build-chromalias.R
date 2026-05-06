@@ -137,6 +137,55 @@ test_that(".detect_alias_column on empty target errors", {
     expect_error(.detect_alias_column(df, character(0)), "empty target")
 })
 
+test_that(".length_match_fill maps empty alias rows to unique-length groot chroms", {
+    # Two alias rows: row 1 has full canonical, row 2 has empty canonical and
+    # needs length-fill. Lengths must be unique on both sides for a match.
+    canonical <- c("JH880237.1", "")
+    alias_lengths <- c(1e9, 16000)
+    groot_chroms <- c("JH880237.1", "NC_006380.3")
+    groot_lengths <- c(1e9, 16000)
+    out <- .length_match_fill(canonical, alias_lengths, groot_chroms, groot_lengths)
+    expect_equal(out, c("JH880237.1", "NC_006380.3"))
+})
+
+test_that(".length_match_fill leaves rows NA when length is ambiguous", {
+    canonical <- c("", "", "")
+    alias_lengths <- c(100, 100, 200)
+    groot_chroms <- c("a", "b", "c")
+    groot_lengths <- c(100, 100, 200)
+    # Length 100 appears twice on both sides -> ambiguous; length 200 unique.
+    out <- .length_match_fill(canonical, alias_lengths, groot_chroms, groot_lengths)
+    expect_true(is.na(out[[1L]]) || !nzchar(out[[1L]]))
+    expect_true(is.na(out[[2L]]) || !nzchar(out[[2L]]))
+    expect_equal(out[[3L]], "c")
+})
+
+test_that(".length_match_fill is a no-op when no fills needed", {
+    canonical <- c("X", "Y")
+    out <- .length_match_fill(canonical, c(100, 200), c("X", "Y"), c(100, 200))
+    expect_equal(out, c("X", "Y"))
+})
+
+test_that(".translate_chroms_per_row resolves any naming via cross-column lookup", {
+    # alias_df has 3 cols + per-row canonical. A GFF mixing refseq (NW_X.1)
+    # and a different namespace (chrM) should resolve to the right groot
+    # canonical regardless.
+    alias_df <- data.frame(
+        refseq = c("NW_X.1", "NC_006380.3"),
+        genbank = c("JH_X.1", ""),
+        ucsc = c("NW_Xv1", "chrM"),
+        canonical = c("JH_X.1", "NC_006380.3"),
+        stringsAsFactors = FALSE
+    )
+    rows <- data.frame(
+        chrom = c("NW_X.1", "chrM", "unknown"), x = 1:3,
+        stringsAsFactors = FALSE
+    )
+    out <- .translate_chroms_per_row(rows, "chrom", alias_df, "canonical")
+    expect_equal(out$chrom, c("JH_X.1", "NC_006380.3", NA_character_))
+    expect_equal(out$x, 1:3)
+})
+
 test_that(".translate_chroms is a no-op when source_col == groot_col", {
     f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
     alias_df <- .parse_ucsc_chromalias(f)

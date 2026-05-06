@@ -755,6 +755,11 @@
 #'   to e.g. \code{0.99} when a column has small gaps -- typical when a target
 #'   column doesn't span every contig (e.g. UCSC's \code{genbank} column has
 #'   no value for the mitochondrion in many hubs, leaving 1 stray chrom).
+#' @param match_by_length Forwarded to \code{\link{gdb.install_intervals}}.
+#'   When \code{TRUE}, complements column-based canonical detection with a
+#'   per-row length match for alias rows the chosen column couldn't cover,
+#'   and switches asset translation to a cross-column per-row lookup so
+#'   GFFs in any naming scheme import cleanly. Default \code{FALSE}.
 #' @param chrom_naming Optional override for the recipe's \code{chrom_naming}.
 #'   Selects which name space the canonical chrom names should come from. For
 #'   \code{ucsc-hub}: any chromAlias column (\code{"ucsc"}, \code{"genbank"},
@@ -802,11 +807,15 @@ gdb.build_genome <- function(name,
                              ),
                              chrom_naming = NULL,
                              min_coverage = 1.0,
+                             match_by_length = FALSE,
                              format = NULL,
                              verbose = TRUE) {
     if (!is.numeric(min_coverage) || length(min_coverage) != 1L ||
         min_coverage <= 0 || min_coverage > 1) {
         stop("`min_coverage` must be a single number in (0, 1].", call. = FALSE)
+    }
+    if (!is.logical(match_by_length) || length(match_by_length) != 1L) {
+        stop("`match_by_length` must be a single logical.", call. = FALSE)
     }
     if (file.exists(path)) {
         stop(sprintf(
@@ -839,16 +848,17 @@ gdb.build_genome <- function(name,
 
     if (length(sets)) {
         gdb.install_intervals(
-            groot        = path,
-            source       = recipe,
-            sets         = sets,
-            prefix       = prefix,
-            gene_sets    = gene_sets,
-            gtf_priority = gtf_priority,
-            overwrite    = FALSE,
-            registry     = NULL,
-            min_coverage = min_coverage,
-            verbose      = verbose
+            groot           = path,
+            source          = recipe,
+            sets            = sets,
+            prefix          = prefix,
+            gene_sets       = gene_sets,
+            gtf_priority    = gtf_priority,
+            overwrite       = FALSE,
+            registry        = NULL,
+            min_coverage    = min_coverage,
+            match_by_length = match_by_length,
+            verbose         = verbose
         )
     }
 
@@ -1034,6 +1044,15 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #'   genome) costs ~0.0005% rather than ~1/N. On the source-file side
 #'   (asset chroms read from a GTF/GFF) the metric is the count-weighted
 #'   fraction of distinct names. Unmapped contigs receive no annotations.
+#' @param match_by_length If \code{TRUE}, complement the column-based canonical
+#'   detection with a per-row length-based fill: alias rows whose chosen
+#'   column is empty are paired with a groot chrom of the same length, but
+#'   only when the length is unique on both sides (ambiguous lengths are
+#'   skipped, never guessed). Asset translation also switches to a per-row
+#'   cross-column lookup, so a GFF in any naming scheme (or mixed schemes)
+#'   imports cleanly. Currently honored only by the \code{ucsc-hub} backend
+#'   (which ships per-contig lengths in \code{<acc>.chrom.sizes.txt});
+#'   ignored elsewhere with a notice.
 #' @param verbose If \code{TRUE}, prints progress.
 #' @return Invisible \code{NULL}. Side effects: writes \code{.interv} files under
 #'   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
@@ -1073,6 +1092,7 @@ gdb.install_intervals <- function(groot,
                                   overwrite = FALSE,
                                   registry = NULL,
                                   min_coverage = 1.0,
+                                  match_by_length = FALSE,
                                   verbose = TRUE) {
     sets <- match.arg(sets,
         choices = c("genes", "rmsk", "cgi", "cytoband"),
@@ -1080,6 +1100,9 @@ gdb.install_intervals <- function(groot,
     )
     if (!is.numeric(min_coverage) || min_coverage <= 0 || min_coverage > 1) {
         stop("`min_coverage` must be in (0, 1].", call. = FALSE)
+    }
+    if (!is.logical(match_by_length) || length(match_by_length) != 1L) {
+        stop("`match_by_length` must be a single logical.", call. = FALSE)
     }
     if (!is.null(groot)) {
         if (!dir.exists(groot) ||
@@ -1163,23 +1186,66 @@ gdb.install_intervals <- function(groot,
         ), call. = FALSE)
     }
     if (!is.null(alias_df)) {
+        groot_col_chr <- as.character(groot_col)
+        # When match_by_length, complement the chosen column with a per-row
+        # length-match fill. The chosen column may have empty cells (e.g. MT
+        # row's genbank cell is blank in many UCSC hubs); length matching
+        # provides a canonical for those rows by pairing unique-on-both-sides
+        # lengths. The combined per-row canonical lives in a virtual
+        # ".canonical" column that downstream code (chrom_aliases.tsv writer,
+        # asset translator) treats as the groot column.
+        canonical_col <- groot_col_chr
+        if (match_by_length) {
+            base_canonical <- alias_df[[groot_col_chr]]
+            # Treat NA as empty for fill purposes.
+            base_canonical[is.na(base_canonical)] <- ""
+            row_lengths <- assets$chrom_alias$row_lengths
+            n_filled <- 0L
+            if (!is.null(row_lengths)) {
+                filled <- .length_match_fill(
+                    base_canonical, row_lengths,
+                    groot_chroms, groot_lengths
+                )
+                # Account empty/NA after fill as still-empty.
+                filled[is.na(filled)] <- ""
+                n_filled <- sum(nzchar(filled) & !nzchar(base_canonical))
+                base_canonical <- filled
+            }
+            alias_df[[".canonical"]] <- base_canonical
+            canonical_col <- ".canonical"
+            if (verbose && n_filled > 0L) {
+                message(sprintf(
+                    "  Length-matched %d alias row(s) the '%s' column couldn't cover.",
+                    n_filled, groot_col_chr
+                ))
+            } else if (verbose && match_by_length && is.null(row_lengths)) {
+                message("  match_by_length=TRUE but no per-row lengths fetched; falling back to column-only.")
+            }
+        }
         groot_overlap <- attr(groot_col, "overlap")
         if (verbose && !is.null(groot_overlap) && groot_overlap < 1.0) {
-            n_unmapped <- sum(!groot_chroms %in% alias_df[[as.character(groot_col)]])
+            n_unmapped <- sum(!groot_chroms %in% alias_df[[canonical_col]])
             message(sprintf(
                 "  chromAlias '%s' covers %.4f%% of groot bp; %d unmapped contigs will receive no annotations.",
-                as.character(groot_col), 100 * groot_overlap, n_unmapped
+                groot_col_chr, 100 * groot_overlap, n_unmapped
             ))
         }
-        .merge_chrom_aliases_tsv(groot, alias_df, as.character(groot_col))
+        .merge_chrom_aliases_tsv(groot, alias_df, canonical_col)
         gdb.init(groot, rescan = TRUE) # reload CHROM_ALIAS
     }
 
-    # Helper: per-asset translator. Detects the asset's own source column at
-    # the same `min_coverage` threshold as the groot side.
+    # Helper: per-asset translator.
+    # When match_by_length is on, translate per-row across all alias columns
+    # so a GFF in any naming scheme (or mixed schemes) imports cleanly. Else
+    # fall back to single-column detection at `min_coverage`.
     make_translator <- function(asset_chroms, asset_label) {
         if (is.null(alias_df)) {
             return(NULL)
+        }
+        if (match_by_length) {
+            return(function(rows, chrom_col) {
+                .translate_chroms_per_row(rows, chrom_col, alias_df, canonical_col)
+            })
         }
         src_col <- .detect_alias_column(alias_df, unique(asset_chroms),
             min_coverage = min_coverage
@@ -1204,9 +1270,8 @@ gdb.install_intervals <- function(groot,
         }
         # Strip attributes for stable indexing into alias_df.
         src_col_chr <- as.character(src_col)
-        groot_col_chr <- as.character(groot_col)
         function(rows, chrom_col) {
-            .translate_chroms(rows, chrom_col, alias_df, src_col_chr, groot_col_chr)
+            .translate_chroms(rows, chrom_col, alias_df, src_col_chr, canonical_col)
         }
     }
 

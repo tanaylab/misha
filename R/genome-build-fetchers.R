@@ -82,7 +82,24 @@
     } else {
         local <- file.path(workdir, basename(alias_file[[1L]]))
         .download_to(paste0(base, alias_file[[1L]]), local, verbose = verbose)
-        out$chrom_alias <- list(file = local, df = .parse_ucsc_chromalias(local))
+        alias_df <- .parse_ucsc_chromalias(local)
+        out$chrom_alias <- list(file = local, df = alias_df)
+        # chrom.sizes.txt (2-col TSV: name<TAB>length, keyed on the FASTA's
+        # source column -- typically refseq for GCF, genbank for GCA). Used by
+        # gdb.install_intervals when match_by_length=TRUE to fill alias rows
+        # whose chosen canonical column is empty (e.g. MT row with no genbank).
+        sizes_file <- files[grepl("\\.chrom\\.sizes\\.txt$", files)]
+        if (length(sizes_file)) {
+            local_sizes <- file.path(workdir, basename(sizes_file[[1L]]))
+            .download_to(paste0(base, sizes_file[[1L]]), local_sizes, verbose = verbose)
+            sizes <- utils::read.table(local_sizes,
+                sep = "\t", header = FALSE,
+                col.names = c("name", "length"),
+                stringsAsFactors = FALSE, comment.char = "",
+                quote = ""
+            )
+            out$chrom_alias$row_lengths <- .alias_row_lengths_from_sizes(alias_df, sizes)
+        }
     }
 
     if ("rmsk" %in% sets) {

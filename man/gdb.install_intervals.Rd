@@ -14,6 +14,7 @@ gdb.install_intervals(
   overwrite = FALSE,
   registry = NULL,
   min_coverage = 1,
+  match_by_length = FALSE,
   verbose = TRUE
 )
 }
@@ -48,6 +49,16 @@ mitochondrion missing from UCSC's \code{genbank} column out of a 3 Gb
 genome) costs ~0.0005% rather than ~1/N. On the source-file side
 (asset chroms read from a GTF/GFF) the metric is the count-weighted
 fraction of distinct names. Unmapped contigs receive no annotations.}
+
+\item{match_by_length}{If \code{TRUE}, complement the column-based canonical
+detection with a per-row length-based fill: alias rows whose chosen
+column is empty are paired with a groot chrom of the same length, but
+only when the length is unique on both sides (ambiguous lengths are
+skipped, never guessed). Asset translation also switches to a per-row
+cross-column lookup, so a GFF in any naming scheme (or mixed schemes)
+imports cleanly. Currently honored only by the \code{ucsc-hub} backend
+(which ships per-contig lengths in \code{<acc>.chrom.sizes.txt});
+ignored elsewhere with a notice.}
 
 \item{verbose}{If \code{TRUE}, prints progress.}
 }

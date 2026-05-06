@@ -76,6 +76,22 @@
     df
 }
 
+# Map each alias_df row to a length, given a sizes data.frame (cols: name,
+# length) keyed on whichever column the FASTA used for headers (typically
+# refseq for GCF or genbank for GCA hubs). Returns a numeric vector aligned
+# with alias_df rows; NA where the row's source-column value isn't in sizes.
+.alias_row_lengths_from_sizes <- function(alias_df, sizes_df) {
+    # Pick the alias column whose values match sizes_df$name best. Use a
+    # generous threshold -- the chrom.sizes file should match one column
+    # closely but doesn't have to be perfect.
+    src <- .detect_alias_column(alias_df, sizes_df$name, min_coverage = 0.5)
+    if (is.na(src)) {
+        return(NULL)
+    }
+    name_to_length <- setNames(as.numeric(sizes_df$length), sizes_df$name)
+    unname(name_to_length[alias_df[[as.character(src)]]])
+}
+
 # Returns the column whose values cover at least `min_coverage` of target_chroms.
 # Among columns meeting the threshold, the one with highest coverage wins; ties
 # broken by column order. Default `min_coverage = 1.0` keeps strict semantics.
@@ -130,6 +146,72 @@
         overlap = unname(coverages[best]),
         bp_weighted = bp_weighted
     )
+}
+
+# For each alias row whose `canonical` value is empty, look up the unique
+# groot chrom whose length matches the row's length. A match counts only
+# when the length appears exactly once on BOTH the groot side and the alias
+# side -- ambiguous lengths (typical for tiny scaffolds in Cactus assemblies)
+# are left empty rather than guessed.
+#
+# canonical, alias_row_lengths must be aligned with alias_df rows.
+# groot_chroms, groot_lengths must be aligned with each other.
+.length_match_fill <- function(canonical, alias_row_lengths,
+                               groot_chroms, groot_lengths) {
+    if (length(canonical) != length(alias_row_lengths)) {
+        stop(".length_match_fill: canonical/alias_row_lengths length mismatch",
+            call. = FALSE
+        )
+    }
+    needs <- is.na(canonical) | !nzchar(canonical)
+    if (!any(needs)) {
+        return(canonical)
+    }
+    # Lengths that appear exactly once on each side. Stringify because lengths
+    # are integers/numerics that don't survive named-list indexing well.
+    g_counts <- table(groot_lengths)
+    g_unique <- names(g_counts)[g_counts == 1L]
+    a_counts <- table(alias_row_lengths)
+    a_unique <- names(a_counts)[a_counts == 1L]
+    fill_lengths <- intersect(g_unique, a_unique)
+    if (!length(fill_lengths)) {
+        return(canonical)
+    }
+    # Build "length -> groot chrom" lookup over the unique-on-both side.
+    keep <- as.character(groot_lengths) %in% fill_lengths
+    groot_lookup <- setNames(groot_chroms[keep], as.character(groot_lengths[keep]))
+    fill_idx <- which(needs & as.character(alias_row_lengths) %in% fill_lengths)
+    canonical[fill_idx] <- groot_lookup[as.character(alias_row_lengths[fill_idx])]
+    canonical
+}
+
+# Per-row asset translation. For each value in `rows[[chrom_col]]`, find the
+# alias_df row whose ANY column equals that value, then return that row's
+# canonical (alias_df[[canonical_col]]). Allows GFFs that mix naming schemes
+# to import cleanly. Unmatched chroms become NA -- caller decides whether to
+# drop or warn.
+.translate_chroms_per_row <- function(rows, chrom_col, alias_df, canonical_col) {
+    # Reverse index: every non-empty cell -> its row index. First occurrence wins.
+    cols <- setdiff(names(alias_df), canonical_col)
+    rev_idx <- new.env(hash = TRUE, parent = emptyenv())
+    for (col in cols) {
+        vals <- alias_df[[col]]
+        for (i in seq_along(vals)) {
+            v <- vals[i]
+            if (!is.na(v) && nzchar(v) && !exists(v, envir = rev_idx, inherits = FALSE)) {
+                assign(v, i, envir = rev_idx)
+            }
+        }
+    }
+    asset_names <- as.character(rows[[chrom_col]])
+    out <- vapply(asset_names, function(nm) {
+        if (is.na(nm) || !nzchar(nm) || !exists(nm, envir = rev_idx, inherits = FALSE)) {
+            return(NA_character_)
+        }
+        as.character(alias_df[[canonical_col]][get(nm, envir = rev_idx)])
+    }, character(1), USE.NAMES = FALSE)
+    rows[[chrom_col]] <- out
+    rows
 }
 
 # Translate `rows[[chrom_col]]` from source_col naming scheme to groot_col naming
