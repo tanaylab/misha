@@ -13,6 +13,7 @@ gdb.install_intervals(
   gtf_priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene"),
   overwrite = FALSE,
   registry = NULL,
+  target_chroms = NULL,
   min_coverage = 1,
   match_by_length = FALSE,
   verbose = TRUE
@@ -41,10 +42,19 @@ If \code{TRUE}, remove existing sets before saving.}
 
 \item{registry}{Optional path to a registry YAML; overrides the resolution chain.}
 
+\item{target_chroms}{Optional character vector to pin the canonical column
+to (e.g. chrom names from \code{halStats --sequenceStats} for a HAL you
+intend to liftover against). When \code{NULL} (default) misha uses the
+groot's own chrom names (i.e. picks the alias column matching whatever
+is currently in the database). When supplied, misha picks the alias
+column matching \code{target_chroms} instead, and switches detection to
+count-weighted coverage (bp weighting requires lengths, which target
+chrom lists typically don't carry).}
+
 \item{min_coverage}{Minimum fraction that must be covered by a chromAlias
 column for it to be picked as the canonical mapping. Default \code{1.0}
 (strict). On the groot side this is bp-weighted (fraction of genome
-basepairs covered) — a long-tail of small unmapped contigs (e.g. a 16 kb
+basepairs covered) - a long-tail of small unmapped contigs (e.g. a 16 kb
 mitochondrion missing from UCSC's \code{genbank} column out of a 3 Gb
 genome) costs ~0.0005% rather than ~1/N. On the source-file side
 (asset chroms read from a GTF/GFF) the metric is the count-weighted

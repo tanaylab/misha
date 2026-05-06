@@ -3,7 +3,10 @@
 
 # Dispatch to per-source seq builder. Returns a list with files_record and an
 # optional `chrom_alias_df` (used downstream to seed chrom_aliases.tsv).
-.build_seq <- function(recipe, path, format = NULL, verbose = TRUE) {
+# `target_chroms` (optional) lets ucsc-hub auto-pick the chromAlias column
+# whose values best cover those names; ignored by other backends.
+.build_seq <- function(recipe, path, target_chroms = NULL, format = NULL,
+                       verbose = TRUE) {
     fn <- switch(recipe$source,
         ucsc = .build_seq_ucsc,
         `ucsc-hub` = .build_seq_ucsc_hub,
@@ -13,10 +16,18 @@
         local = .build_seq_local,
         stop(sprintf("No seq builder for source '%s'", recipe$source), call. = FALSE)
     )
-    fn(recipe, path, format = format, verbose = verbose)
+    if (!is.null(target_chroms) && !recipe$source %in% c("ucsc-hub")) {
+        if (verbose) {
+            message(sprintf(
+                "  target_chroms is honored only by ucsc-hub; ignored for source=%s.",
+                recipe$source
+            ))
+        }
+    }
+    fn(recipe, path, target_chroms = target_chroms, format = format, verbose = verbose)
 }
 
-.build_seq_ucsc_hub <- function(recipe, path, format, verbose) {
+.build_seq_ucsc_hub <- function(recipe, path, target_chroms = NULL, format, verbose) {
     accession <- recipe$accession
     base <- .hub_url_for(accession)
     files <- .hub_list_dir(base, verbose = verbose)
@@ -45,9 +56,33 @@
         alias_df <- .parse_ucsc_chromalias(local_alias)
     }
 
-    # If chrom_naming requested and chromAlias has the column, rename FASTA
-    # headers; otherwise keep as-shipped (RefSeq accessions).
+    # If `target_chroms` is supplied, auto-pick the chromAlias column whose
+    # values cover those names best -- this lets callers say "I want the groot
+    # to use whatever names HAL/halStats reports for this species" without
+    # having to figure out which column that corresponds to. Wins over any
+    # caller-supplied chrom_naming.
     chrom_naming <- recipe$chrom_naming %||% "ucsc"
+    if (!is.null(alias_df) && !is.null(target_chroms)) {
+        detected <- .detect_alias_column(alias_df, target_chroms,
+            min_coverage = 0.5
+        )
+        if (is.na(detected)) {
+            scores <- attr(detected, "scores")
+            warning(sprintf(
+                "target_chroms covered no chromAlias column above 50%% (best=%s); falling back to chrom_naming='%s'.",
+                paste(sprintf("%s=%d", names(scores), scores), collapse = ","),
+                chrom_naming
+            ), call. = FALSE)
+        } else {
+            chrom_naming <- as.character(detected)
+            if (verbose) {
+                message(sprintf(
+                    "  Auto-detected chrom_naming = '%s' (%.2f%% of target_chroms in this column).",
+                    chrom_naming, 100 * attr(detected, "overlap")
+                ))
+            }
+        }
+    }
     if (!is.null(alias_df) && chrom_naming != "accession") {
         # The hub FASTA is keyed by the column UCSC chose for headers
         # (typically the 'genbank' column, the assembly's contig accessions).
@@ -103,7 +138,7 @@
     out
 }
 
-.build_seq_ucsc <- function(recipe, path, format, verbose) {
+.build_seq_ucsc <- function(recipe, path, target_chroms = NULL, format, verbose) {
     assembly <- recipe$assembly
     base <- sprintf("%s/%s", .UCSC_GOLDENPATH, assembly)
     workdir <- tempfile("misha_ucsc_seq_")
@@ -121,7 +156,7 @@
     )
 }
 
-.build_seq_ncbi <- function(recipe, path, format, verbose) {
+.build_seq_ncbi <- function(recipe, path, target_chroms = NULL, format, verbose) {
     accession <- recipe$accession
     chrom_naming <- recipe$chrom_naming %||% .NCBI_DEFAULT_CHROM_NAMING
     workdir <- tempfile("misha_ncbi_seq_")
@@ -180,7 +215,7 @@
     )
 }
 
-.build_seq_manual <- function(recipe, path, format, verbose) {
+.build_seq_manual <- function(recipe, path, target_chroms = NULL, format, verbose) {
     gdb.create(
         groot = path, fasta = recipe$fasta, genes.file = NULL,
         annots.file = NULL, format = format, verbose = verbose
@@ -191,7 +226,7 @@
     )
 }
 
-.build_seq_s3 <- function(recipe, path, format, verbose) {
+.build_seq_s3 <- function(recipe, path, target_chroms = NULL, format, verbose) {
     parent_dir <- dirname(path)
     if (!dir.exists(parent_dir)) dir.create(parent_dir, recursive = TRUE)
     if (basename(path) != recipe$assembly) {
@@ -204,7 +239,7 @@
     list(files_record = list(s3 = recipe$assembly), chrom_alias_df = NULL)
 }
 
-.build_seq_local <- function(recipe, path, format, verbose) {
+.build_seq_local <- function(recipe, path, target_chroms = NULL, format, verbose) {
     if (!dir.exists(recipe$path)) {
         stop(sprintf("Local groot does not exist: %s", recipe$path), call. = FALSE)
     }

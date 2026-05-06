@@ -32,6 +32,26 @@ test_that(".validate_recipe accepts arbitrary chrom_naming for ucsc-hub (validat
     expect_silent(.validate_recipe(r, "x"))
 })
 
+test_that("gdb.build_genome accepts target_chroms and validates type", {
+    d <- tempfile()
+    dir.create(d)
+    on.exit(unlink(d, recursive = TRUE))
+
+    expect_error(
+        gdb.build_genome("hg38", path = d, target_chroms = 1:5),
+        "target_chroms"
+    )
+    expect_error(
+        gdb.build_genome("hg38", path = d, target_chroms = c("chr1", NA)),
+        "target_chroms"
+    )
+    # Valid: char vector. Existing-path error wins.
+    expect_error(
+        gdb.build_genome("hg38", path = d, target_chroms = c("chr1", "chr2")),
+        "already exists"
+    )
+})
+
 test_that("gdb.build_genome accepts min_coverage and validates range", {
     # Signature/argument plumbing only -- no resolution / network call.
     # `path` already exists -> early error before any network is touched, so

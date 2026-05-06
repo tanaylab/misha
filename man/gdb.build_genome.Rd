@@ -13,6 +13,7 @@ gdb.build_genome(
   gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
   gtf_priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene"),
   chrom_naming = NULL,
+  target_chroms = NULL,
   min_coverage = 1,
   match_by_length = FALSE,
   format = NULL,
@@ -46,6 +47,14 @@ Selects which name space the canonical chrom names should come from. For
 the FASTA's source column). For \code{ncbi}: \code{"sequence_name"} (default),
 \code{"ucsc"}, or \code{"accession"}. \code{NULL} (default) keeps whatever
 the recipe specifies.}
+
+\item{target_chroms}{Optional character vector of chrom names the resulting
+groot should align to (typically the output of \code{halStats
+--sequenceStats}, the chrom names in a HAL file you intend to liftover
+against). When supplied, misha auto-picks the chromAlias column whose
+values cover \code{target_chroms} best and uses that column as the
+canonical naming, instead of \code{chrom_naming}. Honored only by the
+\code{ucsc-hub} backend; ignored elsewhere with a notice.}
 
 \item{min_coverage}{Minimum fraction of groot chroms that must appear in a
 chromAlias column for that column to be picked as canonical (forwarded to

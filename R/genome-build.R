@@ -760,6 +760,13 @@
 #'   per-row length match for alias rows the chosen column couldn't cover,
 #'   and switches asset translation to a cross-column per-row lookup so
 #'   GFFs in any naming scheme import cleanly. Default \code{FALSE}.
+#' @param target_chroms Optional character vector of chrom names the resulting
+#'   groot should align to (typically the output of \code{halStats
+#'   --sequenceStats}, the chrom names in a HAL file you intend to liftover
+#'   against). When supplied, misha auto-picks the chromAlias column whose
+#'   values cover \code{target_chroms} best and uses that column as the
+#'   canonical naming, instead of \code{chrom_naming}. Honored only by the
+#'   \code{ucsc-hub} backend; ignored elsewhere with a notice.
 #' @param chrom_naming Optional override for the recipe's \code{chrom_naming}.
 #'   Selects which name space the canonical chrom names should come from. For
 #'   \code{ucsc-hub}: any chromAlias column (\code{"ucsc"}, \code{"genbank"},
@@ -806,6 +813,7 @@ gdb.build_genome <- function(name,
                                  "ensGene", "augustus", "xenoRefGene"
                              ),
                              chrom_naming = NULL,
+                             target_chroms = NULL,
                              min_coverage = 1.0,
                              match_by_length = FALSE,
                              format = NULL,
@@ -816,6 +824,14 @@ gdb.build_genome <- function(name,
     }
     if (!is.logical(match_by_length) || length(match_by_length) != 1L) {
         stop("`match_by_length` must be a single logical.", call. = FALSE)
+    }
+    if (!is.null(target_chroms)) {
+        if (!is.character(target_chroms) || !length(target_chroms) ||
+            anyNA(target_chroms)) {
+            stop("`target_chroms` must be a non-empty character vector with no NAs.",
+                call. = FALSE
+            )
+        }
     }
     if (file.exists(path)) {
         stop(sprintf(
@@ -843,7 +859,9 @@ gdb.build_genome <- function(name,
         ))
     }
 
-    seq_info <- .build_seq(recipe, path, format = format, verbose = verbose)
+    seq_info <- .build_seq(recipe, path,
+        target_chroms = target_chroms, format = format, verbose = verbose
+    )
     gdb.init(path, rescan = TRUE)
 
     if (length(sets)) {
@@ -856,6 +874,7 @@ gdb.build_genome <- function(name,
             gtf_priority    = gtf_priority,
             overwrite       = FALSE,
             registry        = NULL,
+            target_chroms   = target_chroms,
             min_coverage    = min_coverage,
             match_by_length = match_by_length,
             verbose         = verbose
@@ -1036,10 +1055,18 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #' @param overwrite If \code{FALSE} (default), error on existing target sets.
 #'   If \code{TRUE}, remove existing sets before saving.
 #' @param registry Optional path to a registry YAML; overrides the resolution chain.
+#' @param target_chroms Optional character vector to pin the canonical column
+#'   to (e.g. chrom names from \code{halStats --sequenceStats} for a HAL you
+#'   intend to liftover against). When \code{NULL} (default) misha uses the
+#'   groot's own chrom names (i.e. picks the alias column matching whatever
+#'   is currently in the database). When supplied, misha picks the alias
+#'   column matching \code{target_chroms} instead, and switches detection to
+#'   count-weighted coverage (bp weighting requires lengths, which target
+#'   chrom lists typically don't carry).
 #' @param min_coverage Minimum fraction that must be covered by a chromAlias
 #'   column for it to be picked as the canonical mapping. Default \code{1.0}
 #'   (strict). On the groot side this is bp-weighted (fraction of genome
-#'   basepairs covered) — a long-tail of small unmapped contigs (e.g. a 16 kb
+#'   basepairs covered) - a long-tail of small unmapped contigs (e.g. a 16 kb
 #'   mitochondrion missing from UCSC's \code{genbank} column out of a 3 Gb
 #'   genome) costs ~0.0005% rather than ~1/N. On the source-file side
 #'   (asset chroms read from a GTF/GFF) the metric is the count-weighted
@@ -1091,6 +1118,7 @@ gdb.install_intervals <- function(groot,
                                   ),
                                   overwrite = FALSE,
                                   registry = NULL,
+                                  target_chroms = NULL,
                                   min_coverage = 1.0,
                                   match_by_length = FALSE,
                                   verbose = TRUE) {
@@ -1098,6 +1126,12 @@ gdb.install_intervals <- function(groot,
         choices = c("genes", "rmsk", "cgi", "cytoband"),
         several.ok = TRUE
     )
+    if (!is.null(target_chroms) &&
+        (!is.character(target_chroms) || !length(target_chroms) || anyNA(target_chroms))) {
+        stop("`target_chroms` must be a non-empty character vector with no NAs.",
+            call. = FALSE
+        )
+    }
     if (!is.numeric(min_coverage) || min_coverage <= 0 || min_coverage > 1) {
         stop("`min_coverage` must be in (0, 1].", call. = FALSE)
     }
@@ -1164,23 +1198,31 @@ gdb.install_intervals <- function(groot,
     groot_chroms <- as.character(allg$chrom)
     groot_lengths <- as.numeric(allg$end - allg$start)
     alias_df <- assets$chrom_alias$df
+    # `target_chroms` lets the caller pin the canonical column to whatever
+    # external naming they're aligning to (e.g. HAL/halStats output) without
+    # having to hand-pick a chromAlias column. When NULL (default) we fall
+    # back to "what's currently in the groot", which is the typical case.
+    detect_chroms <- target_chroms %||% groot_chroms
+    detect_lengths <- if (is.null(target_chroms)) groot_lengths else NULL
     groot_col <- if (!is.null(alias_df)) {
-        .detect_alias_column(alias_df, groot_chroms,
-            min_coverage = min_coverage, chrom_lengths = groot_lengths
+        .detect_alias_column(alias_df, detect_chroms,
+            min_coverage = min_coverage, chrom_lengths = detect_lengths
         )
     } else {
         NA_character_
     }
     if (!is.null(alias_df) && is.na(groot_col)) {
         scores <- attr(groot_col, "scores")
-        total_bp <- sum(groot_lengths)
+        bp_weighted <- isTRUE(attr(groot_col, "bp_weighted"))
+        denom <- if (bp_weighted) sum(groot_lengths) else length(detect_chroms)
+        unit <- if (bp_weighted) "bp coverage of groot" else "name coverage of target_chroms"
         stop(sprintf(
-            "chromAlias has no column with %.0f%% bp coverage of groot.\nPer-column bp coverage: %s\nFirst 5 unmapped groot chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.99).",
-            100 * min_coverage,
-            paste(sprintf("%s=%.4f%%", names(scores), 100 * scores / total_bp),
+            "chromAlias has no column with %.0f%% %s.\nPer-column coverage: %s\nFirst 5 unmapped chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.99).",
+            100 * min_coverage, unit,
+            paste(sprintf("%s=%.4f%%", names(scores), 100 * scores / denom),
                 collapse = ", "
             ),
-            paste(utils::head(setdiff(groot_chroms, unlist(alias_df, use.names = FALSE)), 5L),
+            paste(utils::head(setdiff(detect_chroms, unlist(alias_df, use.names = FALSE)), 5L),
                 collapse = ", "
             )
         ), call. = FALSE)
