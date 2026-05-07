@@ -860,25 +860,42 @@ gdb.build_genome <- function(name,
         ))
     }
 
+    prefetched_alias <- NULL
+    if (recipe$source == "ucsc-hub" && length(sets)) {
+        pf_workdir <- tempfile("misha_hub_preflight_")
+        dir.create(pf_workdir, recursive = TRUE)
+        on.exit(unlink(pf_workdir, recursive = TRUE), add = TRUE)
+        prefetched_alias <- .hub_preflight_coverage(
+            accession     = recipe$accession,
+            target_chroms = target_chroms,
+            chrom_naming  = recipe$chrom_naming,
+            min_coverage  = min_coverage,
+            workdir       = pf_workdir,
+            verbose       = verbose
+        )
+    }
+
     seq_info <- .build_seq(recipe, path,
-        target_chroms = target_chroms, format = format, verbose = verbose
+        target_chroms = target_chroms, format = format,
+        prefetched_alias = prefetched_alias, verbose = verbose
     )
     gdb.init(path, rescan = TRUE)
 
     if (length(sets)) {
         gdb.install_intervals(
-            groot           = path,
-            source          = recipe,
-            sets            = sets,
-            prefix          = prefix,
-            gene_sets       = gene_sets,
-            gtf_priority    = gtf_priority,
-            overwrite       = FALSE,
-            registry        = NULL,
-            target_chroms   = target_chroms,
-            min_coverage    = min_coverage,
-            match_by_length = match_by_length,
-            verbose         = verbose
+            groot            = path,
+            source           = recipe,
+            sets             = sets,
+            prefix           = prefix,
+            gene_sets        = gene_sets,
+            gtf_priority     = gtf_priority,
+            overwrite        = FALSE,
+            registry         = NULL,
+            target_chroms    = target_chroms,
+            min_coverage     = min_coverage,
+            match_by_length  = match_by_length,
+            prefetched_alias = prefetched_alias,
+            verbose          = verbose
         )
     }
 

@@ -91,3 +91,58 @@ test_that(".hub_preflight_coverage returns prefetched alias on success", {
     })
     expect_false(any(grepl("\\.fa\\.gz$", rec$urls)))
 })
+
+test_that("gdb.build_genome ucsc-hub fails before fetching FASTA on coverage failure", {
+    rec <- new.env()
+    rec$urls <- character()
+    fake_recipe <- list(
+        source = "ucsc-hub", accession = "GCF_TEST.1",
+        chrom_naming = "ucsc"
+    )
+    testthat::local_mocked_bindings(
+        .resolve_genome = function(name, registry = NULL) {
+            list(recipe = fake_recipe, resolved_from = "test-fixture")
+        },
+        .hub_url_for = function(accession) "https://hub.example/test/",
+        .hub_list_dir = function(url, verbose = TRUE) {
+            c(
+                "GCF_TEST.chromAlias.txt",
+                "GCF_TEST.chrom.sizes.txt",
+                "GCF_TEST.fa.gz"
+            )
+        },
+        .download_to = function(url, dest, verbose = TRUE) {
+            rec$urls <- c(rec$urls, url)
+            if (grepl("chromAlias", url)) {
+                writeLines("# ucsc\tgenbank\trefseq", dest)
+            } else if (grepl("chrom\\.sizes", url)) {
+                cat(.preflight_sizes, file = dest)
+            }
+            invisible(dest)
+        },
+        .parse_ucsc_chromalias = function(path) {
+            data.frame(
+                ucsc = c("chr1", "chr2", ""),
+                genbank = c("CM00001.1", "", ""),
+                refseq = c("NC_00001.1", "NC_00002.1", "NC_M.1"),
+                stringsAsFactors = FALSE
+            )
+        },
+        .package = "misha"
+    )
+    out <- tempfile("misha_test_groot_")
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    expect_error(
+        gdb.build_genome(
+            name         = "ucsc-hub-test-fixture",
+            path         = out,
+            sets         = "rmsk",
+            min_coverage = 1.0,
+            verbose      = FALSE
+        ),
+        "no column with 100"
+    )
+    expect_false(any(grepl("\\.fa\\.gz$", rec$urls)),
+        info = paste("Touched URLs:", paste(rec$urls, collapse = ", "))
+    )
+})
