@@ -240,40 +240,174 @@ test_that("pwm.grad max: head not argmax => engine returns 0 (matches oracle)", 
     expect_equal(expected, 0, tolerance = 1e-10)
 })
 
-test_that("pwm.grad max: bidirect=TRUE errors out (Task 3 scope)", {
+test_that("pwm.grad max: bidirect=TRUE matches oracle on asymmetric PSSM", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
-    pssm <- create_test_pssm()
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    # Asymmetric PSSM (rc != self) so bidirect's strand-softmax is non-trivial.
+    pssm <- matrix(
+        c(
+            0.7, 0.1, 0.1, 0.1,
+            0.1, 0.6, 0.2, 0.1,
+            0.1, 0.1, 0.5, 0.3
+        ),
+        L, 4,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
     gvtrack.create("g_bidir", NULL, "pwm.grad",
         pssm = pssm,
         aggregate = "max", bidirect = TRUE,
         extend = TRUE, prior = 0.01
     )
-    gvtrack.iterator("g_bidir", sshift = 0, eshift = 19)
+    gvtrack.iterator("g_bidir", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_bidir", iterator = 1, intervals = pivot)
 
-    expect_error(
-        gextract("g_bidir", iterator = 1, intervals = gintervals(1, 200, 201)),
-        "bidirect=FALSE"
+    expected <- manual_pwm_grad(pssm, seq_ext, "max",
+        bidirect = TRUE, prior = 0.01
     )
+    expect_equal(res$g_bidir[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
 })
 
-test_that("pwm.grad max: strand=-1 errors out (Task 3 scope)", {
+test_that("pwm.grad lse: bidirect=TRUE matches oracle on asymmetric PSSM", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
-    pssm <- create_test_pssm()
-    gvtrack.create("g_minus", NULL, "pwm.grad",
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    pssm <- matrix(
+        c(
+            0.7, 0.1, 0.1, 0.1,
+            0.1, 0.6, 0.2, 0.1,
+            0.1, 0.1, 0.5, 0.3
+        ),
+        L, 4,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    gvtrack.create("g_bidir_lse", NULL, "pwm.grad",
         pssm = pssm,
+        aggregate = "lse", bidirect = TRUE,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_bidir_lse", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_bidir_lse", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(pssm, seq_ext, "lse",
+        bidirect = TRUE, prior = 0.01
+    )
+    expect_equal(res$g_bidir_lse[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad: bidirect on palindromic PSSM is consistent", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # Palindromic: rc(pssm) == pssm. The bidirect comb score is fwd + log(2)
+    # (offset, irrelevant for argmax). Strand softmax at any anchor is 0.5/0.5.
+    pssm <- matrix(
+        c(
+            0.7, 0.1, 0.1, 0.1,
+            0.1, 0.4, 0.4, 0.1,
+            0.1, 0.1, 0.1, 0.7
+        ),
+        3, 4,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+    rc_test <- pssm[3:1, c(4, 3, 2, 1)]
+    dimnames(rc_test) <- dimnames(pssm)
+    expect_equal(rc_test, pssm) # confirm palindromic
+
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + nrow(pssm) - 1)))
+
+    gvtrack.create("g_bidir", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "lse", bidirect = TRUE,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_bidir", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_bidir", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(pssm, seq_ext, "lse",
+        bidirect = TRUE, prior = 0.01
+    )
+    expect_equal(res$g_bidir[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad max: bidirect=FALSE strand=-1 matches oracle", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    # Build PSSM whose rc-consensus matches the first L bases of seq_ext, so
+    # rc-PSSM scoring at the head anchor is strong.
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    # rc-PSSM at column 0 sees complement(head[0]); we want a consensus PSSM
+    # whose rc orientation has strong matches at our head bases. Simplest: use
+    # the consensus PSSM for the actual head bases; the rc scoring will see
+    # complement-of-head at L-1, L-2, ... so it will be a weak match. To make
+    # rc scoring strong, use the rc of the consensus PSSM instead.
+    fwd_pssm <- .consensus_pssm(head_bases)
+    rc_target_pssm <- fwd_pssm[L:1, c(4, 3, 2, 1)]
+    dimnames(rc_target_pssm) <- dimnames(fwd_pssm)
+
+    gvtrack.create("g_minus", NULL, "pwm.grad",
+        pssm = rc_target_pssm,
         aggregate = "max", bidirect = FALSE, strand = -1,
         extend = TRUE, prior = 0.01
     )
-    gvtrack.iterator("g_minus", sshift = 0, eshift = 19)
+    gvtrack.iterator("g_minus", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_minus", iterator = 1, intervals = pivot)
 
-    expect_error(
-        gextract("g_minus", iterator = 1, intervals = gintervals(1, 200, 201)),
-        "strand=-1"
+    expected <- manual_pwm_grad(rc_target_pssm, seq_ext, "max",
+        bidirect = FALSE, strand = -1L, prior = 0.01
     )
+    expect_equal(res$g_minus[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad lse: bidirect=FALSE strand=-1 matches oracle", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    fwd_pssm <- .consensus_pssm(head_bases)
+    rc_target_pssm <- fwd_pssm[L:1, c(4, 3, 2, 1)]
+    dimnames(rc_target_pssm) <- dimnames(fwd_pssm)
+
+    gvtrack.create("g_minus_lse", NULL, "pwm.grad",
+        pssm = rc_target_pssm,
+        aggregate = "lse", bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_minus_lse", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_minus_lse", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(rc_target_pssm, seq_ext, "lse",
+        bidirect = FALSE, strand = -1L, prior = 0.01
+    )
+    expect_equal(res$g_minus_lse[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
 })
 
 # Task 4: GRAD_LSE single-strand fwd
@@ -377,33 +511,4 @@ test_that("pwm.grad lse: w_p computed correctly via softmax denominator", {
     )
     expect_lte(res$g_lse[1], g_max_oracle + 1e-8)
     expect_gt(res$g_lse[1], 0)
-})
-
-test_that("pwm.grad lse: bidirect=TRUE / strand=-1 error out (Task 4 scope)", {
-    remove_all_vtracks()
-    withr::defer(remove_all_vtracks())
-
-    pssm <- create_test_pssm()
-
-    gvtrack.create("g_bidir_lse", NULL, "pwm.grad",
-        pssm = pssm,
-        aggregate = "lse", bidirect = TRUE,
-        extend = TRUE, prior = 0.01
-    )
-    gvtrack.iterator("g_bidir_lse", sshift = 0, eshift = 19)
-    expect_error(
-        gextract("g_bidir_lse", iterator = 1, intervals = gintervals(1, 200, 201)),
-        "bidirect=FALSE"
-    )
-
-    gvtrack.create("g_minus_lse", NULL, "pwm.grad",
-        pssm = pssm,
-        aggregate = "lse", bidirect = FALSE, strand = -1,
-        extend = TRUE, prior = 0.01
-    )
-    gvtrack.iterator("g_minus_lse", sshift = 0, eshift = 19)
-    expect_error(
-        gextract("g_minus_lse", iterator = 1, intervals = gintervals(1, 200, 201)),
-        "strand=-1"
-    )
 })
