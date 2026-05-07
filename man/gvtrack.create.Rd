@@ -138,6 +138,8 @@ interval after all modifier adjustments.
   NULL (sequence) \tab pwm.max \tab pssm, bidirect, prior, extend, spat_* \tab Maximum log-likelihood score among all anchors (per-position union across strands). \cr
   NULL (sequence) \tab pwm.max.pos \tab pssm, bidirect, prior, extend, spat_* \tab 1-based position of the best-scoring anchor (signed by strand when \code{bidirect = TRUE}); coordinates are always relative to the iterator interval after any \code{gvtrack.iterator()} shifts/extensions. \cr
   NULL (sequence) \tab pwm.count \tab pssm, score.thresh, bidirect, prior, extend, strand, spat_* \tab Count of anchors whose score exceeds \code{score.thresh} (per-position union). \cr
+  NULL (sequence) \tab pwm.grad \tab pssm, aggregate, bidirect, prior, extend, spat_* \tab Linearized per-bp gradient (DeepLIFT-style) of the PWM aggregate at the interval start. \cr
+  NULL (sequence) \tab pwm.grad.ism \tab pssm, aggregate, bidirect, prior, extend, spat_* \tab In-silico mutagenesis per-bp gradient at the interval start. \cr
 }
 
 \strong{Edit distance summarizers}
