@@ -333,11 +333,6 @@ glm_pred.create <- function(name,
             if (!is.numeric(s) || length(s) != 2) {
                 stop(sprintf("shifts[[%d]] must be numeric(2)", i), call. = FALSE)
             }
-            if (s[1] >= s[2]) {
-                stop(sprintf("shifts[[%d]]: sshift (%g) must be < eshift (%g)", i, s[1], s[2]),
-                    call. = FALSE
-                )
-            }
             sshifts[i] <- s[1]
             eshifts[i] <- s[2]
         }
