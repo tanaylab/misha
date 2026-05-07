@@ -355,7 +355,7 @@
 
     sizes_file <- files[grepl("\\.chrom\\.sizes\\.txt$", files)]
     row_lengths <- NULL
-    local_sizes <- NA_character_
+    local_sizes <- NULL
     if (length(sizes_file)) {
         local_sizes <- file.path(workdir, basename(sizes_file[[1L]]))
         .download_to(paste0(base, sizes_file[[1L]]), local_sizes, verbose = verbose)
@@ -379,6 +379,10 @@
     }
     if (is.na(canonical_col)) {
         cn <- chrom_naming %||% "ucsc"
+        # Friendly aliases mirror .resolve_hub_target_col() in
+        # R/genome-build-chromalias.R: "sequence_name" maps to the alias's
+        # "assembly" column; "ucsc" stays as-is; anything else is treated as
+        # a literal column name.
         target <- switch(cn,
             ucsc          = "ucsc",
             sequence_name = "assembly",
@@ -386,12 +390,14 @@
         )
         if (cn == "accession" || !target %in% names(alias_df)) {
             # Either the build will keep the FASTA's source column (which we
-            # can't sniff without the FASTA), or chrom_naming maps to a
-            # column the alias doesn't have. Fall back to the column with
-            # highest coverage as a conservative proxy: if even the best
-            # column doesn't meet min_coverage, the gate fails; if it does,
-            # the build proceeds and the post-build gate makes the precise
-            # call.
+            # can't sniff without the FASTA), or chrom_naming maps to a column
+            # the alias doesn't have. Pick the column whose values cover the
+            # largest share of all alias values across the frame -- a rough
+            # "most-populated column" proxy. The post-build gate inside
+            # gdb.install_intervals will make the precise call once the FASTA
+            # is on disk; this fallback exists only to fail obviously-broken
+            # cases (e.g. an alias with no usable column at all) before the
+            # download.
             best <- .detect_alias_column(alias_df,
                 target_chroms = unlist(alias_df, use.names = FALSE),
                 min_coverage = 0
@@ -409,6 +415,15 @@
     # column's coverage score. Net effect: a 16 kb mitochondrion missing from
     # the canonical col costs 16 kb of denom, exactly the bp-weighted gap we
     # want the gate to detect.
+    #
+    # Note: this is deliberately stricter than the post-build gate inside
+    # gdb.install_intervals, which can rescue empty canonical cells via
+    # length-matching against the actual built groot (the match_by_length
+    # path). Pre-flight has no FASTA yet, so length-matching isn't available.
+    # Trade-off: rare false-positive fail-early on builds that would have
+    # succeeded post-rename, in exchange for never paying the multi-GB FASTA
+    # download for a build that ultimately couldn't pass the strict gate at
+    # the user's chosen min_coverage.
     canonical_vals <- alias_df[[canonical_col]]
     empties <- is.na(canonical_vals) | !nzchar(canonical_vals)
     groot_chroms <- canonical_vals
