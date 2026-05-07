@@ -1083,6 +1083,49 @@ test_that("glm_pred multi-selector: Cartesian product strata, hand-computed resu
     expect_equal(df$vt, expected, tolerance = 1e-8)
 })
 
+test_that("glm_pred selector: c(-Inf, ..., Inf) breaks correctly distinguish bins", {
+    # Regression: BinFinder::init left m_binsize == Inf when every adjacent
+    # break-diff is Inf (e.g. c(-Inf, x, Inf)), which sent val2bin's
+    # uniform-binsize fast path through Inf/Inf -> NaN -> (int)NaN -> wrong
+    # bin, silently routing every position to the last bin.
+    src <- "test.fixedbin"
+    sel <- "test.fixedbin"
+    cut_at <- 0.13 # roughly mid-range for test.fixedbin (~[0, 0.26])
+    breaks <- c(-Inf, cut_at, Inf) # K = 2
+
+    # Bin-distinct weights so a wrong bin selection produces a different value.
+    weights <- matrix(c(2.0, -3.0), nrow = 1L)
+    bias <- c(0.5, 7.5)
+
+    glm_pred.create(
+        name = "vt_inf_breaks",
+        tracks = src,
+        inner_func = "sum",
+        weights = weights,
+        bias = bias,
+        trans_family = NA_character_,
+        selector_tracks = sel,
+        selector_breaks = list(breaks)
+    )
+    on.exit(gvtrack.rm("vt_inf_breaks"), add = TRUE)
+
+    df <- gextract(c("vt_inf_breaks", sel, src),
+        intervals = gintervals(1, 0, 5000),
+        iterator = 50L,
+        colnames = c("vt", "s", "x")
+    )
+
+    bin <- .val2bin_finder(df$s, breaks)
+    expected <- ifelse(is.na(bin), NA_real_, bias[bin] + weights[1L, bin] * df$x)
+
+    expect_equal(df$vt, expected, tolerance = 1e-8)
+
+    # Both bins must actually be hit by the data, otherwise the test would
+    # silently still pass with the buggy "always last bin" behaviour.
+    expect_true(any(bin == 1L, na.rm = TRUE))
+    expect_true(any(bin == 2L, na.rm = TRUE))
+})
+
 test_that("glm_pred multi-selector: any-NaN or any-OOR selector -> NaN output", {
     src <- "test.fixedbin"
     sel <- "test.fixedbin"
