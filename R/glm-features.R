@@ -1,3 +1,16 @@
+# Resolve transform column-name suffixes from a `transforms` list.
+# Uses element names when all elements are named; otherwise falls back to
+# generic t1..tN. Partially-named lists fall back to generic to avoid
+# silently mislabeling the unnamed entries.
+.glm_features_transform_names <- function(transforms) {
+    n <- length(transforms)
+    nm <- names(transforms)
+    if (!is.null(nm) && all(nzchar(nm))) {
+        return(nm)
+    }
+    paste0("t", seq_len(n))
+}
+
 #' Extract GLM feature matrix from motif energy tracks
 #'
 #' Reads multiple motif energy tracks, applies scaling and logistic transforms,
@@ -55,10 +68,10 @@ glm_extract_features <- function(
   dis_from_cap = 10,
   scale_factor = 10,
   transforms = list(
-      list(L = 2, k = 0.5, x_0 = 0, pre_shift = 0, post_shift = -1),
-      list(L = 2, k = 0.5, x_0 = 10, pre_shift = 0, post_shift = 0),
-      list(L = 1, k = 1, x_0 = 0, pre_shift = -5, post_shift = 0),
-      list(L = 2, k = 1, x_0 = 10, pre_shift = 0, post_shift = 0)
+      "low-energy"    = list(L = 2, k = 0.5, x_0 = 0, pre_shift = 0, post_shift = -1),
+      "high-energy"   = list(L = 2, k = 0.5, x_0 = 10, pre_shift = 0, post_shift = 0),
+      "sigmoid"       = list(L = 1, k = 1, x_0 = 0, pre_shift = -5, post_shift = 0),
+      "higher-energy" = list(L = 2, k = 1, x_0 = 10, pre_shift = 0, post_shift = 0)
   ),
   gc_track = "seq.G_or_C",
   gc_scale_factor = 10,
@@ -153,14 +166,8 @@ glm_extract_features <- function(
         character(1)
     )
 
-    # Transform suffixes
-    transform_names <- c("low-energy", "high-energy", "sigmoid", "higher-energy")
-    if (n_transforms != 4 || !identical(
-        vapply(transforms, function(t) t$L, numeric(1)),
-        c(2, 2, 1, 2)
-    )) {
-        transform_names <- paste0("t", seq_len(n_transforms))
-    }
+    # Transform suffixes from element names; fallback to t1..tN.
+    transform_names <- .glm_features_transform_names(transforms)
 
     # Motif columns: (tile * n_motifs + motif) * n_transforms + transform
     motif_col_names <- character(n_motifs * n_tiles * n_transforms)

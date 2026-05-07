@@ -92,6 +92,90 @@ test_that("glm_pred.create validates interaction indices", {
     )
 })
 
+test_that("glm_pred.create rejects wrong-length interaction_trans_family", {
+    # M = 3 interactions; user passes length-2 family -> should error,
+    # not silently pad with NA (regression for prior asymmetric validation
+    # vs the entry-side trans_family check).
+    expect_error(
+        glm_pred.create("bad",
+            tracks = c("test.fixedbin", "test.fixedbin"),
+            inner_func = c("sum", "sum"),
+            weights = c(1, 1),
+            shifts = list(c(-100, 100), c(-100, 100)),
+            interactions = list(c(1L, 2L), c(1L, 2L), c(1L, 2L)),
+            interaction_weights = c(0.1, 0.2, 0.3),
+            interaction_trans_family = c("logist", "logist")
+        ),
+        "interaction_trans_family"
+    )
+})
+
+test_that("glm_pred.create rejects wrong-length simple_cap", {
+    # N = 3 entries; user passes length-2 simple_cap. Without validation,
+    # the C++ side silently uses simple_cap[0..1] for entries 0..1 and
+    # the default (FALSE) for entry 2 - silent miswiring.
+    expect_error(
+        glm_pred.create("bad",
+            tracks = c("test.fixedbin", "test.fixedbin", "test.fixedbin"),
+            inner_func = c("sum", "sum", "sum"),
+            weights = c(1, 1, 1),
+            shifts = list(c(-100, 100), c(-100, 100), c(-100, 100)),
+            max_cap = c(0, 0, 0),
+            dis_from_cap = c(1, 1, 1),
+            simple_cap = c(TRUE, FALSE)
+        ),
+        "simple_cap"
+    )
+})
+
+test_that("glm_pred surfaces entry-track open errors (no silent NaN)", {
+    # Regression: prior catch silently nulled the cached entry track
+    # on TGLException (e.g., bad track name, corrupted file), causing
+    # gextract to return NaN for the affected positions with no
+    # indication. Now verror's, matching the selector path's policy.
+    glm_pred.create("vt_a5_silent",
+        tracks = "test.fixedbin",
+        inner_func = "sum",
+        weights = 1.0,
+        bias = 0,
+        shifts = list(c(-50, 50))
+    )
+    on.exit(try(glm_pred.rm("vt_a5_silent"), silent = TRUE), add = TRUE)
+
+    # Bypass R-side track-existence validation by mutating the stored
+    # vtrack to point at a non-existent track. This exercises the
+    # C++ start_chrom catch path that previously silently swallowed
+    # TGLException from track2path / get_type / create_and_init_1d_track.
+    misha_env <- get(".misha", envir = asNamespace("misha"))
+    gwd <- get("GWD", envir = misha_env)
+    misha_env$GVTRACKS[[gwd]]$vt_a5_silent$params$tracks <- "no.such.track"
+
+    intervals <- gintervals(1, 500, 1000)
+    expect_error(
+        gextract("vt_a5_silent", intervals = intervals, iterator = 100),
+        "(?i)glm.*track|no\\.such\\.track"
+    )
+})
+
+test_that("glm_pred.create rejects wrong-length inter_trans_params", {
+    expect_error(
+        glm_pred.create("bad",
+            tracks = c("test.fixedbin", "test.fixedbin"),
+            inner_func = c("sum", "sum"),
+            weights = c(1, 1),
+            shifts = list(c(-100, 100), c(-100, 100)),
+            interactions = list(c(1L, 2L), c(1L, 2L), c(1L, 2L)),
+            interaction_weights = c(0.1, 0.2, 0.3),
+            interaction_trans_family = "logist",
+            inter_trans_params = list(
+                list(L = 1, k = 1, x_0 = 0),
+                list(L = 2, k = 1, x_0 = 0)
+            )
+        ),
+        "inter_trans_params"
+    )
+})
+
 # ============================================================
 # Category 2: Basic pipeline correctness
 # ============================================================

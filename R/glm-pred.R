@@ -413,6 +413,16 @@ glm_pred.create <- function(name,
     if (length(dis_from_cap) != N) {
         stop(sprintf("'dis_from_cap' must be length %d or NULL", N), call. = FALSE)
     }
+    # --- Validate / recycle simple_cap ---
+    if (!is.null(simple_cap)) {
+        if (length(simple_cap) == 1) {
+            simple_cap <- rep(simple_cap, N)
+        } else if (length(simple_cap) != N) {
+            stop(sprintf("'simple_cap' must be length 1, %d, or NULL", N),
+                call. = FALSE
+            )
+        }
+    }
     # max_cap and dis_from_cap must be specified together per entry
     cap_mismatch <- xor(is.na(max_cap), is.na(dis_from_cap))
     if (any(cap_mismatch)) {
@@ -525,16 +535,22 @@ glm_pred.create <- function(name,
         # Process interaction transforms
         if (is.null(interaction_trans_family)) {
             interaction_trans_family <- rep(NA_character_, M)
-        }
-        if (length(interaction_trans_family) == 1) {
+        } else if (length(interaction_trans_family) == 1) {
             interaction_trans_family <- rep(interaction_trans_family, M)
+        } else if (length(interaction_trans_family) != M) {
+            stop(sprintf(
+                "'interaction_trans_family' must be length 1, %d, or NULL", M
+            ), call. = FALSE)
         }
 
         if (is.null(inter_trans_params)) {
             inter_trans_params <- vector("list", M)
-        }
-        if (length(inter_trans_params) == 1) {
+        } else if (length(inter_trans_params) == 1) {
             inter_trans_params <- rep(inter_trans_params, M)
+        } else if (length(inter_trans_params) != M) {
+            stop(sprintf(
+                "'inter_trans_params' must be length 1, %d, or NULL", M
+            ), call. = FALSE)
         }
 
         params$inter_trans_family <- interaction_trans_family

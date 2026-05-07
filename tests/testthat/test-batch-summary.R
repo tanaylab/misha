@@ -40,6 +40,30 @@ test_that("gsummary with vector of tracks returns a data.frame", {
     expect_true(all(df$mean <= df$max))
 })
 
+test_that("C_gsummary_multi returns matrix with named columns (C/R contract)", {
+    # Regression: R compute-core must read summary stats by column name,
+    # not position - if C-side reorders the seven stat columns, R must
+    # not silently swap their meanings. The C side names the columns;
+    # this test pins that contract.
+    gdb.init_examples()
+    tracks <- c("dense_track", "subdir.dense_track2")
+    n_threads <- as.integer(getOption("gmax.processes", 1L))
+    m <- misha:::.gcall(
+        "C_gsummary_multi",
+        as.character(tracks),
+        50L, 0L, 0L,
+        n_threads,
+        "avg",
+        NULL,
+        misha:::.misha_env()
+    )
+    expect_equal(
+        colnames(m),
+        c("n", "n_nan", "min", "max", "sum", "mean", "sd")
+    )
+    expect_equal(rownames(m), tracks)
+})
+
 test_that("gsummary multi-track fast path matches per-track single calls", {
     gdb.init_examples()
     tracks <- c("dense_track", "subdir.dense_track2")
