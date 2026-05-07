@@ -512,3 +512,234 @@ test_that("pwm.grad lse: w_p computed correctly via softmax denominator", {
     expect_lte(res$g_lse[1], g_max_oracle + 1e-8)
     expect_gt(res$g_lse[1], 0)
 })
+
+# Task 6: GRAD_MAX_ISM tests
+
+test_that("pwm.grad.ism max: argmax-shift case differs from linearized", {
+    # The test-DB seq at chr1:200-222 is periodic ("CCCTAACCC..."), so even
+    # with a strong consensus PSSM matching the head, flipping the head base
+    # doesn't drop the max because anchor 7 also matches the consensus.
+    # Linearized would report ~3.9 (the col-0 diff); ISM correctly returns 0
+    # because the argmax shifts under the flip. This is the canonical
+    # ISM-vs-linearized divergence case.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    gvtrack.create("g_ism", NULL, "pwm.grad.ism",
+        pssm = pssm, aggregate = "max",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.create("g_lin", NULL, "pwm.grad",
+        pssm = pssm, aggregate = "max",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_ism", sshift = 0, eshift = iter_W - 1)
+    gvtrack.iterator("g_lin", sshift = 0, eshift = iter_W - 1)
+    res <- gextract(c("g_ism", "g_lin"), iterator = 1, intervals = pivot)
+
+    expected_ism <- manual_pwm_grad_ism(pssm, seq_ext, "max",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g_ism[1], expected_ism, tolerance = 1e-5, ignore_attr = TRUE)
+    # ISM = 0 (argmax shift); linearized > 0; they differ.
+    expect_equal(expected_ism, 0, tolerance = 1e-10)
+    expect_gt(res$g_lin[1], 1)
+})
+
+test_that("pwm.grad.ism max: matches oracle on weak-consensus PSSM", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 15L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    # Mid-strength PSSM so flipping can plausibly shift argmax.
+    pssm <- matrix(
+        c(
+            0.5, 0.3, 0.1, 0.1,
+            0.1, 0.5, 0.3, 0.1,
+            0.1, 0.1, 0.5, 0.3
+        ),
+        L, 4,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    gvtrack.create("g_ism", NULL, "pwm.grad.ism",
+        pssm = pssm, aggregate = "max",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_ism", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_ism", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad_ism(pssm, seq_ext, "max",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g_ism[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+    expect_gte(res$g_ism[1], -1e-7)
+})
+
+# Task 7: GRAD_LSE_ISM tests
+
+test_that("pwm.grad.ism lse: matches oracle (concentrated softmax)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    gvtrack.create("g_ism_lse", NULL, "pwm.grad.ism",
+        pssm = pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_ism_lse", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_ism_lse", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad_ism(pssm, seq_ext, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g_ism_lse[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad.ism lse: matches oracle on mid-strength PSSM", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 15L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    pssm <- matrix(
+        c(
+            0.5, 0.3, 0.1, 0.1,
+            0.1, 0.5, 0.3, 0.1,
+            0.1, 0.1, 0.5, 0.3
+        ),
+        L, 4,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    gvtrack.create("g_ism_lse", NULL, "pwm.grad.ism",
+        pssm = pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_ism_lse", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_ism_lse", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad_ism(pssm, seq_ext, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g_ism_lse[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+# Task 8: bidirect for ISM
+
+test_that("pwm.grad.ism max: bidirect=TRUE matches oracle on asymmetric PSSM", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    pssm <- matrix(
+        c(
+            0.6, 0.2, 0.1, 0.1,
+            0.1, 0.5, 0.3, 0.1,
+            0.1, 0.1, 0.5, 0.3
+        ),
+        L, 4,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    gvtrack.create("g_ism_bid", NULL, "pwm.grad.ism",
+        pssm = pssm, aggregate = "max",
+        bidirect = TRUE, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_ism_bid", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_ism_bid", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad_ism(pssm, seq_ext, "max",
+        bidirect = TRUE, prior = 0.01
+    )
+    expect_equal(res$g_ism_bid[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad.ism lse: bidirect=TRUE matches oracle on asymmetric PSSM", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    pssm <- matrix(
+        c(
+            0.6, 0.2, 0.1, 0.1,
+            0.1, 0.5, 0.3, 0.1,
+            0.1, 0.1, 0.5, 0.3
+        ),
+        L, 4,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    gvtrack.create("g_ism_bid_lse", NULL, "pwm.grad.ism",
+        pssm = pssm, aggregate = "lse",
+        bidirect = TRUE, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_ism_bid_lse", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_ism_bid_lse", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad_ism(pssm, seq_ext, "lse",
+        bidirect = TRUE, prior = 0.01
+    )
+    expect_equal(res$g_ism_bid_lse[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad.ism max: strand=-1 matches oracle", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    fwd_pssm <- .consensus_pssm(head_bases)
+    rc_target_pssm <- fwd_pssm[L:1, c(4, 3, 2, 1)]
+    dimnames(rc_target_pssm) <- dimnames(fwd_pssm)
+
+    gvtrack.create("g_ism_minus", NULL, "pwm.grad.ism",
+        pssm = rc_target_pssm, aggregate = "max",
+        bidirect = FALSE, strand = -1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_ism_minus", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_ism_minus", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad_ism(rc_target_pssm, seq_ext, "max",
+        bidirect = FALSE, strand = -1L, prior = 0.01
+    )
+    expect_equal(res$g_ism_minus[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
