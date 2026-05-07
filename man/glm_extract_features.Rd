@@ -12,10 +12,10 @@ glm_extract_features(
   max_cap,
   dis_from_cap = 10,
   scale_factor = 10,
-  transforms = list(list(L = 2, k = 0.5, x_0 = 0, pre_shift = 0, post_shift = -1), list(L
-    = 2, k = 0.5, x_0 = 10, pre_shift = 0, post_shift = 0), list(L = 1, k = 1, x_0 = 0,
-    pre_shift = -5, post_shift = 0), list(L = 2, k = 1, x_0 = 10, pre_shift = 0,
-    post_shift = 0)),
+  transforms = list(`low-energy` = list(L = 2, k = 0.5, x_0 = 0, pre_shift = 0,
+    post_shift = -1), `high-energy` = list(L = 2, k = 0.5, x_0 = 10, pre_shift = 0,
+    post_shift = 0), sigmoid = list(L = 1, k = 1, x_0 = 0, pre_shift = -5, post_shift =
+    0), `higher-energy` = list(L = 2, k = 1, x_0 = 10, pre_shift = 0, post_shift = 0)),
   gc_track = "seq.G_or_C",
   gc_scale_factor = 10,
   n_threads = getOption("gmax.processes", 1L)
