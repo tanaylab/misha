@@ -1,5 +1,7 @@
 # misha (development version)
 
+* Added `pwm.grad` and `pwm.grad.ism` virtual tracks: per-bp gradient / saliency of the PWM aggregate (LSE or MAX) at the iterator interval start. `pwm.grad` is the linearized DeepLIFT-style attribution; `pwm.grad.ism` is in-silico mutagenesis.
+
 # misha 5.6.28
 
 * `gtrack.copy()` gained a `db` argument to copy tracks across databases, and an `overwrite` argument to replace existing destinations. Format conversion (per-chromosome <-> indexed) and chromosome-order remap are handled automatically. Multi-track input is also supported.
