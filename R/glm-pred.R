@@ -282,7 +282,6 @@ glm_pred.create <- function(name,
             K_per[m] <- length(br) - 1L
         }
         K <- as.integer(prod(K_per))
-        if (K < 1L) stop("Product of selector bin counts must be >= 1", call. = FALSE)
     }
 
     # --- Validate weights and bias ---
