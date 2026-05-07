@@ -174,6 +174,8 @@ private:
     // Gradient-mode answer paths (single-strand fwd; bidirect / rc deferred)
     float score_grad_max(const std::string& target, size_t i_min, size_t i_max,
                          size_t motif_length);
+    float score_grad_lse(const std::string& target, size_t i_min, size_t i_max,
+                         size_t motif_length);
 
     // Core members
     DnaPSSM m_pssm;
