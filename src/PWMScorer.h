@@ -171,11 +171,13 @@ private:
     // Utilities
     inline float get_spatial_log_factor(size_t pos_index) const;
 
-    // Gradient-mode answer paths (single-strand fwd; bidirect / rc deferred)
-    float score_grad_max(const std::string& target, size_t i_min, size_t i_max,
-                         size_t motif_length);
-    float score_grad_lse(const std::string& target, size_t i_min, size_t i_max,
-                         size_t motif_length);
+    // Linearized per-bp gradient (DeepLIFT-style) at the iterator interval start.
+    // Handles fwd-only, rc-only, and bidirect strand modes with either MAX
+    // (`lse_aggregate = false`) or LSE (`lse_aggregate = true`) aggregation.
+    float score_grad_linearized(const std::string& target,
+                                size_t i_min, size_t i_max,
+                                size_t motif_length,
+                                bool lse_aggregate);
 
     // Core members
     DnaPSSM m_pssm;
