@@ -481,7 +481,11 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
 			std::string aggregate = "lse";
 			if (func == "pwm.grad" || func == "pwm.grad.ism") {
 				SEXP r_agg = get_rvector_col(rparams, "aggregate", vtrack.c_str(), false);
-				if (!Rf_isNull(r_agg) && Rf_isString(r_agg)) {
+				if (!Rf_isNull(r_agg)) {
+					if (!Rf_isString(r_agg) || Rf_length(r_agg) != 1) {
+						verror("Virtual track %s: aggregate must be a single string",
+						       vtrack.c_str());
+					}
 					aggregate = CHAR(STRING_ELT(r_agg, 0));
 				}
 				if (aggregate != "lse" && aggregate != "max") {
