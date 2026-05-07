@@ -458,15 +458,18 @@ float PWMScorer::score_grad(const std::string& target,
 
     // Scan and accumulate. We track all-anchor stats plus excluding-head
     // stats; the latter let ISM compute max/LSE after a single-base flip in
-    // O(1) without a second pass.
+    // O(1) without a second pass. When spatial weighting is on, each anchor's
+    // score is augmented by a position-dependent log factor; head_fwd/head_rc
+    // are kept *raw* (no spat) so the ISM flip math can recompute them.
     float lse           = -std::numeric_limits<float>::infinity();
     float lse_no_head   = -std::numeric_limits<float>::infinity();
     float best          = -std::numeric_limits<float>::infinity();
     float best_no_head  = -std::numeric_limits<float>::infinity();
     size_t argmax       = i_min;
-    float head_fwd      = -std::numeric_limits<float>::infinity();
-    float head_rc       = -std::numeric_limits<float>::infinity();
-    float head_score    = -std::numeric_limits<float>::infinity();
+    float head_fwd      = -std::numeric_limits<float>::infinity(); // raw, no spat
+    float head_rc       = -std::numeric_limits<float>::infinity(); // raw, no spat
+    float head_score    = -std::numeric_limits<float>::infinity(); // with spat
+    float head_spat_log = 0.0f;
     bool any_finite     = false;
 
     for (size_t i = i_min; i <= i_max; ++i) {
@@ -481,27 +484,32 @@ float PWMScorer::score_grad(const std::string& target,
             rc = score_reverse_original(m_pssm, target, i, m_strand);
         }
 
-        // Per-anchor score: comb (bidirect) or single-strand.
-        float s;
+        // Per-anchor raw score: comb (bidirect) or single-strand.
+        float s_raw;
         if (bidirect) {
             if (!std::isfinite(fwd) && !std::isfinite(rc)) {
-                s = -std::numeric_limits<float>::infinity();
+                s_raw = -std::numeric_limits<float>::infinity();
             } else if (!std::isfinite(fwd)) {
-                s = rc;
+                s_raw = rc;
             } else if (!std::isfinite(rc)) {
-                s = fwd;
+                s_raw = fwd;
             } else {
-                s = fwd;
-                log_sum_log(s, rc);
+                s_raw = fwd;
+                log_sum_log(s_raw, rc);
             }
         } else {
-            s = use_fwd ? fwd : rc;
+            s_raw = use_fwd ? fwd : rc;
         }
 
+        // Apply spatial log factor (= 0 when m_use_spat is false).
+        const float spat_log = get_spatial_log_factor(i - i_min);
+        const float s = std::isfinite(s_raw) ? (s_raw + spat_log) : s_raw;
+
         if (i == head_idx) {
-            head_fwd   = fwd;
-            head_rc    = rc;
-            head_score = s;
+            head_fwd      = fwd;
+            head_rc       = rc;
+            head_score    = s;
+            head_spat_log = spat_log;
         }
 
         if (std::isfinite(s)) {
@@ -625,22 +633,24 @@ float PWMScorer::score_grad(const std::string& target,
             }
         }
 
-        // Combined per-anchor score after flip.
-        float s_alt;
+        // Combined per-anchor raw score after flip, then apply head's spat_log.
+        float s_alt_raw;
         if (bidirect) {
             if (!std::isfinite(fwd_alt) && !std::isfinite(rc_alt)) {
-                s_alt = -std::numeric_limits<float>::infinity();
+                s_alt_raw = -std::numeric_limits<float>::infinity();
             } else if (!std::isfinite(fwd_alt)) {
-                s_alt = rc_alt;
+                s_alt_raw = rc_alt;
             } else if (!std::isfinite(rc_alt)) {
-                s_alt = fwd_alt;
+                s_alt_raw = fwd_alt;
             } else {
-                s_alt = fwd_alt;
-                log_sum_log(s_alt, rc_alt);
+                s_alt_raw = fwd_alt;
+                log_sum_log(s_alt_raw, rc_alt);
             }
         } else {
-            s_alt = use_fwd ? fwd_alt : rc_alt;
+            s_alt_raw = use_fwd ? fwd_alt : rc_alt;
         }
+        const float s_alt = std::isfinite(s_alt_raw)
+            ? (s_alt_raw + head_spat_log) : s_alt_raw;
 
         // Aggregate after flip: only the head anchor's score changes.
         float f_alt;
@@ -1163,20 +1173,11 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                 i_min = 0;
             }
 
-            // Spatial weighting for gradient modes is deferred to a later task.
-            // Surface a clear error rather than silently using non-spatial code.
-            if (m_use_spat &&
-                (m_mode == GRAD_LSE || m_mode == GRAD_MAX ||
-                 m_mode == GRAD_LSE_ISM || m_mode == GRAD_MAX_ISM)) {
-                rdb::verror("PWMScorer: spatial weighting not yet supported for gradient modes");
-            }
-
-            // Gradient modes (single-strand fwd) take a dedicated answer path.
+            // Gradient modes route through score_grad regardless of spatial.
             // They share the iterator clamping (i_min..i_max) above so that the
             // argmax convention matches pwm.max exactly.
-            if (!m_use_spat &&
-                (m_mode == GRAD_MAX || m_mode == GRAD_LSE ||
-                 m_mode == GRAD_MAX_ISM || m_mode == GRAD_LSE_ISM)) {
+            if (m_mode == GRAD_MAX || m_mode == GRAD_LSE ||
+                m_mode == GRAD_MAX_ISM || m_mode == GRAD_LSE_ISM) {
                 const bool lse_aggregate = (m_mode == GRAD_LSE || m_mode == GRAD_LSE_ISM);
                 const bool ism = (m_mode == GRAD_MAX_ISM || m_mode == GRAD_LSE_ISM);
                 return score_grad(target, i_min, i_max, motif_len, lse_aggregate, ism);

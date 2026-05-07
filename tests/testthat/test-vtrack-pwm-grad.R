@@ -743,3 +743,108 @@ test_that("pwm.grad.ism max: strand=-1 matches oracle", {
     )
     expect_equal(res$g_ism_minus[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
 })
+
+# Task 9: spatial weighting
+
+test_that("pwm.grad: spat_factor = all-1 matches non-spatial", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+
+    head_bases <- strsplit(
+        toupper(gseq.extract(gintervals(1, 200, 200 + L))), ""
+    )[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    spat_one <- rep(1, iter_W)
+
+    gvtrack.create("g_no_spat", NULL, "pwm.grad",
+        pssm = pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.create("g_spat_one", NULL, "pwm.grad",
+        pssm = pssm, spat_factor = spat_one, spat_bin = 1L,
+        aggregate = "lse", bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_no_spat", sshift = 0, eshift = iter_W - 1)
+    gvtrack.iterator("g_spat_one", sshift = 0, eshift = iter_W - 1)
+
+    res <- gextract(c("g_no_spat", "g_spat_one"),
+        iterator = 1, intervals = pivot
+    )
+    expect_equal(res$g_no_spat[1], res$g_spat_one[1],
+        tolerance = 1e-5, ignore_attr = TRUE
+    )
+})
+
+test_that("pwm.grad lse: non-trivial spat_factor matches oracle", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 10L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    # Down-weight late anchors so the LSE concentrates more on early ones,
+    # which boosts the head's softmax weight.
+    spat_factor <- c(rep(1, 5), rep(0.01, 5))
+
+    gvtrack.create("g_spat", NULL, "pwm.grad",
+        pssm = pssm, spat_factor = spat_factor, spat_bin = 1L,
+        aggregate = "lse", bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_spat", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_spat", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(pssm, seq_ext, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01,
+        spat_factor = spat_factor, spat_bin_size = 1L
+    )
+    expect_equal(res$g_spat[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad.ism lse: spat_factor matches oracle", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 10L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    pssm <- matrix(
+        c(
+            0.5, 0.3, 0.1, 0.1,
+            0.1, 0.5, 0.3, 0.1,
+            0.1, 0.1, 0.5, 0.3
+        ),
+        L, 4,
+        byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    spat_factor <- c(rep(1, 5), rep(0.05, 5))
+
+    gvtrack.create("g_ism_spat", NULL, "pwm.grad.ism",
+        pssm = pssm, spat_factor = spat_factor, spat_bin = 1L,
+        aggregate = "lse", bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_ism_spat", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_ism_spat", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad_ism(pssm, seq_ext, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01,
+        spat_factor = spat_factor, spat_bin_size = 1L
+    )
+    expect_equal(res$g_ism_spat[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})

@@ -95,20 +95,48 @@
     stop("strand must be +1 or -1 when bidirect = FALSE")
 }
 
+# Apply a per-anchor spatial log-factor to a vector of per-anchor scores.
+# `spat_factor` is a vector of multiplicative factors (in linear scale); we
+# convert to log and add. `spat_bin_size` controls how many anchors share each
+# factor (matches the engine's get_spatial_log_factor convention). When
+# `spat_factor` is NULL or empty, scores are returned unchanged.
+.apply_spat <- function(scores, spat_factor, spat_bin_size = 1L) {
+    if (is.null(spat_factor) || length(spat_factor) == 0) {
+        return(scores)
+    }
+    n <- length(scores)
+    bin_sz <- max(1L, as.integer(spat_bin_size))
+    bins <- ((seq_len(n) - 1L) %/% bin_sz) + 1L
+    bins <- pmin(bins, length(spat_factor))
+    log_factors <- log(pmax(1e-30, spat_factor))[bins]
+    scores + log_factors
+}
+
 # Linearized gradient at p = interval start, head anchor, column 0 (= base b_p).
 #
 # Returns a single non-negative scalar. For an all-N seq or otherwise invalid
 # head base, returns 0.
 manual_pwm_grad <- function(pssm, seq, aggregate = c("lse", "max"),
-                            bidirect = TRUE, strand = 1L, prior = 0.01) {
+                            bidirect = TRUE, strand = 1L, prior = 0.01,
+                            spat_factor = NULL, spat_bin_size = 1L) {
     aggregate <- match.arg(aggregate)
     L <- nrow(pssm)
 
     # Normalized log PSSM (used for diff lookups).
     M <- log(.normalize_pssm(pssm, prior = prior))
 
-    # Per-anchor scores.
+    # Per-anchor scores (with spatial weighting applied).
     scores <- .oracle_anchor_scores(seq, pssm, prior = prior)
+    scores$fwd <- .apply_spat(scores$fwd, spat_factor, spat_bin_size)
+    scores$rc <- .apply_spat(scores$rc, spat_factor, spat_bin_size)
+    # Recompute comb after spatial weighting (spatial is the same for fwd and
+    # rc at a given anchor, so log(exp(fwd_spat) + exp(rc_spat)) = log(exp(fwd)
+    # + exp(rc)) + spat, but recomputing keeps the code symmetric and handles
+    # the all-Inf cases cleanly).
+    scores$comb <- vapply(seq_along(scores$fwd), function(i) {
+        log_sum_exp(c(scores$fwd[i], scores$rc[i]))
+    }, numeric(1))
+
     s <- .pick_scores(scores, bidirect, strand)
     f <- .aggregate_scores(s, aggregate)
 
@@ -153,11 +181,17 @@ manual_pwm_grad <- function(pssm, seq, aggregate = c("lse", "max"),
 # g = f_actual - min over b' != b_p of f(seq with seq[1] := b').
 # If b_p is not ACGT, returns 0.
 manual_pwm_grad_ism <- function(pssm, seq, aggregate = c("lse", "max"),
-                                bidirect = TRUE, strand = 1L, prior = 0.01) {
+                                bidirect = TRUE, strand = 1L, prior = 0.01,
+                                spat_factor = NULL, spat_bin_size = 1L) {
     aggregate <- match.arg(aggregate)
 
     aggregate_for_seq <- function(s_seq) {
         sc <- .oracle_anchor_scores(s_seq, pssm, prior = prior)
+        sc$fwd <- .apply_spat(sc$fwd, spat_factor, spat_bin_size)
+        sc$rc <- .apply_spat(sc$rc, spat_factor, spat_bin_size)
+        sc$comb <- vapply(seq_along(sc$fwd), function(i) {
+            log_sum_exp(c(sc$fwd[i], sc$rc[i]))
+        }, numeric(1))
         s <- .pick_scores(sc, bidirect, strand)
         .aggregate_scores(s, aggregate)
     }
