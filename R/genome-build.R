@@ -1083,6 +1083,10 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #'   \code{<acc>.chrom.sizes.txt}); other backends are unaffected. Set
 #'   \code{FALSE} for the stricter single-column-only behavior.
 #' @param verbose If \code{TRUE}, prints progress.
+#' @param prefetched_alias Optional pre-fetched chromAlias bundle (the
+#'   return value of \code{.hub_preflight_coverage}). When supplied the
+#'   ucsc-hub fetcher reuses it instead of re-downloading. Internal; users
+#'   never set this directly.
 #' @return Invisible \code{NULL}. Side effects: writes \code{.interv} files under
 #'   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
 #'   \code{<groot>/genome_info.yaml}, and re-initializes the active groot.
@@ -1123,7 +1127,8 @@ gdb.install_intervals <- function(groot,
                                   target_chroms = NULL,
                                   min_coverage = 1.0,
                                   match_by_length = TRUE,
-                                  verbose = TRUE) {
+                                  verbose = TRUE,
+                                  prefetched_alias = NULL) {
     sets <- match.arg(sets,
         choices = c("genes", "rmsk", "cgi", "cytoband"),
         several.ok = TRUE
@@ -1184,7 +1189,11 @@ gdb.install_intervals <- function(groot,
 
     fetcher <- switch(recipe$source,
         ucsc = .ucsc_fetch_assets,
-        `ucsc-hub` = function(r, s, w, v) .hub_fetch_assets(r, s, w, gtf_priority, v),
+        `ucsc-hub` = function(r, s, w, v) {
+            .hub_fetch_assets(r, s, w, gtf_priority,
+                prefetched_alias = prefetched_alias, verbose = v
+            )
+        },
         ncbi = .ncbi_fetch_assets,
         manual = .manual_fetch_assets,
         stop(sprintf("No fetcher for source '%s'", recipe$source), call. = FALSE)
