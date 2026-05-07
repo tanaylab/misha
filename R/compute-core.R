@@ -431,11 +431,13 @@ gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL,
                 c_intervals,
                 .misha_env()
             )
+            # Read by column name. The C side guarantees these names; if
+            # ever absent, the test-batch-summary.R contract test catches it.
             df <- data.frame(
                 track = as.character(expr),
-                n = m[, 1], n_nan = m[, 2],
-                min = m[, 3], max = m[, 4], sum = m[, 5],
-                mean = m[, 6], sd = m[, 7],
+                n = m[, "n"], n_nan = m[, "n_nan"],
+                min = m[, "min"], max = m[, "max"], sum = m[, "sum"],
+                mean = m[, "mean"], sd = m[, "sd"],
                 stringsAsFactors = FALSE
             )
             rownames(df) <- NULL

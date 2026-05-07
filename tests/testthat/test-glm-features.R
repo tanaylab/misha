@@ -1,6 +1,57 @@
 local_mm10_db <- Sys.getenv("MISHA_MM10_MOTIF_DB", "")
 mm10_trackdb <- Sys.getenv("MISHA_MM10_TRACKDB", "")
 
+# ---- Unit tests for column-name derivation (no DB required) ----
+
+test_that(".glm_features_transform_names uses element names when all named", {
+    transforms <- list(
+        low = list(L = 2, k = 0.5, x_0 = 0),
+        high = list(L = 1, k = 1, x_0 = 10)
+    )
+    expect_identical(
+        misha:::.glm_features_transform_names(transforms),
+        c("low", "high")
+    )
+})
+
+test_that(".glm_features_transform_names falls back to t1..tN for unnamed", {
+    transforms <- list(list(L = 2), list(L = 1), list(L = 2))
+    expect_identical(
+        misha:::.glm_features_transform_names(transforms),
+        c("t1", "t2", "t3")
+    )
+})
+
+test_that(".glm_features_transform_names falls back when partially named", {
+    # Partially named -> generic, since silent labeling on partial names
+    # would mislabel the unnamed entries.
+    transforms <- list(low = list(L = 2), list(L = 1))
+    expect_identical(
+        misha:::.glm_features_transform_names(transforms),
+        c("t1", "t2")
+    )
+})
+
+test_that(".glm_features_transform_names does not match by L-value fingerprint", {
+    # Regression for prior magic fingerprint that keyed on L == c(2,2,1,2):
+    # an unnamed length-4 transforms list with that exact L-pattern must
+    # NOT silently get the canonical labels - those labels are only
+    # correct when the user actually supplies the canonical pipeline by
+    # name.
+    transforms <- list(
+        list(L = 2, k = 0.5, x_0 = 0, pre_shift = 0, post_shift = -1),
+        list(L = 2, k = 0.5, x_0 = 10, pre_shift = 0, post_shift = 0),
+        list(L = 1, k = 1, x_0 = 0, pre_shift = -5, post_shift = 0),
+        list(L = 2, k = 1, x_0 = 10, pre_shift = 0, post_shift = 0)
+    )
+    expect_identical(
+        misha:::.glm_features_transform_names(transforms),
+        c("t1", "t2", "t3", "t4")
+    )
+})
+
+# ---- Integration tests (require local mm10 motif DB) ----
+
 test_that("glm_extract_features matches R reference pipeline", {
     # Requires local mm10 database with motif energy tracks
     skip_if(!dir.exists(local_mm10_db), "Local mm10 misha db not available")

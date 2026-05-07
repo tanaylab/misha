@@ -1,6 +1,10 @@
 # misha 5.6.26
 
 * `glm_pred.create()` (multi-selector) now takes `weights`, `bias`, and `interaction_weights` as labeled multi-axis arrays with `dim = c(N, K_1, ..., K_M)` (or `c(M_int, K_1, ..., K_M)` for interactions; `bias` drops the leading axis). Trailing-axis names and bin labels are auto-derived from `selector_tracks` and `selector_breaks`, so `glm_pred.info()` round-trips a fully labeled object. The pre-release flat `N x prod(K_m)` matrix shape is no longer accepted for `M >= 2`; replace `matrix(coefs, nrow = N)` with `array(coefs, dim = c(N, K_1, ..., K_M))`. Single-selector (`M = 1`) still accepts a plain `matrix(N, K_1)`. Scalar `bias` (default `0`) is recycled to all strata.
+* `glm_pred.create()` now validates that `simple_cap`, `interaction_trans_family`, and `inter_trans_params` have length 1 or N. Previously wrong lengths were silently miswired (entries beyond the input length got the default).
+* `glm_pred` virtual tracks now surface track-open errors during evaluation (e.g., the underlying track was removed or corrupted between `create` and `gextract`). Previously the affected positions were silently filled with NaN.
+* `glm_extract_features()` derives transform column-name suffixes from `names(transforms)`; the default `transforms` is now a named list so existing default usage is unchanged. Replaces a fragile `L`-value fingerprint that silently relabeled non-canonical transform sets as `t1..tN`.
+* `gsummary()` multi-track fast path reads C-side output columns by name, removing a silent column-swap risk.
 
 # misha 5.6.25
 

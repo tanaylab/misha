@@ -2408,11 +2408,15 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 					glm_track_cache.emplace(entry.track_name,
 						GlmTrackCache{entry.track_handle, entry.cached_fixedbin,
 						              entry.cached_sparse, entry.cached_bin_size});
-				} catch (TGLException &) {
-					entry.track_handle.reset();
-					entry.cached_fixedbin = nullptr;
-					entry.cached_sparse = nullptr;
-					entry.cached_bin_size = 0;
+				} catch (TGLException &e) {
+					// Surface real errors (bad track name, corrupted file)
+					// instead of silently NaN'ing the affected positions.
+					// Legitimate "no data on this chrom" returns nullptr from
+					// create_and_init_1d_track without throwing and is handled
+					// in the else-branch above.
+					const string &chrom_str = m_iu.get_chromkey().id2chrom(interval.chromid);
+					verror("GLM entry track '%s' failed to open for chrom %s: %s",
+					       entry.track_name.c_str(), chrom_str.c_str(), e.msg());
 				}
 			}
 		}
