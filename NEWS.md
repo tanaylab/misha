@@ -1,3 +1,11 @@
+# misha 5.6.26
+
+* `glm_pred.create()` (multi-selector) now takes `weights`, `bias`, and `interaction_weights` as labeled multi-axis arrays with `dim = c(N, K_1, ..., K_M)` (or `c(M_int, K_1, ..., K_M)` for interactions; `bias` drops the leading axis). Trailing-axis names and bin labels are auto-derived from `selector_tracks` and `selector_breaks`, so `glm_pred.info()` round-trips a fully labeled object. The pre-release flat `N x prod(K_m)` matrix shape is no longer accepted for `M >= 2`; replace `matrix(coefs, nrow = N)` with `array(coefs, dim = c(N, K_1, ..., K_M))`. Single-selector (`M = 1`) still accepts a plain `matrix(N, K_1)`. Scalar `bias` (default `0`) is recycled to all strata.
+* `glm_pred.create()` now validates that `simple_cap`, `interaction_trans_family`, and `inter_trans_params` have length 1 or N. Previously wrong lengths were silently miswired (entries beyond the input length got the default).
+* `glm_pred` virtual tracks now surface track-open errors during evaluation (e.g., the underlying track was removed or corrupted between `create` and `gextract`). Previously the affected positions were silently filled with NaN.
+* `glm_extract_features()` derives transform column-name suffixes from `names(transforms)`; the default `transforms` is now a named list so existing default usage is unchanged. Replaces a fragile `L`-value fingerprint that silently relabeled non-canonical transform sets as `t1..tN`.
+* `gsummary()` multi-track fast path reads C-side output columns by name, removing a silent column-swap risk.
+
 # misha 5.6.25
 
 * `gsynth.sample()` and `gsynth.random()` now preserve `N` (and lowercase `n`) positions from the original reference by default. Previously, every position was filled with a sampled/random ACGT base, so reference gaps and centromeres came out as fabricated nucleotides. Pass `preserve_n = FALSE` to restore the legacy behavior.
@@ -40,6 +48,7 @@
 
 # misha 5.6.17
 
+* `gquantiles`, `gsummary`, `gscreen` now accept a vector of expressions and return a `data.frame` for multi-track calls (matrix-returning single-expression calls are unchanged). An optimized C++ fast path is available for simple track or vtrack shapes; `gsummary` and `gscreen` use it automatically when the input resolves to bare tracks / simple vtracks, since their outputs agree exactly between paths. `gquantiles` keeps `fast = FALSE` as its default to preserve existing numeric outputs; pass `fast = TRUE` to opt into the exact top-K path (substantially faster for extreme quantiles — ≥5× on a 10-motif mouse-genome benchmark). A one-time session message suggests `fast = TRUE` on calls where it is eligible.
 * Fixed `gextract` over thousands of tracks failing with "Too many open files" (EMFILE). `GenomeTrackSparse` and `GenomeTrackFixedBin` (dense) were holding one open `FILE*` per track for the lifetime of the call, so workloads over hundreds–thousands of motif tracks blew past the default 1024 soft `RLIMIT_NOFILE`. The `BufferedFile` handle is now released once it is no longer needed (sparse: after data is loaded into memory; dense: after `mmap` is set up — reads go through the mapped region). Subsequent chromosome transitions reopen via the same paths. Negligible perf cost.
 * Fixed dense-track `gextract` regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Two compounding causes:
   - `MmapFile` used `MAP_POPULATE`, eagerly paging in every mapped track at every chromosome transition (already covered by `MADV_SEQUENTIAL`).

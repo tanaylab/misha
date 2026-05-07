@@ -111,6 +111,10 @@ extern "C" {
                                 SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer_dist(SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_ggenome_implant(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_glm_extract_features(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gquantiles_multi(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gsummary_multi(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gscreen_multi(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -217,6 +221,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gsynth_score", (DL_FUNC)&C_gsynth_score, 14},
     {"C_gseq_kmer_dist", (DL_FUNC)&C_gseq_kmer_dist, 4},
     {"C_ggenome_implant", (DL_FUNC)&C_ggenome_implant, 7},
+    {"C_glm_extract_features", (DL_FUNC)&C_glm_extract_features, 14},
+    {"C_gquantiles_multi", (DL_FUNC)&C_gquantiles_multi, 9},
+    {"C_gsummary_multi", (DL_FUNC)&C_gsummary_multi, 8},
+    {"C_gscreen_multi", (DL_FUNC)&C_gscreen_multi, 10},
     {NULL, NULL, 0}
 };
 

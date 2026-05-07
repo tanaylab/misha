@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cmath>
+#include <map>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <unordered_set>
@@ -25,6 +26,7 @@
 #include "IntervVarProcessor.h"
 #include "ValueVarProcessor.h"
 #include "SequenceVarProcessor.h"
+#include "GlmVarProcessor.h"
 
 namespace {
 // Parse direction parameter from R params list. Returns ABOVE or BELOW.
@@ -65,7 +67,8 @@ const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Trac
     "first", "first.pos.abs", "first.pos.relative", "last", "last.pos.abs", "last.pos.relative",
     "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
     "pwm.edit_distance.lse", "pwm.edit_distance.lse.pos",
-    "pwm.n_mutations"};
+    "pwm.n_mutations",
+    "glm.predict"};
 
 const char *TrackExpressionVars::Interv_var::FUNC_NAMES[TrackExpressionVars::Interv_var::NUM_FUNCS] = { "distance", "distance.center", "distance.edge", "coverage", "neighbor.count" };
 
@@ -158,6 +161,7 @@ TrackExpressionVars::TrackExpressionVars(rdb::IntervUtils &iu) :
 	m_interv_processor = std::make_unique<IntervVarProcessor>(iu);
 	m_value_processor = std::make_unique<ValueVarProcessor>(iu);
 	m_sequence_processor = std::make_unique<SequenceVarProcessor>(iu, m_shared_seqfetch);
+	m_glm_processor = std::make_unique<GlmVarProcessor>(iu);
 }
 
 TrackExpressionVars::~TrackExpressionVars()
@@ -873,6 +877,385 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             // Attach filter if present
             attach_filter_to_var(rvtrack, vtrack, var);
             return;
+        } else if (func == "glm.predict") {
+            // Fused GLM predictor virtual track (sourceless)
+            m_track_vars.push_back(Track_var());
+            Track_var &var = m_track_vars.back();
+            var.var_name = vtrack;
+            var.val_func = Track_var::GLM_PREDICT;
+            var.track_n_imdf = nullptr;
+
+            SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
+            if (Rf_isNull(rparams) || !Rf_isNewList(rparams))
+                verror("Virtual track %s: glm.predict requires params list", vtrack.c_str());
+
+            // --- tracks (character vector, N entries) ---
+            int t_idx = findListElementIndex(rparams, "tracks");
+            if (t_idx < 0)
+                verror("Virtual track %s: 'tracks' parameter is required", vtrack.c_str());
+            SEXP rtracks = VECTOR_ELT(rparams, t_idx);
+            if (!Rf_isString(rtracks) || Rf_length(rtracks) < 1)
+                verror("Virtual track %s: 'tracks' must be a non-empty character vector", vtrack.c_str());
+            int N = Rf_length(rtracks);
+
+            // --- inner_func (character vector, N) ---
+            int if_idx = findListElementIndex(rparams, "inner_func");
+            if (if_idx < 0)
+                verror("Virtual track %s: 'inner_func' parameter is required", vtrack.c_str());
+            SEXP rif = VECTOR_ELT(rparams, if_idx);
+            if (!Rf_isString(rif) || Rf_length(rif) != N)
+                verror("Virtual track %s: 'inner_func' must be a character vector of length %d", vtrack.c_str(), N);
+
+            // --- weights (numeric vector N, or matrix N×K flattened column-major) ---
+            int w_idx = findListElementIndex(rparams, "weights");
+            if (w_idx < 0)
+                verror("Virtual track %s: 'weights' parameter is required", vtrack.c_str());
+            SEXP rweights = VECTOR_ELT(rparams, w_idx);
+            if (!Rf_isReal(rweights))
+                verror("Virtual track %s: 'weights' must be numeric", vtrack.c_str());
+
+            // Detect K from num_bins parameter (default 1)
+            int K = 1;
+            int nb_idx = findListElementIndex(rparams, "num_bins");
+            if (nb_idx >= 0) {
+                SEXP rnb = VECTOR_ELT(rparams, nb_idx);
+                if (!Rf_isNull(rnb)) {
+                    if (Rf_isInteger(rnb)) K = INTEGER(rnb)[0];
+                    else K = (int)Rf_asReal(rnb);
+                }
+            }
+            var.glm_num_bins = K;
+
+            if (Rf_length(rweights) != N * K)
+                verror("Virtual track %s: 'weights' length must be %d (N=%d x K=%d)",
+                       vtrack.c_str(), N * K, N, K);
+
+            // --- bias (numeric scalar or vector of length K) ---
+            var.glm_bias.assign(K, 0.0);
+            int b_idx = findListElementIndex(rparams, "bias");
+            if (b_idx >= 0) {
+                SEXP rbias = VECTOR_ELT(rparams, b_idx);
+                if (!Rf_isNull(rbias) && Rf_isReal(rbias)) {
+                    double *bp = REAL(rbias);
+                    int blen = Rf_length(rbias);
+                    for (int i = 0; i < K && i < blen; i++)
+                        var.glm_bias[i] = bp[i];
+                }
+            }
+
+            // --- scale_factor (numeric scalar) ---
+            var.glm_scale_factor = 10.0;
+            int sf_idx = findListElementIndex(rparams, "scale_factor");
+            if (sf_idx >= 0) {
+                SEXP rsf = VECTOR_ELT(rparams, sf_idx);
+                if (!Rf_isNull(rsf))
+                    var.glm_scale_factor = Rf_asReal(rsf);
+            }
+
+            // --- sshifts / eshifts (numeric vectors, N) ---
+            SEXP rsshifts = R_NilValue, reshifts = R_NilValue;
+            int ss_idx = findListElementIndex(rparams, "sshifts");
+            int es_idx = findListElementIndex(rparams, "eshifts");
+            if (ss_idx >= 0) rsshifts = VECTOR_ELT(rparams, ss_idx);
+            if (es_idx >= 0) reshifts = VECTOR_ELT(rparams, es_idx);
+
+            // --- max_cap / dis_from_cap (numeric vectors, N, may contain NA) ---
+            SEXP rmaxcap = R_NilValue, rdiscap = R_NilValue;
+            int mc_idx = findListElementIndex(rparams, "max_cap");
+            int dc_idx = findListElementIndex(rparams, "dis_from_cap");
+            if (mc_idx >= 0) rmaxcap = VECTOR_ELT(rparams, mc_idx);
+            if (dc_idx >= 0) rdiscap = VECTOR_ELT(rparams, dc_idx);
+
+            // --- trans_family (character vector, N, may contain NA) ---
+            SEXP rtfam = R_NilValue;
+            int tf_idx = findListElementIndex(rparams, "trans_family");
+            if (tf_idx >= 0) rtfam = VECTOR_ELT(rparams, tf_idx);
+
+            // --- trans param vectors (5 parallel numeric vectors, N each) ---
+            SEXP rtL = R_NilValue, rtk = R_NilValue, rtx0 = R_NilValue;
+            SEXP rtpre = R_NilValue, rtpost = R_NilValue;
+            int tL_idx = findListElementIndex(rparams, "trans_L");
+            int tk_idx = findListElementIndex(rparams, "trans_k");
+            int tx0_idx = findListElementIndex(rparams, "trans_x0");
+            int tpre_idx = findListElementIndex(rparams, "trans_pre");
+            int tpost_idx = findListElementIndex(rparams, "trans_post");
+            if (tL_idx >= 0) rtL = VECTOR_ELT(rparams, tL_idx);
+            if (tk_idx >= 0) rtk = VECTOR_ELT(rparams, tk_idx);
+            if (tx0_idx >= 0) rtx0 = VECTOR_ELT(rparams, tx0_idx);
+            if (tpre_idx >= 0) rtpre = VECTOR_ELT(rparams, tpre_idx);
+            if (tpost_idx >= 0) rtpost = VECTOR_ELT(rparams, tpost_idx);
+
+            // --- kernel_bins (optional numeric vector, B) ---
+            SEXP rkbins = R_NilValue;
+            int kb_idx = findListElementIndex(rparams, "kernel_bins");
+            if (kb_idx >= 0) rkbins = VECTOR_ELT(rparams, kb_idx);
+            if (!Rf_isNull(rkbins) && Rf_isReal(rkbins)) {
+                int B = Rf_length(rkbins);
+                var.glm_kernel_bins.resize(B);
+                double *kbp = REAL(rkbins);
+                for (int b = 0; b < B; b++)
+                    var.glm_kernel_bins[b] = kbp[b];
+            }
+
+            // --- kernels (optional list of numeric vectors, N or recycled from length 1) ---
+            SEXP rkernels = R_NilValue;
+            int kn_idx = findListElementIndex(rparams, "kernels");
+            if (kn_idx >= 0) rkernels = VECTOR_ELT(rparams, kn_idx);
+
+            // --- Build GlmEntry vector ---
+            var.glm_entries.resize(N);
+            // Copy weights directly — R's column-major layout is already bin-major: wp[b*N + i]
+            var.glm_all_weights.assign(REAL(rweights), REAL(rweights) + N * K);
+            double *ssp = (!Rf_isNull(rsshifts) && Rf_isReal(rsshifts)) ? REAL(rsshifts) : nullptr;
+            double *esp = (!Rf_isNull(reshifts) && Rf_isReal(reshifts)) ? REAL(reshifts) : nullptr;
+            double *mcp = (!Rf_isNull(rmaxcap) && Rf_isReal(rmaxcap)) ? REAL(rmaxcap) : nullptr;
+            double *dcp = (!Rf_isNull(rdiscap) && Rf_isReal(rdiscap)) ? REAL(rdiscap) : nullptr;
+            double *tLp = (!Rf_isNull(rtL) && Rf_isReal(rtL)) ? REAL(rtL) : nullptr;
+            double *tkp = (!Rf_isNull(rtk) && Rf_isReal(rtk)) ? REAL(rtk) : nullptr;
+            double *tx0p = (!Rf_isNull(rtx0) && Rf_isReal(rtx0)) ? REAL(rtx0) : nullptr;
+            double *tprep = (!Rf_isNull(rtpre) && Rf_isReal(rtpre)) ? REAL(rtpre) : nullptr;
+            double *tpostp = (!Rf_isNull(rtpost) && Rf_isReal(rtpost)) ? REAL(rtpost) : nullptr;
+
+            for (int i = 0; i < N; i++) {
+                auto &entry = var.glm_entries[i];
+                entry.track_name = CHAR(STRING_ELT(rtracks, i));
+
+                // inner_func
+                string ifunc = CHAR(STRING_ELT(rif, i));
+                entry.inner_is_lse = (ifunc == "lse");
+
+                // weight(s) — bin-major layout matches R column-major: wp[b*N + i]
+                entry.weight_offset = i;
+
+                // shifts
+                entry.sshift = ssp ? (int64_t)ssp[i] : 0;
+                entry.eshift = esp ? (int64_t)esp[i] : 0;
+
+                // scaling
+                if (mcp && !ISNA(mcp[i]) && dcp && !ISNA(dcp[i])) {
+                    entry.scaling.enabled = true;
+                    entry.scaling.max_cap = mcp[i];
+                    entry.scaling.dis_from_cap = dcp[i];
+                }
+
+                // simple_cap flag (optional logical vector)
+                int sc_idx = findListElementIndex(rparams, "simple_cap");
+                if (sc_idx >= 0) {
+                    SEXP rsc = VECTOR_ELT(rparams, sc_idx);
+                    if (!Rf_isNull(rsc) && Rf_isLogical(rsc) && i < Rf_length(rsc)) {
+                        entry.scaling.simple_cap = (LOGICAL(rsc)[i] == TRUE);
+                    }
+                }
+
+                // transform
+                if (rtfam != R_NilValue && Rf_isString(rtfam) && Rf_length(rtfam) > i) {
+                    SEXP tfam_elt = STRING_ELT(rtfam, i);
+                    if (tfam_elt != NA_STRING) {
+                        string tfam = CHAR(tfam_elt);
+                        if (tfam == "logist") {
+                            entry.transform.enabled = true;
+                            if (tLp && !ISNA(tLp[i])) entry.transform.L = tLp[i];
+                            if (tkp && !ISNA(tkp[i])) entry.transform.k = tkp[i];
+                            if (tx0p && !ISNA(tx0p[i])) entry.transform.x_0 = tx0p[i];
+                            if (tprep && !ISNA(tprep[i])) entry.transform.pre_shift = tprep[i];
+                            if (tpostp && !ISNA(tpostp[i])) entry.transform.post_shift = tpostp[i];
+                        }
+                    }
+                }
+
+                // kernel weights per entry (optional)
+                if (!Rf_isNull(rkernels) && Rf_isNewList(rkernels)) {
+                    int kn_len = Rf_length(rkernels);
+                    int ki = (kn_len == 1) ? 0 : i; // recycle if length 1
+                    SEXP rk = VECTOR_ELT(rkernels, ki);
+                    if (Rf_isReal(rk)) {
+                        int B = Rf_length(rk);
+                        entry.kernel_weights.resize(B);
+                        double *kp = REAL(rk);
+                        for (int b = 0; b < B; b++)
+                            entry.kernel_weights[b] = kp[b];
+                    }
+                }
+            }
+
+            // --- Interactions (optional) ---
+            int ii_idx = findListElementIndex(rparams, "inter_i");
+            int ij_idx = findListElementIndex(rparams, "inter_j");
+            int iw_idx = findListElementIndex(rparams, "inter_weights");
+            if (ii_idx >= 0 && ij_idx >= 0 && iw_idx >= 0) {
+                SEXP rii = VECTOR_ELT(rparams, ii_idx);
+                SEXP rij = VECTOR_ELT(rparams, ij_idx);
+                SEXP riw = VECTOR_ELT(rparams, iw_idx);
+                if (!Rf_isNull(rii) && !Rf_isNull(rij) && !Rf_isNull(riw)) {
+                    int M = Rf_length(rii);  // inter_i always has exactly M elements
+                    int iw_len = Rf_length(riw);
+                    if (iw_len != M * K)
+                        verror("Virtual track %s: 'inter_weights' length must be %d (M=%d x K=%d)",
+                               vtrack.c_str(), M * K, M, K);
+                    // inter_i/inter_j can be integer or real
+                    var.glm_interactions.resize(M);
+                    // Copy interaction weights directly — R column-major = bin-major: iwp[b*M + m]
+                    var.glm_all_inter_weights.assign(REAL(riw), REAL(riw) + M * K);
+
+                    // Get interaction transform params
+                    SEXP ritfam = R_NilValue;
+                    SEXP ritL = R_NilValue, ritk = R_NilValue, ritx0 = R_NilValue;
+                    SEXP ritpre = R_NilValue, ritpost = R_NilValue;
+                    int itf_idx = findListElementIndex(rparams, "inter_trans_family");
+                    if (itf_idx >= 0) ritfam = VECTOR_ELT(rparams, itf_idx);
+                    int itL_idx = findListElementIndex(rparams, "inter_trans_L");
+                    int itk_idx = findListElementIndex(rparams, "inter_trans_k");
+                    int itx0_idx = findListElementIndex(rparams, "inter_trans_x0");
+                    int itpre_idx = findListElementIndex(rparams, "inter_trans_pre");
+                    int itpost_idx = findListElementIndex(rparams, "inter_trans_post");
+                    if (itL_idx >= 0) ritL = VECTOR_ELT(rparams, itL_idx);
+                    if (itk_idx >= 0) ritk = VECTOR_ELT(rparams, itk_idx);
+                    if (itx0_idx >= 0) ritx0 = VECTOR_ELT(rparams, itx0_idx);
+                    if (itpre_idx >= 0) ritpre = VECTOR_ELT(rparams, itpre_idx);
+                    if (itpost_idx >= 0) ritpost = VECTOR_ELT(rparams, itpost_idx);
+
+                    double *iip = Rf_isInteger(rii) ? nullptr : REAL(rii);
+                    int *iipi = Rf_isInteger(rii) ? INTEGER(rii) : nullptr;
+                    double *ijp = Rf_isInteger(rij) ? nullptr : REAL(rij);
+                    int *ijpi = Rf_isInteger(rij) ? INTEGER(rij) : nullptr;
+                    double *itLp = (!Rf_isNull(ritL) && Rf_isReal(ritL)) ? REAL(ritL) : nullptr;
+                    double *itkp = (!Rf_isNull(ritk) && Rf_isReal(ritk)) ? REAL(ritk) : nullptr;
+                    double *itx0p = (!Rf_isNull(ritx0) && Rf_isReal(ritx0)) ? REAL(ritx0) : nullptr;
+                    double *itprep = (!Rf_isNull(ritpre) && Rf_isReal(ritpre)) ? REAL(ritpre) : nullptr;
+                    double *itpostp = (!Rf_isNull(ritpost) && Rf_isReal(ritpost)) ? REAL(ritpost) : nullptr;
+
+                    for (int m = 0; m < M; m++) {
+                        auto &inter = var.glm_interactions[m];
+                        // 1-based R index to 0-based C++ index
+                        inter.entry_i = (iipi ? iipi[m] : (int)iip[m]) - 1;
+                        inter.entry_j = (ijpi ? ijpi[m] : (int)ijp[m]) - 1;
+                        inter.weight_offset = m;  // bin-major: access as [b*M + m]
+
+                        if (inter.entry_i < 0 || inter.entry_i >= N ||
+                            inter.entry_j < 0 || inter.entry_j >= N)
+                            verror("Virtual track %s: interaction index out of range [1, %d]",
+                                   vtrack.c_str(), N);
+
+                        // Interaction transform
+                        if (ritfam != R_NilValue && Rf_isString(ritfam) && Rf_length(ritfam) > m) {
+                            SEXP itfam_elt = STRING_ELT(ritfam, m);
+                            if (itfam_elt != NA_STRING) {
+                                string itfam = CHAR(itfam_elt);
+                                if (itfam == "logist") {
+                                    inter.transform.enabled = true;
+                                    if (itLp && !ISNA(itLp[m])) inter.transform.L = itLp[m];
+                                    if (itkp && !ISNA(itkp[m])) inter.transform.k = itkp[m];
+                                    if (itx0p && !ISNA(itx0p[m])) inter.transform.x_0 = itx0p[m];
+                                    if (itprep && !ISNA(itprep[m])) inter.transform.pre_shift = itprep[m];
+                                    if (itpostp && !ISNA(itpostp[m])) inter.transform.post_shift = itpostp[m];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- selector_tracks (CHARACTER vector len M) and selector_breaks (LIST of REAL vectors len M) ---
+            int st_idx = findListElementIndex(rparams, "selector_tracks");
+            int sb_idx = findListElementIndex(rparams, "selector_breaks");
+            if (st_idx >= 0) {
+                SEXP rst = VECTOR_ELT(rparams, st_idx);
+                if (!Rf_isNull(rst)) {
+                    if (!Rf_isString(rst))
+                        verror("'selector_tracks' must be a character vector");
+                    int M = Rf_length(rst);
+                    if (M < 1)
+                        verror("'selector_tracks' must have length >= 1 when present");
+                    if (sb_idx < 0)
+                        verror("'selector_breaks' is required when 'selector_tracks' is present");
+                    SEXP rsb = VECTOR_ELT(rparams, sb_idx);
+                    if (!Rf_isVectorList(rsb) || Rf_length(rsb) != M)
+                        verror("'selector_breaks' must be a list of length %d (one per selector)", M);
+
+                    var.glm_selector_track_names.resize(M);
+                    var.glm_selector_binfinders.resize(M);
+                    var.glm_selector_strides.assign(M, 0);
+
+                    int64_t K_total = 1;
+                    for (int m = 0; m < M; ++m) {
+                        var.glm_selector_track_names[m] = CHAR(STRING_ELT(rst, m));
+                        SEXP rbm = VECTOR_ELT(rsb, m);
+                        if (!Rf_isReal(rbm) || Rf_length(rbm) < 2)
+                            verror("'selector_breaks[[%d]]' must be a numeric vector of length >= 2", m + 1);
+                        int nbr = Rf_length(rbm);
+                        std::vector<double> breaks(REAL(rbm), REAL(rbm) + nbr);
+                        var.glm_selector_binfinders[m].init(breaks, true, true);
+                        int K_m = nbr - 1;
+                        var.glm_selector_strides[m] = (size_t)K_total;
+                        K_total *= K_m;
+                    }
+                    if (K_total != var.glm_num_bins)
+                        verror("Compound bin count from selectors (%lld) does not match weights/bias (%d)",
+                               (long long)K_total, var.glm_num_bins);
+                }
+            }
+
+            // Allocate scaled cache if interactions exist
+            if (!var.glm_interactions.empty()) {
+                var.glm_scaled_cache.resize(N, 0.0);
+            }
+
+            // Build scaling groups: entries with identical
+            // (track_name, sshift, eshift, inner_is_lse, scaling) share one
+            // aggregate+scale computation. Only the transform+weight differ.
+            if (var.glm_kernel_bins.empty()) {
+                // Group key: (track_name, sshift, eshift, inner_is_lse, scaling_enabled, max_cap, dis_from_cap)
+                // Use a map with string key for simplicity at parse time (runs once).
+                map<string, vector<int>> group_map;
+                for (int i = 0; i < N; i++) {
+                    auto &e = var.glm_entries[i];
+                    // Build a string key from the grouping fields
+                    char keybuf[256];
+                    snprintf(keybuf, sizeof(keybuf),
+                             "%s|%lld|%lld|%d|%d|%.17g|%.17g|%d",
+                             e.track_name.c_str(),
+                             (long long)e.sshift, (long long)e.eshift,
+                             (int)e.inner_is_lse,
+                             (int)e.scaling.enabled,
+                             e.scaling.enabled ? e.scaling.max_cap : 0.0,
+                             e.scaling.enabled ? e.scaling.dis_from_cap : 0.0,
+                             (int)e.scaling.simple_cap);
+                    group_map[string(keybuf)].push_back(i);
+                }
+                var.glm_scaling_groups.reserve(group_map.size());
+                for (auto &kv : group_map) {
+                    Track_var::GlmScalingGroup g;
+                    g.representative_idx = kv.second[0];
+                    g.entry_indices = std::move(kv.second);
+                    var.glm_scaling_groups.push_back(std::move(g));
+                }
+
+                // Build track-level groups: cluster scaling groups by track name
+                // for cache-friendly traversal (read one track's data, process all groups).
+                map<string, vector<int>> tg_map;
+                for (int sg = 0; sg < (int)var.glm_scaling_groups.size(); sg++) {
+                    auto &rep = var.glm_entries[var.glm_scaling_groups[sg].representative_idx];
+                    tg_map[rep.track_name].push_back(sg);
+                }
+                var.glm_track_groups.reserve(tg_map.size());
+                for (auto &kv : tg_map) {
+                    Track_var::GlmTrackGroup tg;
+                    tg.track_entry_idx = var.glm_scaling_groups[kv.second[0]].representative_idx;
+                    tg.min_sshift = numeric_limits<int64_t>::max();
+                    tg.max_eshift = numeric_limits<int64_t>::min();
+                    for (int sg_idx : kv.second) {
+                        auto &rep = var.glm_entries[var.glm_scaling_groups[sg_idx].representative_idx];
+                        tg.min_sshift = min(tg.min_sshift, rep.sshift);
+                        tg.max_eshift = max(tg.max_eshift, rep.eshift);
+                    }
+                    tg.scaling_group_indices = std::move(kv.second);
+                    var.glm_track_groups.push_back(std::move(tg));
+                }
+            }
+
+            var.percentile = numeric_limits<double>::quiet_NaN();
+            var.requires_pv = false;
+            return;
         }
 	}
 
@@ -1539,6 +1922,10 @@ void TrackExpressionVars::register_track_functions()
         if (TrackExpressionVars::is_sequence_based_function(ivar->val_func)) {
             continue;
         }
+		// Skip GLM predict variables - they manage their own track reads
+		if (TrackExpressionVars::is_glm_function(ivar->val_func)) {
+			continue;
+		}
 		GenomeTrack1D *track1d = GenomeTrack::is_1d(ivar->track_n_imdf->type) ? (GenomeTrack1D *)ivar->track_n_imdf->track.get() : NULL;
 		GenomeTrack2D *track2d = GenomeTrack::is_2d(ivar->track_n_imdf->type) ? (GenomeTrack2D *)ivar->track_n_imdf->track.get() : NULL;
 
@@ -1642,7 +2029,7 @@ void TrackExpressionVars::register_track_functions()
 				verror("vtrack functions 'last.pos.abs' and 'last.pos.relative' can only be used on 1D tracks");
 			track1d->register_function(GenomeTrack1D::LAST_POS);
 			break;
-		// Sequence-based functions work directly on sequences, no need to register track functions
+		// Sequence-based functions bypass normal track function registration
 		default:
 			if (!TrackExpressionVars::is_sequence_based_function((Track_var::Val_func)ivar->val_func))
 				verror("Unrecognized virtual track function");
@@ -1665,8 +2052,17 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	// First validate iterator compatibility
 	for (Track_vars::const_iterator itrack_var = m_track_vars.begin(); itrack_var != m_track_vars.end(); ++itrack_var)
 	{
-	    // Skip iterator validation for sequence-based variables since they don't have tracks or imdf
+	    // Skip iterator validation for sourceless variables (sequence-based, glm.predict)
         if (TrackExpressionVars::is_sequence_based_function(itrack_var->val_func)) {
+            continue;
+        }
+        // GLM predict is 1D-only: it reads source tracks directly without dimension projection
+        if (TrackExpressionVars::is_glm_function(itrack_var->val_func)) {
+            if (expr_itr.is_2d())
+                verror("Virtual track %s: glm.predict does not support 2D iterators", itrack_var->var_name.c_str());
+            continue;
+        }
+        if (!itrack_var->track_n_imdf) {
             continue;
         }
 
@@ -1703,9 +2099,12 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 
 	for (Track_vars::const_iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ++ivar)
 	{
-		// Skip sequence-based tracks
+		// Skip sourceless tracks (sequence-based, glm.predict)
 		if (TrackExpressionVars::is_sequence_based_function(ivar->val_func))
 		{
+			continue;
+		}
+		if (!ivar->track_n_imdf) {
 			continue;
 		}
 		track_names.push_back(ivar->track_n_imdf->name);
@@ -1889,9 +2288,10 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 {
 	reset_shared_1d_track_masters();
 
-	// Precompute sequence-only flags (avoids O(N*M) scan in set_vars hot loop)
-	for (Track_n_imdfs::iterator itn = m_track_n_imdfs.begin(); itn != m_track_n_imdfs.end(); ++itn)
+	// Precompute sequence-only flag (avoids O(N*M) scan in set_vars hot loop)
+	for (Track_n_imdfs::iterator itn = m_track_n_imdfs.begin(); itn != m_track_n_imdfs.end(); ++itn) {
 		itn->has_only_sequence_functions = is_sequence_track_n_imdf(*itn);
+	}
 
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 	{
@@ -1956,6 +2356,109 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 			ivar->pwm_scorer->invalidate_cache();
 		}
 	}
+
+	// Open track handles for GLM predict multi-track vtracks.
+	// Many entries reference the same underlying track (e.g. 2430 entries
+	// from 190 unique motifs). Cache handles by track_name so we open each
+	// file only once, avoiding FD exhaustion under heavy parallelism.
+	{
+		struct GlmTrackCache {
+			shared_ptr<GenomeTrack> handle;
+			GenomeTrackFixedBin *fixedbin;
+			GenomeTrackSparse *sparse;
+			unsigned bin_size;
+		};
+		unordered_map<string, GlmTrackCache> glm_track_cache;
+
+		for (auto &var : m_track_vars) {
+			if (var.val_func != Track_var::GLM_PREDICT) continue;
+			for (auto &entry : var.glm_entries) {
+				try {
+					auto it = glm_track_cache.find(entry.track_name);
+					if (it != glm_track_cache.end()) {
+						entry.track_handle   = it->second.handle;
+						entry.cached_fixedbin = it->second.fixedbin;
+						entry.cached_sparse   = it->second.sparse;
+						entry.cached_bin_size = it->second.bin_size;
+						continue;
+					}
+
+					string track_dir = track2path(m_iu.get_env(), entry.track_name);
+					GenomeTrack::Type ttype = GenomeTrack::get_type(track_dir.c_str(), m_iu.get_chromkey(), false);
+					string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
+					string filename(track_dir + "/" + resolved);
+					// GLM reads bin_size/mmap directly without read_interval(),
+					// so shared-backend dependents (which defer init) would be uninitialized.
+					entry.track_handle = create_and_init_1d_track(filename, interval.chromid, ttype);
+					if (entry.track_handle) {
+						GenomeTrack *raw = entry.track_handle.get();
+						entry.cached_fixedbin = dynamic_cast<GenomeTrackFixedBin*>(raw);
+						entry.cached_sparse = entry.cached_fixedbin ? nullptr
+						                      : dynamic_cast<GenomeTrackSparse*>(raw);
+						if (entry.cached_fixedbin) {
+							entry.cached_bin_size = entry.cached_fixedbin->get_bin_size();
+						} else {
+							entry.cached_bin_size = 0;
+						}
+					} else {
+						entry.cached_fixedbin = nullptr;
+						entry.cached_sparse = nullptr;
+						entry.cached_bin_size = 0;
+					}
+					glm_track_cache.emplace(entry.track_name,
+						GlmTrackCache{entry.track_handle, entry.cached_fixedbin,
+						              entry.cached_sparse, entry.cached_bin_size});
+				} catch (TGLException &e) {
+					// Surface real errors (bad track name, corrupted file)
+					// instead of silently NaN'ing the affected positions.
+					// Legitimate "no data on this chrom" returns nullptr from
+					// create_and_init_1d_track without throwing and is handled
+					// in the else-branch above.
+					const string &chrom_str = m_iu.get_chromkey().id2chrom(interval.chromid);
+					verror("GLM entry track '%s' failed to open for chrom %s: %s",
+					       entry.track_name.c_str(), chrom_str.c_str(), e.msg());
+				}
+			}
+		}
+	}
+
+	// Open selector tracks for GLM predict vars (M >= 0)
+	for (auto &var : m_track_vars) {
+		if (var.val_func != Track_var::GLM_PREDICT) continue;
+		const int M = (int)var.glm_selector_track_names.size();
+		if (M == 0) continue;
+
+		var.glm_selector_handles.assign(M, nullptr);
+		var.glm_selector_fixedbins.assign(M, nullptr);
+		var.glm_selector_bin_sizes.assign(M, 0u);
+
+		const string &chrom_str = m_iu.get_chromkey().id2chrom(interval.chromid);
+		for (int m = 0; m < M; ++m) {
+			const string &tname = var.glm_selector_track_names[m];
+			try {
+				string track_dir = track2path(m_iu.get_env(), tname);
+				GenomeTrack::Type ttype = GenomeTrack::get_type(track_dir.c_str(), m_iu.get_chromkey(), false);
+				string resolved = GenomeTrack::find_existing_1d_filename(m_iu.get_chromkey(), track_dir, interval.chromid);
+				string filename(track_dir + "/" + resolved);
+				var.glm_selector_handles[m] = init_1d_track_with_shared_backend(filename, interval.chromid, ttype);
+				if (!var.glm_selector_handles[m])
+					verror("GLM selector track '%s' returned null handle for chrom %s",
+					       tname.c_str(), chrom_str.c_str());
+				GenomeTrack *raw = var.glm_selector_handles[m].get();
+				var.glm_selector_fixedbins[m] = dynamic_cast<GenomeTrackFixedBin*>(raw);
+				if (!var.glm_selector_fixedbins[m])
+					verror("GLM selector track '%s' is not a fixed-bin track for chrom %s",
+					       tname.c_str(), chrom_str.c_str());
+				var.glm_selector_bin_sizes[m] = var.glm_selector_fixedbins[m]->get_bin_size();
+			} catch (TGLException &e) {
+				verror("GLM selector track '%s' failed to open for chrom %s: %s",
+				       tname.c_str(), chrom_str.c_str(), e.msg());
+			}
+		}
+	}
+
+	// Pre-build GLM var batch list for the processor
+	m_glm_processor->prepare_batch(m_track_vars);
 }
 
 void TrackExpressionVars::start_chrom(const GInterval2D &interval)
@@ -2114,7 +2617,7 @@ void TrackExpressionVars::set_vars(const GInterval2D &interval, const DiagonalBa
 
 void TrackExpressionVars::set_vars(unsigned idx)
 {
-	// Setup tracks (read intervals for non-sequence-based tracks)
+	// Setup tracks (read intervals for non-sequence tracks)
 	for (Track_n_imdfs::iterator itrack_n_imdf = m_track_n_imdfs.begin(); itrack_n_imdf != m_track_n_imdfs.end(); ++itrack_n_imdf)
 	{
 		if (itrack_n_imdf->has_only_sequence_functions)
@@ -2149,4 +2652,7 @@ void TrackExpressionVars::set_vars(unsigned idx)
 
 	// Process value variables
 	m_value_processor->process_value_vars(m_value_vars, m_interval1d, idx);
+
+	// Process GLM predict variables
+	m_glm_processor->process_glm_vars(m_track_vars, m_interval1d, idx);
 }

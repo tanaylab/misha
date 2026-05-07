@@ -52,6 +52,18 @@ reference:
       - gvtrack.ls
       - gvtrack.rm
       - gvtrack.filter
+  - title: GLM predictor virtual tracks
+    desc: Fused generalized linear model prediction at each genome position
+    contents:
+      - glm_pred.create
+      - glm_pred.rm
+      - glm_pred.ls
+      - glm_pred.info
+  - title: GLM feature extraction
+    desc: Batch feature extraction for LASSO training from motif tracks
+    contents:
+      - glm_extract_features
+      - glm_batch_quantiles
   - title: Intervals functions
     desc:  Functions to manipulate and create intervals
     contents:

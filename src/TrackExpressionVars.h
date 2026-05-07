@@ -55,6 +55,9 @@ class TrackVarProcessor;
 class IntervVarProcessor;
 class ValueVarProcessor;
 class SequenceVarProcessor;
+class GlmVarProcessor;
+class GenomeTrackFixedBin;
+class GenomeTrackSparse;
 
 using namespace std;
 
@@ -158,6 +161,7 @@ public:
             PWM_EDIT_DISTANCE_LSE,
             PWM_EDIT_DISTANCE_LSE_POS,
             PWM_N_MUTATIONS,
+            GLM_PREDICT,
             NUM_FUNCS
         };
 
@@ -182,6 +186,78 @@ public:
         Iterator_modifier1D *seq_imdf1d{NULL};
         // Filter for masking genomic regions (applied after iterator modifiers)
         std::shared_ptr<Genome1DFilter> filter;
+        // GLM predictor structs and fields
+        struct GlmScaling {
+            bool enabled{false};
+            double max_cap{0.0};
+            double dis_from_cap{10.0};
+            bool simple_cap{false};   // true: min(raw, max_cap) / dis_from_cap (no floor remapping)
+        };
+
+        struct GlmTransform {
+            bool enabled{false};
+            double L{1.0};
+            double k{1.0};
+            double x_0{0.0};
+            double pre_shift{0.0};
+            double post_shift{0.0};
+        };
+
+        struct GlmEntry {
+            std::string track_name;
+            bool inner_is_lse{false};
+            int weight_offset{0};          // entry index into Track_var::glm_all_weights (bin-major: [b*N + offset])
+            int64_t sshift{0};
+            int64_t eshift{0};
+            GlmScaling scaling;
+            GlmTransform transform;
+            std::vector<double> kernel_weights; // length B (same as glm_kernel_bins)
+            GenomeTrackFixedBin *cached_fixedbin{nullptr};
+            GenomeTrackSparse *cached_sparse{nullptr};
+            std::shared_ptr<GenomeTrack> track_handle;
+            unsigned cached_bin_size{0};
+        };
+
+        struct GlmInteraction {
+            int entry_i{-1};
+            int entry_j{-1};
+            int weight_offset{0};          // entry index into Track_var::glm_all_inter_weights (bin-major: [b*M + offset])
+            GlmTransform transform;
+        };
+
+        // Entries sharing (track_name, sshift, eshift, inner_is_lse, scaling)
+        // compute aggregate+scale once; each member entry applies its own transform+weight.
+        struct GlmScalingGroup {
+            int representative_idx;             // first entry (for raw read + scale)
+            std::vector<int> entry_indices;     // all member entries
+        };
+
+        // Groups scaling groups by unique track name for cache-friendly traversal.
+        // At each position: read one track's super-window, process all its groups.
+        struct GlmTrackGroup {
+            int track_entry_idx;                    // any entry for track pointer access
+            int64_t min_sshift;                     // super-window: min shift across groups
+            int64_t max_eshift;                     // super-window: max shift across groups
+            std::vector<int> scaling_group_indices;  // indices into glm_scaling_groups
+        };
+
+        std::vector<GlmEntry> glm_entries;
+        std::vector<GlmInteraction> glm_interactions;
+        std::vector<double> glm_all_weights;       // flat N*K, bin-major layout: [b*N + i]
+        std::vector<double> glm_all_inter_weights; // flat M*K, bin-major layout: [b*M + m]
+        std::vector<double> glm_kernel_bins;
+        std::vector<GlmScalingGroup> glm_scaling_groups;  // built at parse time
+        std::vector<GlmTrackGroup> glm_track_groups;      // built at parse time
+        std::vector<double> glm_bias;          // length K (1 for no selector)
+        int glm_num_bins{1};                   // K (1 = no selector)
+        std::vector<std::string> glm_selector_track_names;                      // length M (M >= 0)
+        std::vector<GenomeTrackFixedBin*> glm_selector_fixedbins;               // length M, set in start_chrom
+        std::vector<std::shared_ptr<GenomeTrack>> glm_selector_handles;         // length M, set in start_chrom
+        std::vector<unsigned> glm_selector_bin_sizes;                           // length M, set in start_chrom
+        std::vector<BinFinder> glm_selector_binfinders;                         // length M, set at parse time
+        std::vector<size_t> glm_selector_strides;                               // length M, computed at parse time
+        double glm_scale_factor{10.0};
+        std::vector<double> glm_scaled_cache; // scratch: post-scaling values for interactions
     };
 
     typedef vector<Track_var> Track_vars;
@@ -249,6 +325,7 @@ public:
 
 	const string &get_track_name(unsigned ivar) const { return m_track_vars[ivar].track_n_imdf->name; }
 	GenomeTrack::Type get_track_type(unsigned ivar) const { return m_track_vars[ivar].track_n_imdf->type; }
+	bool has_track(unsigned ivar) const { return m_track_vars[ivar].track_n_imdf != nullptr; }
 
 	void parse_exprs(const vector<string> &track_exprs);
 	void init(const TrackExpressionIteratorBase &expr_itr);
@@ -262,6 +339,7 @@ public:
     static bool is_pwm_function(Track_var::Val_func func);
     static bool is_kmer_function(Track_var::Val_func func);
     static bool is_masked_function(Track_var::Val_func func);
+    static bool is_glm_function(Track_var::Val_func func);
     static bool is_pwm_edit_distance_function(Track_var::Val_func func);
     static bool is_pwm_lse_edit_distance_function(Track_var::Val_func func);
 
@@ -335,6 +413,7 @@ private:
 	std::unique_ptr<IntervVarProcessor>      m_interv_processor;
 	std::unique_ptr<ValueVarProcessor>       m_value_processor;
 	std::unique_ptr<SequenceVarProcessor>    m_sequence_processor;
+	std::unique_ptr<GlmVarProcessor>         m_glm_processor;
 
 	void                 parse_imdf(SEXP rvtrack, const string &vtrack, Iterator_modifier1D *imdf1d, Iterator_modifier2D *imdf2d);
 	Iterator_modifier1D *add_imdf(const Iterator_modifier1D &imdf1d);
@@ -480,6 +559,10 @@ inline bool TrackExpressionVars::is_kmer_function(Track_var::Val_func func) {
 
 inline bool TrackExpressionVars::is_masked_function(Track_var::Val_func func) {
     return func == Track_var::MASKED_COUNT || func == Track_var::MASKED_FRAC;
+}
+
+inline bool TrackExpressionVars::is_glm_function(Track_var::Val_func func) {
+    return func == Track_var::GLM_PREDICT;
 }
 
 #endif /* TRACKEXPRESSIONVARS_H_ */
