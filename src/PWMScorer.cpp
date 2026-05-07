@@ -741,6 +741,20 @@ float PWMScorer::score_with_sliding_window(const std::string& target,
 
 float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
 {
+    // Gradient modes are not yet implemented. Stub here so that any code path
+    // (score_without_spatial / score_with_spatial / sliding window / spatial sliding
+    // window) that would otherwise silently fall through to a NaN default produces
+    // a clear error instead.
+    switch (m_mode) {
+        case GRAD_LSE:
+        case GRAD_MAX:
+        case GRAD_LSE_ISM:
+        case GRAD_MAX_ISM:
+            rdb::verror("PWMScorer: gradient modes not yet implemented");
+        default:
+            break;
+    }
+
     // Calculate expanded interval to include full motif coverage
     int64_t motif_length = m_pssm.size();
     GInterval expanded_interval = calculate_expanded_interval(interval, chromkey, motif_length);

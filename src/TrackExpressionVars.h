@@ -133,6 +133,8 @@ public:
             PWM_MAX,
             PWM_MAX_POS,
             PWM_COUNT,
+            PWM_GRAD,
+            PWM_GRAD_ISM,
             KMER_COUNT,
             KMER_FRAC,
             MASKED_COUNT,
@@ -429,6 +431,8 @@ inline bool TrackExpressionVars::is_seq_variable(unsigned ivar) const {
            m_track_vars[ivar].val_func == Track_var::PWM_MAX ||
            m_track_vars[ivar].val_func == Track_var::PWM_MAX_POS ||
            m_track_vars[ivar].val_func == Track_var::PWM_COUNT ||
+           m_track_vars[ivar].val_func == Track_var::PWM_GRAD ||
+           m_track_vars[ivar].val_func == Track_var::PWM_GRAD_ISM ||
            m_track_vars[ivar].val_func == Track_var::KMER_COUNT ||
            m_track_vars[ivar].val_func == Track_var::KMER_FRAC ||
            m_track_vars[ivar].val_func == Track_var::MASKED_COUNT ||
@@ -445,6 +449,7 @@ inline bool TrackExpressionVars::is_seq_variable(unsigned ivar) const {
 inline bool TrackExpressionVars::is_sequence_based_function(Track_var::Val_func func) {
     return func == Track_var::PWM || func == Track_var::PWM_MAX ||
            func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT ||
+           func == Track_var::PWM_GRAD || func == Track_var::PWM_GRAD_ISM ||
            func == Track_var::KMER_COUNT || func == Track_var::KMER_FRAC ||
            func == Track_var::MASKED_COUNT || func == Track_var::MASKED_FRAC ||
            func == Track_var::PWM_EDIT_DISTANCE ||
@@ -457,7 +462,8 @@ inline bool TrackExpressionVars::is_sequence_based_function(Track_var::Val_func 
 
 inline bool TrackExpressionVars::is_pwm_function(Track_var::Val_func func) {
     return func == Track_var::PWM || func == Track_var::PWM_MAX ||
-           func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT;
+           func == Track_var::PWM_MAX_POS || func == Track_var::PWM_COUNT ||
+           func == Track_var::PWM_GRAD || func == Track_var::PWM_GRAD_ISM;
 }
 
 inline bool TrackExpressionVars::is_pwm_edit_distance_function(Track_var::Val_func func) {
