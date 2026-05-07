@@ -171,10 +171,20 @@ private:
     // Utilities
     inline float get_spatial_log_factor(size_t pos_index) const;
 
+    // Gradient-mode answer paths (single-strand fwd; bidirect / rc deferred)
+    float score_grad_max(const std::string& target, size_t i_min, size_t i_max,
+                         size_t motif_length);
+
     // Core members
     DnaPSSM m_pssm;
     ScoringMode m_mode;
     float m_score_thresh = 0.0f;
+
+    // Worst per-base log-prob at the head and tail PSSM columns. Used as the
+    // baseline for the linearized gradient ("actual minus worst" per spec).
+    // Computed once at construction.
+    float m_worst_col0_fwd = 0.0f;
+    float m_worst_col_last_fwd = 0.0f;
 
     // Spatial weighting
     bool m_use_spat = false;

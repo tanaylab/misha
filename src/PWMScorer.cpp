@@ -108,6 +108,31 @@ static inline float pos_value_with_dir(const DnaPSSM& pssm,
     return best_val;
 }
 
+// Precompute the worst-base log-prob at the head and tail PSSM columns. These
+// are used as the "neutral" baseline for the linearized gradient
+// (g = M[col, b_p] - min_b M[col, b]). Computed once at construction so the
+// per-call gradient path is O(1) on top of the existing scan.
+static inline void compute_worst_col_logprobs(const DnaPSSM& pssm,
+                                              float& worst_col0,
+                                              float& worst_col_last)
+{
+    if (pssm.size() == 0) {
+        worst_col0 = 0.0f;
+        worst_col_last = 0.0f;
+        return;
+    }
+    const DnaProbVec& col0 = pssm[0];
+    worst_col0 = std::min({col0.get_log_prob_from_code(0),
+                           col0.get_log_prob_from_code(1),
+                           col0.get_log_prob_from_code(2),
+                           col0.get_log_prob_from_code(3)});
+    const DnaProbVec& col_last = pssm[pssm.size() - 1];
+    worst_col_last = std::min({col_last.get_log_prob_from_code(0),
+                               col_last.get_log_prob_from_code(1),
+                               col_last.get_log_prob_from_code(2),
+                               col_last.get_log_prob_from_code(3)});
+}
+
 PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool extend,
                      ScoringMode mode, char strand,
                      const std::vector<float>& spat_factor, int spat_bin_size, float score_thresh)
@@ -123,6 +148,8 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool e
             m_spat_log_factors[i] = std::log(std::max(1e-30f, spat_factor[i]));
         }
     }
+
+    compute_worst_col_logprobs(m_pssm, m_worst_col0_fwd, m_worst_col_last_fwd);
 }
 
 PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool extend,
@@ -140,6 +167,8 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool 
             m_spat_log_factors[i] = std::log(std::max(1e-30f, spat_factor[i]));
         }
     }
+
+    compute_worst_col_logprobs(m_pssm, m_worst_col0_fwd, m_worst_col_last_fwd);
 }
 
 void PWMScorer::invalidate_cache()
@@ -335,6 +364,82 @@ float PWMScorer::score_without_spatial(const std::string& target, int64_t motif_
     // MAX_LIKELIHOOD_POS
     size_t pos_idx = best_pos - target.begin();
     return compute_position_result(pos_idx, target.length(), motif_length, best_dir);
+}
+
+// Linearized per-bp gradient (DeepLIFT-style) under MAX aggregation, fwd-only.
+//
+// Pivot is fixed at the iterator interval start (target[0] == genomic
+// interval.start). The argmax is taken over anchors with starts in
+// [i_min, i_max] inside the fetched/expanded target, which mirrors the clamping
+// applied to pwm.max so the two functions agree on which anchor "wins". When
+// the head anchor (i = 0) is the argmax, the gradient is
+//   M[0, b_p] - min_b M[0, b]
+// where M[0, .] are the (prior-adjusted) log-probs at column 0 of the PSSM and
+// b_p is the head base. Otherwise the gradient is 0.
+//
+// Restrictions for Task 3: single-strand fwd only. bidirect=TRUE (m_pssm
+// bidirect) and strand=-1 are deferred to a later task (full bidirect / rc
+// formula needs both fwd and rc head scores at the head anchor).
+float PWMScorer::score_grad_max(const std::string& target,
+                                size_t i_min, size_t i_max,
+                                size_t motif_length)
+{
+    // Precondition: bidirect/strand restrictions have already been enforced
+    // by the dispatch in score_interval (those verrors live outside the
+    // try/catch block so they reach R; calling verror here would be silently
+    // converted to NaN by the surrounding handler).
+
+    // Iterator-interval was empty after clamping, or interval shorter than motif.
+    if (i_min > i_max) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    if (target.size() < (size_t)motif_length) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    if (i_max + (size_t)motif_length > target.size()) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    // The pivot ("p" in the spec) is the iterator interval start, i.e. target[0].
+    // It is the *head anchor* only when i_min == 0; otherwise the head anchor
+    // sits outside the iterator-interval scan and the gradient at p is 0 by
+    // definition (column 0 of every scanned anchor uses some other base).
+    if (i_min > 0) {
+        return 0.0f;
+    }
+
+    // Scan fwd-only over [i_min, i_max] and find the argmax.
+    float best = -std::numeric_limits<float>::infinity();
+    size_t argmax = i_min;
+    bool any_finite = false;
+    for (size_t i = i_min; i <= i_max; ++i) {
+        float v = 0.0f;
+        std::string::const_iterator it = target.begin() + i;
+        m_pssm.calc_like(it, v);
+        if (std::isfinite(v) && v > best) {
+            best = v;
+            argmax = i;
+            any_finite = true;
+        }
+    }
+
+    if (!any_finite) {
+        // All anchors hit non-ACGT bases (-Inf): cannot define a gradient.
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    // Head base (target[0]). N or other non-ACGT -> NA.
+    int b_p = DnaLookupTables::BASE_ENCODE[(unsigned char)target[0]];
+    if (b_p < 0) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    if (argmax != 0) {
+        return 0.0f;
+    }
+
+    // Argmax is at the head anchor: gradient = M[0, b_p] - worst_col0.
+    return m_pssm[0].get_log_prob_from_code(b_p) - m_worst_col0_fwd;
 }
 
 // Score with spatial weighting
@@ -741,16 +846,28 @@ float PWMScorer::score_with_sliding_window(const std::string& target,
 
 float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
 {
-    // Gradient modes are not yet implemented. Stub here so that any code path
-    // (score_without_spatial / score_with_spatial / sliding window / spatial sliding
-    // window) that would otherwise silently fall through to a NaN default produces
-    // a clear error instead.
+    // Gradient modes: GRAD_MAX (single-strand fwd) is implemented below via a
+    // dedicated answer path. The remaining gradient modes are not yet wired up
+    // and must produce a clear error instead of falling through into the
+    // generic scan paths.
+    //
+    // NOTE: these checks are intentionally placed BEFORE the try/catch block
+    // below so that verror surfaces as an R-level error rather than being
+    // swallowed and converted to NaN by the TGLException handler.
     switch (m_mode) {
         case GRAD_LSE:
-        case GRAD_MAX:
         case GRAD_LSE_ISM:
         case GRAD_MAX_ISM:
-            rdb::verror("PWMScorer: gradient modes not yet implemented");
+            rdb::verror("PWMScorer: gradient mode not yet implemented");
+        case GRAD_MAX:
+            // Task 3 supports only single-strand forward; reject bidirect
+            // PSSMs and strand=-1 here so the caller sees an error rather than
+            // a silent NaN.
+            if (m_pssm.is_bidirect() || m_strand != 1) {
+                rdb::verror("pwm.grad currently supports only bidirect=FALSE, strand=1; "
+                            "bidirect=TRUE and strand=-1 will be added in a future task");
+            }
+            break;
         default:
             break;
     }
@@ -817,6 +934,21 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                 i_min = 0;
             }
 
+            // Spatial weighting for gradient modes is deferred to a later task.
+            // Surface a clear error rather than silently using non-spatial code.
+            if (m_use_spat &&
+                (m_mode == GRAD_LSE || m_mode == GRAD_MAX ||
+                 m_mode == GRAD_LSE_ISM || m_mode == GRAD_MAX_ISM)) {
+                rdb::verror("PWMScorer: spatial weighting not yet supported for gradient modes");
+            }
+
+            // Gradient modes (single-strand fwd) take a dedicated answer path.
+            // They share the iterator clamping (i_min..i_max) above so that the
+            // argmax convention matches pwm.max exactly.
+            if (!m_use_spat && m_mode == GRAD_MAX) {
+                return score_grad_max(target, i_min, i_max, motif_len);
+            }
+
             // Try spatial sliding window optimization
             if (m_use_spat) {
                 size_t stride = 0;
@@ -856,8 +988,14 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                 return score_with_spatial(target, motif_length);
             }
 
-            // Non-spatial sliding window optimization (original code)
-            if (!m_use_spat && m_mode != MAX_LIKELIHOOD_POS) {
+            // Non-spatial sliding window optimization (original code).
+            // Gradient modes are not supported by the sliding window machinery
+            // (they need a per-call full scan), so force them through the
+            // dedicated gradient answer paths above (or, if not yet
+            // implemented, the verror dispatch at the top of score_interval).
+            if (!m_use_spat && m_mode != MAX_LIKELIHOOD_POS &&
+                m_mode != GRAD_LSE && m_mode != GRAD_MAX &&
+                m_mode != GRAD_LSE_ISM && m_mode != GRAD_MAX_ISM) {
                 return score_with_sliding_window(target, interval, expanded_interval, i_min, i_max, motif_len);
             }
         }

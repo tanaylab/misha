@@ -141,3 +141,137 @@ test_that("oracle: ISM is always >= 0", {
         }
     }
 })
+
+# ---- Engine tests for GRAD_MAX (Task 3) ----
+
+create_isolated_test_db()
+
+# Build a strong-consensus PSSM (0.97/0.01/0.01/0.01) whose column j has its
+# peak at the j-th base of `bases`. `bases` must be a length-L character vector
+# of A/C/G/T (no Ns).
+.consensus_pssm <- function(bases) {
+    L <- length(bases)
+    stopifnot(all(bases %in% c("A", "C", "G", "T")))
+    pssm <- matrix(0.01,
+        nrow = L, ncol = 4,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+    for (j in seq_len(L)) {
+        idx <- match(bases[j], c("A", "C", "G", "T"))
+        pssm[j, idx] <- 0.97
+    }
+    pssm
+}
+
+test_that("pwm.grad max: head=argmax => engine matches oracle col-0 diff", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L # number of iterator-interval positions per pivot
+    # Use a 1bp iterator interval; the iterator extension makes the vtrack
+    # see a window of length iter_W (sshift=0, eshift=iter_W-1).
+    pivot <- gintervals(1, 200, 201)
+    # The engine fetches sequence over [pivot.start + sshift,
+    #                                   pivot.end + eshift + (L-1))
+    # because extend=TRUE adds (L-1) at the end. That's [200, 200 + iter_W + L - 1).
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    # Pick PSSM consensus = first L bases of seq_ext, so the head anchor wins.
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    gvtrack.create("g", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "max", bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = iter_W - 1)
+
+    res <- gextract("g", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(pssm, seq_ext, "max",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+    # Sanity: the head-wins case must produce a strictly positive gradient
+    # (the head base is the consensus and column 0 is non-uniform).
+    expect_gt(res$g[1], 0)
+})
+
+test_that("pwm.grad max: head not argmax => engine returns 0 (matches oracle)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 30L
+    offset <- 10L # interior anchor index whose match wins
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    # Construct a PSSM whose consensus matches the interior anchor at `offset`,
+    # NOT the head anchor at 0. Argmax should land at the interior, so head
+    # gradient is 0 (provided the head bases are not coincidentally also a
+    # consensus run, which we verify below).
+    interior_bases <- strsplit(substr(seq_ext, offset + 1, offset + L), "")[[1]]
+    pssm <- .consensus_pssm(interior_bases)
+
+    # Guard the test setup: interior pattern must differ from head bases.
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    skip_if(
+        identical(interior_bases, head_bases),
+        "test fixture: interior PSSM consensus collides with head bases; pick a different interval"
+    )
+
+    gvtrack.create("g", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "max", bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = iter_W - 1)
+
+    res <- gextract("g", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(pssm, seq_ext, "max",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+    # And it should be exactly 0 in this construction (argmax interior).
+    expect_equal(expected, 0, tolerance = 1e-10)
+})
+
+test_that("pwm.grad max: bidirect=TRUE errors out (Task 3 scope)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+    gvtrack.create("g_bidir", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "max", bidirect = TRUE,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_bidir", sshift = 0, eshift = 19)
+
+    expect_error(
+        gextract("g_bidir", iterator = 1, intervals = gintervals(1, 200, 201)),
+        "bidirect=FALSE"
+    )
+})
+
+test_that("pwm.grad max: strand=-1 errors out (Task 3 scope)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+    gvtrack.create("g_minus", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "max", bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_minus", sshift = 0, eshift = 19)
+
+    expect_error(
+        gextract("g_minus", iterator = 1, intervals = gintervals(1, 200, 201)),
+        "strand=-1"
+    )
+})
