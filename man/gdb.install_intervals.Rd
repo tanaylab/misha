@@ -16,7 +16,8 @@ gdb.install_intervals(
   target_chroms = NULL,
   min_coverage = 1,
   match_by_length = TRUE,
-  verbose = TRUE
+  verbose = TRUE,
+  prefetched_alias = NULL
 )
 }
 \arguments{
@@ -72,6 +73,11 @@ the \code{ucsc-hub} backend (which ships per-contig lengths in
 \code{FALSE} for the stricter single-column-only behavior.}
 
 \item{verbose}{If \code{TRUE}, prints progress.}
+
+\item{prefetched_alias}{Optional pre-fetched chromAlias bundle (the
+return value of \code{.hub_preflight_coverage}). When supplied the
+ucsc-hub fetcher reuses it instead of re-downloading. Internal; users
+never set this directly.}
 }
 \value{
 Invisible \code{NULL}. Side effects: writes \code{.interv} files under
