@@ -55,15 +55,27 @@ test_that("glm_pred.create validates inner_func values", {
     )
 })
 
-test_that("glm_pred.create validates shift ordering", {
-    expect_error(
-        glm_pred.create("bad",
+test_that("glm_pred.create accepts pure-shift and reverse-orientation entries", {
+    # Per commit 3c9d3545: sshift < eshift is no longer required. A
+    # shifts entry can translate the interval (sshift == eshift) and
+    # reverse orientation (sshift > eshift). Pin the new semantics so
+    # the validation is not silently re-tightened.
+    expect_silent(
+        glm_pred.create("vt_shift_translate",
+            tracks = "test.fixedbin",
+            inner_func = "sum", weights = 1,
+            shifts = list(c(50, 50))
+        )
+    )
+    glm_pred.rm("vt_shift_translate")
+    expect_silent(
+        glm_pred.create("vt_shift_reverse",
             tracks = "test.fixedbin",
             inner_func = "sum", weights = 1,
             shifts = list(c(100, -100))
-        ),
-        "sshift"
+        )
     )
+    glm_pred.rm("vt_shift_reverse")
 })
 
 test_that("glm_pred.create validates interaction indices", {
