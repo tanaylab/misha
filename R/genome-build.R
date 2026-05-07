@@ -1214,20 +1214,10 @@ gdb.install_intervals <- function(groot,
         NA_character_
     }
     if (!is.null(alias_df) && is.na(groot_col)) {
-        scores <- attr(groot_col, "scores")
-        bp_weighted <- isTRUE(attr(groot_col, "bp_weighted"))
-        denom <- if (bp_weighted) sum(groot_lengths) else length(detect_chroms)
-        unit <- if (bp_weighted) "bp coverage of groot" else "name coverage of target_chroms"
-        stop(sprintf(
-            "chromAlias has no column with %.0f%% %s.\nPer-column coverage: %s\nFirst 5 unmapped chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.99).",
-            100 * min_coverage, unit,
-            paste(sprintf("%s=%.4f%%", names(scores), 100 * scores / denom),
-                collapse = ", "
-            ),
-            paste(utils::head(setdiff(detect_chroms, unlist(alias_df, use.names = FALSE)), 5L),
-                collapse = ", "
-            )
-        ), call. = FALSE)
+        label <- if (is.null(target_chroms)) "groot" else "target_chroms"
+        .coverage_gate(alias_df, detect_chroms, detect_lengths,
+            min_coverage = min_coverage, label = label
+        )
     }
     if (!is.null(alias_df)) {
         groot_col_chr <- as.character(groot_col)

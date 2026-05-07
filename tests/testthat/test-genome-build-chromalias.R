@@ -293,3 +293,36 @@ test_that(".merge_chrom_aliases_tsv warns on canonical conflict and keeps existi
     # Existing chrFOO mapping preserved, new (chr1, NC_067374.1) skipped.
     expect_equal(out$canonical[out$alias == "NC_067374.1"], "chrFOO")
 })
+
+test_that(".coverage_gate returns winning column when threshold met", {
+    df <- data.frame(
+        ucsc = c("chr1", "chr2", "chrM"),
+        genbank = c("CM00001.1", "CM00002.1", ""),
+        stringsAsFactors = FALSE
+    )
+    target <- c("chr1", "chr2", "chrM")
+    lengths <- c(1e8, 1e8, 1.6e4)
+    col <- .coverage_gate(df, target, lengths,
+        min_coverage = 0.99,
+        label = "groot"
+    )
+    expect_equal(as.character(col), "ucsc")
+})
+
+test_that(".coverage_gate stops with diagnostic when no column meets threshold", {
+    df <- data.frame(
+        ucsc = c("chr1", "chr2", ""),
+        genbank = c("CM00001.1", "", ""),
+        stringsAsFactors = FALSE
+    )
+    target <- c("chr1", "chr2", "chrM")
+    lengths <- c(1e8, 1e8, 1.6e4)
+    expect_error(
+        .coverage_gate(df, target, lengths, min_coverage = 1.0, label = "groot"),
+        "no column with 100% bp coverage of groot"
+    )
+})
+
+test_that(".coverage_gate is a no-op when alias_df is NULL", {
+    expect_null(.coverage_gate(NULL, "chr1", 1, min_coverage = 1.0))
+})

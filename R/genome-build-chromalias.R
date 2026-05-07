@@ -286,3 +286,34 @@
     utils::write.table(out, out_path, sep = "\t", quote = FALSE, row.names = FALSE)
     invisible(out_path)
 }
+
+# Run the chromAlias coverage gate. Returns the winning column name (with
+# attributes from .detect_alias_column) on success; stops with a diagnostic
+# matching the existing wording on failure. NULL alias_df is a no-op so
+# callers don't need to check.
+.coverage_gate <- function(alias_df, target_chroms, target_lengths,
+                           min_coverage, label = "groot") {
+    if (is.null(alias_df)) {
+        return(invisible(NULL))
+    }
+    col <- .detect_alias_column(alias_df, target_chroms,
+        min_coverage = min_coverage, chrom_lengths = target_lengths
+    )
+    if (!is.na(col)) {
+        return(col)
+    }
+    scores <- attr(col, "scores")
+    bp_weighted <- isTRUE(attr(col, "bp_weighted"))
+    denom <- if (bp_weighted) sum(target_lengths) else length(target_chroms)
+    unit <- if (bp_weighted) "bp coverage" else "name coverage"
+    stop(sprintf(
+        "chromAlias has no column with %.0f%% %s of %s.\nPer-column coverage: %s\nFirst 5 unmapped chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.99).",
+        100 * min_coverage, unit, label,
+        paste(sprintf("%s=%.4f%%", names(scores), 100 * scores / denom),
+            collapse = ", "
+        ),
+        paste(utils::head(setdiff(target_chroms, unlist(alias_df, use.names = FALSE)), 5L),
+            collapse = ", "
+        )
+    ), call. = FALSE)
+}
