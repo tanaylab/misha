@@ -6,7 +6,7 @@
 # `target_chroms` (optional) lets ucsc-hub auto-pick the chromAlias column
 # whose values best cover those names; ignored by other backends.
 .build_seq <- function(recipe, path, target_chroms = NULL, format = NULL,
-                       verbose = TRUE) {
+                       prefetched_alias = NULL, verbose = TRUE) {
     fn <- switch(recipe$source,
         ucsc = .build_seq_ucsc,
         `ucsc-hub` = .build_seq_ucsc_hub,
@@ -24,10 +24,21 @@
             ))
         }
     }
-    fn(recipe, path, target_chroms = target_chroms, format = format, verbose = verbose)
+    if (recipe$source == "ucsc-hub") {
+        fn(recipe, path,
+            target_chroms = target_chroms, format = format,
+            prefetched_alias = prefetched_alias, verbose = verbose
+        )
+    } else {
+        fn(recipe, path,
+            target_chroms = target_chroms, format = format,
+            verbose = verbose
+        )
+    }
 }
 
-.build_seq_ucsc_hub <- function(recipe, path, target_chroms = NULL, format, verbose) {
+.build_seq_ucsc_hub <- function(recipe, path, target_chroms = NULL, format,
+                                prefetched_alias = NULL, verbose) {
     accession <- recipe$accession
     base <- .hub_url_for(accession)
     files <- .hub_list_dir(base, verbose = verbose)
@@ -49,11 +60,15 @@
     .download_to(paste0(base, fa_file[[1L]]), local_fa, verbose = verbose)
 
     alias_df <- NULL
-    alias_file <- files[grepl("\\.chromAlias\\.txt$", files)]
-    if (length(alias_file)) {
-        local_alias <- file.path(workdir, basename(alias_file[[1L]]))
-        .download_to(paste0(base, alias_file[[1L]]), local_alias, verbose = verbose)
-        alias_df <- .parse_ucsc_chromalias(local_alias)
+    if (!is.null(prefetched_alias)) {
+        alias_df <- prefetched_alias$df
+    } else {
+        alias_file <- files[grepl("\\.chromAlias\\.txt$", files)]
+        if (length(alias_file)) {
+            local_alias <- file.path(workdir, basename(alias_file[[1L]]))
+            .download_to(paste0(base, alias_file[[1L]]), local_alias, verbose = verbose)
+            alias_df <- .parse_ucsc_chromalias(local_alias)
+        }
     }
 
     # If `target_chroms` is supplied, auto-pick the chromAlias column whose
