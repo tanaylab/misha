@@ -327,3 +327,104 @@
     }
     out
 }
+
+# Pre-flight chromAlias coverage gate for ucsc-hub builds. Fetches only the
+# small alias and chrom.sizes files (no FASTA) and runs .coverage_gate so
+# gdb.build_genome can fail before pulling multi-GB sequence data. Returns
+# the prefetched alias bundle so callers can pass it to .build_seq_ucsc_hub
+# and gdb.install_intervals to avoid re-download.
+.hub_preflight_coverage <- function(accession, target_chroms = NULL,
+                                    chrom_naming = NULL, min_coverage,
+                                    workdir, verbose = TRUE) {
+    base <- .hub_url_for(accession)
+    files <- .hub_list_dir(base, verbose = verbose)
+    if (is.null(files)) {
+        stop(sprintf("UCSC mammal hub directory not found: %s", base),
+            call. = FALSE
+        )
+    }
+    alias_file <- files[grepl("\\.chromAlias\\.txt$", files)]
+    if (!length(alias_file)) {
+        # No chromAlias means no gate; nothing to pre-flight, the build will
+        # proceed exactly as before.
+        return(NULL)
+    }
+    local_alias <- file.path(workdir, basename(alias_file[[1L]]))
+    .download_to(paste0(base, alias_file[[1L]]), local_alias, verbose = verbose)
+    alias_df <- .parse_ucsc_chromalias(local_alias)
+
+    sizes_file <- files[grepl("\\.chrom\\.sizes\\.txt$", files)]
+    row_lengths <- NULL
+    local_sizes <- NA_character_
+    if (length(sizes_file)) {
+        local_sizes <- file.path(workdir, basename(sizes_file[[1L]]))
+        .download_to(paste0(base, sizes_file[[1L]]), local_sizes, verbose = verbose)
+        sizes <- utils::read.table(local_sizes,
+            sep = "\t", header = FALSE,
+            col.names = c("name", "length"),
+            stringsAsFactors = FALSE, comment.char = "", quote = ""
+        )
+        row_lengths <- .alias_row_lengths_from_sizes(alias_df, sizes)
+    }
+
+    # Determine the canonical column the build will end up with.
+    canonical_col <- NA_character_
+    if (!is.null(target_chroms)) {
+        detected <- .detect_alias_column(alias_df, target_chroms,
+            min_coverage = 0.5
+        )
+        if (!is.na(detected)) {
+            canonical_col <- as.character(detected)
+        }
+    }
+    if (is.na(canonical_col)) {
+        cn <- chrom_naming %||% "ucsc"
+        target <- switch(cn,
+            ucsc          = "ucsc",
+            sequence_name = "assembly",
+            cn
+        )
+        if (cn == "accession" || !target %in% names(alias_df)) {
+            # Either the build will keep the FASTA's source column (which we
+            # can't sniff without the FASTA), or chrom_naming maps to a
+            # column the alias doesn't have. Fall back to the column with
+            # highest coverage as a conservative proxy: if even the best
+            # column doesn't meet min_coverage, the gate fails; if it does,
+            # the build proceeds and the post-build gate makes the precise
+            # call.
+            best <- .detect_alias_column(alias_df,
+                target_chroms = unlist(alias_df, use.names = FALSE),
+                min_coverage = 0
+            )
+            canonical_col <- as.character(best)
+        } else {
+            canonical_col <- target
+        }
+    }
+
+    # Build a per-row target vector: the canonical col's value for non-empty
+    # rows, NA for rows with no canonical value. NA targets fail %in% against
+    # every column (including the canonical col's empty cell), so those rows
+    # contribute their length to the denominator without contributing to any
+    # column's coverage score. Net effect: a 16 kb mitochondrion missing from
+    # the canonical col costs 16 kb of denom, exactly the bp-weighted gap we
+    # want the gate to detect.
+    canonical_vals <- alias_df[[canonical_col]]
+    empties <- is.na(canonical_vals) | !nzchar(canonical_vals)
+    groot_chroms <- canonical_vals
+    groot_chroms[empties] <- NA_character_
+    groot_lengths <- row_lengths
+
+    .coverage_gate(alias_df, groot_chroms, groot_lengths,
+        min_coverage = min_coverage,
+        label = sprintf("groot (%s)", canonical_col)
+    )
+
+    list(
+        df = alias_df,
+        row_lengths = row_lengths,
+        alias_file = local_alias,
+        sizes_file = local_sizes,
+        canonical_col = canonical_col
+    )
+}
