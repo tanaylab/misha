@@ -1,3 +1,7 @@
+# misha 5.6.26
+
+* Fixed `gpartition`, `gquantiles` and other consumers of `BinFinder` silently routing every value into the highest bin when the breaks vector contained both `-Inf` and `+Inf` (e.g. `c(-Inf, 0, Inf)`). The uniform-binsize fast path computed `Inf/Inf = NaN` whose cast to int is undefined behaviour. `BinFinder::init` now falls back to binary search when binsize is non-finite.
+
 # misha 5.6.25
 
 * `gsynth.sample()` and `gsynth.random()` now preserve `N` (and lowercase `n`) positions from the original reference by default. Previously, every position was filled with a sampled/random ACGT base, so reference gaps and centromeres came out as fabricated nucleotides. Pass `preserve_n = FALSE` to restore the legacy behavior.
