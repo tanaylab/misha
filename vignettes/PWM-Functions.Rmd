@@ -1,0 +1,465 @@
+---
+title: "PWM Virtual Tracks"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{PWM Virtual Tracks}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>",
+    fig.width = 7, fig.height = 4
+)
+```
+
+This vignette covers misha's PWM virtual track family: the existing
+aggregating scorers (`pwm`, `pwm.max`, `pwm.max.pos`, `pwm.count`), the
+edit-distance variants, and the per-position attribution tracks
+(`pwm.grad`, `pwm.grad.ism`).
+
+The aggregating sections (`pwm`, `pwm.max`, ...) are well documented on
+the `gvtrack.create` help page, so the focus here is on the mental
+model and on examples a reader can adapt to their own database. The
+math for the gradient tracks is worked out in more detail because they
+are new and there is no existing reference.
+
+The math chunks below run as plain R (no genome database required) so
+they always evaluate. The genome-track examples are shown with
+`eval = FALSE` because they need a database; the patterns transfer
+unchanged to any misha DB.
+
+## What is a PSSM?
+
+A position-specific scoring matrix (PSSM, also "PWM") is a per-column
+distribution over A/C/G/T. In misha the input is an `L x 4` matrix:
+
+- **Rows**: motif columns, in 5' -> 3' order (one row per nucleotide
+  position in the motif).
+- **Columns**: bases, named `A`, `C`, `G`, `T` (any extra columns are
+  ignored).
+
+The raw matrix typically holds frequencies or counts. Internally misha
+adds a Dirichlet pseudocount (`prior`, default `0.01`), normalizes each
+row to sum to 1, and takes the natural log. The result is a matrix of
+log-probabilities `M[c, b]`: the log-likelihood that base `b` appears
+at column `c` of the motif.
+
+```{r}
+# A 3-column PSSM with consensus ACG.
+pssm <- matrix(
+    c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01
+    ),
+    nrow = 3, ncol = 4, byrow = TRUE,
+    dimnames = list(NULL, c("A", "C", "G", "T"))
+)
+pssm
+```
+
+```{r}
+# Apply prior + per-row normalization, then log.
+prior <- 0.01
+M <- log((pssm + prior) / rowSums(pssm + prior))
+round(M, 3)
+```
+
+`M[1, "A"]` is close to 0 (high probability), while every off-consensus
+entry is a large negative number. The `prior` keeps log-zero rows
+finite: with `prior = 0` and a strict frequency matrix, missing bases
+become `-Inf` and dominate any sum. `0.01` is a conservative default; a
+raw count matrix often wants something larger.
+
+## Per-anchor score
+
+Given a sequence `s`, an *anchor* is a position `a` at which the motif
+is laid down. The per-anchor (single-strand, forward) score is
+
+$$
+\text{score}_a \;=\; \sum_{c=0}^{L-1} M[c,\, s_{a+c}].
+$$
+
+It is just a column-by-column lookup followed by a sum. Units are log
+probability; values are <= 0 by construction (each term is the log of a
+probability in [0, 1]).
+
+```{r}
+# Score the anchor at position 1 of the sequence "ACGTTT".
+seq <- "ACGTTT"
+bases <- strsplit(seq, "")[[1]]
+score_anchor <- function(M, bases, anchor) {
+    L <- nrow(M)
+    sum(vapply(seq_len(L), function(c) M[c, bases[anchor + c - 1]], numeric(1)))
+}
+score_anchor(M, bases, 1) # "ACG" - perfect consensus
+score_anchor(M, bases, 2) # "CGT" - off-consensus
+```
+
+The first anchor matches the consensus and scores close to 0; the
+second is well below.
+
+For a window of length `W >= L`, we get `W - L + 1` per-anchor scores.
+
+```{r}
+all_anchor_scores <- function(M, seq) {
+    bases <- strsplit(seq, "")[[1]]
+    W <- length(bases)
+    L <- nrow(M)
+    vapply(seq_len(W - L + 1), function(a) score_anchor(M, bases, a), numeric(1))
+}
+all_anchor_scores(M, seq)
+```
+
+## Aggregating over an interval
+
+The PWM virtual tracks each reduce these per-anchor scores to a single
+scalar per iterator interval.
+
+### `pwm.max`: best anchor
+
+`pwm.max` returns the maximum per-anchor score in the window. Easiest
+to interpret ("how good is the best motif hit here?"), but discards
+information about secondary hits.
+
+```{r}
+max(all_anchor_scores(M, seq))
+```
+
+### `pwm` (LSE): smooth aggregate
+
+`pwm` returns the log-sum-exp of all per-anchor scores:
+
+$$
+f_{\text{LSE}} \;=\; \log \sum_a \exp(\text{score}_a).
+$$
+
+This is dominated by the best anchor when one anchor clearly wins, but
+also adds support for many mediocre anchors (an "OR" over noisy
+matches). LSE is also smooth: small changes in the input give small
+changes in the output, which is friendlier for downstream filtering and
+gradient-based attribution.
+
+```{r}
+log_sum_exp <- function(x) {
+    m <- max(x)
+    m + log(sum(exp(x - m)))
+}
+s <- all_anchor_scores(M, seq)
+log_sum_exp(s)
+```
+
+For a single dominant hit `pwm` and `pwm.max` are nearly equal; for a
+window with many weak similar-strength hits `pwm` can be substantially
+larger.
+
+### `pwm.max.pos`: argmax position
+
+`pwm.max.pos` returns the 1-based offset of the argmax anchor inside
+the iterator interval, signed by strand when `bidirect = TRUE`. Useful
+when you want to know *where* the best hit sits within a region.
+
+### `pwm.count`: thresholded hit count
+
+`pwm.count` requires `score.thresh`. It counts anchors whose score is
+at or above `score.thresh`. With `bidirect = TRUE` the union over
+strands is taken at each genomic start, so palindromic hits count once.
+
+```{r, eval = FALSE}
+gvtrack.create("motif_count", NULL, "pwm.count",
+    pssm = pssm, score.thresh = -2, bidirect = TRUE
+)
+gvtrack.iterator("motif_count", sshift = 0, eshift = 500)
+gextract("motif_count", iterator = 500, intervals = my_intervals)
+```
+
+### Why LSE rather than just MAX?
+
+For any aggregation over a long window, LSE has three practical
+advantages over MAX:
+
+1. **Integrates many anchors.** A region with five mediocre hits has a
+   higher LSE than one with a single mediocre hit, but the same MAX.
+2. **Smooth.** Differentiable everywhere; small input changes -> small
+   output changes. This matters for gradient attribution
+   (next section).
+3. **Numerically stable when implemented with the standard
+   `m + log(sum(exp(x - m)))` trick.**
+
+When you only care about "is there a strong hit anywhere in this
+window?", `pwm.max` is fine. For typical "motif energy" scoring across
+500 bp - 1 kb windows, `pwm` (LSE) is the better default.
+
+## Common parameters
+
+These mirror what `?gvtrack.create` documents; one-liner each:
+
+- **`bidirect`** (default `TRUE`): scan both strands and combine per
+  genomic start. With `bidirect = FALSE`, only the strand given by
+  `strand` is scanned.
+- **`strand`** (`+1` / `-1`): only used when `bidirect = FALSE`.
+- **`prior`** (default `0.01`): Dirichlet pseudocount added to PSSM
+  rows before normalization. Raise it for noisy / count-based PSSMs;
+  set to 0 to disable.
+- **`extend`** (default `TRUE`): pad the fetched sequence so anchors
+  near the right edge of the iterator interval still get a full
+  window. Without extension, an interval of length `W` only yields
+  `W - L + 1` anchors.
+- **`spat_factor`** + **`spat_bin`**: optional position-dependent log
+  weights. `spat_factor` is a positive numeric vector; `spat_bin` is
+  the bin width in bp. Each anchor's score is multiplied by the log
+  factor for its bin. Use this to weight central bases of a window
+  more than flanks.
+- **`score.thresh`**: required by `pwm.count` and the edit-distance
+  variants. Anchors with score >= threshold are "hits". Rejected by
+  `pwm.grad` and `pwm.grad.ism`.
+
+## Edit-distance variants
+
+These ask "how many single-base edits would it take to make / break a
+motif match?". They share the same PSSM machinery but answer a
+discrete combinatorial question instead of returning a continuous
+score.
+
+- **`pwm.edit_distance`**: minimum number of edits (substitutions, and
+  optionally indels via `max_indels`) needed across all windows in the
+  iterator interval to push the score across `score.thresh`.
+  `direction = "above"` (default) targets making a match;
+  `direction = "below"` targets disrupting one.
+- **`pwm.max.edit_distance`**: same idea, but always evaluated at the
+  argmax window of `pwm.max`.
+- **`pwm.n_mutations`**: number of independent single-base
+  substitutions that each cross `score.thresh` on their own. Returns 0
+  if the threshold is already met, NA if no single substitution
+  suffices.
+
+There is also an LSE-aware family (`pwm.edit_distance.lse`,
+`pwm.edit_distance.lse.pos`) that targets the LSE aggregate rather
+than per-window scores.
+
+See `?gvtrack.create` for the full parameter list and worked examples.
+
+## Per-position attribution: `pwm.grad` and `pwm.grad.ism`
+
+The aggregating tracks above all collapse a window into one scalar.
+`pwm.grad` and `pwm.grad.ism` answer a different question: **at this
+specific base pair, how much does the local sequence support the PWM
+aggregate?** The output is one non-negative number per iterator
+interval, computed at the anchor that starts at `interval.start`.
+
+Combined with a `iterator = 1` step and `gvtrack.iterator(eshift =
+W - 1)`, this gives a per-bp saliency / attribution track you can plot
+or combine with conservation, ATAC, methylation, etc.
+
+### Motivation
+
+Two use cases:
+
+1. **Saliency.** "Of the base pairs in this window, which ones are
+   actually carrying the motif signal?" - a poor man's
+   integrated-gradient / DeepLIFT.
+2. **Single-bp coupling.** Combine PWM evidence with another per-bp
+   signal (conservation, ChIP, etc.) at single-base resolution. With
+   `pwm` you only get one number per window; with `pwm.grad` you get
+   one per bp.
+
+### Math intuition (linearized, `pwm.grad`)
+
+Think of each base as a one-hot vector `x_p` over A/C/G/T. The score
+`score_a` is linear in `x_p` whenever `a` contains `p`, with gradient
+`M[p - a, b]`. With pivot fixed at the iterator start `p =
+interval.start`, only one anchor (`a = p`) contains `p`, and only
+column 0 of the PSSM is involved.
+
+For the LSE aggregate, the gradient is the softmax-weighted column-0
+score, contracted against `(x_p - x_p^{\text{worst}})` where the
+reference is the worst possible base at column 0:
+
+$$
+g_{\text{LSE}}(p) \;=\; w_p \cdot \big(M[0,\, b_p] - \min_b M[0,\, b]\big),
+\qquad w_p = \exp(\text{score}_p - f_{\text{LSE}}).
+$$
+
+Three useful sanity points:
+
+- **Non-negative.** `M[0, b_p] - min_b M[0, b]` >= 0 by construction;
+  `w_p` in [0, 1].
+- **Bounded by per-column information.** The diff term equals the
+  column's information content under the "actual minus worst" baseline.
+- **Modulated by softmax weight.** If the head anchor dominates the
+  LSE (`w_p ≈ 1`), the gradient saturates to the diff. If the LSE
+  spreads over many anchors (`w_p` small), the gradient is small even
+  if the head anchor is itself a good match - the *attribution* of
+  this particular base to the aggregate is diluted.
+
+For the MAX aggregate, the gradient picks up the diff iff the head
+anchor is the argmax:
+
+$$
+g_{\text{MAX}}(p) \;=\;
+\begin{cases}
+M[0,\, b_p] - \min_b M[0,\, b] & \text{if } a^* = p,\\
+0 & \text{otherwise.}
+\end{cases}
+$$
+
+### Math intuition (in-silico mutagenesis, `pwm.grad.ism`)
+
+The ISM gradient is "actual minus best replacement":
+
+$$
+g_{\text{ISM}}(p) \;=\; f(\text{seq}) \;-\; \min_{b' \neq b_p} f\big(\text{seq with } s_p := b'\big).
+$$
+
+Always >= 0. With pivot fixed at `interval.start`, only `score_p`
+changes when we flip `s_p`, so the update is O(1) per flip and ISM
+costs only ~3-4x more than the linearized form.
+
+### When `pwm.grad` and `pwm.grad.ism` differ
+
+The two definitions agree exactly when the argmax is stable under
+flips of `s_p`, and agree to high precision when LSE concentrates on
+the head anchor. They diverge in two cases:
+
+1. **Argmax shifts.** For MAX, if flipping `s_p` makes a *different*
+   anchor become the argmax, ISM accounts for that ("the second-best
+   hit kicks in") and the linearized form doesn't.
+2. **Curvature in LSE.** Linearization is a first-order approximation
+   around the actual sequence; ISM evaluates the aggregate at three
+   discrete neighbours and takes the worst. For sharply non-linear
+   regions of the LSE landscape they differ slightly, but in practice
+   the disagreement is small.
+
+In short: **`pwm.grad` is cheaper and almost always good enough;
+`pwm.grad.ism` is more conservative around argmax-shift edge cases.**
+
+### Worked numerical example
+
+Consider an `L = 3` PSSM and a 6-bp window starting with consensus
+"ACG":
+
+```{r}
+pssm <- matrix(
+    c(
+        0.97, 0.01, 0.01, 0.01,
+        0.01, 0.97, 0.01, 0.01,
+        0.01, 0.01, 0.97, 0.01
+    ),
+    nrow = 3, ncol = 4, byrow = TRUE,
+    dimnames = list(NULL, c("A", "C", "G", "T"))
+)
+M <- log((pssm + 0.01) / rowSums(pssm + 0.01))
+
+seq <- "ACGTTT"
+s <- all_anchor_scores(M, seq) # 4 per-anchor scores
+s
+```
+
+Linearized LSE gradient at `p = 1`:
+
+```{r}
+f_lse <- log_sum_exp(s)
+score_p <- s[1]
+w_p <- exp(score_p - f_lse) # softmax weight at the head
+b_p <- "A" # head base
+diff_col0 <- M[1, b_p] - min(M[1, ])
+w_p
+diff_col0
+g_lse <- w_p * diff_col0
+g_lse
+```
+
+`w_p ≈ 1` because the head anchor "ACG" is the dominant LSE
+contributor; `diff_col0` is the column-0 information content. The
+result is essentially the column's entropy gap.
+
+ISM gradient: flip `seq[1]` to each of C/G/T and recompute the LSE.
+
+```{r}
+ism_lse <- function(M, seq) {
+    s <- all_anchor_scores(M, seq)
+    log_sum_exp(s)
+}
+flips <- setdiff(c("A", "C", "G", "T"), substr(seq, 1, 1))
+f_alt <- vapply(flips, function(b) {
+    ism_lse(M, paste0(b, substr(seq, 2, nchar(seq))))
+}, numeric(1))
+f_alt
+ism_lse(M, seq) - min(f_alt)
+```
+
+The two values agree to within numerical noise; this is the typical
+case.
+
+### Genome-track recipe
+
+Here is the canonical pattern: extract `pwm` and `pwm.grad` over a 1
+kb iterator window, then walk the per-bp gradient with `iterator = 1`.
+
+```{r, eval = FALSE}
+W <- 500 # window length (bp) used for both aggregate and gradient
+
+pssm <- matrix(...) # your 4-col PSSM, dimnames A/C/G/T
+
+gvtrack.create("score", NULL, "pwm", pssm = pssm)
+gvtrack.create("grad", NULL, "pwm.grad", pssm = pssm, aggregate = "lse")
+gvtrack.create("grad_ism", NULL, "pwm.grad.ism", pssm = pssm, aggregate = "lse")
+
+# Each per-bp value uses a window starting at this bp and extending W bp right.
+gvtrack.iterator("score", sshift = 0, eshift = W - 1)
+gvtrack.iterator("grad", sshift = 0, eshift = W - 1)
+gvtrack.iterator("grad_ism", sshift = 0, eshift = W - 1)
+
+regions <- gintervals(1, 100000, 110000)
+out <- gextract(c("score", "grad", "grad_ism"),
+    intervals = regions, iterator = 1
+)
+head(out)
+```
+
+Common downstream patterns:
+
+- **Per-bp coupling**: `out$grad * out$other_track` to get an
+  attribution-weighted version of `other_track`.
+- **Argmax-shift hunting**: `out$grad_ism - out$grad` highlights bp
+  where ISM and linearization diverge, i.e. where the argmax flips
+  under a single substitution.
+- **Smoothing**: a `gtrack.smooth` over `pwm.grad` gives a soft
+  saliency band over the canonical motif location.
+
+### `bidirect = TRUE` for asymmetric PSSMs
+
+For palindromic PSSMs the rc strand contributes column-0 of the rc
+PSSM (= column `L-1` of the fwd PSSM, with complement). With
+`bidirect = TRUE` the gradient uses a per-anchor strand softmax to
+combine the two contributions; this is handled internally and you
+don't need to touch anything beyond `bidirect = TRUE`. For asymmetric
+PSSMs, the bidirect gradient at a bp can pick up signal from either
+strand depending on which one wins locally.
+
+## Performance notes
+
+In rough numbers for an `L = 12` PSSM, `W = 500` bp window, scanned at
+1 bp resolution:
+
+- `pwm.grad` is roughly comparable to `pwm` (both do the same scan;
+  the gradient post-step is O(1) per anchor).
+- `pwm.grad.ism` is ~3-4x `pwm.grad` (three flips x O(1) per
+  position, with a small constant for log-space arithmetic).
+
+For genome-wide attribution, you almost never want `iterator = 1`
+across the whole genome. Common patterns:
+
+- Use a sparse intervals set as iterator (e.g. peaks, TSS windows) and
+  `iterator = 1` only inside those; gives single-bp attribution where
+  it matters and skips empty space.
+- Use a coarser iterator step (e.g. `iterator = 10` or `iterator =
+  100`) for whole-genome scans; gradient is still meaningful, just
+  averaged over the step.
+
+When in doubt, profile on one chromosome before committing to a
+genome-wide scan: the expensive part is reading sequence from disk,
+not the gradient computation itself.
