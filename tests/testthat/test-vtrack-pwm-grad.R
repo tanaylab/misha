@@ -848,3 +848,120 @@ test_that("pwm.grad.ism lse: spat_factor matches oracle", {
     )
     expect_equal(res$g_ism_spat[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
 })
+
+# Task 10: NA / composition / edge-case tests
+
+test_that("pwm.grad: interval shorter than L returns NA", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 5L
+    pivot <- gintervals(1, 200, 201)
+    pssm <- .consensus_pssm(c("A", "C", "G", "T", "A"))
+
+    # eshift only adds 2 bp -> total interval length = 3, < L = 5 -> NA.
+    gvtrack.create("g_short", NULL, "pwm.grad",
+        pssm = pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = FALSE, prior = 0.01
+    )
+    gvtrack.iterator("g_short", sshift = 0, eshift = 2)
+    res <- gextract("g_short", iterator = 1, intervals = pivot)
+    expect_true(is.na(res$g_short[1]))
+})
+
+test_that("pwm.grad: composes with pwm in gextract", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot_block <- gintervals(1, 200, 210)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    gvtrack.create("score", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.create("g", NULL, "pwm.grad",
+        pssm = pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("score", sshift = 0, eshift = iter_W - 1)
+    gvtrack.iterator("g", sshift = 0, eshift = iter_W - 1)
+
+    res <- gextract(c("score", "g"), iterator = 1, intervals = pivot_block)
+    expect_equal(nrow(res), 10L) # 10 1-bp positions
+    expect_true(all(res$g >= -1e-7, na.rm = TRUE))
+    # Score and gradient should both vary across positions.
+    expect_gt(length(unique(res$score)), 1L)
+})
+
+test_that("pwm.grad: gscreen filter on gradient", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    gvtrack.create("g", NULL, "pwm.grad",
+        pssm = pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = iter_W - 1)
+
+    out <- gscreen("g > 0.1", iterator = 1, intervals = gintervals(1, 200, 220))
+    expect_s3_class(out, "data.frame")
+    # All returned intervals must satisfy the predicate.
+    if (nrow(out) > 0) {
+        vals <- gextract("g", iterator = 1, intervals = out)
+        expect_true(all(vals$g > 0.1, na.rm = TRUE))
+    }
+})
+
+test_that("pwm.grad: multi-chromosome intervals", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 10L
+    pssm <- .consensus_pssm(c("A", "C", "G"))
+
+    gvtrack.create("g", NULL, "pwm.grad",
+        pssm = pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = iter_W - 1)
+
+    intervals <- rbind(
+        gintervals(1, 200, 210),
+        gintervals(2, 200, 210)
+    )
+    res <- gextract("g", iterator = 1, intervals = intervals)
+    expect_equal(nrow(res), 20L)
+    expect_true(all(c(1, 2) %in% res$chrom1 |
+        c("chr1", "chr2") %in% res$chrom))
+})
+
+test_that("pwm.grad: gsummary aggregation runs without error", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 10L
+    pssm <- .consensus_pssm(c("A", "C", "G"))
+
+    gvtrack.create("g", NULL, "pwm.grad",
+        pssm = pssm, aggregate = "max",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = iter_W - 1)
+
+    s <- gsummary("g", iterator = 1, intervals = gintervals(1, 200, 250))
+    expect_true(is.numeric(s))
+    expect_true(length(s) >= 5L)
+})
