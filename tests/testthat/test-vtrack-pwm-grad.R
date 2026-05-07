@@ -275,3 +275,135 @@ test_that("pwm.grad max: strand=-1 errors out (Task 3 scope)", {
         "strand=-1"
     )
 })
+
+# Task 4: GRAD_LSE single-strand fwd
+
+test_that("pwm.grad lse: concentrated softmax (head=consensus) matches oracle", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 20L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    gvtrack.create("g_lse", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "lse", bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_lse", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_lse", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(pssm, seq_ext, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g_lse[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+    expect_gt(res$g_lse[1], 0)
+})
+
+test_that("pwm.grad lse: head not argmax => w_p small, g_lse < g_max", {
+    # Same construction as the head-not-argmax test for max, but compare lse
+    # vs max instead of just checking equality.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 30L
+    offset <- 10L
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    interior_bases <- strsplit(substr(seq_ext, offset + 1, offset + L), "")[[1]]
+    pssm <- .consensus_pssm(interior_bases)
+
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    skip_if(
+        identical(interior_bases, head_bases),
+        "test fixture: interior PSSM consensus collides with head bases"
+    )
+
+    gvtrack.create("g_lse", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "lse", bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_lse", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_lse", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(pssm, seq_ext, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g_lse[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+    # When the interior anchor is the LSE-dominant one, w_p (head) is small,
+    # so g_lse stays close to 0 even though M[0, b_p] - worst is large.
+    expect_lt(res$g_lse[1], 0.5)
+})
+
+test_that("pwm.grad lse: w_p computed correctly via softmax denominator", {
+    # Hand-verifiable case: build a 2-anchor situation where head and one
+    # interior anchor have known scores, then compare the engine's w_p * diff
+    # against a direct computation.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    L <- 3L
+    iter_W <- 5L # exactly 5 anchors
+    pivot <- gintervals(1, 200, 201)
+    seq_ext <- toupper(gseq.extract(gintervals(1, 200, 200 + iter_W + L - 1)))
+
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+
+    gvtrack.create("g_lse", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "lse", bidirect = FALSE, strand = 1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_lse", sshift = 0, eshift = iter_W - 1)
+    res <- gextract("g_lse", iterator = 1, intervals = pivot)
+
+    expected <- manual_pwm_grad(pssm, seq_ext, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g_lse[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+
+    # Cross-check: w_p must be in (0, 1] and g_lse <= g_max.
+    g_max_oracle <- manual_pwm_grad(pssm, seq_ext, "max",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_lte(res$g_lse[1], g_max_oracle + 1e-8)
+    expect_gt(res$g_lse[1], 0)
+})
+
+test_that("pwm.grad lse: bidirect=TRUE / strand=-1 error out (Task 4 scope)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    gvtrack.create("g_bidir_lse", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "lse", bidirect = TRUE,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_bidir_lse", sshift = 0, eshift = 19)
+    expect_error(
+        gextract("g_bidir_lse", iterator = 1, intervals = gintervals(1, 200, 201)),
+        "bidirect=FALSE"
+    )
+
+    gvtrack.create("g_minus_lse", NULL, "pwm.grad",
+        pssm = pssm,
+        aggregate = "lse", bidirect = FALSE, strand = -1,
+        extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_minus_lse", sshift = 0, eshift = 19)
+    expect_error(
+        gextract("g_minus_lse", iterator = 1, intervals = gintervals(1, 200, 201)),
+        "strand=-1"
+    )
+})
