@@ -75,14 +75,17 @@
         overwrite = overwrite, verbose = verbose
     )
 
-    classes <- unique(df$class)
-    classes <- classes[!is.na(classes) & nzchar(classes)]
-    for (cls in classes) {
-        sub <- df[!is.na(df$class) & df$class == cls, , drop = FALSE]
-        suffix <- gsub("\\?$", "_qmark", tolower(cls))
-        .save_intervals(sprintf("%srmsk_%s", prefix, suffix), sub,
-            overwrite = overwrite, verbose = verbose
-        )
+    # Split once instead of N full-table scans (was ~20 passes over ~5M rows
+    # for hg38). split() drops NA groups by default; explicitly drop empties.
+    valid <- !is.na(df$class) & nzchar(df$class)
+    if (any(valid)) {
+        groups <- split(df[valid, , drop = FALSE], df$class[valid])
+        for (cls in names(groups)) {
+            suffix <- gsub("\\?$", "_qmark", tolower(cls))
+            .save_intervals(sprintf("%srmsk_%s", prefix, suffix), groups[[cls]],
+                overwrite = overwrite, verbose = verbose
+            )
+        }
     }
     invisible(NULL)
 }
@@ -142,15 +145,32 @@
 
     # 3. Translate chrom column (col 2) via asset$translate, if provided.
     if (!is.null(asset$translate)) {
-        rows <- utils::read.table(gp_trim,
-            sep = "\t", header = FALSE,
-            stringsAsFactors = FALSE, quote = "", comment.char = ""
-        )
+        # data.table is in Suggests; use fread/fwrite when present (~5x faster
+        # on ~50k-row genePred), fall back to base read.table/write.table.
+        use_dt <- requireNamespace("data.table", quietly = TRUE)
+        if (use_dt) {
+            rows <- data.table::fread(gp_trim,
+                sep = "\t", header = FALSE, quote = "",
+                showProgress = FALSE, data.table = FALSE
+            )
+        } else {
+            rows <- utils::read.table(gp_trim,
+                sep = "\t", header = FALSE,
+                stringsAsFactors = FALSE, quote = "", comment.char = ""
+            )
+        }
         rows <- asset$translate(rows, 2L)
         gp_xlat <- file.path(workdir, "xlat.genePred")
-        utils::write.table(rows, gp_xlat,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
-        )
+        if (use_dt) {
+            data.table::fwrite(rows, gp_xlat,
+                sep = "\t", quote = FALSE, col.names = FALSE,
+                na = "NA", showProgress = FALSE
+            )
+        } else {
+            utils::write.table(rows, gp_xlat,
+                sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+            )
+        }
         gp_trim <- gp_xlat
     }
 

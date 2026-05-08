@@ -17,7 +17,8 @@ gdb.install_intervals(
   min_coverage = 1,
   match_by_length = TRUE,
   verbose = TRUE,
-  prefetched_alias = NULL
+  prefetched_alias = NULL,
+  .from_build_genome = FALSE
 )
 }
 \arguments{
@@ -78,6 +79,10 @@ the \code{ucsc-hub} backend (which ships per-contig lengths in
 return value of \code{.hub_preflight_coverage}). When supplied the
 ucsc-hub fetcher reuses it instead of re-downloading. Internal; users
 never set this directly.}
+
+\item{.from_build_genome}{Internal flag; when \code{TRUE},
+\code{gdb.build_genome} signals that it has already rescanned the groot
+and we can skip the entry rescan. Users never set this directly.}
 }
 \value{
 Invisible \code{NULL}. Side effects: writes \code{.interv} files under

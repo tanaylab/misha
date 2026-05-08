@@ -883,19 +883,20 @@ gdb.build_genome <- function(name,
 
     if (length(sets)) {
         gdb.install_intervals(
-            groot            = path,
-            source           = recipe,
-            sets             = sets,
-            prefix           = prefix,
-            gene_sets        = gene_sets,
-            gtf_priority     = gtf_priority,
-            overwrite        = FALSE,
-            registry         = NULL,
-            target_chroms    = target_chroms,
-            min_coverage     = min_coverage,
-            match_by_length  = match_by_length,
-            prefetched_alias = prefetched_alias,
-            verbose          = verbose
+            groot              = path,
+            source             = recipe,
+            sets               = sets,
+            prefix             = prefix,
+            gene_sets          = gene_sets,
+            gtf_priority       = gtf_priority,
+            overwrite          = FALSE,
+            registry           = NULL,
+            target_chroms      = target_chroms,
+            min_coverage       = min_coverage,
+            match_by_length    = match_by_length,
+            prefetched_alias   = prefetched_alias,
+            verbose            = verbose,
+            .from_build_genome = TRUE
         )
     }
 
@@ -1104,6 +1105,9 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #'   return value of \code{.hub_preflight_coverage}). When supplied the
 #'   ucsc-hub fetcher reuses it instead of re-downloading. Internal; users
 #'   never set this directly.
+#' @param .from_build_genome Internal flag; when \code{TRUE},
+#'   \code{gdb.build_genome} signals that it has already rescanned the groot
+#'   and we can skip the entry rescan. Users never set this directly.
 #' @return Invisible \code{NULL}. Side effects: writes \code{.interv} files under
 #'   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
 #'   \code{<groot>/genome_info.yaml}, and re-initializes the active groot.
@@ -1145,7 +1149,8 @@ gdb.install_intervals <- function(groot,
                                   min_coverage = 1.0,
                                   match_by_length = TRUE,
                                   verbose = TRUE,
-                                  prefetched_alias = NULL) {
+                                  prefetched_alias = NULL,
+                                  .from_build_genome = FALSE) {
     sets <- match.arg(sets,
         choices = c("genes", "rmsk", "cgi", "cytoband"),
         several.ok = TRUE
@@ -1170,7 +1175,12 @@ gdb.install_intervals <- function(groot,
                 groot
             ), call. = FALSE)
         }
-        gdb.init(groot, rescan = TRUE)
+        # gdb.build_genome already rescanned this groot at line ~882; skip the
+        # redundant rescan to avoid an extra chrom_sizes/ALLGENOME read (slow
+        # on NFS for many-contig assemblies).
+        if (!.from_build_genome) {
+            gdb.init(groot, rescan = TRUE)
+        }
     } else if (!exists("GROOT", envir = .misha)) {
         stop("No active groot and no `groot` argument supplied.", call. = FALSE)
     }

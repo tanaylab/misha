@@ -189,20 +189,24 @@
 # Build a reverse index for cross-column per-row alias translation: maps every
 # non-empty cell of `alias_df` (excluding `canonical_col`) directly to the
 # row's canonical name. First occurrence of any duplicate value wins.
+# Returned as a named character vector for O(1) bulk lookup via match()/`[`;
+# previously returned an environment, which forced per-element exists()/get().
 .build_alias_rev_index <- function(alias_df, canonical_col) {
     cols <- setdiff(names(alias_df), canonical_col)
     canonical <- as.character(alias_df[[canonical_col]])
-    rev_idx <- new.env(hash = TRUE, parent = emptyenv())
-    for (col in cols) {
-        vals <- alias_df[[col]]
-        for (i in seq_along(vals)) {
-            v <- vals[i]
-            if (!is.na(v) && nzchar(v) && !exists(v, envir = rev_idx, inherits = FALSE)) {
-                assign(v, canonical[i], envir = rev_idx)
-            }
-        }
+    if (!length(cols)) {
+        return(setNames(character(0), character(0)))
     }
-    rev_idx
+    keys <- unlist(
+        lapply(cols, function(col) as.character(alias_df[[col]])),
+        use.names = FALSE
+    )
+    vals <- rep(canonical, times = length(cols))
+    keep <- !is.na(keys) & nzchar(keys)
+    keys <- keys[keep]
+    vals <- vals[keep]
+    first <- !duplicated(keys)
+    setNames(vals[first], keys[first])
 }
 
 # Per-row asset translation. For each value in `rows[[chrom_col]]`, look up
@@ -211,13 +215,9 @@
 # whether to drop or warn.
 .translate_chroms_per_row <- function(rows, chrom_col, rev_idx) {
     asset_names <- as.character(rows[[chrom_col]])
-    out <- vapply(asset_names, function(nm) {
-        if (is.na(nm) || !nzchar(nm) || !exists(nm, envir = rev_idx, inherits = FALSE)) {
-            return(NA_character_)
-        }
-        get(nm, envir = rev_idx)
-    }, character(1), USE.NAMES = FALSE)
-    rows[[chrom_col]] <- out
+    # Vector indexing handles NA / "" / unmatched names by returning NA, which
+    # is exactly the contract callers expect.
+    rows[[chrom_col]] <- unname(rev_idx[asset_names])
     rows
 }
 
