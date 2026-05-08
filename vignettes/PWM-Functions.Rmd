@@ -17,7 +17,7 @@ knitr::opts_chunk$set(
 
 This vignette covers misha's PWM virtual track family: the aggregating
 scorers (`pwm`, `pwm.max`, `pwm.max.pos`, `pwm.count`), the
-edit-distance variants, and the per-position attribution tracks
+edit-distance variants, and the per-position contribution tracks
 (`pwm.grad`, `pwm.grad.ism`).
 
 The math chunks below run as plain R (no genome database required) so
@@ -260,7 +260,7 @@ than per-window scores.
 
 See `?gvtrack.create` for the full parameter list and worked examples.
 
-## Per-position attribution: `pwm.grad` and `pwm.grad.ism`
+## Per-position contribution: `pwm.grad` and `pwm.grad.ism`
 
 The aggregating tracks above collapse a window into one scalar.
 `pwm.grad` and `pwm.grad.ism` return one scalar per iterator interval
@@ -268,7 +268,22 @@ The aggregating tracks above collapse a window into one scalar.
 `interval.start`. With `iterator = 1` and `gvtrack.iterator(eshift =
 W - 1)`, this gives a per-bp track over a region.
 
-### Linearized gradient (`pwm.grad`)
+A PWM is a linear log-likelihood model, so "the gradient" is just a
+PSSM column. These tracks expose two flavors of per-base contribution:
+
+- **`pwm.grad`**: a softmax-weighted column-0 contribution. The math
+  is the gradient of the LSE / MAX aggregate w.r.t. the one-hot input
+  at the head bp, contracted with `actual_base - worst_base`. This
+  reduces to "how much does this base's PSSM column contribute,
+  weighted by how much the head anchor matters in the window".
+- **`pwm.grad.ism`**: in-silico mutagenesis. Same idea as
+  `motifbreakR`-style SNP-impact scoring, exposed as a sliding-window
+  track: flip the base, recompute the aggregate, take the worst.
+
+These are not new methods - they are standard motif-scanning math
+packaged as misha vtracks composable with other 1D tracks.
+
+### Softmax-weighted contribution (`pwm.grad`)
 
 Treat each base as a one-hot vector `x_p` over A/C/G/T. With pivot
 fixed at `p = interval.start`, only one anchor (`a = p`) contains `p`,
@@ -283,8 +298,8 @@ $$
 
 `w_p` is the softmax weight of the head anchor in the window: it
 captures how much the head anchor contributes to the LSE relative to
-the other `W - L` anchors. The diff term equals the column-0
-information content under an "actual minus worst" baseline.
+the other anchors. The diff term equals the column-0 information
+content under an "actual minus worst" baseline.
 
 For the MAX aggregate:
 
@@ -409,7 +424,7 @@ head(out)
 
 `out$grad - out$grad_ism` flags positions where the argmax flips under
 single substitution. Multiplying `out$grad` by another per-bp track
-gives an attribution-weighted version of that track.
+gives a contribution-weighted version of that track.
 
 ## Performance notes
 
@@ -424,7 +439,7 @@ For an `L = 12` PSSM, `W = 500` bp window, scanned at 1 bp resolution:
 - `pwm.grad.ism` is essentially the same cost as `pwm.grad`: the
   three flips contribute O(1) each on top of the per-pivot scan.
 
-For genome-wide attribution, a sparse iterator (peaks, TSS windows)
+For genome-wide per-bp scans, a sparse iterator (peaks, TSS windows)
 plus `iterator = 1` *inside* those is usually the right shape. Coarser
 iterator steps (`iterator = 10` or `100`) work for whole-genome scans
 when single-bp resolution isn't required.

@@ -1,6 +1,6 @@
 # misha (development version)
 
-* Added `pwm.grad` and `pwm.grad.ism` virtual tracks: per-bp gradient / saliency of the PWM aggregate (LSE or MAX) at the iterator interval start. `pwm.grad` is the linearized DeepLIFT-style attribution; `pwm.grad.ism` is in-silico mutagenesis.
+* Added `pwm.grad` and `pwm.grad.ism` virtual tracks: per-bp PSSM-column contribution at the iterator interval start, derived from the LSE or MAX aggregate. `pwm.grad` is the softmax-weighted column contribution (linearized form); `pwm.grad.ism` is in-silico mutagenesis (`motifbreakR`-style flip-and-rescore, packaged as a sliding-window track).
 
 # misha 5.6.28
 
