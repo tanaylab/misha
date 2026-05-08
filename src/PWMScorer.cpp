@@ -176,6 +176,7 @@ void PWMScorer::invalidate_cache()
     m_slide.valid = false;
     m_slide.stride = 0;
     m_spat_slide.valid = false;
+    m_grad_slide.clear();
 }
 
 // Get spatial log factor for a given position index
@@ -403,6 +404,7 @@ float PWMScorer::score_without_spatial(const std::string& target, int64_t motif_
 float PWMScorer::score_grad(const std::string& target,
                             size_t i_min, size_t i_max,
                             size_t motif_length,
+                            int chromid, int64_t interval_start, int64_t interval_end,
                             bool lse_aggregate, bool ism)
 {
     // Precondition: only the score_thresh / spatial restrictions need not be
@@ -461,6 +463,98 @@ float PWMScorer::score_grad(const std::string& target,
     // O(1) without a second pass. When spatial weighting is on, each anchor's
     // score is augmented by a position-dependent log factor; head_fwd/head_rc
     // are kept *raw* (no spat) so the ISM flip math can recompute them.
+    // ---- Slide-or-seed phase --------------------------------------------------
+    //
+    // Populate m_grad_slide.fwd / m_grad_slide.rc so they hold per-anchor RAW
+    // scores in target-index order [i_min, i_max]. On consecutive iterator
+    // steps with the same chrom / strand / window geometry, slide the deque
+    // (pop trailing anchors, score & push leading anchors) instead of doing a
+    // full O(W*L) rescan; otherwise seed from scratch.
+    const size_t W = (i_min <= i_max) ? (i_max - i_min + 1) : 0;
+    bool can_slide = false;
+    size_t stride = 0;
+    if (m_grad_slide.valid &&
+        m_grad_slide.chromid == chromid &&
+        m_grad_slide.strand_mode == m_strand &&
+        m_grad_slide.i_min == i_min &&
+        m_grad_slide.i_max == i_max &&
+        m_grad_slide.fwd.size() == W &&
+        m_grad_slide.rc.size() == W) {
+        const int64_t step = interval_start - m_grad_slide.last_interval_start;
+        const int64_t step_end = interval_end - m_grad_slide.last_interval_end;
+        if (step > 0 && step == step_end && (size_t)step <= W) {
+            stride = (size_t)step;
+            can_slide = true;
+        }
+    }
+
+    if (can_slide) {
+        if (m_strand != -1) {
+            // Target is fwd-orientation: a 1bp genomic forward step drops the
+            // anchor at the LEFT of the target (low target index) and adds a
+            // new anchor at the RIGHT (high target index). The fetched window
+            // for the new pivot has its left edge advanced by `stride`, so
+            // target indices for the SAME genomic anchor have shifted by
+            // -stride; in target-local terms we pop_front and push_back.
+            for (size_t k = 0; k < stride; ++k) {
+                m_grad_slide.fwd.pop_front();
+                m_grad_slide.rc.pop_front();
+                const size_t new_anchor_i = i_max - stride + 1 + k;
+                float fwd_v = -std::numeric_limits<float>::infinity();
+                float rc_v  = -std::numeric_limits<float>::infinity();
+                if (use_fwd) fwd_v = score_forward_original(m_pssm, target, new_anchor_i, m_strand);
+                if (use_rc)  rc_v  = score_reverse_original(m_pssm, target, new_anchor_i, m_strand);
+                m_grad_slide.fwd.push_back(fwd_v);
+                m_grad_slide.rc.push_back(rc_v);
+            }
+        } else {
+            // Target is rc'd: the rc'd buffer's HIGH target index corresponds
+            // to the LOW genomic coordinate. A genomic forward step still adds
+            // new anchors at the LOW genomic coordinates (because the iterator
+            // step extends the END of the genomic window), which in rc'd-target
+            // space means LOW target indices. Pop trailing tail anchors
+            // (high target indices) and push new anchors at the front to
+            // preserve target-index ordering.
+            for (size_t k = 0; k < stride; ++k) {
+                m_grad_slide.fwd.pop_back();
+                m_grad_slide.rc.pop_back();
+            }
+            for (size_t k = stride; k > 0; --k) {
+                const size_t new_anchor_i = i_min + (k - 1);
+                float fwd_v = -std::numeric_limits<float>::infinity();
+                float rc_v  = -std::numeric_limits<float>::infinity();
+                if (use_fwd) fwd_v = score_forward_original(m_pssm, target, new_anchor_i, m_strand);
+                if (use_rc)  rc_v  = score_reverse_original(m_pssm, target, new_anchor_i, m_strand);
+                m_grad_slide.fwd.push_front(fwd_v);
+                m_grad_slide.rc.push_front(rc_v);
+            }
+        }
+        m_grad_slide.last_interval_start = interval_start;
+        m_grad_slide.last_interval_end = interval_end;
+    } else {
+        // Seed: full scan once.
+        m_grad_slide.fwd.clear();
+        m_grad_slide.rc.clear();
+        for (size_t k = 0; k < W; ++k) {
+            const size_t i = i_min + k;
+            float fwd_v = -std::numeric_limits<float>::infinity();
+            float rc_v  = -std::numeric_limits<float>::infinity();
+            if (use_fwd) fwd_v = score_forward_original(m_pssm, target, i, m_strand);
+            if (use_rc)  rc_v  = score_reverse_original(m_pssm, target, i, m_strand);
+            m_grad_slide.fwd.push_back(fwd_v);
+            m_grad_slide.rc.push_back(rc_v);
+        }
+        m_grad_slide.valid = true;
+        m_grad_slide.chromid = chromid;
+        m_grad_slide.strand_mode = m_strand;
+        m_grad_slide.last_interval_start = interval_start;
+        m_grad_slide.last_interval_end = interval_end;
+        m_grad_slide.i_min = i_min;
+        m_grad_slide.i_max = i_max;
+    }
+
+    // ---- Aggregation phase ----------------------------------------------------
+
     float lse           = -std::numeric_limits<float>::infinity();
     float lse_no_head   = -std::numeric_limits<float>::infinity();
     float best          = -std::numeric_limits<float>::infinity();
@@ -472,17 +566,10 @@ float PWMScorer::score_grad(const std::string& target,
     float head_spat_log = 0.0f;
     bool any_finite     = false;
 
-    for (size_t i = i_min; i <= i_max; ++i) {
-        // score_forward_original / score_reverse_original return scores in
-        // fwd-genome semantics regardless of whether `target` is rc'd.
-        float fwd = -std::numeric_limits<float>::infinity();
-        float rc  = -std::numeric_limits<float>::infinity();
-        if (use_fwd) {
-            fwd = score_forward_original(m_pssm, target, i, m_strand);
-        }
-        if (use_rc) {
-            rc = score_reverse_original(m_pssm, target, i, m_strand);
-        }
+    for (size_t k = 0; k < W; ++k) {
+        const size_t i = i_min + k;
+        const float fwd = m_grad_slide.fwd[k];
+        const float rc  = m_grad_slide.rc[k];
 
         // Per-anchor raw score: comb (bidirect) or single-strand.
         float s_raw;
@@ -501,8 +588,10 @@ float PWMScorer::score_grad(const std::string& target,
             s_raw = use_fwd ? fwd : rc;
         }
 
-        // Apply spatial log factor (= 0 when m_use_spat is false).
-        const float spat_log = get_spatial_log_factor(i - i_min);
+        // Apply spatial log factor (= 0 when m_use_spat is false). Spatial is
+        // iterator-local (indexed by k = i - i_min), so it's recomputed per
+        // pivot even though the underlying fwd/rc are cached.
+        const float spat_log = get_spatial_log_factor(k);
         const float s = std::isfinite(s_raw) ? (s_raw + spat_log) : s_raw;
 
         if (i == head_idx) {
@@ -1180,7 +1269,9 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                 m_mode == GRAD_MAX_ISM || m_mode == GRAD_LSE_ISM) {
                 const bool lse_aggregate = (m_mode == GRAD_LSE || m_mode == GRAD_LSE_ISM);
                 const bool ism = (m_mode == GRAD_MAX_ISM || m_mode == GRAD_LSE_ISM);
-                return score_grad(target, i_min, i_max, motif_len, lse_aggregate, ism);
+                return score_grad(target, i_min, i_max, motif_len,
+                                  interval.chromid, interval.start, interval.end,
+                                  lse_aggregate, ism);
             }
 
             // Try spatial sliding window optimization

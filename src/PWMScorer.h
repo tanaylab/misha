@@ -66,6 +66,38 @@ private:
         int hit_count = 0;
     };
 
+    // Per-anchor (fwd, rc) raw score cache for grad modes. Sliding by 1bp pops
+    // one anchor at the trailing edge and adds one at the leading edge; the
+    // per-pivot aggregate is recomputed from the cache (O(W)) but the per-anchor
+    // scoring is amortized to O(L) across slides, replacing an O(W*L) full scan.
+    //
+    // Cache holds RAW (no spatial weighting) per-strand scores so the per-pivot
+    // spatial assignment can be re-applied: different pivots assign different
+    // spatial bins to the same anchor (spatial is iterator-local, not anchor-
+    // genomic).
+    struct GradSlideCache {
+        bool valid = false;
+        int chromid = -1;
+        char strand_mode = 0;
+        int64_t last_interval_start = -1;
+        int64_t last_interval_end = -1;
+        size_t i_min = 0;
+        size_t i_max = 0;          // i_max - i_min + 1 == window size
+        std::deque<float> fwd;     // raw fwd score per anchor in target-index order
+        std::deque<float> rc;      // raw rc score per anchor in target-index order
+
+        void clear() {
+            valid = false;
+            chromid = -1;
+            last_interval_start = -1;
+            last_interval_end = -1;
+            i_min = 0;
+            i_max = 0;
+            fwd.clear();
+            rc.clear();
+        }
+    };
+
     // Spatial sliding window cache with bin-aware delta updates
     struct SpatSlideCache {
         // Geometry / semantics
@@ -179,6 +211,7 @@ private:
     float score_grad(const std::string& target,
                      size_t i_min, size_t i_max,
                      size_t motif_length,
+                     int chromid, int64_t interval_start, int64_t interval_end,
                      bool lse_aggregate, bool ism);
 
     // Core members
@@ -200,6 +233,7 @@ private:
     // Cache
     SlideCache m_slide;
     SpatSlideCache m_spat_slide;
+    GradSlideCache m_grad_slide;
 };
 
 #endif // PWM_SCORER_H_
