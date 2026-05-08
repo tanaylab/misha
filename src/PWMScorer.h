@@ -19,10 +19,10 @@ public:
         MAX_LIKELIHOOD,     // Maximum log-likelihood score
         MAX_LIKELIHOOD_POS, // Position of maximum log-likelihood
         MOTIF_COUNT,        // Count of positions exceeding threshold
-        GRAD_LSE,           // Linearized per-bp gradient (DeepLIFT-style) under LSE aggregate
-        GRAD_MAX,           // Linearized per-bp gradient under MAX aggregate
-        GRAD_LSE_ISM,       // In-silico mutagenesis per-bp gradient under LSE aggregate
-        GRAD_MAX_ISM        // In-silico mutagenesis per-bp gradient under MAX aggregate
+        GRAD_LSE,           // Softmax-weighted per-bp PSSM-column contribution under LSE aggregate
+        GRAD_MAX,           // Argmax-conditioned per-bp PSSM-column contribution under MAX aggregate
+        GRAD_LSE_ISM,       // In-silico mutagenesis per-bp contribution under LSE aggregate
+        GRAD_MAX_ISM        // In-silico mutagenesis per-bp contribution under MAX aggregate
     };
 
     PWMScorer(const DnaPSSM &pssm, const std::string &genome_root, bool extend = true,
