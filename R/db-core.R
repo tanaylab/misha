@@ -6,10 +6,15 @@
 # For large alias maps (e.g. NCBI assemblies with chrom_aliases.tsv loaded:
 # ~12k entries on rabbit), this becomes the dominant cost in .gchroms().
 # An environment offers genuine O(1) hashed lookup that survives across calls.
-.refresh_chrom_alias_env <- function(full_alias_map = NULL) {
+.refresh_chrom_alias_env <- function(full_alias_map = NULL,
+                                     lazy_threshold = getOption("misha.chrom_alias_lazy_threshold", 1e6)) {
     # Drop any existing mirror first.
     if (exists("CHROM_ALIAS_ENV", envir = .misha, inherits = FALSE)) {
         rm("CHROM_ALIAS_ENV", envir = .misha)
+    }
+    # Drop any stale pending map; caller will set a fresh one if applicable.
+    if (exists("CHROM_ALIAS_PENDING", envir = .misha, inherits = FALSE)) {
+        rm("CHROM_ALIAS_PENDING", envir = .misha)
     }
     if (!exists("CHROM_ALIAS", envir = .misha, inherits = FALSE)) {
         return(invisible(NULL))
@@ -24,6 +29,16 @@
     if (is.null(alias_map) || length(alias_map) == length(cpp_map)) {
         return(invisible(NULL))
     }
+    # Defer the env build for very large maps. list2env(as.list(named_char))
+    # is ~10us per entry; on the Phylo447 / Crocidura assembly's 7.2M-entry
+    # alias map that's ~80s of gsetroot stall. The full map is stashed in
+    # CHROM_ALIAS_PENDING and .gchroms() materializes the env on the first
+    # query that actually requires alias resolution (i.e. has a non-canonical
+    # name). Canonical-only workflows never pay the cost.
+    if (length(alias_map) > lazy_threshold) {
+        assign("CHROM_ALIAS_PENDING", alias_map, envir = .misha)
+        return(invisible(NULL))
+    }
     env <- new.env(
         hash = TRUE, parent = emptyenv(),
         size = max(length(alias_map), 1L)
@@ -32,6 +47,26 @@
         list2env(as.list(alias_map), envir = env)
     }
     assign("CHROM_ALIAS_ENV", env, envir = .misha)
+    invisible(NULL)
+}
+
+# Materialize the alias env from CHROM_ALIAS_PENDING. Called by .gchroms() the
+# first time a query needs alias resolution on a DB whose map was deferred at
+# gsetroot time.
+.materialize_chrom_alias_env <- function() {
+    if (!exists("CHROM_ALIAS_PENDING", envir = .misha, inherits = FALSE)) {
+        return(invisible(NULL))
+    }
+    full_map <- get("CHROM_ALIAS_PENDING", envir = .misha)
+    env <- new.env(
+        hash = TRUE, parent = emptyenv(),
+        size = max(length(full_map), 1L)
+    )
+    if (length(full_map)) {
+        list2env(as.list(full_map), envir = env)
+    }
+    assign("CHROM_ALIAS_ENV", env, envir = .misha)
+    rm("CHROM_ALIAS_PENDING", envir = .misha)
     invisible(NULL)
 }
 
@@ -63,36 +98,51 @@
     has_alias_env <- exists("CHROM_ALIAS_ENV", envir = .misha, inherits = FALSE)
     has_alias_map <- exists("CHROM_ALIAS", envir = .misha, inherits = FALSE)
 
+    # Lazy alias-env materialization: if .refresh_chrom_alias_env deferred the
+    # build (huge alias map, e.g. Phylo447), build it now -- but only when the
+    # query actually needs alias resolution. Canonical-only queries take a
+    # direct match() shortcut and never pay either the env build or the
+    # named-vector hash on CHROM_ALIAS.
+    if (!has_alias_env &&
+        exists("CHROM_ALIAS_PENDING", envir = .misha, inherits = FALSE)) {
+        indices <- match(chroms, allchroms)
+        if (!anyNA(indices)) {
+            # All canonical; allchroms[] yields factor-typed output, matching
+            # the function's "alias-resolution" tail return semantics.
+            return(allchroms[indices])
+        }
+        .materialize_chrom_alias_env()
+        has_alias_env <- exists("CHROM_ALIAS_ENV", envir = .misha, inherits = FALSE)
+    }
+
     if (has_alias_env) {
         env <- get("CHROM_ALIAS_ENV", envir = .misha)
-        if (length(env)) {
-            # Fast probe: do any unique chroms hit the alias env at all?
-            any_hit <- FALSE
-            for (u in uniq) {
-                if (exists(u, envir = env, inherits = FALSE)) {
-                    any_hit <- TRUE
-                    break
-                }
+        # Fast probe: do any unique chroms hit the alias env at all?
+        # (We deliberately don't gate on length(env) here -- length() on a
+        # 7M-entry env is ~700 ms, while a per-uniq exists() probe on the same
+        # env is ~5 us.)
+        any_hit <- FALSE
+        for (u in uniq) {
+            if (exists(u, envir = env, inherits = FALSE)) {
+                any_hit <- TRUE
+                break
             }
-            if (!any_hit) {
-                if (all(uniq %in% allchroms)) {
-                    return(chroms)
-                }
-            } else {
-                # Map only the unique values, then expand back to chroms.
-                u_targets <- vapply(uniq, .chrom_alias_lookup, character(1), env = env)
-                # Build a name->target named character; missing entries stay NA.
-                names(u_targets) <- uniq
-                mapped <- u_targets[chroms]
-                matched <- !is.na(mapped)
-                if (any(matched)) {
-                    chroms[matched] <- unname(mapped[matched])
-                } else if (all(uniq %in% allchroms)) {
-                    return(chroms)
-                }
+        }
+        if (!any_hit) {
+            if (all(uniq %in% allchroms)) {
+                return(chroms)
             }
-        } else if (all(uniq %in% allchroms)) {
-            return(chroms)
+        } else {
+            # Map only the unique values, then expand back to chroms.
+            u_targets <- vapply(uniq, .chrom_alias_lookup, character(1), env = env)
+            names(u_targets) <- uniq
+            mapped <- u_targets[chroms]
+            matched <- !is.na(mapped)
+            if (any(matched)) {
+                chroms[matched] <- unname(mapped[matched])
+            } else if (all(uniq %in% allchroms)) {
+                return(chroms)
+            }
         }
     } else if (has_alias_map) {
         # Backward-compat path: no env mirror present (e.g. user assigned
