@@ -123,77 +123,72 @@
 
 .compute_chrom_aliases <- function(chroms) {
     chroms <- unique(as.character(chroms))
+    n <- length(chroms)
+    if (!n) {
+        return(stats::setNames(character(0), character(0)))
+    }
 
-    # Pre-compute all string transformations (vectorized)
     has_chr_prefix <- startsWith(chroms, "chr")
     unprefixed <- ifelse(has_chr_prefix, substring(chroms, 4), chroms)
     prefixed <- ifelse(has_chr_prefix, chroms, paste0("chr", chroms))
-    upper_unprefixed <- toupper(unprefixed)
-    upper_chroms <- toupper(chroms)
+    upper_unpref <- toupper(unprefixed)
+    upper_chr <- toupper(chroms)
+    is_mito <- upper_unpref %in% c("M", "MT") | upper_chr %in% c("CHRM", "CHRMT")
 
-    # Build alias mappings efficiently using environment for O(1) existence checks
-    seen <- new.env(hash = TRUE, parent = emptyenv())
+    # On fragmented assemblies (Phylo447, 2.4M contigs named "CroInd_scaffold_*")
+    # the prefixed-alias step generates millions of "chrXXX" entries that no user
+    # will ever look up. Skip it when (a) the contig count is large, (b) no
+    # canonical name has the "chr" prefix, and (c) no name is mito-pattern -- so
+    # Ensembl-style references ("1", "2", "X", "MT") still get their chr-toggle
+    # aliases.
+    skip_prefixed <- n > 1000L && !any(has_chr_prefix) && !any(is_mito)
 
-    # Pre-allocate result vectors (estimate ~4 entries per chromosome)
-    max_aliases <- length(chroms) * 4
-    alias_names <- character(max_aliases)
-    alias_targets <- character(max_aliases)
-    idx <- 0
+    # Pass 1: each canonical chrom maps to itself (already deduplicated above).
+    self_names <- chroms
+    self_targets <- chroms
 
-    # Inline alias addition to avoid <<- (CRAN compliance)
-    # First pass: add all chromosomes mapping to themselves
-    for (i in seq_along(chroms)) {
-        chrom <- chroms[i]
-        if (!exists(chrom, envir = seen, inherits = FALSE)) {
-            seen[[chrom]] <- TRUE
-            idx <- idx + 1
-            alias_names[idx] <- chrom
-            alias_targets[idx] <- chrom
-        }
+    if (skip_prefixed) {
+        return(stats::setNames(self_targets, self_names))
     }
 
-    # Second pass: add aliases using pre-computed vectorized values
-    for (i in seq_along(chroms)) {
-        chrom <- chroms[i]
+    # Pass 2: candidate aliases (unprefixed + prefixed), tagged with source-chrom
+    # index so we can reproduce the original loop's "first-seen wins" semantics.
+    diff_un <- nzchar(unprefixed) & unprefixed != chroms
+    diff_pf <- nzchar(prefixed) & prefixed != chroms
+    cand_names <- c(unprefixed[diff_un], prefixed[diff_pf])
+    cand_targets <- c(chroms[diff_un], chroms[diff_pf])
+    cand_pri <- c(which(diff_un), which(diff_pf))
 
-        # Add unprefixed alias
-        if (unprefixed[i] != chrom) {
-            name <- unprefixed[i]
-            if (nzchar(name) && !exists(name, envir = seen, inherits = FALSE)) {
-                seen[[name]] <- TRUE
-                idx <- idx + 1
-                alias_names[idx] <- name
-                alias_targets[idx] <- chrom
-            }
-        }
+    # Canonical names always win: drop aliases that collide with a canonical.
+    not_canon <- !(cand_names %in% chroms)
+    cand_names <- cand_names[not_canon]
+    cand_targets <- cand_targets[not_canon]
+    cand_pri <- cand_pri[not_canon]
 
-        # Add prefixed alias
-        if (prefixed[i] != chrom) {
-            name <- prefixed[i]
-            if (nzchar(name) && !exists(name, envir = seen, inherits = FALSE)) {
-                seen[[name]] <- TRUE
-                idx <- idx + 1
-                alias_names[idx] <- name
-                alias_targets[idx] <- chrom
-            }
-        }
+    # First-seen wins: order by source-chrom index, then keep first occurrence.
+    o <- order(cand_pri)
+    cand_names <- cand_names[o]
+    cand_targets <- cand_targets[o]
+    keep <- !duplicated(cand_names)
+    cand_names <- cand_names[keep]
+    cand_targets <- cand_targets[keep]
 
-        # Add mitochondrial aliases
-        if (upper_unprefixed[i] %in% c("M", "MT") || upper_chroms[i] %in% c("CHRM", "CHRMT")) {
-            for (mt_alias in c("M", "MT", "chrM")) {
-                if (!exists(mt_alias, envir = seen, inherits = FALSE)) {
-                    seen[[mt_alias]] <- TRUE
-                    idx <- idx + 1
-                    alias_names[idx] <- mt_alias
-                    alias_targets[idx] <- chrom
-                }
+    out_names <- c(self_names, cand_names)
+    out_targets <- c(self_targets, cand_targets)
+
+    # Mitochondrial aliases (M, MT, chrM) all point to the first mito-like canonical.
+    # Original loop adds each only if not already present.
+    if (any(is_mito)) {
+        mt_target <- chroms[which(is_mito)[1]]
+        for (mt in c("M", "MT", "chrM")) {
+            if (!(mt %in% out_names)) {
+                out_names <- c(out_names, mt)
+                out_targets <- c(out_targets, mt_target)
             }
         }
     }
 
-    # Build final named vector
-    alias <- stats::setNames(alias_targets[1:idx], alias_names[1:idx])
-    alias
+    stats::setNames(out_targets, out_names)
 }
 
 .store_chrom_aliases <- function(chroms) {
