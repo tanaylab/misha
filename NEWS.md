@@ -1,3 +1,7 @@
+# misha (development version)
+
+* `gsetroot` is much faster on fragmented assemblies (e.g. ~93 s -> ~11 s on a 2.4M-contig genome). Vectorized `.compute_chrom_aliases` and skipped the chr-prefixed alias step when no canonical name has the `chr` prefix and the contig count is large.
+
 # misha 5.6.26
 
 * Fixed `gpartition`, `gquantiles` and other consumers of `BinFinder` silently routing every value into the highest bin when the breaks vector contained both `-Inf` and `+Inf` (e.g. `c(-Inf, 0, Inf)`). The uniform-binsize fast path computed `Inf/Inf = NaN` whose cast to int is undefined behaviour. `BinFinder::init` now falls back to binary search when binsize is non-finite.
