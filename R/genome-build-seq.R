@@ -16,14 +16,6 @@
         local = .build_seq_local,
         stop(sprintf("No seq builder for source '%s'", recipe$source), call. = FALSE)
     )
-    if (!is.null(target_chroms) && !recipe$source %in% c("ucsc-hub")) {
-        if (verbose) {
-            message(sprintf(
-                "  target_chroms is honored only by ucsc-hub; ignored for source=%s.",
-                recipe$source
-            ))
-        }
-    }
     if (recipe$source == "ucsc-hub") {
         fn(recipe, path,
             target_chroms = target_chroms, format = format,

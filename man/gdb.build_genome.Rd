@@ -54,14 +54,17 @@ groot should align to (typically the output of \code{halStats
 against). When supplied, misha auto-picks the chromAlias column whose
 values cover \code{target_chroms} best and uses that column as the
 canonical naming, instead of \code{chrom_naming}. Honored only by the
-\code{ucsc-hub} backend; ignored elsewhere with a notice.}
+\code{ucsc-hub} backend; supplying it with any other source is an error
+(raised before any download).}
 
 \item{min_coverage}{Minimum fraction of groot chroms that must appear in a
 chromAlias column for that column to be picked as canonical (forwarded to
 \code{\link{gdb.install_intervals}}). Default \code{1.0} (strict). Lower
 to e.g. \code{0.99} when a column has small gaps -- typical when a target
 column doesn't span every contig (e.g. UCSC's \code{genbank} column has
-no value for the mitochondrion in many hubs, leaving 1 stray chrom).}
+no value for the mitochondrion in many hubs, leaving 1 stray chrom).
+Honored only by the \code{ucsc-hub} backend; supplying a non-default value
+for any other source is an error (raised before any download).}
 
 \item{match_by_length}{Forwarded to \code{\link{gdb.install_intervals}}.
 When \code{TRUE} (default), complements column-based canonical detection

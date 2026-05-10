@@ -618,3 +618,134 @@ test_that("gdb.build_genome refuses to overwrite existing path", {
     on.exit(unlink(d, recursive = TRUE))
     expect_error(gdb.build_genome("hg38", path = d), "already exists")
 })
+
+# ---------------------------------------------------------------------------
+# Eager-fail / cleanup behavior
+# ---------------------------------------------------------------------------
+
+test_that("gdb.build_genome rejects target_chroms with non-ucsc-hub source", {
+    out <- tempfile("misha_test_groot_")
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    # hg38 resolves to source=ucsc in the built-in registry; target_chroms is
+    # ucsc-hub-only and must error before any download/path creation.
+    expect_error(
+        gdb.build_genome(
+            name          = "hg38",
+            path          = out,
+            target_chroms = c("chr1", "chr2"),
+            verbose       = FALSE
+        ),
+        "ucsc-hub"
+    )
+    expect_false(dir.exists(out))
+})
+
+test_that("gdb.build_genome rejects non-default min_coverage with non-ucsc-hub source", {
+    out <- tempfile("misha_test_groot_")
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    expect_error(
+        gdb.build_genome(
+            name         = "hg38",
+            path         = out,
+            min_coverage = 0.9,
+            verbose      = FALSE
+        ),
+        "ucsc-hub"
+    )
+    expect_false(dir.exists(out))
+})
+
+test_that("gdb.build_genome leaves no path behind when ucsc-hub pre-flight fails", {
+    fake_recipe <- list(
+        source = "ucsc-hub", accession = "GCF_TEST.1",
+        chrom_naming = "ucsc"
+    )
+    testthat::local_mocked_bindings(
+        .resolve_genome = function(name, registry = NULL) {
+            list(recipe = fake_recipe, resolved_from = "test-fixture")
+        },
+        .hub_url_for = function(accession) "https://hub.example/test/",
+        .hub_list_dir = function(url, verbose = TRUE) {
+            c(
+                "GCF_TEST.chromAlias.txt",
+                "GCF_TEST.chrom.sizes.txt",
+                "GCF_TEST.fa.gz"
+            )
+        },
+        .download_to = function(url, dest, verbose = TRUE) {
+            if (grepl("chromAlias", url)) {
+                writeLines("# ucsc\tgenbank\trefseq", dest)
+            } else if (grepl("chrom\\.sizes", url)) {
+                cat("NC_00001.1\t100000000\nNC_00002.1\t100000000\nNC_M.1\t16000\n",
+                    file = dest
+                )
+            }
+            invisible(dest)
+        },
+        .parse_ucsc_chromalias = function(path) {
+            data.frame(
+                ucsc = c("chr1", "chr2", ""),
+                genbank = c("CM00001.1", "", ""),
+                refseq = c("NC_00001.1", "NC_00002.1", "NC_M.1"),
+                stringsAsFactors = FALSE
+            )
+        },
+        .package = "misha"
+    )
+    out <- tempfile("misha_test_groot_")
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    expect_error(
+        gdb.build_genome(
+            name         = "ucsc-hub-test-fixture",
+            path         = out,
+            sets         = "rmsk",
+            min_coverage = 1.0,
+            verbose      = FALSE
+        ),
+        "no column with 100"
+    )
+    expect_false(dir.exists(out))
+})
+
+test_that("gdb.build_genome unlinks path when a post-pre-flight step fails", {
+    fake_recipe <- list(
+        source = "ucsc-hub", accession = "GCF_TEST.1",
+        chrom_naming = "ucsc"
+    )
+    testthat::local_mocked_bindings(
+        .resolve_genome = function(name, registry = NULL) {
+            list(recipe = fake_recipe, resolved_from = "test-fixture")
+        },
+        # Pre-flight passes (return a synthetic prefetched alias bundle, no
+        # network), then .build_seq is forced to fail AFTER creating `path`.
+        .hub_preflight_coverage = function(accession, target_chroms = NULL,
+                                           chrom_naming = NULL, min_coverage,
+                                           workdir, verbose = TRUE) {
+            list(
+                df = data.frame(ucsc = "chr1", stringsAsFactors = FALSE),
+                row_lengths = 1000L,
+                alias_file = NULL,
+                sizes_file = NULL,
+                canonical_col = "ucsc"
+            )
+        },
+        .build_seq = function(recipe, path, target_chroms = NULL, format = NULL,
+                              prefetched_alias = NULL, verbose = TRUE) {
+            dir.create(path, recursive = TRUE)
+            writeLines("not a real groot", file.path(path, "marker.txt"))
+            stop("forced failure after path creation", call. = FALSE)
+        },
+        .package = "misha"
+    )
+    out <- tempfile("misha_test_groot_")
+    expect_error(
+        gdb.build_genome(
+            name    = "ucsc-hub-test-fixture",
+            path    = out,
+            sets    = character(0),
+            verbose = FALSE
+        ),
+        "forced failure"
+    )
+    expect_false(dir.exists(out))
+})

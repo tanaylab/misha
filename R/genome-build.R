@@ -755,6 +755,8 @@
 #'   to e.g. \code{0.99} when a column has small gaps -- typical when a target
 #'   column doesn't span every contig (e.g. UCSC's \code{genbank} column has
 #'   no value for the mitochondrion in many hubs, leaving 1 stray chrom).
+#'   Honored only by the \code{ucsc-hub} backend; supplying a non-default value
+#'   for any other source is an error (raised before any download).
 #' @param match_by_length Forwarded to \code{\link{gdb.install_intervals}}.
 #'   When \code{TRUE} (default), complements column-based canonical detection
 #'   with a per-row length match for alias rows the chosen column couldn't
@@ -767,7 +769,8 @@
 #'   against). When supplied, misha auto-picks the chromAlias column whose
 #'   values cover \code{target_chroms} best and uses that column as the
 #'   canonical naming, instead of \code{chrom_naming}. Honored only by the
-#'   \code{ucsc-hub} backend; ignored elsewhere with a notice.
+#'   \code{ucsc-hub} backend; supplying it with any other source is an error
+#'   (raised before any download).
 #' @param chrom_naming Optional override for the recipe's \code{chrom_naming}.
 #'   Selects which name space the canonical chrom names should come from. For
 #'   \code{ucsc-hub}: any chromAlias column (\code{"ucsc"}, \code{"genbank"},
@@ -860,6 +863,30 @@ gdb.build_genome <- function(name,
         ))
     }
 
+    if (recipe$source != "ucsc-hub") {
+        if (!is.null(target_chroms)) {
+            stop(sprintf(
+                "`target_chroms` is honored only for ucsc-hub sources; got source='%s'.",
+                recipe$source
+            ), call. = FALSE)
+        }
+        if (!isTRUE(all.equal(min_coverage, 1.0))) {
+            stop(sprintf(
+                "`min_coverage` is honored only for ucsc-hub sources; got source='%s'.",
+                recipe$source
+            ), call. = FALSE)
+        }
+    }
+
+    # From here on, any failure must clean up `path` if we created it. The
+    # gate is placed AFTER the file.exists(path) guard above, so a stale
+    # pre-existing directory is never unlinked.
+    success <- FALSE
+    on.exit(
+        if (!success && dir.exists(path)) unlink(path, recursive = TRUE),
+        add = TRUE
+    )
+
     prefetched_alias <- NULL
     if (recipe$source == "ucsc-hub" && length(sets)) {
         pf_workdir <- tempfile("misha_hub_preflight_")
@@ -901,6 +928,7 @@ gdb.build_genome <- function(name,
     }
 
     .write_genome_info(path, name, recipe, sets, files = seq_info$files_record)
+    success <- TRUE
     invisible(NULL)
 }
 
