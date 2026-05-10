@@ -82,3 +82,48 @@ test_that("gquantiles vtrack vector works for fast=TRUE", {
     expect_equal(nrow(df), 2)
     expect_true(all(is.finite(df[["0.9"]])))
 })
+
+# Window-semantics regression: the fast path must use the same window as
+# the slow path -- [iter_start + sshift, iter_end + eshift] -- rather than
+# [c + sshift, c + eshift] anchored at a single point. Previously a vtrack
+# with default sshift=0, eshift=0 produced an empty window and returned
+# NaN, and any non-trivial window produced silently-wrong values.
+test_that("gquantiles fast=TRUE matches slow path for vtrack with default sshift=eshift=0", {
+    gdb.init_examples()
+    gvtrack.create("vt_zero", src = "dense_track", func = "lse")
+    gvtrack.iterator("vt_zero", sshift = 0, eshift = 0)
+    on.exit(gvtrack.rm("vt_zero"))
+
+    q_slow <- gquantiles("vt_zero", 0.97, iterator = 20L, fast = FALSE)
+    q_fast <- gquantiles("vt_zero", 0.97, iterator = 20L, fast = TRUE)
+    expect_true(is.finite(q_fast))
+    # Fast path is exact nth_element; slow path is approximate
+    # StreamPercentiler. Tolerance covers the latter's sampling error
+    # at p = 0.97 (documented as up to ~0.06 at p = 0.9999).
+    expect_equal(unname(q_fast), unname(q_slow), tolerance = 0.02)
+})
+
+test_that("gquantiles fast=TRUE matches slow path for vtrack with non-zero sshift/eshift", {
+    gdb.init_examples()
+    gvtrack.create("vt_w", src = "dense_track", func = "lse")
+    gvtrack.iterator("vt_w", sshift = -50, eshift = 50)
+    on.exit(gvtrack.rm("vt_w"))
+
+    q_slow <- gquantiles("vt_w", c(0.5, 0.9), iterator = 20L, fast = FALSE)
+    q_fast <- gquantiles("vt_w", c(0.5, 0.9), iterator = 20L, fast = TRUE)
+    expect_equal(unname(q_fast), unname(q_slow), tolerance = 0.01)
+})
+
+test_that("gquantiles fast=TRUE matches slow path for bare track with iterator != bin_size", {
+    gdb.init_examples()
+    bsz <- as.integer(gtrack.info("dense_track")$bin.size)
+    iter <- 2L * bsz
+
+    q_slow <- gquantiles("dense_track", c(0.1, 0.5, 0.9),
+        iterator = iter, fast = FALSE
+    )
+    q_fast <- gquantiles("dense_track", c(0.1, 0.5, 0.9),
+        iterator = iter, fast = TRUE
+    )
+    expect_equal(unname(q_fast), unname(q_slow), tolerance = 0.05)
+})
