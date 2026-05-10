@@ -114,8 +114,23 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
     const float *all_bins = fb->get_mmap_bins_ptr(0, total_bins, out_count);
     if (!all_bins || out_count <= 0) return;
 
+    // Window for one iterator step at position c is
+    // [c + sshift, c + iterator_step + eshift] -- mirrors the slow-path
+    // convention in TrackExpressionVars::Iterator_modifier1D::transform
+    // (interv.start + sshift, interv.end + eshift) where the iterator
+    // interval has width iterator_step.
+    //
+    // n_bins_per_window must be a safe upper bound on the number of bins
+    // a window of width W = iterator_step + eshift - sshift can overlap.
+    // For arbitrary alignment that's ceil(W/bin_size) + 1: an unaligned
+    // window of width W can clip into at most one extra bin beyond the
+    // aligned count. This is used both as the deque capacity check and
+    // as the precomputed_const for upper-bound pruning (LSE: log(n);
+    // SUM: n) -- overestimates loosen the bound (safe), underestimates
+    // would falsely prune valid passes (missed hits in gscreen, etc.).
+    const int W_window = iterator_step + eshift - sshift;
     const int n_bins_per_window = std::max(
-        1, (int)(((eshift - sshift) + (int)bin_size - 1) / (int)bin_size));
+        1, (int)(((W_window + (int)bin_size - 1) / (int)bin_size) + 1));
     if (n_bins_per_window > WINDOW_CAP) {
         throw std::runtime_error(
             "BatchTrackScan: window exceeds WINDOW_CAP bins");
@@ -161,7 +176,7 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
         }
 
         int64_t win_s = c + sshift;
-        int64_t win_e = c + eshift;
+        int64_t win_e = c + iterator_step + eshift;
         if (win_s < 0) win_s = 0;
         if (win_e <= win_s) continue;
         int64_t sbin = win_s / (int64_t)bin_size;
@@ -274,7 +289,7 @@ void scan_sparse_inner(GenomeTrackSparse *sp, int64_t chrom_size,
         }
 
         int64_t win_s = c + sshift;
-        int64_t win_e = c + eshift;
+        int64_t win_e = c + iterator_step + eshift;
         if (win_s < 0) win_s = 0;
         if (win_e <= win_s) continue;
 

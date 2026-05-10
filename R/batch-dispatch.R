@@ -9,6 +9,14 @@
 #   $sshift   integer
 #   $eshift   integer
 #
+# Window semantics: the C++ scan computes
+#   window = [c + sshift, c + iterator_step + eshift]
+# at each iterator step c, mirroring the slow-path
+# Iterator_modifier1D::transform convention
+#   [interv.start + sshift, interv.end + eshift]
+# where the iterator interval has width iterator_step. Bare tracks pass
+# sshift = eshift = 0 so the window is exactly the iterator step.
+#
 # Preconditions for eligibility:
 #   1. Each expr is a bare track name OR a vtrack wrapping a single
 #      source track with func in {avg, sum, max, min, lse}.
@@ -27,17 +35,15 @@
         if (!identical(info$type, "dense") && !identical(info$type, "sparse")) {
             return(NULL)
         }
-        # Bare track → per-bin scan semantics. We return sshift=0 and
-        # eshift=bin_size for dense tracks so the window covers exactly one
-        # bin at each iterator position (and func=avg collapses to the bin
-        # value). For sparse tracks there's no native bin size; use a
-        # placeholder 1 and rely on the caller's iterator. The caller may
-        # override by wrapping in a vtrack.
+        # Bare track → window equals one iterator step (sshift=eshift=0).
+        # `default_iterator` is the natural step when the caller passes
+        # iterator=NULL: bin_size for dense tracks (one bin per step), 1
+        # for sparse tracks (no native bin grid).
         bsz <- info$bin.size
         if (is.null(bsz) || !is.numeric(bsz)) bsz <- 1L
         return(list(
-            track = e, func = "avg", sshift = 0L,
-            eshift = as.integer(bsz)
+            track = e, func = "avg", sshift = 0L, eshift = 0L,
+            default_iterator = as.integer(bsz)
         ))
     }
     # Virtual track?
@@ -68,7 +74,8 @@
             }
             return(list(
                 track = v$src, func = v$func,
-                sshift = sshift, eshift = eshift
+                sshift = sshift, eshift = eshift,
+                default_iterator = NA_integer_
             ))
         }
     }
@@ -95,18 +102,17 @@
 
     # iterator is optional when every expression is a bare track with a
     # known bin size — default to the common bin size (all must match).
-    # Otherwise iterator is required.
+    # Vtracks have default_iterator = NA, so any vtrack forces the user
+    # to specify iterator explicitly.
     if (is.null(iterator)) {
-        eshifts <- vapply(infos, `[[`, integer(1), "eshift")
-        sshifts <- vapply(infos, `[[`, integer(1), "sshift")
-        is_bare <- sshifts == 0L
-        if (!all(is_bare)) {
+        defaults <- vapply(infos, `[[`, integer(1), "default_iterator")
+        if (any(is.na(defaults))) {
             return(NULL)
         }
-        if (length(unique(eshifts)) != 1) {
+        if (length(unique(defaults)) != 1) {
             return(NULL)
         }
-        it_int <- eshifts[1]
+        it_int <- defaults[1]
     } else {
         if (!is.numeric(iterator) || length(iterator) != 1) {
             return(NULL)
@@ -196,14 +202,14 @@
     eshifts <- vapply(infos, `[[`, integer(1), "eshift")
 
     if (is.null(iterator)) {
-        is_bare <- sshifts == 0L
-        if (!all(is_bare)) {
+        defaults <- vapply(infos, `[[`, integer(1), "default_iterator")
+        if (any(is.na(defaults))) {
             return(NULL)
         }
-        if (length(unique(eshifts)) != 1) {
+        if (length(unique(defaults)) != 1) {
             return(NULL)
         }
-        it_int <- eshifts[1]
+        it_int <- defaults[1]
     } else {
         if (!is.numeric(iterator) || length(iterator) != 1) {
             return(NULL)

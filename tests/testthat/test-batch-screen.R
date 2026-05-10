@@ -131,3 +131,28 @@ test_that("gscreen with intervals.set.out + multi-expr rejects fast path", {
         regexp = "multi-expression slow path not yet implemented"
     )
 })
+
+# Regression: vtrack with sshift=eshift=0 and iterator != bin_size produces
+# windows unaligned to the bin grid (a 20bp window over 50bp bins can span
+# 1-2 bins). The fast path must use the same window semantics as the slow
+# path -- [iter_start + sshift, iter_end + eshift] -- and the LSE pruning
+# upper bound must account for the unaligned bin count, otherwise valid
+# passing positions get falsely pruned.
+test_that("gscreen fast path with vtrack(sshift=eshift=0) matches slow path", {
+    gdb.init_examples()
+    gvtrack.create("vt_a", src = "dense_track", func = "lse")
+    gvtrack.create("vt_b", src = "subdir.dense_track2", func = "lse")
+    gvtrack.iterator("vt_a", sshift = 0, eshift = 0)
+    gvtrack.iterator("vt_b", sshift = 0, eshift = 0)
+    on.exit({
+        gvtrack.rm("vt_a")
+        gvtrack.rm("vt_b")
+    })
+
+    fast <- gscreen(c("vt_a > 0.5", "vt_b > 0.5"),
+        iterator = 20L, fast = TRUE
+    )
+    n_fast_a <- sum(fast$track == "vt_a > 0.5")
+    n_slow_a <- nrow(gscreen("vt_a > 0.5", iterator = 20L, fast = FALSE))
+    expect_equal(n_fast_a, n_slow_a)
+})
