@@ -210,48 +210,85 @@
 # self-entries cost only a no-op lookup on the C++ side.
 .compute_chrom_aliases <- function(chroms, groot = NULL) {
     chroms <- unique(as.character(chroms))
+    n <- length(chroms)
+    if (!n) {
+        result <- stats::setNames(character(0), character(0))
+        attr(result, "n_basic") <- 0L
+        return(result)
+    }
 
-    # Pre-compute all string transformations (vectorized)
     has_chr_prefix <- startsWith(chroms, "chr")
     unprefixed <- ifelse(has_chr_prefix, substring(chroms, 4), chroms)
     prefixed <- ifelse(has_chr_prefix, chroms, paste0("chr", chroms))
-    upper_unprefixed <- toupper(unprefixed)
-    upper_chroms <- toupper(chroms)
+    upper_unpref <- toupper(unprefixed)
+    upper_chr <- toupper(chroms)
+    is_mito <- upper_unpref %in% c("M", "MT") | upper_chr %in% c("CHRM", "CHRMT")
 
-    seen <- new.env(hash = TRUE, parent = emptyenv())
+    # Vectorized basic pass: self-aliases, chr-prefix toggles, and MT aliases.
+    # Replaces a per-element loop over .compute_chrom_aliases's `seen` env, which
+    # took ~90 s on a 2.4M-contig fragmented assembly.
+    #
+    # On fragmented assemblies (e.g. Phylo447, 2.4M scaffold_*) the prefixed-
+    # alias step generates millions of "chrXXX" entries that no user will ever
+    # look up. Skip it when (a) contig count is large, (b) no canonical name
+    # has the "chr" prefix, and (c) no name is mito-pattern. Ensembl-style
+    # references (1/2/X/MT) and any genome with mito stay unaffected.
+    skip_prefixed <- n > 1000L && !any(has_chr_prefix) && !any(is_mito)
 
-    # Pre-allocate result vectors (estimate ~4 entries per chromosome:
-    # self + chr-prefix toggle + up to 2 MT aliases).
-    max_aliases <- length(chroms) * 4
-    alias_names <- character(max_aliases)
-    alias_targets <- character(max_aliases)
-    idx <- 0L
-    # Mark where the basic-toggle pass ends so .store_chrom_aliases can split
-    # the result into the C++-facing CHROM_ALIAS (basic only) and the R-side
-    # CHROM_ALIAS_ENV (full).
-    n_basic <- 0L
+    if (skip_prefixed) {
+        basic_names <- chroms
+        basic_targets <- chroms
+    } else {
+        # Candidate chr-toggle aliases tagged with source-chrom index, so we can
+        # reproduce the original loop's "first-seen wins" semantics via
+        # order + !duplicated.
+        diff_un <- nzchar(unprefixed) & unprefixed != chroms
+        diff_pf <- nzchar(prefixed) & prefixed != chroms
+        cand_names <- c(unprefixed[diff_un], prefixed[diff_pf])
+        cand_targets <- c(chroms[diff_un], chroms[diff_pf])
+        cand_pri <- c(which(diff_un), which(diff_pf))
 
-    add_basic <- function(name, target) {
-        if (!nzchar(name) || exists(name, envir = seen, inherits = FALSE)) {
-            return(invisible(FALSE))
+        # Canonical names always win: drop aliases that collide with a canonical.
+        not_canon <- !(cand_names %in% chroms)
+        cand_names <- cand_names[not_canon]
+        cand_targets <- cand_targets[not_canon]
+        cand_pri <- cand_pri[not_canon]
+
+        # First-seen wins: order by source-chrom index, then keep first occurrence.
+        o <- order(cand_pri)
+        cand_names <- cand_names[o]
+        cand_targets <- cand_targets[o]
+        keep <- !duplicated(cand_names)
+        cand_names <- cand_names[keep]
+        cand_targets <- cand_targets[keep]
+
+        basic_names <- c(chroms, cand_names)
+        basic_targets <- c(chroms, cand_targets)
+
+        # Mitochondrial: M, MT, chrM all point to the first mito-like canonical.
+        # Add only if not already present in basic.
+        if (any(is_mito)) {
+            mt_target <- chroms[which(is_mito)[1]]
+            for (mt in c("M", "MT", "chrM")) {
+                if (!(mt %in% basic_names)) {
+                    basic_names <- c(basic_names, mt)
+                    basic_targets <- c(basic_targets, mt_target)
+                }
+            }
         }
-        seen[[name]] <- TRUE
-        idx <<- idx + 1L
-        alias_names[idx] <<- name
-        alias_targets[idx] <<- target
-        invisible(TRUE)
     }
 
-    for (i in seq_along(chroms)) {
-        chrom <- chroms[i]
-        add_basic(chrom, chrom)
-        add_basic(unprefixed[i], chrom)
-        add_basic(prefixed[i], chrom)
-        if (upper_unprefixed[i] %in% c("M", "MT") || upper_chroms[i] %in% c("CHRM", "CHRMT")) {
-            for (mt_alias in c("M", "MT", "chrM")) add_basic(mt_alias, chrom)
-        }
+    n_basic <- length(basic_names)
+
+    # No TSV -> short-circuit before read.table (which would otherwise produce
+    # a confusing relative-path read on NULL/empty groot).
+    no_tsv <- is.null(groot) || length(groot) != 1L || !nzchar(groot) ||
+        !file.exists(file.path(groot, "chrom_aliases.tsv"))
+    if (no_tsv) {
+        result <- stats::setNames(basic_targets, basic_names)
+        attr(result, "n_basic") <- n_basic
+        return(result)
     }
-    n_basic <- idx
 
     # Optional pass: load <groot>/chrom_aliases.tsv and add aliases pointing at
     # canonical chrom names. Two on-disk shapes are handled:
@@ -259,73 +296,73 @@
     #     sequenceName, chrName, role, length.
     #   - Long (ucsc-hub builds): canonical, alias, source -- one row per
     #     (canonical, alias) pair.
-    # Aliases that already resolve via the chr-prefix or mitochondrial passes
-    # above are skipped.
-    if (!is.null(groot) && length(groot) == 1L && nzchar(groot)) {
-        tsv_path <- file.path(groot, "chrom_aliases.tsv")
-        if (file.exists(tsv_path)) {
-            tsv <- tryCatch(
-                utils::read.table(tsv_path,
-                    sep = "\t", header = TRUE,
-                    quote = "", comment.char = "",
-                    stringsAsFactors = FALSE,
-                    colClasses = "character",
-                    na.strings = character(0)
-                ),
-                error = function(e) NULL
-            )
-            add_alias <- function(name, target) {
-                if (is.na(name) || !nzchar(name)) {
-                    return(invisible(FALSE))
-                }
-                if (exists(name, envir = seen, inherits = FALSE)) {
-                    return(invisible(FALSE))
-                }
-                seen[[name]] <- TRUE
-                idx <<- idx + 1
-                if (idx > length(alias_names)) {
-                    alias_names <<- c(alias_names, character(length(alias_names)))
-                    alias_targets <<- c(alias_targets, character(length(alias_targets)))
-                }
-                alias_names[idx] <<- name
-                alias_targets[idx] <<- target
-                invisible(TRUE)
-            }
-            if (!is.null(tsv) && nrow(tsv) && "canonical" %in% names(tsv)) {
-                keep <- tsv$canonical %in% chroms
-                tsv <- tsv[keep, , drop = FALSE]
-                if (all(c("alias", "source") %in% names(tsv))) {
-                    # Long format: one alias->canonical per row.
-                    for (j in seq_len(nrow(tsv))) {
-                        add_alias(tsv$alias[j], tsv$canonical[j])
-                    }
-                } else {
-                    # Wide format: explicit alias-bearing columns.
-                    alias_cols <- intersect(
-                        c("refseqAccession", "genbankAccession", "sequenceName", "chrName"),
-                        names(tsv)
-                    )
-                    for (col in alias_cols) {
-                        vals <- tsv[[col]]
-                        targets <- tsv$canonical
-                        for (j in seq_along(vals)) {
-                            add_alias(vals[j], targets[j])
-                        }
-                    }
+    # The whole pass is vectorized: a per-row add_alias closure with <<- env
+    # and vector grows took ~260 s on a 7.2M-row TSV (Phylo447 / Crocidura).
+    tsv_path <- file.path(groot, "chrom_aliases.tsv")
+    tsv <- tryCatch(
+        utils::read.table(tsv_path,
+            sep = "\t", header = TRUE,
+            quote = "", comment.char = "",
+            stringsAsFactors = FALSE,
+            colClasses = "character",
+            na.strings = character(0)
+        ),
+        error = function(e) NULL
+    )
+
+    extra_names <- character(0)
+    extra_targets <- character(0)
+
+    if (!is.null(tsv) && nrow(tsv) && "canonical" %in% names(tsv)) {
+        # Defensive: ignore TSV rows whose canonical is no longer among `chroms`
+        # (e.g. stale alias file referring to renamed contigs).
+        keep_canon <- tsv$canonical %in% chroms
+        tsv <- tsv[keep_canon, , drop = FALSE]
+
+        if (nrow(tsv)) {
+            if (all(c("alias", "source") %in% names(tsv))) {
+                # Long format: each row is one (alias -> canonical) mapping.
+                extra_names <- tsv$alias
+                extra_targets <- tsv$canonical
+            } else {
+                # Wide format: stack alias-bearing columns in priority order so
+                # earlier columns win first-seen-wins below.
+                alias_cols <- intersect(
+                    c("refseqAccession", "genbankAccession", "sequenceName", "chrName"),
+                    names(tsv)
+                )
+                for (col in alias_cols) {
+                    extra_names <- c(extra_names, tsv[[col]])
+                    extra_targets <- c(extra_targets, tsv$canonical)
                 }
             }
         }
     }
 
-    # Build final named vector. seq_len(0) is integer(0), so an alias-free
-    # build yields an empty named character (whereas 1:0 would yield c(1, 0)).
-    # Attach `n_basic` as an attribute so .store_chrom_aliases can carve out
-    # the C++-facing subset without re-running the algorithm.
-    if (idx == 0L) {
-        result <- stats::setNames(character(0), character(0))
-    } else {
-        result <- stats::setNames(alias_targets[seq_len(idx)], alias_names[seq_len(idx)])
+    if (length(extra_names)) {
+        # Drop empty / NA aliases.
+        valid <- !is.na(extra_names) & nzchar(extra_names)
+        extra_names <- extra_names[valid]
+        extra_targets <- extra_targets[valid]
+
+        # Basic entries always win: drop TSV aliases that collide with basic.
+        not_basic <- !(extra_names %in% basic_names)
+        extra_names <- extra_names[not_basic]
+        extra_targets <- extra_targets[not_basic]
+
+        # First-seen wins within the TSV pass (matches the original loop's
+        # `seen` env semantics: earlier row / earlier column wins on collisions).
+        keep <- !duplicated(extra_names)
+        extra_names <- extra_names[keep]
+        extra_targets <- extra_targets[keep]
     }
+
+    # n_basic is the length of the "basic" prefix; .store_chrom_aliases uses
+    # this to carve out the C++-facing CHROM_ALIAS without re-running.
+    result <- stats::setNames(
+        c(basic_targets, extra_targets),
+        c(basic_names, extra_names)
+    )
     attr(result, "n_basic") <- n_basic
     result
 }
