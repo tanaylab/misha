@@ -965,3 +965,141 @@ test_that("pwm.grad: gsummary aggregation runs without error", {
     expect_true(is.numeric(s))
     expect_true(length(s) >= 5L)
 })
+
+# ============================================================
+# Filters
+# ============================================================
+
+# Helpers shared by the filter tests below. They all use a 1-bp pivot at
+# chr1:200 and the same head-consensus PSSM, so the gradient is anchored at
+# genomic position 200 and is positive when the pivot is unmasked.
+.grad_filter_setup <- function(aggregate = "lse", L = 3L, iter_W = 20L,
+                               pivot_start = 200L) {
+    pivot <- gintervals(1, pivot_start, pivot_start + 1L)
+    seq_ext <- toupper(
+        gseq.extract(gintervals(1, pivot_start, pivot_start + iter_W + L - 1L))
+    )
+    head_bases <- strsplit(substr(seq_ext, 1, L), "")[[1]]
+    pssm <- .consensus_pssm(head_bases)
+    list(
+        pivot = pivot, seq_ext = seq_ext, pssm = pssm, L = L,
+        iter_W = iter_W, pivot_start = pivot_start
+    )
+}
+
+test_that("pwm.grad: gvtrack.filter masking the pivot returns NA", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    s <- .grad_filter_setup(aggregate = "lse")
+
+    gvtrack.create("g", NULL, "pwm.grad",
+        pssm = s$pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = s$iter_W - 1L)
+    # Mask covers the pivot at chr1:200.
+    gvtrack.filter("g", filter = gintervals(1, s$pivot_start, s$pivot_start + 5L))
+
+    res <- gextract("g", iterator = 1, intervals = s$pivot)
+    expect_true(is.na(res$g[1]))
+})
+
+test_that("pwm.grad: gvtrack.filter masking the pivot returns NA (ism)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    s <- .grad_filter_setup(aggregate = "lse")
+
+    gvtrack.create("g", NULL, "pwm.grad.ism",
+        pssm = s$pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = s$iter_W - 1L)
+    gvtrack.filter("g", filter = gintervals(1, s$pivot_start, s$pivot_start + 5L))
+
+    res <- gextract("g", iterator = 1, intervals = s$pivot)
+    expect_true(is.na(res$g[1]))
+})
+
+test_that("pwm.grad: multi-part filter scores only the pivot-anchored part", {
+    # Mask splits seq_interval into two unmasked parts. The pivot is in the
+    # first part; the second part lives at a different genomic anchor. The
+    # gradient must be computed at the pivot-anchored part only - summing
+    # across parts (the pre-fix behavior) would mix gradients at different
+    # anchor positions.
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    s <- .grad_filter_setup(aggregate = "lse")
+
+    gvtrack.create("g", NULL, "pwm.grad",
+        pssm = s$pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = s$iter_W - 1L)
+
+    # seq_interval = [200, 200 + iter_W + L - 1) = [200, 222) for default args.
+    # Mask [210, 215) -> unmasked parts [200, 210) and [215, 222).
+    mask_lo <- s$pivot_start + 10L
+    mask_hi <- s$pivot_start + 15L
+    gvtrack.filter("g", filter = gintervals(1, mask_lo, mask_hi))
+
+    res <- gextract("g", iterator = 1, intervals = s$pivot)
+
+    # Expected: score on the first unmasked part [pivot, mask_lo). The engine
+    # expands that part by L-1 at the end for motif scanning, so the oracle
+    # sees (mask_lo - pivot) + (L - 1) bases.
+    part_len <- mask_lo - s$pivot_start + (s$L - 1L)
+    part_seq <- substr(s$seq_ext, 1, part_len)
+    expected <- manual_pwm_grad(s$pssm, part_seq, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad.ism: multi-part filter scores only the pivot-anchored part", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    s <- .grad_filter_setup(aggregate = "lse")
+
+    gvtrack.create("g", NULL, "pwm.grad.ism",
+        pssm = s$pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g", sshift = 0, eshift = s$iter_W - 1L)
+
+    mask_lo <- s$pivot_start + 10L
+    mask_hi <- s$pivot_start + 15L
+    gvtrack.filter("g", filter = gintervals(1, mask_lo, mask_hi))
+
+    res <- gextract("g", iterator = 1, intervals = s$pivot)
+    part_len <- mask_lo - s$pivot_start + (s$L - 1L)
+    part_seq <- substr(s$seq_ext, 1, part_len)
+    expected <- manual_pwm_grad_ism(s$pssm, part_seq, "lse",
+        bidirect = FALSE, strand = 1L, prior = 0.01
+    )
+    expect_equal(res$g[1], expected, tolerance = 1e-5, ignore_attr = TRUE)
+})
+
+test_that("pwm.grad: gvtrack.filter not intersecting seq_interval matches unfiltered", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+    s <- .grad_filter_setup(aggregate = "lse")
+
+    gvtrack.create("g_filt", NULL, "pwm.grad",
+        pssm = s$pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_filt", sshift = 0, eshift = s$iter_W - 1L)
+    gvtrack.create("g_nofilt", NULL, "pwm.grad",
+        pssm = s$pssm, aggregate = "lse",
+        bidirect = FALSE, strand = 1, extend = TRUE, prior = 0.01
+    )
+    gvtrack.iterator("g_nofilt", sshift = 0, eshift = s$iter_W - 1L)
+
+    # Mask far from seq_interval; should not affect the result.
+    gvtrack.filter("g_filt",
+        filter = gintervals(1, s$pivot_start + 1000L, s$pivot_start + 1100L)
+    )
+
+    res <- gextract(c("g_filt", "g_nofilt"), iterator = 1, intervals = s$pivot)
+    expect_equal(res$g_filt[1], res$g_nofilt[1], tolerance = 1e-9)
+})
