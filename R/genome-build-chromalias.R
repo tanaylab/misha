@@ -265,14 +265,15 @@
             source = col,
             stringsAsFactors = FALSE
         )
-        # Detect conflicts against existing entries.
+        # Count conflicts (existing alias mapping to a different canonical) for
+        # the user-facing warning, then drop every alias already in `existing`.
+        # Non-conflict duplicates are dropped too: the existing row wins.
         idx <- match(df$alias, existing$alias)
         is_existing <- !is.na(idx)
         if (any(is_existing)) {
             conflict_mask <- existing$canonical[idx[is_existing]] != df$canonical[is_existing]
             conflicts <- conflicts + sum(conflict_mask, na.rm = TRUE)
-            df <- df[!is_existing | !conflict_mask, , drop = FALSE]
-            df <- df[!df$alias %in% existing$alias, , drop = FALSE] # dedupe non-conflicts too
+            df <- df[!is_existing, , drop = FALSE]
         }
         new_rows[[length(new_rows) + 1L]] <- df
     }
@@ -304,7 +305,9 @@
     }
     scores <- attr(col, "scores")
     bp_weighted <- isTRUE(attr(col, "bp_weighted"))
-    denom <- if (bp_weighted) sum(target_lengths) else length(target_chroms)
+    # Match .detect_alias_column's count-branch denom (unique names); bp branch
+    # weights are kept per-row to mirror its bp denom.
+    denom <- if (bp_weighted) sum(target_lengths) else length(unique(target_chroms))
     unit <- if (bp_weighted) "bp coverage" else "name coverage"
     stop(sprintf(
         "chromAlias has no column with %.0f%% %s of %s.\nPer-column coverage: %s\nFirst 5 unmapped chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.99).",

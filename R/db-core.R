@@ -2,7 +2,7 @@
 
 # Build (or refresh) an environment-based mirror of CHROM_ALIAS for O(1)
 # lookup. R's named-vector subscript path uses match(), which rebuilds an
-# internal hash on every call — O(M) per call, where M is the alias count.
+# internal hash on every call - O(M) per call, where M is the alias count.
 # For large alias maps (e.g. NCBI assemblies with chrom_aliases.tsv loaded:
 # ~12k entries on rabbit), this becomes the dominant cost in .gchroms().
 # An environment offers genuine O(1) hashed lookup that survives across calls.
@@ -22,7 +22,7 @@
     # The env mirror exists only to give O(1) lookup for the *extra* aliases
     # (TSV-derived NCBI/GenBank/sequenceName) that don't go into the
     # C++-facing CHROM_ALIAS. If the full map is the same as CHROM_ALIAS
-    # (no TSV extras present), skip building the env entirely — .gchroms
+    # (no TSV extras present), skip building the env entirely - .gchroms
     # then uses the original named-vector path with no per-call overhead.
     cpp_map <- get("CHROM_ALIAS", envir = .misha)
     alias_map <- full_alias_map

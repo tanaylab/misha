@@ -1,8 +1,8 @@
 # R/genome-build-binaries.R
-# UCSC converter binaries (gff3ToGenePred, gtfToGenePred) — install on demand,
+# UCSC converter binaries (gff3ToGenePred, gtfToGenePred) - install on demand,
 # SHA-pinned, cached under tools::R_user_dir("misha", "cache").
 
-# UCSC gff3ToGenePred binary URLs (no version tag — UCSC overwrites in place).
+# UCSC gff3ToGenePred binary URLs (no version tag - UCSC overwrites in place).
 # SHAs pinned at implementation time (2026-04-30); a UCSC rebuild will trigger
 # an integrity error pointing users at MISHA_GFF3_TO_GENEPRED.
 .GFF3_TO_GENEPRED_URLS <- list(
@@ -55,7 +55,7 @@
 }
 
 # Returns absolute path to a usable gff3ToGenePred binary, or NULL if none
-# is available. Never downloads — caller decides whether to install.
+# is available. Never downloads - caller decides whether to install.
 .gff3_to_genepred_path <- function() {
     env <- Sys.getenv(.GFF3_TO_GENEPRED_ENV, unset = "")
     if (nzchar(env)) {
@@ -147,7 +147,7 @@
 # gtfToGenePred binary management
 # ---------------------------------------------------------------------------
 
-# UCSC gtfToGenePred binary URLs (no version tag — UCSC overwrites in place).
+# UCSC gtfToGenePred binary URLs (no version tag - UCSC overwrites in place).
 # SHAs pinned at implementation time (2026-05-03); a UCSC rebuild will trigger
 # an integrity error pointing users at MISHA_GTF_TO_GENEPRED.
 .GTF_TO_GENEPRED_URLS <- list(
@@ -169,7 +169,7 @@
 }
 
 # Returns absolute path to a usable gtfToGenePred binary, or NULL if none
-# is available. Never downloads — caller decides whether to install.
+# is available. Never downloads - caller decides whether to install.
 .gtf_to_genepred_path <- function() {
     env <- Sys.getenv(.GTF_TO_GENEPRED_ENV, unset = "")
     if (nzchar(env)) {

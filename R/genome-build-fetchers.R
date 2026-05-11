@@ -12,7 +12,7 @@
 
 # Fetch a UCSC hub-style directory listing. Returns a character vector of
 # filenames (or NULL if URL is unreachable or 404). Uses curl (already in
-# Imports) — no xml2/rvest.
+# Imports) - no xml2/rvest.
 .hub_list_dir <- function(url, verbose = TRUE) {
     if (verbose) message(sprintf("Listing %s ...", url))
     h <- curl::new_handle()

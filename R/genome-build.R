@@ -1,10 +1,10 @@
 # Build a misha genome from a name.
 #
 # Public surface (exported):
-#   gdb.build_genome()           — build from registry-resolved recipe
-#   gdb.list_genomes()           — list resolvable genome names
-#   gdb.genome_info()            — show resolved recipe without building
-#   gdb.install_gff3_converter() — pre-install UCSC's gff3ToGenePred binary
+#   gdb.build_genome()           - build from registry-resolved recipe
+#   gdb.list_genomes()           - list resolvable genome names
+#   gdb.genome_info()            - show resolved recipe without building
+#   gdb.install_gff3_converter() - pre-install UCSC's gff3ToGenePred binary
 #
 # Spec: dev/notes/specs/2026-04-30_genome-build-design.md
 
@@ -245,7 +245,7 @@
 }
 
 # Normalize a UCSC TSV table to exactly N columns per row. UCSC sometimes
-# ships rows with stray embedded tabs (e.g. in description fields) — these
+# ships rows with stray embedded tabs (e.g. in description fields) - these
 # lines have NF != expected count and would crash the C++ importer's strict
 # column-count check. Short rows are padded with empty strings; long rows
 # have their trailing extras joined back into the last column with " ".
@@ -284,7 +284,7 @@
 # In both cases the resulting 12 cols are:
 #   [name, chrom, strand, txStart, txEnd, cdsStart, cdsEnd, exonCount,
 #    exonStarts, exonEnds, score, name2]
-# Cols 11-12 occupy the C++ importer's PROTEINID/ALIGNID slots — read but
+# Cols 11-12 occupy the C++ importer's PROTEINID/ALIGNID slots - read but
 # unused, so populating with score/name2 is harmless.
 #
 # Accepts .txt or .txt.gz, writes a .txt with 12-col content. Streams the
@@ -347,7 +347,7 @@
     out_path
 }
 
-# Parse UCSC rmsk.txt(.gz) — 17 columns. Returns a data.frame with intervals
+# Parse UCSC rmsk.txt(.gz) - 17 columns. Returns a data.frame with intervals
 # columns plus name/class/family. Strand is normalized to numeric (1/-1/0).
 .parse_ucsc_rmsk <- function(file) {
     cols <- c(
@@ -414,7 +414,7 @@
     )
 }
 
-# Write genome_info.yaml — a record of where this groot came from.
+# Write genome_info.yaml - a record of where this groot came from.
 .write_genome_info <- function(groot, name, recipe, sets, files = list()) {
     info <- list(
         name = name,
@@ -942,11 +942,11 @@ gdb.build_genome <- function(name,
 #'   resolution chain.
 #' @return A data frame with columns:
 #'   \itemize{
-#'     \item \code{name} — registry key.
-#'     \item \code{source} — backend (\code{ucsc}, \code{ncbi}, \code{s3},
+#'     \item \code{name} - registry key.
+#'     \item \code{source} - backend (\code{ucsc}, \code{ncbi}, \code{s3},
 #'       \code{local}, \code{manual}).
-#'     \item \code{detail} — assembly / accession / path.
-#'     \item \code{resolved_from} — which registry the entry came from.
+#'     \item \code{detail} - assembly / accession / path.
+#'     \item \code{resolved_from} - which registry the entry came from.
 #'   }
 #'
 #' @seealso \code{\link{gdb.build_genome}}, \code{\link{gdb.genome_info}}.
@@ -1077,7 +1077,7 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #' Install interval sets onto an existing groot
 #'
 #' Given an existing groot and a source recipe (or registry name, or accession),
-#' fetches the relevant annotation files and installs interval sets — one or
+#' fetches the relevant annotation files and installs interval sets - one or
 #' more of \code{genes / rmsk / cgi / cytoband}.
 #'
 #' Decoupled from \code{\link{gdb.build_genome}} so that:
@@ -1415,7 +1415,10 @@ gdb.install_intervals <- function(groot,
         spec <- simple_set_specs[[key]]
         df <- spec$parser(assets[[key]])
         if (!is.null(alias_df)) {
-            translator <- make_translator(unique(df$chrom), key)
+            # match_by_length translates per-row via rev_idx and ignores
+            # asset_chroms; skip the unique() (rmsk df can have ~7M rows).
+            asset_chroms <- if (match_by_length) NULL else unique(df$chrom)
+            translator <- make_translator(asset_chroms, key)
             df <- translator(df, "chrom")
         }
         spec$installer(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
