@@ -92,6 +92,58 @@ test_that(".hub_preflight_coverage returns prefetched alias on success", {
     expect_false(any(grepl("\\.fa\\.gz$", rec$urls)))
 })
 
+test_that(".hub_preflight_coverage rescues a canonical with empty cells via target_lengths", {
+    # target_chroms picks the genbank column (2/3 of names match) but that
+    # column has an empty cell for chrM. Without rescue the strict gate
+    # would fail (16 kb missing). With target_lengths supplied and
+    # match_by_length=TRUE, the empty cell is matched to "chrM" by unique
+    # length pairing -> preflight passes.
+    rec <- new.env()
+    rec$urls <- character()
+    with_preflight_mocks(rec, {
+        wd <- tempfile("preflight_")
+        dir.create(wd)
+        on.exit(unlink(wd, recursive = TRUE), add = TRUE)
+        out <- .hub_preflight_coverage(
+            accession       = "GCF_TEST.1",
+            target_chroms   = c("CM00001.1", "CM00002.1", "chrM"),
+            target_lengths  = c(1e8, 1e8, 16000),
+            chrom_naming    = "genbank",
+            min_coverage    = 1.0,
+            match_by_length = TRUE,
+            workdir         = wd,
+            verbose         = FALSE
+        )
+        expect_equal(out$canonical_col, "genbank")
+    })
+    expect_false(any(grepl("\\.fa\\.gz$", rec$urls)))
+})
+
+test_that(".hub_preflight_coverage still fails strict when match_by_length=FALSE", {
+    # Same fixture as the rescue test but with match_by_length disabled - the
+    # strict gate must fire (no rescue eligibility).
+    rec <- new.env()
+    rec$urls <- character()
+    with_preflight_mocks(rec, {
+        wd <- tempfile("preflight_")
+        dir.create(wd)
+        on.exit(unlink(wd, recursive = TRUE), add = TRUE)
+        expect_error(
+            .hub_preflight_coverage(
+                accession       = "GCF_TEST.1",
+                target_chroms   = c("CM00001.1", "CM00002.1", "chrM"),
+                target_lengths  = c(1e8, 1e8, 16000),
+                chrom_naming    = "genbank",
+                min_coverage    = 1.0,
+                match_by_length = FALSE,
+                workdir         = wd,
+                verbose         = FALSE
+            ),
+            "no column with 100"
+        )
+    })
+})
+
 test_that("gdb.build_genome ucsc-hub fails before fetching FASTA on coverage failure", {
     rec <- new.env()
     rec$urls <- character()

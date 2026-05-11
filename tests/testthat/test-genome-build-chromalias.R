@@ -166,6 +166,111 @@ test_that(".length_match_fill is a no-op when no fills needed", {
     expect_equal(out, c("X", "Y"))
 })
 
+test_that(".detect_alias_column_with_length_fill rescues a partial column via unique-length fill", {
+    # ucsc covers 3/4 target_chroms by name; row 4 is empty in ucsc but its
+    # length uniquely matches a target_chrom -> post-fill coverage reaches 100%.
+    df <- data.frame(
+        ucsc = c("chr1", "chr2", "chr3", ""),
+        genbank = c("CM1", "CM2", "CM3", "JH99"),
+        stringsAsFactors = FALSE
+    )
+    target_chroms <- c("chr1", "chr2", "chr3", "chrMT")
+    target_lengths <- c(100, 200, 300, 16)
+    alias_row_lengths <- c(100, 200, 300, 16)
+    res <- .detect_alias_column_with_length_fill(
+        df, target_chroms, target_lengths, alias_row_lengths,
+        min_coverage = 1.0
+    )
+    expect_equal(as.character(res), "ucsc")
+    expect_equal(attr(res, "overlap"), 1.0)
+})
+
+test_that(".detect_alias_column_with_length_fill returns NA when no column reaches threshold even with fill", {
+    # Neither column has empty cells, so fill adds nothing; neither matches
+    # target_chroms by name -> rescue fails (NA), preserving strict failure.
+    df <- data.frame(
+        a = c("u", "v", "w"),
+        b = c("d", "e", "f"),
+        stringsAsFactors = FALSE
+    )
+    target_chroms <- c("X", "Y", "Z")
+    target_lengths <- c(100, 200, 300)
+    alias_row_lengths <- c(100, 200, 300)
+    res <- .detect_alias_column_with_length_fill(
+        df, target_chroms, target_lengths, alias_row_lengths,
+        min_coverage = 1.0
+    )
+    expect_true(is.na(res))
+    # Diagnostic attrs preserved for caller.
+    expect_true(!is.null(attr(res, "scores")))
+    expect_equal(attr(res, "overlap"), 0)
+})
+
+test_that(".detect_alias_column_with_length_fill picks highest-scoring column among ties on fill", {
+    # Both columns have one empty cell each at row 3 (length 50 unique on both
+    # sides). After fill, both cover the same 3/3 - first wins (column order).
+    df <- data.frame(
+        a = c("X", "Y", ""),
+        b = c("X", "Y", ""),
+        stringsAsFactors = FALSE
+    )
+    target_chroms <- c("X", "Y", "Z")
+    target_lengths <- c(100, 200, 50)
+    alias_row_lengths <- c(100, 200, 50)
+    res <- .detect_alias_column_with_length_fill(
+        df, target_chroms, target_lengths, alias_row_lengths,
+        min_coverage = 1.0
+    )
+    expect_equal(as.character(res), "a")
+})
+
+test_that(".detect_alias_column_with_length_fill leaves ambiguous-length rows unfilled", {
+    # Lengths 100 appear twice on alias side - ambiguous, no fill.
+    # Length 50 unique - fills row 3 only. Post-fill ucsc covers 1/3 -> NA at 1.0.
+    df <- data.frame(
+        ucsc = c("", "", ""),
+        stringsAsFactors = FALSE
+    )
+    target_chroms <- c("A", "B", "C")
+    target_lengths <- c(100, 100, 50)
+    alias_row_lengths <- c(100, 100, 50)
+    res <- .detect_alias_column_with_length_fill(
+        df, target_chroms, target_lengths, alias_row_lengths,
+        min_coverage = 1.0
+    )
+    expect_true(is.na(res))
+    # At min_coverage 0.33, the partial fill is enough.
+    res2 <- .detect_alias_column_with_length_fill(
+        df, target_chroms, target_lengths, alias_row_lengths,
+        min_coverage = 0.33
+    )
+    expect_equal(as.character(res2), "ucsc")
+})
+
+test_that(".detect_alias_column_with_length_fill errors on input misalignment", {
+    df <- data.frame(a = c("x", "y"), stringsAsFactors = FALSE)
+    expect_error(
+        .detect_alias_column_with_length_fill(
+            df,
+            target_chroms = c("X", "Y"),
+            target_lengths = c(1, 2, 3),
+            alias_row_lengths = c(1, 2),
+            min_coverage = 1.0
+        ),
+        "target_lengths"
+    )
+    expect_error(
+        .detect_alias_column_with_length_fill(
+            df,
+            target_chroms = c("X", "Y"),
+            target_lengths = c(1, 2),
+            alias_row_lengths = c(1, 2, 3),
+            min_coverage = 1.0
+        ),
+        "alias_row_lengths"
+    )
+})
+
 test_that(".translate_chroms_per_row resolves any naming via cross-column lookup", {
     # alias_df has 3 cols + per-row canonical. A GFF mixing refseq (NW_X.1)
     # and a different namespace (chrM) should resolve to the right groot

@@ -1,5 +1,6 @@
 # misha (development version)
 
+* `gdb.build_genome()` / `gdb.install_intervals()` gain an optional `target_lengths` argument (aligned with `target_chroms`). When supplied with `match_by_length = TRUE`, a chromAlias column that falls just short of `min_coverage` is rescued via per-column unique-length-pair fill against `target_lengths` (and the pre-flight gate likewise). Strictly opt-in: omitting `target_lengths` keeps the existing strict behavior.
 * `gsetroot` is much faster on fragmented assemblies (e.g. ~93 s -> ~11 s on a 2.4M-contig genome). Vectorized `.compute_chrom_aliases` and skipped the chr-prefixed alias step when no canonical name has the `chr` prefix and the contig count is large.
 * `gdb.build_genome()` now fails eagerly: passing `target_chroms` or a non-default `min_coverage` with a non-`ucsc-hub` source errors before any download, and any failure after pre-flight removes the partial output directory rather than leaving a half-built groot behind.
 * `gdb.build_genome()` / `gdb.install_intervals()` are substantially faster on large assemblies (notably hg38 rmsk): vectorized chromAlias translation (was per-row environment lookups), vectorized RepeatMasker `.out` parser, single-pass `rmsk_<class>` split, deduped genome rescans during builds, and optional `data.table` `fread`/`fwrite` for genePred I/O when installed.

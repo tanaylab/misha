@@ -14,6 +14,7 @@ gdb.build_genome(
   gtf_priority = c("ncbiRefSeq", "bestRefSeq", "ensGene", "augustus", "xenoRefGene"),
   chrom_naming = NULL,
   target_chroms = NULL,
+  target_lengths = NULL,
   min_coverage = 1,
   match_by_length = TRUE,
   format = NULL,
@@ -56,6 +57,16 @@ values cover \code{target_chroms} best and uses that column as the
 canonical naming, instead of \code{chrom_naming}. Honored only by the
 \code{ucsc-hub} backend; supplying it with any other source is an error
 (raised before any download).}
+
+\item{target_lengths}{Optional numeric vector aligned with
+\code{target_chroms} (typically the second column of
+\code{halStats --sequenceStats}). When supplied alongside
+\code{target_chroms} and with \code{match_by_length = TRUE}, a column
+that falls just short of \code{min_coverage} against \code{target_chroms}
+can still be accepted if its empty cells are filled by unique-on-both-
+sides length matching against \code{target_lengths}. Strictly opt-in -
+without it the gate keeps today's strict semantics. Honored only by the
+\code{ucsc-hub} backend.}
 
 \item{min_coverage}{Minimum fraction of groot chroms that must appear in a
 chromAlias column for that column to be picked as canonical (forwarded to

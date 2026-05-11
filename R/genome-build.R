@@ -771,6 +771,15 @@
 #'   canonical naming, instead of \code{chrom_naming}. Honored only by the
 #'   \code{ucsc-hub} backend; supplying it with any other source is an error
 #'   (raised before any download).
+#' @param target_lengths Optional numeric vector aligned with
+#'   \code{target_chroms} (typically the second column of
+#'   \code{halStats --sequenceStats}). When supplied alongside
+#'   \code{target_chroms} and with \code{match_by_length = TRUE}, a column
+#'   that falls just short of \code{min_coverage} against \code{target_chroms}
+#'   can still be accepted if its empty cells are filled by unique-on-both-
+#'   sides length matching against \code{target_lengths}. Strictly opt-in -
+#'   without it the gate keeps today's strict semantics. Honored only by the
+#'   \code{ucsc-hub} backend.
 #' @param chrom_naming Optional override for the recipe's \code{chrom_naming}.
 #'   Selects which name space the canonical chrom names should come from. For
 #'   \code{ucsc-hub}: any chromAlias column (\code{"ucsc"}, \code{"genbank"},
@@ -818,6 +827,7 @@ gdb.build_genome <- function(name,
                              ),
                              chrom_naming = NULL,
                              target_chroms = NULL,
+                             target_lengths = NULL,
                              min_coverage = 1.0,
                              match_by_length = TRUE,
                              format = NULL,
@@ -835,6 +845,23 @@ gdb.build_genome <- function(name,
             stop("`target_chroms` must be a non-empty character vector with no NAs.",
                 call. = FALSE
             )
+        }
+    }
+    if (!is.null(target_lengths)) {
+        if (is.null(target_chroms)) {
+            stop("`target_lengths` requires `target_chroms`.", call. = FALSE)
+        }
+        if (!is.numeric(target_lengths) || anyNA(target_lengths) ||
+            any(target_lengths <= 0)) {
+            stop("`target_lengths` must be a positive numeric vector with no NAs.",
+                call. = FALSE
+            )
+        }
+        if (length(target_lengths) != length(target_chroms)) {
+            stop(sprintf(
+                "`target_lengths` (%d) must align with `target_chroms` (%d).",
+                length(target_lengths), length(target_chroms)
+            ), call. = FALSE)
         }
     }
     if (file.exists(path)) {
@@ -870,6 +897,12 @@ gdb.build_genome <- function(name,
                 recipe$source
             ), call. = FALSE)
         }
+        if (!is.null(target_lengths)) {
+            stop(sprintf(
+                "`target_lengths` is honored only for ucsc-hub sources; got source='%s'.",
+                recipe$source
+            ), call. = FALSE)
+        }
         if (!isTRUE(all.equal(min_coverage, 1.0))) {
             stop(sprintf(
                 "`min_coverage` is honored only for ucsc-hub sources; got source='%s'.",
@@ -893,12 +926,14 @@ gdb.build_genome <- function(name,
         dir.create(pf_workdir, recursive = TRUE)
         on.exit(unlink(pf_workdir, recursive = TRUE), add = TRUE)
         prefetched_alias <- .hub_preflight_coverage(
-            accession     = recipe$accession,
-            target_chroms = target_chroms,
-            chrom_naming  = recipe$chrom_naming,
-            min_coverage  = min_coverage,
-            workdir       = pf_workdir,
-            verbose       = verbose
+            accession       = recipe$accession,
+            target_chroms   = target_chroms,
+            target_lengths  = target_lengths,
+            chrom_naming    = recipe$chrom_naming,
+            min_coverage    = min_coverage,
+            match_by_length = match_by_length,
+            workdir         = pf_workdir,
+            verbose         = verbose
         )
     }
 
@@ -919,6 +954,7 @@ gdb.build_genome <- function(name,
             overwrite          = FALSE,
             registry           = NULL,
             target_chroms      = target_chroms,
+            target_lengths     = target_lengths,
             min_coverage       = min_coverage,
             match_by_length    = match_by_length,
             prefetched_alias   = prefetched_alias,
@@ -1110,6 +1146,14 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #'   column matching \code{target_chroms} instead, and switches detection to
 #'   count-weighted coverage (bp weighting requires lengths, which target
 #'   chrom lists typically don't carry).
+#' @param target_lengths Optional numeric vector aligned with
+#'   \code{target_chroms}. When supplied together with \code{target_chroms}
+#'   and \code{match_by_length = TRUE}, the column gate is rescued via a
+#'   per-column simulated length-fill against \code{target_lengths}: an
+#'   empty alias cell whose row length uniquely matches a target chrom's
+#'   length counts toward that column's coverage. Without
+#'   \code{target_lengths} the gate keeps its current strict semantics, so
+#'   existing flows are unaffected.
 #' @param min_coverage Minimum fraction that must be covered by a chromAlias
 #'   column for it to be picked as the canonical mapping. Default \code{1.0}
 #'   (strict). On the groot side this is bp-weighted (fraction of genome
@@ -1174,6 +1218,7 @@ gdb.install_intervals <- function(groot,
                                   overwrite = FALSE,
                                   registry = NULL,
                                   target_chroms = NULL,
+                                  target_lengths = NULL,
                                   min_coverage = 1.0,
                                   match_by_length = TRUE,
                                   verbose = TRUE,
@@ -1188,6 +1233,23 @@ gdb.install_intervals <- function(groot,
         stop("`target_chroms` must be a non-empty character vector with no NAs.",
             call. = FALSE
         )
+    }
+    if (!is.null(target_lengths)) {
+        if (is.null(target_chroms)) {
+            stop("`target_lengths` requires `target_chroms`.", call. = FALSE)
+        }
+        if (!is.numeric(target_lengths) || anyNA(target_lengths) ||
+            any(target_lengths <= 0)) {
+            stop("`target_lengths` must be a positive numeric vector with no NAs.",
+                call. = FALSE
+            )
+        }
+        if (length(target_lengths) != length(target_chroms)) {
+            stop(sprintf(
+                "`target_lengths` (%d) must align with `target_chroms` (%d).",
+                length(target_lengths), length(target_chroms)
+            ), call. = FALSE)
+        }
     }
     if (!is.numeric(min_coverage) || min_coverage <= 0 || min_coverage > 1) {
         stop("`min_coverage` must be in (0, 1].", call. = FALSE)
@@ -1276,6 +1338,30 @@ gdb.install_intervals <- function(groot,
         )
     } else {
         NA_character_
+    }
+    # Length-rescue: when target_chroms is supplied with per-target lengths
+    # and match_by_length is on, retry the failed column gate using a per-
+    # column simulated length-fill. A column's empty cells whose row length
+    # uniquely pairs with a target chrom's length effectively count toward
+    # that column's coverage. Strictly opt-in (target_lengths defaults to
+    # NULL), so behavior without it is unchanged.
+    if (!is.null(alias_df) && is.na(groot_col) && match_by_length &&
+        !is.null(target_chroms) && !is.null(target_lengths) &&
+        !is.null(assets$chrom_alias$row_lengths)) {
+        rescued <- .detect_alias_column_with_length_fill(
+            alias_df, target_chroms, target_lengths,
+            assets$chrom_alias$row_lengths,
+            min_coverage = min_coverage
+        )
+        if (!is.na(rescued)) {
+            if (verbose) {
+                message(sprintf(
+                    "  Length-rescue picked chromAlias '%s' (post-fill %.2f%% of target_chroms covered).",
+                    as.character(rescued), 100 * attr(rescued, "overlap")
+                ))
+            }
+            groot_col <- rescued
+        }
     }
     if (!is.null(alias_df) && is.na(groot_col)) {
         label <- if (is.null(target_chroms)) "groot" else "target_chroms"

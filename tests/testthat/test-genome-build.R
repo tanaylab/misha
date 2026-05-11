@@ -623,6 +623,55 @@ test_that("gdb.build_genome refuses to overwrite existing path", {
 # Eager-fail / cleanup behavior
 # ---------------------------------------------------------------------------
 
+test_that("gdb.build_genome validates target_lengths input shape", {
+    out <- tempfile("misha_test_groot_")
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    # Without target_chroms, target_lengths is meaningless.
+    expect_error(
+        gdb.build_genome(
+            name           = "hg38",
+            path           = out,
+            target_lengths = c(1e8, 2e8),
+            verbose        = FALSE
+        ),
+        "target_chroms"
+    )
+    expect_false(dir.exists(out))
+})
+
+test_that("gdb.build_genome rejects target_lengths with non-ucsc-hub source", {
+    out <- tempfile("misha_test_groot_")
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    # hg38 resolves to source=ucsc; target_lengths is ucsc-hub-only.
+    expect_error(
+        gdb.build_genome(
+            name           = "hg38",
+            path           = out,
+            target_chroms  = c("chr1", "chr2"),
+            target_lengths = c(1e8, 2e8),
+            verbose        = FALSE
+        ),
+        "ucsc-hub"
+    )
+    expect_false(dir.exists(out))
+})
+
+test_that("gdb.build_genome rejects mismatched target_chroms/target_lengths length", {
+    out <- tempfile("misha_test_groot_")
+    on.exit(unlink(out, recursive = TRUE), add = TRUE)
+    expect_error(
+        gdb.build_genome(
+            name           = "hg38",
+            path           = out,
+            target_chroms  = c("chr1", "chr2"),
+            target_lengths = c(1e8, 2e8, 3e8),
+            verbose        = FALSE
+        ),
+        "align"
+    )
+    expect_false(dir.exists(out))
+})
+
 test_that("gdb.build_genome rejects target_chroms with non-ucsc-hub source", {
     out <- tempfile("misha_test_groot_")
     on.exit(unlink(out, recursive = TRUE), add = TRUE)
@@ -719,7 +768,9 @@ test_that("gdb.build_genome unlinks path when a post-pre-flight step fails", {
         # Pre-flight passes (return a synthetic prefetched alias bundle, no
         # network), then .build_seq is forced to fail AFTER creating `path`.
         .hub_preflight_coverage = function(accession, target_chroms = NULL,
+                                           target_lengths = NULL,
                                            chrom_naming = NULL, min_coverage,
+                                           match_by_length = TRUE,
                                            workdir, verbose = TRUE) {
             list(
                 df = data.frame(ucsc = "chr1", stringsAsFactors = FALSE),

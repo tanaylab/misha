@@ -342,7 +342,9 @@
 # the prefetched alias bundle so callers can pass it to .build_seq_ucsc_hub
 # and gdb.install_intervals to avoid re-download.
 .hub_preflight_coverage <- function(accession, target_chroms = NULL,
+                                    target_lengths = NULL,
                                     chrom_naming = NULL, min_coverage,
+                                    match_by_length = TRUE,
                                     workdir, verbose = TRUE) {
     base <- .hub_url_for(accession)
     files <- .hub_list_dir(base, verbose = verbose)
@@ -438,10 +440,45 @@
     groot_chroms[empties] <- NA_character_
     groot_lengths <- row_lengths
 
-    .coverage_gate(alias_df, groot_chroms, groot_lengths,
-        min_coverage = min_coverage,
-        label = sprintf("groot (%s)", canonical_col)
-    )
+    # Length-rescue pre-check: when the caller supplied per-target lengths and
+    # opted in to match_by_length, the post-FASTA install path may fill the
+    # canonical column's empty cells via unique length pairing against
+    # target_chroms. Simulating that fill here lets a build whose canonical
+    # column has empty rows (e.g. MT row blank in the genbank column) pass
+    # the preflight when post-fill coverage clears `min_coverage`. Without
+    # target_lengths the path is a no-op and the original strict gate runs.
+    rescued <- FALSE
+    if (match_by_length && !is.null(target_chroms) && !is.null(target_lengths) &&
+        !is.null(row_lengths)) {
+        filled <- canonical_vals
+        filled[empties] <- ""
+        filled <- .length_match_fill(
+            filled, row_lengths,
+            target_chroms, target_lengths
+        )
+        filled[is.na(filled)] <- ""
+        nonempty <- nzchar(filled)
+        # Rows with NA length can't contribute either way -- weight them 0.
+        weights <- row_lengths
+        weights[is.na(weights)] <- 0
+        covered <- sum(weights[nonempty])
+        total <- sum(weights)
+        if (total > 0 && covered / total >= min_coverage) {
+            rescued <- TRUE
+            if (verbose) {
+                message(sprintf(
+                    "  Pre-flight length-rescue: canonical '%s' reaches %.4f%% bp coverage after length-fill against target_lengths.",
+                    canonical_col, 100 * covered / total
+                ))
+            }
+        }
+    }
+    if (!rescued) {
+        .coverage_gate(alias_df, groot_chroms, groot_lengths,
+            min_coverage = min_coverage,
+            label = sprintf("groot (%s)", canonical_col)
+        )
+    }
 
     list(
         df = alias_df,

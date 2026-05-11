@@ -14,6 +14,7 @@ gdb.install_intervals(
   overwrite = FALSE,
   registry = NULL,
   target_chroms = NULL,
+  target_lengths = NULL,
   min_coverage = 1,
   match_by_length = TRUE,
   verbose = TRUE,
@@ -52,6 +53,15 @@ is currently in the database). When supplied, misha picks the alias
 column matching \code{target_chroms} instead, and switches detection to
 count-weighted coverage (bp weighting requires lengths, which target
 chrom lists typically don't carry).}
+
+\item{target_lengths}{Optional numeric vector aligned with
+\code{target_chroms}. When supplied together with \code{target_chroms}
+and \code{match_by_length = TRUE}, the column gate is rescued via a
+per-column simulated length-fill against \code{target_lengths}: an
+empty alias cell whose row length uniquely matches a target chrom's
+length counts toward that column's coverage. Without
+\code{target_lengths} the gate keeps its current strict semantics, so
+existing flows are unaffected.}
 
 \item{min_coverage}{Minimum fraction that must be covered by a chromAlias
 column for it to be picked as the canonical mapping. Default \code{1.0}
