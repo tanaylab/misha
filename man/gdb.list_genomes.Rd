@@ -13,11 +13,11 @@ resolution chain.}
 \value{
 A data frame with columns:
   \itemize{
-    \item \code{name} — registry key.
-    \item \code{source} — backend (\code{ucsc}, \code{ncbi}, \code{s3},
+    \item \code{name} - registry key.
+    \item \code{source} - backend (\code{ucsc}, \code{ncbi}, \code{s3},
       \code{local}, \code{manual}).
-    \item \code{detail} — assembly / accession / path.
-    \item \code{resolved_from} — which registry the entry came from.
+    \item \code{detail} - assembly / accession / path.
+    \item \code{resolved_from} - which registry the entry came from.
   }
 }
 \description{

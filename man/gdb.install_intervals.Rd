@@ -91,7 +91,7 @@ Invisible \code{NULL}. Side effects: writes \code{.interv} files under
 }
 \description{
 Given an existing groot and a source recipe (or registry name, or accession),
-fetches the relevant annotation files and installs interval sets — one or
+fetches the relevant annotation files and installs interval sets - one or
 more of \code{genes / rmsk / cgi / cytoband}.
 }
 \details{
