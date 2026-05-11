@@ -33,4 +33,11 @@ void BinFinder::init(const double *breaks, unsigned num_breaks, bool include_low
 
 		m_breaks.push_back(breaks[i]);
 	}
+
+	// When breaks contain +/-Inf the per-step diff is Inf and the loop above
+	// keeps m_binsize == Inf. The uniform-binsize fast path in val2bin() then
+	// computes Inf/Inf = NaN, whose cast to int is undefined behaviour and
+	// silently misroutes every value to a single bin. Force binary search.
+	if (!std::isfinite(m_binsize))
+		m_binsize = 0;
 }
