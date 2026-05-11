@@ -76,6 +76,151 @@
     df
 }
 
+# Parse an NCBI assembly_report.txt (the same file UCSC mammal hubs mirror
+# at `<acc>_assembly_report.txt`). Format: a run of `# Key: Value` metadata
+# lines, then a `# <col>\t<col>\t...` header line, then tab-separated data
+# rows. The header is the LAST `#`-prefixed line. Standard columns:
+# Sequence-Name, Sequence-Role, Assigned-Molecule, Assigned-Molecule-Location/Type,
+# GenBank-Accn, Relationship, RefSeq-Accn, Assembly-Unit, Sequence-Length,
+# UCSC-style-name.
+#
+# Returns a data.frame with one character column per header field, with
+# NCBI's "na" placeholder (used in GenBank-Accn / RefSeq-Accn / UCSC-style-
+# name when no counterpart exists) collapsed to "". Returns NULL when the
+# file has no data rows so callers can no-op cleanly.
+.parse_ucsc_assembly_report <- function(path) {
+    if (!file.exists(path)) {
+        stop(sprintf("Assembly report not found: %s", path), call. = FALSE)
+    }
+    lines <- readLines(path, warn = FALSE)
+    lines <- lines[nzchar(lines)]
+    is_comment <- startsWith(lines, "#")
+    if (!any(is_comment)) {
+        return(NULL)
+    }
+    header_idx <- max(which(is_comment))
+    if (header_idx == length(lines)) {
+        return(NULL)
+    }
+    cols <- strsplit(sub("^#\\s*", "", lines[[header_idx]]), "\t", fixed = TRUE)[[1L]]
+    cols <- trimws(cols)
+    data_lines <- lines[(header_idx + 1L):length(lines)]
+    data_lines <- data_lines[!startsWith(data_lines, "#")]
+    if (!length(data_lines)) {
+        return(NULL)
+    }
+    fields <- strsplit(data_lines, "\t", fixed = TRUE)
+    n_cols <- length(cols)
+    short <- vapply(fields, length, integer(1)) < n_cols
+    if (any(short)) {
+        fields[short] <- lapply(
+            fields[short],
+            function(x) c(x, rep("", n_cols - length(x)))
+        )
+    }
+    mat <- do.call(rbind, lapply(fields, `[`, seq_len(n_cols)))
+    df <- as.data.frame(mat, stringsAsFactors = FALSE)
+    names(df) <- cols
+    # NCBI's "not applicable" placeholder -- normalize to empty so downstream
+    # %in% checks don't false-match it as a chrom name.
+    for (col in c("GenBank-Accn", "RefSeq-Accn", "UCSC-style-name")) {
+        if (col %in% names(df)) {
+            df[[col]][df[[col]] == "na"] <- ""
+        }
+    }
+    df
+}
+
+# Normalize a free-form report column name to a chromAlias-style identifier:
+# lowercase, runs of non-alphanumerics replaced with a single `_`, trailing
+# `_` stripped. "UCSC-style-name" -> "ucsc_style_name".
+.normalize_report_colname <- function(x) {
+    s <- gsub("[^A-Za-z0-9]+", "_", tolower(x))
+    sub("_+$", "", s)
+}
+
+# Merge an NCBI assembly_report data.frame into alias_df. Picks a join key
+# automatically (alias_df$refseq <-> report$RefSeq-Accn first, falling back
+# to genbank), adds report columns under normalized names (avoiding
+# duplicates of equivalent chromAlias columns), and appends report-only
+# rows (e.g. unplaced scaffolds that the chromAlias drops) with the
+# chromAlias equivalents (genbank/refseq/ucsc/assembly) populated from
+# their report sources. No-op when alias_df is NULL, the report is empty,
+# or no join key reaches 50% match.
+#
+# Motivating case: UCSC hub chromAlias is sometimes missing rows (typically
+# small unplaced scaffolds) and the `assembly_report.txt` mirrored next to
+# it covers them -- merging closes the gap, often pushing min_coverage
+# from ~97% to ~99.9%.
+.merge_assembly_report_into_alias <- function(alias_df, report_df) {
+    if (is.null(alias_df) || is.null(report_df) || nrow(report_df) == 0L) {
+        return(alias_df)
+    }
+    rep_norm <- report_df
+    names(rep_norm) <- vapply(names(rep_norm), .normalize_report_colname, character(1))
+    # chromAlias column -> equivalent normalized report column.
+    syn <- c(
+        refseq   = "refseq_accn",
+        genbank  = "genbank_accn",
+        ucsc     = "ucsc_style_name",
+        assembly = "sequence_name"
+    )
+    # Pick join key: prefer refseq, fall back to genbank. Use whichever has
+    # at least 50% match rate of non-empty alias values into the report.
+    join <- NULL
+    for (pair in list(c("refseq", "refseq_accn"), c("genbank", "genbank_accn"))) {
+        a_col <- pair[[1L]]
+        r_col <- pair[[2L]]
+        if (!(a_col %in% names(alias_df)) || !(r_col %in% names(rep_norm))) next
+        a_vals <- as.character(alias_df[[a_col]])
+        a_vals[is.na(a_vals)] <- ""
+        non_empty <- nzchar(a_vals)
+        if (!any(non_empty)) next
+        n_match <- sum(a_vals[non_empty] %in% rep_norm[[r_col]])
+        if (n_match / sum(non_empty) >= 0.5) {
+            join <- list(alias = a_col, report = r_col)
+            break
+        }
+    }
+    if (is.null(join)) {
+        return(alias_df)
+    }
+    idx <- match(alias_df[[join$alias]], rep_norm[[join$report]])
+    # Columns to skip: those whose data is already carried by an equivalent
+    # chromAlias column.
+    skip_cols <- unname(syn[names(syn) %in% names(alias_df)])
+    for (col in setdiff(names(rep_norm), skip_cols)) {
+        if (col %in% names(alias_df)) next
+        vals <- character(nrow(alias_df))
+        hit <- !is.na(idx)
+        vals[hit] <- as.character(rep_norm[[col]])[idx[hit]]
+        alias_df[[col]] <- vals
+    }
+    # Append report rows not represented in alias_df (matched by join key).
+    matched_keys <- alias_df[[join$alias]][nzchar(alias_df[[join$alias]])]
+    extra <- !(rep_norm[[join$report]] %in% matched_keys) &
+        nzchar(rep_norm[[join$report]])
+    if (any(extra)) {
+        rep_extra <- rep_norm[extra, , drop = FALSE]
+        extra_df <- as.data.frame(
+            matrix("", nrow = nrow(rep_extra), ncol = ncol(alias_df)),
+            stringsAsFactors = FALSE
+        )
+        names(extra_df) <- names(alias_df)
+        for (a_col in names(extra_df)) {
+            # Prefer the chromAlias equivalent (e.g. fill 'genbank' from
+            # 'genbank_accn'); otherwise look for an exact name match in the
+            # already-extended report.
+            r_col <- if (a_col %in% names(syn)) syn[[a_col]] else a_col
+            if (r_col %in% names(rep_extra)) {
+                extra_df[[a_col]] <- as.character(rep_extra[[r_col]])
+            }
+        }
+        alias_df <- rbind(alias_df, extra_df)
+    }
+    alias_df
+}
+
 # Map each alias_df row to a length, given a sizes data.frame (cols: name,
 # length) keyed on whichever column the FASTA used for headers (typically
 # refseq for GCF or genbank for GCA hubs). Returns a numeric vector aligned

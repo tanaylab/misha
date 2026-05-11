@@ -81,7 +81,7 @@ test_that(".hub_preflight_coverage returns prefetched alias on success", {
         )
         expect_named(out, c(
             "df", "row_lengths", "alias_file",
-            "sizes_file", "canonical_col"
+            "sizes_file", "report_file", "canonical_col"
         ),
         ignore.order = TRUE
         )
@@ -117,6 +117,77 @@ test_that(".hub_preflight_coverage rescues a canonical with empty cells via targ
         expect_equal(out$canonical_col, "genbank")
     })
     expect_false(any(grepl("\\.fa\\.gz$", rec$urls)))
+})
+
+test_that(".hub_preflight_coverage merges assembly_report.txt and rescues coverage", {
+    # chromAlias alone covers 2 of 3 groot contigs by name (66.7%); the
+    # mirrored assembly_report.txt fills in the missing 3rd row (chrUn_X)
+    # via its UCSC-style-name column, so the strict gate passes at 1.0.
+    rec <- new.env()
+    rec$urls <- character()
+    testthat::local_mocked_bindings(
+        .hub_url_for = function(accession) "https://hub.example/test/",
+        .hub_list_dir = function(url, verbose = TRUE) {
+            c(
+                "GCF_TEST.chromAlias.txt",
+                "GCF_TEST.chrom.sizes.txt",
+                "GCF_TEST_assembly_report.txt",
+                "GCF_TEST.fa.gz"
+            )
+        },
+        .download_to = function(url, dest, verbose = TRUE) {
+            rec$urls <- c(rec$urls, url)
+            if (grepl("chromAlias", url)) {
+                # chromAlias has only 2 rows -- chrUn_X is missing.
+                writeLines(c(
+                    "# ucsc\tgenbank\trefseq",
+                    "chr1\tCM00001.1\tNC_00001.1",
+                    "chr2\tCM00002.1\tNC_00002.1"
+                ), dest)
+            } else if (grepl("assembly_report", url)) {
+                # Report has all 3 rows including chrUn_X.
+                writeLines(c(
+                    "# Sequence-Name\tSequence-Role\tAssigned-Molecule\tAssigned-Molecule-Location/Type\tGenBank-Accn\tRelationship\tRefSeq-Accn\tAssembly-Unit\tSequence-Length\tUCSC-style-name",
+                    "1\tassembled-molecule\t1\tChromosome\tCM00001.1\t=\tNC_00001.1\tPrimary Assembly\t100000000\tchr1",
+                    "2\tassembled-molecule\t2\tChromosome\tCM00002.1\t=\tNC_00002.1\tPrimary Assembly\t100000000\tchr2",
+                    "unp1\tunplaced-scaffold\tna\tna\tJH99.1\t=\tNW_99.1\tPrimary Assembly\t500\tchrUn_X"
+                ), dest)
+            } else if (grepl("chrom\\.sizes", url)) {
+                # Sizes keyed on refseq, including the unplaced row.
+                cat("NC_00001.1\t100000000\nNC_00002.1\t100000000\nNW_99.1\t500\n",
+                    file = dest
+                )
+            }
+            invisible(dest)
+        },
+        .parse_ucsc_chromalias = function(path) {
+            data.frame(
+                ucsc = c("chr1", "chr2"),
+                genbank = c("CM00001.1", "CM00002.1"),
+                refseq = c("NC_00001.1", "NC_00002.1"),
+                stringsAsFactors = FALSE
+            )
+        },
+        .package = "misha"
+    )
+    wd <- tempfile("preflight_")
+    dir.create(wd)
+    on.exit(unlink(wd, recursive = TRUE), add = TRUE)
+    # Without the assembly_report merge this would fail (chromAlias only
+    # covers 2 of 3 contigs); with it, alias_df grows to 3 rows and the
+    # ucsc column covers all of them.
+    out <- .hub_preflight_coverage(
+        accession = "GCF_TEST.1",
+        target_chroms = NULL,
+        chrom_naming = "ucsc",
+        min_coverage = 1.0,
+        workdir = wd,
+        verbose = FALSE
+    )
+    expect_equal(nrow(out$df), 3L)
+    expect_true("chrUn_X" %in% out$df$ucsc)
+    expect_false(any(grepl("\\.fa\\.gz$", rec$urls)))
+    expect_true(any(grepl("assembly_report", rec$urls)))
 })
 
 test_that(".hub_preflight_coverage errors before FASTA when a target_chrom is unplaceable", {

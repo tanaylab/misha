@@ -20,6 +20,69 @@ test_that(".parse_ucsc_chromalias handles gzipped input", {
     expect_equal(df$ucsc[[1L]], "chr1")
 })
 
+test_that(".parse_ucsc_assembly_report parses 10-column NCBI format and normalizes 'na'", {
+    f <- testthat::test_path("fixtures", "assembly-report-mini.txt")
+    df <- .parse_ucsc_assembly_report(f)
+    expect_equal(nrow(df), 5L)
+    expect_true(all(c(
+        "Sequence-Name", "GenBank-Accn", "RefSeq-Accn",
+        "UCSC-style-name", "Sequence-Length"
+    ) %in% names(df)))
+    # 'na' placeholders collapse to "".
+    expect_equal(df[["Assigned-Molecule"]][[5L]], "na") # not normalized: only GB/RS/UCSC are
+    expect_equal(df[["GenBank-Accn"]], c(
+        "CM00001.1", "CM00002.1", "CM00003.1",
+        "AY999999.1", "JH99999.1"
+    ))
+    expect_equal(df[["UCSC-style-name"]][[5L]], "chrUn_JH99999v1")
+})
+
+test_that(".merge_assembly_report_into_alias adds UCSC-style-name + report-only rows", {
+    # chromAlias has 4 rows; the report has 5 (one extra unplaced scaffold).
+    # After merge, alias_df should grow to 5 rows and gain ucsc_style_name +
+    # sequence_role columns (sequence_name is skipped because chromAlias's
+    # 'assembly' column already carries it).
+    alias_df <- .parse_ucsc_chromalias(
+        testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    )
+    report_df <- .parse_ucsc_assembly_report(
+        testthat::test_path("fixtures", "assembly-report-mini.txt")
+    )
+    merged <- .merge_assembly_report_into_alias(alias_df, report_df)
+    expect_equal(nrow(merged), 5L)
+    # New column from the report (ucsc-equivalent is suppressed because
+    # alias already has 'ucsc'; sequence_role and length are kept).
+    expect_true("sequence_role" %in% names(merged))
+    expect_true("sequence_length" %in% names(merged))
+    expect_false("ucsc_style_name" %in% names(merged)) # equivalent suppressed
+    # Extra row populated from report's chromAlias-equivalent columns.
+    expect_equal(merged$ucsc[[5L]], "chrUn_JH99999v1")
+    expect_equal(merged$refseq[[5L]], "NW_007777777.1")
+    expect_equal(merged$genbank[[5L]], "JH99999.1")
+})
+
+test_that(".merge_assembly_report_into_alias preserves alias_df when no join key matches", {
+    # alias_df has columns matching nothing in the report.
+    alias_df <- data.frame(
+        refseq = c("DIFFERENT1", "DIFFERENT2"),
+        genbank = c("OTHER1", "OTHER2"),
+        stringsAsFactors = FALSE
+    )
+    report_df <- .parse_ucsc_assembly_report(
+        testthat::test_path("fixtures", "assembly-report-mini.txt")
+    )
+    out <- .merge_assembly_report_into_alias(alias_df, report_df)
+    # Returns alias_df unchanged (no columns added, no rows appended).
+    expect_equal(out, alias_df)
+})
+
+test_that(".merge_assembly_report_into_alias is a no-op on NULL or empty inputs", {
+    alias_df <- data.frame(refseq = "NC_1", stringsAsFactors = FALSE)
+    expect_null(.merge_assembly_report_into_alias(NULL, data.frame()))
+    expect_equal(.merge_assembly_report_into_alias(alias_df, NULL), alias_df)
+    expect_equal(.merge_assembly_report_into_alias(alias_df, data.frame()), alias_df)
+})
+
 test_that(".detect_alias_column returns the column with 100% coverage", {
     f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
     df <- .parse_ucsc_chromalias(f)
