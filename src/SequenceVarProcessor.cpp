@@ -402,9 +402,28 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 			vector<GInterval> unmasked_parts;
 			ivar->filter->subtract(seq_interval, unmasked_parts);
 
+			const bool is_grad =
+				ivar->val_func == TrackExpressionVars::Track_var::PWM_GRAD ||
+				ivar->val_func == TrackExpressionVars::Track_var::PWM_GRAD_ISM;
+
 			if (unmasked_parts.empty()) {
 				// Completely masked
 				ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+			} else if (is_grad) {
+				// Gradient modes are anchored at seq_interval.start; we can only
+				// score the unmasked part that begins at that pivot. Any other
+				// part is at a different genomic anchor and must not contribute.
+				bool scored = false;
+				for (const auto& part : unmasked_parts) {
+					if (part.start == seq_interval.start) {
+						ivar->var[idx] = ivar->pwm_scorer->score_interval(part, m_iu.get_chromkey());
+						scored = true;
+						break;
+					}
+				}
+				if (!scored) {
+					ivar->var[idx] = numeric_limits<double>::quiet_NaN();
+				}
 			} else if (unmasked_parts.size() == 1) {
 				// Single unmasked part
 				ivar->var[idx] = ivar->pwm_scorer->score_interval(unmasked_parts[0], m_iu.get_chromkey());
