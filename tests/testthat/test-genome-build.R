@@ -780,8 +780,10 @@ test_that("gdb.build_genome unlinks path when a post-pre-flight step fails", {
                 canonical_col = "ucsc"
             )
         },
-        .build_seq = function(recipe, path, target_chroms = NULL, format = NULL,
-                              prefetched_alias = NULL, verbose = TRUE) {
+        .build_seq = function(recipe, path, target_chroms = NULL,
+                              target_lengths = NULL, format = NULL,
+                              prefetched_alias = NULL,
+                              match_by_length = TRUE, verbose = TRUE) {
             dir.create(path, recursive = TRUE)
             writeLines("not a real groot", file.path(path, "marker.txt"))
             stop("forced failure after path creation", call. = FALSE)

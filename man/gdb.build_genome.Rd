@@ -59,14 +59,17 @@ canonical naming, instead of \code{chrom_naming}. Honored only by the
 (raised before any download).}
 
 \item{target_lengths}{Optional numeric vector aligned with
-\code{target_chroms} (typically the second column of
+\code{target_chroms} (typically the second field of
 \code{halStats --sequenceStats}). When supplied alongside
-\code{target_chroms} and with \code{match_by_length = TRUE}, a column
-that falls just short of \code{min_coverage} against \code{target_chroms}
-can still be accepted if its empty cells are filled by unique-on-both-
-sides length matching against \code{target_lengths}. Strictly opt-in -
-without it the gate keeps today's strict semantics. Honored only by the
-\code{ucsc-hub} backend.}
+\code{target_chroms} and with \code{match_by_length = TRUE}, this is
+the strong-guarantee path: misha force-aligns the hub FASTA to
+\code{target_chroms}, placing every target on its chromAlias row by
+name match across columns or unique-on-both-sides length pairing. If
+any target can't be placed, the build errors (in the pre-flight,
+before the multi-GB FASTA download). On success the resulting groot's
+chrom names are exactly \code{target_chroms} (alias rows not in
+\code{target_chroms} keep their original FASTA-header accession).
+Honored only by the \code{ucsc-hub} backend.}
 
 \item{min_coverage}{Minimum fraction of groot chroms that must appear in a
 chromAlias column for that column to be picked as canonical (forwarded to

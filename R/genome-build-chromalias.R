@@ -149,66 +149,69 @@
     )
 }
 
-# Companion to .detect_alias_column for the case where target_chroms is
-# supplied but no column covers them at min_coverage by name alone. For each
-# column, simulate .length_match_fill against (target_chroms, target_lengths)
-# -- empty cells whose row length uniquely matches a target chrom's length on
-# both sides receive that target chrom -- then score the post-fill column's
-# count coverage of target_chroms. Returns the same shape as
-# .detect_alias_column on success/failure so callers can route the result
-# through the existing .canonical / .coverage_gate pipeline unchanged.
+# Assign each alias_df row to a target_chrom name, or to "" if the row can't
+# be placed. Pass 1 is name match across every chromAlias column (first
+# column whose value is in target_chroms wins for that row). Pass 2 fills
+# any remaining row whose length uniquely pairs with a target_chrom on both
+# sides via .length_match_fill. Errors if any target_chrom is left unplaced
+# -- the contract is "every target chrom maps to exactly one alias row,
+# else the requested canonical naming can't be realized."
 #
-# Strictly opt-in: callers only reach this helper when match_by_length=TRUE,
-# target_lengths is supplied alongside target_chroms, and the alias bundle
-# carries per-row lengths. Without these, behavior is identical to today.
-.detect_alias_column_with_length_fill <- function(alias_df, target_chroms,
-                                                  target_lengths,
-                                                  alias_row_lengths,
-                                                  min_coverage = 1.0) {
+# Used in three places:
+#   * .build_seq_ucsc_hub force-align -- rename hub FASTA headers to
+#     target_chroms regardless of whether target_chroms appears in any
+#     chromAlias column.
+#   * .hub_preflight_coverage -- dry-run as a fail-early check before the
+#     multi-GB FASTA download.
+#   * gdb.install_intervals (called from gdb.build_genome with
+#     target_lengths) -- inject the per-row assignment as a virtual
+#     ".target_chroms" column so the canonical naming pipeline naturally
+#     emits target_chroms.
+.assign_target_chroms_per_row <- function(alias_df, target_chroms,
+                                          target_lengths, alias_row_lengths) {
     if (!length(target_chroms)) {
-        stop(".detect_alias_column_with_length_fill called with empty target chrom set",
+        stop(".assign_target_chroms_per_row called with empty target chrom set",
             call. = FALSE
         )
     }
     if (length(target_lengths) != length(target_chroms)) {
         stop(sprintf(
-            ".detect_alias_column_with_length_fill: target_lengths (%d) must align with target_chroms (%d)",
+            ".assign_target_chroms_per_row: target_lengths (%d) must align with target_chroms (%d)",
             length(target_lengths), length(target_chroms)
         ), call. = FALSE)
     }
     if (length(alias_row_lengths) != nrow(alias_df)) {
         stop(sprintf(
-            ".detect_alias_column_with_length_fill: alias_row_lengths (%d) must align with alias_df rows (%d)",
+            ".assign_target_chroms_per_row: alias_row_lengths (%d) must align with alias_df rows (%d)",
             length(alias_row_lengths), nrow(alias_df)
         ), call. = FALSE)
     }
-    unique_targets <- unique(target_chroms)
-    total <- length(unique_targets)
-    scores <- vapply(alias_df, function(col) {
-        col_vals <- as.character(col)
-        col_vals[is.na(col_vals)] <- ""
-        filled <- .length_match_fill(
-            col_vals, alias_row_lengths,
-            target_chroms, target_lengths
-        )
-        filled[is.na(filled)] <- ""
-        sum(unique_targets %in% filled)
-    }, integer(1))
-    coverages <- scores / total
-    valid <- which(coverages >= min_coverage)
-    if (!length(valid)) {
-        return(structure(NA_character_,
-            scores = scores,
-            overlap = max(coverages),
-            bp_weighted = FALSE
-        ))
+    canonical <- character(nrow(alias_df))
+    target_set <- unique(target_chroms)
+    # Pass 1: name match across every chromAlias column.
+    for (col in names(alias_df)) {
+        vals <- as.character(alias_df[[col]])
+        vals[is.na(vals)] <- ""
+        hits <- !nzchar(canonical) & vals %in% target_set
+        canonical[hits] <- vals[hits]
     }
-    best <- valid[which.max(coverages[valid])]
-    structure(names(alias_df)[best],
-        scores = scores,
-        overlap = unname(coverages[best]),
-        bp_weighted = FALSE
+    # Pass 2: unique-on-both-sides length pairing for any remaining empty
+    # rows. .length_match_fill returns NA when no unique pair exists; collapse
+    # back to "" so the missing-target check below sees a uniform empty marker.
+    canonical <- .length_match_fill(
+        canonical, alias_row_lengths,
+        target_chroms, target_lengths
     )
+    canonical[is.na(canonical)] <- ""
+    missing <- setdiff(target_chroms, canonical)
+    if (length(missing)) {
+        stop(sprintf(
+            "Cannot align %d of %d target_chroms to chromAlias rows: no name match in any column and no unique-on-both-sides length pair.\nFirst 5 unplaced: %s\nHint: verify target_lengths match the assembly (halStats --sequenceStats), or relax target_chroms to the subset you can guarantee.",
+            length(missing), length(target_chroms),
+            paste(utils::head(missing, 5L), collapse = ", ")
+        ), call. = FALSE)
+    }
+    canonical
 }
 
 # For each alias row whose `canonical` value is empty, look up the unique

@@ -166,106 +166,90 @@ test_that(".length_match_fill is a no-op when no fills needed", {
     expect_equal(out, c("X", "Y"))
 })
 
-test_that(".detect_alias_column_with_length_fill rescues a partial column via unique-length fill", {
-    # ucsc covers 3/4 target_chroms by name; row 4 is empty in ucsc but its
-    # length uniquely matches a target_chrom -> post-fill coverage reaches 100%.
+test_that(".assign_target_chroms_per_row places every target via name match across columns", {
+    # target_chroms appear scattered across columns (mixing namings is fine).
     df <- data.frame(
-        ucsc = c("chr1", "chr2", "chr3", ""),
-        genbank = c("CM1", "CM2", "CM3", "JH99"),
+        ucsc = c("chr1", "chr2", "chr3", "chrM"),
+        genbank = c("CM1", "CM2", "CM3", ""),
+        refseq = c("NC1", "NC2", "NC3", "NCM"),
         stringsAsFactors = FALSE
     )
-    target_chroms <- c("chr1", "chr2", "chr3", "chrMT")
+    target_chroms <- c("chr1", "CM2", "NC3", "chrM")
     target_lengths <- c(100, 200, 300, 16)
     alias_row_lengths <- c(100, 200, 300, 16)
-    res <- .detect_alias_column_with_length_fill(
-        df, target_chroms, target_lengths, alias_row_lengths,
-        min_coverage = 1.0
+    out <- .assign_target_chroms_per_row(
+        df, target_chroms, target_lengths, alias_row_lengths
     )
-    expect_equal(as.character(res), "ucsc")
-    expect_equal(attr(res, "overlap"), 1.0)
+    expect_equal(out, c("chr1", "CM2", "NC3", "chrM"))
 })
 
-test_that(".detect_alias_column_with_length_fill returns NA when no column reaches threshold even with fill", {
-    # Neither column has empty cells, so fill adds nothing; neither matches
-    # target_chroms by name -> rescue fails (NA), preserving strict failure.
+test_that(".assign_target_chroms_per_row falls back to length pairing for unmatched targets", {
+    # 'HALMT' isn't in any chromAlias column but its length pairs uniquely
+    # with the empty row's alias length -> length fill places it.
     df <- data.frame(
-        a = c("u", "v", "w"),
-        b = c("d", "e", "f"),
+        ucsc = c("chr1", "chr2", "chr3", ""),
         stringsAsFactors = FALSE
     )
-    target_chroms <- c("X", "Y", "Z")
-    target_lengths <- c(100, 200, 300)
-    alias_row_lengths <- c(100, 200, 300)
-    res <- .detect_alias_column_with_length_fill(
-        df, target_chroms, target_lengths, alias_row_lengths,
-        min_coverage = 1.0
+    target_chroms <- c("chr1", "chr2", "chr3", "HALMT")
+    target_lengths <- c(100, 200, 300, 16)
+    alias_row_lengths <- c(100, 200, 300, 16)
+    out <- .assign_target_chroms_per_row(
+        df, target_chroms, target_lengths, alias_row_lengths
     )
-    expect_true(is.na(res))
-    # Diagnostic attrs preserved for caller.
-    expect_true(!is.null(attr(res, "scores")))
-    expect_equal(attr(res, "overlap"), 0)
+    expect_equal(out, c("chr1", "chr2", "chr3", "HALMT"))
 })
 
-test_that(".detect_alias_column_with_length_fill picks highest-scoring column among ties on fill", {
-    # Both columns have one empty cell each at row 3 (length 50 unique on both
-    # sides). After fill, both cover the same 3/3 - first wins (column order).
+test_that(".assign_target_chroms_per_row errors when a target can't be placed", {
+    # 'HALMT' isn't in chromAlias and its length is ambiguous (length 16
+    # appears twice on alias side) -> unplaced -> stop.
     df <- data.frame(
-        a = c("X", "Y", ""),
-        b = c("X", "Y", ""),
+        ucsc = c("chr1", "chr2", "", ""),
         stringsAsFactors = FALSE
     )
-    target_chroms <- c("X", "Y", "Z")
-    target_lengths <- c(100, 200, 50)
-    alias_row_lengths <- c(100, 200, 50)
-    res <- .detect_alias_column_with_length_fill(
-        df, target_chroms, target_lengths, alias_row_lengths,
-        min_coverage = 1.0
+    target_chroms <- c("chr1", "chr2", "HALMT")
+    target_lengths <- c(100, 200, 16)
+    alias_row_lengths <- c(100, 200, 16, 16)
+    expect_error(
+        .assign_target_chroms_per_row(
+            df, target_chroms, target_lengths, alias_row_lengths
+        ),
+        "HALMT"
     )
-    expect_equal(as.character(res), "a")
 })
 
-test_that(".detect_alias_column_with_length_fill leaves ambiguous-length rows unfilled", {
-    # Lengths 100 appear twice on alias side - ambiguous, no fill.
-    # Length 50 unique - fills row 3 only. Post-fill ucsc covers 1/3 -> NA at 1.0.
+test_that(".assign_target_chroms_per_row leaves rows not in target_chroms empty", {
+    # Extra alias row (smallContig with length 17) has no matching target;
+    # it must come back empty (caller fills with src_col fallback if needed).
     df <- data.frame(
-        ucsc = c("", "", ""),
+        ucsc = c("chr1", "chr2", "smallContig"),
         stringsAsFactors = FALSE
     )
-    target_chroms <- c("A", "B", "C")
-    target_lengths <- c(100, 100, 50)
-    alias_row_lengths <- c(100, 100, 50)
-    res <- .detect_alias_column_with_length_fill(
-        df, target_chroms, target_lengths, alias_row_lengths,
-        min_coverage = 1.0
+    target_chroms <- c("chr1", "chr2")
+    target_lengths <- c(100, 200)
+    alias_row_lengths <- c(100, 200, 17)
+    out <- .assign_target_chroms_per_row(
+        df, target_chroms, target_lengths, alias_row_lengths
     )
-    expect_true(is.na(res))
-    # At min_coverage 0.33, the partial fill is enough.
-    res2 <- .detect_alias_column_with_length_fill(
-        df, target_chroms, target_lengths, alias_row_lengths,
-        min_coverage = 0.33
-    )
-    expect_equal(as.character(res2), "ucsc")
+    expect_equal(out, c("chr1", "chr2", ""))
 })
 
-test_that(".detect_alias_column_with_length_fill errors on input misalignment", {
+test_that(".assign_target_chroms_per_row errors on input misalignment", {
     df <- data.frame(a = c("x", "y"), stringsAsFactors = FALSE)
     expect_error(
-        .detect_alias_column_with_length_fill(
+        .assign_target_chroms_per_row(
             df,
             target_chroms = c("X", "Y"),
             target_lengths = c(1, 2, 3),
-            alias_row_lengths = c(1, 2),
-            min_coverage = 1.0
+            alias_row_lengths = c(1, 2)
         ),
         "target_lengths"
     )
     expect_error(
-        .detect_alias_column_with_length_fill(
+        .assign_target_chroms_per_row(
             df,
             target_chroms = c("X", "Y"),
             target_lengths = c(1, 2),
-            alias_row_lengths = c(1, 2, 3),
-            min_coverage = 1.0
+            alias_row_lengths = c(1, 2, 3)
         ),
         "alias_row_lengths"
     )

@@ -440,37 +440,26 @@
     groot_chroms[empties] <- NA_character_
     groot_lengths <- row_lengths
 
-    # Length-rescue pre-check: when the caller supplied per-target lengths and
-    # opted in to match_by_length, the post-FASTA install path may fill the
-    # canonical column's empty cells via unique length pairing against
-    # target_chroms. Simulating that fill here lets a build whose canonical
-    # column has empty rows (e.g. MT row blank in the genbank column) pass
-    # the preflight when post-fill coverage clears `min_coverage`. Without
-    # target_lengths the path is a no-op and the original strict gate runs.
+    # Force-align dry-run: when caller supplied per-target lengths and opted
+    # in to match_by_length, the post-FASTA path force-aligns the FASTA to
+    # target_chroms via .assign_target_chroms_per_row. Running the same
+    # helper here (on the already-downloaded alias + sizes) fails before the
+    # multi-GB FASTA transfer if any target_chrom can't be placed by name or
+    # unique-length pairing. On success, the standard bp gate is skipped --
+    # the helper's success guarantee is strictly stronger than the gate.
     rescued <- FALSE
     if (match_by_length && !is.null(target_chroms) && !is.null(target_lengths) &&
         !is.null(row_lengths)) {
-        filled <- canonical_vals
-        filled[empties] <- ""
-        filled <- .length_match_fill(
-            filled, row_lengths,
-            target_chroms, target_lengths
+        .assign_target_chroms_per_row(
+            alias_df, target_chroms,
+            target_lengths, row_lengths
         )
-        filled[is.na(filled)] <- ""
-        nonempty <- nzchar(filled)
-        # Rows with NA length can't contribute either way -- weight them 0.
-        weights <- row_lengths
-        weights[is.na(weights)] <- 0
-        covered <- sum(weights[nonempty])
-        total <- sum(weights)
-        if (total > 0 && covered / total >= min_coverage) {
-            rescued <- TRUE
-            if (verbose) {
-                message(sprintf(
-                    "  Pre-flight length-rescue: canonical '%s' reaches %.4f%% bp coverage after length-fill against target_lengths.",
-                    canonical_col, 100 * covered / total
-                ))
-            }
+        rescued <- TRUE
+        if (verbose) {
+            message(sprintf(
+                "  Pre-flight force-align dry-run: all %d target_chroms placeable on chromAlias rows by name or unique-length pairing.",
+                length(target_chroms)
+            ))
         }
     }
     if (!rescued) {

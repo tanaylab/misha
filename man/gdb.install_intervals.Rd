@@ -55,13 +55,13 @@ count-weighted coverage (bp weighting requires lengths, which target
 chrom lists typically don't carry).}
 
 \item{target_lengths}{Optional numeric vector aligned with
-\code{target_chroms}. When supplied together with \code{target_chroms}
-and \code{match_by_length = TRUE}, the column gate is rescued via a
-per-column simulated length-fill against \code{target_lengths}: an
-empty alias cell whose row length uniquely matches a target chrom's
-length counts toward that column's coverage. Without
-\code{target_lengths} the gate keeps its current strict semantics, so
-existing flows are unaffected.}
+\code{target_chroms}. Only honored when this call originates from
+\code{\link{gdb.build_genome}} (the groot was just force-aligned to
+\code{target_chroms}); standalone calls ignore it and use the strict
+column gate. When honored, canonical is set to a synthetic
+\code{".target_chroms"} column populated by name match + unique-length
+pairing, so \code{chrom_aliases.tsv} writes \code{target_chroms} as
+canonical with all other chromAlias columns as aliases.}
 
 \item{min_coverage}{Minimum fraction that must be covered by a chromAlias
 column for it to be picked as the canonical mapping. Default \code{1.0}

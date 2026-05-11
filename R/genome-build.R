@@ -772,14 +772,17 @@
 #'   \code{ucsc-hub} backend; supplying it with any other source is an error
 #'   (raised before any download).
 #' @param target_lengths Optional numeric vector aligned with
-#'   \code{target_chroms} (typically the second column of
+#'   \code{target_chroms} (typically the second field of
 #'   \code{halStats --sequenceStats}). When supplied alongside
-#'   \code{target_chroms} and with \code{match_by_length = TRUE}, a column
-#'   that falls just short of \code{min_coverage} against \code{target_chroms}
-#'   can still be accepted if its empty cells are filled by unique-on-both-
-#'   sides length matching against \code{target_lengths}. Strictly opt-in -
-#'   without it the gate keeps today's strict semantics. Honored only by the
-#'   \code{ucsc-hub} backend.
+#'   \code{target_chroms} and with \code{match_by_length = TRUE}, this is
+#'   the strong-guarantee path: misha force-aligns the hub FASTA to
+#'   \code{target_chroms}, placing every target on its chromAlias row by
+#'   name match across columns or unique-on-both-sides length pairing. If
+#'   any target can't be placed, the build errors (in the pre-flight,
+#'   before the multi-GB FASTA download). On success the resulting groot's
+#'   chrom names are exactly \code{target_chroms} (alias rows not in
+#'   \code{target_chroms} keep their original FASTA-header accession).
+#'   Honored only by the \code{ucsc-hub} backend.
 #' @param chrom_naming Optional override for the recipe's \code{chrom_naming}.
 #'   Selects which name space the canonical chrom names should come from. For
 #'   \code{ucsc-hub}: any chromAlias column (\code{"ucsc"}, \code{"genbank"},
@@ -938,8 +941,12 @@ gdb.build_genome <- function(name,
     }
 
     seq_info <- .build_seq(recipe, path,
-        target_chroms = target_chroms, format = format,
-        prefetched_alias = prefetched_alias, verbose = verbose
+        target_chroms    = target_chroms,
+        target_lengths   = target_lengths,
+        format           = format,
+        prefetched_alias = prefetched_alias,
+        match_by_length  = match_by_length,
+        verbose          = verbose
     )
     gdb.init(path, rescan = TRUE)
 
@@ -1147,13 +1154,13 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #'   count-weighted coverage (bp weighting requires lengths, which target
 #'   chrom lists typically don't carry).
 #' @param target_lengths Optional numeric vector aligned with
-#'   \code{target_chroms}. When supplied together with \code{target_chroms}
-#'   and \code{match_by_length = TRUE}, the column gate is rescued via a
-#'   per-column simulated length-fill against \code{target_lengths}: an
-#'   empty alias cell whose row length uniquely matches a target chrom's
-#'   length counts toward that column's coverage. Without
-#'   \code{target_lengths} the gate keeps its current strict semantics, so
-#'   existing flows are unaffected.
+#'   \code{target_chroms}. Only honored when this call originates from
+#'   \code{\link{gdb.build_genome}} (the groot was just force-aligned to
+#'   \code{target_chroms}); standalone calls ignore it and use the strict
+#'   column gate. When honored, canonical is set to a synthetic
+#'   \code{".target_chroms"} column populated by name match + unique-length
+#'   pairing, so \code{chrom_aliases.tsv} writes \code{target_chroms} as
+#'   canonical with all other chromAlias columns as aliases.
 #' @param min_coverage Minimum fraction that must be covered by a chromAlias
 #'   column for it to be picked as the canonical mapping. Default \code{1.0}
 #'   (strict). On the groot side this is bp-weighted (fraction of genome
@@ -1332,42 +1339,42 @@ gdb.install_intervals <- function(groot,
     # back to "what's currently in the groot", which is the typical case.
     detect_chroms <- target_chroms %||% groot_chroms
     detect_lengths <- if (is.null(target_chroms)) groot_lengths else NULL
-    groot_col <- if (!is.null(alias_df)) {
-        .detect_alias_column(alias_df, detect_chroms,
-            min_coverage = min_coverage, chrom_lengths = detect_lengths
-        )
-    } else {
-        NA_character_
-    }
-    # Length-rescue: when target_chroms is supplied with per-target lengths
-    # and match_by_length is on, retry the failed column gate using a per-
-    # column simulated length-fill. A column's empty cells whose row length
-    # uniquely pairs with a target chrom's length effectively count toward
-    # that column's coverage. Strictly opt-in (target_lengths defaults to
-    # NULL), so behavior without it is unchanged.
-    if (!is.null(alias_df) && is.na(groot_col) && match_by_length &&
+    # Force-align canonical to target_chroms when gdb.build_genome ran the
+    # same force-align in .build_seq_ucsc_hub (so the FASTA's headers are now
+    # target_chroms). Inject a synthetic ".target_chroms" column carrying the
+    # per-row assignment; downstream this becomes the canonical column,
+    # which is later filled for non-target rows by the standard
+    # match_by_length groot-side length-fill. Gated on .from_build_genome so
+    # standalone gdb.install_intervals (where the groot wasn't built with
+    # this branch) keeps strict gate semantics.
+    force_align <- .from_build_genome && !is.null(alias_df) &&
         !is.null(target_chroms) && !is.null(target_lengths) &&
-        !is.null(assets$chrom_alias$row_lengths)) {
-        rescued <- .detect_alias_column_with_length_fill(
+        isTRUE(match_by_length) && !is.null(assets$chrom_alias$row_lengths)
+    if (force_align) {
+        alias_df[[".target_chroms"]] <- .assign_target_chroms_per_row(
             alias_df, target_chroms, target_lengths,
-            assets$chrom_alias$row_lengths,
-            min_coverage = min_coverage
+            assets$chrom_alias$row_lengths
         )
-        if (!is.na(rescued)) {
-            if (verbose) {
-                message(sprintf(
-                    "  Length-rescue picked chromAlias '%s' (post-fill %.2f%% of target_chroms covered).",
-                    as.character(rescued), 100 * attr(rescued, "overlap")
-                ))
-            }
-            groot_col <- rescued
+        groot_col <- structure(".target_chroms",
+            overlap = 1.0, bp_weighted = FALSE
+        )
+        if (verbose) {
+            message("  Force-align canonical = target_chroms (synthetic .target_chroms column).")
         }
-    }
-    if (!is.null(alias_df) && is.na(groot_col)) {
-        label <- if (is.null(target_chroms)) "groot" else "target_chroms"
-        .coverage_gate(alias_df, detect_chroms, detect_lengths,
-            min_coverage = min_coverage, label = label
-        )
+    } else {
+        groot_col <- if (!is.null(alias_df)) {
+            .detect_alias_column(alias_df, detect_chroms,
+                min_coverage = min_coverage, chrom_lengths = detect_lengths
+            )
+        } else {
+            NA_character_
+        }
+        if (!is.null(alias_df) && is.na(groot_col)) {
+            label <- if (is.null(target_chroms)) "groot" else "target_chroms"
+            .coverage_gate(alias_df, detect_chroms, detect_lengths,
+                min_coverage = min_coverage, label = label
+            )
+        }
     }
     if (!is.null(alias_df)) {
         groot_col_chr <- as.character(groot_col)

@@ -119,6 +119,33 @@ test_that(".hub_preflight_coverage rescues a canonical with empty cells via targ
     expect_false(any(grepl("\\.fa\\.gz$", rec$urls)))
 })
 
+test_that(".hub_preflight_coverage errors before FASTA when a target_chrom is unplaceable", {
+    # 'HALxyz' isn't in any chromAlias column and its length (42) doesn't
+    # appear on the alias side -> can't be placed -> preflight errors before
+    # the FASTA download.
+    rec <- new.env()
+    rec$urls <- character()
+    with_preflight_mocks(rec, {
+        wd <- tempfile("preflight_")
+        dir.create(wd)
+        on.exit(unlink(wd, recursive = TRUE), add = TRUE)
+        expect_error(
+            .hub_preflight_coverage(
+                accession       = "GCF_TEST.1",
+                target_chroms   = c("chr1", "chr2", "HALxyz"),
+                target_lengths  = c(1e8, 1e8, 42),
+                chrom_naming    = "ucsc",
+                min_coverage    = 1.0,
+                match_by_length = TRUE,
+                workdir         = wd,
+                verbose         = FALSE
+            ),
+            "Cannot align"
+        )
+    })
+    expect_false(any(grepl("\\.fa\\.gz$", rec$urls)))
+})
+
 test_that(".hub_preflight_coverage still fails strict when match_by_length=FALSE", {
     # Same fixture as the rescue test but with match_by_length disabled - the
     # strict gate must fire (no rescue eligibility).
