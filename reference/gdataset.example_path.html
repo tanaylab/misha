@@ -21,7 +21,7 @@ intervals ('example_dataset_intervals') in that database."><!-- mathjax --><scri
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.26</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.28</span>
       </span>
     </div>
 
@@ -74,7 +74,7 @@ intervals ('example_dataset_intervals') in that database."><!-- mathjax --><scri
     <div class="ref-description">
     <p>Creates a small dataset in a temporary directory using the built-in
 example database. This function has side effects: it calls
-<code><a href="gdb.init.html">gdb.init_examples</a></code> which resets the working database, and
+<code><a href="gdb.init_examples.html">gdb.init_examples</a></code> which resets the working database, and
 it creates then deletes temporary tracks ('example_dataset_track') and
 intervals ('example_dataset_intervals') in that database.</p>
     </div>
@@ -89,7 +89,7 @@ intervals ('example_dataset_intervals') in that database.</p>
     </div>
     <div id="details">
     <h2>Details</h2>
-    <p>This function performs the following steps:</p><ol><li><p>Calls <code><a href="gdb.init.html">gdb.init_examples()</a></code> to set the working database</p></li>
+    <p>This function performs the following steps:</p><ol><li><p>Calls <code><a href="gdb.init_examples.html">gdb.init_examples()</a></code> to set the working database</p></li>
 <li><p>Removes any existing 'example_dataset_track' and 'example_dataset_intervals'</p></li>
 <li><p>Creates temporary track and intervals in the example database</p></li>
 <li><p>Saves them to a new dataset in a temporary directory</p></li>
@@ -100,7 +100,7 @@ aware that calling this function will change their current working database.</p>
     <div id="see-also">
     <h2>See also</h2>
     <div class="dont-index"><p><code><a href="gdataset.save.html">gdataset.save</a></code>, <code><a href="gdataset.load.html">gdataset.load</a></code>,
-  <code><a href="gdb.init.html">gdb.init_examples</a></code></p></div>
+  <code><a href="gdb.init_examples.html">gdb.init_examples</a></code></p></div>
     </div>
 
     <div id="ref-examples">
