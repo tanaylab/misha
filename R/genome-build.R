@@ -1415,6 +1415,18 @@ gdb.install_intervals <- function(groot,
                 n_overridden <- sum(filled != pre_override)
                 base_canonical <- filled
             }
+            # Third pass: name-based fallback. For any row whose canonical
+            # still doesn't appear in the groot, scan the row's other
+            # columns for a value that does -- and use it. Catches rows
+            # where the chosen canonical column was empty/different but
+            # some other naming-scheme column (e.g. GenBank-Accn) carries
+            # the exact groot name (typical: bare-accession contigs in
+            # HAL-built grooots).
+            pre_name <- base_canonical
+            base_canonical <- .name_match_override(
+                base_canonical, alias_df, groot_col_chr, groot_chroms
+            )
+            n_name_overridden <- sum(base_canonical != pre_name)
             alias_df[[".canonical"]] <- base_canonical
             canonical_col <- ".canonical"
             if (verbose && n_filled > 0L) {
@@ -1429,16 +1441,34 @@ gdb.install_intervals <- function(groot,
                     n_overridden
                 ))
             }
+            if (verbose && n_name_overridden > 0L) {
+                message(sprintf(
+                    "  Name-overrode %d alias row(s) by picking a non-canonical column whose value matched the groot.",
+                    n_name_overridden
+                ))
+            }
             if (verbose && match_by_length && is.null(row_lengths)) {
                 message("  match_by_length=TRUE but no per-row lengths fetched; falling back to column-only.")
             }
         }
-        groot_overlap <- attr(groot_col, "overlap")
-        if (verbose && !is.null(groot_overlap) && groot_overlap < 1.0) {
-            n_unmapped <- sum(!groot_chroms %in% alias_df[[canonical_col]])
+        canonical_vals <- alias_df[[canonical_col]]
+        unmapped <- groot_chroms[!groot_chroms %in% canonical_vals]
+        if (verbose && length(unmapped)) {
+            unmapped_bp <- sum(groot_lengths[!groot_chroms %in% canonical_vals])
             message(sprintf(
-                "  chromAlias '%s' covers %.4f%% of groot bp; %d unmapped contigs will receive no annotations.",
-                groot_col_chr, 100 * groot_overlap, n_unmapped
+                "  %d groot contigs (%s bp, %.4f%% of genome) remain unmapped and will receive no annotations.\n  %s",
+                length(unmapped),
+                format(unmapped_bp, big.mark = ","),
+                100 * unmapped_bp / sum(groot_lengths),
+                .diagnose_unmapped_chroms(
+                    unmapped,
+                    alias_df,
+                    canonical_col,
+                    groot_chroms,
+                    groot_lengths,
+                    assets$chrom_alias$row_lengths,
+                    groot
+                )
             ))
         }
         .merge_chrom_aliases_tsv(groot, alias_df, canonical_col)

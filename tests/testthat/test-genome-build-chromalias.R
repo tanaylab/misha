@@ -307,6 +307,55 @@ test_that(".length_match_fill leaves rows NA when length is ambiguous", {
     expect_equal(out[[3L]], "c")
 })
 
+test_that(".name_match_override picks a non-canonical column whose value matches groot", {
+    # row 2: canonical="" (UCSC-style-name was 'na') but genbank=AABR07023006.1
+    # is in groot under that bare accession. The override picks it up.
+    canonical <- c("chr1", "")
+    alias_df <- data.frame(
+        ucsc_style_name = c("chr1", ""),
+        genbank = c("CM01.1", "AABR07023006.1"),
+        stringsAsFactors = FALSE
+    )
+    groot <- c("chr1", "AABR07023006.1")
+    out <- .name_match_override(canonical, alias_df, "ucsc_style_name", groot)
+    expect_equal(out, c("chr1", "AABR07023006.1"))
+})
+
+test_that(".name_match_override does not reuse a groot chrom already in canonical", {
+    canonical <- c("chr1", "missing")
+    alias_df <- data.frame(
+        ucsc_style_name = c("chr1", "missing"),
+        other = c("chr1", "chr1"), # would collide with row 1's canonical
+        stringsAsFactors = FALSE
+    )
+    groot <- c("chr1")
+    out <- .name_match_override(canonical, alias_df, "ucsc_style_name", groot)
+    # row 2 stays "missing" because the only candidate (chr1) is already
+    # canonical for row 1.
+    expect_equal(out, c("chr1", "missing"))
+})
+
+test_that(".diagnose_unmapped_chroms categorizes each unmapped chrom", {
+    alias_df <- data.frame(
+        ucsc = c("chr1", "chr2"),
+        genbank = c("CM01.1", "CM02.1"),
+        stringsAsFactors = FALSE
+    )
+    # 3 unmapped groot chroms: one in another column, one length-ambiguous,
+    # one absent.
+    unmapped <- c("CM01.1", "amb_a", "ghost")
+    groot_chroms <- c("chr1", "chr2", "CM01.1", "amb_a", "amb_b", "ghost")
+    groot_lengths <- c(100, 200, 100, 50, 50, 999)
+    alias_row_lengths <- c(100, 200) # only 2 alias rows
+    out <- .diagnose_unmapped_chroms(
+        unmapped, alias_df, "ucsc",
+        groot_chroms, groot_lengths, alias_row_lengths, "/path/to/groot"
+    )
+    expect_match(out, "CM01.1.*present in alias column\\(s\\) genbank")
+    expect_match(out, "ghost.*contig absent")
+    expect_match(out, "/path/to/groot/chrom_aliases.tsv")
+})
+
 test_that(".length_match_override replaces canonical when canonical isn't in groot but length pairs uniquely", {
     # Rat MT scenario: canonical (ucsc_style_name) says "chrM" but the
     # groot has the MT contig under its GenBank accession "AY172581.1".

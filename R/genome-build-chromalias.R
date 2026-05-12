@@ -411,6 +411,99 @@
     canonical
 }
 
+# Third-pass refinement of the canonical column: for any row whose canonical
+# value isn't in the groot, look across the row's OTHER alias columns for a
+# value that IS in the groot, and use that. Catches the case where the
+# chosen canonical column's value for a row is missing or follows a
+# convention the groot doesn't use, but some other alias column (e.g.
+# GenBank-Accn) carries the exact groot chrom name. Never reuses a groot
+# chrom already in canonical (no canonical-name collisions).
+#
+# Returns the canonical vector with overrides applied; caller can compare to
+# the input to count how many rows were touched.
+.name_match_override <- function(canonical, alias_df, canonical_col, groot_chroms) {
+    not_in_groot <- !(canonical %in% groot_chroms)
+    if (!any(not_in_groot)) {
+        return(canonical)
+    }
+    for (col in setdiff(names(alias_df), canonical_col)) {
+        if (!any(not_in_groot)) break
+        vals <- as.character(alias_df[[col]])
+        vals[is.na(vals)] <- ""
+        can_replace <- not_in_groot & nzchar(vals) & vals %in% groot_chroms &
+            !(vals %in% canonical)
+        if (any(can_replace)) {
+            canonical[can_replace] <- vals[can_replace]
+            not_in_groot[can_replace] <- FALSE
+        }
+    }
+    canonical
+}
+
+# Format a per-contig diagnostic for groot chroms still unmapped after all
+# canonical-resolution passes. Categorizes each unmapped chrom as:
+#   * "in alias column(s) X, Y but not canonical" -- a bug or naming edge
+#     case (post-pass-3 this is rare).
+#   * "length-ambiguous (N alias rows x M groot chroms at length L)" --
+#     more than one alias row competes for this groot chrom's length, so
+#     no safe pairing is possible.
+#   * "no alias row at this length" -- this contig isn't represented in
+#     the assembly's chromAlias or assembly_report at all (chromAlias was
+#     built from a different assembly version).
+# Includes a copy-pasteable line the user can append to chrom_aliases.tsv.
+.diagnose_unmapped_chroms <- function(unmapped, alias_df, canonical_col,
+                                      groot_chroms, groot_lengths,
+                                      alias_row_lengths, groot_path,
+                                      max_show = 5L) {
+    lines <- character()
+    for (chrom in utils::head(unmapped, max_show)) {
+        L <- groot_lengths[match(chrom, groot_chroms)]
+        L_str <- format(L, big.mark = ",")
+        found_cols <- character()
+        for (col in names(alias_df)) {
+            if (identical(col, canonical_col)) next
+            if (chrom %in% alias_df[[col]]) found_cols <- c(found_cols, col)
+        }
+        if (length(found_cols)) {
+            lines <- c(lines, sprintf(
+                "    %s (%s bp): present in alias column(s) %s but not in the canonical column.",
+                chrom, L_str, paste(found_cols, collapse = ", ")
+            ))
+        } else if (!is.null(alias_row_lengths)) {
+            n_alias_same <- sum(alias_row_lengths == L, na.rm = TRUE)
+            n_groot_same <- sum(groot_lengths == L)
+            if (n_alias_same == 0L) {
+                lines <- c(lines, sprintf(
+                    "    %s (%s bp): no alias row at this length -- contig absent from chromAlias and assembly_report. chromAlias was likely built from a different assembly version.",
+                    chrom, L_str
+                ))
+            } else if (n_alias_same > 1L || n_groot_same > 1L) {
+                lines <- c(lines, sprintf(
+                    "    %s (%s bp): length-ambiguous (%d alias rows x %d groot chroms at this length); length pairing refuses to guess.",
+                    chrom, L_str, n_alias_same, n_groot_same
+                ))
+            } else {
+                lines <- c(lines, sprintf(
+                    "    %s (%s bp): no name match, no unique length pair.",
+                    chrom, L_str
+                ))
+            }
+        } else {
+            lines <- c(lines, sprintf(
+                "    %s (%s bp): no name match (no chrom.sizes available for length pairing).",
+                chrom, L_str
+            ))
+        }
+    }
+    sprintf(
+        "First %d unmapped:\n%s\nManual fix: append to %s/chrom_aliases.tsv (tab-separated 'canonical<TAB>alias<TAB>source'). For a self-mapping when you only know the groot name, use:\n    %s\t%s\tmanual\nMisha will pick up new rows on the next gdb.init(rescan = TRUE).",
+        min(length(unmapped), max_show),
+        paste(lines, collapse = "\n"),
+        groot_path,
+        unmapped[1L], unmapped[1L]
+    )
+}
+
 # Companion to .length_match_fill for the case where canonical is non-empty
 # but the value doesn't actually appear in the groot (e.g. canonical says
 # "chrM" but the groot has the MT contig under its GenBank accession
