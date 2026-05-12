@@ -307,6 +307,54 @@ test_that(".length_match_fill leaves rows NA when length is ambiguous", {
     expect_equal(out[[3L]], "c")
 })
 
+test_that(".length_match_override replaces canonical when canonical isn't in groot but length pairs uniquely", {
+    # Rat MT scenario: canonical (ucsc_style_name) says "chrM" but the
+    # groot has the MT contig under its GenBank accession "AY172581.1".
+    # Length 16313 is unique on both sides -> safe to override.
+    canonical <- c("chr1", "chrM", "chr2")
+    alias_lengths <- c(100, 16313, 200)
+    groot_chroms <- c("chr1", "AY172581.1", "chr2")
+    groot_lengths <- c(100, 16313, 200)
+    out <- .length_match_override(canonical, alias_lengths, groot_chroms, groot_lengths)
+    expect_equal(out, c("chr1", "AY172581.1", "chr2"))
+})
+
+test_that(".length_match_override leaves canonical alone when length is ambiguous", {
+    # Two alias rows at length 642 and four groot chroms at 642 -- can't
+    # safely assign. Override must skip.
+    canonical <- c("chr1", "chrM", "alias_x")
+    alias_lengths <- c(100, 642, 642)
+    groot_chroms <- c("chr1", "AABR_a.1", "AABR_b.1", "AABR_c.1", "AABR_d.1")
+    groot_lengths <- c(100, 642, 642, 642, 642)
+    out <- .length_match_override(canonical, alias_lengths, groot_chroms, groot_lengths)
+    expect_equal(out, canonical)
+})
+
+test_that(".length_match_override does not reuse a groot chrom already in canonical", {
+    # canonical[1] is "chr1" (in groot). canonical[2] is "chrM" (not in
+    # groot). Length 100 is unique on both sides. But "chr1" already
+    # claims the only groot chrom at length 100. Override must NOT replace
+    # canonical[2] with "chr1" -- that would create a duplicate canonical.
+    canonical <- c("chr1", "chrM")
+    alias_lengths <- c(50, 100)
+    groot_chroms <- c("chr1", "AY999.1")
+    groot_lengths <- c(50, 100) # "chr1" already in canonical at length 50, AY999.1 at 100
+    out <- .length_match_override(canonical, alias_lengths, groot_chroms, groot_lengths)
+    # canonical[2] gets replaced with "AY999.1" (not yet in canonical).
+    expect_equal(out, c("chr1", "AY999.1"))
+})
+
+test_that(".length_match_override is a no-op when canonical already matches groot", {
+    canonical <- c("chr1", "chr2")
+    alias_lengths <- c(100, 200)
+    groot_chroms <- c("chr1", "chr2")
+    groot_lengths <- c(100, 200)
+    expect_equal(.length_match_override(
+        canonical, alias_lengths,
+        groot_chroms, groot_lengths
+    ), canonical)
+})
+
 test_that(".length_match_fill is a no-op when no fills needed", {
     canonical <- c("X", "Y")
     out <- .length_match_fill(canonical, c(100, 200), c("X", "Y"), c(100, 200))

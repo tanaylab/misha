@@ -411,6 +411,53 @@
     canonical
 }
 
+# Companion to .length_match_fill for the case where canonical is non-empty
+# but the value doesn't actually appear in the groot (e.g. canonical says
+# "chrM" but the groot has the MT contig under its GenBank accession
+# "AY172581.1"). For each such misaligned row, if the row's length pairs
+# uniquely on both sides with a groot chrom that isn't already placed
+# anywhere in canonical, REPLACE the canonical value with that groot chrom.
+# Strictly conservative: ambiguous lengths are left alone, and groot chroms
+# already represented in canonical are never reused (avoids two rows
+# colliding on the same canonical name).
+#
+# canonical, alias_row_lengths must be aligned with alias_df rows.
+# groot_chroms, groot_lengths must be aligned with each other.
+.length_match_override <- function(canonical, alias_row_lengths,
+                                   groot_chroms, groot_lengths) {
+    if (length(canonical) != length(alias_row_lengths)) {
+        stop(".length_match_override: canonical/alias_row_lengths length mismatch",
+            call. = FALSE
+        )
+    }
+    misaligned <- nzchar(canonical) & !is.na(canonical) &
+        !(canonical %in% groot_chroms)
+    if (!any(misaligned)) {
+        return(canonical)
+    }
+    g_counts <- table(groot_lengths)
+    g_unique <- names(g_counts)[g_counts == 1L]
+    a_counts <- table(alias_row_lengths)
+    a_unique <- names(a_counts)[a_counts == 1L]
+    pair_lengths <- intersect(g_unique, a_unique)
+    if (!length(pair_lengths)) {
+        return(canonical)
+    }
+    keep <- as.character(groot_lengths) %in% pair_lengths
+    groot_lookup <- setNames(groot_chroms[keep], as.character(groot_lengths[keep]))
+    # Drop groot chroms already in canonical -- we never reuse one. (Empty
+    # canonical cells were filled by .length_match_fill upstream, so any
+    # name already there is a "real" placement we shouldn't disturb.)
+    groot_lookup <- groot_lookup[!groot_lookup %in% canonical]
+    if (!length(groot_lookup)) {
+        return(canonical)
+    }
+    replace_idx <- which(misaligned &
+        as.character(alias_row_lengths) %in% names(groot_lookup))
+    canonical[replace_idx] <- groot_lookup[as.character(alias_row_lengths[replace_idx])]
+    canonical
+}
+
 # For each alias row whose `canonical` value is empty, look up the unique
 # groot chrom whose length matches the row's length. A match counts only
 # when the length appears exactly once on BOTH the groot side and the alias
@@ -572,7 +619,7 @@
     denom <- if (bp_weighted) sum(target_lengths) else length(unique(target_chroms))
     unit <- if (bp_weighted) "bp coverage" else "name coverage"
     stop(sprintf(
-        "chromAlias has no column with %.0f%% %s of %s.\nPer-column coverage: %s\nFirst 5 unmapped chroms: %s\nLower `min_coverage` to relax (e.g. min_coverage = 0.99).",
+        "chromAlias has no column with %.0f%% %s of %s.\nPer-column coverage: %s\nFirst 5 unmapped chroms: %s\nHints:\n  * Lower `min_coverage` to relax (e.g. min_coverage = 0.99).\n  * The registry may resolve this name to a different assembly version than your groot was built from. Try an explicit alternate accession via `source = list(source = \"ucsc-hub\", accession = \"GCF_<old_or_new_version>\")` -- e.g. CanFam3.1 (GCF_000002285.3) vs mCanLor1.2 (GCF_000002285.5) cover the same species but different assemblies.\n  * If the groot was built from de novo contigs (e.g. SPAdes/MEGAHIT k-mer-named) no public chromAlias will match; alias-driven annotation isn't applicable.",
         100 * min_coverage, unit, label,
         paste(sprintf("%s=%.4f%%", names(scores), 100 * scores / denom),
             collapse = ", "

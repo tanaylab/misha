@@ -1392,6 +1392,7 @@ gdb.install_intervals <- function(groot,
             base_canonical[is.na(base_canonical)] <- ""
             row_lengths <- assets$chrom_alias$row_lengths
             n_filled <- 0L
+            n_overridden <- 0L
             if (!is.null(row_lengths)) {
                 filled <- .length_match_fill(
                     base_canonical, row_lengths,
@@ -1400,6 +1401,18 @@ gdb.install_intervals <- function(groot,
                 # Account empty/NA after fill as still-empty.
                 filled[is.na(filled)] <- ""
                 n_filled <- sum(nzchar(filled) & !nzchar(base_canonical))
+                # Second pass: rows where canonical is non-empty but doesn't
+                # appear in the groot (different naming convention for the
+                # same physical contig -- e.g. canonical="chrM" but the groot
+                # uses the GenBank accession "AY172581.1") get overridden by
+                # unique-on-both-sides length pairing. Rat MT is the
+                # canonical example: chromAlias and report agree on "chrM"
+                # but the groot follows a HAL that used GenBank accessions.
+                pre_override <- filled
+                filled <- .length_match_override(
+                    filled, row_lengths, groot_chroms, groot_lengths
+                )
+                n_overridden <- sum(filled != pre_override)
                 base_canonical <- filled
             }
             alias_df[[".canonical"]] <- base_canonical
@@ -1409,7 +1422,14 @@ gdb.install_intervals <- function(groot,
                     "  Length-matched %d alias row(s) the '%s' column couldn't cover.",
                     n_filled, groot_col_chr
                 ))
-            } else if (verbose && match_by_length && is.null(row_lengths)) {
+            }
+            if (verbose && n_overridden > 0L) {
+                message(sprintf(
+                    "  Length-overrode %d alias row(s) where canonical didn't match groot but length paired uniquely.",
+                    n_overridden
+                ))
+            }
+            if (verbose && match_by_length && is.null(row_lengths)) {
                 message("  match_by_length=TRUE but no per-row lengths fetched; falling back to column-only.")
             }
         }
