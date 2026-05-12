@@ -1,0 +1,5 @@
+# ucsc	assembly	genbank	refseq
+chr1	1	CM028932.1	NC_067374.1
+chr2	2	CM028933.1	NC_067375.1
+chr3	3	CM028934.1	NC_067376.1
+chrM	MT	CM028935.1	NC_067377.1

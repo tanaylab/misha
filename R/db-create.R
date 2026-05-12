@@ -111,6 +111,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
     tryCatch(
         {
             assign("CHROM_ALIAS", NULL, envir = .misha)
+            .refresh_chrom_alias_env()
             assign("DB_IS_PER_CHROMOSOME", FALSE, envir = .misha)
             dir.create(groot, showWarnings = FALSE, recursive = TRUE, mode = "0777")
             dir.create(paste(groot, "pssms", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
@@ -155,7 +156,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
             # Compute chromosome aliases early so we can add them to factor levels
             canonical_names <- as.character(chrom.sizes$chrom)
-            alias_map <- .compute_chrom_aliases(canonical_names)
+            alias_map <- .compute_chrom_aliases(canonical_names, groot = groot)
             all_chrom_names <- unique(c(canonical_names, names(alias_map)))
 
             # before calling gintervals.import_genes new ALLGENOME must be set
@@ -197,7 +198,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
 
             assign("ALLGENOME", list(intervals, intervals2d), envir = .misha)
             assign("GROOT", groot, envir = .misha)
-            .store_chrom_aliases(levels(intervals$chrom))
+            .store_chrom_aliases(levels(intervals$chrom), groot = groot)
 
             if (!is.null(genes.file)) {
                 intervs <- gintervals.import_genes(genes.file, annots.file, annots.names)
@@ -222,6 +223,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             assign("ALLGENOME", allgenome.old, envir = .misha)
             assign("GROOT", groot.old, envir = .misha)
             assign("CHROM_ALIAS", chrom_alias.old, envir = .misha)
+            .refresh_chrom_alias_env()
             assign("DB_IS_PER_CHROMOSOME", db_per_chromosome.old, envir = .misha)
             if (!success) {
                 unlink(groot, recursive = TRUE)
@@ -356,7 +358,7 @@ gdb.get_readonly_attrs <- function() {
 #' When option 'gmulticontig.indexed_format' is set to TRUE, the function
 #' loads a database with "indexed" track format.
 #'
-#' @aliases gdb.init gdb.init.examples gsetroot
+#' @aliases gdb.init gsetroot
 #' @param groot the root directory of the Genomic Database
 #' @param dir the current working directory inside the Genomic Database
 #' @param rescan indicates whether the file structure should be rescanned
@@ -373,13 +375,31 @@ gdb.init <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     gsetroot(groot, dir, rescan)
 }
 
-#' @rdname gdb.init
+#' Initialise the example Genomic Database
+#'
+#' Extracts the bundled \code{testdb} tarball under \code{dir} and points the
+#' active groot at \code{<dir>/trackdb/test}. Used by examples and tests.
+#'
+#' If \code{dir} is \code{NULL} (default), uses the value of environment
+#' variable \code{MISHA_EXAMPLES_DIR}, falling back to \code{\link{tempdir}()}.
+#' Set \code{MISHA_EXAMPLES_DIR} to a roomy path when \code{/tmp} is tight.
+#'
+#' @param dir Directory under which to extract the example trackdb. Created if
+#'   it does not exist. Defaults to \code{Sys.getenv("MISHA_EXAMPLES_DIR")} if
+#'   set, otherwise \code{tempdir()}.
+#' @return None.
+#' @seealso \code{\link{gdb.init}}
+#' @aliases gdb.init.examples
 #' @export
-gdb.init_examples <- function() {
-    db_dir <- tempdir()
-    test_path <- file.path(db_dir, "trackdb/test")
+gdb.init_examples <- function(dir = NULL) {
+    if (is.null(dir) || !nzchar(dir)) {
+        env <- Sys.getenv("MISHA_EXAMPLES_DIR", unset = "")
+        dir <- if (nzchar(env)) env else tempdir()
+    }
+    if (!dir.exists(dir)) dir.create(dir, recursive = TRUE, mode = "0755")
+    test_path <- file.path(dir, "trackdb/test")
     unlink(test_path, recursive = TRUE)
-    utils::untar(system.file("testdb.tar.gz", package = "misha"), exdir = db_dir)
+    utils::untar(system.file("testdb.tar.gz", package = "misha"), exdir = dir)
     gsetroot(test_path)
     if (getOption("gmulticontig.indexed_format", FALSE)) {
         gdb.convert_to_indexed(test_path, convert_tracks = TRUE, remove_old_files = TRUE, convert_intervals = TRUE, verbose = FALSE, force = TRUE)

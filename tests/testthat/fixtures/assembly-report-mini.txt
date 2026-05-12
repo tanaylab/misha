@@ -1,0 +1,10 @@
+# Assembly name: TEST_v1
+# Description:   Synthetic test fixture mirroring NCBI's assembly_report.txt
+# Submitter:     misha-tests
+# Date:          2026-05-11
+# Sequence-Name	Sequence-Role	Assigned-Molecule	Assigned-Molecule-Location/Type	GenBank-Accn	Relationship	RefSeq-Accn	Assembly-Unit	Sequence-Length	UCSC-style-name
+1	assembled-molecule	1	Chromosome	CM00001.1	=	NC_067374.1	Primary Assembly	1000	chr1
+2	assembled-molecule	2	Chromosome	CM00002.1	=	NC_067375.1	Primary Assembly	2000	chr2
+3	assembled-molecule	3	Chromosome	CM00003.1	=	NC_067376.1	Primary Assembly	3000	chr3
+MT	assembled-molecule	MT	Mitochondrion	AY999999.1	=	NC_067377.1	non-nuclear	16	chrM
+unp1	unplaced-scaffold	na	na	JH99999.1	=	NW_007777777.1	Primary Assembly	500	chrUn_JH99999v1

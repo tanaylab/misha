@@ -169,12 +169,19 @@ reference:
   - title: Database functions
     desc: Database functions
     contents:
+      - gdb.build_genome
       - gdb.create
       - gdb.create_genome
       - gdb.create_linked
+      - gdb.genome_info
       - gdb.get_readonly_attrs
       - gdb.info
       - gdb.init
+      - gdb.init_examples
+      - gdb.install_gff3_converter
+      - gdb.install_gtf_converter
+      - gdb.install_intervals
+      - gdb.list_genomes
       - gdb.mark_cache_dirty
       - gdb.reload
       - gdb.set_readonly_attrs
