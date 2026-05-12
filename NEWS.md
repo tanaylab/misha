@@ -1,6 +1,14 @@
 # misha (development version)
 
-* `gsetroot` is much faster on fragmented assemblies (e.g. ~93 s -> ~11 s on a 2.4M-contig genome). Vectorized `.compute_chrom_aliases` and skipped the chr-prefixed alias step when no canonical name has the `chr` prefix and the contig count is large.
+# misha 5.6.27
+
+* Added `gdb.build_genome(name)` for build-from-source genome creation. Backends: `ucsc` (golden path), `ucsc-hub` (224/241 Zoonomia mammals), `ncbi` (Datasets API), `manual`, `local`, `s3`. `name` resolves through a registry chain (`misha.genome_registry` option, project-local `misha.yaml`, built-in `inst/genomes.yaml`), with a fallback to `ucsc-hub` for `GC[FA]_*` accessions. Companions: `gdb.list_genomes()`, `gdb.genome_info()`.
+* Added `gdb.install_intervals()` to layer gene / `rmsk` / `cgi` / cytoband sets onto an existing groot - useful for adding annotations to a private FASTA build or resuming a failed install without re-fetching. `rmsk` now also produces per-class subsets `rmsk_<class>` (e.g. `rmsk_sine`).
+* Naming alignment to external schemes (e.g. HAL canonical names) via `target_chroms` / `target_lengths` / `match_by_length` (default `TRUE`) / `chrom_naming` / `min_coverage` arguments: misha picks the chromAlias column that best matches the target and falls back to per-row length pairing when a single column doesn't cover everything. UCSC-hub builds also merge `<acc>_assembly_report.txt` when present to expose extra alias columns. Coverage is bp-weighted on the groot side, so small unmapped contigs (e.g. a 16 kb mitochondrion) don't trip thresholds.
+* Cheap pre-flight runs before any multi-GB download: UCSC-hub coverage is checked from ~190 KB of metadata; NCBI annotation availability is checked via the Datasets `dataset_report`. Missing-annotation builds drop `genes` with an actionable warning (suggesting a RefSeq companion if one exists). Post-pre-flight failures clean up the partial output directory.
+* Added `gdb.install_gff3_converter()` / `gdb.install_gtf_converter()` to pre-install the UCSC `gff3ToGenePred` / `gtfToGenePred` binaries; override paths via `MISHA_GFF3_TO_GENEPRED` / `MISHA_GTF_TO_GENEPRED`. UCSC's prebuilt binaries need glibc >= 2.34; older systems can `conda install -c bioconda ucsc-gff3togenepred ucsc-gtftogenepred`.
+* **Renames in `gdb.build_genome()`**: argument `annotations` -> `sets`; track `cpgIsland` -> `cgi`.
+* `gsetroot` is much faster on fragmented assemblies (e.g. ~93 s -> ~11 s on a 2.4M-contig genome). `gdb.build_genome()` and `gdb.install_intervals()` are also substantially faster on large assemblies (vectorized chromAlias translation and RepeatMasker `.out` parsing, optional `data.table` for genePred I/O).
 
 # misha 5.6.26
 

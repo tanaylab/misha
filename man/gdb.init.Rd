@@ -2,14 +2,10 @@
 % Please edit documentation in R/db-create.R, R/db-root.R
 \name{gdb.init}
 \alias{gdb.init}
-\alias{gdb.init.examples}
 \alias{gsetroot}
-\alias{gdb.init_examples}
 \title{Initializes connection with Genomic Database}
 \usage{
 gdb.init(groot = NULL, dir = NULL, rescan = FALSE)
-
-gdb.init_examples()
 
 gsetroot(groot = NULL, dir = NULL, rescan = FALSE)
 }
