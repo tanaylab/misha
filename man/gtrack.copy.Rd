@@ -2,25 +2,41 @@
 % Please edit documentation in R/track-management.R
 \name{gtrack.copy}
 \alias{gtrack.copy}
-\title{Copies a track}
+\title{Copies one or more tracks}
 \usage{
-gtrack.copy(src = NULL, dest = NULL)
+gtrack.copy(src = NULL, dest = NULL, db = NULL, overwrite = FALSE)
 }
 \arguments{
-\item{src}{source track name}
+\item{src}{source track name(s). Either a single name or a character
+vector of names.}
 
-\item{dest}{destination track name}
+\item{dest}{destination name. If \code{src} is a single name, this is the
+destination track name (defaults to \code{src}). If \code{src} is a
+vector, \code{dest} is treated as a namespace prefix (e.g. \code{"ns"}
+produces \code{"ns.track1"}, \code{"ns.track2"}, ...). NULL keeps each
+track's name.}
+
+\item{db}{destination database root. Must be the current \code{GROOT} or a
+member of \code{GDATASETS}. NULL means the current working directory db.}
+
+\item{overwrite}{if TRUE, replace an existing destination track.}
 }
 \value{
-None.
+invisibly, the character vector of created track names.
 }
 \description{
-Creates a copy of an existing track.
+Creates a copy of an existing track, optionally to a different database.
+Transparently handles format mismatches (per-chromosome vs indexed) and
+chromosome-order differences between source and destination databases.
 }
 \details{
-This function creates a copy of a track. The new track is created in the
-current working directory (.misha$GWD), which may be in a different database than
-the source track when multiple databases are connected.
+Chromosomes that exist in the source database but not in the destination
+are dropped with a warning.
+
+
+For 2D tracks (rectangles, points), cross-database copy requires identical
+chromosome order in source and destination. Format conversion (per-chromosome
+to indexed) is supported only when the destination is the active database.
 }
 \examples{
 \dontshow{
@@ -34,7 +50,6 @@ gtrack.rm("dense_track_copy", force = TRUE)
 
 }
 \seealso{
-\code{\link{gtrack.mv}}, \code{\link{gtrack.rm}},
-\code{\link{gtrack.exists}}, \code{\link{gtrack.ls}}
+\code{\link{gtrack.mv}}, \code{\link{gtrack.rm}}
 }
 \keyword{~track}

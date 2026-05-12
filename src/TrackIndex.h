@@ -106,4 +106,8 @@ private:
     uint64_t compute_checksum(const vector<TrackContigEntry> &entries);
 };
 
+// Offset to the checksum field within the index header.
+// Header layout: magic(8) + version(4) + tracktype(4) + numcontigs(4) + flags(8) = 28 bytes.
+static constexpr size_t IDX_HEADER_SIZE_TO_CHECKSUM = 8 + 4 + 4 + 4 + 8;
+
 #endif /* TRACKINDEX_H_ */

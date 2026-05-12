@@ -1,5 +1,9 @@
 # misha (development version)
 
+# misha 5.6.28
+
+* `gtrack.copy()` gained a `db` argument to copy tracks across databases, and an `overwrite` argument to replace existing destinations. Format conversion (per-chromosome <-> indexed) and chromosome-order remap are handled automatically. Multi-track input is also supported.
+
 # misha 5.6.27
 
 * Added `gdb.build_genome(name)` for build-from-source genome creation. Backends: `ucsc` (golden path), `ucsc-hub` (224/241 Zoonomia mammals), `ncbi` (Datasets API), `manual`, `local`, `s3`. `name` resolves through a registry chain (`misha.genome_registry` option, project-local `misha.yaml`, built-in `inst/genomes.yaml`), with a fallback to `ucsc-hub` for `GC[FA]_*` accessions. Companions: `gdb.list_genomes()`, `gdb.genome_info()`.
