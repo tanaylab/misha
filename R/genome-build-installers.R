@@ -149,9 +149,14 @@
         # on ~50k-row genePred), fall back to base read.table/write.table.
         use_dt <- requireNamespace("data.table", quietly = TRUE)
         if (use_dt) {
+            # Force cols 9/10 (exonStarts/exonEnds) to character so a
+            # genePred whose every row is single-exon (e.g. "100,",
+            # "500,") doesn't get type-inferred as numeric and lose the
+            # trailing commas the C++ importer requires.
             rows <- data.table::fread(gp_trim,
                 sep = "\t", header = FALSE, quote = "",
-                showProgress = FALSE, data.table = FALSE
+                showProgress = FALSE, data.table = FALSE,
+                colClasses = list(character = c(9, 10))
             )
         } else {
             rows <- utils::read.table(gp_trim,
@@ -160,6 +165,22 @@
             )
         }
         rows <- asset$translate(rows, 2L)
+        # Drop rows whose chrom didn't translate to a groot name (NA from
+        # rev_idx misses, "" from rows whose canonical column was unset by
+        # the 3-pass resolution). gintervals.import_genes (read_genes_file
+        # in src/IntervalsImport.cpp) rejects empty CHROM as
+        # "invalid file format" on line 1; NA strings it skips silently,
+        # but filtering both is cleaner and avoids the asymmetry.
+        keep <- !is.na(rows[[2L]]) & nzchar(rows[[2L]])
+        if (any(!keep)) {
+            if (verbose) {
+                message(sprintf(
+                    "  %d genePred rows dropped: their chrom didn't translate to a groot contig (keeping %d).",
+                    sum(!keep), sum(keep)
+                ))
+            }
+            rows <- rows[keep, , drop = FALSE]
+        }
         gp_xlat <- file.path(workdir, "xlat.genePred")
         if (use_dt) {
             data.table::fwrite(rows, gp_xlat,

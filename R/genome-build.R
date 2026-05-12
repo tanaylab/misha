@@ -1563,6 +1563,21 @@ gdb.install_intervals <- function(groot,
             asset_chroms <- if (match_by_length) NULL else unique(df$chrom)
             translator <- make_translator(asset_chroms, key)
             df <- translator(df, "chrom")
+            # Drop rows whose chrom didn't translate to a groot name (NA
+            # from rev_idx misses, "" from rows whose canonical was unset
+            # by the 3-pass resolution). Mirror the genes path: the C++
+            # importers (and downstream gintervals.save) treat empty
+            # chrom as a hard error.
+            keep <- !is.na(df$chrom) & nzchar(df$chrom)
+            if (any(!keep)) {
+                if (verbose) {
+                    message(sprintf(
+                        "  %s: %d rows dropped (chrom didn't translate to a groot contig).",
+                        key, sum(!keep)
+                    ))
+                }
+                df <- df[keep, , drop = FALSE]
+            }
         }
         spec$installer(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
     }
