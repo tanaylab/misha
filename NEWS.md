@@ -1,5 +1,7 @@
 # misha (development version)
 
+* `gdb.install_intervals()` now errors if any requested set is unavailable from the source (previously skipped silently with a warning). Pass `force = TRUE` to demote the error to a summary warning and install the available sets.
+
 # misha 5.6.28
 
 * `gtrack.copy()` gained a `db` argument to copy tracks across databases, and an `overwrite` argument to replace existing destinations. Format conversion (per-chromosome <-> indexed) and chromosome-order remap are handled automatically. Multi-track input is also supported.

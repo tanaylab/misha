@@ -1179,6 +1179,10 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #'   the \code{ucsc-hub} backend (which ships per-contig lengths in
 #'   \code{<acc>.chrom.sizes.txt}); other backends are unaffected. Set
 #'   \code{FALSE} for the stricter single-column-only behavior.
+#' @param force If \code{FALSE} (default), any requested set that the source
+#'   doesn't provide raises an error and aborts the call before touching the
+#'   groot. If \code{TRUE}, missing sets are demoted to a single summary
+#'   warning and the available sets are installed.
 #' @param verbose If \code{TRUE}, prints progress.
 #' @param prefetched_alias Optional pre-fetched chromAlias bundle (the
 #'   return value of \code{.hub_preflight_coverage}). When supplied the
@@ -1228,6 +1232,7 @@ gdb.install_intervals <- function(groot,
                                   target_lengths = NULL,
                                   min_coverage = 1.0,
                                   match_by_length = TRUE,
+                                  force = FALSE,
                                   verbose = TRUE,
                                   prefetched_alias = NULL,
                                   .from_build_genome = FALSE) {
@@ -1323,6 +1328,27 @@ gdb.install_intervals <- function(groot,
         stop(sprintf("No fetcher for source '%s'", recipe$source), call. = FALSE)
     )
     assets <- fetcher(recipe, sets, workdir, verbose)
+
+    # Detect requested sets the source couldn't provide. Fetchers warn-and-skip
+    # individually, which historically meant gdb.install_intervals returned
+    # cleanly even when some requested sets weren't installed. Surface that as
+    # an error (or a single summary warning under force=TRUE).
+    missing_sets <- sets[vapply(sets, function(s) is.null(assets[[s]]), logical(1))]
+    if (length(missing_sets) > 0L) {
+        msg <- sprintf(
+            "Requested set(s) not available from source '%s': %s",
+            recipe$source, paste(missing_sets, collapse = ", ")
+        )
+        if (isTRUE(force)) {
+            warning(msg, call. = FALSE)
+        } else {
+            stop(sprintf(
+                "%s\nPass force = TRUE to demote this to a warning and install the available sets.",
+                msg
+            ), call. = FALSE)
+        }
+    }
+    installed_sets <- setdiff(sets, missing_sets)
 
     # chromAlias: detect groot column and source columns; build translator closure.
     # Coverage is bp-weighted on the groot side -- a long-tail of small unmapped
@@ -1582,12 +1608,14 @@ gdb.install_intervals <- function(groot,
         spec$installer(df, prefix = prefix, overwrite = overwrite, verbose = verbose)
     }
 
-    # Provenance: append to genome_info.yaml.
-    .append_tracks_to_genome_info(groot, recipe, sets, prefix)
+    # Provenance: append to genome_info.yaml. Record only the sets that
+    # actually got installed (under force=TRUE some requested sets may have
+    # been missing and skipped).
+    .append_tracks_to_genome_info(groot, recipe, installed_sets, prefix)
 
     # Final reload + summary.
     gdb.init(groot, rescan = TRUE)
-    if (verbose) .install_intervals_summary(groot, recipe, sets, prefix)
+    if (verbose) .install_intervals_summary(groot, recipe, installed_sets, prefix)
     invisible(NULL)
 }
 

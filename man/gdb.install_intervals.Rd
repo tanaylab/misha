@@ -17,6 +17,7 @@ gdb.install_intervals(
   target_lengths = NULL,
   min_coverage = 1,
   match_by_length = TRUE,
+  force = FALSE,
   verbose = TRUE,
   prefetched_alias = NULL,
   .from_build_genome = FALSE
@@ -82,6 +83,11 @@ scheme (or mixed schemes) imports cleanly. Currently honored only by
 the \code{ucsc-hub} backend (which ships per-contig lengths in
 \code{<acc>.chrom.sizes.txt}); other backends are unaffected. Set
 \code{FALSE} for the stricter single-column-only behavior.}
+
+\item{force}{If \code{FALSE} (default), any requested set that the source
+doesn't provide raises an error and aborts the call before touching the
+groot. If \code{TRUE}, missing sets are demoted to a single summary
+warning and the available sets are installed.}
 
 \item{verbose}{If \code{TRUE}, prints progress.}
 
