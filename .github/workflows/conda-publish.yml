@@ -30,6 +30,8 @@ jobs:
           miniforge-version: latest
           channels: conda-forge
           channel-priority: strict
+          activate-environment: base
+          auto-activate-base: true
 
       - name: Install conda-build and anaconda-client
         run: |
