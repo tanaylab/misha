@@ -206,24 +206,67 @@
         vals[hit] <- as.character(rep_norm[[col]])[idx[hit]]
         alias_df[[out_names[[i]]]] <- vals
     }
-    # Append report rows not represented in alias_df (matched by join key).
-    # On the chromAlias side, only fill the join key column -- other
-    # chromAlias columns stay empty to avoid mixing naming conventions in
-    # one column. The report-derived columns we just added carry the rest
-    # of the per-row data for these new rows.
-    matched_keys <- alias_df[[join$alias]][nzchar(alias_df[[join$alias]])]
-    extra <- !(rep_norm[[join$report]] %in% matched_keys) &
-        nzchar(rep_norm[[join$report]])
-    if (any(extra)) {
-        rep_extra <- rep_norm[extra, , drop = FALSE]
+    # Append report rows not represented in alias_df. A row is "represented"
+    # if any of its identifier values (RefSeq-Accn, GenBank-Accn,
+    # UCSC-style-name, Sequence-Name) appears anywhere in alias_df's
+    # standard chromAlias columns. This is stricter than "join key matches"
+    # because the join key alone misses rows like NCBI's MT contig where
+    # RefSeq-Accn is "na" but GenBank-Accn is real (e.g.
+    # GCF_000002285.5 dog: MT has GenBank CM023446.1, RefSeq "na").
+    report_id_cols <- intersect(
+        c("refseq_accn", "genbank_accn", "ucsc_style_name", "sequence_name"),
+        names(rep_norm)
+    )
+    alias_id_cols <- intersect(
+        c("refseq", "genbank", "ucsc", "assembly", "ncbi"),
+        names(alias_df)
+    )
+    alias_value_set <- unique(unlist(
+        lapply(alias_id_cols, function(c) {
+            v <- as.character(alias_df[[c]])
+            v[nzchar(v)]
+        }),
+        use.names = FALSE
+    ))
+    is_represented <- rep(FALSE, nrow(rep_norm))
+    has_any_id <- rep(FALSE, nrow(rep_norm))
+    for (col in report_id_cols) {
+        v <- as.character(rep_norm[[col]])
+        nz <- nzchar(v)
+        has_any_id <- has_any_id | nz
+        is_represented <- is_represented | (nz & v %in% alias_value_set)
+    }
+    extra_mask <- !is_represented & has_any_id
+    if (any(extra_mask)) {
+        rep_extra <- rep_norm[extra_mask, , drop = FALSE]
         extra_df <- as.data.frame(
             matrix("", nrow = nrow(rep_extra), ncol = ncol(alias_df)),
             stringsAsFactors = FALSE
         )
         names(extra_df) <- names(alias_df)
-        extra_df[[join$alias]] <- as.character(rep_extra[[join$report]])
+        # Fill the chromAlias-style columns from their report equivalents.
+        # Notably, NOT ucsc <- UCSC-style-name: those two columns can use
+        # different naming conventions for unplaced scaffolds (chromAlias
+        # uses RefSeq-derived "_NW_xxx_random", report uses GenBank-derived
+        # "_AABRxxx_random"), and a single column shouldn't carry a mix.
+        # The report's UCSC-style-name lives in the separate
+        # ucsc_style_name column below.
+        safe_syn <- list(
+            refseq   = "refseq_accn",
+            genbank  = "genbank_accn",
+            assembly = "sequence_name"
+        )
+        for (a_col in names(safe_syn)) {
+            r_col <- safe_syn[[a_col]]
+            if (a_col %in% names(extra_df) && r_col %in% names(rep_extra)) {
+                extra_df[[a_col]] <- as.character(rep_extra[[r_col]])
+            }
+        }
         for (i in seq_along(new_cols)) {
-            extra_df[[out_names[[i]]]] <- as.character(rep_extra[[new_cols[[i]]]])
+            out <- out_names[[i]]
+            if (out %in% names(extra_df)) {
+                extra_df[[out]] <- as.character(rep_extra[[new_cols[[i]]]])
+            }
         }
         alias_df <- rbind(alias_df, extra_df)
     }

@@ -86,6 +86,39 @@ test_that(".merge_assembly_report_into_alias keeps report columns independent (n
     expect_equal(merged$refseq[[5L]], "NW_007777777.1")
 })
 
+test_that(".merge_assembly_report_into_alias appends a report-only row even when RefSeq-Accn is 'na'", {
+    # Dog (GCF_000002285.5) case: the chromAlias has 147 rows and skips
+    # the MT contig; the assembly_report carries MT with RefSeq-Accn='na'
+    # and UCSC-style-name='na' but a real GenBank-Accn (CM023446.1) and
+    # Sequence-Name='MT'. The merge must append this row using whatever
+    # identifier the report supplies, populating the chromAlias-side
+    # genbank/assembly columns from the report's equivalents.
+    alias_df <- data.frame(
+        refseq = c("NC_001.1", "NC_002.1"),
+        genbank = c("CM01.1", "CM02.1"),
+        ucsc = c("chr1", "chr2"),
+        assembly = c("1", "2"),
+        stringsAsFactors = FALSE
+    )
+    report_df <- data.frame(
+        check.names = FALSE,
+        "Sequence-Name" = c("1", "2", "MT"),
+        "GenBank-Accn" = c("CM01.1", "CM02.1", "CM023446.1"),
+        "RefSeq-Accn" = c("NC_001.1", "NC_002.1", ""),
+        "UCSC-style-name" = c("chr1", "chr2", ""),
+        stringsAsFactors = FALSE
+    )
+    merged <- .merge_assembly_report_into_alias(alias_df, report_df)
+    expect_equal(nrow(merged), 3L)
+    # Appended row has genbank/assembly filled from report equivalents but
+    # ucsc stays empty (no UCSC-style-name to safely copy, and chromAlias's
+    # ucsc convention may differ from report's anyway).
+    expect_equal(merged$genbank[[3L]], "CM023446.1")
+    expect_equal(merged$assembly[[3L]], "MT")
+    expect_equal(merged$ucsc[[3L]], "")
+    expect_equal(merged$refseq[[3L]], "")
+})
+
 test_that(".merge_assembly_report_into_alias preserves both columns when chromAlias and report disagree", {
     # Real-world rat case: chromAlias.ucsc uses RefSeq-derived
     # "chr1_NW_xxx_random"; report's UCSC-style-name uses GenBank-derived
