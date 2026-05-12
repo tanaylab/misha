@@ -37,11 +37,31 @@ test_that(".parse_ucsc_assembly_report parses 10-column NCBI format and normaliz
     expect_equal(df[["UCSC-style-name"]][[5L]], "chrUn_JH99999v1")
 })
 
-test_that(".merge_assembly_report_into_alias adds UCSC-style-name + report-only rows", {
+test_that(".parse_ucsc_assembly_report strips CRLF carriage returns from fields", {
+    # UCSC's mirrored copies use Windows line endings; readLines keeps the
+    # trailing '\r' on the last column. Parser must strip it so downstream
+    # %in% checks work.
+    crlf_path <- tempfile(fileext = ".txt")
+    on.exit(unlink(crlf_path))
+    writeBin(charToRaw(paste0(
+        "# Description: CRLF test\r\n",
+        "# Sequence-Name\tGenBank-Accn\tUCSC-style-name\r\n",
+        "1\tCM00001.1\tchr1\r\n",
+        "MT\tAY99999.1\tchrM\r\n"
+    )), crlf_path)
+    df <- .parse_ucsc_assembly_report(crlf_path)
+    expect_equal(df[["UCSC-style-name"]], c("chr1", "chrM"))
+    # Verify no field carries trailing whitespace anywhere.
+    expect_false(any(grepl("[[:space:]]$", unlist(df))))
+})
+
+test_that(".merge_assembly_report_into_alias keeps report columns independent (no suppression)", {
     # chromAlias has 4 rows; the report has 5 (one extra unplaced scaffold).
-    # After merge, alias_df should grow to 5 rows and gain ucsc_style_name +
-    # sequence_role columns (sequence_name is skipped because chromAlias's
-    # 'assembly' column already carries it).
+    # After merge, alias_df should grow to 5 rows and gain EVERY report
+    # column under a normalized name -- including ucsc_style_name, even
+    # though alias already has a 'ucsc' column. The two are different
+    # naming conventions for unplaced scaffolds and must be scored
+    # independently by .detect_alias_column.
     alias_df <- .parse_ucsc_chromalias(
         testthat::test_path("fixtures", "chrom-alias-mini.txt")
     )
@@ -50,15 +70,46 @@ test_that(".merge_assembly_report_into_alias adds UCSC-style-name + report-only 
     )
     merged <- .merge_assembly_report_into_alias(alias_df, report_df)
     expect_equal(nrow(merged), 5L)
-    # New column from the report (ucsc-equivalent is suppressed because
-    # alias already has 'ucsc'; sequence_role and length are kept).
+    expect_true("ucsc_style_name" %in% names(merged))
     expect_true("sequence_role" %in% names(merged))
     expect_true("sequence_length" %in% names(merged))
-    expect_false("ucsc_style_name" %in% names(merged)) # equivalent suppressed
-    # Extra row populated from report's chromAlias-equivalent columns.
-    expect_equal(merged$ucsc[[5L]], "chrUn_JH99999v1")
+    # ucsc_style_name carries the report's per-row UCSC names for ALL rows
+    # (including the extra row appended from the report).
+    expect_equal(
+        merged[["ucsc_style_name"]],
+        c("chr1", "chr2", "chr3", "chrM", "chrUn_JH99999v1")
+    )
+    # The original alias 'ucsc' column is untouched for matched rows and
+    # empty for the appended row (no mixing of naming conventions).
+    expect_equal(merged$ucsc, c("chr1", "chr2", "chr3", "chrM", ""))
+    # Join key (refseq) is filled on the appended row for cross-ref.
     expect_equal(merged$refseq[[5L]], "NW_007777777.1")
-    expect_equal(merged$genbank[[5L]], "JH99999.1")
+})
+
+test_that(".merge_assembly_report_into_alias preserves both columns when chromAlias and report disagree", {
+    # Real-world rat case: chromAlias.ucsc uses RefSeq-derived
+    # "chr1_NW_xxx_random"; report's UCSC-style-name uses GenBank-derived
+    # "chr1_AABRxxx_random". Same row, same scaffold, different names. The
+    # merge must keep BOTH so detect_alias_column can pick whichever
+    # matches the groot.
+    alias_df <- data.frame(
+        refseq = c("NC_001.1", "NW_xxx.1"),
+        ucsc = c("chr1", "chr1_NW_xxx_random"),
+        genbank = c("CM01.1", "AABR_xxx.1"),
+        stringsAsFactors = FALSE
+    )
+    report_df <- data.frame(
+        check.names = FALSE,
+        "Sequence-Name" = c("1", "1"),
+        "RefSeq-Accn" = c("NC_001.1", "NW_xxx.1"),
+        "GenBank-Accn" = c("CM01.1", "AABR_xxx.1"),
+        "UCSC-style-name" = c("chr1", "chr1_AABRxxx_random"),
+        stringsAsFactors = FALSE
+    )
+    merged <- .merge_assembly_report_into_alias(alias_df, report_df)
+    # Both naming conventions preserved as separate columns.
+    expect_equal(merged$ucsc[[2L]], "chr1_NW_xxx_random")
+    expect_equal(merged$ucsc_style_name[[2L]], "chr1_AABRxxx_random")
 })
 
 test_that(".merge_assembly_report_into_alias preserves alias_df when no join key matches", {

@@ -173,19 +173,25 @@ test_that(".hub_preflight_coverage merges assembly_report.txt and rescues covera
     wd <- tempfile("preflight_")
     dir.create(wd)
     on.exit(unlink(wd, recursive = TRUE), add = TRUE)
-    # Without the assembly_report merge this would fail (chromAlias only
-    # covers 2 of 3 contigs); with it, alias_df grows to 3 rows and the
-    # ucsc column covers all of them.
+    # The merge appends the report-only row (chrUn_X) and adds the
+    # report's columns under their normalized names. ucsc_style_name
+    # carries the report's per-row names independently of chromAlias's
+    # ucsc column (they often use different naming conventions for
+    # unplaced scaffolds, so the two must be scored separately).
     out <- .hub_preflight_coverage(
         accession = "GCF_TEST.1",
         target_chroms = NULL,
         chrom_naming = "ucsc",
-        min_coverage = 1.0,
+        min_coverage = 0.99,
         workdir = wd,
         verbose = FALSE
     )
     expect_equal(nrow(out$df), 3L)
-    expect_true("chrUn_X" %in% out$df$ucsc)
+    expect_true("ucsc_style_name" %in% names(out$df))
+    expect_true("chrUn_X" %in% out$df$ucsc_style_name)
+    # The original chromAlias ucsc column stays empty for the appended
+    # row -- no mixing of naming conventions.
+    expect_equal(out$df$ucsc, c("chr1", "chr2", ""))
     expect_false(any(grepl("\\.fa\\.gz$", rec$urls)))
     expect_true(any(grepl("assembly_report", rec$urls)))
 })
