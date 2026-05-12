@@ -24,18 +24,18 @@
 
 # misha 5.6.24
 
-* Fixed `gquantiles` (`gmultitasking = FALSE`) hanging for hours on the first `global.percentile.max` lookup of a fresh dense track. `.gtrack.prepare.pvals` asks for ~12k percentiles, and the single-process fast path introduced in 5.6.20 walked the unsorted suffix with one `nth_element` per target rank — O(k·N) work that hit ~10¹² compares on full-genome dense tracks. Above ~2·log₂(N) target ranks the fast path now sorts the reservoir once and indexes; below it, the suffix walk is preserved (still ~3× faster than sorting for the typical 21-percentile call). Single-process and multitask results remain bit-identical.
-* Fixed small-scope `gscreen` regression introduced in 5.6.7 by sub-chromosome range splitting. With `iterator=1` on a 5 Mb scope the multitask path forked `gmax.processes` (e.g. 89) kids that each scanned only ~50 kbp — fork+setup cost (~15 ms/kid serial) dwarfed PWM scoring (~10 ms/kid). Added a 500 kbp-per-kid floor so range-split kids actually have enough work to amortise fork overhead. Full-genome scans still cap at `gmax.processes` kids (chr1 ≫ 500 kbp), preserving the 4× speedup that motivated the original split. Measured chr19:0-5 Mb gscreen: was 1.47 s, now 0.31 s.
+* Fixed `gquantiles` (`gmultitasking = FALSE`) hanging for hours on the first `global.percentile.max` lookup of a fresh dense track (regression in the 5.6.20 single-process fast path). Above ~2*log_2(N) target ranks the fast path now sorts the reservoir once and indexes; below it the suffix walk is preserved. Single-process and multitask results remain bit-identical.
+* Fixed small-scope `gscreen` regression introduced in 5.6.7 by sub-chromosome range splitting: with `iterator=1` on a ~5 Mb scope, range-split forks were too small to amortise fork overhead. Added a 500 kbp-per-kid floor; full-genome scans still cap at `gmax.processes` kids. Measured chr19:0-5 Mb gscreen: 1.47 s -> 0.31 s.
 
 # misha 5.6.23
 
 * Improved error messages: "start exceeds or equals to end" now mentions misha's 0-based half-open convention and the GFF/VCF 1-based hint; "chromosome does not exist" lists known chromosomes and points to `CHROM_ALIAS`.
-* C++ converter now emits an R warning ("N intervals had start == end and were extended by 1bp") when zero-length intervals from a loaded file are auto-bumped — previously this happened silently.
-* Added `gintervals.import_bed()`, `gintervals.import_gff()`, `gintervals.import_vcf()` for direct import from common interval file formats. All three normalize chromosome names via the existing `CHROM_ALIAS` mechanism (so `chr1` ↔ `1` works), apply misha's 0-based half-open convention (subtracting 1 from start for the 1-based GFF/GTF/VCF inputs), and preserve common metadata columns (`name`/`score`/`strand` for BED; `type`/`source`/`score`/`attrs` for GFF; `id`/`ref`/`alt`/`qual`/`filter`/`info` for VCF).
+* C++ converter now emits an R warning ("N intervals had start == end and were extended by 1bp") when zero-length intervals from a loaded file are auto-bumped (previously silent).
+* Added `gintervals.import_bed()`, `gintervals.import_gff()`, `gintervals.import_vcf()` for direct import from common interval file formats. All three normalize chromosome names via `CHROM_ALIAS`, apply misha's 0-based half-open convention (subtracting 1 from start for 1-based GFF/GTF/VCF inputs), and preserve common metadata columns (`name`/`score`/`strand` for BED; `type`/`source`/`score`/`attrs` for GFF; `id`/`ref`/`alt`/`qual`/`filter`/`info` for VCF).
 
 # misha 5.6.22
 
-* Intervals' `strand` column now accepts character (`"+"`, `"-"`, `"."`, `"*"`, `""`) or factor input in addition to numeric `1`/`-1`/`0`. Strings are normalized to the numeric convention at the R→C++ boundary; output stays numeric.
+* Intervals' `strand` column now accepts character (`"+"`, `"-"`, `"."`, `"*"`, `""`) or factor input in addition to numeric `1`/`-1`/`0`. Strings are normalized to the numeric convention at the R->C++ boundary; output stays numeric.
 
 # misha 5.6.21
 
@@ -45,7 +45,7 @@
 
 # misha 5.6.20
 
-* Fixed `gquantiles` hanging for many minutes on dense `binsize=1` whole-genome scans. The parent used to merge every non-NaN value into one `std::vector<double>` and single-thread `std::sort` it (~21 GB on mm10). Kids now sort their samples buffer before packing, and the parent does a heap-based k-way merge over the per-kid sorted runs. The single-process path (`gmultitasking = FALSE`) uses `std::nth_element` per percentile rank instead of a full sort. mm10 dense full-genome `gquantiles`: was hung, now ~75 s (multitask) / ~270 s (single-process). Sub-sampling fallback (when `gmax.data.size` forces it) preserved, with `samples` capacity pre-reserved.
+* Fixed `gquantiles` hanging for many minutes on dense `binsize=1` whole-genome scans. Kids now sort their samples buffer before packing and the parent does a heap-based k-way merge instead of a global single-thread sort; the single-process path uses `std::nth_element` per percentile rank. mm10 dense full-genome `gquantiles`: was hung, now ~75 s (multitask) / ~270 s (single-process).
 
 # misha 5.6.19
 
@@ -53,32 +53,29 @@
 
 # misha 5.6.18
 
-* Added `gsynth.score()`: writes a misha fixed-bin dense track of summed natural-log conditional probability under a trained stratified Markov-k model. Stratum bin is queried at `pos - k` (the leftmost base of the (k+1)-mer context), matching `gsynth.train()`'s convention; the chrom-parallel kernel writes one file per chromosome (gated by `gmultitasking` / `gmax.processes`). Two scored tracks subtracted at any resolution gives a windowed log-Bayes-factor.
-* Added `mask` argument to `gsynth.score()`: positions inside `mask` (e.g. repeats) are NA-poisoned in the output bin. Predicted-base `N` is unconditional NA — `n_policy` only applies to N's in the k-mer context.
+* Added `gsynth.score()`: writes a misha fixed-bin dense track of summed natural-log conditional probability under a trained stratified Markov-k model. Two scored tracks subtracted at any resolution give a windowed log-Bayes-factor. `mask` argument NA-poisons positions inside the mask (e.g. repeats); predicted-base `N` is unconditional NA.
 * `gsynth.sample()` now looks up the stratum bin at `pos - k` to match `gsynth.train()`. Previously it queried the bin at the predicted-base position, which differed from training at the first `k` bp of every iter window. Cached `.gsm` models are unchanged; samples generated with earlier versions had a slight stratum-shift artifact at iter boundaries.
-* Added `getOption("gmultitasking.strategy")` for `gextract` (default `"auto"`). When the workload is large and many-track, `auto` routes to a track-parallel mode (each `parallel::mclapply` worker handles a track subset across all tiles) instead of the legacy tile-parallel mode (each fork-kid handles a tile range across all tracks). On the realistic 3,110 motif tracks × 2.19M tiled_peaks workload measured 57.6 min vs ~3.4 h projected for tile-parallel — a 3.5× per-track speedup. Override per-call via `options(gmultitasking.strategy = "tracks" | "tiles" | "auto")`. The heuristic stays on `"tiles"` for streaming iterators (numeric / NULL / 2D rect / track-name), single-track or fewer than 8 tracks, file/intervals.set.out output, or 2D band — so nothing else regresses (validated by a 36-cell matrix bench across iterator types × track counts × cache states).
+* Added `getOption("gmultitasking.strategy")` for `gextract` (default `"auto"`). For large many-track workloads (>= 8 tracks, non-streaming iterator) `auto` routes to a track-parallel mode (each worker handles a track subset across all tiles) instead of the legacy tile-parallel mode. Realistic 3,110 motif tracks x 2.19M peaks: 57.6 min vs ~3.4 h projected (3.5x per-track speedup). Override with `options(gmultitasking.strategy = "tracks" | "tiles" | "auto")`.
 
 # misha 5.6.17
 
-* Fixed `gextract` over thousands of tracks failing with "Too many open files" (EMFILE). `GenomeTrackSparse` and `GenomeTrackFixedBin` (dense) were holding one open `FILE*` per track for the lifetime of the call, so workloads over hundreds–thousands of motif tracks blew past the default 1024 soft `RLIMIT_NOFILE`. The `BufferedFile` handle is now released once it is no longer needed (sparse: after data is loaded into memory; dense: after `mmap` is set up — reads go through the mapped region). Subsequent chromosome transitions reopen via the same paths. Negligible perf cost.
-* Fixed dense-track `gextract` regression introduced in v5.6.11 where calls over many tracks (e.g. ~50 motif tracks) became 10–20× slower. Two compounding causes:
-  - `MmapFile` used `MAP_POPULATE`, eagerly paging in every mapped track at every chromosome transition (already covered by `MADV_SEQUENTIAL`).
-  - The two track-validation loops in `create_expr_iterator` and `TrackExpressionVars::init` were calling `GenomeTrackFixedBin::init_read()` once per chromosome per track, paying open + mmap + madvise + close + munmap each time, even though they only needed the bin size and file size. Replaced with a metadata-only path that stat()s for size and reads bin_size only once per track. Net effect on Tamar's 51-motif workload: 22s → 0.4s.
+* Fixed `gextract` over thousands of tracks failing with "Too many open files" (EMFILE). `BufferedFile` handles are now released once data is loaded (sparse) or mmapped (dense), so the open-FD count no longer scales with track count. Negligible perf cost.
+* Fixed dense-track `gextract` regression introduced in v5.6.11 where calls over ~50 motif tracks became 10-20x slower. `MmapFile` no longer eagerly pages with `MAP_POPULATE`, and track-validation loops use a metadata-only path (stat for size, read `bin_size` once) instead of round-tripping `init_read()` per chromosome per track. Tamar's 51-motif workload: 22 s -> 0.4 s.
 * Added an opt-in performance regression test (`MISHA_PERF_TESTS=true`) covering many-track `gextract` setup overhead.
 
 # misha 5.6.16
 
-* `gsynth.sample()` with `output_format = "fasta"` now writes a samtools-compatible `.fai` alongside the FASTA (tracking byte offsets during the write loop, no extra pass over the file). Removes the need to call `samtools faidx` by hand on every sampled genome. Matches the convention already used by `ggenome.implant()`.
-* Added `cell_merge` argument to `gsynth.sample()` and a companion exported utility `gsynth.cell_merge()`. Unlike `bin_merge`, which redirects bins independently along each dimension, `cell_merge` redirects specific per-joint-cell CDFs to other per-joint-cell CDFs (e.g. `(GC=0.725, CG=0.05) -> (GC=0.70, CG=0.08)`). Redirects are applied after `bin_merge` and after sparse-bin uniform fallback via pointer-level list-element copies in `cdf_list`, so there is no matrix duplication and no change to the C++ sampling hot path. Intended for reassigning under-trained joint cells to a nearest-sufficient neighbor to avoid sequence leakage from tiny training sets.
-* Added `gsynth.forbid_kmer(model, pattern)` returning a new `gsynth.model` whose samples are guaranteed pattern-free downstream of the seeding window (e.g. `gsynth.forbid_kmer(model, "CG")` for a CpG-null background). Analytically equivalent to rejection sampling, implemented by zeroing the transitions that would produce the pattern and renormalizing per state-row; pattern length is capped at `model$k + 1`.
+* `gsynth.sample()` with `output_format = "fasta"` now writes a samtools-compatible `.fai` alongside the FASTA, removing the need to call `samtools faidx` by hand. Matches the convention already used by `ggenome.implant()`.
+* Added `cell_merge` argument to `gsynth.sample()` and a companion exported utility `gsynth.cell_merge()`. Unlike `bin_merge` (which redirects bins independently along each dimension), `cell_merge` redirects specific per-joint-cell CDFs to other joint cells (e.g. `(GC=0.725, CG=0.05) -> (GC=0.70, CG=0.08)`). Intended for reassigning under-trained joint cells to a nearest-sufficient neighbor to avoid sequence leakage from tiny training sets.
+* Added `gsynth.forbid_kmer(model, pattern)` returning a new `gsynth.model` whose samples are guaranteed pattern-free downstream of the seeding window (e.g. `gsynth.forbid_kmer(model, "CG")` for a CpG-null background). Pattern length is capped at `model$k + 1`.
 
 ### Bug fixes
 
-* Fixed `gsynth.sample()` silently falling back to uniform-random sampling for most positions inside any interval whose start was not aligned to `model$iterator` (#94). The iterator bin size is now passed explicitly from R instead of inferred from the first same-chrom diff in `iter_starts` (which was the partial first-bin width, not the full bin width). Output k-mer statistics on unaligned intervals were wrong; composition was partially uniform.
+* Fixed `gsynth.sample()` silently falling back to uniform-random sampling for most positions inside any interval whose start was not aligned to `model$iterator` (#94). Output k-mer statistics on unaligned intervals were wrong; composition was partially uniform.
 
 # misha 5.6.15
 
-* Fixed `gsynth.train()`, `gsynth.sample()`, and `gsynth.random_seqs()` silently reading sequences from the wrong chromosome when the `intervals` argument covered a subset of the genome that omitted one or more earlier chromosomes in the chromkey. For every chromosome in the input that came after a missing one, the C++ side opened the wrong chromosome's sequence (shifted by the number of earlier missing chromosomes), producing invalid models and corrupted sampled genomes without any error. Calls that passed `intervals = gintervals.all()` or left `intervals` at its default (which is `gintervals.all()`) were not affected. Users who ran these functions on custom interval subsets should re-run them with this version.
+* Fixed `gsynth.train()`, `gsynth.sample()`, and `gsynth.random_seqs()` silently reading sequences from the wrong chromosome when `intervals` omitted one or more earlier chromosomes in the chromkey - the C++ side opened the wrong sequence (shifted by the number of earlier missing chromosomes), producing invalid models and corrupted sampled genomes without any error. Calls that passed `intervals = gintervals.all()` (or left it at the default) were not affected. Users who ran these functions on custom interval subsets should re-run them with this version.
 
 # misha 5.6.14
 
@@ -90,12 +87,12 @@
 
 # misha 5.6.12 
 
-* Fixed child processes surviving `rexit()` due to R's SIGTERM handler. All multitasked operations (`gmultitasking = TRUE`) were affected: after forking, child processes continued executing R-level post-processing code instead of terminating. Track-creating functions (`gtrack.create`, `gtrack.smooth`, `gtrack.create_pwm_energy`) could corrupt data on indexed databases — children ran `gtrack.convert_to_indexed` concurrently, reading incomplete files and deleting files still being written by other children. On non-indexed databases, track data was correct. Query functions (`gextract`, `gscreen`, `gdist`, `gquantiles`, `gcor`, `gsummary`, `gcis.decay`, `gapply`, `gbins.quantiles`, `gbins.summary`) returned correct results since data was written to shared memory before the failed exit.
+* Fixed child processes surviving `rexit()` due to R's SIGTERM handler. All multitasked operations (`gmultitasking = TRUE`) were affected. Track-creating functions (`gtrack.create`, `gtrack.smooth`, `gtrack.create_pwm_energy`) could corrupt data on indexed databases because children ran `gtrack.convert_to_indexed` concurrently. Non-indexed track data and query functions (`gextract`, `gscreen`, `gdist`, `gquantiles`, ...) were unaffected (data was written to shared memory before the failed exit).
 
 # misha 5.6.11
 
 * Added `ggenome.implant()` for replacing intervals in a reference genome with donor sequences and writing a new FASTA. Supports literal donor sequences or extraction from a misha database, with optional trackdb creation.
-* Added `ggenome.transplant()` as sugar for cross-genome sequence swaps — extracts from a source genome and implants into a target genome in a single call.
+* Added `ggenome.transplant()` as sugar for cross-genome sequence swaps - extracts from a source genome and implants into a target genome in a single call.
 
 # misha 5.6.10
 
@@ -106,8 +103,8 @@
 # misha 5.6.9
 
 * Added `k` parameter to `gsynth.train()` to configure the Markov order (1-8, default 5).
-* 14-20x faster PWM scoring across all code paths (`gextract` with PWM vtracks, `gseq.pwm`, PWM edit distance). Replaced switch-statement DNA base encoding with O(1) lookup tables, eliminating branch mispredictions in the inner scoring loop.
-* Fixed a typo in `DnaPSSM::integrate_energy` where `case 'h'` was written instead of `case 'g'` in the reverse-complement scoring path. This caused lowercase 'g' bases to be silently skipped (contributing zero to the score) instead of being complemented to 'C'. The affected function was dead code (never called by any user-facing API — all callers use `integrate_energy_logspat` instead), so no user-visible results were affected.
+* 14-20x faster PWM scoring across all code paths (`gextract` with PWM vtracks, `gseq.pwm`, PWM edit distance). Replaced switch-statement DNA base encoding with O(1) lookup tables in the inner scoring loop.
+* Fixed a typo in `DnaPSSM::integrate_energy` (`case 'h'` for `case 'g'`) on the reverse-complement scoring path. The affected function is dead code (all user-facing callers use `integrate_energy_logspat`), so no user-visible results were affected.
 
 # misha 5.6.8
 
@@ -165,11 +162,11 @@
 
 * Replaced the naive variance formula (E[X²]-E[X]²) with Welford's numerically stable online algorithm for standard deviation computation in all track types (GenomeTrackFixedBin, GenomeTrackSparse, GenomeTrackInMemory, GenomeTrackArrays). The naive formula is prone to catastrophic cancellation when values are large or have small variance relative to their mean.
 
-* Improved sum accumulation precision by using double-precision intermediate accumulators in all non-sliding sum paths. The `m_last_sum` member remains float for API compatibility, but per-interval accumulation now happens in double, eliminating float→float rounding errors for large sums.
+* Improved sum accumulation precision by using double-precision intermediate accumulators in all non-sliding sum paths. The `m_last_sum` member remains float for API compatibility, but per-interval accumulation now happens in double, eliminating float->float rounding errors for large sums.
 
 * Fixed potential out-of-bounds access in SAMPLE/SAMPLE_POS functions when the random number generator returns exactly 1.0. Added bounds clamping (ported from pymisha).
 
-* Fixed umask leak in `GenomeTrack::write_type()` and `GenomeTrackFixedBin::init_write()` — the old umask is now saved and restored immediately after `open()`, preventing permanent process-wide umask changes.
+* Fixed umask leak in `GenomeTrack::write_type()` and `GenomeTrackFixedBin::init_write()` - the old umask is now saved and restored immediately after `open()`, preventing permanent process-wide umask changes.
 
 * Improved header validation in `GenomeTrackFixedBin::init_read()` to use integer modulo instead of floating-point division, with an additional underflow guard.
 
@@ -193,13 +190,13 @@
 
 # misha 5.4.8
 
-* Fixed NaN comparison bug in `distance.center` virtual track with iterator modifiers — used `!=` instead of `std::isnan()`, causing the guard condition to always be true under IEEE 754 semantics.
+* Fixed NaN comparison bug in `distance.center` virtual track with iterator modifiers - used `!=` instead of `std::isnan()`, causing the guard condition to always be true under IEEE 754 semantics.
 
 * Fixed `distance` virtual track returning NaN instead of a valid distance when one side of the sorted interval array has no intervals on the current chromosome (NaN-unsafe `min` in sequential path).
 
 * Fixed `gtrack.smooth` MEAN algorithm producing spurious NaN values during periodic recalculation when NaN values are present in the smoothing window. The recalculation checked `isnan` on the accumulator instead of the incoming value, permanently poisoning the sum.
 
-* Fixed incorrect standard deviation/variance computation in virtual tracks with filter/mask — the parallel variance formula used the already-incremented weight instead of the pre-increment value.
+* Fixed incorrect standard deviation/variance computation in virtual tracks with filter/mask - the parallel variance formula used the already-incremented weight instead of the pre-increment value.
 
 * Fixed `min.pos`/`max.pos` virtual track aggregation comparing genomic positions instead of signal values when combining sub-intervals, returning the leftmost/rightmost sub-interval position instead of the position of the actual min/max value.
 
@@ -207,7 +204,7 @@
 
 * Fixed copy-paste error in quantile track computation where `highest_vals` buffer was resized using `kid_lowest_vals_buf_size` instead of `kid_highest_vals_buf_size`.
 
-* Fixed `int32` truncation of `int64_t` genomic coordinates in `gintervals.normalize` — could silently produce wrong results for chromosomes longer than ~2.1 Gbp.
+* Fixed `int32` truncation of `int64_t` genomic coordinates in `gintervals.normalize` - could silently produce wrong results for chromosomes longer than ~2.1 Gbp.
 
 * Fixed p-value transformation (`pv` function) being skipped when virtual track has both a filter and a p-value function active.
 
@@ -340,7 +337,7 @@
 * Added score-based liftover functionality matching UCSC liftOver behavior:
   - `gintervals.load_chain` now includes `score` and `chain_id` columns for all loaded chains
   - New `min_score` parameter in `gintervals.load_chain`, `gintervals.liftover`, and `gtrack.liftover` filters out low-quality chains
-  - New `tgt_overlap_policy = "auto_score"` (or `"auto"`) selects the best chain mapping based on alignment score (highest score → longest span → lowest chain_id)
+  - New `tgt_overlap_policy = "auto_score"` (or `"auto"`) selects the best chain mapping based on alignment score (highest score -> longest span -> lowest chain_id)
   - New `include_metadata` parameter in `gintervals.liftover` optionally returns score and chain_id for each mapping
   **BREAKING**: "auto" is now an alias for "auto_score". For the old behavior, use `tgt_overlap_policy = "auto_first"`.
 * Added `canonic` parameter to `gintervals.liftover` (default `FALSE`) to merge adjacent target intervals resulting from the same source interval and chain.
