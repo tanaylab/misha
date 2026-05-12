@@ -1,5 +1,7 @@
 # misha (development version)
 
+# misha 5.6.29
+
 * `gdb.install_intervals()` now errors if any requested set is unavailable from the source (previously skipped silently with a warning). Pass `force = TRUE` to demote the error to a summary warning and install the available sets.
 
 # misha 5.6.28
