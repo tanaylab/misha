@@ -23,7 +23,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: conda-incubator/setup-miniconda@v3
         with:
@@ -31,7 +31,7 @@ jobs:
           channels: conda-forge
           channel-priority: strict
           activate-environment: base
-          auto-activate-base: true
+          auto-activate: true
 
       - name: Install conda-build and anaconda-client
         run: |
