@@ -32,7 +32,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.26</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.28</span>
       </span>
     </div>
 
@@ -216,6 +216,54 @@ path):</p>
 <span>    <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gdb.init.html">gdb.init</a></span><span class="op">(</span><span class="st">"mm39"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="building-from-ucsc-mammal-hubs-zoonomia">Building from UCSC mammal hubs (Zoonomia)<a class="anchor" aria-label="anchor" href="#building-from-ucsc-mammal-hubs-zoonomia"></a>
+</h3>
+<p>UCSC mammal hubs host 224 of the 241 Cactus / Zoonomia mammalian
+genomes under a uniform per-species directory layout, including
+chromAlias, repeat masker output, and one or more GTFs per species.
+Build a misha groot from a hub assembly with:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># One-shot. Default sets = c("genes", "rmsk", "cgi", "cytoband"); cytoband and</span></span>
+<span><span class="co"># (often) cgi are skipped with a warning since hubs don't ship them.</span></span>
+<span><span class="fu"><a href="../reference/gdb.build_genome.html">gdb.build_genome</a></span><span class="op">(</span><span class="st">"GCA_004023825.1"</span>,</span>
+<span>    path   <span class="op">=</span> <span class="st">"/genomes/arctic_fox"</span>,</span>
+<span>    prefix <span class="op">=</span> <span class="st">"intervs.global."</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>If you already have a private FASTA build for the same accession (or
+a HAL- derived assembly) and just want to layer canonical annotations on
+it:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.install_intervals.html">gdb.install_intervals</a></span><span class="op">(</span></span>
+<span>    groot  <span class="op">=</span> <span class="st">"/genomes/my_private_assembly"</span>,</span>
+<span>    source <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>source <span class="op">=</span> <span class="st">"ucsc-hub"</span>, accession <span class="op">=</span> <span class="st">"GCA_004023825.1"</span><span class="op">)</span>,</span>
+<span>    sets   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"genes"</span>, <span class="st">"rmsk"</span><span class="op">)</span>,</span>
+<span>    prefix <span class="op">=</span> <span class="st">"intervs.global."</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>If your groot was built with a different chromosome-naming scheme
+than the hub uses (for example, Cactus-derived names), the hub’s
+<code>chromAlias.txt</code> is consulted to translate annotation chroms
+into the groot’s canonical names — strictly. The chosen alias column
+must contain <em>every</em> groot chrom and <em>every</em> distinct
+chrom in the source file; otherwise the install errors with a diagnostic
+per-column overlap table.</p>
+<p>To convert hub GTFs the install needs UCSC’s
+<code>gtfToGenePred</code> binary (and <code>gff3ToGenePred</code> for
+NCBI Datasets sources). On the first call the package prompts for
+consent to download UCSC’s prebuilt binaries (~5 MB each). To
+pre-install in non-interactive contexts:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.install_gff3_converter.html">gdb.install_gff3_converter</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/gdb.install_gtf_converter.html">gdb.install_gtf_converter</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>The prebuilt binaries require glibc ≥ 2.34. On older systems
+(e.g. CentOS 8) the download will succeed but the binary won’t run.
+Workaround:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="ex">conda</span> install <span class="at">-c</span> bioconda ucsc-gff3togenepred ucsc-gtftogenepred</span></code></pre></div>
+<p>Then point misha at the env’s binaries:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>MISHA_GFF3_TO_GENEPRED <span class="op">=</span> <span class="st">"/path/to/env/bin/gff3ToGenePred"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>MISHA_GTF_TO_GENEPRED <span class="op">=</span> <span class="st">"/path/to/env/bin/gtfToGenePred"</span><span class="op">)</span></span></code></pre></div>
 </div>
 </div>
   </div>
