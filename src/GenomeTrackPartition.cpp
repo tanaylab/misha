@@ -76,7 +76,7 @@ static void gpartition_add_interval2res(const GInterval &interval, GIntervals &r
 
 static void gpartition_add_interval2res(const GInterval2D &interval, GIntervals2D &res_intervals, vector<int> &res_bins, int bin,
 										const BinFinder &bin_finder, bool include_lowest, const string &intervset_out,
-										vector<GIntervalsBigSet2D::ChromStat> &chromstats, IntervUtils &iu)
+										GIntervalsMeta2D::ChromStats2D &chromstats, IntervUtils &iu)
 {
 	static char error_prefix[1000];
 
@@ -188,7 +188,7 @@ SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include
 				answer = gpartition_build_answer<GInterval>(res_intervals, res_bins, bin_finder, include_lowest, iu);
 		} else {
 			GIntervals2D res_intervals;
-			vector<GIntervalsBigSet2D::ChromStat> chromstats;
+			GIntervalsMeta2D::ChromStats2D chromstats;
 
 			if (!intervset_out.empty())
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats);

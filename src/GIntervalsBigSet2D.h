@@ -40,19 +40,23 @@ public:
 
 	static pair<ChromPair, ChromStat> get_chrom_stat(GIntervalsFetcher2D *intervals, const IntervUtils &iu);
 
-	static void begin_save(const char *intervset, const IntervUtils &iu, vector<ChromStat> &chromstats);
+	// Phase 7b: sparse write API. The dense vector<ChromStat>(N*N) parameter
+	// has been replaced by GIntervalsMeta2D::ChromStats2D so that 2D track /
+	// interval-set creation does not allocate O(N*N) entries on databases
+	// with O(1M) contigs.
+	static void begin_save(const char *intervset, const IntervUtils &iu, ChromStats2D &chromstats);
 
 	// saves generic intervals with optional additional columns
-	static void save_chrom(const char *intervset, GIntervalsFetcher2D *intervals, SEXP rintervals, const IntervUtils &iu, vector<ChromStat> &chromstats);
+	static void save_chrom(const char *intervset, GIntervalsFetcher2D *intervals, SEXP rintervals, const IntervUtils &iu, ChromStats2D &chromstats);
 
 	// ends save for generic intervals with optional additional columns
-	static void end_save(const char *intervset, SEXP zeroline, const IntervUtils &iu, const vector<ChromStat> &chromstats);
+	static void end_save(const char *intervset, SEXP zeroline, const IntervUtils &iu, const ChromStats2D &chromstats);
 
 	// saves plain intervals
-	static void save_chrom_plain_intervals(const char *intervset, GIntervals2D &intervals, const IntervUtils &iu, vector<ChromStat> &chromstats);
+	static void save_chrom_plain_intervals(const char *intervset, GIntervals2D &intervals, const IntervUtils &iu, ChromStats2D &chromstats);
 
 	// ends save for plain intervals
-	static void end_save_plain_intervals(const char *intervset, const IntervUtils &iu, const vector<ChromStat> &chromstats);
+	static void end_save_plain_intervals(const char *intervset, const IntervUtils &iu, const ChromStats2D &chromstats);
 
 	static int chroms2idx(int chromid1, int chromid2, int num_chroms) { return chromid1 * num_chroms + chromid2; }
 	static int idx2chrom1(int idx, int num_chroms) { return idx / num_chroms; }

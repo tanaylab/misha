@@ -169,16 +169,18 @@ pair<ChromPair, GIntervalsBigSet2D::ChromStat> GIntervalsBigSet2D::get_chrom_sta
 	return res;
 }
 
-void GIntervalsBigSet2D::begin_save(const char *intervset, const IntervUtils &iu, vector<ChromStat> &chromstats)
+void GIntervalsBigSet2D::begin_save(const char *intervset, const IntervUtils &iu, ChromStats2D &chromstats)
 {
 	string path = interv2path(iu.get_env(), intervset);
 	if (mkdir(path.c_str(), 0777))
 		verror("Cannot create intervals directory at %s: %s", path.c_str(), strerror(errno));
 
-	init_chromstats(chromstats, iu);
+	// Phase 7b: sparse - start empty. The previous dense form resized to
+	// num_chroms*num_chroms which OOMed on 1M-contig DBs.
+	chromstats.clear();
 }
 
-void GIntervalsBigSet2D::save_chrom_plain_intervals(const char *intervset, GIntervals2D &intervals, const IntervUtils &iu, vector<ChromStat> &chromstats)
+void GIntervalsBigSet2D::save_chrom_plain_intervals(const char *intervset, GIntervals2D &intervals, const IntervUtils &iu, ChromStats2D &chromstats)
 {
 	if (intervals.size()) {
 		SEXP rintervals = iu.convert_intervs(&intervals);
@@ -187,15 +189,15 @@ void GIntervalsBigSet2D::save_chrom_plain_intervals(const char *intervset, GInte
 	}
 }
 
-void GIntervalsBigSet2D::save_chrom(const char *intervset, GIntervalsFetcher2D *intervals, SEXP rintervals, const IntervUtils &iu, vector<ChromStat> &chromstats)
+void GIntervalsBigSet2D::save_chrom(const char *intervset, GIntervalsFetcher2D *intervals, SEXP rintervals, const IntervUtils &iu, ChromStats2D &chromstats)
 {
-	if (!intervals->size()) 
+	if (!intervals->size())
 		return;
 
 	pair<ChromPair, ChromStat> res = get_chrom_stat(intervals, iu);
 	ChromPair &chrompair = res.first;
 	ChromStat &chromstat = res.second;
-	chromstats[chrompair.chromid1 * iu.get_chromkey().get_num_chroms() + chrompair.chromid2] = chromstat;
+	chromstats.set(chrompair.chromid1, chrompair.chromid2, chromstat);
 
 	string filename = interv2path(iu.get_env(), intervset);
 	filename += "/";
@@ -205,12 +207,12 @@ void GIntervalsBigSet2D::save_chrom(const char *intervset, GIntervalsFetcher2D *
 	RSaneSerialize(rintervals, filename.c_str());
 }
 
-void GIntervalsBigSet2D::end_save_plain_intervals(const char *intervset, const IntervUtils &iu, const vector<ChromStat> &chromstats)
+void GIntervalsBigSet2D::end_save_plain_intervals(const char *intervset, const IntervUtils &iu, const ChromStats2D &chromstats)
 {
 	save_plain_intervals_meta(interv2path(iu.get_env(), intervset).c_str(), chromstats, iu);
 }
 
-void GIntervalsBigSet2D::end_save(const char *intervset, SEXP zeroline, const IntervUtils &iu, const vector<ChromStat> &chromstats)
+void GIntervalsBigSet2D::end_save(const char *intervset, SEXP zeroline, const IntervUtils &iu, const ChromStats2D &chromstats)
 {
 	save_meta(interv2path(iu.get_env(), intervset).c_str(), zeroline, chromstats, iu);
 }

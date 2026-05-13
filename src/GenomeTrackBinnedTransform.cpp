@@ -177,7 +177,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		vector<unsigned> ids;
 		vector<double> out_values;
 		vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
-		vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
+		GIntervalsMeta2D::ChromStats2D chromstats2d;
 		GInterval last_scope_interval1d;
 		GInterval2D last_scope_interval2d;
 		uint64_t size;
@@ -193,15 +193,19 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 		if (!intervset_out.empty()) {
 			if (is_1d_iterator)
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
-			else
+			else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
+				// Phase 7b: bound shmem by the scope's populated-pair count so
+				// each kid can serialize up to that many distinct chrom-pairs.
+				chromstats2d.set_max_pairs(intervals2d ? (size_t)intervals2d->num_chrom_pairs() : 0);
+			}
 		}
 
 		if (iu.get_multitasking()) {
 			if (!intervset_out.empty()) {
 				if (iu.distribute_task(is_1d_iterator ?
 									   sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() :
-									   sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size(),
+									   GIntervalsMeta2D::ChromStats2D::max_pairs_bytes(chromstats2d.max_pairs()),
 									   0))
 				{ // child process
 					GIntervalsFetcher1D *kid_intervals1d = iu.get_kid_intervals1d();
@@ -255,13 +259,13 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 					// pack the result into shared memory
 					void *ptr = allocate_res(0);
 
-					if (is_1d_iterator) 
+					if (is_1d_iterator)
 						pack_data(ptr, chromstats1d.front(), chromstats1d.size());
 					else
-						pack_data(ptr, chromstats2d.front(), chromstats2d.size());
+						chromstats2d.pack(ptr);
 				} else { // parent process
 					vector<GIntervalsBigSet1D::ChromStat> kid_chromstats1d(chromstats1d.size());
-					vector<GIntervalsBigSet2D::ChromStat> kid_chromstats2d(chromstats2d.size());
+					GIntervalsMeta2D::ChromStats2D kid_chromstats2d;
 
 					for (int i = 0; i < get_num_kids(); ++i) {
 						void *ptr = get_kid_res(i);
@@ -273,11 +277,9 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 									chromstats1d[istat - kid_chromstats1d.begin()] = *istat;
 							}
 						} else {
-							unpack_data(ptr, kid_chromstats2d.front(), kid_chromstats2d.size());
-							for (vector<GIntervalsBigSet2D::ChromStat>::const_iterator istat = kid_chromstats2d.begin(); istat < kid_chromstats2d.end(); ++istat) {
-								if (istat->size)
-									chromstats2d[istat - kid_chromstats2d.begin()] = *istat;
-							}
+							kid_chromstats2d.clear();
+							kid_chromstats2d.unpack(ptr);
+							chromstats2d.merge(kid_chromstats2d);
 						}
 					}
 

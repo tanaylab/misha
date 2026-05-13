@@ -95,6 +95,95 @@ test_that("gintervals.2d.all enumerates contigs on many-contig DB", {
     expect_true(nrow(all2d) > 0)
 })
 
+test_that("2D big-set creation on many-contig DB writes only populated pairs (Phase 7b)", {
+    # Phase 7b: GIntervalsBigSet2D::begin_save used to allocate a dense
+    # vector<ChromStat> of size N*N. On a 1000-contig DB that's 1e6
+    # ChromStat entries (~24 MB), and at 1e6 contigs it OOMs (~10^12
+    # entries, multi-TB). The sparse ChromStats2D rewrite keeps only the
+    # populated chrom-pairs. This test exercises the save path end-to-end
+    # on a moderately large contig count.
+    skip_if_not_installed("withr")
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+
+    n_contigs <- 1000L
+
+    tmp_root <- build_many_contig_db(n_contigs, parent.frame())
+    switch_to_db(tmp_root, parent.frame())
+    withr::defer(
+        try(gintervals.rm("test.sparse_write_2d", force = TRUE), silent = TRUE),
+        envir = parent.frame()
+    )
+
+    intervs <- gintervals.2d(
+        chroms1 = c(1, 1, 250, 750),
+        starts1 = c(0, 1000, 0, 0),
+        ends1 = c(500, 1500, 500, 500),
+        chroms2 = c(1, 2, 250, 999),
+        starts2 = c(0, 0, 0, 0),
+        ends2 = c(500, 500, 500, 500)
+    )
+    t0 <- Sys.time()
+    withr::with_options(list(gmax.data.size = 1), {
+        misha::gintervals.save("test.sparse_write_2d", intervs)
+    })
+    elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+    # Save should be fast (no O(N*N) allocation). Generous bound for CI.
+    expect_lt(elapsed, 30)
+
+    withr::with_options(list(gmax.data.size = 1e9), {
+        loaded <- misha::gintervals.load("test.sparse_write_2d")
+        expect_equal(nrow(loaded), nrow(intervs))
+        expect_setequal(
+            paste(loaded$chrom1, loaded$start1, loaded$chrom2, loaded$start2),
+            paste(intervs$chrom1, intervs$start1, intervs$chrom2, intervs$start2)
+        )
+    })
+})
+
+test_that("gtrack.create_meta on 2D track scans only populated pairs (Phase 7b)", {
+    # Phase 7b: GTrackIntervalsFetcher::create_track_meta for 2D tracks
+    # used to walk all N*N chrom-pairs and run init_read+read_interval on
+    # each (full qtree load). Now it iterates either the track.idx entries
+    # (indexed tracks) or readdir's the track directory (legacy tracks).
+    # This test creates a track with only a few populated pairs on a DB
+    # with many contigs and verifies the meta builder completes quickly.
+    skip_if_not_installed("withr")
+    withr::local_options(list(gmulticontig.indexed_format = FALSE))
+
+    n_contigs <- 500L
+
+    tmp_root <- build_many_contig_db(n_contigs, parent.frame())
+    switch_to_db(tmp_root, parent.frame())
+    withr::defer(
+        try(gtrack.rm("test.create_meta_2d", force = TRUE), silent = TRUE),
+        envir = parent.frame()
+    )
+
+    # Create a 2D RECTS track with 3 populated chrom-pairs out of 500*500.
+    intervs <- gintervals.2d(
+        chroms1 = c(1, 50, 250),
+        starts1 = c(100, 100, 100),
+        ends1 = c(200, 200, 200),
+        chroms2 = c(1, 50, 250),
+        starts2 = c(300, 300, 300),
+        ends2 = c(400, 400, 400)
+    )
+    gtrack.2d.create("test.create_meta_2d", "Phase 7b sparse meta test",
+        intervs,
+        values = c(1.0, 2.0, 3.0)
+    )
+
+    # Force meta regeneration (gtrack_create_meta path).
+    t0 <- Sys.time()
+    .gcall("gtrack_create_meta", "test.create_meta_2d", .misha_env())
+    elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+
+    # With the prior dense scan this was N*N = 250k probes (each opens a
+    # nonexistent file) plus a full qtree init for the 3 populated pairs.
+    # Sparse path: 3 populated pairs only. Bound generously for CI noise.
+    expect_lt(elapsed, 30)
+})
+
 test_that("masked copy preserves populated pair stats", {
     skip_if_not_installed("withr")
     withr::local_options(list(gmulticontig.indexed_format = FALSE))
