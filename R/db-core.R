@@ -349,14 +349,27 @@
     # The whole pass is vectorized: a per-row add_alias closure with <<- env
     # and vector grows took ~260 s on a 7.2M-row TSV (Phylo447 / Crocidura).
     tsv_path <- file.path(groot, "chrom_aliases.tsv")
+    # data.table::fread (Suggests) is ~20x faster than utils::read.table on
+    # the multi-million-row TSVs produced by Phylo447-scale builds. Fall back
+    # to read.table when data.table is not installed.
     tsv <- tryCatch(
-        utils::read.table(tsv_path,
-            sep = "\t", header = TRUE,
-            quote = "", comment.char = "",
-            stringsAsFactors = FALSE,
-            colClasses = "character",
-            na.strings = character(0)
-        ),
+        if (requireNamespace("data.table", quietly = TRUE)) {
+            data.table::fread(tsv_path,
+                sep = "\t", header = TRUE,
+                colClasses = "character",
+                na.strings = character(0),
+                data.table = FALSE,
+                showProgress = FALSE
+            )
+        } else {
+            utils::read.table(tsv_path,
+                sep = "\t", header = TRUE,
+                quote = "", comment.char = "",
+                stringsAsFactors = FALSE,
+                colClasses = "character",
+                na.strings = character(0)
+            )
+        },
         error = function(e) NULL
     )
 
