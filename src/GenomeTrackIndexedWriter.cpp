@@ -13,11 +13,12 @@
  *     the same CRC64 checksum domain (chrom_id + offset + length only,
  *     reserved excluded), via TrackIndexWriter.
  *
- * The writer accepts begin_chrom() calls in any order (the scanner
- * emits chroms strictly in ascending chromid order, but we don't rely
- * on that here - finalize() sorts the recorded entries and pads the
- * gaps with length=0 entries pointing at the current track.dat end,
- * matching pack's "missing per-chrom file" behaviour).
+ * begin_chrom() requires strictly increasing chromids. The scanner
+ * traverses chromosomes in genome order, so this is satisfied by
+ * design; the check is defensive and ensures that finalize() can
+ * compute missing-chrom offsets identically to the legacy pack flow
+ * (offset of an absent chrom = end of the preceding chrom's data,
+ * not the final end-of-dat).
  */
 
 #include <algorithm>
@@ -76,6 +77,7 @@ void GenomeTrackIndexedWriter::init(const string &track_dir,
     m_current_offset = 0;
     m_current_chrom = -1;
     m_chrom_start_offset = 0;
+    m_max_seen_chromid = -1;
     m_entries.clear();
     m_finalized = false;
 
@@ -92,9 +94,20 @@ void GenomeTrackIndexedWriter::begin_chrom(int chromid)
     if (m_current_chrom != -1)
         TGLError<GenomeTrack>("GenomeTrackIndexedWriter::begin_chrom called while chrom %d is still open",
                               m_current_chrom);
+    if (chromid < 0 || (uint32_t)chromid >= m_total_contigs)
+        TGLError<GenomeTrack>("GenomeTrackIndexedWriter::begin_chrom: chromid %d outside [0,%u)",
+                              chromid, m_total_contigs);
+    // Strictly increasing order is required so missing-chrom offsets
+    // can be computed as end-of-preceding-chrom (matches legacy pack
+    // output byte-for-byte). The scanner emits chroms in id order, so
+    // the only way this fires is a logic bug at the caller.
+    if (chromid <= m_max_seen_chromid)
+        TGLError<GenomeTrack>("GenomeTrackIndexedWriter::begin_chrom: chromid %d not strictly greater than previous max %d",
+                              chromid, m_max_seen_chromid);
 
     m_current_chrom = chromid;
     m_chrom_start_offset = m_current_offset;
+    m_max_seen_chromid = chromid;
 }
 
 void GenomeTrackIndexedWriter::write_bytes(const void *buf, size_t len)
@@ -156,13 +169,18 @@ void GenomeTrackIndexedWriter::finalize()
     m_dat_fp = nullptr;
 
     // Build the full per-genome entry table. One TrackContigEntry per
-    // chromid in [0, total_contigs); missing chroms get length=0 with
-    // offset = end-of-dat (matches pack's behaviour for absent files).
+    // chromid in [0, total_contigs). For missing chroms (begin_chrom
+    // was never called) we record offset = end of the preceding
+    // chrom's data and length = 0, which matches what
+    // gtrack_pack_per_chrom_to_indexed records when a per-chrom file
+    // is absent (preserves bit-for-bit equivalence). begin_chrom
+    // enforces strictly-increasing chromids so the "running offset"
+    // walk below is well-defined.
     vector<TrackContigEntry> full_entries;
     full_entries.reserve(m_total_contigs);
 
-    // Index recorded entries by chromid (recorded order may equal
-    // genome order in practice; this is defensive).
+    // Index recorded entries by chromid for O(1) lookup. begin_chrom
+    // already validated range and uniqueness; assert defensively.
     vector<const ChromEntry *> by_id(m_total_contigs, nullptr);
     for (const ChromEntry &e : m_entries) {
         if (e.chromid < 0 || (uint32_t)e.chromid >= m_total_contigs)
@@ -173,6 +191,7 @@ void GenomeTrackIndexedWriter::finalize()
         by_id[e.chromid] = &e;
     }
 
+    uint64_t running_offset = 0;
     for (uint32_t chromid = 0; chromid < m_total_contigs; ++chromid) {
         TrackContigEntry te;
         te.chrom_id = chromid;
@@ -180,8 +199,12 @@ void GenomeTrackIndexedWriter::finalize()
         if (by_id[chromid]) {
             te.offset = by_id[chromid]->offset;
             te.length = by_id[chromid]->length;
+            running_offset = by_id[chromid]->offset + by_id[chromid]->length;
         } else {
-            te.offset = m_current_offset; // end of dat
+            // Missing chrom: legacy pack would have hit this point with
+            // current_offset = sum of all preceding chroms' data sizes,
+            // then recorded entry.offset = current_offset, length = 0.
+            te.offset = running_offset;
             te.length = 0;
         }
         full_entries.push_back(te);

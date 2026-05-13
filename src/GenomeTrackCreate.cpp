@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <algorithm>
 #include <set>
 #include <string>
 #include <vector>
@@ -122,25 +123,82 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 				}
 			}
 		} else if (itr_type == TrackExpressionIteratorBase::INTERVALS1D) {
-			int cur_chromid = -1;
-			GenomeTrackSparse gtrack;
-			set<int> created_chromids;
+			if (is_indexed_db(envir)) {
+				// Streaming indexed-direct sparse path: write track.dat +
+				// track.idx in one pass. Mirrors the FIXED_BIN branch
+				// above. Per-chrom byte layout = 4-byte format signature
+				// header + 20-byte records (int64 start, int64 end,
+				// float val).
+				//
+				// To preserve bit-for-bit equivalence with the legacy
+				// per-chrom + pack flow we emit a header-only block for
+				// every genome chrom that the scanner does NOT cover.
+				// The legacy INTERVALS1D branch calls init_write() for
+				// each chrom in all_genome_intervs1d (writes the 4-byte
+				// signature even for chroms with no intervals), and
+				// pack then concatenates those bytes into track.dat
+				// with length=4 entries.
+				//
+				// Drive in chromid order: build the ordered chromid
+				// list from all_genome_intervs1d, then for each
+				// chromid C emit a header and drain any scanner
+				// records belonging to C. This keeps track.dat in
+				// strict genome order and satisfies begin_chrom's
+				// monotonicity check.
+				GenomeTrackIndexedWriter iw;
+				iw.init(dirname, GenomeTrack::SPARSE, (uint32_t)iu.get_chromkey().get_num_chroms());
 
-			for (; !scanner.isend(); scanner.next()) {
-				if (cur_chromid != scanner.last_interval1d().chromid) {
-					cur_chromid = scanner.last_interval1d().chromid;
-					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
-					gtrack.init_write(filename, cur_chromid);
-					created_chromids.insert(cur_chromid);
+				vector<char> header_bytes;
+				GenomeTrackSparse::pack_header(header_bytes);
+
+				vector<int> all_chromids;
+				all_chromids.reserve(all_genome_intervs1d.size());
+				for (GIntervals::const_iterator it = all_genome_intervs1d.begin(); it != all_genome_intervs1d.end(); ++it)
+					all_chromids.push_back(it->chromid);
+				std::sort(all_chromids.begin(), all_chromids.end());
+				all_chromids.erase(std::unique(all_chromids.begin(), all_chromids.end()), all_chromids.end());
+
+				vector<char> rec_buf;
+				for (size_t i = 0; i < all_chromids.size(); ++i) {
+					int chromid = all_chromids[i];
+					iw.begin_chrom(chromid);
+					iw.write_bytes(header_bytes.data(), header_bytes.size());
+
+					// Drain records belonging to this chrom. The scanner
+					// advances chroms in genome order, so once we see a
+					// record with chromid != C we leave the rest for the
+					// later iteration.
+					while (!scanner.isend() && scanner.last_interval1d().chromid == chromid) {
+						const GInterval &iv = scanner.last_interval1d();
+						rec_buf.clear();
+						GenomeTrackSparse::pack_record(rec_buf, iv.start, iv.end, scanner.last_real(0));
+						iw.write_bytes(rec_buf.data(), rec_buf.size());
+						scanner.next();
+					}
+					iw.end_chrom();
 				}
-				gtrack.write_next_interval(scanner.last_interval1d(), scanner.last_real(0));
-			}
+				iw.finalize();
+			} else {
+				int cur_chromid = -1;
+				GenomeTrackSparse gtrack;
+				set<int> created_chromids;
 
-			// some of the chromosome could be previously skipped; we still must create them even if they are empty
-			for (GIntervals::const_iterator iinterv = all_genome_intervs1d.begin(); iinterv != all_genome_intervs1d.end(); ++iinterv) {
-				if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
-					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
-					gtrack.init_write(filename, iinterv->chromid);
+				for (; !scanner.isend(); scanner.next()) {
+					if (cur_chromid != scanner.last_interval1d().chromid) {
+						cur_chromid = scanner.last_interval1d().chromid;
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
+						gtrack.init_write(filename, cur_chromid);
+						created_chromids.insert(cur_chromid);
+					}
+					gtrack.write_next_interval(scanner.last_interval1d(), scanner.last_real(0));
+				}
+
+				// some of the chromosome could be previously skipped; we still must create them even if they are empty
+				for (GIntervals::const_iterator iinterv = all_genome_intervs1d.begin(); iinterv != all_genome_intervs1d.end(); ++iinterv) {
+					if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
+						gtrack.init_write(filename, iinterv->chromid);
+					}
 				}
 			}
 		} else if (itr_type == TrackExpressionIteratorBase::INTERVALS2D) {
@@ -262,33 +320,44 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 				rreturn(R_NilValue);
 			}
 
-			// Non-FIXED_BIN types: process all intervals in the parent,
-			// using the existing per-chrom write paths. The R-level
-			// gtrack.convert_to_indexed step will pack them into the
-			// indexed format. (Phase 4c will extend the streaming
-			// indexed writer to sparse and array; for now they go
-			// through the legacy two-pass flow.)
+			// INTERVALS1D on indexed DBs: stream the sparse data
+			// directly into track.dat + track.idx in the parent
+			// process. Same write pattern as gtrackcreate's indexed
+			// INTERVALS1D branch (see above for the byte-layout and
+			// header-for-skipped-chroms rationale). The single-file
+			// append model of GenomeTrackIndexedWriter precludes
+			// parallel children, so we forgo the multitasking
+			// parallelism here, same trade-off as fixed-bin.
 			if (itr_type == TrackExpressionIteratorBase::INTERVALS1D) {
-				int cur_chromid = -1;
-				GenomeTrackSparse gtrack;
-				set<int> created_chromids;
+				GenomeTrackIndexedWriter iw;
+				iw.init(dirname, GenomeTrack::SPARSE, (uint32_t)iu.get_chromkey().get_num_chroms());
 
-				for (; !scanner.isend(); scanner.next()) {
-					if (cur_chromid != scanner.last_interval1d().chromid) {
-						cur_chromid = scanner.last_interval1d().chromid;
-						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), cur_chromid).c_str());
-						gtrack.init_write(filename, cur_chromid);
-						created_chromids.insert(cur_chromid);
-					}
-					gtrack.write_next_interval(scanner.last_interval1d(), scanner.last_real(0));
-				}
+				vector<char> header_bytes;
+				GenomeTrackSparse::pack_header(header_bytes);
 
-				for (GIntervals::const_iterator iinterv = all_genome_intervs1d.begin(); iinterv != all_genome_intervs1d.end(); ++iinterv) {
-					if (created_chromids.find(iinterv->chromid) == created_chromids.end()) {
-						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), iinterv->chromid).c_str());
-						gtrack.init_write(filename, iinterv->chromid);
+				vector<int> all_chromids;
+				all_chromids.reserve(all_genome_intervs1d.size());
+				for (GIntervals::const_iterator it = all_genome_intervs1d.begin(); it != all_genome_intervs1d.end(); ++it)
+					all_chromids.push_back(it->chromid);
+				std::sort(all_chromids.begin(), all_chromids.end());
+				all_chromids.erase(std::unique(all_chromids.begin(), all_chromids.end()), all_chromids.end());
+
+				vector<char> rec_buf;
+				for (size_t i = 0; i < all_chromids.size(); ++i) {
+					int chromid = all_chromids[i];
+					iw.begin_chrom(chromid);
+					iw.write_bytes(header_bytes.data(), header_bytes.size());
+
+					while (!scanner.isend() && scanner.last_interval1d().chromid == chromid) {
+						const GInterval &iv = scanner.last_interval1d();
+						rec_buf.clear();
+						GenomeTrackSparse::pack_record(rec_buf, iv.start, iv.end, scanner.last_real(0));
+						iw.write_bytes(rec_buf.data(), rec_buf.size());
+						scanner.next();
 					}
+					iw.end_chrom();
 				}
+				iw.finalize();
 				rreturn(R_NilValue);
 			}
 			if (itr_type == TrackExpressionIteratorBase::INTERVALS2D) {
