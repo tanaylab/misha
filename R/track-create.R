@@ -94,7 +94,12 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
         },
         finally = {
             if (!success) {
-                .gdb.trash(final_dir)
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
                 try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
