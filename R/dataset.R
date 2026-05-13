@@ -416,8 +416,9 @@ gdataset.ls <- function(dataframe = FALSE) {
 
         # Fallback to filesystem scan (with session cache)
         if (!used_cache) {
-            result$tracks_total[i] <- length(.gdb.scan_tracks(db))
-            result$intervals_total[i] <- length(.gdb.scan_intervals(db))
+            scan_res <- .gdb.scan_db_cached(db)
+            result$tracks_total[i] <- length(scan_res$tracks)
+            result$intervals_total[i] <- length(scan_res$intervals)
         }
 
         # Count visible
@@ -469,9 +470,10 @@ gdataset.info <- function(path) {
         yaml_data <- list()
     }
 
-    # Scan tracks and intervals
-    tracks <- .gdb.scan_tracks(path_norm)
-    intervals <- .gdb.scan_intervals(path_norm)
+    # Scan tracks and intervals (single FTS traversal, session-cached)
+    scan_res <- .gdb.scan_db_cached(path_norm)
+    tracks <- scan_res$tracks
+    intervals <- scan_res$intervals
 
     # Check if loaded
     gdatasets <- get("GDATASETS", envir = .misha)
@@ -622,65 +624,24 @@ gdataset.example_path <- function() {
 }
 
 .gdb.scan_tracks <- function(db, use_cache = TRUE) {
-    cache_key <- paste0("tracks:", normalizePath(db, mustWork = FALSE))
-
-    if (use_cache && exists(cache_key, envir = .gdb.scan_cache)) {
-        return(get(cache_key, envir = .gdb.scan_cache))
-    }
-
-    tracks_dir <- file.path(db, "tracks")
-    if (!dir.exists(tracks_dir)) {
-        result <- character(0)
-        if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
-        return(result)
-    }
-
-    # List all .track directories recursively
-    all_files <- list.files(tracks_dir, full.names = TRUE, recursive = TRUE, include.dirs = TRUE)
-    track_dirs <- all_files[grepl("\\.track$", all_files) & dir.exists(all_files)]
-
-    if (length(track_dirs) == 0) {
-        result <- character(0)
-        if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
-        return(result)
-    }
-
-    # Extract track names (relative to tracks_dir, without .track extension)
-    track_names <- sub("\\.track$", "", sub(paste0("^", tracks_dir, "/"), "", track_dirs))
-
-    if (use_cache) assign(cache_key, track_names, envir = .gdb.scan_cache)
-    track_names
+    .gdb.scan_db_cached(db, use_cache)$tracks
 }
 
 .gdb.scan_intervals <- function(db, use_cache = TRUE) {
-    cache_key <- paste0("intervals:", normalizePath(db, mustWork = FALSE))
+    .gdb.scan_db_cached(db, use_cache)$intervals
+}
+
+# Session-cached wrapper around .gdb.scan_db_fast (single FTS traversal for
+# tracks+intervals; FTS_SKIP avoids descending into .track/.interv dirs, which
+# matters on per-chrom tracks with 1M files per track).
+.gdb.scan_db_cached <- function(db, use_cache = TRUE) {
+    cache_key <- paste0("scan:", normalizePath(db, mustWork = FALSE))
 
     if (use_cache && exists(cache_key, envir = .gdb.scan_cache)) {
         return(get(cache_key, envir = .gdb.scan_cache))
     }
 
-    tracks_dir <- file.path(db, "tracks")
-    if (!dir.exists(tracks_dir)) {
-        result <- character(0)
-        if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
-        return(result)
-    }
-
-    # List all .interv files/directories
-    all_files <- list.files(tracks_dir, full.names = TRUE, recursive = TRUE)
-    interv_paths <- all_files[grepl("\\.interv$", all_files)]
-
-    if (length(interv_paths) == 0) {
-        result <- character(0)
-        if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
-        return(result)
-    }
-
-    # Extract interval names
-    interval_names <- sub("\\.interv$", "", sub(paste0("^", tracks_dir, "/"), "", interv_paths))
-
-    # Remove duplicates (in case both file and directory exist)
-    result <- unique(interval_names)
+    result <- .gdb.scan_db_fast(db)
     if (use_cache) assign(cache_key, result, envir = .gdb.scan_cache)
     result
 }
