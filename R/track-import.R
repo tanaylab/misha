@@ -159,14 +159,15 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
     retv <- 0
-    success <- FALSE
 
     tmp.dirname <- ""
     file.original <- file
+    bed_parsed <- NULL
+    used_bed <- FALSE
 
+    # File-preparation phase: unzip / BigWig conversion. tmp.dirname must
+    # be cleaned regardless of whether track create succeeds.
     tryCatch(
         {
             report.progress <- FALSE
@@ -188,33 +189,11 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 file <- file.unzipped
             }
 
-            # BED files can be imported as sparse (binsize==0) or dense (binsize>0)
             if (is_bed_input || length(grep("^.+\\.bed$", file, perl = TRUE))) {
                 message("Importing BED file...\n")
                 report.progress <- TRUE
                 bed_parsed <- .gtrack_read_bed(file)
-                if (!is.null(binsize) && !is.na(binsize) && binsize > 0) {
-                    intervalData <- data.frame(
-                        chrom = bed_parsed$intervals$chrom,
-                        start = bed_parsed$intervals$start,
-                        end = bed_parsed$intervals$end,
-                        value = as.numeric(bed_parsed$values)
-                    )
-                    .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
-                    .gdb.add_track(trackstr)
-                    .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
-                } else {
-                    .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
-                    .gdb.add_track(trackstr)
-                    .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, 0, defval), attrs)
-                }
-
-                # If database is indexed, automatically convert the track to indexed format
-                if (.gdb.is_indexed()) {
-                    gtrack.convert_to_indexed(trackstr)
-                }
-
-                success <- TRUE
+                used_bed <- TRUE
             } else if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
                 # looks like all bigWig files start with "fc26" in their first two bytes
                 system(sprintf("od -x -N 2 \"%s\"", file), intern = TRUE)[1] == "0000000 fc26") {
@@ -236,37 +215,66 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 file <- file.converted
             }
 
-            if (success) {
-                # BED path handled above; skip the generic wig importer
-            } else {
-                if (report.progress) {
-                    message("Converting to track...\n")
-                }
-
-                .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env())
-                .gdb.add_track(trackstr)
-                .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
-
-                # If database is indexed, automatically convert the track to indexed format
-                if (.gdb.is_indexed()) {
-                    gtrack.convert_to_indexed(trackstr)
-                }
-
-                success <- TRUE
+            if (!used_bed && report.progress) {
+                message("Converting to track...\n")
             }
+
+            .gtrack.create_atomic(trackstr, function() {
+                if (used_bed) {
+                    if (!is.null(binsize) && !is.na(binsize) && binsize > 0) {
+                        intervalData <- data.frame(
+                            chrom = bed_parsed$intervals$chrom,
+                            start = bed_parsed$intervals$start,
+                            end = bed_parsed$intervals$end,
+                            value = as.numeric(bed_parsed$values)
+                        )
+                        .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
+                    } else {
+                        .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
+                    }
+                } else {
+                    .gcall("gtrackimportwig", trackstr, file, binsize, defval, .misha_env())
+                }
+            })
+
+            final_dir <- .track_dir(trackstr)
+            success <- FALSE
+            tryCatch(
+                {
+                    .gdb.add_track(trackstr)
+                    if (used_bed) {
+                        bed_binsize <- if (!is.null(binsize) && !is.na(binsize) && binsize > 0) binsize else 0
+                        .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, bed_binsize, defval), attrs)
+                    } else {
+                        .gtrack_set_created_attrs(trackstr, description, sprintf("gtrack.import(%s, description, \"%s\", %d, %g, attrs)", trackstr, file.original, binsize, defval), attrs)
+                    }
+
+                    # If database is indexed, automatically convert the track to indexed format
+                    if (.gdb.is_indexed()) {
+                        gtrack.convert_to_indexed(trackstr)
+                    }
+                    success <- TRUE
+                },
+                finally = {
+                    if (!success) {
+                        if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                            warning(sprintf(
+                                "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                                trackstr, final_dir
+                            ), call. = FALSE)
+                        }
+                        try(.gdb.rm_track(trackstr), silent = TRUE)
+                    }
+                }
+            )
         },
         finally = {
             if (tmp.dirname != "") {
                 unlink(tmp.dirname, recursive = TRUE)
             }
-
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
-            }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
 
 
@@ -326,13 +334,16 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
-    retv <- 0
+
+    retv <- NULL
+    .gtrack.create_atomic(trackstr, function() {
+        retv <<- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env())
+    })
+
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            retv <- .gcall("gtrackimport_mappedseq", trackstr, file, pileup, binsize, cols.order, remove.dups, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -344,9 +355,14 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
             success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )

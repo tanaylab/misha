@@ -358,14 +358,18 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     }
 
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
+
+    out_colnames <- NULL
+    .gtrack.create_atomic(trackstr, function() {
+        out_colnames <<- .gcall("garrays_import", trackstr, srcs, colnames, .misha_env())
+    })
+
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            colnames <- .gcall("garrays_import", trackstr, srcs, colnames, .misha_env())
             .gdb.add_track(trackstr)
-            .gtrack.array.set_colnames(trackstr, colnames, FALSE)
+            .gtrack.array.set_colnames(trackstr, out_colnames, FALSE)
             created.by <- sprintf("gtrack.array.import(\"%s\", description, src = c(\"%s\"))", trackstr, paste(srcs, collapse = "\", \""))
             .gtrack.attr.set(trackstr, "created.by", created.by, TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -374,13 +378,18 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
             success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
 
 

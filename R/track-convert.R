@@ -44,18 +44,19 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
 
     src.dirname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", src.trackstr), sep = "/"))
     tgt.dirname <- sprintf("%s.track", paste(get("GWD", envir = .misha), gsub("\\.", "/", tgt.trackstr), sep = "/"))
-    success <- FALSE
 
+    .gtrack.create_atomic(tgt.trackstr, function() {
+        .gcall("gtrackconvert", src.trackstr, tgt.trackstr, .misha_env())
+    })
+
+    success <- FALSE
     tryCatch(
         {
-            .gcall("gtrackconvert", src.trackstr, tgt.trackstr, .misha_env())
-
             # copy all supplimentary data of a track (vars, etc.)
             if (!system(sprintf("cp -r -u %s/. %s", src.dirname, tgt.dirname))) {
                 # if tgt track is null move it to the source track
                 if (is.null(substitute(tgt.track))) {
                     unlink(src.dirname, recursive = TRUE)
-                    success <- TRUE
                     file.rename(tgt.dirname, src.dirname)
                 }
             } else {
@@ -71,19 +72,36 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
                 }
                 warning(msg, call. = FALSE)
             }
-            success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
             if (.gdb.is_indexed()) {
-                gtrack.convert_to_indexed(tgt.trackstr)
+                # In the tgt.track==NULL case the converted dir was renamed
+                # over the source above, so the indexed conversion target is
+                # src.trackstr; otherwise it is tgt.trackstr.
+                indexed_target <- if (is.null(substitute(tgt.track))) src.trackstr else tgt.trackstr
+                gtrack.convert_to_indexed(indexed_target)
             }
+            success <- TRUE
         },
         finally = {
             if (!success) {
-                unlink(tgt.dirname, recursive = TRUE)
+                # On post-rename failure, trash whichever track dir(s) are
+                # still on disk and leave the source intact if we already
+                # consumed it.
+                if (dir.exists(tgt.dirname)) {
+                    if (!.gdb.trash(tgt.dirname) && dir.exists(tgt.dirname)) {
+                        warning(sprintf(
+                            "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                            tgt.trackstr, tgt.dirname
+                        ), call. = FALSE)
+                    }
+                }
             }
-            .gdb.rm_track(tgt.trackstr)
+            # Always sync the registry for tgt.trackstr - either the dir
+            # is gone (rename-to-src case) and rm_track deregisters it,
+            # or the dir still exists and rm_track is a no-op there.
+            try(.gdb.rm_track(tgt.trackstr), silent = TRUE)
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
