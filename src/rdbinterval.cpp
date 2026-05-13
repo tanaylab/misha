@@ -10,6 +10,8 @@
 #include <cctype>
 #include <limits>
 #include <fstream>
+#include <memory>
+#include <mutex>
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -36,7 +38,103 @@ const char *IntervalPval::COL_NAMES[IntervalPval::NUM_COLS] = { "chrom", "start"
 
 const char *ChainInterval::COL_NAMES[ChainInterval::NUM_COLS] = { "chrom", "start", "end", "strand", "chromsrc", "startsrc", "endsrc", "strandsrc", "chain_id", "score" };
 
+// Process-wide cache for GenomeChromKey. The key is the identity of the
+// (ALLGENOME, CHROM_ALIAS) SEXP pointers in the misha environment. Building
+// this structure costs ~5M hash inserts on a 1.28M-contig genome (~1.5 s of
+// kernel-and-CPU per C++ entry); caching it amortises that to ~zero on the
+// common case where many misha calls run against the same set root.
+//
+// The cache holds R_PreserveObject-pinned SEXPs so the addresses stay valid
+// across R GCs (R's GC is non-moving, but it can free objects and reuse
+// addresses for unrelated allocations). Replacing the cache entry releases
+// the previous pins.
+namespace {
+	std::mutex s_chrom_key_cache_mutex;
+	std::shared_ptr<GenomeChromKey> s_chrom_key_cache;
+	SEXP s_cached_allgenome = nullptr;
+	SEXP s_cached_chrom_alias = nullptr;
+}
+
+const GenomeChromKey &IntervUtils::get_or_build_chrom_key(SEXP envir)
+{
+	SEXP allgenome = find_in_misha(envir, "ALLGENOME");
+	if (Rf_isNull(allgenome))
+		verror("ALLGENOME variable does not exist");
+	if (!Rf_isVector(allgenome) || Rf_length(allgenome) != 2)
+		verror("ALLGENOME variable has invalid type");
+
+	SEXP chrom_alias = find_in_misha(envir, "CHROM_ALIAS");
+	// Normalise NULL/missing to R_NilValue so cache comparisons are stable.
+	if (Rf_isNull(chrom_alias))
+		chrom_alias = R_NilValue;
+
+	{
+		std::lock_guard<std::mutex> lock(s_chrom_key_cache_mutex);
+		if (s_chrom_key_cache &&
+		    s_cached_allgenome == allgenome &&
+		    s_cached_chrom_alias == chrom_alias) {
+			return *s_chrom_key_cache;
+		}
+	}
+
+	auto new_key = std::make_shared<GenomeChromKey>();
+
+	SEXP rallgenome1d = VECTOR_ELT(allgenome, 0);
+	SEXP chroms = VECTOR_ELT(rallgenome1d, GInterval::CHROM);
+	SEXP chrom_sizes = VECTOR_ELT(rallgenome1d, GInterval::END);
+	SEXP chrom_levels = Rf_getAttrib(chroms, R_LevelsSymbol);
+	unsigned num_intervals = (unsigned)Rf_length(chroms);
+
+	for (unsigned i = 0; i < num_intervals; i++) {
+		const char *chrom = Rf_isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
+		double chrom_size = Rf_isReal(chrom_sizes) ? REAL(chrom_sizes)[i] : INTEGER(chrom_sizes)[i];
+		try {
+			new_key->add_chrom(chrom, (uint64_t)chrom_size);
+		} catch (TGLException &e) {
+			verror("Reading ALLGENOME: %s", e.msg());
+		}
+	}
+
+	if (chrom_alias != R_NilValue && Rf_isVector(chrom_alias)) {
+		SEXP alias_names = Rf_getAttrib(chrom_alias, R_NamesSymbol);
+		if (!Rf_isNull(alias_names)) {
+			int n_aliases = Rf_length(chrom_alias);
+			for (int i = 0; i < n_aliases; i++) {
+				const char *alias = CHAR(STRING_ELT(alias_names, i));
+				const char *canonical = CHAR(STRING_ELT(chrom_alias, i));
+				try {
+					int chrom_id = new_key->chrom2id(canonical);
+					new_key->add_chrom_alias(alias, chrom_id);
+				} catch (TGLException &) {
+					// Silently skip aliases that point to non-existent chromosomes
+				}
+			}
+		}
+	}
+
+	std::lock_guard<std::mutex> lock(s_chrom_key_cache_mutex);
+	// Double-checked: another thread may have populated since our miss check.
+	if (s_chrom_key_cache &&
+	    s_cached_allgenome == allgenome &&
+	    s_cached_chrom_alias == chrom_alias) {
+		return *s_chrom_key_cache;
+	}
+	// Release the previous pins (if any) before pinning the new SEXPs.
+	if (s_cached_allgenome != nullptr)
+		R_ReleaseObject(s_cached_allgenome);
+	if (s_cached_chrom_alias != nullptr && s_cached_chrom_alias != R_NilValue)
+		R_ReleaseObject(s_cached_chrom_alias);
+	R_PreserveObject(allgenome);
+	if (chrom_alias != R_NilValue)
+		R_PreserveObject(chrom_alias);
+	s_cached_allgenome = allgenome;
+	s_cached_chrom_alias = chrom_alias;
+	s_chrom_key_cache = std::move(new_key);
+	return *s_chrom_key_cache;
+}
+
 IntervUtils::IntervUtils(SEXP envir) :
+	m_chrom_key(get_or_build_chrom_key(envir)),
 	m_envir(envir),
 	m_num_planned_kids(0),
 	m_kid_intervals1d(NULL),
@@ -49,53 +147,12 @@ IntervUtils::IntervUtils(SEXP envir) :
 	m_kids_intervals1d.clear();
 	m_kids_intervals2d.clear();
 
-    {
-        m_allgenome = find_in_misha(m_envir, "ALLGENOME");
-    }
+	// ALLGENOME has already been fetched and validated inside
+	// get_or_build_chrom_key; re-fetch the SEXP pointer here so the
+	// existing get_rallgenome1d / get_rallgenome2d accessors keep working.
+	m_allgenome = find_in_misha(m_envir, "ALLGENOME");
 
-	if (Rf_isNull(m_allgenome))
-		verror("ALLGENOME variable does not exist");
-
-	if (!Rf_isVector(m_allgenome) || Rf_length(m_allgenome) != 2)
-		verror("ALLGENOME variable has invalid type");
-
-	SEXP chroms = VECTOR_ELT(get_rallgenome1d(), GInterval::CHROM);
-	SEXP chrom_sizes = VECTOR_ELT(get_rallgenome1d(), GInterval::END);
-	SEXP chrom_levels = Rf_getAttrib(chroms, R_LevelsSymbol);
-	unsigned num_intervals = (unsigned)Rf_length(chroms);
-
-	for (unsigned i = 0; i < num_intervals; i++) {
-		const char *chrom = Rf_isString(chroms) ? CHAR(STRING_ELT(chroms, i)) : CHAR(STRING_ELT(chrom_levels, INTEGER(chroms)[i] - 1));
-		double chrom_size = Rf_isReal(chrom_sizes) ? REAL(chrom_sizes)[i] : INTEGER(chrom_sizes)[i];
-		try {
-			m_chrom_key.add_chrom(chrom, (uint64_t)chrom_size);
-		} catch (TGLException &e) {
-			verror("Reading ALLGENOME: %s", e.msg());
-		}
-	}
-
-	// Populate chromosome aliases from R CHROM_ALIAS map
-	SEXP chrom_alias = find_in_misha(m_envir, "CHROM_ALIAS");
-	if (!Rf_isNull(chrom_alias) && Rf_isVector(chrom_alias)) {
-		SEXP alias_names = Rf_getAttrib(chrom_alias, R_NamesSymbol);
-		if (!Rf_isNull(alias_names)) {
-			int n_aliases = Rf_length(chrom_alias);
-			for (int i = 0; i < n_aliases; i++) {
-				const char *alias = CHAR(STRING_ELT(alias_names, i));
-				const char *canonical = CHAR(STRING_ELT(chrom_alias, i));
-
-				// Find the chromid for the canonical chromosome name
-				try {
-					int chrom_id = m_chrom_key.chrom2id(canonical);
-					m_chrom_key.add_chrom_alias(alias, chrom_id);
-				} catch (TGLException &) {
-					// Silently skip aliases that point to non-existent chromosomes
-				}
-			}
-		}
-	}
-
-    GenomeTrack::set_rnd_func(unif_rand);
+	GenomeTrack::set_rnd_func(unif_rand);
 }
 
 IntervUtils::~IntervUtils()
