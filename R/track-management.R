@@ -877,8 +877,8 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        removed <- .gdb.trash(dirname)
-        if (!removed) {
+        trashed <- .gdb.trash(dirname)
+        if (!trashed) {
             message(sprintf("Failed to delete track %s", trackname))
         } else {
             .gdb.rm_track(trackname, trackdir = dirname, db = db)
