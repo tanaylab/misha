@@ -1929,9 +1929,10 @@ void TrackExpressionVars::start_chrom(const GInterval &interval)
 				}
 				itrack_n_imdf->track = new_track;
 
-				// If this is an indexed track, add to persistent cache
-				struct stat idx_st;
-				if (stat((track_dir + "/track.idx").c_str(), &idx_st) == 0 && supports_shared_1d_backend(itrack_n_imdf->type)) {
+				// If this is an indexed track, add to persistent cache.
+				// Use the cached get_track_index() rather than a fresh stat()
+				// on every chromosome transition.
+				if (GenomeTrack::get_track_index(track_dir) && supports_shared_1d_backend(itrack_n_imdf->type)) {
 					const BackendKey bk{itrack_n_imdf->type, interval.chromid, filename};
 					auto master_it = m_shared_1d_track_masters.find(bk);
 					if (master_it != m_shared_1d_track_masters.end()) {
@@ -2014,9 +2015,9 @@ void TrackExpressionVars::start_chrom(const GInterval2D &interval)
 						}
 						itrack_n_imdf->track = new_track;
 
-						// If indexed, add to persistent cache
-						struct stat idx_st;
-						if (stat((track_dir + "/track.idx").c_str(), &idx_st) == 0 && supports_shared_1d_backend(itrack_n_imdf->type)) {
+						// If indexed, add to persistent cache. Use the cached
+						// get_track_index() to avoid a stat() per chromosome.
+						if (GenomeTrack::get_track_index(track_dir) && supports_shared_1d_backend(itrack_n_imdf->type)) {
 							const BackendKey bk{itrack_n_imdf->type, chromid, filename};
 							auto master_it = m_shared_1d_track_masters.find(bk);
 							if (master_it != m_shared_1d_track_masters.end()) {

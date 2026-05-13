@@ -37,12 +37,13 @@ void GenomeTrackArrays::init_read(const char *filename, int chromid)
 	m_vals_pos.clear();
 
 	if (!m_master_obj) {
-		// Check for indexed format FIRST
+		// Check for indexed format FIRST. get_track_index() hits the process-
+		// static index cache (avoiding a stat() per chromosome transition on
+		// the hot iterator path) and returns nullptr when there is no index.
 		const std::string track_dir = GenomeTrack::get_track_dir(filename);
-		const std::string idx_path = track_dir + "/track.idx";
+		auto idx = get_track_index(track_dir);
 
-		struct stat idx_st;
-		if (stat(idx_path.c_str(), &idx_st) == 0) {
+		if (idx) {
 			// --- INDEXED PATH ---
 			const std::string dat_path  = track_dir + "/track.dat";
 
@@ -55,10 +56,6 @@ void GenomeTrackArrays::init_read(const char *filename, int chromid)
 				m_dat_path = dat_path;
 				m_dat_mode = "rb";
 			}
-
-			auto idx   = get_track_index(track_dir);
-			if (!idx)
-				TGLError<GenomeTrackArrays>("Failed to load track index for %s", track_dir.c_str());
 
 			auto entry = idx->get_entry(chromid);
 			if (!entry || entry->length == 0) {
