@@ -145,3 +145,153 @@ test_that("indexed-direct track.idx has one entry per chromosome", {
     n_chroms <- nrow(gintervals.all())
     expect_equal(idx_size, 36 + 24 * n_chroms)
 })
+
+# ---------------------------------------------------------------------
+# Sparse (INTERVALS1D iterator) - Phase 4c.
+# Builds a small indexed DB, creates a sparse iterator source via
+# gtrack.create_sparse, then exercises the iterator-based gtrack.create
+# (INTERVALS1D path) on both the indexed-direct and convert-after-create
+# flows; asserts bit-for-bit equivalence.
+
+# Build a small indexed DB and create a sparse "source" track via
+# gtrack.create_sparse (which writes the indexed format directly via
+# its own C path, unrelated to GenomeTrackIndexedWriter). Returns
+# handles + the source track name. Source intervals deliberately skip
+# some chroms to exercise the missing-chrom offset logic.
+.make_indexed_db_with_sparse_source <- function(src_name = "src_sparse") {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n",
+        ">chr2\nGGCCGGCCGGCCGGCCGGCCGGCCGGCCGGCC\n",
+        ">chr3\nTATATATATATATATATATATATATATATATA\n",
+        ">chr4\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+        ">chr5\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n",
+        file = test_fasta, sep = ""
+    )
+
+    test_db <- tempfile(pattern = "misha_idx_sparse_")
+
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = FALSE)
+        gdb.init(test_db)
+    })
+
+    # Sparse source intervals on chr1, chr3, chr5 only - chr2 and chr4
+    # are deliberately absent to exercise the missing-chrom offset path
+    # in finalize().
+    src_intervs <- data.frame(
+        chrom = c("chr1", "chr1", "chr3", "chr5", "chr5"),
+        start = c(0L, 16L, 8L, 0L, 20L),
+        end = c(8L, 24L, 24L, 12L, 28L),
+        stringsAsFactors = FALSE
+    )
+    gtrack.create_sparse(src_name, "sparse source", src_intervs,
+        values = seq_len(nrow(src_intervs))
+    )
+
+    list(db = test_db, fasta = test_fasta, src = src_name)
+}
+
+test_that("indexed-direct sparse matches convert-after-create bit-for-bit", {
+    handles_a <- .make_indexed_db_with_sparse_source("src_sparse")
+    withr::defer({
+        unlink(handles_a$db, recursive = TRUE)
+        unlink(handles_a$fasta)
+    })
+
+    # Direct path: gtrack.create on the indexed DB. Note: the source
+    # track's data is on chr1, chr3, chr5; the iterator scope is
+    # gintervals.all() so chr2 and chr4 must be backfilled with
+    # header-only entries.
+    gtrack.create("idx_sparse_direct", "via direct", "src_sparse",
+        iterator = "src_sparse"
+    )
+
+    direct_dir <- .track_dir("idx_sparse_direct")
+    direct_dat <- readBin(file.path(direct_dir, "track.dat"),
+        what = "raw",
+        n = file.info(file.path(direct_dir, "track.dat"))$size + 1
+    )
+    direct_idx <- readBin(file.path(direct_dir, "track.idx"),
+        what = "raw",
+        n = file.info(file.path(direct_dir, "track.idx"))$size + 1
+    )
+
+    # Comparison artifact in a SECOND indexed DB: re-create source +
+    # consumer by hiding genome.idx before the consumer create so the
+    # per-chrom + convert path runs.
+    handles_b <- .make_indexed_db_with_sparse_source("src_sparse")
+    withr::defer({
+        unlink(handles_b$db, recursive = TRUE)
+        unlink(handles_b$fasta)
+    })
+
+    seq_dir <- file.path(handles_b$db, "seq")
+    idx_path <- file.path(seq_dir, "genome.idx")
+    hidden_path <- file.path(seq_dir, "genome.idx.hidden")
+    expect_true(file.rename(idx_path, hidden_path))
+    withr::defer({
+        if (file.exists(hidden_path)) file.rename(hidden_path, idx_path)
+    })
+    gtrack.create("idx_sparse_via_convert", "via convert", "src_sparse",
+        iterator = "src_sparse"
+    )
+
+    # Restore idx, then convert (mirroring legacy two-pass flow).
+    file.rename(hidden_path, idx_path)
+    gdb.reload()
+    gtrack.convert_to_indexed("idx_sparse_via_convert")
+
+    convert_dir <- .track_dir("idx_sparse_via_convert")
+    convert_dat <- readBin(file.path(convert_dir, "track.dat"),
+        what = "raw",
+        n = file.info(file.path(convert_dir, "track.dat"))$size + 1
+    )
+    convert_idx <- readBin(file.path(convert_dir, "track.idx"),
+        what = "raw",
+        n = file.info(file.path(convert_dir, "track.idx"))$size + 1
+    )
+
+    expect_identical(direct_dat, convert_dat)
+    expect_identical(direct_idx, convert_idx)
+
+    # Functional equivalence (open in handles_b, which has both).
+    intv <- gintervals.all()
+    r_direct <- gextract("idx_sparse_via_convert", intervals = intv)
+    expect_true(nrow(r_direct) > 0)
+})
+
+test_that("indexed-direct sparse: no per-chrom files left over", {
+    handles <- .make_indexed_db_with_sparse_source("src_sparse_clean")
+    withr::defer({
+        unlink(handles$db, recursive = TRUE)
+        unlink(handles$fasta)
+    })
+
+    gtrack.create("idx_sparse_clean", "no leftover", "src_sparse_clean",
+        iterator = "src_sparse_clean"
+    )
+
+    dir_contents <- list.files(.track_dir("idx_sparse_clean"),
+        all.files = TRUE, no.. = TRUE
+    )
+    expect_setequal(dir_contents, c("track.dat", "track.idx", ".attributes"))
+})
+
+test_that("indexed-direct sparse produces a working track", {
+    handles <- .make_indexed_db_with_sparse_source("src_sparse_func")
+    withr::defer({
+        unlink(handles$db, recursive = TRUE)
+        unlink(handles$fasta)
+    })
+
+    gtrack.create("idx_sparse_func", "functional", "src_sparse_func",
+        iterator = "src_sparse_func"
+    )
+
+    info <- gtrack.info("idx_sparse_func")
+    expect_equal(info$type, "sparse")
+
+    val <- gextract("idx_sparse_func", intervals = gintervals.all())
+    expect_gt(nrow(val), 0)
+    expect_true(all(!is.na(val$idx_sparse_func)))
+})

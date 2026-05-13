@@ -77,6 +77,13 @@ private:
     int m_current_chrom = -1;
     std::uint64_t m_chrom_start_offset = 0;
 
+    // Largest chromid passed to begin_chrom() so far. begin_chrom()
+    // requires strictly increasing chromids so that track.dat is laid
+    // out in genome order; finalize() relies on this to compute
+    // missing-chrom offsets identically to the legacy pack
+    // (gtrack_pack_per_chrom_to_indexed) - see finalize() comment.
+    int m_max_seen_chromid = -1;
+
     // Entries recorded in the order begin_chrom() was called. Sparse
     // (only chroms with data are present); finalize() pads to a full
     // per-genome table before writing track.idx.
