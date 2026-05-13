@@ -230,6 +230,48 @@ test_that(".install_genes_set with NA in gene_sets skips that role", {
     expect_false(gintervals.exists("utr5"))
 })
 
+test_that(".install_genes_set tolerates GFF3 records that fail conversion (NCBI Ig case)", {
+    # NCBI's RefSeq human GFF carries a handful of immunoglobulin V/D/J
+    # records whose CDS coords extend beyond their parent exon. Without
+    # -warnAndContinue the whole ~70k-row conversion aborts on the first
+    # such record, leaving only the mitochondrial subset (which converts
+    # before the loop reaches the Ig loci).
+    converter <- tryCatch(.gff3_to_genepred_resolve_or_install(),
+        error = function(e) NULL
+    )
+    skip_if(is.null(converter), "gff3ToGenePred binary not available")
+
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    dir.create(file.path(groot, "downloads"), showWarnings = FALSE)
+    gdb.init(groot, rescan = TRUE)
+
+    gff <- tempfile(fileext = ".gff3")
+    writeLines(c(
+        "##gff-version 3",
+        # Good gene: CDS sits inside exons.
+        "chr1\tsrc\tgene\t101\t500\t.\t+\t.\tID=g1;Name=GOOD",
+        "chr1\tsrc\tmRNA\t101\t500\t.\t+\t.\tID=m1;Parent=g1;Name=GOOD-tx",
+        "chr1\tsrc\texon\t101\t500\t.\t+\t.\tID=e1;Parent=m1",
+        "chr1\tsrc\tCDS\t151\t450\t.\t+\t0\tID=c1;Parent=m1",
+        # Bad gene: CDS extends beyond exon (Ig-style annotation).
+        "chr1\tsrc\tgene\t600\t900\t.\t+\t.\tID=g2;Name=BAD",
+        "chr1\tsrc\tmRNA\t600\t900\t.\t+\t.\tID=m2;Parent=g2;Name=BAD-tx",
+        "chr1\tsrc\texon\t600\t700\t.\t+\t.\tID=e2;Parent=m2",
+        "chr1\tsrc\tCDS\t750\t850\t.\t+\t0\tID=c2;Parent=m2"
+    ), gff)
+
+    .install_genes_set(
+        list(file = gff, format = "gff3"),
+        prefix = "",
+        gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
+        overwrite = FALSE, verbose = FALSE
+    )
+    # GOOD record converts; BAD is skipped with a warning.
+    expect_true(gintervals.exists("tss"))
+    expect_equal(nrow(gintervals.load("tss")), 1L)
+})
+
 test_that(".install_genes_set creates intermediate dirs for dotted prefix", {
     groot <- make_test_groot()
     on.exit(unlink(groot, recursive = TRUE))
