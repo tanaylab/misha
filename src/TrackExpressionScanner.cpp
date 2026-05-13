@@ -564,8 +564,10 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 	int common_track_type = -1;
 	int common_binsize = -1;
 
-	GIntervals all_genome_intervs;
-	m_iu.get_all_genome_intervs(all_genome_intervs);
+	// Read-only lookup of per-chrom sizes; using the cached const ref avoids
+	// a per-call O(num_contigs) copy that adds up across multitask kids on
+	// large-contig genomes.
+	const GIntervals &all_genome_intervs = m_iu.get_all_genome_intervs_cached1d();
 
 	unsigned num_tracks = vars.get_num_track_vars();
 	vector<string> track_names;

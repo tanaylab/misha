@@ -61,8 +61,7 @@ SEXP gtrackinfo(SEXP _track, SEXP _validate, SEXP _envir)
             names = rprotect_ptr(RSaneAllocVector(STRSXP, NUM_FIXED_BIN_COLS));
 
 			GenomeTrackFixedBin gtrack;
-			GIntervals all_genome_intervs;
-			iu.get_all_genome_intervs(all_genome_intervs);
+			const GIntervals &all_genome_intervs = iu.get_all_genome_intervs_cached1d();
 			char filename[FILENAME_MAX];
             SEXP rbinsize;
 
