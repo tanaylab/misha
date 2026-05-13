@@ -11,7 +11,7 @@
 * `gextract()` / `gscreen()` and other track-expression iterators now validate indexed 1D tracks via `track.idx` instead of stat'ing it once per chromosome. On a 1.28M-contig database, `gextract` of 100 random 5 bp intervals from a dense indexed track drops from ~64 s to ~8 s (system time from ~52 s to ~2 s).
 * Fixed `gintervals.random()` rejecting chromosomes whose length exactly equals `size + 2*dist_from_edge` (where a single valid interval is available) and biasing sampling away from the right edge. The no-filter path now uses the same full-range semantics as the filter path.
 * Most misha functions paid a fixed ~1.5 s setup cost on million-contig databases (rebuilding the chromosome table and the all-genome interval list on every call). Both are now cached. On a 1.28M-contig database, `gtrack.info()` drops from ~1.4 s to <1 ms and `gseq.extract()` from ~14 s to ~0.4 s; smaller genomes are unaffected.
-* `gsetroot()` is ~2x faster on million-contig databases (~13 s -> ~7 s on a 1.28M-contig DB).
+* `gsetroot()` is ~3x faster on million-contig databases (~13 s -> ~5 s on a 1.28M-contig DB).
 * `gextract()` and other scan operations are faster on indexed tracks of databases with many chromosome aliases (skips a per-contig alias lookup that has no effect on indexed tracks).
 
 # misha 5.6.29
