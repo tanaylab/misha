@@ -262,16 +262,24 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
             }
 
         } else {
-            // No filter: use simple chromosome-based sampling
+            // No filter: use simple chromosome-based sampling. seg.length is the
+            // *full* length of the valid range (matching the filter path), so the
+            // sampling code's `valid_range = seg.length - size` is correct. The
+            // previous version trimmed `size` off `valid_end` AND subtracted
+            // `size` again at sample time, which both biased sampling away from
+            // the right edge and rejected chromosomes whose length exactly
+            // equals `size + 2*dist_from_edge` (e.g. size=1000 on a 1000 bp
+            // contig).
             for (int chromid = 0; chromid < num_chroms; chromid++) {
                 int64_t chrom_start = chrom_starts[chromid];
                 int64_t chrom_end = chrom_ends[chromid];
                 int64_t chrom_len = chrom_end - chrom_start;
 
-                int64_t valid_start = chrom_start + (int64_t)dist_from_edge;
-                int64_t valid_end = chrom_end - (int64_t)dist_from_edge - size;
+                int64_t seg_start = chrom_start + (int64_t)dist_from_edge;
+                int64_t seg_end = chrom_end - (int64_t)dist_from_edge;
+                int64_t seg_len = seg_end - seg_start;
 
-                if (valid_start >= valid_end) {
+                if (seg_len < size) {
                     Rf_error("Chromosome %s is too short (length: %lld, required: %lld)",
                              chrom_id_to_name[chromid].c_str(), (long long)chrom_len,
                              (long long)(size + 2 * dist_from_edge));
@@ -280,9 +288,9 @@ SEXP C_grandom_genome(SEXP _size, SEXP _n, SEXP _dist_from_edge, SEXP _chrom_df,
                 ValidSegment seg;
                 seg.chromid = chromid;
                 seg.chrom_name = chrom_id_to_name[chromid];
-                seg.start = valid_start;
-                seg.end = valid_end;
-                seg.length = valid_end - valid_start;
+                seg.start = seg_start;
+                seg.end = seg_end;
+                seg.length = seg_len;
                 valid_segments.push_back(seg);
             }
 
