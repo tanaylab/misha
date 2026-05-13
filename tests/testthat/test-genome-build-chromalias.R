@@ -601,6 +601,42 @@ test_that(".merge_chrom_aliases_tsv preserves existing rows and dedupes", {
     expect_equal(nrow(out), 13L) # 12 new + 1 preserved
 })
 
+test_that(".merge_chrom_aliases_tsv tolerates pre-existing wide-format TSV (NCBI seq-only)", {
+    # .build_seq_ncbi (pre-v5.6.30) wrote chrom_aliases.tsv in wide format:
+    # (canonical, refseqAccession, genbankAccession, sequenceName, chrName, role, length).
+    # When gdb.install_intervals runs against such a groot, the merge must
+    # convert the wide rows to long and append the new alias rows.
+    f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
+    alias_df <- .parse_ucsc_chromalias(f)
+    groot <- tempfile()
+    dir.create(groot)
+    on.exit(unlink(groot, recursive = TRUE))
+    wide <- data.frame(
+        canonical        = "chrZ",
+        refseqAccession  = "NC_999999.1",
+        genbankAccession = "CM999999.1",
+        sequenceName     = "Z",
+        chrName          = "Z",
+        role             = "assembled-molecule",
+        length           = 1000L,
+        stringsAsFactors = FALSE
+    )
+    write.table(wide, file.path(groot, "chrom_aliases.tsv"),
+        sep = "\t", quote = FALSE, row.names = FALSE
+    )
+    .merge_chrom_aliases_tsv(groot, alias_df, groot_col = "ucsc")
+    out <- read.table(file.path(groot, "chrom_aliases.tsv"),
+        sep = "\t", header = TRUE, stringsAsFactors = FALSE
+    )
+    # Existing wide row produces 4 long rows (chrZ -> NC_999999.1, CM999999.1, "Z", "Z").
+    # The chrName/sequenceName rows dedupe to one alias ("Z") per (canonical, source).
+    expect_true("NC_999999.1" %in% out$alias)
+    expect_true("CM999999.1" %in% out$alias)
+    expect_true(all(out$canonical[out$alias %in% c("NC_999999.1", "CM999999.1")] == "chrZ"))
+    # New long-format rows from the merge are also present.
+    expect_true(any(out$canonical == "chr1"))
+})
+
 test_that(".merge_chrom_aliases_tsv warns on canonical conflict and keeps existing", {
     f <- testthat::test_path("fixtures", "chrom-alias-mini.txt")
     alias_df <- .parse_ucsc_chromalias(f)

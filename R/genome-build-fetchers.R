@@ -241,54 +241,68 @@
     out
 }
 
-# NCBI Datasets fetcher. The existing backend already extracts the zip and finds
-# the GFF; we reuse that logic. For seq-only builds, only chromAlias-equivalent
-# (sequence_report.jsonl) is fetched.
+# NCBI Datasets + FTP fetcher. The Datasets zip carries SEQUENCE_REPORT (for
+# chromAlias) and optionally GENOME_GFF (for genes); FASTA is never pulled
+# here since install_intervals doesn't use it. rmsk comes from per-assembly
+# FTP (Datasets API does not expose RM_OUT).
 .ncbi_fetch_assets <- function(recipe, sets, workdir, verbose = TRUE) {
     accession <- recipe$accession
-    # Pre-flight: hit /dataset_report (a few KB) to learn whether 'genes' can
-    # actually be installed before downloading 800+ MB. About 80% of the
-    # Phylo447/Zoonomia community-submitted assemblies (Sanger TOL et al.) on
-    # NCBI ship without any annotation at all; pulling the FASTA only to find
-    # there's no GFF is pure waste. The check is best-effort: any failure
-    # (network, parse) falls through to the original code path.
-    if ("genes" %in% sets) {
+    # Pre-flight: hit /dataset_report (a few KB) to (a) learn whether 'genes'
+    # can actually be installed before downloading the GFF, and (b) pick up
+    # assembly_name for the rmsk FTP path. About 80% of the Phylo447/Zoonomia
+    # community-submitted assemblies (Sanger TOL et al.) on NCBI ship without
+    # any annotation at all; pulling the GFF only to find there's none is
+    # pure waste. Best-effort: any failure (network, parse) leaves info=NULL
+    # and rmsk will be skipped if its FTP path can't be built.
+    info <- NULL
+    if (any(c("genes", "rmsk") %in% sets)) {
         report <- tryCatch(.ncbi_dataset_report(accession),
             error = function(e) NULL
         )
         if (!is.null(report)) {
             info <- .ncbi_parse_annotation_info(report)
-            hint <- if (!info$has_annotation) {
-                .ncbi_suggest_annotated_alternative(info$organism_tax_id, accession)
-            } else {
-                ""
+            if ("genes" %in% sets) {
+                hint <- if (!info$has_annotation) {
+                    .ncbi_suggest_annotated_alternative(info$organism_tax_id, accession)
+                } else {
+                    ""
+                }
+                res <- .ncbi_resolve_sets_with_preflight(sets, info,
+                    accession = accession, hint = hint
+                )
+                for (w in res$warnings) warning(w, call. = FALSE)
+                sets <- res$sets
             }
-            res <- .ncbi_resolve_sets_with_preflight(sets, info,
-                accession = accession, hint = hint
-            )
-            for (w in res$warnings) warning(w, call. = FALSE)
-            sets <- res$sets
         }
     }
     if (!length(sets)) {
         return(list(chrom_alias = NULL))
     }
+
+    # Build the Datasets include list: always SEQUENCE_REPORT (cheap; required
+    # for chromAlias), GENOME_GFF only when genes is requested.
+    include <- "SEQUENCE_REPORT"
+    if ("genes" %in% sets) include <- c(include, "GENOME_GFF")
     zip_path <- file.path(workdir, "datasets.zip")
-    .download_to(.ncbi_datasets_zip_url(accession), zip_path, verbose = verbose)
+    .download_to(.ncbi_datasets_zip_url(accession, include),
+        zip_path,
+        verbose = verbose
+    )
     extract_dir <- file.path(workdir, "extract")
     dir.create(extract_dir, recursive = TRUE)
     utils::unzip(zip_path, exdir = extract_dir)
 
     out <- list(chrom_alias = NULL)
 
-    seqrep <- list.files(extract_dir,
+    seqrep_files <- list.files(extract_dir,
         pattern = "sequence_report\\.jsonl$",
         recursive = TRUE, full.names = TRUE
     )
-    if (length(seqrep)) {
-        out$ncbi_sequence_report <- list(
-            file = seqrep[[1L]],
-            df = .parse_ncbi_sequence_report(seqrep[[1L]])
+    if (length(seqrep_files)) {
+        seqrep_df <- .parse_ncbi_sequence_report(seqrep_files[[1L]])
+        out$chrom_alias <- list(
+            df          = .ncbi_seqrep_to_alias_df(seqrep_df),
+            row_lengths = seqrep_df$length
         )
     }
 
@@ -309,9 +323,56 @@
         }
     }
     if ("rmsk" %in% sets) {
-        warning("'rmsk' from NCBI is not implemented (v1); skipping. Use ucsc-hub or manual.",
-            call. = FALSE
-        )
+        asm_name <- if (!is.null(info)) info$assembly_name else ""
+        if (!nzchar(asm_name)) {
+            # /dataset_report is suppressed for some older accessions
+            # (e.g. GCF_000001635.26 GRCm38.p6 returns {}). Fall back to
+            # listing the parent FTP dir and extracting the
+            # <accession>_<assembly_name>/ subdir.
+            parent <- sub("/[^/]+$", "/", .ncbi_ftp_assembly_dir(accession, "x"))
+            listing <- tryCatch(
+                {
+                    h <- curl::new_handle()
+                    curl::handle_setopt(h, timeout = 30, useragent = "misha")
+                    resp <- curl::curl_fetch_memory(parent, handle = h)
+                    if (resp$status_code >= 400) {
+                        NULL
+                    } else {
+                        strsplit(rawToChar(resp$content), "\n", fixed = TRUE)[[1L]]
+                    }
+                },
+                error = function(e) NULL
+            )
+            if (!is.null(listing)) {
+                asm_name <- .ncbi_ftp_assembly_name_from_dir(accession, listing)
+            }
+        }
+        if (!nzchar(asm_name)) {
+            warning(sprintf(
+                "Could not resolve assembly_name for %s (dataset_report empty and FTP listing failed); skipping rmsk.",
+                accession
+            ), call. = FALSE)
+        } else {
+            ftp_dir <- .ncbi_ftp_assembly_dir(accession, asm_name)
+            rm_url <- sprintf("%s/%s_%s_rm.out.gz", ftp_dir, accession, asm_name)
+            local_gz <- file.path(workdir, "rm.out.gz")
+            ok <- tryCatch(
+                {
+                    .download_to(rm_url, local_gz, verbose = verbose)
+                    TRUE
+                },
+                error = function(e) FALSE
+            )
+            if (!ok) {
+                warning(sprintf(
+                    "NCBI does not publish rm.out.gz for %s; skipping rmsk.",
+                    accession
+                ), call. = FALSE)
+            } else {
+                unzipped <- .gunzip_to_file(local_gz)
+                out$rmsk <- list(file = unzipped, format = "rmsk-out")
+            }
+        }
     }
     if ("cgi" %in% sets) {
         warning("'cgi' is not available from NCBI Datasets; skipping.", call. = FALSE)

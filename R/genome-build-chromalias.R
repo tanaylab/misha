@@ -644,10 +644,39 @@
 .merge_chrom_aliases_tsv <- function(groot, alias_df, groot_col) {
     out_path <- file.path(groot, "chrom_aliases.tsv")
     existing <- if (file.exists(out_path)) {
-        utils::read.table(out_path,
+        raw <- utils::read.table(out_path,
             sep = "\t", header = TRUE,
             stringsAsFactors = FALSE, quote = "", comment.char = ""
         )
+        # Wide-format (NCBI builds prior to v5.6.30 wrote
+        # canonical/refseqAccession/genbankAccession/sequenceName/chrName/role/length).
+        # Pivot to long so the merge can dedupe / append uniformly.
+        if (!all(c("alias", "source") %in% names(raw)) && "canonical" %in% names(raw)) {
+            alias_cols <- setdiff(names(raw), c("canonical", "role", "length"))
+            long_parts <- lapply(alias_cols, function(col) {
+                vals <- as.character(raw[[col]])
+                keep <- nzchar(vals) & !is.na(vals) & vals != raw$canonical
+                if (!any(keep)) {
+                    return(NULL)
+                }
+                data.frame(
+                    canonical = raw$canonical[keep],
+                    alias = vals[keep],
+                    source = col,
+                    stringsAsFactors = FALSE
+                )
+            })
+            long_parts <- Filter(Negate(is.null), long_parts)
+            raw <- if (length(long_parts)) {
+                unique(do.call(rbind, long_parts))
+            } else {
+                data.frame(
+                    canonical = character(0), alias = character(0),
+                    source = character(0), stringsAsFactors = FALSE
+                )
+            }
+        }
+        raw
     } else {
         data.frame(
             canonical = character(0), alias = character(0),

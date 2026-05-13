@@ -430,10 +430,11 @@
 }
 
 
-.ncbi_datasets_zip_url <- function(accession) {
+.ncbi_datasets_zip_url <- function(accession, include) {
+    stopifnot(is.character(include), length(include) >= 1L)
     sprintf(
-        "%s/genome/accession/%s/download?include_annotation_type=GENOME_FASTA,GENOME_GFF,SEQUENCE_REPORT",
-        .NCBI_DATASETS_API, accession
+        "%s/genome/accession/%s/download?include_annotation_type=%s",
+        .NCBI_DATASETS_API, accession, paste(include, collapse = ",")
     )
 }
 
@@ -465,13 +466,15 @@
     rep <- if (length(reports)) reports[[1L]] else list()
     ai <- rep$annotation_info %||% list()
     org <- rep$organism %||% list()
+    asm <- rep$assembly_info %||% list()
     provider <- as.character(ai$provider %||% "")
     list(
         has_annotation  = nzchar(provider),
         provider        = provider,
         annotation_name = as.character(ai$name %||% ""),
         organism_name   = as.character(org$organism_name %||% ""),
-        organism_tax_id = if (is.null(org$tax_id)) NA_integer_ else as.integer(org$tax_id)
+        organism_tax_id = if (is.null(org$tax_id)) NA_integer_ else as.integer(org$tax_id),
+        assembly_name   = as.character(asm$assembly_name %||% "")
     )
 }
 
@@ -595,6 +598,58 @@
     paste0("chrUn_", encode_acc(refseq_acc))
 }
 
+# Synthesize a UCSC-shaped chromAlias data.frame from a parsed NCBI
+# sequence_report. Five columns chosen so the existing column-detect +
+# match_by_length passes in gdb.install_intervals can resolve any common
+# groot naming convention (chr1.., NC_*, GenBank, bare chr name, HAL hybrid).
+# Empty cells (e.g. assemblies without GenBank twin) stay as "" -- alias
+# detection is bp-weighted and tolerates partial columns.
+.ncbi_seqrep_to_alias_df <- function(seqrep) {
+    sequence_name <- ifelse(seqrep$role == "assembled-molecule",
+        seqrep$chrName,
+        seqrep$sequenceName
+    )
+    ucsc <- mapply(.ncbi_to_ucsc_name,
+        seqrep$refseqAccession, seqrep$chrName, seqrep$role,
+        USE.NAMES = FALSE
+    )
+    data.frame(
+        accession = seqrep$refseqAccession,
+        genbank = seqrep$genbankAccession,
+        sequence_name = sequence_name,
+        chr_name = seqrep$chrName,
+        ucsc = ucsc,
+        stringsAsFactors = FALSE
+    )
+}
+
+# Extract the <assembly_name> suffix for `accession` from an NCBI FTP parent-
+# directory listing. NCBI Datasets /dataset_report returns {} for some older
+# / suppressed accessions (e.g. GCF_000001635.26 GRCm38.p6) so the
+# assembly_name field is missing; the FTP listing is the canonical fallback.
+.ncbi_ftp_assembly_name_from_dir <- function(accession, listing) {
+    pat <- sprintf("%s_([^/\"<> ]+)/", accession)
+    m <- regmatches(listing, regexpr(pat, listing, perl = TRUE))
+    if (!length(m)) {
+        return("")
+    }
+    sub(pat, "\\1", m[[1L]])
+}
+
+# NCBI FTP genomes-all directory for an assembly. Accession's nine-digit
+# numeric portion is split into three triplets:
+#   GCF_000001405.40 -> GCF/000/001/405/GCF_000001405.40_GRCh38.p14
+.ncbi_ftp_assembly_dir <- function(accession, assembly_name) {
+    prefix <- substr(accession, 1, 3)
+    digits <- sub("^GC[AF]_", "", accession)
+    digits <- sub("\\..*$", "", digits)
+    parts <- substring(digits, c(1, 4, 7), c(3, 6, 9))
+    sprintf(
+        "https://ftp.ncbi.nlm.nih.gov/genomes/all/%s/%s/%s/%s/%s_%s",
+        prefix, parts[1], parts[2], parts[3], accession, assembly_name
+    )
+}
+
 # Build a named character vector: original FASTA/GFF id -> target canonical
 # chrom name, given the desired chrom_naming and a parsed sequence report.
 # Always indexed by the refseqAccession used in the FASTA/GFF (the field NCBI
@@ -699,28 +754,6 @@
         ))
     }
     invisible(out_path)
-}
-
-# Persist the full sequence-report mapping (canonical, refseq, genbank,
-# sequenceName, role, length) as a TSV at <groot>/chrom_aliases.tsv. Provides
-# a self-describing aliases table for downstream tooling and future hooks
-# into .compute_chrom_aliases.
-.write_chrom_aliases_tsv <- function(groot, seqrep, rename_map) {
-    df <- data.frame(
-        canonical        = unname(rename_map[seqrep$refseqAccession]),
-        refseqAccession  = seqrep$refseqAccession,
-        genbankAccession = seqrep$genbankAccession,
-        sequenceName     = seqrep$sequenceName,
-        chrName          = seqrep$chrName,
-        role             = seqrep$role,
-        length           = seqrep$length,
-        stringsAsFactors = FALSE
-    )
-    utils::write.table(
-        df, file.path(groot, "chrom_aliases.tsv"),
-        sep = "\t", quote = FALSE, row.names = FALSE
-    )
-    invisible(NULL)
 }
 
 # ---------------------------------------------------------------------------
