@@ -320,12 +320,12 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE, db = NULL) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        removed <- .gdb.trash(fname)
+        trashed <- .gdb.trash(fname)
         # Also remove companion .iattr file for small interval sets
         iattr_path <- sub("\\.interv$", ".iattr", fname)
         if (file.exists(iattr_path)) unlink(iattr_path)
 
-        if (!removed) {
+        if (!trashed) {
             message(sprintf("Failed to delete intervals set %s", intervals.set))
         } else {
             # refresh the list of GINTERVS, etc.

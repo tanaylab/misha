@@ -18,7 +18,14 @@
     # suppressWarnings: cross-filesystem rename returns FALSE and warns; the
     # FALSE return is the documented signal we rely on, the warning is noise.
     if (!suppressWarnings(file.rename(path, trash))) {
+        # Fallback: rename failed (cross-filesystem, or a concurrent mover
+        # beat us to it). Try a direct unlink. If even that doesn't fully
+        # clear path (e.g. permission denied on a sub-file), report failure
+        # so callers don't scrub their caches prematurely.
         unlink(path, recursive = TRUE, force = TRUE)
+        if (file.exists(path)) {
+            return(invisible(FALSE))
+        }
         return(invisible(TRUE))
     }
 

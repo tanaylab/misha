@@ -83,3 +83,17 @@ test_that(".gdb.trash called twice on same path returns FALSE second time", {
     expect_false(file.exists(target))
     expect_false(.gdb.trash(target)) # gone, no-op
 })
+
+test_that(".gdb.trash returns FALSE when fallback unlink leaves residue", {
+    tmp <- withr::local_tempdir()
+    target <- file.path(tmp, "stubborn")
+    dir.create(target)
+    file.create(file.path(target, "child"))
+
+    # Force the rename-fallback path and the unlink-keeps-file scenario.
+    local_mocked_bindings(file.rename = function(from, to) FALSE, .package = "base")
+    local_mocked_bindings(unlink = function(x, ...) 0L, .package = "base") # claim success but do nothing
+
+    expect_false(.gdb.trash(target))
+    expect_true(dir.exists(target)) # still there because unlink didn't actually remove it
+})
