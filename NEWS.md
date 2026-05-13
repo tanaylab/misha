@@ -5,6 +5,9 @@
 * On indexed databases, `gtrack.create()` for dense (fixed-bin) and sparse tracks now writes the indexed format (`track.dat` + `track.idx`) directly instead of writing N per-chromosome files and then deleting them. Substantially faster on databases with >1M contigs.
 * 2D track / interval-set creation and meta builders no longer allocate `O(num_contigs^2)` per-pair entries. `gtrack.create_meta()` for 2D tracks uses `track.idx` (indexed) or a directory scan (legacy) to enumerate populated pairs instead of probing all N*N. Enables 2D tracks on databases with >1000 contigs without OOM or multi-day metadata scans.
 * `gdataset.info()` and `gdataset.ls(dataframe=TRUE)` now use a single C++ filesystem traversal (with FTS_SKIP) instead of two recursive R-level `list.files()` calls. Faster on databases with many tracks/intervals when `.db.cache` is missing or stale.
+* `gtrack.liftover()` now writes the indexed format directly when the target database is indexed, avoiding ~1M per-chromosome empty-placeholder file creations when lifting onto a many-contig genome.
+* `gdb.convert_to_indexed(convert_tracks = TRUE)` and `convert_intervals = TRUE` accept a new `threads` argument (default: `min(detectCores(), 8)`) and run per-track conversions in parallel via `parallel::mclapply`. Per-track failures are reported as warnings without aborting the batch.
+* `gtrack.create_meta()` for sparse/array tracks on indexed databases now consults `track.idx` to find populated chromosomes instead of stat'ing per-chromosome files that don't exist. Drops a one-time O(N_contigs) syscall cost from the first use of a sparse/array track.
 
 # misha 5.6.29
 
