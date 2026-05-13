@@ -18,7 +18,7 @@
 
 #include "GenomeTrack.h"
 #include "TrackIndex.h"
-#include "CRC64.h"
+#include "TrackIndexWriter.h"
 #include "BufferedFile.h"
 #include "TGLException.h"
 #include "rdbinterval.h"
@@ -27,43 +27,6 @@
 
 using namespace std;
 using namespace rdb;
-
-// Helper function to write index header
-static void write_index_header(FILE *fp, MishaTrackType track_type, uint32_t num_contigs, uint64_t checksum) {
-    // Magic header
-    const char magic[8] = {'M','I','S','H','A','T','D','X'};
-    if (fwrite(magic, 1, 8, fp) != 8) {
-        TGLError<GenomeTrack>("Failed to write index header");
-    }
-
-    // Version
-    uint32_t version = 1;
-    if (fwrite(&version, sizeof(version), 1, fp) != 1) {
-        TGLError<GenomeTrack>("Failed to write index version");
-    }
-
-    // Track type
-    uint32_t track_type_raw = static_cast<uint32_t>(track_type);
-    if (fwrite(&track_type_raw, sizeof(track_type_raw), 1, fp) != 1) {
-        TGLError<GenomeTrack>("Failed to write track type");
-    }
-
-    // Number of contigs
-    if (fwrite(&num_contigs, sizeof(num_contigs), 1, fp) != 1) {
-        TGLError<GenomeTrack>("Failed to write number of contigs");
-    }
-
-    // Flags (little-endian flag)
-    uint64_t flags = 0x01; // IS_LITTLE_ENDIAN
-    if (fwrite(&flags, sizeof(flags), 1, fp) != 1) {
-        TGLError<GenomeTrack>("Failed to write flags");
-    }
-
-    // Checksum
-    if (fwrite(&checksum, sizeof(checksum), 1, fp) != 1) {
-        TGLError<GenomeTrack>("Failed to write checksum");
-    }
-}
 
 // Helper function to copy file contents
 static bool copy_file_contents(const string &src, FILE *dest, uint64_t &bytes_written) {
@@ -181,8 +144,10 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
             TGLError<GenomeTrack>("Failed to create %s: %s", idx_path_tmp.c_str(), strerror(errno));
         }
 
-        // Write index header (checksum=0 for now)
-        write_index_header(idx_fp, track_type, chromkey.get_num_chroms(), 0);
+        // Write index header (checksum=0 for now; patched at end via
+        // TrackIndexWriter::finalize_checksum). Shared format definition
+        // lives in TrackIndexWriter / TrackIndex.h.
+        TrackIndexWriter::write_header(idx_fp, track_type, chromkey.get_num_chroms());
 
         // Collect entries and concatenate files
         vector<TrackContigEntry> entries;
@@ -238,11 +203,10 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
                 chr_files_to_remove.push_back(chr_file);
             }
 
-            // Write entry to index
-            if (fwrite(&entry.chrom_id, sizeof(entry.chrom_id), 1, idx_fp) != 1 ||
-                fwrite(&entry.offset, sizeof(entry.offset), 1, idx_fp) != 1 ||
-                fwrite(&entry.length, sizeof(entry.length), 1, idx_fp) != 1 ||
-                fwrite(&entry.reserved, sizeof(entry.reserved), 1, idx_fp) != 1) {
+            // Write entry to index via shared writer.
+            try {
+                TrackIndexWriter::write_entry(idx_fp, entry);
+            } catch (TGLException &) {
                 fclose(dat_fp);
                 fclose(idx_fp);
                 TGLError<GenomeTrack>("Failed to write index entry for chromosome %s", chrom_name.c_str());
@@ -251,29 +215,13 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
             entries.push_back(entry);
         }
 
-        // Compute checksum of entries
-        misha::CRC64 crc64;
-        uint64_t checksum = crc64.init_incremental();
-        for (const auto &entry : entries) {
-            checksum = crc64.compute_incremental(checksum,
-                (const unsigned char*)&entry.chrom_id, sizeof(entry.chrom_id));
-            checksum = crc64.compute_incremental(checksum,
-                (const unsigned char*)&entry.offset, sizeof(entry.offset));
-            checksum = crc64.compute_incremental(checksum,
-                (const unsigned char*)&entry.length, sizeof(entry.length));
-        }
-        checksum = crc64.finalize_incremental(checksum);
-
-        // Update checksum in index header
-        if (fseek(idx_fp, IDX_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
+        // Compute and patch checksum via shared writer.
+        try {
+            TrackIndexWriter::finalize_checksum(idx_fp, entries);
+        } catch (TGLException &) {
             fclose(dat_fp);
             fclose(idx_fp);
-            TGLError<GenomeTrack>("Failed to seek to checksum position in index");
-        }
-        if (fwrite(&checksum, sizeof(checksum), 1, idx_fp) != 1) {
-            fclose(dat_fp);
-            fclose(idx_fp);
-            TGLError<GenomeTrack>("Failed to update checksum in index");
+            throw;
         }
 
         // Flush and sync both files
@@ -364,9 +312,12 @@ SEXP gtrack_create_empty_indexed(SEXP _track, SEXP _envir) {
             TGLError<GenomeTrack>("Failed to create %s: %s", idx_path.c_str(), strerror(errno));
         }
 
-        // Write index header with track type SPARSE and 0 contigs
-        uint64_t checksum = 0;  // No data, so checksum is 0
-        write_index_header(idx_fp, MishaTrackType::SPARSE, 0, checksum);
+        // Write index header with track type SPARSE and 0 contigs.
+        // CRC64-ECMA of an empty sequence is 0, so leaving the
+        // placeholder checksum=0 (which TrackIndexWriter::write_header
+        // writes) is correct here - no entries to checksum, no
+        // finalize_checksum call needed.
+        TrackIndexWriter::write_header(idx_fp, MishaTrackType::SPARSE, 0);
 
         fclose(idx_fp);
 

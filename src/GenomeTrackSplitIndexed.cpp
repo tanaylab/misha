@@ -17,7 +17,7 @@
 // that collides with TrackContigEntry::length in TrackIndex.h. R's headers are
 // pulled in transitively via rdbutils.h.
 #include "TrackIndex.h"
-#include "CRC64.h"
+#include "TrackIndexWriter.h"
 #include "TGLException.h"
 #include "rdbutils.h"
 
@@ -179,24 +179,13 @@ SEXP gtrack_pack_per_chrom_to_indexed(SEXP _track_dir, SEXP _chrom_names, SEXP _
             verror("Failed to create %s: %s", idx_path_tmp.c_str(), strerror(errno));
         }
 
-        // Header (checksum=0 for now; updated at end). Layout matches
-        // GenomeTrackIndexedFormat.cpp::write_index_header.
-        const char magic[8] = {'M','I','S','H','A','T','D','X'};
-        const uint32_t version = 1;
-        const uint32_t track_type_raw = static_cast<uint32_t>(track_type);
-        const uint32_t num_contigs = (uint32_t)n_chroms;
-        const uint64_t flags = 0x01; // IS_LITTLE_ENDIAN
-        uint64_t checksum_placeholder = 0;
-        bool header_ok =
-            fwrite(magic, 1, 8, idx_fp) == 8 &&
-            fwrite(&version, sizeof(version), 1, idx_fp) == 1 &&
-            fwrite(&track_type_raw, sizeof(track_type_raw), 1, idx_fp) == 1 &&
-            fwrite(&num_contigs, sizeof(num_contigs), 1, idx_fp) == 1 &&
-            fwrite(&flags, sizeof(flags), 1, idx_fp) == 1 &&
-            fwrite(&checksum_placeholder, sizeof(checksum_placeholder), 1, idx_fp) == 1;
-        if (!header_ok) {
+        // Header (checksum=0 for now; updated at end). Shared format
+        // definition lives in TrackIndexWriter / TrackIndex.h.
+        try {
+            TrackIndexWriter::write_header(idx_fp, track_type, (uint32_t)n_chroms);
+        } catch (TGLException &) {
             fclose(dat_fp); fclose(idx_fp);
-            verror("Failed to write index header");
+            throw;
         }
 
         vector<TrackContigEntry> entries;
@@ -245,34 +234,21 @@ SEXP gtrack_pack_per_chrom_to_indexed(SEXP _track_dir, SEXP _chrom_names, SEXP _
             }
             // else: entry stays length=0, no per-chrom file present.
 
-            if (fwrite(&entry.chrom_id,  sizeof(entry.chrom_id),  1, idx_fp) != 1 ||
-                fwrite(&entry.offset,    sizeof(entry.offset),    1, idx_fp) != 1 ||
-                fwrite(&entry.length,    sizeof(entry.length),    1, idx_fp) != 1 ||
-                fwrite(&entry.reserved,  sizeof(entry.reserved),  1, idx_fp) != 1) {
+            try {
+                TrackIndexWriter::write_entry(idx_fp, entry);
+            } catch (TGLException &) {
                 fclose(dat_fp); fclose(idx_fp);
                 verror("Failed to write index entry for %s", chrom_names[chromid].c_str());
             }
             entries.push_back(entry);
         }
 
-        // Compute and patch checksum
-        misha::CRC64 crc64;
-        uint64_t checksum = crc64.init_incremental();
-        for (const auto &e : entries) {
-            checksum = crc64.compute_incremental(checksum, (const unsigned char*)&e.chrom_id, sizeof(e.chrom_id));
-            checksum = crc64.compute_incremental(checksum, (const unsigned char*)&e.offset,   sizeof(e.offset));
-            checksum = crc64.compute_incremental(checksum, (const unsigned char*)&e.length,   sizeof(e.length));
-        }
-        checksum = crc64.finalize_incremental(checksum);
-
-        // Seek to checksum field; layout documented in TrackIndex.h.
-        if (fseek(idx_fp, IDX_HEADER_SIZE_TO_CHECKSUM, SEEK_SET) != 0) {
+        // Compute and patch checksum.
+        try {
+            TrackIndexWriter::finalize_checksum(idx_fp, entries);
+        } catch (TGLException &) {
             fclose(dat_fp); fclose(idx_fp);
-            verror("Failed to seek to checksum position");
-        }
-        if (fwrite(&checksum, sizeof(checksum), 1, idx_fp) != 1) {
-            fclose(dat_fp); fclose(idx_fp);
-            verror("Failed to update checksum");
+            throw;
         }
 
         fflush(dat_fp); fflush(idx_fp);
