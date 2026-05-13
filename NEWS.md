@@ -10,7 +10,7 @@
 * `gtrack.create_meta()` for sparse/array tracks on indexed databases now consults `track.idx` to find populated chromosomes instead of stat'ing per-chromosome files that don't exist. Drops a one-time O(N_contigs) syscall cost from the first use of a sparse/array track.
 * `gextract()` / `gscreen()` and other track-expression iterators now validate indexed 1D tracks via `track.idx` instead of stat'ing it once per chromosome. On a 1.28M-contig database, `gextract` of 100 random 5 bp intervals from a dense indexed track drops from ~64 s to ~8 s (system time from ~52 s to ~2 s).
 * Fixed `gintervals.random()` rejecting chromosomes whose length exactly equals `size + 2*dist_from_edge` (where a single valid interval is available) and biasing sampling away from the right edge. The no-filter path now uses the same full-range semantics as the filter path.
-* Most misha functions paid a ~1.5 s fixed setup cost on million-contig databases (rebuilding the chromosome-name table on every call). The table is now cached. On a 1.28M-contig database, `gtrack.info()` drops from ~1.4 s to ~0.3 s and `gseq.extract()` from ~14 s to ~0.4 s; smaller genomes are unaffected.
+* Most misha functions paid a fixed ~1.5 s setup cost on million-contig databases (rebuilding the chromosome table and the all-genome interval list on every call). Both are now cached. On a 1.28M-contig database, `gtrack.info()` drops from ~1.4 s to <1 ms and `gseq.extract()` from ~14 s to ~0.4 s; smaller genomes are unaffected.
 
 # misha 5.6.29
 
