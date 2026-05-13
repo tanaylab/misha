@@ -1,5 +1,9 @@
 # misha (development version)
 
+* `gtrack.rm()` (and `gintervals.rm()`) now returns immediately even when the target directory contains millions of files; the actual filesystem cleanup runs in the background.
+* Track creation (`gtrack.create()` and friends) is now atomic on databases with many contigs: an interrupted create no longer leaves a partial track directory that blocks re-creation. Cleanup of failed creates runs in the background.
+* On indexed databases, `gtrack.create()` for dense (fixed-bin) and sparse tracks now writes the indexed format (`track.dat` + `track.idx`) directly instead of writing N per-chromosome files and then deleting them. Substantially faster on databases with >1M contigs.
+
 # misha 5.6.29
 
 * `gdb.install_intervals()` now errors if any requested set is unavailable from the source (previously skipped silently with a warning). Pass `force = TRUE` to demote the error to a summary warning and install the available sets.
