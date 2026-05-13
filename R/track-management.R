@@ -549,7 +549,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             ), call. = FALSE)
         }
         # Bypass gtrack.rm (which insists db is loaded) and clean up directly.
-        unlink(dest_dir, recursive = TRUE)
+        .gdb.trash(dest_dir)
         .gdb.rm_track(destname, trackdir = dest_dir, db = dest_db)
     }
 
@@ -850,7 +850,7 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
     # check whether track appears among GTRACKS
     if (!(trackname %in% get("GTRACKS", envir = .misha))) {
         if (force) {
-            unlink(dirname, recursive = TRUE)
+            .gdb.trash(dirname)
             .gdb.rm_track(trackname, trackdir = dirname, db = db)
             return(invisible())
         }
@@ -877,13 +877,10 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
     }
 
     if (answer == "Y" || answer == "YES") {
-        # remove the track
-        unlink(dirname, recursive = TRUE)
-
-        if (dir.exists(dirname)) {
+        removed <- .gdb.trash(dirname)
+        if (!removed) {
             message(sprintf("Failed to delete track %s", trackname))
         } else {
-            # refresh the list of GTRACKS, etc.
             .gdb.rm_track(trackname, trackdir = dirname, db = db)
         }
     }
