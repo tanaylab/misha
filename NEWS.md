@@ -1,3 +1,7 @@
+# misha 5.6.31
+
+* `gdb.install_intervals(..., sets = "genes")` from NCBI no longer aborts on a handful of unconvertible GFF records (typically the immunoglobulin loci in RefSeq human/mouse): `gff3ToGenePred` is now invoked with `-warnAndContinue`, so the offending transcripts are skipped with a warning and the rest of the genome is installed.
+
 # misha 5.6.30
 
 * `gtrack.rm()` (and `gintervals.rm()`) now returns immediately even when the target directory contains millions of files; the actual filesystem cleanup runs in the background.
