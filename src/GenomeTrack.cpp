@@ -78,6 +78,15 @@ const pair<int, int> GenomeTrack::get_chromid_2d(const GenomeChromKey &chromkey,
 string GenomeTrack::find_existing_1d_filename(const GenomeChromKey &chromkey, const string &track_dir, int chromid)
 {
 	const string &base = get_1d_filename(chromkey, chromid);
+
+	// Indexed tracks (track.idx present) store all chromosomes in a single
+	// track.dat; per-chromosome files never exist, so the access() probes
+	// below would always fail. Short-circuit via the cached index lookup,
+	// which also skips GenomeChromKey::get_aliases (an O(N_aliases) linear
+	// scan, ~3.87M on Phylo447 mammals) called per chromosome transition.
+	if (get_track_index(track_dir))
+		return base;
+
 	vector<string> candidates;
 	candidates.push_back(base);
 
