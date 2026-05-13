@@ -751,3 +751,13 @@
         )
     ), call. = FALSE)
 }
+
+# bp-weighted coverage of `groot_chroms` by the post-rescue `canonical` vector.
+# Returns a numeric in [0, 1]. Empty/NA cells in canonical contribute nothing.
+.canonical_coverage <- function(canonical, groot_chroms, groot_lengths) {
+    if (!length(groot_chroms)) {
+        return(1)
+    }
+    mapped <- groot_chroms %in% canonical[nzchar(canonical) & !is.na(canonical)]
+    sum(as.numeric(groot_lengths[mapped])) / sum(as.numeric(groot_lengths))
+}
