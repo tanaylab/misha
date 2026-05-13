@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include "GIntervalsMeta2D.h"
 #include "rdbutils.h"
@@ -6,21 +7,33 @@ const char *GIntervalsMeta2D::STAT_COL_NAMES[NUM_STAT_COLS] = {
 	"chrom1", "chrom2", "contains_overlaps", "size", "surface"
 };
 
+void GIntervalsMeta2D::rebuild_pair_index()
+{
+	m_pair_keys_sorted.clear();
+	m_pair_keys_sorted.reserve(m_pair_stats.size());
+	for (const auto &kv : m_pair_stats)
+		m_pair_keys_sorted.push_back(kv.first);
+	std::sort(m_pair_keys_sorted.begin(), m_pair_keys_sorted.end());
+
+	m_orig_size_prefix.assign(m_pair_keys_sorted.size() + 1, 0);
+	for (size_t i = 0; i < m_pair_keys_sorted.size(); ++i) {
+		const PairStat &ps = m_pair_stats[m_pair_keys_sorted[i]];
+		m_orig_size_prefix[i + 1] = m_orig_size_prefix[i] + ps.orig_size;
+	}
+}
+
 void GIntervalsMeta2D::init(const char *name, SEXP meta, const GenomeChromKey &chromkey)
 {
 	if (!is2d(meta) || !Rf_isVector(meta) || Rf_length(meta) < 1) {
 		verror("%s: Invalid format of .meta file", name);
 	}
-	
+
 	m_chromkey = (GenomeChromKey *)&chromkey;
 	m_size = 0;
 	m_surface = 0;
-	m_chroms2size.clear();
-	m_contains_overlaps.clear();
-	m_surfaces.clear();
-	m_chroms2size.resize(m_chromkey->get_num_chroms() * m_chromkey->get_num_chroms(), 0);
-	m_contains_overlaps.resize(m_chromkey->get_num_chroms() * m_chromkey->get_num_chroms(), false);
-	m_surfaces.resize(m_chromkey->get_num_chroms() * m_chromkey->get_num_chroms(), 0);
+	m_pair_stats.clear();
+	m_pair_keys_sorted.clear();
+	m_orig_size_prefix.clear();
 
 	SEXP stat = VECTOR_ELT(meta, 0);
 	SEXP colnames = Rf_getAttrib(stat, R_NamesSymbol);
@@ -41,6 +54,8 @@ void GIntervalsMeta2D::init(const char *name, SEXP meta, const GenomeChromKey &c
 	SEXP surfaces = VECTOR_ELT(stat, SURFACE_COL);
 	SEXP contains_overlaps = VECTOR_ELT(stat, CONTAINS_OVERLAPS_COL);
 
+	m_pair_stats.reserve(Rf_length(sizes));
+
 	for (int i = 0; i < Rf_length(sizes); ++i) {
 		const char *chrom1 = Rf_isString(chroms1) ? CHAR(STRING_ELT(chroms1, i)) : CHAR(STRING_ELT(chrom_levels1, INTEGER(chroms1)[i] - 1));
 		const char *chrom2 = Rf_isString(chroms2) ? CHAR(STRING_ELT(chroms2, i)) : CHAR(STRING_ELT(chrom_levels2, INTEGER(chroms2)[i] - 1));
@@ -48,16 +63,21 @@ void GIntervalsMeta2D::init(const char *name, SEXP meta, const GenomeChromKey &c
 		int chromid2 = m_chromkey->chrom2id(chrom2);
 		int64_t size = (int64_t)(Rf_isReal(sizes) ? REAL(sizes)[i] : INTEGER(sizes)[i]);
 		double surface = REAL(surfaces)[i];
-		int idx = chroms2idx(chromid1, chromid2);
 
-		m_chroms2size[idx] = size;
-		m_surfaces[idx] = surface;
-		m_contains_overlaps[idx] = LOGICAL(contains_overlaps)[i];
+		if (size == 0)
+			continue; // skip phantom empty rows; sparse store keeps only populated pairs
+
+		PairStat &ps = m_pair_stats[pair_key(chromid1, chromid2)];
+		ps.size = size;
+		ps.orig_size = size;
+		ps.surface = surface;
+		ps.contains_overlaps = LOGICAL(contains_overlaps)[i];
+
 		m_size += (uint64_t)size;
 		m_surface += surface;
 	}
 
-	m_orig_chroms2size = m_chroms2size;
+	rebuild_pair_index();
 }
 
 void GIntervalsMeta2D::init_masked_copy(GIntervalsMeta2D *obj, const set<ChromPair> &chrompairs_mask) const
@@ -65,27 +85,29 @@ void GIntervalsMeta2D::init_masked_copy(GIntervalsMeta2D *obj, const set<ChromPa
 	obj->m_chromkey = m_chromkey;
 	obj->m_size = 0;
 	obj->m_surface = 0;
-	obj->m_chroms2size.clear();
-	obj->m_contains_overlaps.clear();
-	obj->m_surfaces.clear();
-	obj->m_chroms2size.resize(m_chroms2size.size(), 0);
-	obj->m_contains_overlaps.resize(m_contains_overlaps.size(), false);
-	obj->m_surfaces.resize(m_surfaces.size(), 0);
-	obj->m_orig_chroms2size = m_orig_chroms2size;
+	obj->m_pair_stats.clear();
+	obj->m_pair_keys_sorted.clear();
+	obj->m_orig_size_prefix.clear();
 
-	for (int chromid = 0; (uint64_t)chromid < obj->m_chroms2size.size(); ++chromid) {
-		int chromid1 = idx2chrom1(chromid);
-		int chromid2 = idx2chrom2(chromid);
+	// Preserve orig_size for every populated pair (masked or not) so udata
+	// offset computations remain consistent with the unmasked parent.
+	obj->m_pair_stats.reserve(m_pair_stats.size());
+	for (const auto &kv : m_pair_stats) {
+		PairStat ps_copy;
+		ps_copy.orig_size = kv.second.orig_size;
 
-		if (chrompairs_mask.find(ChromPair(chromid1, chromid2)) == chrompairs_mask.end())
-			continue;
-
-		obj->m_chroms2size[chromid] = m_chroms2size[chromid];
-		obj->m_contains_overlaps[chromid] = m_contains_overlaps[chromid];
-		obj->m_surfaces[chromid] = m_surfaces[chromid];
-		obj->m_size += (uint64_t)m_chroms2size[chromid];
-		obj->m_surface += m_surfaces[chromid];
+		ChromPair cp(key_chrom1(kv.first), key_chrom2(kv.first));
+		if (chrompairs_mask.find(cp) != chrompairs_mask.end()) {
+			ps_copy.size = kv.second.size;
+			ps_copy.surface = kv.second.surface;
+			ps_copy.contains_overlaps = kv.second.contains_overlaps;
+			obj->m_size += (uint64_t)kv.second.size;
+			obj->m_surface += kv.second.surface;
+		}
+		obj->m_pair_stats[kv.first] = ps_copy;
 	}
+
+	obj->rebuild_pair_index();
 }
 
 void GIntervalsMeta2D::init_chromstats(vector<ChromStat> &chromstats, const IntervUtils &iu)
@@ -118,7 +140,7 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 
 	int num_nonempty_chroms = 0;
 	for (vector<ChromStat>::const_iterator ichromstat = chromstats.begin(); ichromstat != chromstats.end(); ++ichromstat) {
-		if (ichromstat->size) 
+		if (ichromstat->size)
 			++num_nonempty_chroms;
 	}
 
@@ -139,7 +161,7 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 		for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
 			const ChromStat &chromstat = chromstats[chromid1 * iu.get_chromkey().get_num_chroms() + chromid2];
 
-			if (!chromstat.size) 
+			if (!chromstat.size)
 				continue;
 
 			INTEGER(chroms_idx1)[res_index] = chromid1 + 1;
@@ -169,4 +191,3 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 
 	GIntervalsMeta::save_meta(path, rstat, zeroline);
 }
-

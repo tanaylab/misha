@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -44,8 +45,8 @@ void GIntervalsBigSet2D::init(const char *intervset, SEXP meta, const IntervUtil
 	if (!is2d(meta))
 		verror("Intervals set %s: expecting 1D intervals", intervset);
 
-	m_cur_chromid = m_chroms2size.size();
-	m_iter_chromid = -1;
+	m_cur_pair_idx = (int)m_pair_keys_sorted.size();
+	m_iter_pair_idx = -1;
 	m_iter_index = -1;
 	m_iter_chrom_index = 0;
 	m_do_sort = false;
@@ -121,10 +122,14 @@ void GIntervalsBigSet2D::load_chrom(int chromid1, int chromid2)
 			runprotect(1);
 
 			// set udata
+			// Cumulative orig_size of all populated pairs strictly preceding
+			// (chromid1, chromid2) in row-major order. Phase 7a: lookup via
+			// prefix-sum table indexed by the sorted-pair position.
 			uint64_t offset = 0;
-			int idx = chroms2idx(chromid1, chromid2);
-			for (int i = 0; i < idx; ++i)
-				offset += m_orig_chroms2size[i];
+			uint64_t target_key = pair_key(chromid1, chromid2);
+			auto pkit = std::lower_bound(m_pair_keys_sorted.begin(), m_pair_keys_sorted.end(), target_key);
+			size_t pos = (size_t)(pkit - m_pair_keys_sorted.begin());
+			offset = (uint64_t)m_orig_size_prefix[pos];
 			for (GIntervals2D::iterator iinterval = m_intervals.begin(); iinterval < m_intervals.end(); ++iinterval)
 				iinterval->udata() = (void *)(intptr_t)(iinterval - m_intervals.begin() + offset);
 
@@ -218,14 +223,13 @@ GIntervalsFetcher2D *GIntervalsBigSet2D::create_masked_copy(const set<ChromPair>
 
 	obj->m_intervset = m_intervset;
 	obj->m_iu = m_iu;
-	obj->m_cur_chromid = obj->m_chroms2size.size();
-	obj->m_iter_chromid = -1;
+	obj->m_cur_pair_idx = (int)obj->m_pair_keys_sorted.size();
+	obj->m_iter_pair_idx = -1;
 	obj->m_iter_index = -1;
 	obj->m_iter_chrom_index = 0;
 	obj->m_do_sort = false;
 	obj->m_intervals.clear();
 	obj->m_iinterval = obj->m_intervals.end();
-	obj->m_orig_chroms2size = m_orig_chroms2size;
 
 	if (m_do_sort)
 		obj->sort(m_compare);
@@ -235,15 +239,17 @@ GIntervalsFetcher2D *GIntervalsBigSet2D::create_masked_copy(const set<ChromPair>
 
 void GIntervalsBigSet2D::begin_iter()
 {
-	m_iter_chromid = -1;
+	m_iter_pair_idx = -1;
 	m_iter_index = 0;
 	m_iter_chrom_index = 0;
 	m_intervals.clear();
 	m_iinterval = m_intervals.end();
-	for (m_cur_chromid = 0; m_cur_chromid < (int)m_chroms2size.size(); ++m_cur_chromid) {
-		if (m_chroms2size[m_cur_chromid]) {
-			int chromid1 = idx2chrom1(m_cur_chromid);
-			int chromid2 = idx2chrom2(m_cur_chromid);
+	for (m_cur_pair_idx = 0; m_cur_pair_idx < (int)m_pair_keys_sorted.size(); ++m_cur_pair_idx) {
+		uint64_t k = m_pair_keys_sorted[m_cur_pair_idx];
+		auto it = m_pair_stats.find(k);
+		if (it != m_pair_stats.end() && it->second.size) {
+			int chromid1 = key_chrom1(k);
+			int chromid2 = key_chrom2(k);
 			load_chrom(chromid1, chromid2);
 			m_iinterval = m_intervals.begin();
 			return;
@@ -253,25 +259,38 @@ void GIntervalsBigSet2D::begin_iter()
 
 void GIntervalsBigSet2D::begin_chrom_iter(int chromid1, int chromid2)
 {
-	int target_chromid = chroms2idx(chromid1, chromid2);
-	m_iter_chromid = target_chromid;
+	uint64_t target_key = pair_key(chromid1, chromid2);
 	m_iter_index = 0;
 	m_iter_chrom_index = 0;
-	for (m_cur_chromid = 0; m_cur_chromid < (int)m_chroms2size.size(); ++m_cur_chromid) {
-		if (m_cur_chromid == target_chromid) {
-			if (m_chroms2size[m_cur_chromid]) {
-				load_chrom(chromid1, chromid2);
-				m_iinterval = m_intervals.begin();
-			} else {
-				m_intervals.clear();
-				m_iinterval = m_intervals.end();
-			}
-			return;
-		}
-		m_iter_index += m_chroms2size[m_cur_chromid];
+
+	auto it = std::lower_bound(m_pair_keys_sorted.begin(), m_pair_keys_sorted.end(), target_key);
+
+	// Sum sizes of populated pairs preceding the target in sorted order.
+	for (auto p = m_pair_keys_sorted.begin(); p != it; ++p) {
+		auto sit = m_pair_stats.find(*p);
+		if (sit != m_pair_stats.end())
+			m_iter_index += (uint64_t)sit->second.size;
 	}
-	m_intervals.clear();
-	m_iinterval = m_intervals.end();
+
+	if (it != m_pair_keys_sorted.end() && *it == target_key) {
+		int target_idx = (int)(it - m_pair_keys_sorted.begin());
+		m_iter_pair_idx = target_idx;
+		m_cur_pair_idx = target_idx;
+		auto sit = m_pair_stats.find(target_key);
+		if (sit != m_pair_stats.end() && sit->second.size) {
+			load_chrom(chromid1, chromid2);
+			m_iinterval = m_intervals.begin();
+		} else {
+			m_intervals.clear();
+			m_iinterval = m_intervals.end();
+		}
+	} else {
+		// Target pair absent: position past the end so isend_chrom() trips.
+		m_iter_pair_idx = -1;
+		m_cur_pair_idx = (int)m_pair_keys_sorted.size();
+		m_intervals.clear();
+		m_iinterval = m_intervals.end();
+	}
 }
 
 void GIntervalsBigSet2D::sort(Compare_t compare)
@@ -284,8 +303,8 @@ void GIntervalsBigSet2D::sort(Compare_t compare)
 
 void GIntervalsBigSet2D::verify_no_overlaps(const GenomeChromKey &chromkey, const char *error_prefix) const
 {
-	for (vector<bool>::const_iterator icontains_overlaps = m_contains_overlaps.begin(); icontains_overlaps < m_contains_overlaps.end(); ++icontains_overlaps)  {
-		if (*icontains_overlaps) 
+	for (const auto &kv : m_pair_stats) {
+		if (kv.second.contains_overlaps)
 			TGLError<GIntervalsFetcher2D>(OVERLAPPING_INTERVAL, "%sIntervals set %s contains overlapping intervals", error_prefix, m_intervset.c_str());
 	}
 }
