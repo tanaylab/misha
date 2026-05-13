@@ -549,7 +549,14 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
             ), call. = FALSE)
         }
         # Bypass gtrack.rm (which insists db is loaded) and clean up directly.
-        .gdb.trash(dest_dir)
+        # If trash failed and residue remains, abort so we don't create on top
+        # of stale files.
+        if (!.gdb.trash(dest_dir) && dir.exists(dest_dir)) {
+            stop(sprintf(
+                "Failed to remove existing destination %s; copy aborted.",
+                dest_dir
+            ), call. = FALSE)
+        }
         .gdb.rm_track(destname, trackdir = dest_dir, db = dest_db)
     }
 
@@ -850,7 +857,12 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
     # check whether track appears among GTRACKS
     if (!(trackname %in% get("GTRACKS", envir = .misha))) {
         if (force) {
-            .gdb.trash(dirname)
+            existed <- dir.exists(dirname)
+            trashed <- .gdb.trash(dirname)
+            if (existed && !trashed) {
+                message(sprintf("Failed to delete track %s", trackname))
+                return(invisible())
+            }
             .gdb.rm_track(trackname, trackdir = dirname, db = db)
             return(invisible())
         }
