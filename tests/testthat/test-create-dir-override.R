@@ -63,3 +63,48 @@ test_that(".misha$.create_dir_override = empty string behaves as no override", {
     gtrack.create("test_override_empty", "test", "test.fixedbin")
     expect_true(gtrack.exists("test_override_empty"))
 })
+
+test_that(".create_dir_override is cleared even when create_track_dir errors", {
+    # Pre-create the override path so create_track_dir's mkdir errors
+    # with EEXIST. The C++ reads + clears the override BEFORE calling
+    # mkdir, so the slot must be cleared even though the call errors.
+    parent <- file.path(get("GWD", envir = .misha), ".override_mkdir_fail_target")
+    suppressWarnings(unlink(parent, recursive = TRUE, force = TRUE))
+    dir.create(parent)
+    withr::defer(suppressWarnings(unlink(parent, recursive = TRUE, force = TRUE)))
+
+    suppressWarnings(gtrack.rm("test_override_err_target", force = TRUE))
+    withr::defer(suppressWarnings(gtrack.rm("test_override_err_target", force = TRUE)))
+
+    assign(".create_dir_override", parent, envir = .misha)
+
+    # mkdir errors because 'parent' already exists; the slot must
+    # already be cleared by the time the error propagates.
+    expect_error(
+        gtrack.create("test_override_err_target", "test", "test.fixedbin"),
+        regexp = "Cannot create track|exists"
+    )
+
+    override_after <- get0(".create_dir_override", envir = .misha, inherits = FALSE)
+    expect_true(is.null(override_after))
+})
+
+test_that(".misha$.create_dir_override = NA_character_ behaves as no override", {
+    # NA_character_ has length 1 but the C++ explicitly guards against
+    # NA_STRING (see src/rdbutils.cpp::create_track_dir). The override
+    # should be ignored and creation should succeed at the default path.
+    # This is a regression guard: if someone removes the NA_STRING check
+    # from the C++ the override would resolve to literal path "NA".
+    suppressWarnings(gtrack.rm("test_override_na", force = TRUE))
+    withr::defer(suppressWarnings(gtrack.rm("test_override_na", force = TRUE)))
+    withr::defer(suppressWarnings(unlink("NA", recursive = TRUE, force = TRUE)))
+
+    assign(".create_dir_override", NA_character_, envir = .misha)
+
+    gtrack.create("test_override_na", "test", "test.fixedbin")
+    expect_true(gtrack.exists("test_override_na"))
+
+    # A literal "NA" directory must NOT have been created (in cwd or GWD).
+    expect_false(dir.exists("NA"))
+    expect_false(dir.exists(file.path(get("GWD", envir = .misha), "NA")))
+})
