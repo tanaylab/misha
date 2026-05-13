@@ -13,7 +13,7 @@
 * Most misha functions paid a fixed ~1.5 s setup cost on million-contig databases (rebuilding the chromosome table and the all-genome interval list on every call). Both are now cached. On a 1.28M-contig database, `gtrack.info()` drops from ~1.4 s to <1 ms and `gseq.extract()` from ~14 s to ~0.4 s; smaller genomes are unaffected.
 * `gsetroot()` is ~3x faster on million-contig databases (~13 s -> ~5 s on a 1.28M-contig DB).
 * `gextract()` and other scan operations are faster on indexed tracks of databases with many chromosome aliases (skips a per-contig alias lookup that has no effect on indexed tracks).
-* `gdb.install_intervals()` from `ncbi` now translates chrom names to the groot's convention, fetches `rmsk` from the NCBI FTP, and no longer downloads the FASTA.
+* `gdb.install_intervals()` from `ncbi` now translates chrom names to the groot's convention, fetches `genes` and `rmsk` from the NCBI FTP when the Datasets API doesn't ship them (older / suppressed accessions like GRCm38.p6), and no longer downloads the FASTA.
 * `min_coverage` is now checked after the alias rescue passes, so hybrid naming (e.g. UCSC-style chroms mixed with bare GenBank accessions) passes at the strict default.
 
 # misha 5.6.29
