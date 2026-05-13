@@ -91,3 +91,78 @@ test_that(".gtrack.create_atomic cleans up after C++ throws", {
     ]
     expect_length(tmp_leftovers, 0)
 })
+
+test_that(".gtrack.create_atomic trashes a half-written tmp dir on failure", {
+    suppressWarnings(gtrack.rm("atomic_partial", force = TRUE))
+    withr::defer(suppressWarnings(gtrack.rm("atomic_partial", force = TRUE)))
+
+    parent <- get("GWD", envir = .misha)
+
+    expect_error(
+        .gtrack.create_atomic("atomic_partial", function() {
+            # Simulate what C++ would do: read+clear the override slot,
+            # mkdir the tmp dir, write some partial files, then fail.
+            tmp_dir <- get(".create_dir_override", envir = .misha)
+            if (is.null(tmp_dir)) stop("override slot was not set")
+            assign(".create_dir_override", NULL, envir = .misha) # mimic C++ clear-on-read
+            dir.create(tmp_dir, recursive = TRUE)
+            writeLines("partial1", file.path(tmp_dir, "chr1"))
+            writeLines("partial2", file.path(tmp_dir, "chr2"))
+            stop("simulated mid-create write failure")
+        }),
+        regexp = "simulated mid-create write failure"
+    )
+
+    # Final dir should not exist
+    expect_false(dir.exists(file.path(parent, "atomic_partial.track")))
+
+    # Tmp dir should be gone (either deleted or renamed-to-trash)
+    tmp_left <- list.files(parent,
+        all.files = TRUE,
+        pattern = "^\\.atomic_partial\\.track\\.tmp\\."
+    )
+    expect_length(tmp_left, 0)
+
+    # Wait for any in-flight trash unlink to settle (best-effort, async)
+    Sys.sleep(0.5)
+})
+
+test_that(".gtrack.create_atomic loses gracefully when another session wins the rename race", {
+    suppressWarnings(gtrack.rm("race_target", force = TRUE))
+    withr::defer(suppressWarnings(gtrack.rm("race_target", force = TRUE)))
+
+    parent <- get("GWD", envir = .misha)
+    final_dir <- file.path(parent, "race_target.track")
+
+    # Pre-create the final dir as if another session won the race after
+    # .gconfirmtrackcreate but before our rename.
+    suppressWarnings(unlink(final_dir, recursive = TRUE, force = TRUE))
+    withr::defer(suppressWarnings(unlink(final_dir, recursive = TRUE, force = TRUE)))
+
+    # Our create_fn writes a tmp dir; the helper should then refuse to
+    # rename onto the existing final dir.
+    create_fn <- function() {
+        tmp_dir <- get(".create_dir_override", envir = .misha)
+        if (is.null(tmp_dir)) stop("override slot was not set")
+        assign(".create_dir_override", NULL, envir = .misha)
+        dir.create(tmp_dir, recursive = TRUE)
+        writeLines("data", file.path(tmp_dir, "x"))
+        # NOW simulate the racing session creating the final dir.
+        dir.create(final_dir)
+        writeLines("winner", file.path(final_dir, "x"))
+    }
+
+    expect_error(
+        .gtrack.create_atomic("race_target", create_fn),
+        regexp = "Refusing to overwrite existing|already exists"
+    )
+
+    # Our tmp dir is gone (trashed); the winner's dir survives.
+    tmp_left <- list.files(parent,
+        all.files = TRUE,
+        pattern = "^\\.race_target\\.track\\.tmp\\."
+    )
+    expect_length(tmp_left, 0)
+    expect_true(dir.exists(final_dir))
+    expect_equal(readLines(file.path(final_dir, "x")), "winner")
+})

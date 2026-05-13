@@ -21,6 +21,20 @@
 # on the final dir (which now exists after rename). Errors in those
 # post-rename steps must call .gdb.trash(final_dir) themselves; this
 # function only owns the create+rename atomicity.
+#
+# Concurrency: two sessions creating the same trackname will each
+# write to a distinct tmp dir (PID + random suffix). The first to
+# reach file.rename wins; the second sees the final_dir already
+# present (rename onto a non-empty dir returns ENOTEMPTY/EEXIST on
+# POSIX) and aborts with a "Refusing to overwrite existing" error,
+# trashing its tmp.
+#
+# Orphan window: between file.rename and the caller's subsequent
+# .gdb.add_track, the final dir exists on disk but is not in
+# GTRACKS. Concurrent readers using the cached GTRACKS won't see
+# it; a concurrent gdb.reload(rescan=TRUE) WILL pick it up. This
+# is acceptable - the window is microseconds wide and no design
+# without locking avoids it.
 .gtrack.create_atomic <- function(trackname, create_fn) {
     final_dir <- .track_dir(trackname)
     parent <- dirname(final_dir)
@@ -39,10 +53,7 @@
     on.exit(
         {
             if (exists(".create_dir_override", envir = .misha, inherits = FALSE)) {
-                override <- get(".create_dir_override", envir = .misha)
-                if (!is.null(override)) {
-                    assign(".create_dir_override", NULL, envir = .misha)
-                }
+                assign(".create_dir_override", NULL, envir = .misha)
             }
         },
         add = TRUE
