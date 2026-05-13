@@ -916,7 +916,35 @@ string rdb::interv2path(SEXP envir, const string &intervname)
 
 string rdb::create_track_dir(SEXP envir, const string &trackname)
 {
-	string path = track2path(envir, trackname);
+	// Allow R to redirect the mkdir to a temporary path so creation
+	// can be atomic: write into a hidden tmp dir, then rename to final
+	// on success. R sets .misha$.create_dir_override and clears it via
+	// on.exit. The slot is consumed (cleared) on read so a second
+	// create call inside the same wrapper doesn't accidentally reuse it.
+	// See R/track-create-atomic.R (Phase 3b).
+	string path;
+	SEXP misha_env = R_getVar(Rf_install(".misha"), envir, (Rboolean)TRUE);
+	if (misha_env != R_NilValue && misha_env != R_UnboundValue &&
+	    TYPEOF(misha_env) == ENVSXP) {
+		PROTECT(misha_env);
+		SEXP override_sym = Rf_install(".create_dir_override");
+		SEXP override = R_getVarEx(override_sym, misha_env, (Rboolean)TRUE, R_UnboundValue);
+		if (override != R_UnboundValue && override != R_NilValue &&
+		    TYPEOF(override) == STRSXP && Rf_length(override) > 0) {
+			SEXP elt = STRING_ELT(override, 0);
+			if (elt != NA_STRING) {
+				path = CHAR(elt);
+				// Clear so a subsequent create inside the same R wrapper
+				// doesn't accidentally reuse this override.
+				Rf_defineVar(override_sym, R_NilValue, misha_env);
+			}
+		}
+		UNPROTECT(1);
+	}
+
+	if (path.empty())
+		path = track2path(envir, trackname);
+
 	if (mkdir(path.c_str(), 0777))
 		verror("Cannot create track at %s: %s", path.c_str(), strerror(errno));
 
