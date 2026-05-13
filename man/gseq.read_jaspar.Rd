@@ -37,8 +37,8 @@ head(m)
 
 }
 \seealso{
-Other motif functions: 
-\code{\link{gseq.read_homer}()},
-\code{\link{gseq.read_meme}()}
+Other motif functions:
+\code{\link[=gseq.read_homer]{gseq.read_homer()}},
+\code{\link[=gseq.read_meme]{gseq.read_meme()}}
 }
 \concept{motif functions}

@@ -40,8 +40,8 @@ attr(m, "consensus")
 
 }
 \seealso{
-Other motif functions: 
-\code{\link{gseq.read_jaspar}()},
-\code{\link{gseq.read_meme}()}
+Other motif functions:
+\code{\link[=gseq.read_jaspar]{gseq.read_jaspar()}},
+\code{\link[=gseq.read_meme]{gseq.read_meme()}}
 }
 \concept{motif functions}
