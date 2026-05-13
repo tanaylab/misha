@@ -19,7 +19,7 @@ Optionally also converts tracks and interval sets to indexed format."><!-- mathj
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.29</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.30</span>
       </span>
     </div>
 
@@ -84,7 +84,8 @@ Optionally also converts tracks and interval sets to indexed format.</p>
 <span>  convert_tracks <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  convert_intervals <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  chunk_size <span class="op">=</span> <span class="fl">104857600</span></span>
+<span>  chunk_size <span class="op">=</span> <span class="fl">104857600</span>,</span>
+<span>  threads <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -123,6 +124,14 @@ Optionally also converts tracks and interval sets to indexed format.</p>
 <dt id="arg-chunk-size">chunk_size<a class="anchor" aria-label="anchor" href="#arg-chunk-size"></a></dt>
 <dd><p>Integer. The size of the chunk to read from the sequence files. Default: 104857600 (100MB). Reduce if
 you are running into memory issues.</p></dd>
+
+
+<dt id="arg-threads">threads<a class="anchor" aria-label="anchor" href="#arg-threads"></a></dt>
+<dd><p>Integer or NULL. Number of parallel processes used when converting
+tracks and interval sets (each worker handles one track/interval set via
+<code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply</a></code>). If <code>NULL</code> (default), uses
+<code>min(parallel::detectCores(), 8)</code>. Set to <code>1</code> for serial execution.
+Falls back to serial on non-Unix platforms (mclapply requires fork).</p></dd>
 
 </dl></div>
     <div id="value">
