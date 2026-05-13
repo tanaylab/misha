@@ -1421,9 +1421,18 @@ gdb.install_intervals <- function(groot,
             message("  Force-align canonical = target_chroms (synthetic .target_chroms column).")
         }
     } else {
+        # When match_by_length is on, the pre-rescue column pick is just a
+        # starting point for the length-fill / length-override / name-override
+        # passes; `min_coverage` should apply to the post-rescue canonical
+        # below, not to the single-column score. Hybrid HAL conventions
+        # (e.g. Phylo447: assembled = UCSC names, unplaced = bare GenBank
+        # accessions) routinely have no single column above 99% but the
+        # rescues take final coverage to 100%. Picking at `min_coverage = 0`
+        # always returns the best-scoring column.
+        select_min <- if (isTRUE(match_by_length)) 0 else min_coverage
         groot_col <- if (!is.null(alias_df)) {
             .detect_alias_column(alias_df, detect_chroms,
-                min_coverage = min_coverage, chrom_lengths = detect_lengths
+                min_coverage = select_min, chrom_lengths = detect_lengths
             )
         } else {
             NA_character_
@@ -1512,6 +1521,30 @@ gdb.install_intervals <- function(groot,
         }
         canonical_vals <- alias_df[[canonical_col]]
         unmapped <- groot_chroms[!groot_chroms %in% canonical_vals]
+        # Post-rescue gate: when match_by_length=TRUE, min_coverage applies
+        # to the final canonical column (after all rescue passes), not to
+        # the single-column score above. The pre-rescue gate is skipped
+        # precisely so the rescues get a chance; this is where we re-check.
+        if (isTRUE(match_by_length) && length(unmapped)) {
+            unmapped_bp <- sum(groot_lengths[!groot_chroms %in% canonical_vals])
+            final_cov <- 1 - unmapped_bp / sum(groot_lengths)
+            if (final_cov < min_coverage) {
+                stop(sprintf(
+                    "After alias resolution (column-detect + length-fill + length-override + name-override), %d groot contigs (%s bp, %.4f%% of genome) remain unmapped; final coverage %.4f%% < min_coverage %.4f%%.\n  %s\nHint: lower `min_coverage` (e.g. min_coverage = %.2f) if you accept the unmapped fraction.",
+                    length(unmapped),
+                    format(unmapped_bp, big.mark = ","),
+                    100 * unmapped_bp / sum(groot_lengths),
+                    100 * final_cov,
+                    100 * min_coverage,
+                    .diagnose_unmapped_chroms(
+                        unmapped, alias_df, canonical_col,
+                        groot_chroms, groot_lengths,
+                        assets$chrom_alias$row_lengths, groot
+                    ),
+                    floor(final_cov * 100) / 100
+                ), call. = FALSE)
+            }
+        }
         if (verbose && length(unmapped)) {
             unmapped_bp <- sum(groot_lengths[!groot_chroms %in% canonical_vals])
             message(sprintf(
