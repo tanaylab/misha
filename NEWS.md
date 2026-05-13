@@ -14,6 +14,12 @@
 * `gsetroot()` is ~3x faster on million-contig databases (~13 s -> ~5 s on a 1.28M-contig DB).
 * `gextract()` and other scan operations are faster on indexed tracks of databases with many chromosome aliases (skips a per-contig alias lookup that has no effect on indexed tracks).
 
+# misha 5.6.30
+
+* `gdb.install_intervals()` and `gdb.build_genome()` from `ncbi` sources now translate chrom names to whatever the groot uses (chr1/1/CM*, mixed HAL conventions) via the standard chromAlias chain. Previously NCBI installs left source seq IDs (NC_*) untranslated, mismatching most grooots.
+* `gdb.install_intervals()` from `ncbi` skips the FASTA download (it was never used), saving ~900 MB per call on GRCh38-scale assemblies.
+* `gdb.install_intervals(sets = "rmsk", ...)` from `ncbi` now fetches `*_rm.out.gz` from the NCBI FTP. Skipped with a warning for assemblies that don't publish it (community-submitted GCAs typically don't).
+
 # misha 5.6.29
 
 * `gdb.install_intervals()` now errors if any requested set is unavailable from the source (previously skipped silently with a warning). Pass `force = TRUE` to demote the error to a summary warning and install the available sets.
