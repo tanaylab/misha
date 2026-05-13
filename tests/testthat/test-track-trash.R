@@ -52,3 +52,34 @@ test_that(".gdb.trash_sweep_old on missing parent is a no-op", {
     tmp <- withr::local_tempdir()
     expect_equal(.gdb.trash_sweep_old(file.path(tmp, "nope")), 0L)
 })
+
+test_that(".gdb.trash falls back to direct unlink when rename fails", {
+    tmp <- withr::local_tempdir()
+    target <- file.path(tmp, "renamefail")
+    dir.create(target)
+    file.create(file.path(target, "a"))
+
+    local_mocked_bindings(
+        file.rename = function(from, to) FALSE,
+        .package = "base"
+    )
+
+    result <- .gdb.trash(target)
+    expect_true(result)
+    expect_false(file.exists(target))
+    # No trash sibling because the fallback unlinks the original path directly
+    expect_length(
+        list.files(tmp, all.files = TRUE, no.. = TRUE, pattern = "^\\.trash\\."),
+        0
+    )
+})
+
+test_that(".gdb.trash called twice on same path returns FALSE second time", {
+    tmp <- withr::local_tempdir()
+    target <- file.path(tmp, "twice")
+    dir.create(target)
+
+    expect_true(.gdb.trash(target, async = FALSE))
+    expect_false(file.exists(target))
+    expect_false(.gdb.trash(target)) # gone, no-op
+})

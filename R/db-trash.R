@@ -15,14 +15,21 @@
     rand <- basename(tempfile(""))
     trash <- file.path(parent, sprintf(".trash.%s.%d.%s", base, Sys.getpid(), rand))
 
-    if (!file.rename(path, trash)) {
+    # suppressWarnings: cross-filesystem rename returns FALSE and warns; the
+    # FALSE return is the documented signal we rely on, the warning is noise.
+    if (!suppressWarnings(file.rename(path, trash))) {
         unlink(path, recursive = TRUE, force = TRUE)
         return(invisible(TRUE))
     }
 
     if (async) {
         cmd <- sprintf("nohup rm -rf -- %s >/dev/null 2>&1 &", shQuote(trash))
-        system(cmd, wait = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+        rc <- system(cmd, wait = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+        if (rc != 0) {
+            # Fork or shell launch failed - unlink synchronously so the trash
+            # dir doesn't linger until the next sweep_old.
+            unlink(trash, recursive = TRUE, force = TRUE)
+        }
     } else {
         unlink(trash, recursive = TRUE, force = TRUE)
     }
@@ -41,6 +48,8 @@
     }
     cutoff <- Sys.time() - as.difftime(max_age_hours, units = "hours")
     info <- file.info(entries)
+    # NA mtimes (typically permission-denied stat) are intentionally treated as
+    # "not stale" so we don't loop on entries we can't even inspect.
     stale <- entries[!is.na(info$mtime) & info$mtime < cutoff]
     for (s in stale) {
         try(unlink(s, recursive = TRUE, force = TRUE), silent = TRUE)
