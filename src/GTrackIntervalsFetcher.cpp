@@ -11,6 +11,7 @@
 #include "GTrackIntervalsFetcher.h"
 #include "GIntervalsBigSet1D.h"
 #include "GIntervalsBigSet2D.h"
+#include "TrackIndex.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
 
@@ -45,36 +46,92 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 	REprintf("Preparing the track %s to be used as an intervals set...\n", track_name);
 
 	if (track_type == GenomeTrack::SPARSE || track_type == GenomeTrack::ARRAYS) {
-		vector<GIntervalsMeta1D::ChromStat> chromstats(iu.get_chromkey().get_num_chroms());
-		Progress_reporter progress;
-		progress.init(iu.get_chromkey().get_num_chroms(), 1);
+		const uint64_t num_chroms = iu.get_chromkey().get_num_chroms();
+		vector<GIntervalsMeta1D::ChromStat> chromstats(num_chroms);
 
-		for (uint64_t chromid = 0; chromid < iu.get_chromkey().get_num_chroms(); chromid++) {
-			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, chromid);
-			string filename(trackpath + "/" + resolved);
+		// For indexed tracks, the on-disk track.idx tells us exactly which
+		// chromids have data (length > 0). This lets us skip O(N) per-chrom
+		// find_existing_1d_filename + access() syscalls on indexed-only tracks
+		// (where the per-chrom files don't exist anyway). On a 1M-contig DB
+		// this drops ~3-5M syscalls per meta creation to ~N.
+		const string idx_path = trackpath + "/track.idx";
+		struct stat idx_st;
+		const bool indexed = (::stat(idx_path.c_str(), &idx_st) == 0);
 
-			if (access(filename.c_str(), R_OK) && errno == ENOENT) {
+		if (indexed) {
+			std::shared_ptr<TrackIndex> idx = GenomeTrack::get_track_index(trackpath);
+			if (!idx)
+				verror("Failed to load track index for %s", trackpath.c_str());
+
+			// Count non-empty contigs for progress reporting.
+			const vector<TrackContigEntry> &entries = idx->get_all_entries();
+			uint64_t num_nonempty = 0;
+			for (const TrackContigEntry &e : entries)
+				if (e.length > 0)
+					++num_nonempty;
+
+			Progress_reporter progress;
+			progress.init(num_nonempty, 1);
+
+			// init_read on an indexed track ignores the per-chrom filename
+			// component once it has located track.idx; pass the trackdir
+			// prefix so get_track_dir() recovers the right directory.
+			const string dummy_filename = trackpath + "/.idx_dummy";
+
+			for (const TrackContigEntry &entry : entries) {
+				if (entry.length == 0)
+					continue;
+				const uint64_t chromid = entry.chrom_id;
+				if (chromid >= num_chroms)
+					continue;
+
+				if (track_type == GenomeTrack::SPARSE) {
+					GenomeTrackSparse track;
+					track.init_read(dummy_filename.c_str(), chromid);
+					GIntervals intervals(track.get_intervals());
+					chromstats[chromid] = GIntervalsBigSet1D::get_chrom_stat(&intervals).second;
+				} else { // ARRAYS
+					GenomeTrackArrays track;
+					track.init_read(dummy_filename.c_str(), chromid);
+					GIntervals intervals(track.get_intervals());
+					chromstats[chromid] = GIntervalsBigSet1D::get_chrom_stat(&intervals).second;
+				}
+
 				progress.report(1);
-				continue;
+				check_interrupt();
 			}
+			progress.report_last();
+		} else {
+			Progress_reporter progress;
+			progress.init(num_chroms, 1);
 
-			if (track_type == GenomeTrack::SPARSE) {
-				GenomeTrackSparse track;
-				track.init_read(filename.c_str(), chromid);
-				GIntervals intervals(track.get_intervals());
-				chromstats[chromid] = GIntervalsBigSet1D::get_chrom_stat(&intervals).second;
-			} else if (track_type == GenomeTrack::ARRAYS) {
-				GenomeTrackArrays track;
-				track.init_read(filename.c_str(), chromid);
-				GIntervals intervals(track.get_intervals());
-				chromstats[chromid] = GIntervalsBigSet1D::get_chrom_stat(&intervals).second;
+			for (uint64_t chromid = 0; chromid < num_chroms; chromid++) {
+				string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, chromid);
+				string filename(trackpath + "/" + resolved);
+
+				if (access(filename.c_str(), R_OK) && errno == ENOENT) {
+					progress.report(1);
+					continue;
+				}
+
+				if (track_type == GenomeTrack::SPARSE) {
+					GenomeTrackSparse track;
+					track.init_read(filename.c_str(), chromid);
+					GIntervals intervals(track.get_intervals());
+					chromstats[chromid] = GIntervalsBigSet1D::get_chrom_stat(&intervals).second;
+				} else if (track_type == GenomeTrack::ARRAYS) {
+					GenomeTrackArrays track;
+					track.init_read(filename.c_str(), chromid);
+					GIntervals intervals(track.get_intervals());
+					chromstats[chromid] = GIntervalsBigSet1D::get_chrom_stat(&intervals).second;
+				}
+
+				progress.report(1);
+				check_interrupt();
 			}
-
-			progress.report(1);
-			check_interrupt();
+			progress.report_last();
 		}
 		GIntervalsMeta1D::save_plain_intervals_meta(trackpath.c_str(), chromstats, iu);
-		progress.report_last();
 	} else if (track_type == GenomeTrack::RECTS || track_type == GenomeTrack::POINTS || track_type == GenomeTrack::COMPUTED) {
 		vector<GIntervalsMeta2D::ChromStat> chromstats(iu.get_chromkey().get_num_chroms() * iu.get_chromkey().get_num_chroms());
 		BufferedFile bfile;
