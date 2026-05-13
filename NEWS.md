@@ -8,6 +8,7 @@
 * `gtrack.liftover()` now writes the indexed format directly when the target database is indexed, avoiding ~1M per-chromosome empty-placeholder file creations when lifting onto a many-contig genome.
 * `gdb.convert_to_indexed(convert_tracks = TRUE)` and `convert_intervals = TRUE` accept a new `threads` argument (default: `min(detectCores(), 8)`) and run per-track conversions in parallel via `parallel::mclapply`. Per-track failures are reported as warnings without aborting the batch.
 * `gtrack.create_meta()` for sparse/array tracks on indexed databases now consults `track.idx` to find populated chromosomes instead of stat'ing per-chromosome files that don't exist. Drops a one-time O(N_contigs) syscall cost from the first use of a sparse/array track.
+* `gextract()` / `gscreen()` and other track-expression iterators now validate indexed 1D tracks via `track.idx` instead of stat'ing it once per chromosome. On a 1.28M-contig database, `gextract` of 100 random 5 bp intervals from a dense indexed track drops from ~64 s to ~8 s (system time from ~52 s to ~2 s).
 
 # misha 5.6.29
 

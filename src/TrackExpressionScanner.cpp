@@ -38,6 +38,7 @@
 #include "TrackExpressionTrackRectsIterator.h"
 #include "TrackExpressionVars.h"
 #include "rdbutils.h"
+#include "TrackIndex.h"
 #include "TrackIndex2D.h"
 
 const int TrackExprScanner::INIT_REPORT_STEP = 10000;
@@ -613,8 +614,98 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 			// read the list of chrom files
 			get_chrom_files(trackpath.c_str(), filenames);
 
-			// If filenames is empty, this is an indexed track - populate with synthetic names
+			// Indexed 1D fast path: when track.idx is present, validate via the
+			// in-memory index instead of synthesizing one filename per chromosome
+			// and stat()'ing track.idx for every one. On large-contig genomes
+			// (~1M+ chroms) the synthetic loop hits ~4 syscalls × N_chroms per
+			// gextract setup, with stat(track.idx) dominating.
 			if (filenames.empty() && GenomeTrack::is_1d(track_type)) {
+				auto idx = GenomeTrack::get_track_index(trackpath);
+				if (idx) {
+					const auto &entries = idx->get_all_entries();
+					set<int> chromids;
+					unsigned bin_size = 0;
+
+					// FIXED_BIN: bin_size is invariant across contigs; read it
+					// once from the first non-empty entry, then validate each
+					// non-empty contig's num_samples in-memory via entry.length.
+					if (track_type == GenomeTrack::FIXED_BIN) {
+						const string dat_path = trackpath + "/track.dat";
+						BufferedFile bf;
+						bool bf_opened = false;
+						for (const auto &entry : entries) {
+							chromids.insert((int)entry.chrom_id);
+							if (entry.length == 0)
+								continue;
+							if (bin_size == 0) {
+								if (bf.open(dat_path.c_str(), "rb"))
+									verror("Cannot open %s: %s", dat_path.c_str(), strerror(errno));
+								bf_opened = true;
+								if (bf.seek((long)entry.offset, SEEK_SET))
+									verror("Failed to seek in %s", dat_path.c_str());
+								if (bf.read(&bin_size, sizeof(bin_size)) != sizeof(bin_size) || bin_size == 0)
+									verror("Invalid fixed-bin header in %s", dat_path.c_str());
+							}
+							if (entry.length < sizeof(bin_size))
+								verror("Invalid fixed-bin format in %s", dat_path.c_str());
+							const uint64_t data_bytes = entry.length - sizeof(bin_size);
+							if ((data_bytes % sizeof(float)) != 0)
+								verror("Invalid fixed-bin format in %s", dat_path.c_str());
+							const int64_t num_samples = (int64_t)(data_bytes / sizeof(float));
+							const int chromid = (int)entry.chrom_id;
+							const int64_t expected_num_bins = (int64_t)ceil(all_genome_intervs[chromid].end / (double)bin_size);
+							if (num_samples != expected_num_bins)
+								verror("Number of bins in track %s, chrom %s do not match the chromosome size (expecting: %ld, reading: %ld)",
+								       itrack_name->c_str(),
+								       m_iu.get_chromkey().id2chrom(chromid).c_str(),
+								       expected_num_bins, num_samples);
+						}
+						if (bf_opened)
+							bf.close();
+					} else {
+						// SPARSE / ARRAYS: no bin_size invariant to enforce; just
+						// collect chromids for the missing-chrom check.
+						for (const auto &entry : entries)
+							chromids.insert((int)entry.chrom_id);
+					}
+
+					// Update common_track_type / common_binsize using the same
+					// semantics as the legacy per-chrom loop's first-iteration
+					// branch (line ~669 below).
+					if (Rf_isString(giterator)) {
+						if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
+							common_track_type = track_type;
+					} else {
+						if (itrack_name == track_names.begin())
+							common_track_type = track_type;
+						else if (common_track_type != track_type)
+							common_track_type = -1;
+					}
+					if (track_type == GenomeTrack::FIXED_BIN) {
+						if (Rf_isString(giterator)) {
+							if (*itrack_name == CHAR(STRING_ELT(giterator, 0)))
+								common_binsize = (int)bin_size;
+						} else {
+							if (itrack_name == track_names.begin())
+								common_binsize = (int)bin_size;
+							else if (common_binsize != (int)bin_size)
+								common_binsize = -1;
+						}
+					}
+
+					// Equivalent of the "missing-chrom" check that ran after the
+					// legacy per-chrom loop. The index entry table covers the
+					// full chromkey by construction, but verify in case of a
+					// stale/partial index.
+					for (GIntervals::const_iterator iinterv = all_genome_intervs.begin(); iinterv != all_genome_intervs.end(); ++iinterv) {
+						if (chromids.find(iinterv->chromid) == chromids.end())
+							verror("Chrom %s presented in the global chrom list is missing in track %s",
+							       m_iu.id2chrom(iinterv->chromid).c_str(), itrack_name->c_str());
+					}
+
+					continue;  // Skip the legacy per-chrom loop below.
+				}
+				// No index found: fall through to legacy per-chrom synthesis.
 				for (unsigned i = 0; i < m_iu.get_chromkey().get_num_chroms(); ++i) {
 					filenames.push_back(m_iu.get_chromkey().id2chrom(i));
 				}
