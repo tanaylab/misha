@@ -175,26 +175,29 @@ gtrack.liftover <- function(track = NULL,
     }
 
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
+
+    .gtrack.create_atomic(trackstr, function() {
+        .gcall(
+            "gtrack_liftover",
+            trackstr,
+            src.track.dir,
+            chain.intervs,
+            src_overlap_policy,
+            tgt_overlap_policy,
+            multi_target_agg,
+            nth_param,
+            na.rm,
+            if (is.null(min_n)) NA_integer_ else min_n,
+            min_score,
+            .misha_env(),
+            silent = TRUE
+        )
+    })
+
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            .gcall(
-                "gtrack_liftover",
-                trackstr,
-                src.track.dir,
-                chain.intervs,
-                src_overlap_policy,
-                tgt_overlap_policy,
-                multi_target_agg,
-                nth_param,
-                na.rm,
-                if (is.null(min_n)) NA_integer_ else min_n,
-                min_score,
-                .misha_env(),
-                silent = TRUE
-            )
             .gdb.add_track(trackstr)
             if (is.character(chain)) {
                 .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.liftover(%s, description, \"%s\", \"%s\")", trackstr, src.track.dir, chain), TRUE)
@@ -204,12 +207,11 @@ gtrack.liftover <- function(track = NULL,
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
             # For empty tracks (no chromosome files), create an empty indexed track
             if (.gdb.is_indexed()) {
-                track_has_files <- length(list.files(trackdir, pattern = "^[^.]")) > 0
+                track_has_files <- length(list.files(final_dir, pattern = "^[^.]")) > 0
                 if (track_has_files) {
                     gtrack.convert_to_indexed(trackstr)
                 } else {
@@ -218,13 +220,19 @@ gtrack.liftover <- function(track = NULL,
                     .gcall("gtrack_create_empty_indexed", trackstr, .misha_env())
                 }
             }
+            success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }

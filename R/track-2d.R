@@ -6,12 +6,15 @@
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
+
+    .gtrack.create_atomic(trackstr, function() {
+        .gcall("gcreate_test_computer2d_track", trackstr, prob.skip.chrom, max.rect, max.rect.size, .misha_env())
+    })
+
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            .gcall("gcreate_test_computer2d_track", trackstr, prob.skip.chrom, max.rect, max.rect.size, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf(".gtrack.create_test_computer2d(%s, %g, %g, %g)", trackstr, prob.skip.chrom, max.rect, max.rect.size), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
@@ -19,13 +22,18 @@
             success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
 
 
@@ -86,32 +94,40 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
     valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
+
+    .gtrack.create_atomic(trackstr, function() {
+        .gcall("gtrack_create_track2d", trackstr, intervals, values, .misha_env())
+    })
+
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_create_track2d", trackstr, intervals, values, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.2d.create(%s, description, %s, %s)", trackstr, intervalsstr, valuesstr), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
             # If database is indexed, automatically convert the 2D track to indexed format
             if (.gdb.is_indexed()) {
                 gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
             }
+            success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
 
 
@@ -165,14 +181,15 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
-    retv <- 0
-    success <- FALSE
 
+    .gtrack.create_atomic(trackstr, function() {
+        .gcall("gtrack_2d_import", trackstr, file, .misha_env())
+    })
+
+    final_dir <- .track_dir(trackstr)
+    success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_2d_import", trackstr, file, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -181,21 +198,26 @@ gtrack.2d.import <- function(track = NULL, description = NULL, file = NULL) {
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
             # If database is indexed, automatically convert the 2D track to indexed format
             if (.gdb.is_indexed()) {
                 gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
             }
+            success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
 
 
@@ -278,12 +300,15 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
+
+    .gtrack.create_atomic(trackstr, function() {
+        .gcall("gtrack_import_contacts", trackstr, contacts, fends, allow.duplicates, .misha_env())
+    })
+
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_import_contacts", trackstr, contacts, fends, allow.duplicates, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -296,19 +321,24 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
             # If database is indexed, automatically convert the 2D track to indexed format
             if (.gdb.is_indexed()) {
                 gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
             }
+            success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
