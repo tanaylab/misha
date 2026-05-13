@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <cmath>
 #include <algorithm>
+#include <cstring>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1269,4 +1270,13 @@ void GenomeTrackFixedBin::init_write(const char *filename, unsigned bin_size, in
 	}
 
 	m_chromid = chromid;
+}
+
+void GenomeTrackFixedBin::pack_header(std::vector<char> &out, unsigned bin_size)
+{
+	// Must match init_write() above byte-for-byte. Currently a single
+	// 4-byte `unsigned bin_size`. If the on-disk header ever grows, this
+	// function and init_write() must change in lock-step.
+	out.resize(sizeof(bin_size));
+	std::memcpy(out.data(), &bin_size, sizeof(bin_size));
 }
