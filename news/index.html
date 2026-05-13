@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.29</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.30</span>
       </span>
     </div>
 
@@ -67,8 +67,33 @@
     </div>
 
     <div class="section level2">
-<h2 class="page-header" data-toc-text="development version" id="misha-development-version">misha (development version)<a class="anchor" aria-label="anchor" href="#misha-development-version"></a></h2>
-</div>
+<h2 class="page-header" data-toc-text="5.6.30" id="misha-5630">misha 5.6.30<a class="anchor" aria-label="anchor" href="#misha-5630"></a></h2>
+<ul><li>
+<code><a href="../reference/gtrack.rm.html">gtrack.rm()</a></code> (and <code><a href="../reference/gintervals.rm.html">gintervals.rm()</a></code>) now returns immediately even when the target directory contains millions of files; the actual filesystem cleanup runs in the background.</li>
+<li>Track creation (<code><a href="../reference/gtrack.create.html">gtrack.create()</a></code> and friends) is now atomic on databases with many contigs: an interrupted create no longer leaves a partial track directory that blocks re-creation. Cleanup of failed creates runs in the background.</li>
+<li>On indexed databases, <code><a href="../reference/gtrack.create.html">gtrack.create()</a></code> for dense (fixed-bin) and sparse tracks now writes the indexed format (<code>track.dat</code> + <code>track.idx</code>) directly instead of writing N per-chromosome files and then deleting them. Substantially faster on databases with &gt;1M contigs.</li>
+<li>2D track / interval-set creation and meta builders no longer allocate <code>O(num_contigs^2)</code> per-pair entries. <code>gtrack.create_meta()</code> for 2D tracks uses <code>track.idx</code> (indexed) or a directory scan (legacy) to enumerate populated pairs instead of probing all N*N. Enables 2D tracks on databases with &gt;1000 contigs without OOM or multi-day metadata scans.</li>
+<li>
+<code><a href="../reference/gdataset.info.html">gdataset.info()</a></code> and <code>gdataset.ls(dataframe=TRUE)</code> now use a single C++ filesystem traversal (with FTS_SKIP) instead of two recursive R-level <code><a href="https://rdrr.io/r/base/list.files.html" class="external-link">list.files()</a></code> calls. Faster on databases with many tracks/intervals when <code>.db.cache</code> is missing or stale.</li>
+<li>
+<code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> now writes the indexed format directly when the target database is indexed, avoiding ~1M per-chromosome empty-placeholder file creations when lifting onto a many-contig genome.</li>
+<li>
+<code>gdb.convert_to_indexed(convert_tracks = TRUE)</code> and <code>convert_intervals = TRUE</code> accept a new <code>threads</code> argument (default: <code>min(detectCores(), 8)</code>) and run per-track conversions in parallel via <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply</a></code>. Per-track failures are reported as warnings without aborting the batch.</li>
+<li>
+<code>gtrack.create_meta()</code> for sparse/array tracks on indexed databases now consults <code>track.idx</code> to find populated chromosomes instead of stat’ing per-chromosome files that don’t exist. Drops a one-time O(N_contigs) syscall cost from the first use of a sparse/array track.</li>
+<li>
+<code><a href="../reference/gextract.html">gextract()</a></code> / <code><a href="../reference/gscreen.html">gscreen()</a></code> and other track-expression iterators now validate indexed 1D tracks via <code>track.idx</code> instead of stat’ing it once per chromosome. On a 1.28M-contig database, <code>gextract</code> of 100 random 5 bp intervals from a dense indexed track drops from ~64 s to ~8 s (system time from ~52 s to ~2 s).</li>
+<li>Fixed <code><a href="../reference/gintervals.random.html">gintervals.random()</a></code> rejecting chromosomes whose length exactly equals <code>size + 2*dist_from_edge</code> (where a single valid interval is available) and biasing sampling away from the right edge. The no-filter path now uses the same full-range semantics as the filter path.</li>
+<li>Most misha functions paid a fixed ~1.5 s setup cost on million-contig databases (rebuilding the chromosome table and the all-genome interval list on every call). Both are now cached. On a 1.28M-contig database, <code><a href="../reference/gtrack.info.html">gtrack.info()</a></code> drops from ~1.4 s to &lt;1 ms and <code><a href="../reference/gseq.extract.html">gseq.extract()</a></code> from ~14 s to ~0.4 s; smaller genomes are unaffected.</li>
+<li>
+<code><a href="../reference/gdb.init.html">gsetroot()</a></code> is ~3x faster on million-contig databases (~13 s -&gt; ~5 s on a 1.28M-contig DB).</li>
+<li>
+<code><a href="../reference/gextract.html">gextract()</a></code> and other scan operations are faster on indexed tracks of databases with many chromosome aliases (skips a per-contig alias lookup that has no effect on indexed tracks).</li>
+<li>
+<code><a href="../reference/gdb.install_intervals.html">gdb.install_intervals()</a></code> from <code>ncbi</code> now translates chrom names to the groot’s convention, fetches <code>genes</code> and <code>rmsk</code> from the NCBI FTP when the Datasets API doesn’t ship them (older / suppressed accessions like GRCm38.p6), and no longer downloads the FASTA.</li>
+<li>
+<code>min_coverage</code> is now checked after the alias rescue passes, so hybrid naming (e.g. UCSC-style chroms mixed with bare GenBank accessions) passes at the strict default.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.29" id="misha-5629">misha 5.6.29<a class="anchor" aria-label="anchor" href="#misha-5629"></a></h2>
 <ul><li>
