@@ -1,7 +1,10 @@
 create_isolated_test_db()
 
 test_that(".misha$.create_dir_override redirects track create dir", {
-    # Clean slate
+    # Test the C++ primitive directly. Since Phase 3b, gtrack.create()
+    # wraps the create in .gtrack.create_atomic which manages the
+    # override slot itself, so we bypass it and call the underlying
+    # gtrackcreate .gcall directly.
     suppressWarnings(gtrack.rm("test_override_target", force = TRUE))
     withr::defer(suppressWarnings(gtrack.rm("test_override_target", force = TRUE)))
 
@@ -19,12 +22,13 @@ test_that(".misha$.create_dir_override redirects track create dir", {
     assign(".create_dir_override", parent, envir = .misha)
 
     # The C++ writes into 'parent' (our override) but the trackname is
-    # "test_override_target". R-level post-processing (.gdb.add_track,
-    # attrs) likely fails because the expected track dir does not exist.
-    # Catch any resulting error - we only care about the mkdir side
-    # effect and slot consumption.
+    # "test_override_target". We catch any resulting error - we only
+    # care about the mkdir side effect and slot consumption.
     suppressWarnings(try(
-        gtrack.create("test_override_target", "test", "test.fixedbin"),
+        .gcall(
+            "gtrackcreate", "test_override_target", "test.fixedbin",
+            list(), NULL, .misha_env()
+        ),
         silent = TRUE
     ))
 
@@ -68,6 +72,7 @@ test_that(".create_dir_override is cleared even when create_track_dir errors", {
     # Pre-create the override path so create_track_dir's mkdir errors
     # with EEXIST. The C++ reads + clears the override BEFORE calling
     # mkdir, so the slot must be cleared even though the call errors.
+    # Call the C++ primitive directly to bypass the atomic wrapper.
     parent <- file.path(get("GWD", envir = .misha), ".override_mkdir_fail_target")
     suppressWarnings(unlink(parent, recursive = TRUE, force = TRUE))
     dir.create(parent)
@@ -81,7 +86,10 @@ test_that(".create_dir_override is cleared even when create_track_dir errors", {
     # mkdir errors because 'parent' already exists; the slot must
     # already be cleared by the time the error propagates.
     expect_error(
-        gtrack.create("test_override_err_target", "test", "test.fixedbin"),
+        .gcall(
+            "gtrackcreate", "test_override_err_target", "test.fixedbin",
+            list(), NULL, .misha_env()
+        ),
         regexp = "Cannot create track|exists"
     )
 
