@@ -259,7 +259,8 @@
 # add_chrom_alias no-ops on entries whose alias already names a chrom, so
 # self-entries cost only a no-op lookup on the C++ side.
 .compute_chrom_aliases <- function(chroms, groot = NULL) {
-    chroms <- unique(as.character(chroms))
+    if (!is.character(chroms)) chroms <- as.character(chroms)
+    chroms <- unique(chroms)
     n <- length(chroms)
     if (!n) {
         result <- stats::setNames(character(0), character(0))
@@ -268,27 +269,34 @@
     }
 
     has_chr_prefix <- startsWith(chroms, "chr")
-    unprefixed <- ifelse(has_chr_prefix, substring(chroms, 4), chroms)
-    prefixed <- ifelse(has_chr_prefix, chroms, paste0("chr", chroms))
-    upper_unpref <- toupper(unprefixed)
-    upper_chr <- toupper(chroms)
-    is_mito <- upper_unpref %in% c("M", "MT") | upper_chr %in% c("CHRM", "CHRMT")
+    any_chr_prefix <- any(has_chr_prefix)
 
-    # Vectorized basic pass: self-aliases, chr-prefix toggles, and MT aliases.
-    # Replaces a per-element loop over .compute_chrom_aliases's `seen` env, which
-    # took ~90 s on a 2.4M-contig fragmented assembly.
-    #
-    # On fragmented assemblies (e.g. Phylo447, 2.4M scaffold_*) the prefixed-
-    # alias step generates millions of "chrXXX" entries that no user will ever
-    # look up. Skip it when (a) contig count is large, (b) no canonical name
-    # has the "chr" prefix, and (c) no name is mito-pattern. Ensembl-style
-    # references (1/2/X/MT) and any genome with mito stay unaffected.
-    skip_prefixed <- n > 1000L && !any(has_chr_prefix) && !any(is_mito)
+    # Cheap mito detection on million-contig assemblies: enumerate the known
+    # forms and let %in% (hashed) decide. Skips the O(N) toupper / ifelse /
+    # paste0 work that the general path needs only for the mito branch.
+    # The general path below still uses toupper-based detection so unusual
+    # mito naming (e.g. "MT-DNA") in smaller curated assemblies still works.
+    mito_forms <- c(
+        "M", "MT", "Mt", "mt", "m",
+        "chrM", "chrMT", "chrMt", "chrmt", "chrm",
+        "CHRM", "CHRMT"
+    )
 
-    if (skip_prefixed) {
+    # Fast path for fragmented assemblies (Phylo447 et al.): if there are
+    # many contigs and none start with "chr" and none are a known mito form,
+    # the prefixed-aliases pass would generate millions of "chrXXX" entries
+    # that no user will look up. Skip all the per-row vector work in that
+    # case and return the identity map.
+    if (n > 1000L && !any_chr_prefix && !any(chroms %in% mito_forms)) {
         basic_names <- chroms
         basic_targets <- chroms
     } else {
+        unprefixed <- ifelse(has_chr_prefix, substring(chroms, 4), chroms)
+        prefixed <- ifelse(has_chr_prefix, chroms, paste0("chr", chroms))
+        upper_unpref <- toupper(unprefixed)
+        upper_chr <- toupper(chroms)
+        is_mito <- upper_unpref %in% c("M", "MT") | upper_chr %in% c("CHRM", "CHRMT")
+
         # Candidate chr-toggle aliases tagged with source-chrom index, so we can
         # reproduce the original loop's "first-seen wins" semantics via
         # order + !duplicated.
