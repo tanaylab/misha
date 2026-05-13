@@ -1078,12 +1078,11 @@ void GenomeTrackFixedBin::init_read_metadata(const char *filename, int chromid)
 	// get_bin_size() and get_num_samples(). The full init_read does an open +
 	// mmap + madvise + close + munmap on every call; this version does at
 	// most an open + read + close on the first chromosome of a track, then
-	// just one stat per subsequent chromosome.
+	// just one hash lookup per subsequent chromosome (was a stat() per call;
+	// get_track_index hits the process-static index cache).
 	const std::string track_dir = GenomeTrack::get_track_dir(filename);
-	const std::string idx_path = track_dir + "/track.idx";
 
-	struct stat idx_st;
-	if (stat(idx_path.c_str(), &idx_st) == 0) {
+	if (get_track_index(track_dir)) {
 		// Indexed path is rare for this caller; defer to the full init_read,
 		// which already short-circuits via the persistent cache.
 		init_read(filename, "rb", chromid, /* setup_mmap = */ false);
@@ -1130,12 +1129,13 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 	m_lse_sliding_valid = false;
 	m_running_lse_initialized = false;
 
-	// Check for indexed format FIRST
+	// Check for indexed format FIRST. get_track_index() hits the process-
+	// static index cache (avoiding a stat() per chromosome transition on the
+	// hot iterator path) and returns nullptr when the track has no index.
 	const std::string track_dir = GenomeTrack::get_track_dir(filename);
-	const std::string idx_path = track_dir + "/track.idx";
+	auto idx = get_track_index(track_dir);
 
-	struct stat idx_st;
-	if (stat(idx_path.c_str(), &idx_st) == 0) {
+	if (idx) {
 		// --- INDEXED PATH ---
 		const std::string dat_path  = track_dir + "/track.dat";
 
@@ -1148,10 +1148,6 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 			m_dat_path = dat_path;
 			m_dat_mode = mode;
 		}
-
-		auto idx   = get_track_index(track_dir);
-		if (!idx)
-			TGLError<GenomeTrackFixedBin>("Failed to load track index for %s", track_dir.c_str());
 
 		auto entry = idx->get_entry(chromid);
 		if (!entry || entry->length == 0) {
