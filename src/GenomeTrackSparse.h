@@ -32,6 +32,19 @@ public:
 
 	void write_next_interval(const GInterval &interval, float val);
 
+	// Append the per-chrom on-disk header bytes for a sparse track to
+	// `out`. Must match init_write()/write_type() byte-for-byte so the
+	// streaming indexed-direct writer (GenomeTrackIndexedWriter) can
+	// emit the same bytes the legacy per-chrom-then-pack flow would
+	// have produced. Currently a 4-byte int32_t format signature
+	// (FORMAT_SIGNATURES[SPARSE] = -1).
+	static void pack_header(std::vector<char> &out);
+
+	// Append a single sparse on-disk record (start, end, val) to `out`.
+	// Must match write_next_interval() byte-for-byte. Currently
+	// int64_t start + int64_t end + float val = 20 bytes.
+	static void pack_record(std::vector<char> &out, int64_t start, int64_t end, float val);
+
 	const GIntervals &get_intervals();
 	const vector<float> &get_vals();
 

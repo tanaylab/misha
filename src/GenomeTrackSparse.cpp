@@ -366,6 +366,29 @@ void GenomeTrackSparse::write_next_interval(const GInterval &interval, float val
 	}
 }
 
+void GenomeTrackSparse::pack_header(std::vector<char> &out)
+{
+	// Must match GenomeTrack::write_type() for SPARSE byte-for-byte.
+	// Header is a single 4-byte int (the negative format signature).
+	// If the on-disk header ever grows, this function and write_type()
+	// must change in lock-step.
+	const int32_t sig = GenomeTrack::FORMAT_SIGNATURES[GenomeTrack::SPARSE];
+	const size_t start = out.size();
+	out.resize(start + sizeof(sig));
+	std::memcpy(out.data() + start, &sig, sizeof(sig));
+}
+
+void GenomeTrackSparse::pack_record(std::vector<char> &out, int64_t start, int64_t end, float val)
+{
+	// Must match write_next_interval() byte-for-byte: start (int64_t),
+	// end (int64_t), val (float). Record size is RECORD_SIZE bytes.
+	const size_t off = out.size();
+	out.resize(off + sizeof(start) + sizeof(end) + sizeof(val));
+	std::memcpy(out.data() + off, &start, sizeof(start));
+	std::memcpy(out.data() + off + sizeof(start), &end, sizeof(end));
+	std::memcpy(out.data() + off + sizeof(start) + sizeof(end), &val, sizeof(val));
+}
+
 const GIntervals &GenomeTrackSparse::get_intervals()
 {
 	if (m_master_obj)
