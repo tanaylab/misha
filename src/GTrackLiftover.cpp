@@ -15,6 +15,7 @@
 #include "rdbutils.h"
 
 #include "GenomeTrackFixedBin.h"
+#include "GenomeTrackIndexedWriter.h"
 #include "GenomeTrackRects.h"
 #include "GenomeTrackSparse.h"
 #include "AggregationHelpers.h"
@@ -610,41 +611,89 @@ SEXP gtrack_liftover(SEXP _track,
 			} else
 				TGLError("Source track type %s is currently not supported in liftover", GenomeTrack::TYPE_NAMES[src_track_type]);
 
-			// Process collected intervals for each chromosome, sort and save to track files
+			// Process collected intervals for each chromosome, sort and save to track files.
+			//
+			// On indexed-format target DBs (large-contig genomes), stream the per-chrom
+			// bytes directly into track.dat + track.idx via GenomeTrackIndexedWriter
+			// instead of writing one file per chrom. The legacy per-chrom path created
+			// N files even for chroms not covered by the chain (mostly empty
+			// signature-only sparse files, or NaN-filled fixed-bin files); on a 1M-contig
+			// target genome that is ~1M open+close syscalls. Byte layout is bit-for-bit
+			// identical to the convert-after-create path (see test-track-indexed-direct.R
+			// for the sparse and fixed-bin equivalence tests).
+			//
+			// The chrom loop already iterates 0..num_chroms in strictly increasing order
+			// which satisfies GenomeTrackIndexedWriter::begin_chrom's monotonicity check.
+			const bool indexed = rdb::is_db_indexed(_envir);
+			GenomeTrackIndexedWriter iw;
+			vector<char> sparse_header_bytes;
+			vector<char> fixedbin_header_bytes;
+			if (indexed) {
+				GenomeTrack::Type out_type = (src_track_type == GenomeTrack::FIXED_BIN) ? GenomeTrack::FIXED_BIN : GenomeTrack::SPARSE;
+				iw.init(dirname, out_type, (uint32_t)iu.get_chromkey().get_num_chroms());
+				if (out_type == GenomeTrack::SPARSE)
+					GenomeTrackSparse::pack_header(sparse_header_bytes);
+				else if (binsize > 0)
+					GenomeTrackFixedBin::pack_header(fixedbin_header_bytes, binsize);
+			}
+
 			for (int chromid = 0; chromid < (int)iu.get_chromkey().get_num_chroms(); ++chromid) {
 				// Create empty file if this chromosome has no data
 				if (chrom_intervals.find(chromid) == chrom_intervals.end()) {
 					// Always create empty chromosome files so downstream readers and indexing
 					// see the expected number of bins/intervals, even when the database is indexed.
-					snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 					if (src_track_type == GenomeTrack::FIXED_BIN) {
 						// Only create empty fixed bin tracks if we know the binsize (i.e., at least one chromosome was processed)
 						if (binsize > 0) {
-							GenomeTrackFixedBin gtrack;
-							gtrack.init_write(filename, binsize, chromid);
-							// Fill the chromosome with NaN values so the bin count matches the chromosome size
 							int64_t chrom_size = iu.get_chromkey().get_chrom_size(chromid);
 							int64_t end_bin = (int64_t)ceil(chrom_size / (double)binsize);
-							if (end_bin > 0) {
-								const int64_t chunk_size = 65536;
-								vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
-								int64_t remaining = end_bin;
-								while (remaining > 0) {
-									uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
-									gtrack.write_next_bins(&na_chunk[0], to_write);
-									remaining -= to_write;
+							if (indexed) {
+								iw.begin_chrom(chromid);
+								iw.write_bytes(fixedbin_header_bytes.data(), fixedbin_header_bytes.size());
+								if (end_bin > 0) {
+									const int64_t chunk_size = 65536;
+									vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
+									int64_t remaining = end_bin;
+									while (remaining > 0) {
+										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
+										iw.write_bytes(&na_chunk[0], to_write * sizeof(float));
+										remaining -= to_write;
+									}
+								}
+								iw.end_chrom();
+							} else {
+								snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+								GenomeTrackFixedBin gtrack;
+								gtrack.init_write(filename, binsize, chromid);
+								// Fill the chromosome with NaN values so the bin count matches the chromosome size
+								if (end_bin > 0) {
+									const int64_t chunk_size = 65536;
+									vector<float> na_chunk((size_t)min<int64_t>(end_bin, chunk_size), numeric_limits<float>::quiet_NaN());
+									int64_t remaining = end_bin;
+									while (remaining > 0) {
+										uint64_t to_write = (uint64_t)min<int64_t>(remaining, (int64_t)na_chunk.size());
+										gtrack.write_next_bins(&na_chunk[0], to_write);
+										remaining -= to_write;
+									}
 								}
 							}
 						}
+						// indexed && binsize==0: skip entirely (no source data at all,
+						// matches legacy per-chrom behaviour of writing no file).
 					} else if (src_track_type == GenomeTrack::SPARSE) {
-						GenomeTrackSparse gtrack;
-						gtrack.init_write(filename, chromid);
+						if (indexed) {
+							iw.begin_chrom(chromid);
+							iw.write_bytes(sparse_header_bytes.data(), sparse_header_bytes.size());
+							iw.end_chrom();
+						} else {
+							snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+							GenomeTrackSparse gtrack;
+							gtrack.init_write(filename, chromid);
+						}
 					}
 					progress.report(1);
 					continue;
 				}
-
-				snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
 
 				vector<GIntervalVal> &interv_vals = chrom_intervals[chromid];
 
@@ -652,7 +701,13 @@ SEXP gtrack_liftover(SEXP _track,
 
 				if (src_track_type == GenomeTrack::FIXED_BIN) {
 					GenomeTrackFixedBin gtrack;
-					gtrack.init_write(filename, binsize, chromid);
+					if (indexed) {
+						iw.begin_chrom(chromid);
+						iw.write_bytes(fixedbin_header_bytes.data(), fixedbin_header_bytes.size());
+					} else {
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+						gtrack.init_write(filename, binsize, chromid);
+					}
 					int64_t chrom_size = iu.get_chromkey().get_chrom_size(chromid);
 					int64_t end_bin = (int64_t)ceil(chrom_size / (double)binsize);
 					int64_t coord1 = 0;
@@ -700,17 +755,29 @@ SEXP gtrack_liftover(SEXP _track,
 						if (!std::isnan(aggregated))
 							out_val = static_cast<float>(aggregated);
 
-						gtrack.write_next_bin(out_val);
+						if (indexed)
+							iw.write_bytes(&out_val, sizeof(out_val));
+						else
+							gtrack.write_next_bin(out_val);
 
 						coord1 = coord2;
 						coord2 += binsize;
 						check_interrupt();
 					}
+					if (indexed)
+						iw.end_chrom();
 				} else if (src_track_type == GenomeTrack::SPARSE) {
 					GenomeTrackSparse gtrack;
-					gtrack.init_write(filename, chromid);
+					if (indexed) {
+						iw.begin_chrom(chromid);
+						iw.write_bytes(sparse_header_bytes.data(), sparse_header_bytes.size());
+					} else {
+						snprintf(filename, sizeof(filename), "%s/%s", dirname.c_str(), GenomeTrack::get_1d_filename(iu.get_chromkey(), chromid).c_str());
+						gtrack.init_write(filename, chromid);
+					}
 					AggregationState agg_state;
 					agg_state.contributions.reserve(4);
+					vector<char> rec_buf;
 
 					// Merge overlapping intervals before writing
 					// Intervals are sorted by start, then end
@@ -753,13 +820,24 @@ SEXP gtrack_liftover(SEXP _track,
 							out_val = static_cast<float>(aggregated);
 
 						GInterval merged_interval(chromid, merged_start, merged_end, 0);
-						gtrack.write_next_interval(merged_interval, out_val);
+						if (indexed) {
+							rec_buf.clear();
+							GenomeTrackSparse::pack_record(rec_buf, merged_interval.start, merged_interval.end, out_val);
+							iw.write_bytes(rec_buf.data(), rec_buf.size());
+						} else {
+							gtrack.write_next_interval(merged_interval, out_val);
+						}
 						check_interrupt();
 					}
+					if (indexed)
+						iw.end_chrom();
 				}
 
 				progress.report(1);
 			}
+
+			if (indexed)
+				iw.finalize();
 
 			progress.report_last();
 		} else {   // 2D tracks
