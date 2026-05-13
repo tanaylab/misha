@@ -58,6 +58,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item Aviezer Lifshitz \email{aviezer.lifshitz@weizmann.ac.il}
   \item Misha Hoichman \email{misha@hoichman.com}
   \item Eitan Yaffe \email{eitan.yaffe@weizmann.ac.il}
   \item Amos Tanay \email{amos.tanay@weizmann.ac.il}
