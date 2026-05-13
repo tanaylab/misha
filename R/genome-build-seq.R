@@ -246,7 +246,13 @@
     dir.create(workdir, recursive = TRUE)
     on.exit(unlink(workdir, recursive = TRUE), add = TRUE)
     zip_path <- file.path(workdir, "datasets.zip")
-    .download_to(.ncbi_datasets_zip_url(accession), zip_path, verbose = verbose)
+    .download_to(
+        .ncbi_datasets_zip_url(accession,
+            include = c("GENOME_FASTA", "SEQUENCE_REPORT")
+        ),
+        zip_path,
+        verbose = verbose
+    )
     extract_dir <- file.path(workdir, "extract")
     dir.create(extract_dir)
     utils::unzip(zip_path, exdir = extract_dir)
@@ -288,13 +294,20 @@
         annots.file = NULL, format = format, verbose = verbose
     )
 
+    # Persist chrom_aliases.tsv in the long format the rest of the build/
+    # install pipeline uses. After the FASTA rename above, the groot chroms
+    # equal rename_map[refseqAccession]; inject that as a synthetic
+    # ".canonical" column so .merge_chrom_aliases_tsv treats every other
+    # column as an alias of the groot name.
     if (!is.null(seqrep) && !is.null(rename_map)) {
-        .write_chrom_aliases_tsv(path, seqrep, rename_map)
+        alias_df <- .ncbi_seqrep_to_alias_df(seqrep)
+        alias_df[[".canonical"]] <- unname(rename_map[seqrep$refseqAccession])
+        .merge_chrom_aliases_tsv(path, alias_df, ".canonical")
     }
 
     list(
         files_record = list(fasta = list(name = basename(fasta_file))),
-        chrom_alias_df = NULL # NCBI uses sequence_report -> chrom_aliases.tsv directly
+        chrom_alias_df = NULL # written above via .merge_chrom_aliases_tsv
     )
 }
 
