@@ -226,6 +226,13 @@ public:
 	// Get all 2d intervals that cover the whole genome
 	void get_all_genome_intervs(GIntervals2D &intervals) const;
 
+	// Read-only accessors backed by a process-wide cache keyed on the
+	// ALLGENOME SEXP. Building these structures touches every contig of
+	// the genome (~1.28M for Phylo447 mammals); reuse the cached object
+	// when only read access is needed.
+	const GIntervals   &get_all_genome_intervs_cached1d() const;
+	const GIntervals2D &get_all_genome_intervs_cached2d() const;
+
 	GIntervalsFetcher1D *get_kid_intervals1d();
 
 	GIntervalsFetcher2D *get_kid_intervals2d();

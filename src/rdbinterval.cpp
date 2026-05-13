@@ -178,18 +178,81 @@ bool IntervUtils::track_exists(const char *track_name)
 	return false;
 }
 
+// Process-wide cache for the genome interval lists. Keyed on the SEXP
+// pointers for ALLGENOME[[0]] (1D) / ALLGENOME[[1]] (2D), pinned by
+// R_PreserveObject so the addresses remain stable across R GC cycles.
+// Cached values are immutable after construction; callers that need a
+// mutable copy (multitasking partitioning) go through the legacy
+// out-parameter API which copies from the cache.
+namespace {
+	std::mutex s_all_genome_intervs_mutex;
+	SEXP s_cached_rallgenome1d = nullptr;
+	SEXP s_cached_rallgenome2d = nullptr;
+	std::shared_ptr<GIntervals>   s_cached_all_genome_intervs1d;
+	std::shared_ptr<GIntervals2D> s_cached_all_genome_intervs2d;
+}
+
+const GIntervals &IntervUtils::get_all_genome_intervs_cached1d() const
+{
+	SEXP rallgenome = get_rallgenome1d();
+	{
+		std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
+		if (s_cached_all_genome_intervs1d && s_cached_rallgenome1d == rallgenome)
+			return *s_cached_all_genome_intervs1d;
+	}
+	auto built = std::make_shared<GIntervals>();
+	convert_rintervs(rallgenome, built.get(), NULL);
+	built->sort();
+	std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
+	if (s_cached_all_genome_intervs1d && s_cached_rallgenome1d == rallgenome)
+		return *s_cached_all_genome_intervs1d;
+	if (s_cached_rallgenome1d != nullptr)
+		R_ReleaseObject(s_cached_rallgenome1d);
+	R_PreserveObject(rallgenome);
+	s_cached_rallgenome1d = rallgenome;
+	s_cached_all_genome_intervs1d = std::move(built);
+	return *s_cached_all_genome_intervs1d;
+}
+
+const GIntervals2D &IntervUtils::get_all_genome_intervs_cached2d() const
+{
+	SEXP rallgenome = get_rallgenome2d();
+	{
+		std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
+		if (s_cached_all_genome_intervs2d && s_cached_rallgenome2d == rallgenome)
+			return *s_cached_all_genome_intervs2d;
+	}
+	auto built = std::make_shared<GIntervals2D>();
+	convert_rintervs(rallgenome, NULL, built.get());
+	built->sort();
+	std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
+	if (s_cached_all_genome_intervs2d && s_cached_rallgenome2d == rallgenome)
+		return *s_cached_all_genome_intervs2d;
+	if (s_cached_rallgenome2d != nullptr)
+		R_ReleaseObject(s_cached_rallgenome2d);
+	R_PreserveObject(rallgenome);
+	s_cached_rallgenome2d = rallgenome;
+	s_cached_all_genome_intervs2d = std::move(built);
+	return *s_cached_all_genome_intervs2d;
+}
+
 void IntervUtils::get_all_genome_intervs(GIntervals &intervals) const
 {
+	// Cache-backed: building once costs ~250 ms on a 1.28M-contig genome;
+	// subsequent calls only pay the vector copy. clear()+insert() (rather
+	// than operator=) preserves the existing GIntervals semantics: the
+	// inherited m_chrom2itr cache is reset to match the new vector data,
+	// not aliased to the source.
+	const GIntervals &cached = get_all_genome_intervs_cached1d();
 	intervals.clear();
-	convert_rintervs(get_rallgenome1d(), &intervals, NULL);
-	intervals.sort();
+	intervals.insert(intervals.end(), cached.begin(), cached.end());
 }
 
 void IntervUtils::get_all_genome_intervs(GIntervals2D &intervals) const
 {
+	const GIntervals2D &cached = get_all_genome_intervs_cached2d();
 	intervals.clear();
-	convert_rintervs(get_rallgenome2d(), NULL, &intervals);
-	intervals.sort();
+	intervals.insert(intervals.end(), cached.begin(), cached.end());
 }
 
 GIntervalsFetcher1D *IntervUtils::get_kid_intervals1d()
