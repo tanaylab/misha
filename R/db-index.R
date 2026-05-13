@@ -32,6 +32,11 @@
 #' @param verbose Logical. If TRUE, prints verbose messages. Default: FALSE.
 #' @param chunk_size Integer. The size of the chunk to read from the sequence files. Default: 104857600 (100MB). Reduce if
 #' you are running into memory issues.
+#' @param threads Integer or NULL. Number of parallel processes used when converting
+#' tracks and interval sets (each worker handles one track/interval set via
+#' \code{parallel::mclapply}). If \code{NULL} (default), uses
+#' \code{min(parallel::detectCores(), 8)}. Set to \code{1} for serial execution.
+#' Falls back to serial on non-Unix platforms (mclapply requires fork).
 #'
 #' @return Invisible NULL
 #'
@@ -104,7 +109,10 @@
 #'
 #' @seealso \code{\link{gdb.create}}, \code{\link{gdb.init}}, \code{\link{gtrack.convert_to_indexed}}, \code{\link{gintervals.convert_to_indexed}}, \code{\link{gintervals.2d.convert_to_indexed}}
 #' @export
-gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force = FALSE, validate = TRUE, convert_tracks = FALSE, convert_intervals = FALSE, verbose = FALSE, chunk_size = 104857600) {
+gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force = FALSE, validate = TRUE, convert_tracks = FALSE, convert_intervals = FALSE, verbose = FALSE, chunk_size = 104857600, threads = NULL) {
+    # Resolve thread count: NULL -> min(detectCores, 8). Non-Unix -> 1 (mclapply forks).
+    threads <- .gdb.convert_to_indexed.resolve_threads(threads)
+
     # Validate database and get setup information
     setup_info <- .gdb.convert_to_indexed.validate_and_setup(groot, verbose)
 
@@ -125,17 +133,83 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
     # Convert tracks if requested
     if (convert_tracks) {
-        .gdb.convert_to_indexed.tracks(setup_info$groot, verbose)
+        .gdb.convert_to_indexed.tracks(setup_info$groot, verbose, threads = threads)
     }
 
     # Convert intervals if requested
     if (convert_intervals) {
-        .gdb.convert_to_indexed.intervals(setup_info$groot, remove_old_files, verbose)
+        .gdb.convert_to_indexed.intervals(setup_info$groot, remove_old_files, verbose, threads = threads)
     }
 
     if (verbose) message("\n=== Conversion Complete ===")
 
     invisible(NULL)
+}
+
+# Resolve thread count for bulk conversion. NULL -> capped detectCores.
+# Non-Unix forces serial since parallel::mclapply uses fork.
+.gdb.convert_to_indexed.resolve_threads <- function(threads) {
+    if (.Platform$OS.type != "unix") {
+        if (!is.null(threads) && is.numeric(threads) && threads > 1L) {
+            warning("parallel::mclapply requires fork (Unix); falling back to serial.", call. = FALSE)
+        }
+        return(1L)
+    }
+    if (is.null(threads)) {
+        n <- tryCatch(parallel::detectCores(), error = function(e) 1L)
+        if (is.na(n) || n < 1L) n <- 1L
+        return(as.integer(min(n, 8L)))
+    }
+    if (!is.numeric(threads) || length(threads) != 1L || is.na(threads) || threads < 1L) {
+        stop("threads must be NULL or a positive integer", call. = FALSE)
+    }
+    as.integer(threads)
+}
+
+# Apply fn to xs serially or via parallel::mclapply, capturing per-element
+# failures as ("error" + message) list entries rather than aborting. Returns
+# a list of per-element result records of the form
+#   list(item = <xs[[i]]>, status = "ok"|"error", error = NULL|<chr>, value = <result>).
+.gdb.convert_to_indexed.parallel_apply <- function(xs, fn, threads) {
+    wrap <- function(x) {
+        tryCatch(
+            {
+                value <- fn(x)
+                list(item = x, status = "ok", error = NULL, value = value)
+            },
+            error = function(e) {
+                list(item = x, status = "error", error = conditionMessage(e), value = NULL)
+            }
+        )
+    }
+
+    if (threads <= 1L || length(xs) <= 1L) {
+        return(lapply(xs, wrap))
+    }
+
+    n_workers <- min(threads, length(xs))
+    results <- parallel::mclapply(xs, wrap,
+        mc.cores = n_workers, mc.preschedule = FALSE
+    )
+
+    # mclapply may surface fork-level failures as "try-error" instead of our wrap()
+    # record. Normalize so callers always see the same shape.
+    for (i in seq_along(results)) {
+        r <- results[[i]]
+        if (inherits(r, "try-error") || !is.list(r) || is.null(r$status)) {
+            msg <- if (inherits(r, "try-error")) {
+                cond <- attr(r, "condition")
+                if (!is.null(cond)) conditionMessage(cond) else as.character(r)
+            } else {
+                "worker returned an unexpected value"
+            }
+            results[[i]] <- list(
+                item = xs[[i]], status = "error",
+                error = msg, value = NULL
+            )
+        }
+    }
+    results
 }
 
 # Helper function to validate database and get chromosome information
@@ -503,7 +577,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 }
 
 # Helper function to convert tracks to indexed format
-.gdb.convert_to_indexed.tracks <- function(groot, verbose = FALSE) {
+.gdb.convert_to_indexed.tracks <- function(groot, verbose = FALSE, threads = 1L) {
     if (verbose) message("\n=== Converting Tracks ===")
 
     # Temporarily init the database to get track list
@@ -519,125 +593,133 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
         if (length(all_tracks) == 0) {
             if (verbose) message("No tracks found in database")
+            return(invisible(NULL))
+        }
+
+        if (verbose) message(sprintf("Found %d tracks in database", length(all_tracks)))
+
+        # Classification (parallel): gtrack.info per track is independent.
+        # Each worker returns the per-track verdict; main process aggregates.
+        classify_one <- function(track) {
+            info <- tryCatch(gtrack.info(track), error = function(e) NULL)
+            if (is.null(info)) {
+                return(list(track = track, verdict = "skip", reason = "failed to get info"))
+            }
+
+            is_1d <- info$type %in% c("dense", "sparse", "array")
+            is_2d <- info$type %in% c("rectangles", "points")
+            if (!is_1d && !is_2d) {
+                return(list(
+                    track = track, verdict = "skip",
+                    reason = sprintf("unsupported type (%s)", info$type)
+                ))
+            }
+
+            trackstr <- gsub("\\.", "/", track)
+            trackdir <- sprintf("%s.track", paste(groot, "tracks", trackstr, sep = "/"))
+            if (!dir.exists(trackdir)) {
+                return(list(track = track, verdict = "skip", reason = "single-file format"))
+            }
+            if (file.exists(file.path(trackdir, "track.idx"))) {
+                return(list(track = track, verdict = "skip", reason = "already converted"))
+            }
+
+            list(track = track, verdict = if (is_1d) "1d" else "2d")
+        }
+
+        classify_results <- .gdb.convert_to_indexed.parallel_apply(
+            all_tracks, classify_one, threads
+        )
+
+        convertible_1d_tracks <- character(0)
+        convertible_2d_tracks <- character(0)
+        skipped_tracks <- list()
+
+        for (r in classify_results) {
+            track <- r$item
+            if (r$status == "error") {
+                skipped_tracks[[track]] <- sprintf("classification error: %s", r$error)
+                next
+            }
+            v <- r$value
+            if (v$verdict == "skip") {
+                skipped_tracks[[track]] <- v$reason
+            } else if (v$verdict == "1d") {
+                convertible_1d_tracks <- c(convertible_1d_tracks, track)
+            } else if (v$verdict == "2d") {
+                convertible_2d_tracks <- c(convertible_2d_tracks, track)
+            }
+        }
+
+        total_convertible <- length(convertible_1d_tracks) + length(convertible_2d_tracks)
+
+        if (total_convertible > 0) {
+            if (verbose) {
+                message(sprintf(
+                    "  Convertible: %d tracks (%d 1D, %d 2D)",
+                    total_convertible, length(convertible_1d_tracks), length(convertible_2d_tracks)
+                ))
+                if (threads > 1L) {
+                    message(sprintf("  Running with %d parallel workers", threads))
+                }
+            }
         } else {
-            if (verbose) message(sprintf("Found %d tracks in database", length(all_tracks)))
+            if (verbose) message("  No tracks need conversion")
+        }
 
-            # Filter to convertible tracks (1D and 2D)
-            convertible_1d_tracks <- c()
-            convertible_2d_tracks <- c()
-            skipped_tracks <- list()
-
-            for (track in all_tracks) {
-                # Get track info to determine type
-                info <- tryCatch(gtrack.info(track), error = function(e) NULL)
-
-                if (is.null(info)) {
-                    skipped_tracks[[track]] <- "failed to get info"
-                    next
-                }
-
-                # Check for supported track types
-                is_1d <- info$type %in% c("dense", "sparse", "array")
-                is_2d <- info$type %in% c("rectangles", "points")
-
-                if (!is_1d && !is_2d) {
-                    skipped_tracks[[track]] <- sprintf("unsupported type (%s)", info$type)
-                    next
-                }
-
-                # Check if it's a Big Set track (directory format)
-                trackstr <- gsub("\\.", "/", track)
-                trackdir <- sprintf("%s.track", paste(groot, "tracks", trackstr, sep = "/"))
-
-                if (!dir.exists(trackdir)) {
-                    skipped_tracks[[track]] <- "single-file format"
-                    next
-                }
-
-                # Check if already converted
-                idx_path <- file.path(trackdir, "track.idx")
-                if (file.exists(idx_path)) {
-                    skipped_tracks[[track]] <- "already converted"
-                    next
-                }
-
-                if (is_1d) {
-                    convertible_1d_tracks <- c(convertible_1d_tracks, track)
-                } else {
-                    convertible_2d_tracks <- c(convertible_2d_tracks, track)
-                }
+        if (length(skipped_tracks) > 0) {
+            if (verbose) message(sprintf("  Skipped: %d tracks", length(skipped_tracks)))
+            for (track in names(skipped_tracks)) {
+                if (verbose) message(sprintf("    - %s: %s", track, skipped_tracks[[track]]))
             }
+        }
 
-            total_convertible <- length(convertible_1d_tracks) + length(convertible_2d_tracks)
+        # Convert tracks in parallel; per-track failures are captured as
+        # warnings without aborting the batch. mclapply children fork from
+        # this process so they inherit GROOT/GTRACKS/GWD - no need to gdb.init
+        # inside each worker.
+        convert_1d <- function(track) {
+            if (verbose) message(sprintf("  Converting 1D track: %s", track))
+            gtrack.convert_to_indexed(track)
+            track
+        }
+        convert_2d <- function(track) {
+            if (verbose) message(sprintf("  Converting 2D track: %s", track))
+            gtrack.2d.convert_to_indexed(track, remove.old = TRUE)
+            track
+        }
 
-            # Report what we found
-            if (total_convertible > 0) {
-                if (verbose) {
-                    message(sprintf(
-                        "  Convertible: %d tracks (%d 1D, %d 2D)",
-                        total_convertible, length(convertible_1d_tracks), length(convertible_2d_tracks)
-                    ))
-                }
-            } else {
-                if (verbose) message("  No tracks need conversion")
+        results_1d <- .gdb.convert_to_indexed.parallel_apply(
+            convertible_1d_tracks, convert_1d, threads
+        )
+        results_2d <- .gdb.convert_to_indexed.parallel_apply(
+            convertible_2d_tracks, convert_2d, threads
+        )
+
+        all_results <- c(results_1d, results_2d)
+        converted_count <- sum(vapply(all_results, function(r) r$status == "ok", logical(1)))
+        failed <- Filter(function(r) r$status == "error", all_results)
+
+        for (r in failed) {
+            warning(sprintf("Failed to convert track %s: %s", r$item, r$error),
+                call. = FALSE
+            )
+        }
+
+        if (total_convertible > 0) {
+            if (verbose) message(sprintf("Successfully converted %d/%d tracks", converted_count, total_convertible))
+            if (length(failed) > 0) {
+                warning(sprintf(
+                    "Failed to convert %d tracks: %s",
+                    length(failed),
+                    paste(vapply(failed, function(r) r$item, character(1)), collapse = ", ")
+                ), call. = FALSE)
             }
-
-            if (length(skipped_tracks) > 0) {
-                if (verbose) message(sprintf("  Skipped: %d tracks", length(skipped_tracks)))
-                for (track in names(skipped_tracks)) {
-                    if (verbose) message(sprintf("    - %s: %s", track, skipped_tracks[[track]]))
-                }
-            }
-
-            # Convert 1D tracks
-            converted_count <- 0
-            failed_tracks <- c()
-
-            if (length(convertible_1d_tracks) > 0) {
-                for (track in convertible_1d_tracks) {
-                    if (verbose) message(sprintf("  Converting 1D track: %s", track))
-
-                    tryCatch(
-                        {
-                            gtrack.convert_to_indexed(track)
-                            converted_count <- converted_count + 1
-                        },
-                        error = function(e) {
-                            warning(sprintf("Failed to convert track %s: %s", track, conditionMessage(e)))
-                            failed_tracks <<- c(failed_tracks, track)
-                        }
-                    )
-                }
-            }
-
-            # Convert 2D tracks
-            if (length(convertible_2d_tracks) > 0) {
-                for (track in convertible_2d_tracks) {
-                    if (verbose) message(sprintf("  Converting 2D track: %s", track))
-
-                    tryCatch(
-                        {
-                            gtrack.2d.convert_to_indexed(track, remove.old = TRUE)
-                            converted_count <- converted_count + 1
-                        },
-                        error = function(e) {
-                            warning(sprintf("Failed to convert 2D track %s: %s", track, conditionMessage(e)))
-                            failed_tracks <<- c(failed_tracks, track)
-                        }
-                    )
-                }
-            }
-
-            if (total_convertible > 0) {
-                if (verbose) message(sprintf("Successfully converted %d/%d tracks", converted_count, total_convertible))
-
-                if (length(failed_tracks) > 0) {
-                    warning(sprintf(
-                        "Failed to convert %d tracks: %s",
-                        length(failed_tracks),
-                        paste(failed_tracks, collapse = ", ")
-                    ))
-                }
+            if (verbose) {
+                message(sprintf(
+                    "Track conversion summary: %d succeeded, %d failed",
+                    converted_count, length(failed)
+                ))
             }
         }
     }, finally = {
@@ -649,7 +731,7 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 }
 
 # Helper function to convert interval sets to indexed format
-.gdb.convert_to_indexed.intervals <- function(groot, remove_old_files = FALSE, verbose = FALSE) {
+.gdb.convert_to_indexed.intervals <- function(groot, remove_old_files = FALSE, verbose = FALSE, threads = 1L) {
     if (verbose) message("\n=== Converting Interval Sets ===")
 
     # Temporarily init the database to get interval list
@@ -665,138 +747,142 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
 
         if (length(all_intervals) == 0) {
             if (verbose) message("No interval sets found in database")
-        } else {
-            if (verbose) message(sprintf("Found %d interval sets in database", length(all_intervals)))
+            return(invisible(NULL))
+        }
 
-            # Filter to only Big Set intervals that can be converted
-            convertible_1d <- c()
-            convertible_2d <- c()
-            skipped_intervals <- list()
+        if (verbose) message(sprintf("Found %d interval sets in database", length(all_intervals)))
 
-            for (intervset in all_intervals) {
-                # Construct path
-                path <- gsub("\\.", "/", intervset)
-                intervset_path <- paste0(groot, "/tracks/", path, ".interv")
+        # Classify each interval set (parallel-safe: each call only reads
+        # filesystem metadata for its own directory).
+        classify_one <- function(intervset) {
+            path <- gsub("\\.", "/", intervset)
+            intervset_path <- paste0(groot, "/tracks/", path, ".interv")
 
-                # Check if it's a Big Set (directory format)
-                if (!file.exists(intervset_path)) {
-                    skipped_intervals[[intervset]] <- "does not exist"
-                    next
-                }
+            if (!file.exists(intervset_path)) {
+                return(list(verdict = "skip", reason = "does not exist"))
+            }
+            if (!dir.exists(intervset_path)) {
+                return(list(verdict = "skip", reason = "single-file format"))
+            }
 
-                if (!dir.exists(intervset_path)) {
-                    skipped_intervals[[intervset]] <- "single-file format"
-                    next
-                }
+            idx_path_1d <- file.path(intervset_path, "intervals.idx")
+            idx_path_2d <- file.path(intervset_path, "intervals2d.idx")
+            pair_files <- list.files(intervset_path, pattern = "-")
+            has_2d <- length(pair_files) > 0
 
-                # Determine if 1D or 2D
-                idx_path_1d <- file.path(intervset_path, "intervals.idx")
-                idx_path_2d <- file.path(intervset_path, "intervals2d.idx")
-
-                # Check for 2D files
-                pair_files <- list.files(intervset_path, pattern = "-")
-                has_2d <- length(pair_files) > 0
-
-                if (has_2d) {
-                    # 2D interval set
-                    if (file.exists(idx_path_2d)) {
-                        skipped_intervals[[intervset]] <- "already converted (2D)"
-                    } else {
-                        convertible_2d <- c(convertible_2d, intervset)
-                    }
+            if (has_2d) {
+                if (file.exists(idx_path_2d)) {
+                    list(verdict = "skip", reason = "already converted (2D)")
                 } else {
-                    # 1D interval set
-                    if (file.exists(idx_path_1d)) {
-                        skipped_intervals[[intervset]] <- "already converted (1D)"
-                    } else {
-                        convertible_1d <- c(convertible_1d, intervset)
-                    }
+                    list(verdict = "2d")
+                }
+            } else {
+                if (file.exists(idx_path_1d)) {
+                    list(verdict = "skip", reason = "already converted (1D)")
+                } else {
+                    list(verdict = "1d")
                 }
             }
+        }
 
-            # Report what we found
-            if (length(convertible_1d) > 0) {
-                if (verbose) message(sprintf("  Convertible 1D: %d interval sets", length(convertible_1d)))
+        classify_results <- .gdb.convert_to_indexed.parallel_apply(
+            all_intervals, classify_one, threads
+        )
+
+        convertible_1d <- character(0)
+        convertible_2d <- character(0)
+        skipped_intervals <- list()
+
+        for (r in classify_results) {
+            intervset <- r$item
+            if (r$status == "error") {
+                skipped_intervals[[intervset]] <- sprintf("classification error: %s", r$error)
+                next
             }
-            if (length(convertible_2d) > 0) {
-                if (verbose) message(sprintf("  Convertible 2D: %d interval sets", length(convertible_2d)))
+            v <- r$value
+            if (v$verdict == "skip") {
+                skipped_intervals[[intervset]] <- v$reason
+            } else if (v$verdict == "1d") {
+                convertible_1d <- c(convertible_1d, intervset)
+            } else if (v$verdict == "2d") {
+                convertible_2d <- c(convertible_2d, intervset)
             }
-            if (length(convertible_1d) == 0 && length(convertible_2d) == 0) {
-                if (verbose) message("  No interval sets need conversion")
+        }
+
+        # Report what we found
+        if (length(convertible_1d) > 0) {
+            if (verbose) message(sprintf("  Convertible 1D: %d interval sets", length(convertible_1d)))
+        }
+        if (length(convertible_2d) > 0) {
+            if (verbose) message(sprintf("  Convertible 2D: %d interval sets", length(convertible_2d)))
+        }
+        if (length(convertible_1d) == 0 && length(convertible_2d) == 0) {
+            if (verbose) message("  No interval sets need conversion")
+        } else if (verbose && threads > 1L) {
+            message(sprintf("  Running with %d parallel workers", threads))
+        }
+
+        if (length(skipped_intervals) > 0) {
+            if (verbose) message(sprintf("  Skipped: %d interval sets", length(skipped_intervals)))
+            for (intervset in names(skipped_intervals)) {
+                if (verbose) message(sprintf("    - %s: %s", intervset, skipped_intervals[[intervset]]))
+            }
+        }
+
+        # Convert in parallel; per-set failures captured as warnings.
+        convert_1d <- function(intervset) {
+            if (verbose) message(sprintf("  Converting 1D interval set: %s", intervset))
+            gintervals.convert_to_indexed(intervset, remove.old = remove_old_files)
+            intervset
+        }
+        convert_2d <- function(intervset) {
+            if (verbose) message(sprintf("  Converting 2D interval set: %s", intervset))
+            gintervals.2d.convert_to_indexed(intervset, remove.old = remove_old_files)
+            intervset
+        }
+
+        results_1d <- .gdb.convert_to_indexed.parallel_apply(
+            convertible_1d, convert_1d, threads
+        )
+        results_2d <- .gdb.convert_to_indexed.parallel_apply(
+            convertible_2d, convert_2d, threads
+        )
+
+        converted_1d_count <- sum(vapply(results_1d, function(r) r$status == "ok", logical(1)))
+        converted_2d_count <- sum(vapply(results_2d, function(r) r$status == "ok", logical(1)))
+        failed_1d <- Filter(function(r) r$status == "error", results_1d)
+        failed_2d <- Filter(function(r) r$status == "error", results_2d)
+
+        for (r in c(failed_1d, failed_2d)) {
+            warning(sprintf("Failed to convert interval set %s: %s", r$item, r$error),
+                call. = FALSE
+            )
+        }
+
+        total_converted <- converted_1d_count + converted_2d_count
+        total_convertible <- length(convertible_1d) + length(convertible_2d)
+
+        if (total_convertible > 0) {
+            if (verbose) {
+                message(sprintf(
+                    "Successfully converted %d/%d interval sets (%d 1D, %d 2D)",
+                    total_converted,
+                    total_convertible,
+                    converted_1d_count,
+                    converted_2d_count
+                ))
             }
 
-            if (length(skipped_intervals) > 0) {
-                if (verbose) message(sprintf("  Skipped: %d interval sets", length(skipped_intervals)))
-                for (intervset in names(skipped_intervals)) {
-                    if (verbose) message(sprintf("    - %s: %s", intervset, skipped_intervals[[intervset]]))
-                }
-            }
-
-            # Convert 1D intervals
-            converted_1d_count <- 0
-            failed_1d <- c()
-
-            if (length(convertible_1d) > 0) {
-                for (intervset in convertible_1d) {
-                    if (verbose) message(sprintf("  Converting 1D interval set: %s", intervset))
-
-                    tryCatch(
-                        {
-                            gintervals.convert_to_indexed(intervset, remove.old = remove_old_files)
-                            converted_1d_count <- converted_1d_count + 1
-                        },
-                        error = function(e) {
-                            warning(sprintf("Failed to convert 1D interval set %s: %s", intervset, conditionMessage(e)))
-                            failed_1d <<- c(failed_1d, intervset)
-                        }
-                    )
-                }
-            }
-
-            # Convert 2D intervals
-            converted_2d_count <- 0
-            failed_2d <- c()
-
-            if (length(convertible_2d) > 0) {
-                for (intervset in convertible_2d) {
-                    if (verbose) message(sprintf("  Converting 2D interval set: %s", intervset))
-
-                    tryCatch(
-                        {
-                            gintervals.2d.convert_to_indexed(intervset, remove.old = remove_old_files)
-                            converted_2d_count <- converted_2d_count + 1
-                        },
-                        error = function(e) {
-                            warning(sprintf("Failed to convert 2D interval set %s: %s", intervset, conditionMessage(e)))
-                            failed_2d <<- c(failed_2d, intervset)
-                        }
-                    )
-                }
-            }
-
-            # Report results
-            total_converted <- converted_1d_count + converted_2d_count
-            total_convertible <- length(convertible_1d) + length(convertible_2d)
-
-            if (total_convertible > 0) {
-                if (verbose) {
-                    message(sprintf(
-                        "Successfully converted %d/%d interval sets (%d 1D, %d 2D)",
-                        total_converted,
-                        total_convertible,
-                        converted_1d_count,
-                        converted_2d_count
-                    ))
-                }
-
-                if (length(failed_1d) > 0 || length(failed_2d) > 0) {
-                    all_failed <- c(failed_1d, failed_2d)
-                    warning(sprintf(
-                        "Failed to convert %d interval sets: %s",
-                        length(all_failed),
-                        paste(all_failed, collapse = ", ")
-                    ))
-                }
+            if (length(failed_1d) > 0 || length(failed_2d) > 0) {
+                all_failed_names <- c(
+                    vapply(failed_1d, function(r) r$item, character(1)),
+                    vapply(failed_2d, function(r) r$item, character(1))
+                )
+                warning(sprintf(
+                    "Failed to convert %d interval sets: %s",
+                    length(all_failed_names),
+                    paste(all_failed_names, collapse = ", ")
+                ), call. = FALSE)
             }
         }
     }, finally = {
