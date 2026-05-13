@@ -203,10 +203,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     # top-level tracks/ directory is swept; per-track parents are handled
     # lazily on next operation in that namespace.
     try(
-        {
-            tracks_dir <- file.path(get("GROOT", envir = .misha), "tracks")
-            .gdb.trash_sweep_old(tracks_dir, max_age_hours = 24)
-        },
+        .gdb.trash_sweep_old(tracks_dir, max_age_hours = 24),
         silent = TRUE
     )
 
