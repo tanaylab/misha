@@ -42,8 +42,8 @@ attr(m, "nsites")
 
 }
 \seealso{
-Other motif functions: 
-\code{\link{gseq.read_homer}()},
-\code{\link{gseq.read_jaspar}()}
+Other motif functions:
+\code{\link[=gseq.read_homer]{gseq.read_homer()}},
+\code{\link[=gseq.read_jaspar]{gseq.read_jaspar()}}
 }
 \concept{motif functions}

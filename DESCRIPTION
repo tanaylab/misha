@@ -48,5 +48,5 @@ Language: en-US
 LazyLoad: yes
 NeedsCompilation: yes
 OS_type: unix
-RoxygenNote: 7.3.3
 VignetteBuilder: knitr
+Config/roxygen2/version: 8.0.0
