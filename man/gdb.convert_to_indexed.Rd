@@ -12,7 +12,8 @@ gdb.convert_to_indexed(
   convert_tracks = FALSE,
   convert_intervals = FALSE,
   verbose = FALSE,
-  chunk_size = 104857600
+  chunk_size = 104857600,
+  threads = NULL
 )
 }
 \arguments{
@@ -32,6 +33,12 @@ gdb.convert_to_indexed(
 
 \item{chunk_size}{Integer. The size of the chunk to read from the sequence files. Default: 104857600 (100MB). Reduce if
 you are running into memory issues.}
+
+\item{threads}{Integer or NULL. Number of parallel processes used when converting
+tracks and interval sets (each worker handles one track/interval set via
+\code{parallel::mclapply}). If \code{NULL} (default), uses
+\code{min(parallel::detectCores(), 8)}. Set to \code{1} for serial execution.
+Falls back to serial on non-Unix platforms (mclapply requires fork).}
 }
 \value{
 Invisible NULL
