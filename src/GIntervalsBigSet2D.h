@@ -32,7 +32,7 @@ public:
 
 	void init(const char *intervset, SEXP meta, const IntervUtils &iu);
 
-	int64_t get_num_intervals(int chromid1, int chromid2) const { return m_chroms2size[chroms2idx(chromid1, chromid2)]; }
+	int64_t get_num_intervals(int chromid1, int chromid2) const { return pair_size(chromid1, chromid2); }
 
 	void load_chrom(int chromid1, int chromid2);
 
@@ -71,7 +71,7 @@ public:
 	virtual bool next_in_chrom();
 
 	virtual bool isend() const { return (int)m_iter_index == -1 || m_iter_index >= m_size; }
-	virtual bool isend_chrom() const { return m_iinterval >= m_intervals.end() || m_cur_chromid != m_iter_chromid; }
+	virtual bool isend_chrom() const { return m_iinterval >= m_intervals.end() || m_cur_pair_idx != m_iter_pair_idx; }
 
 	virtual GIntervals2D::const_iterator get_chrom_begin() const { return m_intervals.begin(); }
 	virtual GIntervals2D::const_iterator get_chrom_end() const { return m_intervals.end(); }
@@ -88,8 +88,10 @@ public:
 private:
 	GIntervals2D                 m_intervals;
 	GIntervals2D::const_iterator m_iinterval;
-	int                          m_cur_chromid;
-	int                          m_iter_chromid;
+	// Phase 7a: indices into m_pair_keys_sorted (sparse pair walk), replacing
+	// the prior dense chromid1*N+chromid2 walker.
+	int                          m_cur_pair_idx;
+	int                          m_iter_pair_idx;
 	uint64_t                       m_iter_index;
 	uint64_t                       m_iter_chrom_index;
 	Compare_t                    m_compare;
@@ -124,11 +126,13 @@ inline bool GIntervalsBigSet2D::next()
 	++m_iter_index;
 	++m_iter_chrom_index;
 	if (m_iinterval >= m_intervals.end()) {
-		m_cur_chromid = min(m_cur_chromid + 1, (int)m_chroms2size.size());
-		for (; m_cur_chromid < (int)m_chroms2size.size(); ++m_cur_chromid) {
-			if (m_chroms2size[m_cur_chromid]) {
-				int chromid1 = idx2chrom1(m_cur_chromid);
-				int chromid2 = idx2chrom2(m_cur_chromid);
+		m_cur_pair_idx = min(m_cur_pair_idx + 1, (int)m_pair_keys_sorted.size());
+		for (; m_cur_pair_idx < (int)m_pair_keys_sorted.size(); ++m_cur_pair_idx) {
+			uint64_t k = m_pair_keys_sorted[m_cur_pair_idx];
+			auto it = m_pair_stats.find(k);
+			if (it != m_pair_stats.end() && it->second.size) {
+				int chromid1 = key_chrom1(k);
+				int chromid2 = key_chrom2(k);
 
 				load_chrom(chromid1, chromid2);
 				m_iinterval = m_intervals.begin();
