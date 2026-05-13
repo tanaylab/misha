@@ -47,6 +47,18 @@ public:
 	unsigned get_bin_size() const { return m_bin_size; }
 	int64_t  get_num_samples() const { return m_num_samples; }
 
+	// Serialize the bytes that init_write() would write as the per-chrom
+	// file header. Used by the streaming indexed writer to produce a
+	// track.dat whose chunks are byte-identical to the corresponding
+	// per-chrom files (so gtrack_pack_per_chrom_to_indexed output and
+	// the direct-streaming output are bit-for-bit equal).
+	//
+	// Current header layout: a single 4-byte `unsigned bin_size`. No
+	// signature or chromid is written for fixed-bin (the chromid lives
+	// in the per-chrom filename for the per-chrom path, and in track.idx
+	// for the indexed path). Keep this in sync with init_write().
+	static void pack_header(std::vector<char> &out, unsigned bin_size);
+
 	void goto_bin(uint64_t bin);
 
 	bool read_next_bin(float &val);
