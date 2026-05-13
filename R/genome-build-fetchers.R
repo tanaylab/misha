@@ -243,17 +243,16 @@
 
 # NCBI Datasets + FTP fetcher. The Datasets zip carries SEQUENCE_REPORT (for
 # chromAlias) and optionally GENOME_GFF (for genes); FASTA is never pulled
-# here since install_intervals doesn't use it. rmsk comes from per-assembly
-# FTP (Datasets API does not expose RM_OUT).
+# here since install_intervals doesn't use it. rmsk -- and genes when the
+# Datasets payload is empty -- come from per-assembly FTP.
 .ncbi_fetch_assets <- function(recipe, sets, workdir, verbose = TRUE) {
     accession <- recipe$accession
     # Pre-flight: hit /dataset_report (a few KB) to (a) learn whether 'genes'
     # can actually be installed before downloading the GFF, and (b) pick up
-    # assembly_name for the rmsk FTP path. About 80% of the Phylo447/Zoonomia
+    # assembly_name for the FTP fallbacks. About 80% of the Phylo447/Zoonomia
     # community-submitted assemblies (Sanger TOL et al.) on NCBI ship without
     # any annotation at all; pulling the GFF only to find there's none is
-    # pure waste. Best-effort: any failure (network, parse) leaves info=NULL
-    # and rmsk will be skipped if its FTP path can't be built.
+    # pure waste. Best-effort: any failure (network, parse) leaves info=NULL.
     info <- NULL
     if (any(c("genes", "rmsk") %in% sets)) {
         report <- tryCatch(.ncbi_dataset_report(accession),
@@ -261,7 +260,12 @@
         )
         if (!is.null(report)) {
             info <- .ncbi_parse_annotation_info(report)
-            if ("genes" %in% sets) {
+            # Drop 'genes' only when the API has a real record saying the
+            # assembly is unannotated (assembly_name populated +
+            # annotation_info empty). Older / suppressed accessions whose
+            # /dataset_report returns {} have empty assembly_name and might
+            # still have a GFF on the FTP; let the genes branch try FTP.
+            if ("genes" %in% sets && nzchar(info$assembly_name)) {
                 hint <- if (!info$has_annotation) {
                     .ncbi_suggest_annotated_alternative(info$organism_tax_id, accession)
                 } else {
@@ -277,6 +281,31 @@
     }
     if (!length(sets)) {
         return(list(chrom_alias = NULL))
+    }
+
+    # Resolve assembly_name once: from /dataset_report if available,
+    # otherwise from the parent FTP-directory listing. Used by both the
+    # genes-FTP fallback (when the Datasets zip yields no GFF) and the
+    # rmsk FTP fetch.
+    asm_name <- if (!is.null(info)) info$assembly_name else ""
+    if (!nzchar(asm_name) && any(c("genes", "rmsk") %in% sets)) {
+        parent <- sub("/[^/]+$", "/", .ncbi_ftp_assembly_dir(accession, "x"))
+        listing <- tryCatch(
+            {
+                h <- curl::new_handle()
+                curl::handle_setopt(h, timeout = 30, useragent = "misha")
+                resp <- curl::curl_fetch_memory(parent, handle = h)
+                if (resp$status_code >= 400) {
+                    NULL
+                } else {
+                    strsplit(rawToChar(resp$content), "\n", fixed = TRUE)[[1L]]
+                }
+            },
+            error = function(e) NULL
+        )
+        if (!is.null(listing)) {
+            asm_name <- .ncbi_ftp_assembly_name_from_dir(accession, listing)
+        }
     }
 
     # Build the Datasets include list: always SEQUENCE_REPORT (cheap; required
@@ -315,38 +344,40 @@
             f <- gff[[1L]]
             if (grepl("\\.gz$", f)) f <- .gunzip_to_file(f)
             out$genes <- list(file = f, format = "gff3", gtf_source = "RefSeq")
+        } else if (nzchar(asm_name)) {
+            # Datasets zip didn't ship a GFF (common when /dataset_report
+            # is suppressed, e.g. GCF_000001635.26 GRCm38.p6). The FTP
+            # mirrors the assembly's full release, so try
+            # <ftp_dir>/<acc>_<asm>_genomic.gff.gz directly.
+            ftp_dir <- .ncbi_ftp_assembly_dir(accession, asm_name)
+            gff_url <- sprintf(
+                "%s/%s_%s_genomic.gff.gz", ftp_dir, accession, asm_name
+            )
+            local_gz <- file.path(workdir, "genes.gff.gz")
+            ok <- tryCatch(
+                {
+                    .download_to(gff_url, local_gz, verbose = verbose)
+                    TRUE
+                },
+                error = function(e) FALSE
+            )
+            if (!ok) {
+                warning(sprintf(
+                    "'genes' requested but no GFF in Datasets payload and FTP %s 404'd; skipping.",
+                    gff_url
+                ), call. = FALSE)
+            } else {
+                f <- .gunzip_to_file(local_gz)
+                out$genes <- list(file = f, format = "gff3", gtf_source = "RefSeq")
+            }
         } else {
             warning(sprintf(
-                "'genes' requested but no GFF in NCBI payload for %s; skipping.",
+                "'genes' requested but no GFF in NCBI payload for %s and no assembly_name to try FTP; skipping.",
                 accession
             ), call. = FALSE)
         }
     }
     if ("rmsk" %in% sets) {
-        asm_name <- if (!is.null(info)) info$assembly_name else ""
-        if (!nzchar(asm_name)) {
-            # /dataset_report is suppressed for some older accessions
-            # (e.g. GCF_000001635.26 GRCm38.p6 returns {}). Fall back to
-            # listing the parent FTP dir and extracting the
-            # <accession>_<assembly_name>/ subdir.
-            parent <- sub("/[^/]+$", "/", .ncbi_ftp_assembly_dir(accession, "x"))
-            listing <- tryCatch(
-                {
-                    h <- curl::new_handle()
-                    curl::handle_setopt(h, timeout = 30, useragent = "misha")
-                    resp <- curl::curl_fetch_memory(parent, handle = h)
-                    if (resp$status_code >= 400) {
-                        NULL
-                    } else {
-                        strsplit(rawToChar(resp$content), "\n", fixed = TRUE)[[1L]]
-                    }
-                },
-                error = function(e) NULL
-            )
-            if (!is.null(listing)) {
-                asm_name <- .ncbi_ftp_assembly_name_from_dir(accession, listing)
-            }
-        }
         if (!nzchar(asm_name)) {
             warning(sprintf(
                 "Could not resolve assembly_name for %s (dataset_report empty and FTP listing failed); skipping rmsk.",
