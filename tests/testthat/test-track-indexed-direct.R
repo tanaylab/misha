@@ -295,3 +295,221 @@ test_that("indexed-direct sparse produces a working track", {
     expect_gt(nrow(val), 0)
     expect_true(all(!is.na(val$idx_sparse_func)))
 })
+
+# ---------------------------------------------------------------------
+# Liftover (gtrack.liftover) - Phase 6a.
+# Builds a source DB with a sparse (or dense) track, an indexed target DB,
+# and a chain file mapping a region of source -> target. Lifts the source
+# track into the target DB twice: once with the target idx visible (direct
+# indexed write path) and once with target idx hidden so the per-chrom +
+# convert path runs. Asserts bit-for-bit equivalence of track.dat and
+# track.idx.
+
+# Build a small source DB with a sparse source track. Caller is
+# responsible for the resulting db/fasta cleanup via withr::defer.
+.make_liftover_source_sparse <- function(src_name) {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">chrSrc1\n", paste(rep("A", 64), collapse = ""), "\n",
+        ">chrSrc2\n", paste(rep("C", 64), collapse = ""), "\n",
+        file = test_fasta, sep = ""
+    )
+
+    test_db <- tempfile(pattern = "misha_liftover_src_sparse_")
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = FALSE)
+        gdb.init(test_db)
+    })
+
+    src_intervs <- data.frame(
+        chrom = c("chrSrc1", "chrSrc1", "chrSrc1", "chrSrc2", "chrSrc2"),
+        start = c(0L, 16L, 40L, 0L, 32L),
+        end = c(8L, 24L, 56L, 16L, 48L),
+        stringsAsFactors = FALSE
+    )
+    gtrack.create_sparse(src_name, "sparse source", src_intervs,
+        values = c(1.5, 2.25, 3.0, 4.125, 5.5)
+    )
+
+    list(db = test_db, fasta = test_fasta, src = src_name)
+}
+
+# Build an empty indexed target DB on >2 chroms (one of which the chain
+# will not cover, exercising the header-only empty-chrom path).
+.make_liftover_target_db <- function() {
+    test_fasta <- tempfile(fileext = ".fasta")
+    cat(">chr1\n", paste(rep("T", 96), collapse = ""), "\n",
+        ">chr2\n", paste(rep("G", 96), collapse = ""), "\n",
+        ">chr3\n", paste(rep("A", 96), collapse = ""), "\n",
+        file = test_fasta, sep = ""
+    )
+    test_db <- tempfile(pattern = "misha_liftover_tgt_")
+    withr::with_options(list(gmulticontig.indexed_format = TRUE), {
+        gdb.create(groot = test_db, fasta = test_fasta, verbose = FALSE)
+        gdb.init(test_db)
+    })
+    list(db = test_db, fasta = test_fasta)
+}
+
+.write_liftover_chain <- function(chain_file) {
+    # chain 1: chrSrc1[0..56) + -> chr1[0..56) + (length 56)
+    cat("chain 1000 chrSrc1 64 + 0 56 chr1 96 + 0 56 1\n",
+        "56\n\n",
+        sep = "", file = chain_file
+    )
+    # chain 2: chrSrc2[0..48) + -> chr2[0..48) + (length 48)
+    # Note: chr3 is intentionally NOT covered by any chain - exercises the
+    # empty-chrom header-only path in the indexed writer.
+    cat("chain 1000 chrSrc2 64 + 0 48 chr2 96 + 0 48 2\n",
+        "48\n\n",
+        sep = "", file = chain_file, append = TRUE
+    )
+}
+
+test_that("indexed-direct sparse liftover matches convert-after-create bit-for-bit", {
+    # --- Source DB (shared by both runs) ---
+    src_handles <- .make_liftover_source_sparse("src_for_liftover")
+    withr::defer({
+        unlink(src_handles$db, recursive = TRUE)
+        unlink(src_handles$fasta)
+    })
+    src_track_dir <- file.path(src_handles$db, "tracks", "src_for_liftover.track")
+
+    # --- Chain file (shared) ---
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+    .write_liftover_chain(chain_file)
+
+    # --- Direct path: liftover into a fresh indexed target DB ---
+    tgt_a <- .make_liftover_target_db()
+    withr::defer({
+        unlink(tgt_a$db, recursive = TRUE)
+        unlink(tgt_a$fasta)
+    })
+    gtrack.liftover("lifted_direct", "via direct", src_track_dir, chain_file)
+    direct_dir <- .track_dir("lifted_direct")
+    expect_true(file.exists(file.path(direct_dir, "track.dat")))
+    expect_true(file.exists(file.path(direct_dir, "track.idx")))
+    direct_dat <- readBin(file.path(direct_dir, "track.dat"),
+        what = "raw",
+        n = file.info(file.path(direct_dir, "track.dat"))$size + 1
+    )
+    direct_idx <- readBin(file.path(direct_dir, "track.idx"),
+        what = "raw",
+        n = file.info(file.path(direct_dir, "track.idx"))$size + 1
+    )
+
+    # --- Convert path: build a second target DB, hide genome.idx, lift,
+    #     restore idx, convert.
+    tgt_b <- .make_liftover_target_db()
+    withr::defer({
+        unlink(tgt_b$db, recursive = TRUE)
+        unlink(tgt_b$fasta)
+    })
+
+    seq_dir <- file.path(tgt_b$db, "seq")
+    idx_path <- file.path(seq_dir, "genome.idx")
+    hidden_path <- file.path(seq_dir, "genome.idx.hidden")
+    expect_true(file.rename(idx_path, hidden_path))
+    withr::defer({
+        if (file.exists(hidden_path)) file.rename(hidden_path, idx_path)
+    })
+
+    gdb.reload()
+    gtrack.liftover("lifted_via_convert", "via convert", src_track_dir, chain_file)
+
+    # Restore idx + reload + convert.
+    file.rename(hidden_path, idx_path)
+    gdb.reload()
+    gtrack.convert_to_indexed("lifted_via_convert")
+
+    convert_dir <- .track_dir("lifted_via_convert")
+    convert_dat <- readBin(file.path(convert_dir, "track.dat"),
+        what = "raw",
+        n = file.info(file.path(convert_dir, "track.dat"))$size + 1
+    )
+    convert_idx <- readBin(file.path(convert_dir, "track.idx"),
+        what = "raw",
+        n = file.info(file.path(convert_dir, "track.idx"))$size + 1
+    )
+
+    expect_identical(direct_dat, convert_dat)
+    expect_identical(direct_idx, convert_idx)
+})
+
+test_that("indexed-direct liftover: no per-chrom files left over", {
+    src_handles <- .make_liftover_source_sparse("src_clean_liftover")
+    withr::defer({
+        unlink(src_handles$db, recursive = TRUE)
+        unlink(src_handles$fasta)
+    })
+    src_track_dir <- file.path(src_handles$db, "tracks", "src_clean_liftover.track")
+
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+    .write_liftover_chain(chain_file)
+
+    tgt <- .make_liftover_target_db()
+    withr::defer({
+        unlink(tgt$db, recursive = TRUE)
+        unlink(tgt$fasta)
+    })
+
+    gtrack.liftover("lifted_clean", "no leftover", src_track_dir, chain_file)
+
+    dir_contents <- list.files(.track_dir("lifted_clean"),
+        all.files = TRUE, no.. = TRUE
+    )
+    expect_setequal(dir_contents, c("track.dat", "track.idx", ".attributes"))
+})
+
+test_that("indexed-direct liftover: gextract returns identical values both ways", {
+    src_handles <- .make_liftover_source_sparse("src_func_liftover")
+    withr::defer({
+        unlink(src_handles$db, recursive = TRUE)
+        unlink(src_handles$fasta)
+    })
+    src_track_dir <- file.path(src_handles$db, "tracks", "src_func_liftover.track")
+
+    chain_file <- tempfile(fileext = ".chain")
+    withr::defer(unlink(chain_file))
+    .write_liftover_chain(chain_file)
+
+    # Run 1: direct
+    tgt_a <- .make_liftover_target_db()
+    withr::defer({
+        unlink(tgt_a$db, recursive = TRUE)
+        unlink(tgt_a$fasta)
+    })
+    gtrack.liftover("lifted_func_direct", "direct", src_track_dir, chain_file)
+    res_direct <- gextract("lifted_func_direct", gintervals.all())
+
+    # Run 2: hidden idx + convert
+    tgt_b <- .make_liftover_target_db()
+    withr::defer({
+        unlink(tgt_b$db, recursive = TRUE)
+        unlink(tgt_b$fasta)
+    })
+    seq_dir <- file.path(tgt_b$db, "seq")
+    idx_path <- file.path(seq_dir, "genome.idx")
+    hidden_path <- file.path(seq_dir, "genome.idx.hidden")
+    expect_true(file.rename(idx_path, hidden_path))
+    withr::defer({
+        if (file.exists(hidden_path)) file.rename(hidden_path, idx_path)
+    })
+    gdb.reload()
+    gtrack.liftover("lifted_func_convert", "convert", src_track_dir, chain_file)
+    file.rename(hidden_path, idx_path)
+    gdb.reload()
+    gtrack.convert_to_indexed("lifted_func_convert")
+
+    res_convert <- gextract("lifted_func_convert", gintervals.all())
+
+    # Strip the (different) track-name column from each frame, compare the rest.
+    res_direct$lifted_func_direct <- NULL
+    res_convert$lifted_func_convert <- NULL
+    expect_equal(
+        res_direct[order(res_direct$chrom, res_direct$start), ],
+        res_convert[order(res_convert$chrom, res_convert$start), ],
+        ignore_attr = TRUE
+    )
+})

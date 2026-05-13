@@ -27,28 +27,12 @@
 #include "TrackExpressionFixedBinIterator.h"
 #include "TrackExpressionSparseIterator.h"
 
-namespace {
-
-// Mirror of R's .gdb.is_indexed: an indexed DB has both seq/genome.idx
-// and seq/genome.seq under GROOT. We re-check from C++ rather than
-// passing a flag from R so the writer's behaviour stays tied to actual
-// on-disk state.
-bool is_indexed_db(SEXP envir) {
-    SEXP groot = find_in_misha(envir, "GROOT");
-    if (groot == R_NilValue || groot == R_UnboundValue ||
-        TYPEOF(groot) != STRSXP || Rf_length(groot) < 1) {
-        return false;
-    }
-    const std::string root = CHAR(STRING_ELT(groot, 0));
-    struct stat st;
-    return ::stat((root + "/seq/genome.idx").c_str(), &st) == 0 &&
-           ::stat((root + "/seq/genome.seq").c_str(), &st) == 0;
-}
-
-} // namespace
-
 using namespace std;
 using namespace rdb;
+
+// We re-check indexed-ness from C++ via rdb::is_db_indexed() rather than
+// passing a flag from R so the writer's behaviour stays tied to actual
+// on-disk state.
 
 extern "C" {
 
@@ -81,7 +65,7 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 		if (itr_type == TrackExpressionIteratorBase::FIXED_BIN) {
 			const unsigned bin_size = ((TrackExpressionFixedBinIterator *)scanner.get_iterator())->get_bin_size();
 
-			if (is_indexed_db(envir)) {
+			if (is_db_indexed(envir)) {
 				// Streaming indexed-direct path: write track.dat + track.idx
 				// in one pass instead of N per-chrom files that the R-level
 				// gtrack.convert_to_indexed step would unlink immediately
@@ -123,7 +107,7 @@ SEXP gtrackcreate(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _band, SEXP
 				}
 			}
 		} else if (itr_type == TrackExpressionIteratorBase::INTERVALS1D) {
-			if (is_indexed_db(envir)) {
+			if (is_db_indexed(envir)) {
 				// Streaming indexed-direct sparse path: write track.dat +
 				// track.idx in one pass. Mirrors the FIXED_BIN branch
 				// above. Per-chrom byte layout = 4-byte format signature
@@ -271,7 +255,7 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 		// distribute_task body, mirroring gtrackcreate. The parallelism
 		// loss is small relative to the FS-op savings of avoiding the
 		// per-chrom + pack roundtrip.
-		const bool indexed = is_indexed_db(envir);
+		const bool indexed = is_db_indexed(envir);
 
 		string dirname = create_track_dir(envir, track_str);
 		IntervUtils iu(envir);
