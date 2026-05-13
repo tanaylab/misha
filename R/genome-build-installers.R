@@ -129,8 +129,13 @@
     } else if (asset$format == "gff3") {
         converter <- .gff3_to_genepred_resolve_or_install()
         gp_raw <- file.path(workdir, "raw.genePred")
+        # -warnAndContinue + -maxConvertErrors=-1 keep the conversion alive when
+        # NCBI's RefSeq GFF has a handful of records the tool can't convert
+        # (typical case: immunoglobulin V/D/J segments whose CDS coords don't
+        # fit inside parent exons). Without these flags a 5-record problem
+        # aborts the entire ~70k-record run.
         ret <- system2(converter,
-            args = c(shQuote(src), shQuote(gp_raw)),
+            args = c("-warnAndContinue", "-maxConvertErrors=-1", shQuote(src), shQuote(gp_raw)),
             stdout = if (verbose) "" else FALSE,
             stderr = if (verbose) "" else FALSE
         )
