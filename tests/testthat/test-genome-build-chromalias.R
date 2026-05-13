@@ -663,6 +663,33 @@ test_that(".merge_chrom_aliases_tsv warns on canonical conflict and keeps existi
     expect_equal(out$canonical[out$alias == "NC_067374.1"], "chrFOO")
 })
 
+test_that(".canonical_coverage reports bp-weighted coverage of canonical vs groot", {
+    canonical <- c("chr1", "chr2", "chrX", "")
+    groot_chroms <- c("chr1", "chr2", "chrX")
+    groot_lengths <- c(1000, 2000, 500)
+    expect_equal(
+        .canonical_coverage(canonical, groot_chroms, groot_lengths),
+        1.0
+    )
+})
+
+test_that(".canonical_coverage handles partial coverage", {
+    canonical <- c("chr1", "chrX") # chr2 missing entirely
+    groot_chroms <- c("chr1", "chr2", "chrX")
+    groot_lengths <- c(1000, 2000, 500)
+    expect_equal(
+        .canonical_coverage(canonical, groot_chroms, groot_lengths),
+        1500 / 3500
+    )
+})
+
+test_that(".canonical_coverage is 0 when nothing matches", {
+    expect_equal(
+        .canonical_coverage(c("foo", "bar"), c("chr1", "chr2"), c(100, 200)),
+        0
+    )
+})
+
 test_that(".coverage_gate returns winning column when threshold met", {
     df <- data.frame(
         ucsc = c("chr1", "chr2", "chrM"),
