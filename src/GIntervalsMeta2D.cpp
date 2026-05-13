@@ -110,20 +110,48 @@ void GIntervalsMeta2D::init_masked_copy(GIntervalsMeta2D *obj, const set<ChromPa
 	obj->rebuild_pair_index();
 }
 
-void GIntervalsMeta2D::init_chromstats(vector<ChromStat> &chromstats, const IntervUtils &iu)
+void GIntervalsMeta2D::ChromStats2D::pack(void *&ptr) const
 {
-	chromstats.clear();
-	chromstats.resize(iu.get_chromkey().get_num_chroms() * iu.get_chromkey().get_num_chroms());
+	// Layout: [uint32_t count][PackedEntry * count]. count must not exceed
+	// m_max_pairs (set by begin_save) - the caller pre-allocated the buffer.
+	uint32_t count = (uint32_t)m_stats.size();
+	if (m_max_pairs && count > m_max_pairs)
+		verror("ChromStats2D: kid produced %u populated chrom-pairs but only %zu were reserved", (unsigned)count, m_max_pairs);
+	memcpy(ptr, &count, sizeof(count));
+	ptr = (char *)ptr + sizeof(count);
+	for (const auto &kv : m_stats) {
+		PackedEntry e;
+		e.chromid1 = (uint32_t)key_chrom1(kv.first);
+		e.chromid2 = (uint32_t)key_chrom2(kv.first);
+		e.stat = kv.second;
+		memcpy(ptr, &e, sizeof(e));
+		ptr = (char *)ptr + sizeof(e);
+	}
 }
 
-void GIntervalsMeta2D::save_plain_intervals_meta(const char *path, const vector<ChromStat> &chromstats, const IntervUtils &iu)
+void GIntervalsMeta2D::ChromStats2D::unpack(void *&ptr)
+{
+	uint32_t count = 0;
+	memcpy(&count, ptr, sizeof(count));
+	ptr = (char *)ptr + sizeof(count);
+	for (uint32_t i = 0; i < count; ++i) {
+		PackedEntry e;
+		memcpy(&e, ptr, sizeof(e));
+		ptr = (char *)ptr + sizeof(e);
+		// Skip empty entries (defensive); set() also skips them.
+		if (!e.stat.size) continue;
+		m_stats[pack_key((int)e.chromid1, (int)e.chromid2)] = e.stat;
+	}
+}
+
+void GIntervalsMeta2D::save_plain_intervals_meta(const char *path, const ChromStats2D &chromstats, const IntervUtils &iu)
 {
 	GIntervals2D intervals;
 	SEXP zeroline = iu.convert_intervs(&intervals, GInterval2D::NUM_COLS, false);
 	save_meta(path, zeroline, chromstats, iu);
 }
 
-void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<ChromStat> &chromstats, const IntervUtils &iu)
+void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const ChromStats2D &chromstats, const IntervUtils &iu)
 {
 	SEXP rstat;
 	SEXP colnames;
@@ -138,11 +166,27 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 	for (int i = 0; i < NUM_STAT_COLS; i++)
 		SET_STRING_ELT(colnames, i, Rf_mkChar(STAT_COL_NAMES[i]));
 
-	int num_nonempty_chroms = 0;
-	for (vector<ChromStat>::const_iterator ichromstat = chromstats.begin(); ichromstat != chromstats.end(); ++ichromstat) {
-		if (ichromstat->size)
-			++num_nonempty_chroms;
+	// Collect populated (chromid1, chromid2, stat) tuples and sort by
+	// (chromid1, chromid2) so the saved .meta has stable row order matching
+	// the prior dense-walk implementation.
+	struct Row { int c1; int c2; ChromStat stat; };
+	vector<Row> rows;
+	rows.reserve(chromstats.size());
+	for (auto it = chromstats.begin(); it != chromstats.end(); ++it) {
+		if (!it->second.size)
+			continue;
+		Row r;
+		r.c1 = ChromStats2D::key_chrom1(it->first);
+		r.c2 = ChromStats2D::key_chrom2(it->first);
+		r.stat = it->second;
+		rows.push_back(r);
 	}
+	std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) {
+		if (a.c1 != b.c1) return a.c1 < b.c1;
+		return a.c2 < b.c2;
+	});
+
+	int num_nonempty_chroms = (int)rows.size();
 
     chroms_idx1 = rprotect_ptr(RSaneAllocVector(INTSXP, num_nonempty_chroms));
     chroms_idx2 = rprotect_ptr(RSaneAllocVector(INTSXP, num_nonempty_chroms));
@@ -156,22 +200,14 @@ void GIntervalsMeta2D::save_meta(const char *path, SEXP zeroline, const vector<C
 		SET_STRING_ELT(chroms2, id, Rf_mkChar(iu.id2chrom(id).c_str()));
 	}
 
-	int res_index = 0;
-	for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-		for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
-			const ChromStat &chromstat = chromstats[chromid1 * iu.get_chromkey().get_num_chroms() + chromid2];
-
-			if (!chromstat.size)
-				continue;
-
-			INTEGER(chroms_idx1)[res_index] = chromid1 + 1;
-			INTEGER(chroms_idx2)[res_index] = chromid2 + 1;
-			REAL(rsize)[res_index] = chromstat.size;
-			REAL(rsurface)[res_index] = chromstat.surface;
-			LOGICAL(roverlaps)[res_index] = chromstat.contains_overlaps;
-			INTEGER(rownames)[res_index] = res_index + 1;
-			++res_index;
-		}
+	for (int res_index = 0; res_index < num_nonempty_chroms; ++res_index) {
+		const Row &r = rows[res_index];
+		INTEGER(chroms_idx1)[res_index] = r.c1 + 1;
+		INTEGER(chroms_idx2)[res_index] = r.c2 + 1;
+		REAL(rsize)[res_index] = r.stat.size;
+		REAL(rsurface)[res_index] = r.stat.surface;
+		LOGICAL(roverlaps)[res_index] = r.stat.contains_overlaps;
+		INTEGER(rownames)[res_index] = res_index + 1;
 	}
 
     Rf_setAttrib(rstat, R_RowNamesSymbol, rownames);

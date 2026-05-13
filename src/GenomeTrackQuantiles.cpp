@@ -642,7 +642,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 		if (do_big_intervset_out) {
 			vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
-			vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
+			GIntervalsMeta2D::ChromStats2D chromstats2d;
 			GInterval last_scope_interval1d;
 			GInterval2D last_scope_interval2d;
 			int64_t cur_interval_chrom_idx = -1;
@@ -657,10 +657,17 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 				}
 			} else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
-				for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-					for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
-						if (intervals2d->size(chromid1, chromid2))
-							chroms2d.insert(ChromPair(chromid1, chromid2));
+				// Phase 7b: enumerate populated chrom-pairs via the scope's
+				// (now sparse) get_next_chroms walker instead of an O(N*N)
+				// double loop. This is a no-op on a 100-contig DB but turns
+				// a 10^12 probe loop into O(populated_pairs) on a 1M-contig DB.
+				{
+					int c1 = 0, c2 = 0;
+					if (intervals2d->size(0, 0))
+						chroms2d.insert(ChromPair(0, 0));
+					while (intervals2d->get_next_chroms(&c1, &c2)) {
+						if (intervals2d->size(c1, c2))
+							chroms2d.insert(ChromPair(c1, c2));
 					}
 				}
 			}
@@ -869,7 +876,7 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 
 		if (do_big_intervset_out) {
 			vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
-			vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
+			GIntervalsMeta2D::ChromStats2D chromstats2d;
 			set<int> chroms1d;
 			set<ChromPair> chroms2d;
 
@@ -881,16 +888,20 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 				}
 			} else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
-				for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-					for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
-						if (intervals2d->size(chromid1, chromid2))
-							chroms2d.insert(ChromPair(chromid1, chromid2));
-					}
+				chromstats2d.set_max_pairs(intervals2d ? (size_t)intervals2d->num_chrom_pairs() : 0);
+				// Phase 7b: enumerate populated chrom-pairs via sparse walker.
+				int c1 = 0, c2 = 0;
+				if (intervals2d->size(0, 0))
+					chroms2d.insert(ChromPair(0, 0));
+				while (intervals2d->get_next_chroms(&c1, &c2)) {
+					if (intervals2d->size(c1, c2))
+						chroms2d.insert(ChromPair(c1, c2));
 				}
 			}
 
 			if (iu.distribute_task(sizeof(bool) +
-								   (is_1d_iterator ? sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() : sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size()),
+								   (is_1d_iterator ? sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size()
+								                   : GIntervalsMeta2D::ChromStats2D::max_pairs_bytes(chromstats2d.max_pairs())),
 								   0))
 			{ // child process
 				GInterval last_scope_interval1d;
@@ -967,13 +978,13 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 				void *ptr = allocate_res(0);
 
 				pack_data(ptr, generate_warning, 1);
-				if (scanner.get_iterator()->is_1d()) 
+				if (scanner.get_iterator()->is_1d())
 					pack_data(ptr, chromstats1d.front(), chromstats1d.size());
 				else
-					pack_data(ptr, chromstats2d.front(), chromstats2d.size());
+					chromstats2d.pack(ptr);
 			} else { // parent process
 				vector<GIntervalsBigSet1D::ChromStat> kid_chromstats1d(chromstats1d.size());
-				vector<GIntervalsBigSet2D::ChromStat> kid_chromstats2d(chromstats2d.size());
+				GIntervalsMeta2D::ChromStats2D kid_chromstats2d;
 
 				for (int i = 0; i < get_num_kids(); ++i) {
 					void *ptr = get_kid_res(i);
@@ -991,14 +1002,14 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 							}
 						}
 					} else {
-						int num_chroms = iu.get_chromkey().get_num_chroms();
-
-						unpack_data(ptr, kid_chromstats2d.front(), kid_chromstats2d.size());
-						for (vector<GIntervalsBigSet2D::ChromStat>::const_iterator istat = kid_chromstats2d.begin(); istat < kid_chromstats2d.end(); ++istat) {
-							if (istat->size) {
-								uint64_t idx = istat - kid_chromstats2d.begin();
-								chromstats2d[idx] = *istat;
-								chroms2d.erase(ChromPair(GIntervalsBigSet2D::idx2chrom1(idx, num_chroms), GIntervalsBigSet2D::idx2chrom2(idx, num_chroms)));
+						kid_chromstats2d.clear();
+						kid_chromstats2d.unpack(ptr);
+						for (auto it = kid_chromstats2d.begin(); it != kid_chromstats2d.end(); ++it) {
+							if (it->second.size) {
+								int c1 = GIntervalsMeta2D::ChromStats2D::key_chrom1(it->first);
+								int c2 = GIntervalsMeta2D::ChromStats2D::key_chrom2(it->first);
+								chromstats2d.set(c1, c2, it->second);
+								chroms2d.erase(ChromPair(c1, c2));
 							}
 						}
 					}

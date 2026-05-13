@@ -280,7 +280,7 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 
 		if (do_big_intervset_out) {
 			vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
-			vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
+			GIntervalsMeta2D::ChromStats2D chromstats2d;
 			GInterval last_scope_interval1d;
 			GInterval2D last_scope_interval2d;
 			int64_t cur_interval_idx = -1;
@@ -296,11 +296,14 @@ SEXP gintervals_summary(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP
 				}
 			} else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
-				for (int chromid1 = 0; (uint64_t)chromid1 < iu.get_chromkey().get_num_chroms(); ++chromid1) {
-					for (int chromid2 = 0; (uint64_t)chromid2 < iu.get_chromkey().get_num_chroms(); ++chromid2) {
-						if (intervals2d->size(chromid1, chromid2))
-							chroms2d.insert(ChromPair(chromid1, chromid2));
-					}
+				// Phase 7b: enumerate populated chrom-pairs via sparse walker
+				// instead of an O(N*N) probe loop (untenable on 1M-contig DBs).
+				int c1 = 0, c2 = 0;
+				if (intervals2d->size(0, 0))
+					chroms2d.insert(ChromPair(0, 0));
+				while (intervals2d->get_next_chroms(&c1, &c2)) {
+					if (intervals2d->size(c1, c2))
+						chroms2d.insert(ChromPair(c1, c2));
 				}
 			}
 

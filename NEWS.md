@@ -3,6 +3,7 @@
 * `gtrack.rm()` (and `gintervals.rm()`) now returns immediately even when the target directory contains millions of files; the actual filesystem cleanup runs in the background.
 * Track creation (`gtrack.create()` and friends) is now atomic on databases with many contigs: an interrupted create no longer leaves a partial track directory that blocks re-creation. Cleanup of failed creates runs in the background.
 * On indexed databases, `gtrack.create()` for dense (fixed-bin) and sparse tracks now writes the indexed format (`track.dat` + `track.idx`) directly instead of writing N per-chromosome files and then deleting them. Substantially faster on databases with >1M contigs.
+* 2D track / interval-set creation and meta builders no longer allocate `O(num_contigs^2)` per-pair entries. `gtrack.create_meta()` for 2D tracks uses `track.idx` (indexed) or a directory scan (legacy) to enumerate populated pairs instead of probing all N*N. Enables 2D tracks on databases with >1000 contigs without OOM or multi-day metadata scans.
 * `gdataset.info()` and `gdataset.ls(dataframe=TRUE)` now use a single C++ filesystem traversal (with FTS_SKIP) instead of two recursive R-level `list.files()` calls. Faster on databases with many tracks/intervals when `.db.cache` is missing or stale.
 
 # misha 5.6.29
