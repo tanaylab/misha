@@ -1,4 +1,4 @@
-# misha (development version)
+# misha 5.6.30
 
 * `gtrack.rm()` (and `gintervals.rm()`) now returns immediately even when the target directory contains millions of files; the actual filesystem cleanup runs in the background.
 * Track creation (`gtrack.create()` and friends) is now atomic on databases with many contigs: an interrupted create no longer leaves a partial track directory that blocks re-creation. Cleanup of failed creates runs in the background.
