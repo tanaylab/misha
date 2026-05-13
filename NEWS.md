@@ -13,13 +13,8 @@
 * Most misha functions paid a fixed ~1.5 s setup cost on million-contig databases (rebuilding the chromosome table and the all-genome interval list on every call). Both are now cached. On a 1.28M-contig database, `gtrack.info()` drops from ~1.4 s to <1 ms and `gseq.extract()` from ~14 s to ~0.4 s; smaller genomes are unaffected.
 * `gsetroot()` is ~3x faster on million-contig databases (~13 s -> ~5 s on a 1.28M-contig DB).
 * `gextract()` and other scan operations are faster on indexed tracks of databases with many chromosome aliases (skips a per-contig alias lookup that has no effect on indexed tracks).
-
-# misha 5.6.30
-
-* `gdb.install_intervals()` and `gdb.build_genome()` from `ncbi` sources now translate chrom names to whatever the groot uses (chr1/1/CM*, mixed HAL conventions) via the standard chromAlias chain. Previously NCBI installs left source seq IDs (NC_*) untranslated, mismatching most grooots.
-* `gdb.install_intervals()` from `ncbi` skips the FASTA download (it was never used), saving ~900 MB per call on GRCh38-scale assemblies.
-* `gdb.install_intervals(sets = "rmsk", ...)` from `ncbi` now fetches `*_rm.out.gz` from the NCBI FTP. Skipped with a warning for assemblies that don't publish it (community-submitted GCAs typically don't).
-* `min_coverage` now applies to the post-rescue canonical column (after length-fill / length-override / name-override), not to the best single-column score. Hybrid HAL conventions (e.g. Phylo447 mouse: `chr1`..`chr19` UCSC-style + `chr<N>_GL*_random` HAL-style + bare `GL*` GenBank) used to require `min_coverage <= 0.95` even though the rescues took final coverage to 100%; now they pass the strict default. The strict single-column gate is preserved when `match_by_length = FALSE`.
+* `gdb.install_intervals()` from `ncbi` now translates chrom names to the groot's convention, fetches `rmsk` from the NCBI FTP, and no longer downloads the FASTA.
+* `min_coverage` is now checked after the alias rescue passes, so hybrid naming (e.g. UCSC-style chroms mixed with bare GenBank accessions) passes at the strict default.
 
 # misha 5.6.29
 
