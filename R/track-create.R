@@ -153,16 +153,19 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
 
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
+
+    .gtrack.create_atomic(trackstr, function() {
+        if (.ggetOption("gmultitasking")) {
+            .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
+        } else {
+            .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
+        }
+    })
+
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            if (.ggetOption("gmultitasking")) {
-                .gcall("gcreate_pwm_energy_multitask", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
-            } else {
-                .gcall("gcreate_pwm_energy", trackstr, pssmset, pssmid, prior, .iterator, .misha_env())
-            }
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -174,7 +177,6 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
             if (.gdb.is_indexed()) {
@@ -183,15 +185,21 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
                     gtrack.convert_to_indexed(trackstr)
                 }
             }
+            success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
 
 
@@ -242,18 +250,20 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
+
+    .gtrack.create_atomic(trackstr, function() {
+        .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env())
+    })
+
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            .gcall("gtrack_create_sparse", trackstr, intervals, values, .misha_env())
             .gdb.add_track(trackstr)
             .gtrack.attr.set(trackstr, "created.by", sprintf("gtrack.create_sparse(%s, description, intervals, values)", trackstr), TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
             if (.gdb.is_indexed()) {
@@ -262,15 +272,21 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
                     gtrack.convert_to_indexed(trackstr)
                 }
             }
+            success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
 # Dense track creation function
 
@@ -331,15 +347,16 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
     )
 
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
-    success <- FALSE
 
+    .gtrack.create_atomic(trackstr, function() {
+        # Call the C++ function with the data frame
+        .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
+    })
+
+    final_dir <- .track_dir(trackstr)
+    success <- FALSE
     tryCatch(
         {
-            # Call the C++ function with the data frame
-            .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
-
             # Add the track to the database
             .gdb.add_track(trackstr)
 
@@ -358,8 +375,6 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
             # Set the binsize attribute which is required for the tests
             .gtrack.attr.set(trackstr, "binsize", binsize, TRUE)
 
-            success <- TRUE
-
             # If database is indexed, automatically convert the track to indexed format
             if (.gdb.is_indexed()) {
                 track_info <- gtrack.info(trackstr)
@@ -367,14 +382,19 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
                     gtrack.convert_to_indexed(trackstr)
                 }
             }
+            success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                if (!.gdb.trash(final_dir) && dir.exists(final_dir)) {
+                    warning(sprintf(
+                        "Track %s post-create cleanup left residue at %s; manual cleanup required",
+                        trackstr, final_dir
+                    ), call. = FALSE)
+                }
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-
-    retv <- 0 # suppress return value
+    invisible(0)
 }
