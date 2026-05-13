@@ -75,10 +75,17 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
 
             # If database is indexed, automatically convert the track to indexed format
             if (.gdb.is_indexed()) {
-                # In the tgt.track==NULL case the converted dir was renamed
-                # over the source above, so the indexed conversion target is
-                # src.trackstr; otherwise it is tgt.trackstr.
-                indexed_target <- if (is.null(substitute(tgt.track))) src.trackstr else tgt.trackstr
+                # Route the indexed conversion at the trackname that actually
+                # has the converted data on disk: if tgt.track was NULL AND
+                # the cp succeeded, the rename-to-src above moved tgt onto
+                # src (so tgt.dirname is gone and data lives at src). In any
+                # other case (tgt.track supplied, or cp failed and the
+                # rename was skipped) the data is still at tgt.dirname.
+                indexed_target <- if (is.null(substitute(tgt.track)) && !dir.exists(tgt.dirname)) {
+                    src.trackstr
+                } else {
+                    tgt.trackstr
+                }
                 gtrack.convert_to_indexed(indexed_target)
             }
             success <- TRUE
@@ -97,9 +104,11 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
                     }
                 }
             }
-            # Always sync the registry for tgt.trackstr - either the dir
-            # is gone (rename-to-src case) and rm_track deregisters it,
-            # or the dir still exists and rm_track is a no-op there.
+            # Defensive cache-scrub: tgt.trackstr was never .gdb.add_track'd
+            # by this function, so it is not in GTRACKS under normal flow.
+            # We still call rm_track in case a previous failed run left a
+            # stale entry in the in-memory registry. try(..., silent=TRUE)
+            # because the entry typically isn't there.
             try(.gdb.rm_track(tgt.trackstr), silent = TRUE)
         }
     )

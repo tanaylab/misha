@@ -359,9 +359,9 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
 
     .gconfirmtrackcreate(trackstr)
 
-    out_colnames <- NULL
+    captured <- new.env(parent = emptyenv())
     .gtrack.create_atomic(trackstr, function() {
-        out_colnames <<- .gcall("garrays_import", trackstr, srcs, colnames, .misha_env())
+        captured$colnames <- .gcall("garrays_import", trackstr, srcs, colnames, .misha_env())
     })
 
     final_dir <- .track_dir(trackstr)
@@ -369,7 +369,7 @@ gtrack.array.import <- function(track = NULL, description = NULL, ...) {
     tryCatch(
         {
             .gdb.add_track(trackstr)
-            .gtrack.array.set_colnames(trackstr, out_colnames, FALSE)
+            .gtrack.array.set_colnames(trackstr, captured$colnames, FALSE)
             created.by <- sprintf("gtrack.array.import(\"%s\", description, src = c(\"%s\"))", trackstr, paste(srcs, collapse = "\", \""))
             .gtrack.attr.set(trackstr, "created.by", created.by, TRUE)
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
