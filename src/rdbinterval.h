@@ -398,7 +398,11 @@ public:
 						 uint64_t max_records);      // max number of result records (0 = use gmax.data.size)
 
 private:
-	GenomeChromKey                m_chrom_key;
+	// Held by reference so a process-static cache can share a single
+	// GenomeChromKey across IntervUtils instances (avoids ~5M hash inserts
+	// per C++ entry on million-contig genomes). Declared FIRST so it is
+	// initialized before m_validator binds to it. See get_or_build_chrom_key.
+	const GenomeChromKey         &m_chrom_key;
 	SEXP                          m_envir;
 	SEXP                          m_allgenome;
 	int                           m_num_planned_kids;
@@ -413,6 +417,11 @@ private:
 
 	SEXP get_rallgenome1d() const { return VECTOR_ELT(m_allgenome, 0); }
 	SEXP get_rallgenome2d() const { return VECTOR_ELT(m_allgenome, 1); }
+
+	// Build (or look up in the static cache) a GenomeChromKey for the
+	// current envir's ALLGENOME / CHROM_ALIAS. Returned reference is owned
+	// by the cache and is stable for the lifetime of the matching SEXPs.
+	static const GenomeChromKey &get_or_build_chrom_key(SEXP envir);
 };
 
 }
