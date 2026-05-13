@@ -125,9 +125,13 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     # NCBI sources), refseq/GenBank/sequenceName aliases are added too.
     alias_map <- .compute_chrom_aliases(canonical_names, groot = groot)
 
-    # Include both canonical names and aliases in factor levels
-    # This allows gintervals.all() to work with both forms
-    all_chrom_names <- unique(c(canonical_names, names(alias_map)))
+    # Include both canonical names and aliases in factor levels.
+    # `names(alias_map)` always starts with canonical_names by construction
+    # (see .compute_chrom_aliases: basic_names <- chroms ...) and is already
+    # de-duplicated, so this is equivalent to unique(c(canonical_names,
+    # names(alias_map))) without the ~1 s cost of allocating + uniqueing
+    # ~5M strings on a million-contig database.
+    all_chrom_names <- names(alias_map)
 
     # Validate genome.idx if it exists (indexed format)
     idx_path <- file.path(groot, "seq", "genome.idx")
