@@ -133,7 +133,7 @@ void gscreen_add_interval2res(const GInterval &interval, GIntervals &res_interva
 }
 
 void gscreen_add_interval2res(const GInterval2D &interval, GIntervals2D &res_intervals, const string &intervset_out,
-							  vector<GIntervalsBigSet2D::ChromStat> &chromstats2d, IntervUtils &iu)
+							  GIntervalsMeta2D::ChromStats2D &chromstats2d, IntervUtils &iu)
 {
 	static GInterval2D last_interval;
 
@@ -226,7 +226,7 @@ SEXP C_gscreen(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _band, S
 			GIntervalsBigSet1D::end_save_plain_intervals(intervset_out.c_str(), iu, chromstats);
 		} else {
 			GIntervals2D res_intervals;
-			vector<GIntervalsBigSet2D::ChromStat> chromstats;
+			GIntervalsMeta2D::ChromStats2D chromstats;
 
 			if (!intervset_out.empty())
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats);
@@ -285,7 +285,7 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		GIntervals2D res_intervals2d;
 		bool is_1d_iterator = iu.is_1d_iterator(_expr, intervals1d, intervals2d, _iterator_policy);
 		vector<GIntervalsBigSet1D::ChromStat> chromstats1d;
-		vector<GIntervalsBigSet2D::ChromStat> chromstats2d;
+		GIntervalsMeta2D::ChromStats2D chromstats2d;
 		// Estimate number of records to cap shared-memory allocation size
 		uint64_t base_estimated_records = estimate_records_for_expr(iu, _expr, intervals1d, intervals2d, _iterator_policy, _band);
 		double max_records_factor = iu.get_multitask_max_records_factor();
@@ -294,8 +294,10 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		if (!intervset_out.empty()) {
 			if (is_1d_iterator)
 				GIntervalsBigSet1D::begin_save(intervset_out.c_str(), iu, chromstats1d);
-			else
+			else {
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats2d);
+				chromstats2d.set_max_pairs(intervals2d ? (size_t)intervals2d->num_chrom_pairs() : 0);
+			}
 		}
 
 		bool do_child = false;
@@ -314,7 +316,7 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 				} else {
 					do_child = iu.distribute_task(is_1d_iterator ?
 												  sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() :
-												  sizeof(GIntervalsBigSet2D::ChromStat) * chromstats2d.size(),
+												  GIntervalsMeta2D::ChromStats2D::max_pairs_bytes(chromstats2d.max_pairs()),
 												  0);
 				}
 				break;
@@ -392,7 +394,7 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 						GIntervalsBigSet2D::save_chrom_plain_intervals(intervset_out.c_str(), res_intervals2d, iu, chromstats2d);
 
 					void *ptr = allocate_res(0);
-					pack_data(ptr, chromstats2d.front(), chromstats2d.size());
+					chromstats2d.pack(ptr);
 				}
 			}
 		} else { // parent process
@@ -430,7 +432,7 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 					rreturn(iu.convert_intervs(&out_intervals2d));
 			} else {
 				vector<GIntervalsBigSet1D::ChromStat> kid_chromstats1d(chromstats1d.size());
-				vector<GIntervalsBigSet2D::ChromStat> kid_chromstats2d(chromstats2d.size());
+				GIntervalsMeta2D::ChromStats2D kid_chromstats2d;
 
 				// collect results from kids
 				for (int i = 0; i < get_num_kids(); ++i) {
@@ -443,11 +445,9 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 								chromstats1d[istat - kid_chromstats1d.begin()] = *istat;
 						}
 					} else {
-						unpack_data(ptr, kid_chromstats2d.front(), kid_chromstats2d.size());
-						for (vector<GIntervalsBigSet2D::ChromStat>::const_iterator istat = kid_chromstats2d.begin(); istat < kid_chromstats2d.end(); ++istat) {
-							if (istat->size)
-								chromstats2d[istat - kid_chromstats2d.begin()] = *istat;
-						}
+						kid_chromstats2d.clear();
+						kid_chromstats2d.unpack(ptr);
+						chromstats2d.merge(kid_chromstats2d);
 					}
 				}
 

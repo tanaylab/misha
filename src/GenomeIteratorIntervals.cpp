@@ -167,7 +167,7 @@ SEXP giterator_intervals(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEX
 				GIntervalsBigSet1D::end_save_plain_intervals(intervset_out.c_str(), iu, chromstats);
 			} else {
 				GIntervals2D res_intervals;
-				vector<GIntervalsBigSet2D::ChromStat> chromstats;
+				GIntervalsMeta2D::ChromStats2D chromstats;
 
 				GIntervalsBigSet2D::begin_save(intervset_out.c_str(), iu, chromstats);
 				for (; !scanner.isend(); scanner.next()) {

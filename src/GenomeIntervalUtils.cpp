@@ -381,7 +381,7 @@ SEXP ginterv_intersectband(SEXP _intervs, SEXP _band, SEXP _intervals_set_out, S
 		int chromid1 = 0;
 		int chromid2 = 0;
 		bool go_on;
-		vector<GIntervalsBigSet2D::ChromStat> chromstats;
+		GIntervalsMeta2D::ChromStats2D chromstats;
 		char error_prefix[1000];
 
 		if (!intervset_out.empty())

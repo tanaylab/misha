@@ -3,6 +3,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <dirent.h>
+#include <cstring>
+#include <set>
+
 #include "GenomeTrackArrays.h"
 #include "GenomeTrackComputed.h"
 #include "GenomeTrackRects.h"
@@ -12,6 +16,7 @@
 #include "GIntervalsBigSet1D.h"
 #include "GIntervalsBigSet2D.h"
 #include "TrackIndex.h"
+#include "TrackIndex2D.h"
 #include "rdbprogress.h"
 #include "rdbutils.h"
 
@@ -133,46 +138,110 @@ void GTrackIntervalsFetcher::create_track_meta(const char *track_name, const Int
 		}
 		GIntervalsMeta1D::save_plain_intervals_meta(trackpath.c_str(), chromstats, iu);
 	} else if (track_type == GenomeTrack::RECTS || track_type == GenomeTrack::POINTS || track_type == GenomeTrack::COMPUTED) {
-		vector<GIntervalsMeta2D::ChromStat> chromstats(iu.get_chromkey().get_num_chroms() * iu.get_chromkey().get_num_chroms());
-		BufferedFile bfile;
-		Progress_reporter progress;
-		progress.init(iu.get_chromkey().get_num_chroms() * iu.get_chromkey().get_num_chroms(), 1);
+		// Phase 7b: enumerate populated chrom-pairs sparsely.
+		//
+		// The previous implementation walked all N*N chrom-pairs and called
+		// init_read + read_interval for each, which loaded a full qtree per
+		// pair. On a 1M-contig DB this was 10^12 attempts (multi-day OOM).
+		//
+		// Two fast paths now:
+		//   1. Indexed 2D track (track.idx present): iterate index entries.
+		//   2. Legacy per-pair files: readdir the track directory and parse
+		//      "chrom1-chrom2" file names.
+		GIntervalsMeta2D::ChromStats2D chromstats;
 
-		for (uint64_t chromid1 = 0; chromid1 < iu.get_chromkey().get_num_chroms(); chromid1++) {
-			for (uint64_t chromid2 = 0; chromid2 < iu.get_chromkey().get_num_chroms(); chromid2++) {
-				string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
-				unique_ptr<GenomeTrack2D> track;
+		// Collect (chromid1, chromid2) pairs to process.
+		vector<pair<uint64_t, uint64_t>> pairs;
 
-				if (track_type == GenomeTrack::RECTS) {
-					track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
-					((GenomeTrackRectsRects *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
-				} else if (track_type == GenomeTrack::POINTS) {
-					track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsPoints(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
-					((GenomeTrackRectsPoints *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
-				} else if (track_type == GenomeTrack::COMPUTED) {
-					track = unique_ptr<GenomeTrack2D>(new GenomeTrackComputed(get_groot(iu.get_env()), iu.get_track_chunk_size(), iu.get_track_num_chunks()));
-					((GenomeTrackComputed *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
+		const string idx_path = trackpath + "/track.idx";
+		struct stat idx_st;
+		bool indexed_2d = false;
+		if (::stat(idx_path.c_str(), &idx_st) == 0) {
+			try {
+				auto idx2d = TrackIndex2D::get_track_index_2d(trackpath);
+				if (idx2d && idx2d->is_loaded()) {
+					indexed_2d = true;
+					for (const Track2DPairEntry &e : idx2d->entries()) {
+						if (e.length == 0)
+							continue;
+						if (e.chrom1_id >= iu.get_chromkey().get_num_chroms() ||
+						    e.chrom2_id >= iu.get_chromkey().get_num_chroms())
+							continue;
+						pairs.emplace_back((uint64_t)e.chrom1_id, (uint64_t)e.chrom2_id);
+					}
 				}
-
-				track->read_interval(GInterval2D(chromid1, 0, iu.get_chromkey().get_chrom_size(chromid1),
-												 chromid2, 0, iu.get_chromkey().get_chrom_size(chromid2)),
-									 DiagonalBand());
-
-				int idx = chromid1 * iu.get_chromkey().get_num_chroms() + chromid2;
-
-				chromstats[idx].contains_overlaps = false;
-
-				if (track_type == GenomeTrack::RECTS)
-					chromstats[idx].size = ((GenomeTrackRectsRects *)track.get())->get_qtree().get_num_objs();
-				else if (track_type == GenomeTrack::POINTS)
-					chromstats[idx].size = ((GenomeTrackRectsPoints *)track.get())->get_qtree().get_num_objs();
-				else if (track_type == GenomeTrack::COMPUTED)
-					chromstats[idx].size = ((GenomeTrackComputed *)track.get())->get_qtree().get_num_objs();
-
-				chromstats[idx].surface = track->last_occupied_area();
-				progress.report(1);
-				check_interrupt();
+			} catch (...) {
+				// fall through to legacy per-pair enumeration
+				indexed_2d = false;
 			}
+		}
+
+		if (!indexed_2d) {
+			// Legacy per-pair files: scan the track directory and match
+			// "chrom1-chrom2" names against the chromkey. This is O(num files)
+			// rather than O(N*N), which is the only tractable choice when N is
+			// large.
+			DIR *d = opendir(trackpath.c_str());
+			if (d) {
+				struct dirent *de;
+				while ((de = readdir(d)) != NULL) {
+					if (de->d_name[0] == '.')
+						continue;
+					const char *dash = strrchr(de->d_name, '-');
+					if (!dash || dash == de->d_name)
+						continue;
+					string chrom1_str(de->d_name, dash - de->d_name);
+					string chrom2_str(dash + 1);
+					try {
+						int c1 = iu.get_chromkey().chrom2id(chrom1_str);
+						int c2 = iu.get_chromkey().chrom2id(chrom2_str);
+						pairs.emplace_back((uint64_t)c1, (uint64_t)c2);
+					} catch (TGLException &) {
+						// not a chrom-pair file (attributes, etc.)
+						continue;
+					}
+				}
+				closedir(d);
+			}
+		}
+
+		Progress_reporter progress;
+		progress.init(pairs.size(), 1);
+
+		for (const auto &p : pairs) {
+			uint64_t chromid1 = p.first;
+			uint64_t chromid2 = p.second;
+			string filename(trackpath + "/" + GenomeTrack::get_2d_filename(iu.get_chromkey(), chromid1, chromid2));
+			unique_ptr<GenomeTrack2D> track;
+
+			if (track_type == GenomeTrack::RECTS) {
+				track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsRects(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+				((GenomeTrackRectsRects *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
+			} else if (track_type == GenomeTrack::POINTS) {
+				track = unique_ptr<GenomeTrack2D>(new GenomeTrackRectsPoints(iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+				((GenomeTrackRectsPoints *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
+			} else if (track_type == GenomeTrack::COMPUTED) {
+				track = unique_ptr<GenomeTrack2D>(new GenomeTrackComputed(get_groot(iu.get_env()), iu.get_track_chunk_size(), iu.get_track_num_chunks()));
+				((GenomeTrackComputed *)track.get())->init_read(filename.c_str(), chromid1, chromid2);
+			}
+
+			track->read_interval(GInterval2D(chromid1, 0, iu.get_chromkey().get_chrom_size(chromid1),
+											 chromid2, 0, iu.get_chromkey().get_chrom_size(chromid2)),
+								 DiagonalBand());
+
+			GIntervalsMeta2D::ChromStat stat;
+			stat.contains_overlaps = false;
+			if (track_type == GenomeTrack::RECTS)
+				stat.size = ((GenomeTrackRectsRects *)track.get())->get_qtree().get_num_objs();
+			else if (track_type == GenomeTrack::POINTS)
+				stat.size = ((GenomeTrackRectsPoints *)track.get())->get_qtree().get_num_objs();
+			else if (track_type == GenomeTrack::COMPUTED)
+				stat.size = ((GenomeTrackComputed *)track.get())->get_qtree().get_num_objs();
+			stat.surface = track->last_occupied_area();
+
+			chromstats.set((int)chromid1, (int)chromid2, stat);
+			progress.report(1);
+			check_interrupt();
 		}
 
 		GIntervalsMeta2D::save_plain_intervals_meta(trackpath.c_str(), chromstats, iu);
