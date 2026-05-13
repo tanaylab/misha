@@ -56,16 +56,22 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
     .iterator <- do.call(.giterator, list(substitute(iterator)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)
-    trackdir <- .track_dir(trackstr)
-    direxisted <- file.exists(trackdir)
+
+    .gtrack.create_atomic(trackstr, function() {
+        if (.ggetOption("gmultitasking")) {
+            .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env())
+        } else {
+            .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env())
+        }
+    })
+
+    # Past this point the final dir exists. Register, attribute it,
+    # and possibly convert to indexed. If any post-rename step fails,
+    # the track is in a partial state - clean up.
+    final_dir <- .track_dir(trackstr)
     success <- FALSE
     tryCatch(
         {
-            if (.ggetOption("gmultitasking")) {
-                .gcall("gtrackcreate_multitask", trackstr, exprstr, .iterator, band, .misha_env())
-            } else {
-                .gcall("gtrackcreate", trackstr, exprstr, .iterator, band, .misha_env())
-            }
             .gdb.add_track(trackstr)
             .gtrack.attr.set(
                 trackstr, "created.by",
@@ -74,7 +80,6 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)
             .gtrack.attr.set(trackstr, "description", description, TRUE)
-            success <- TRUE
 
             # If database is indexed, automatically convert the track to indexed format
             if (.gdb.is_indexed()) {
@@ -85,15 +90,16 @@ gtrack.create <- function(track = NULL, description = NULL, expr = NULL, iterato
                     gtrack.2d.convert_to_indexed(trackstr, remove.old = TRUE)
                 }
             }
+            success <- TRUE
         },
         finally = {
-            if (!success && !direxisted) {
-                unlink(trackdir, recursive = TRUE)
-                .gdb.rm_track(trackstr)
+            if (!success) {
+                .gdb.trash(final_dir)
+                try(.gdb.rm_track(trackstr), silent = TRUE)
             }
         }
     )
-    retv <- 0 # suppress return value
+    invisible(0)
 }
 
 
