@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.30</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.31</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.31" id="misha-5631">misha 5.6.31<a class="anchor" aria-label="anchor" href="#misha-5631"></a></h2>
+<ul><li>
+<code>gdb.install_intervals(..., sets = "genes")</code> from NCBI no longer aborts on a handful of unconvertible GFF records (typically the immunoglobulin loci in RefSeq human/mouse): <code>gff3ToGenePred</code> is now invoked with <code>-warnAndContinue</code>, so the offending transcripts are skipped with a warning and the rest of the genome is installed.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.30" id="misha-5630">misha 5.6.30<a class="anchor" aria-label="anchor" href="#misha-5630"></a></h2>
 <ul><li>
