@@ -57,13 +57,23 @@ namespace {
 
 const GenomeChromKey &IntervUtils::get_or_build_chrom_key(SEXP envir)
 {
-	SEXP allgenome = find_in_misha(envir, "ALLGENOME");
-	if (Rf_isNull(allgenome))
+	// PROTECT both SEXPs upfront: find_in_misha returns unprotected values,
+	// and the subsequent work allocates (make_shared, std::string in add_chrom,
+	// R_PreserveObject's precious-list insert). Without explicit protection
+	// across the find_in_misha calls and the build loop, R can move the
+	// allgenome/chrom_alias SEXPs out from under us and later VECTOR_ELT /
+	// STRING_ELT dereferences see a garbage address.
+	SEXP allgenome = PROTECT(find_in_misha(envir, "ALLGENOME"));
+	if (Rf_isNull(allgenome)) {
+		UNPROTECT(1);
 		verror("ALLGENOME variable does not exist");
-	if (!Rf_isVector(allgenome) || Rf_length(allgenome) != 2)
+	}
+	if (!Rf_isVector(allgenome) || Rf_length(allgenome) != 2) {
+		UNPROTECT(1);
 		verror("ALLGENOME variable has invalid type");
+	}
 
-	SEXP chrom_alias = find_in_misha(envir, "CHROM_ALIAS");
+	SEXP chrom_alias = PROTECT(find_in_misha(envir, "CHROM_ALIAS"));
 	// Normalise NULL/missing to R_NilValue so cache comparisons are stable.
 	if (Rf_isNull(chrom_alias))
 		chrom_alias = R_NilValue;
@@ -73,6 +83,7 @@ const GenomeChromKey &IntervUtils::get_or_build_chrom_key(SEXP envir)
 		if (s_chrom_key_cache &&
 		    s_cached_allgenome == allgenome &&
 		    s_cached_chrom_alias == chrom_alias) {
+			UNPROTECT(2);
 			return *s_chrom_key_cache;
 		}
 	}
@@ -91,6 +102,7 @@ const GenomeChromKey &IntervUtils::get_or_build_chrom_key(SEXP envir)
 		try {
 			new_key->add_chrom(chrom, (uint64_t)chrom_size);
 		} catch (TGLException &e) {
+			UNPROTECT(2);
 			verror("Reading ALLGENOME: %s", e.msg());
 		}
 	}
@@ -117,6 +129,7 @@ const GenomeChromKey &IntervUtils::get_or_build_chrom_key(SEXP envir)
 	if (s_chrom_key_cache &&
 	    s_cached_allgenome == allgenome &&
 	    s_cached_chrom_alias == chrom_alias) {
+		UNPROTECT(2);
 		return *s_chrom_key_cache;
 	}
 	// Release the previous pins (if any) before pinning the new SEXPs.
@@ -130,6 +143,7 @@ const GenomeChromKey &IntervUtils::get_or_build_chrom_key(SEXP envir)
 	s_cached_allgenome = allgenome;
 	s_cached_chrom_alias = chrom_alias;
 	s_chrom_key_cache = std::move(new_key);
+	UNPROTECT(2);
 	return *s_chrom_key_cache;
 }
 
@@ -194,45 +208,59 @@ namespace {
 
 const GIntervals &IntervUtils::get_all_genome_intervs_cached1d() const
 {
-	SEXP rallgenome = get_rallgenome1d();
+	// PROTECT rallgenome across the convert_rintervs walk + R_PreserveObject
+	// call. Without this, on R 4.4 builds the walk over factor-level CHARSXPs
+	// can read garbage when the shared-cache R_PreserveObject grows R's
+	// precious list.
+	SEXP rallgenome = PROTECT(get_rallgenome1d());
 	{
 		std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
-		if (s_cached_all_genome_intervs1d && s_cached_rallgenome1d == rallgenome)
+		if (s_cached_all_genome_intervs1d && s_cached_rallgenome1d == rallgenome) {
+			UNPROTECT(1);
 			return *s_cached_all_genome_intervs1d;
+		}
 	}
 	auto built = std::make_shared<GIntervals>();
 	convert_rintervs(rallgenome, built.get(), NULL);
 	built->sort();
 	std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
-	if (s_cached_all_genome_intervs1d && s_cached_rallgenome1d == rallgenome)
+	if (s_cached_all_genome_intervs1d && s_cached_rallgenome1d == rallgenome) {
+		UNPROTECT(1);
 		return *s_cached_all_genome_intervs1d;
+	}
 	if (s_cached_rallgenome1d != nullptr)
 		R_ReleaseObject(s_cached_rallgenome1d);
 	R_PreserveObject(rallgenome);
 	s_cached_rallgenome1d = rallgenome;
 	s_cached_all_genome_intervs1d = std::move(built);
+	UNPROTECT(1);
 	return *s_cached_all_genome_intervs1d;
 }
 
 const GIntervals2D &IntervUtils::get_all_genome_intervs_cached2d() const
 {
-	SEXP rallgenome = get_rallgenome2d();
+	SEXP rallgenome = PROTECT(get_rallgenome2d());
 	{
 		std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
-		if (s_cached_all_genome_intervs2d && s_cached_rallgenome2d == rallgenome)
+		if (s_cached_all_genome_intervs2d && s_cached_rallgenome2d == rallgenome) {
+			UNPROTECT(1);
 			return *s_cached_all_genome_intervs2d;
+		}
 	}
 	auto built = std::make_shared<GIntervals2D>();
 	convert_rintervs(rallgenome, NULL, built.get());
 	built->sort();
 	std::lock_guard<std::mutex> lock(s_all_genome_intervs_mutex);
-	if (s_cached_all_genome_intervs2d && s_cached_rallgenome2d == rallgenome)
+	if (s_cached_all_genome_intervs2d && s_cached_rallgenome2d == rallgenome) {
+		UNPROTECT(1);
 		return *s_cached_all_genome_intervs2d;
+	}
 	if (s_cached_rallgenome2d != nullptr)
 		R_ReleaseObject(s_cached_rallgenome2d);
 	R_PreserveObject(rallgenome);
 	s_cached_rallgenome2d = rallgenome;
 	s_cached_all_genome_intervs2d = std::move(built);
+	UNPROTECT(1);
 	return *s_cached_all_genome_intervs2d;
 }
 
