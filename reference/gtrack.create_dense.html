@@ -78,7 +78,8 @@
 <span>  intervals <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  values <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  binsize <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  defval <span class="op">=</span> <span class="cn">NaN</span></span>
+<span>  defval <span class="op">=</span> <span class="cn">NaN</span>,</span>
+<span>  func <span class="op">=</span> <span class="st">"weighted.mean"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -108,6 +109,33 @@
 
 <dt id="arg-defval">defval<a class="anchor" aria-label="anchor" href="#arg-defval"></a></dt>
 <dd><p>default track value for genomic regions not covered by the intervals</p></dd>
+
+
+<dt id="arg-func">func<a class="anchor" aria-label="anchor" href="#arg-func"></a></dt>
+<dd><p>per-bin aggregation function over intervals overlapping each bin.
+One of:</p><dl><dt><code>"weighted.mean"</code></dt>
+<dd><p>(default) <code>sum(v_i * ov_i) / sum(ov_i)</code> - byte-identical to the historical behavior.</p></dd>
+
+  <dt><code>"weighted.sum"</code></dt>
+<dd><p><code>sum(v_i * ov_i)</code> - coverage-weighted integral over the bin.</p></dd>
+
+  <dt><code>"max"</code></dt>
+<dd><p><code>max(v_i)</code> over intervals touching the bin (unweighted).</p></dd>
+
+  <dt><code>"min"</code></dt>
+<dd><p><code>min(v_i)</code> over intervals touching the bin (unweighted).</p></dd>
+
+  <dt><code>"median"</code></dt>
+<dd><p>overlap-weighted (lower) median by coverage mass.</p></dd>
+
+  <dt><code>"count"</code></dt>
+<dd><p>number of intervals touching the bin. Empty bin = 0.</p></dd>
+
+
+</dl><p>For <code>weighted.mean</code>, <code>weighted.sum</code>, <code>max</code>, <code>min</code>, and <code>median</code>,
+uncovered bases in a bin act as a synthetic contribution with value <code>defval</code>
+(overlap = uncovered_bases), included iff <code>defval</code> is not <code>NaN</code>.
+<code>count</code> ignores <code>defval</code>.</p></dd>
 
 </dl></div>
     <div id="value">
