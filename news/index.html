@@ -69,6 +69,9 @@
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.31" id="misha-5631">misha 5.6.31<a class="anchor" aria-label="anchor" href="#misha-5631"></a></h2>
 <ul><li>
+<code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code> gains a <code>func</code> argument selecting the per-bin aggregation over overlapping intervals: <code>"weighted.mean"</code> (default, unchanged from before), <code>"weighted.sum"</code>, <code>"max"</code>, <code>"min"</code>, <code>"median"</code>, <code>"count"</code>.</li>
+<li>Fixed crashes when calling misha functions after <code><a href="../reference/gdb.init_examples.html">gdb.init_examples()</a></code> on some R installations.</li>
+<li>
 <code>gdb.install_intervals(..., sets = "genes")</code> from NCBI no longer aborts on a handful of unconvertible GFF records (typically the immunoglobulin loci in RefSeq human/mouse): <code>gff3ToGenePred</code> is now invoked with <code>-warnAndContinue</code>, so the offending transcripts are skipped with a warning and the rest of the genome is installed.</li>
 </ul></div>
     <div class="section level2">
