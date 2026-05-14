@@ -22,7 +22,7 @@ namespace rdb {
 
 class ConfigurationManager {
 public:
-	ConfigurationManager(SEXP envir) : m_envir(envir) {}
+	ConfigurationManager(SEXP envir) { (void)envir; }
 
 	// Returns true if multitasking is switched on
 	bool get_multitasking() const;
@@ -70,8 +70,6 @@ public:
 	void verify_max_data_size(uint64_t data_size, const char *data_name = "Result", bool check_all_kids = true) const;
 
 private:
-	[[maybe_unused]] SEXP m_envir;
-
 	// Mutable cache for lazy-loaded configuration values
 	mutable int                   m_multitasking{-1};
 	mutable uint64_t              m_max_data_size{0};
