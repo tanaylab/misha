@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.31</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.32</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.32" id="misha-5632">misha 5.6.32<a class="anchor" aria-label="anchor" href="#misha-5632"></a></h2>
+<ul><li>Fixed <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code> returning wrong values (and <code>func = "coverage"</code> exploding to huge numbers) when overlapping intervals of mixed lengths fed into the same bin. Older callers using the default <code>func = "weighted.mean"</code> got plausible-looking but algebraically wrong means in affected bins.</li>
+<li>Additional cache-protection fixes covering tracks and intervals path lookups; closes the remaining same-family GC-safety gaps after the 5.6.31 chromkey fix.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.31" id="misha-5631">misha 5.6.31<a class="anchor" aria-label="anchor" href="#misha-5631"></a></h2>
 <ul><li>
