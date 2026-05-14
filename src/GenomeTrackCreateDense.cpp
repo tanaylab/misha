@@ -176,9 +176,15 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
 
                     uint64_t overlap_start = max(start_coord, (uint64_t)sorted_data[cur_idx].start);
                     uint64_t overlap_end = min(end_coord, (uint64_t)sorted_data[cur_idx].end);
-                    uint64_t overlap_size = overlap_end - overlap_start;
 
-                    if (overlap_size > 0 && !std::isnan((double)sorted_values[cur_idx])) {
+                    // Intervals are sorted by START only; an earlier-starting
+                    // interval may have an end <= start_coord while later
+                    // intervals (still sorted by start) overlap. So we cannot
+                    // rely on data_idx to filter every non-overlapping
+                    // interval. Guard against the unsigned wrap that would
+                    // otherwise turn overlap_size into ~2^64.
+                    if (overlap_end > overlap_start && !std::isnan((double)sorted_values[cur_idx])) {
+                        uint64_t overlap_size = overlap_end - overlap_start;
                         aggregation_state_add(state,
                                               (double)sorted_values[cur_idx],
                                               (double)overlap_size,
