@@ -26,7 +26,8 @@ enum class AggregationType {
 	MIN_COV_FRAC,
 	WEIGHTED_MEAN,
 	WEIGHTED_SUM,
-	WEIGHTED_MEDIAN
+	WEIGHTED_MEDIAN,
+	COVERAGE
 };
 
 struct Contribution {
@@ -91,6 +92,8 @@ inline AggregationType parse_aggregation_type(const char *agg) {
 		return AggregationType::WEIGHTED_SUM;
 	if (!strcmp(agg, "weighted.median"))
 		return AggregationType::WEIGHTED_MEDIAN;
+	if (!strcmp(agg, "coverage"))
+		return AggregationType::COVERAGE;
 	rdb::verror("Unknown multi_target_agg value: %s", agg);
 	return AggregationType::MEAN;  // unreachable
 }
@@ -298,6 +301,14 @@ case AggregationType::NTH: {
 		double sum = 0.0;
 		for (const Contribution *c : valid)
 			sum += c->value * c->overlap_len;
+		return sum;
+	}
+	case AggregationType::COVERAGE: {
+		// sum(v_i * overlap_i / locus_len). For ChIP-seq pileup with v=1:
+		// bin value = average reads-per-base over the bin.
+		double sum = 0.0;
+		for (const Contribution *c : valid)
+			sum += c->value * c->coverage_frac;
 		return sum;
 	}
 	case AggregationType::WEIGHTED_MEDIAN: {
