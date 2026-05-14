@@ -888,7 +888,13 @@ string rdb::track2path(SEXP envir, const string &trackname)
 			*i = '/';
 	}
 
-	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GTRACK_DATASET"), trackname);
+	// PROTECT the dataset mapping across the lookup_db_path call.
+	// lookup_db_path calls Rf_getAttrib(R_NamesSymbol) which is typically
+	// non-allocating, but pinning the SEXP closes a theoretical GC hole
+	// of the same family as the chromkey cache fix.
+	SEXP gtrack_dataset = PROTECT(find_in_misha(envir, "GTRACK_DATASET"));
+	string db_tracks_dir = lookup_db_path(gtrack_dataset, trackname);
+	UNPROTECT(1);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
 	}
@@ -906,7 +912,9 @@ string rdb::interv2path(SEXP envir, const string &intervname)
 			*i = '/';
 	}
 
-	string db_tracks_dir = lookup_db_path(find_in_misha(envir, "GINTERVALS_DATASET"), intervname);
+	SEXP gintervals_dataset = PROTECT(find_in_misha(envir, "GINTERVALS_DATASET"));
+	string db_tracks_dir = lookup_db_path(gintervals_dataset, intervname);
+	UNPROTECT(1);
 	if (db_tracks_dir.empty()) {
 		db_tracks_dir = get_gwd(envir);
 	}

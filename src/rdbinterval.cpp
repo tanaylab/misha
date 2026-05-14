@@ -164,7 +164,12 @@ IntervUtils::IntervUtils(SEXP envir) :
 	// ALLGENOME has already been fetched and validated inside
 	// get_or_build_chrom_key; re-fetch the SEXP pointer here so the
 	// existing get_rallgenome1d / get_rallgenome2d accessors keep working.
-	m_allgenome = find_in_misha(m_envir, "ALLGENOME");
+	// rprotect_ptr pins it on misha's tracked PROTECT stack for the
+	// lifetime of the enclosing RdbInitializer (i.e. the whole C entry).
+	// Without this, later R allocations during the call could in
+	// principle collect this SEXP -- the same family of failure the
+	// chromkey cache fix addressed.
+	m_allgenome = rprotect_ptr(find_in_misha(m_envir, "ALLGENOME"));
 
 	GenomeTrack::set_rnd_func(unif_rand);
 }
