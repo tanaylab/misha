@@ -233,6 +233,27 @@ test_that("func='coverage' with values=1 is the pileup track (avg reads/bp)", {
     expect_equal(r$value, c(1.5, 2.0))
 })
 
+test_that("non-overlapping early-end intervals don't wrap unsigned overlap_size", {
+    # Regression: intervals are sorted by START only. An early-starting
+    # interval with a large END parks data_idx; a later (by start)
+    # interval with a small END (still > parked data_idx's start but
+    # <= current bin start_coord) used to slip into the per-bin loop
+    # and compute overlap_end < overlap_start, wrapping uint64_t to
+    # ~2^64. With value=1 the resulting bin value would be ~9.2e17.
+    tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    # A: [0, 200) - keeps data_idx parked at index 0
+    # B: [10, 50) - end < bin [60,80) start; must NOT contribute
+    intervs <- gintervals(chrom = c(1, 1), start = c(0, 10), end = c(200, 50))
+    gtrack.create_dense(tmptrack, "wrap regression",
+        intervs, rep(1.0, 2),
+        binsize = 20, defval = 0, func = "coverage"
+    )
+    r <- gextract(tmptrack, gintervals(1, 60, 80), colnames = "v")
+    # Only A contributes: 20bp overlap / 20bp bin = 1.0
+    expect_equal(r$v, 1.0)
+})
+
 test_that("func='max' returns unweighted max of overlapping interval values", {
     tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
     withr::defer(gtrack.rm(tmptrack, force = TRUE))
