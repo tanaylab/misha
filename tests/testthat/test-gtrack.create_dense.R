@@ -208,6 +208,31 @@ test_that("func='weighted.sum' returns sum(v*overlap) per bin", {
     expect_equal(v, c(20, 20, 130, 160, 60))
 })
 
+test_that("func='coverage' equals weighted.sum / binsize", {
+    tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    v <- .func_make_and_extract(tmptrack, "coverage")
+    # Same fixture, binsize=20. coverage = weighted.sum / 20.
+    expect_equal(v, c(20, 20, 130, 160, 60) / 20)
+})
+
+test_that("func='coverage' with values=1 is the pileup track (avg reads/bp)", {
+    tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    # ChIP-seq style: 3 intervals on chr1, value=1 each, binsize 20.
+    # A: [ 0, 30), B: [10, 40), C: [25, 35)
+    # bin [ 0,20):  A=20, B=10                      -> cov = 30/20 = 1.5
+    # bin [20,40):  A=10, B=20, C=10                -> cov = 40/20 = 2.0
+    intervs <- gintervals(chrom = c(1, 1, 1), start = c(0, 10, 25), end = c(30, 40, 35))
+    gtrack.rm(tmptrack, force = TRUE)
+    gtrack.create_dense(tmptrack, "pileup", intervs, rep(1, 3),
+        binsize = 20, defval = 0, func = "coverage"
+    )
+    r <- gextract(tmptrack, gintervals(1, 0, 40), colnames = "value")
+    r <- r[order(r$start), ]
+    expect_equal(r$value, c(1.5, 2.0))
+})
+
 test_that("func='max' returns unweighted max of overlapping interval values", {
     tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
     withr::defer(gtrack.rm(tmptrack, force = TRUE))

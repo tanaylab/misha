@@ -36,11 +36,14 @@ One of:
   \item{\code{"min"}}{\code{min(v_i)} over intervals touching the bin (unweighted).}
   \item{\code{"median"}}{overlap-weighted (lower) median by coverage mass.}
   \item{\code{"count"}}{number of intervals touching the bin. Empty bin = 0.}
+  \item{\code{"coverage"}}{\code{sum(v_i * ov_i) / binsize} - average per-base
+    signal in the bin. With \code{values = rep(1, n)} this is a ChIP-seq-style
+    pileup track (mean overlapping intervals per base).}
 }
-For \code{weighted.mean}, \code{weighted.sum}, \code{max}, \code{min}, and \code{median},
-uncovered bases in a bin act as a synthetic contribution with value \code{defval}
-(overlap = uncovered_bases), included iff \code{defval} is not \code{NaN}.
-\code{count} ignores \code{defval}.}
+For \code{weighted.mean}, \code{weighted.sum}, \code{max}, \code{min}, \code{median},
+and \code{coverage}, uncovered bases in a bin act as a synthetic contribution with
+value \code{defval} (overlap = uncovered_bases), included iff \code{defval} is not
+\code{NaN}. \code{count} ignores \code{defval}.}
 }
 \value{
 None.

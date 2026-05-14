@@ -312,11 +312,14 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
 #'     \item{\code{"min"}}{\code{min(v_i)} over intervals touching the bin (unweighted).}
 #'     \item{\code{"median"}}{overlap-weighted (lower) median by coverage mass.}
 #'     \item{\code{"count"}}{number of intervals touching the bin. Empty bin = 0.}
+#'     \item{\code{"coverage"}}{\code{sum(v_i * ov_i) / binsize} - average per-base
+#'       signal in the bin. With \code{values = rep(1, n)} this is a ChIP-seq-style
+#'       pileup track (mean overlapping intervals per base).}
 #'   }
-#'   For \code{weighted.mean}, \code{weighted.sum}, \code{max}, \code{min}, and \code{median},
-#'   uncovered bases in a bin act as a synthetic contribution with value \code{defval}
-#'   (overlap = uncovered_bases), included iff \code{defval} is not \code{NaN}.
-#'   \code{count} ignores \code{defval}.
+#'   For \code{weighted.mean}, \code{weighted.sum}, \code{max}, \code{min}, \code{median},
+#'   and \code{coverage}, uncovered bases in a bin act as a synthetic contribution with
+#'   value \code{defval} (overlap = uncovered_bases), included iff \code{defval} is not
+#'   \code{NaN}. \code{count} ignores \code{defval}.
 #' @return None.
 #' @seealso \code{\link{gtrack.create_sparse}}, \code{\link{gtrack.import}},
 #' \code{\link{gtrack.modify}}, \code{\link{gtrack.rm}},
@@ -343,7 +346,7 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
         stop("Usage: gtrack.create_dense(track, description, intervals, values, binsize, defval = NaN, func = \"weighted.mean\")", call. = FALSE)
     }
 
-    valid_funcs <- c("weighted.mean", "weighted.sum", "max", "min", "median", "count")
+    valid_funcs <- c("weighted.mean", "weighted.sum", "max", "min", "median", "count", "coverage")
     if (!is.character(func) || length(func) != 1L || !(func %in% valid_funcs)) {
         stop(sprintf(
             "Invalid 'func': must be one of %s",
