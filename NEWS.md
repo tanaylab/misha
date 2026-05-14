@@ -1,3 +1,8 @@
+# misha 5.6.32
+
+* Fixed `gtrack.create_dense()` returning wrong values (and `func = "coverage"` exploding to huge numbers) when overlapping intervals of mixed lengths fed into the same bin. Older callers using the default `func = "weighted.mean"` got plausible-looking but algebraically wrong means in affected bins.
+* Additional cache-protection fixes covering tracks and intervals path lookups; closes the remaining same-family GC-safety gaps after the 5.6.31 chromkey fix.
+
 # misha 5.6.31
 
 * `gtrack.create_dense()` gains a `func` argument selecting the per-bin aggregation over overlapping intervals: `"weighted.mean"` (default, unchanged from before), `"weighted.sum"`, `"max"`, `"min"`, `"median"`, `"count"`, and `"coverage"` (= `sum(v_i * ov_i) / binsize`, i.e. average per-base signal; with `values = rep(1, n)` this is a ChIP-seq-style pileup track in one call).
