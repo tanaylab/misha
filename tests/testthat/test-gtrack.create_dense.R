@@ -193,7 +193,8 @@ test_that("func='weighted.mean' is default and matches historical behavior", {
     expect_equal(v_explicit, v_default)
     # Hand-computed per-bin: bin2 = (1*20 + 3*20 + 5*10) / (20+20+10) = 130/50 = 2.6
     #                        bin3 = (3*20 + 5*20) / 40 = 4
-    expect_equal(v_default, c(1, 1, 2.6, 4, 3))
+    # Tracks store float32, so use a tolerance loose enough for that rounding.
+    expect_equal(v_default, c(1, 1, 2.6, 4, 3), tolerance = 1e-6)
 })
 
 test_that("func='weighted.sum' returns sum(v*overlap) per bin", {
