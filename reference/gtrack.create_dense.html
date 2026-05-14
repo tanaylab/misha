@@ -131,11 +131,16 @@ One of:</p><dl><dt><code>"weighted.mean"</code></dt>
   <dt><code>"count"</code></dt>
 <dd><p>number of intervals touching the bin. Empty bin = 0.</p></dd>
 
+  <dt><code>"coverage"</code></dt>
+<dd><p><code>sum(v_i * ov_i) / binsize</code> - average per-base
+    signal in the bin. With <code>values = rep(1, n)</code> this is a ChIP-seq-style
+    pileup track (mean overlapping intervals per base).</p></dd>
 
-</dl><p>For <code>weighted.mean</code>, <code>weighted.sum</code>, <code>max</code>, <code>min</code>, and <code>median</code>,
-uncovered bases in a bin act as a synthetic contribution with value <code>defval</code>
-(overlap = uncovered_bases), included iff <code>defval</code> is not <code>NaN</code>.
-<code>count</code> ignores <code>defval</code>.</p></dd>
+
+</dl><p>For <code>weighted.mean</code>, <code>weighted.sum</code>, <code>max</code>, <code>min</code>, <code>median</code>,
+and <code>coverage</code>, uncovered bases in a bin act as a synthetic contribution with
+value <code>defval</code> (overlap = uncovered_bases), included iff <code>defval</code> is not
+<code>NaN</code>. <code>count</code> ignores <code>defval</code>.</p></dd>
 
 </dl></div>
     <div id="value">
