@@ -23,7 +23,10 @@ enum class AggregationType {
 	MAX_COV_LEN,
 	MIN_COV_LEN,
 	MAX_COV_FRAC,
-	MIN_COV_FRAC
+	MIN_COV_FRAC,
+	WEIGHTED_MEAN,
+	WEIGHTED_SUM,
+	WEIGHTED_MEDIAN
 };
 
 struct Contribution {
@@ -82,6 +85,12 @@ inline AggregationType parse_aggregation_type(const char *agg) {
 		return AggregationType::MAX_COV_FRAC;
 	if (!strcmp(agg, "min.coverage_frac"))
 		return AggregationType::MIN_COV_FRAC;
+	if (!strcmp(agg, "weighted.mean"))
+		return AggregationType::WEIGHTED_MEAN;
+	if (!strcmp(agg, "weighted.sum"))
+		return AggregationType::WEIGHTED_SUM;
+	if (!strcmp(agg, "weighted.median"))
+		return AggregationType::WEIGHTED_MEDIAN;
 	rdb::verror("Unknown multi_target_agg value: %s", agg);
 	return AggregationType::MEAN;  // unreachable
 }
@@ -273,6 +282,46 @@ case AggregationType::NTH: {
 				best = curr;
 		}
 		return best->value;
+	}
+	case AggregationType::WEIGHTED_MEAN: {
+		double sum = 0.0;
+		double w = 0.0;
+		for (const Contribution *c : valid) {
+			sum += c->value * c->overlap_len;
+			w += c->overlap_len;
+		}
+		if (w <= 0.0)
+			return numeric_limits<double>::quiet_NaN();
+		return sum / w;
+	}
+	case AggregationType::WEIGHTED_SUM: {
+		double sum = 0.0;
+		for (const Contribution *c : valid)
+			sum += c->value * c->overlap_len;
+		return sum;
+	}
+	case AggregationType::WEIGHTED_MEDIAN: {
+		// Lower weighted median: sort by value asc, accumulate overlap_len;
+		// return the value of the first contribution whose running cumulative
+		// overlap reaches or exceeds total_overlap / 2.
+		vector<const Contribution *> sorted(valid.begin(), valid.end());
+		std::sort(sorted.begin(), sorted.end(),
+			[](const Contribution *a, const Contribution *b) {
+				return a->value < b->value;
+			});
+		double total = 0.0;
+		for (const Contribution *c : sorted)
+			total += c->overlap_len;
+		if (total <= 0.0)
+			return numeric_limits<double>::quiet_NaN();
+		double half = total / 2.0;
+		double acc = 0.0;
+		for (const Contribution *c : sorted) {
+			acc += c->overlap_len;
+			if (acc >= half)
+				return c->value;
+		}
+		return sorted.back()->value;  // unreachable; defensive
 	}
 	case AggregationType::COUNT:  // handled earlier
 		break;

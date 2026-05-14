@@ -10,7 +10,8 @@ gtrack.create_dense(
   intervals = NULL,
   values = NULL,
   binsize = NULL,
-  defval = NaN
+  defval = NaN,
+  func = "weighted.mean"
 )
 }
 \arguments{
@@ -25,6 +26,21 @@ gtrack.create_dense(
 \item{binsize}{bin size of the newly created 'Dense' track}
 
 \item{defval}{default track value for genomic regions not covered by the intervals}
+
+\item{func}{per-bin aggregation function over intervals overlapping each bin.
+One of:
+\describe{
+  \item{\code{"weighted.mean"}}{(default) \code{sum(v_i * ov_i) / sum(ov_i)} - byte-identical to the historical behavior.}
+  \item{\code{"weighted.sum"}}{\code{sum(v_i * ov_i)} - coverage-weighted integral over the bin.}
+  \item{\code{"max"}}{\code{max(v_i)} over intervals touching the bin (unweighted).}
+  \item{\code{"min"}}{\code{min(v_i)} over intervals touching the bin (unweighted).}
+  \item{\code{"median"}}{overlap-weighted (lower) median by coverage mass.}
+  \item{\code{"count"}}{number of intervals touching the bin. Empty bin = 0.}
+}
+For \code{weighted.mean}, \code{weighted.sum}, \code{max}, \code{min}, and \code{median},
+uncovered bases in a bin act as a synthetic contribution with value \code{defval}
+(overlap = uncovered_bases), included iff \code{defval} is not \code{NaN}.
+\code{count} ignores \code{defval}.}
 }
 \value{
 None.

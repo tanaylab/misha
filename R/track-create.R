@@ -303,6 +303,20 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
 #' @param values an array of numeric values - one for each interval
 #' @param binsize bin size of the newly created 'Dense' track
 #' @param defval default track value for genomic regions not covered by the intervals
+#' @param func per-bin aggregation function over intervals overlapping each bin.
+#'   One of:
+#'   \describe{
+#'     \item{\code{"weighted.mean"}}{(default) \code{sum(v_i * ov_i) / sum(ov_i)} - byte-identical to the historical behavior.}
+#'     \item{\code{"weighted.sum"}}{\code{sum(v_i * ov_i)} - coverage-weighted integral over the bin.}
+#'     \item{\code{"max"}}{\code{max(v_i)} over intervals touching the bin (unweighted).}
+#'     \item{\code{"min"}}{\code{min(v_i)} over intervals touching the bin (unweighted).}
+#'     \item{\code{"median"}}{overlap-weighted (lower) median by coverage mass.}
+#'     \item{\code{"count"}}{number of intervals touching the bin. Empty bin = 0.}
+#'   }
+#'   For \code{weighted.mean}, \code{weighted.sum}, \code{max}, \code{min}, and \code{median},
+#'   uncovered bases in a bin act as a synthetic contribution with value \code{defval}
+#'   (overlap = uncovered_bases), included iff \code{defval} is not \code{NaN}.
+#'   \code{count} ignores \code{defval}.
 #' @return None.
 #' @seealso \code{\link{gtrack.create_sparse}}, \code{\link{gtrack.import}},
 #' \code{\link{gtrack.modify}}, \code{\link{gtrack.rm}},
@@ -324,10 +338,20 @@ gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = N
 #'
 #' @export gtrack.create_dense
 gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NULL, values = NULL,
-                                binsize = NULL, defval = NaN) {
+                                binsize = NULL, defval = NaN, func = "weighted.mean") {
     if (is.null(substitute(track)) || is.null(description) || is.null(intervals) || is.null(values) || is.null(binsize)) {
-        stop("Usage: gtrack.create_dense(track, description, intervals, values, binsize, defval = NaN)", call. = FALSE)
+        stop("Usage: gtrack.create_dense(track, description, intervals, values, binsize, defval = NaN, func = \"weighted.mean\")", call. = FALSE)
     }
+
+    valid_funcs <- c("weighted.mean", "weighted.sum", "max", "min", "median", "count")
+    if (!is.character(func) || length(func) != 1L || !(func %in% valid_funcs)) {
+        stop(sprintf(
+            "Invalid 'func': must be one of %s",
+            paste(sQuote(valid_funcs), collapse = ", ")
+        ), call. = FALSE)
+    }
+    func_canonical <- if (func == "median") "weighted.median" else func
+
     .gcheckroot()
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
@@ -350,7 +374,7 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
 
     .gtrack.create_atomic(trackstr, function() {
         # Call the C++ function with the data frame
-        .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
+        .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, func_canonical, .misha_env())
     })
 
     final_dir <- .track_dir(trackstr)
@@ -361,9 +385,19 @@ gtrack.create_dense <- function(track = NULL, description = NULL, intervals = NU
             .gdb.add_track(trackstr)
 
             # Set track attributes
+            created_by <- if (func == "weighted.mean") {
+                sprintf(
+                    "gtrack.create_dense(%s, description, intervals, values, %d, %g)",
+                    trackstr, binsize, defval
+                )
+            } else {
+                sprintf(
+                    "gtrack.create_dense(%s, description, intervals, values, %d, %g, func = \"%s\")",
+                    trackstr, binsize, defval, func
+                )
+            }
             .gtrack.attr.set(
-                trackstr, "created.by",
-                sprintf("gtrack.create_dense(%s, description, intervals, values, %d, %g)", trackstr, binsize, defval), TRUE
+                trackstr, "created.by", created_by, TRUE
             )
             .gtrack.attr.set(trackstr, "created.date", date(), TRUE)
             .gtrack.attr.set(trackstr, "created.user", Sys.getenv("USER"), TRUE)

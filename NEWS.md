@@ -1,5 +1,7 @@
 # misha 5.6.31
 
+* `gtrack.create_dense()` gains a `func` argument selecting the per-bin aggregation over overlapping intervals: `"weighted.mean"` (default, unchanged from before), `"weighted.sum"`, `"max"`, `"min"`, `"median"`, `"count"`.
+* Fixed crashes when calling misha functions after `gdb.init_examples()` on some R installations.
 * `gdb.install_intervals(..., sets = "genes")` from NCBI no longer aborts on a handful of unconvertible GFF records (typically the immunoglobulin loci in RefSeq human/mouse): `gff3ToGenePred` is now invoked with `-warnAndContinue`, so the offending transcripts are skipped with a warning and the rest of the genome is installed.
 
 # misha 5.6.30

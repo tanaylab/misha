@@ -6,6 +6,7 @@
 #include "rdbprogress.h"
 #include "rdbutils.h"
 
+#include "AggregationHelpers.h"
 #include "GenomeTrackFixedBin.h"
 
 using namespace std;
@@ -13,7 +14,7 @@ using namespace rdb;
 
 extern "C" {
 
-SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _defvalue, SEXP _envir)
+SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _defvalue, SEXP _func, SEXP _envir)
 {
     try {
         RdbInitializer rdb_init;
@@ -31,13 +32,20 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
         if ((!Rf_isReal(_defvalue) && !Rf_isInteger(_defvalue)) || Rf_length(_defvalue) != 1)
             verror("Defvalue argument is not a number");
 
+        if (!Rf_isString(_func) || Rf_length(_func) != 1)
+            verror("func argument is not a string");
+
         const char *track = CHAR(STRING_ELT(_track, 0));
         double dbinsize = Rf_isReal(_binsize) ? REAL(_binsize)[0] : INTEGER(_binsize)[0];
         unsigned binsize = (unsigned)dbinsize;
         double defvalue = Rf_isReal(_defvalue) ? REAL(_defvalue)[0] : INTEGER(_defvalue)[0];
+        const char *func_str = CHAR(STRING_ELT(_func, 0));
 
         if (dbinsize <= 0 || binsize != dbinsize)
             verror("Invalid value of binsize argument: %g\n", dbinsize);
+
+        AggregationType agg_type = parse_aggregation_type(func_str);
+        AggregationConfig agg_cfg{ agg_type, /*na_rm=*/true, /*min_n=*/-1, /*nth_index=*/-1 };
 
         // Extract columns from the data frame
         SEXP chrom_col = VECTOR_ELT(_data_frame, 0);
@@ -142,11 +150,12 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
                 data_idx++;
             }
 
+            AggregationState state;
+
             // Process each bin in the chromosome
             for (uint64_t start_coord = 0; start_coord < chromsize; start_coord += binsize) {
-                double sum = 0;
-                uint64_t covered_bases = 0;
-                uint64_t end_coord = min(start_coord + binsize, chromsize);
+                uint64_t end_coord = min(start_coord + (uint64_t)binsize, chromsize);
+                uint64_t bin_size_actual = end_coord - start_coord;
 
                 // Advance to the first interval that might overlap with the current bin
                 while (data_idx < sorted_data.size() &&
@@ -155,35 +164,57 @@ SEXP gtrack_create_dense(SEXP _track, SEXP _data_frame, SEXP _binsize, SEXP _def
                     data_idx++;
                 }
 
+                state.reset();
+                uint64_t covered_bases = 0;
+                int64_t chain_id = 0;
+
                 // Process all intervals that overlap with the current bin
                 size_t cur_idx = data_idx;
                 while (cur_idx < sorted_data.size() &&
                        sorted_data[cur_idx].chromid == chromid &&
                        (uint64_t)sorted_data[cur_idx].start < end_coord) {
 
-                    // Calculate overlap between interval and current bin
                     uint64_t overlap_start = max(start_coord, (uint64_t)sorted_data[cur_idx].start);
                     uint64_t overlap_end = min(end_coord, (uint64_t)sorted_data[cur_idx].end);
                     uint64_t overlap_size = overlap_end - overlap_start;
 
-                    if (overlap_size > 0 && !std::isnan(sorted_values[cur_idx])) {
-                        sum += sorted_values[cur_idx] * overlap_size;
+                    if (overlap_size > 0 && !std::isnan((double)sorted_values[cur_idx])) {
+                        aggregation_state_add(state,
+                                              (double)sorted_values[cur_idx],
+                                              (double)overlap_size,
+                                              (double)bin_size_actual,
+                                              (int64_t)overlap_start,
+                                              (int64_t)overlap_end,
+                                              chain_id++);
                         covered_bases += overlap_size;
                     }
 
                     cur_idx++;
                 }
 
-                // Fill uncovered bases with default value
-                uint64_t bin_size_actual = end_coord - start_coord;
-                if (covered_bases < bin_size_actual && !std::isnan(defvalue)) {
+                // Synthetic "uncovered" contribution if defvalue is set.
+                // Skip for COUNT so empty/partial bins report only real interval count.
+                if (covered_bases < bin_size_actual &&
+                    !std::isnan(defvalue) &&
+                    agg_type != AggregationType::COUNT)
+                {
                     uint64_t uncovered = bin_size_actual - covered_bases;
-                    sum += defvalue * uncovered;
-                    covered_bases += uncovered;
+                    aggregation_state_add(state,
+                                          defvalue,
+                                          (double)uncovered,
+                                          (double)bin_size_actual,
+                                          (int64_t)start_coord,
+                                          (int64_t)end_coord,
+                                          chain_id++);
                 }
 
-                // Calculate bin value
-                float bin_value = covered_bases ? (sum / covered_bases) : numeric_limits<float>::quiet_NaN();
+                double agg_value = aggregate_values(agg_cfg, state);
+                float bin_value;
+                if (std::isnan(agg_value)) {
+                    bin_value = numeric_limits<float>::quiet_NaN();
+                } else {
+                    bin_value = (float)agg_value;
+                }
                 bin_batch.push_back(bin_value);
 
                 // Write in batches of 10000 bins
