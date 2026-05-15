@@ -53,6 +53,12 @@
     options(gtrack.chunk.size = 100000)
     options(gtrack.num.chunks = 0)
 
+    # Worker count for the parallel empty-chrom signature-file path in
+    # gtrack.create_sparse on non-indexed DBs. NFSv3 saturates around 4
+    # concurrent CREATEs; set to 1 to disable parallelism. Capped at 32
+    # in C++.
+    options(gtrack.create.threads = 4L)
+
     # set the groot to samples dir
     if (!exists("GROOT", envir = .misha)) {
         gdb.init_examples()

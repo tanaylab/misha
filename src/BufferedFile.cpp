@@ -19,6 +19,12 @@ int BufferedFile::open(const char *path, const char *mode, bool lock)
 	m_filename = path;
 	m_fp = fopen(path, mode);
 	if (m_fp) {
+		// Bump stdio buffer to 1 MiB on write/append modes so streaming
+		// writes coalesce into few syscalls. Default libc buffer is 4-8 KiB,
+		// which produces thousands of NFS write syscalls per MB of payload.
+		if (mode && (*mode == 'w' || *mode == 'a' || strchr(mode, '+')))
+			setvbuf(m_fp, NULL, _IOFBF, 1 << 20);
+
         if (lock) {
             struct flock fl;
 
