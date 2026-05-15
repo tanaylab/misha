@@ -1,3 +1,10 @@
+# misha 5.6.33
+
+### Performance
+
+* Track-creation writes (`gtrack.create_sparse()`, `gtrack.create_dense()`, `gtrack.create()`, `gtrack.smooth()`, `gtrack.modify()`, `gtrack.convert_to_indexed()`) coalesce into far fewer syscalls on networked filesystems by bumping the stdio buffer to 1 MiB on every misha-managed write file. Noticeable on NFS-mounted track DBs.
+* `gtrack.create_sparse()` on per-chromosome (non-indexed) DBs now creates the empty-chrom signature files in parallel via raw POSIX syscalls. Worker count is configurable via the `gtrack.create.threads` option (default 4, matching NFSv3 CREATE concurrency).
+
 # misha 5.6.32
 
 * Fixed `gtrack.create_dense()` returning wrong values (and `func = "coverage"` exploding to huge numbers) when overlapping intervals of mixed lengths fed into the same bin. Older callers using the default `func = "weighted.mean"` got plausible-looking but algebraically wrong means in affected bins.
