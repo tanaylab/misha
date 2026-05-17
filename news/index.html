@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.32</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.6.33</span>
       </span>
     </div>
 
@@ -66,6 +66,20 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.6.33" id="misha-5633">misha 5.6.33<a class="anchor" aria-label="anchor" href="#misha-5633"></a></h2>
+<div class="section level4">
+<h4 id="performance-5-6-33">Performance<a class="anchor" aria-label="anchor" href="#performance-5-6-33"></a></h4>
+<ul><li>Track-creation writes (<code><a href="../reference/gtrack.create_sparse.html">gtrack.create_sparse()</a></code>, <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code>, <code><a href="../reference/gtrack.create.html">gtrack.create()</a></code>, <code><a href="../reference/gtrack.smooth.html">gtrack.smooth()</a></code>, <code><a href="../reference/gtrack.modify.html">gtrack.modify()</a></code>, <code><a href="../reference/gtrack.convert_to_indexed.html">gtrack.convert_to_indexed()</a></code>) coalesce into far fewer syscalls on networked filesystems by bumping the stdio buffer to 1 MiB on every misha-managed write file. Noticeable on NFS-mounted track DBs.</li>
+<li>
+<code><a href="../reference/gtrack.create_sparse.html">gtrack.create_sparse()</a></code> on per-chromosome (non-indexed) DBs now creates the empty-chrom signature files in parallel via raw POSIX syscalls. Worker count is configurable via the <code>gtrack.create.threads</code> option (default 4, matching NFSv3 CREATE concurrency).</li>
+</ul></div>
+<div class="section level4">
+<h4 id="bug-fixes-5-6-33">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-5-6-33"></a></h4>
+<ul><li>
+<strong>Behavior fix:</strong> <code>gtrack.rm("X")</code> followed by <code>gtrack.create_*("X", ...)</code> (and the analogous <code>gintervals.rm</code> + <code>gintervals.save</code> cycle) on the same indexed DB no longer breaks subsequent reads. The process-static index caches keyed by track/intervals directory path were never invalidated, so after rm-then-recreate readers could route to a stale layout and error with <code>Cannot open track.dat: No such file or directory</code> or silently return data from the prior lifecycle. Latent since v5.1.1 (1D tracks and interval sets) and v5.5.0 (2D tracks).</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.6.32" id="misha-5632">misha 5.6.32<a class="anchor" aria-label="anchor" href="#misha-5632"></a></h2>
 <ul><li>Fixed <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code> returning wrong values (and <code>func = "coverage"</code> exploding to huge numbers) when overlapping intervals of mixed lengths fed into the same bin. Older callers using the default <code>func = "weighted.mean"</code> got plausible-looking but algebraically wrong means in affected bins.</li>
