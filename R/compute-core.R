@@ -40,6 +40,16 @@
 #' tab-delimited format
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
+#' @param intervals_join how the output relates to the input intervals data
+#' frame. \code{"id"} (default) appends an \code{intervalID} integer column
+#' carrying the 1-based row index of the originating input interval.
+#' \code{"intervals"} drops \code{intervalID} and instead attaches every column
+#' of the input intervals data frame (coords + metadata) to each output row,
+#' suffixing names that collide with existing output columns with \code{"1"}.
+#' \code{"none"} drops \code{intervalID} and attaches nothing. The
+#' \code{"intervals"} mode is only supported when the result is returned in
+#' memory; combining it with \code{file} or \code{intervals.set.out} raises an
+#' error.
 #' @return If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
 #' an additional column for each of the track expressions and 'columnID'
 #' column.
@@ -64,10 +74,24 @@
 #' )
 #'
 #' @export gextract
-gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL) {
+gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL,
+                     intervals_join = c("id", "intervals", "none")) {
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(intervals) && length(args) < 2 || !is.null(intervals) && length(args) < 1) {
-        stop("Usage: gextract([expr]+, intervals, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL)", call. = FALSE)
+        stop("Usage: gextract([expr]+, intervals, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL, intervals_join = 'id')", call. = FALSE)
+    }
+    intervals_join <- match.arg(intervals_join)
+    if (identical(intervals_join, "intervals")) {
+        if (!is.null(file)) {
+            stop("intervals_join='intervals' cannot be combined with 'file'; extract to memory and write the joined result yourself.", call. = FALSE)
+        }
+        if (!is.null(substitute(intervals.set.out)) && !identical(substitute(intervals.set.out), as.name("NULL"))) {
+            # cheap pre-check; the C++ side also rejects this, but doing it here gives a cleaner trace
+            iso_val <- tryCatch(eval.parent(substitute(intervals.set.out)), error = function(e) NULL)
+            if (!is.null(iso_val)) {
+                stop("intervals_join='intervals' cannot be combined with 'intervals.set.out'; intervals sets carry only numeric value columns.", call. = FALSE)
+            }
+        }
     }
     .gcheckroot()
 
@@ -98,13 +122,16 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
             if (!is.null(intervals)) {
                 if (.ggetOption("gmultitasking")) {
                     strategy <- .gmultitasking_strategy(tracks, intervals, iterator, file, intervals.set.out, band)
-                    if (identical(strategy, "tracks")) {
+                    # The track-parallel R strategy cbinds per-worker results in R; it can't ask
+                    # C++ to attach the intervals data frame. Force the C++ multitask path when
+                    # intervals_join != "id" so the join happens inside the C++ result assembly.
+                    if (identical(strategy, "tracks") && identical(intervals_join, "id")) {
                         res <- .gextract_track_parallel(intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
                     } else {
-                        res <- .gcall("gextract_multitask", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
+                        res <- .gcall("gextract_multitask", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, intervals_join, .misha_env())
                     }
                 } else {
-                    res <- .gcall("C_gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
+                    res <- .gcall("C_gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, intervals_join, .misha_env())
                 }
 
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {

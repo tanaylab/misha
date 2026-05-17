@@ -355,6 +355,19 @@ per_peak <- gextract(c("k27", "atac"),
 
 `arrange(intervalID) |> select(-intervalID)` recovers input row order and drops the helper column.
 
+**Attach the input intervals' columns directly (no R join).** When you want the input `peaks` columns - coords, gene names, scores - on every output row, pass `intervals_join = "intervals"`:
+
+```r
+per_peak <- gextract(c("k27", "atac"),
+                     intervals = peaks, iterator = peaks,
+                     colnames  = c("k27_flank", "atac_summit"),
+                     intervals_join = "intervals")
+# per_peak has chrom/start/end + k27_flank + atac_summit + chrom1/start1/end1
+# + every other column of `peaks` (e.g. gene_id, score, ...)
+```
+
+`intervalID` is dropped; conflicting names from `peaks` get a `"1"` suffix (`chrom` -> `chrom1`). Output rows are in genomic-sort order, not original `peaks` order. The C++ side copies the input columns by `intervalID` index, so this avoids the R-side `dplyr::left_join` round-trip that `misha.ext::gextract.left_join` did and removes the misha.ext dependency for the simple case. Use `intervals_join = "none"` to just drop `intervalID` without attaching anything. Only available when returning to memory; combining with `file=` or `intervals.set.out=` raises an error.
+
 **NA handling - crucial gotcha.** Sparse tracks return NA at unmeasured bins; many dense tracks also have NAs. Fill at extract time, inside the expression:
 
 ```r
@@ -384,7 +397,7 @@ prof <- gextract("epi.k27me3.es",
 m <- gextract("cpgs.meth", intervals = gintervals.all(), iterator = "cpgs.cov")
 ```
 
-**Left-join convenience.** For "extract X and join back to a query frame keeping all input rows even where there's no value", `misha.ext::gextract.left_join(expr, intervals = query, ...)` packages the extract + left-join.
+**Left-join convenience.** For attaching the input intervals' columns to every output row, prefer the built-in `gextract(..., intervals_join = "intervals")`. `misha.ext::gextract.left_join` is the older R-side wrapper that does the same thing via `dplyr::left_join`; equivalent in performance but adds a misha.ext dependency.
 
 **Per-interval descriptive stats in one call.** When you want `nbins / n_nan / min / max / sum / mean / sd` per input region, `gintervals.summary(expr, intervals, iterator)` returns one row per interval with all of them appended:
 

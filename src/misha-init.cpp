@@ -21,8 +21,8 @@ extern "C" {
     extern SEXP gcreate_pwm_energy_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gcreate_pwm_energy(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gcreate_test_computer2d_track(SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP C_gextract(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-    extern SEXP gextract_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_gextract(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP gextract_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gfind_neighbors(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gfind_tracks_n_intervals(SEXP, SEXP);
     extern SEXP gget_tracks_attrs(SEXP, SEXP, SEXP);
@@ -132,8 +132,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gcreate_pwm_energy_multitask", (DL_FUNC)&gcreate_pwm_energy_multitask, 6},
     {"gcreate_pwm_energy", (DL_FUNC)&gcreate_pwm_energy, 6},
     {"gcreate_test_computer2d_track", (DL_FUNC)&gcreate_test_computer2d_track, 5},
-    {"C_gextract", (DL_FUNC)&C_gextract, 8},
-    {"gextract_multitask", (DL_FUNC)&gextract_multitask, 8},
+    {"C_gextract", (DL_FUNC)&C_gextract, 9},
+    {"gextract_multitask", (DL_FUNC)&gextract_multitask, 9},
     {"gfind_neighbors", (DL_FUNC)&gfind_neighbors, 13},
     {"gfind_tracks_n_intervals", (DL_FUNC)&gfind_tracks_n_intervals, 2},
     {"gget_tracks_attrs", (DL_FUNC)&gget_tracks_attrs, 3},
