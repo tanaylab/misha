@@ -1,3 +1,8 @@
+# misha 5.7.0
+
+* New `gintervals.to_mat()` and `gintervals.from_mat()` round-trip intervals + values data.frames to numeric matrices. Fixes a chrom-name corruption bug in `misha.ext::intervs_to_mat()` when chrom names contain underscores. `from_mat` is ~12x faster than the legacy on 1M intervals.
+* `gintervals.to_mat()` gains a `labels = FALSE` argument to skip rowname construction (~25x faster `to_mat` for pipelines that don't need them). The matching `misha.ext` functions are now deprecated.
+
 # misha 5.6.33
 
 ### Performance
