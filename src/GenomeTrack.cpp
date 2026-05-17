@@ -51,6 +51,16 @@ std::shared_ptr<TrackIndex> GenomeTrack::get_track_index(const std::string &trac
 	return idx;
 }
 
+void GenomeTrack::invalidate_index_cache(const std::string &track_dir) {
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	s_index_cache.erase(track_dir);
+}
+
+void GenomeTrack::clear_index_cache() {
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	s_index_cache.clear();
+}
+
 std::string GenomeTrack::get_track_dir(const std::string &filename) {
 	// Extract directory from filename
 	// filename is typically like "/path/to/trackdir/chrN"

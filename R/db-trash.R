@@ -26,8 +26,13 @@
         if (file.exists(path)) {
             return(invisible(FALSE))
         }
+        .gdb.invalidate_dir_cache(path)
         return(invisible(TRUE))
     }
+
+    # Path's contents are gone; drop any cached index entry keyed by it
+    # before recreate-at-same-path resurrects a stale entry.
+    .gdb.invalidate_dir_cache(path)
 
     if (async) {
         cmd <- sprintf("nohup rm -rf -- %s >/dev/null 2>&1 &", shQuote(trash))

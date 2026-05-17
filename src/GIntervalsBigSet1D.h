@@ -108,6 +108,15 @@ private:
 
 	// Helper to get interval set directory from intervset name
 	static std::string get_intervset_dir(const std::string &intervset, SEXP envir);
+
+public:
+	// Drop the cached IntervalsIndex1D for `intervset_dir`. Call after
+	// rm/recreate/convert operations that change the on-disk interval
+	// set contents.
+	static void invalidate_index_cache(const std::string &intervset_dir);
+
+	// Wipe every cached entry.
+	static void clear_index_cache();
 };
 
 //------------------------------------- IMPLEMENTATION ------------------------------------------
