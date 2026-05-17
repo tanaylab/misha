@@ -90,6 +90,16 @@ public:
 	// Returns nullptr if track.idx is not present in track_dir.
 	static std::shared_ptr<TrackIndex> get_track_index(const std::string &track_dir);
 
+	// Drop the cached TrackIndex for `track_dir`. Call this whenever the
+	// on-disk track contents at `track_dir` have changed (rm, create,
+	// convert) so subsequent get_track_index() calls re-read track.idx.
+	// Safe to call when no entry is cached.
+	static void invalidate_index_cache(const std::string &track_dir);
+
+	// Wipe every cached TrackIndex entry. Used by tests and as a coarse
+	// reset when callers cannot enumerate the affected dirs.
+	static void clear_index_cache();
+
 	// Helper to extract track directory from a per-chrom filename.
 	static std::string get_track_dir(const std::string &filename);
 

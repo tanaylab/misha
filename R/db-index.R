@@ -1074,6 +1074,10 @@ gtrack.convert_to_indexed <- function(track = NULL) {
         }
     )
 
+    # Track layout flipped per-chrom -> indexed; any prior cache entry
+    # (nullptr from the per-chrom era) is now wrong.
+    .gdb.invalidate_dir_cache(trackdir)
+
     invisible(0)
 }
 
@@ -1086,6 +1090,9 @@ gtrack.convert_to_indexed <- function(track = NULL) {
         track_dir, as.character(chrom_names), isTRUE(remove_indexed),
         .misha_env()
     )
+    # Track layout flipped indexed -> per-chrom; the cached TrackIndex is
+    # now invalid.
+    .gdb.invalidate_dir_cache(track_dir)
     invisible()
 }
 
@@ -1098,6 +1105,7 @@ gtrack.convert_to_indexed <- function(track = NULL) {
         track_dir, as.character(chrom_names), as.character(track_type),
         .misha_env()
     )
+    .gdb.invalidate_dir_cache(track_dir)
     invisible()
 }
 
@@ -1184,6 +1192,10 @@ gintervals.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE, f
         }
     )
 
+    # Layout flipped per-chrom -> indexed; drop any cached IntervalsIndex1D
+    # entry for this dir.
+    .gdb.invalidate_dir_cache(intervset_path)
+
     invisible(NULL)
 }
 
@@ -1260,6 +1272,12 @@ gtrack.2d.convert_to_indexed <- function(track = NULL, remove.old = FALSE, force
             stop(sprintf("Failed to convert 2D track %s: %s", trackstr, e$message), call. = FALSE)
         }
     )
+
+    # 2D layout flipped per-pair -> indexed; drop any cached TrackIndex2D
+    # for this dir. (The C++ already calls TrackIndex2D::clear_cache() as
+    # a blanket reset; the targeted call here is harmless and keeps the
+    # invariant uniform across paths.)
+    .gdb.invalidate_dir_cache(trackdir)
 
     invisible(0)
 }
@@ -1349,6 +1367,10 @@ gintervals.2d.convert_to_indexed <- function(set.name = NULL, remove.old = FALSE
             stop(sprintf("Failed to convert 2D interval set %s: %s", set.name, e$message), call. = FALSE)
         }
     )
+
+    # 2D bigset layout flipped per-pair -> indexed; drop the cached
+    # IntervalsIndex2D entry for this dir.
+    .gdb.invalidate_dir_cache(intervset_path)
 
     invisible(NULL)
 }
