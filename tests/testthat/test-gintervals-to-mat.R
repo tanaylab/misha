@@ -244,3 +244,37 @@ test_that("from_mat round-trips after row subset", {
     expect_equal(out$chrom, c("chr3", "chr1"))
     expect_equal(out$t1, c(3, 1))
 })
+
+test_that("rbind of two intervs_mat concatenates attr$intervals", {
+    df1 <- data.frame(
+        chrom = "chr1", start = 100L, end = 200L, t1 = 1,
+        stringsAsFactors = FALSE
+    )
+    df2 <- data.frame(
+        chrom = "chr2", start = 300L, end = 400L, t1 = 2,
+        stringsAsFactors = FALSE
+    )
+    m1 <- gintervals.to_mat(df1)
+    m2 <- gintervals.to_mat(df2)
+    combined <- rbind(m1, m2)
+    expect_s3_class(combined, "intervs_mat")
+    expect_equal(nrow(combined), 2L)
+    expect_equal(attr(combined, "intervals")$chrom, c("chr1", "chr2"))
+    expect_equal(attr(combined, "intervals")$start, c(100L, 300L))
+
+    out <- gintervals.from_mat(combined)
+    expect_equal(out$chrom, c("chr1", "chr2"))
+    expect_equal(out$t1, c(1, 2))
+})
+
+test_that("rbind of intervs_mat with plain matrix drops class (no false attr)", {
+    df1 <- data.frame(
+        chrom = "chr1", start = 100L, end = 200L, t1 = 1,
+        stringsAsFactors = FALSE
+    )
+    m1 <- gintervals.to_mat(df1)
+    plain <- matrix(2, nrow = 1, dimnames = list(NULL, "t1"))
+    combined <- rbind(m1, plain)
+    expect_false(inherits(combined, "intervs_mat"))
+    expect_null(attr(combined, "intervals"))
+})

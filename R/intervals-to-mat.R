@@ -134,3 +134,25 @@ gintervals.from_mat <- function(mat, intervals = NULL) {
     rownames(out) <- NULL
     out
 }
+
+rbind.intervs_mat <- function(..., deparse.level = 1) {
+    args <- list(...)
+    all_ours <- all(vapply(args, inherits, logical(1), what = "intervs_mat"))
+
+    bare <- lapply(args, function(a) {
+        b <- unclass(a)
+        attr(b, "intervals") <- NULL
+        b
+    })
+    out <- do.call(rbind, c(bare, list(deparse.level = deparse.level)))
+
+    if (!all_ours) {
+        return(out)
+    }
+
+    intervals <- do.call(rbind, lapply(args, attr, "intervals"))
+    rownames(intervals) <- NULL
+    attr(out, "intervals") <- intervals
+    class(out) <- c("intervs_mat", "matrix", "array")
+    out
+}
