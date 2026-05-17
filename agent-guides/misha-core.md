@@ -119,6 +119,7 @@ Pick the verb by *what's returned*, not by alphabetical proximity.
 | `gintervals.neighbors` | intervals + nearest-feature cols | Nearest-feature annotation; supports `maxdist`/`mindist`. |
 | `gintervals.annotate` | input rows + selected annot cols + `dist` | Column-attach without changing row count or order. |
 | `gintervals.canonic` | merged intervals frame | After rbind / union when you want overlaps merged. |
+| `gintervals.to_mat` / `gintervals.from_mat` | `intervs_mat` (matrix subclass) / data.frame | Round-trip intervals + values to a numeric matrix for PCA / clustering / heatmaps. |
 | `gtrack.create` / `gtrack.smooth` | (side effect) | Materialize a derived track. |
 
 ### Distance - which primitive?
@@ -399,6 +400,16 @@ gextract("score > 5", intervals = gintervals.all(), iterator = 20,
          intervals.set.out = "intervs.high_score")
 ```
 
+**Reshape to a matrix for downstream analysis.** After `gextract`, the typical next step for PCA / clustering / heatmaps is a numeric matrix indexed by interval. `gintervals.to_mat` and its inverse `gintervals.from_mat` round-trip cleanly:
+
+```r
+mat <- gintervals.to_mat(profs)                # N peaks x K tracks; rownames = "chr:start-end"
+pcs <- prcomp(mat, center = TRUE)$x[, 1:5]
+out <- gintervals.from_mat(mat[order(pcs[, 1]), ])  # back to intervals + values
+```
+
+The intervals are carried in `attr(mat, "intervals")` - rownames are display-only and never parsed back, so chrom names containing underscores (`chrUn_KI270442v1`, scaffolds) round-trip safely and `start`/`end` keep integer type. `[`, `head`, `tail`, and `rbind` keep the attribute aligned. Pass `labels = FALSE` to skip rowname construction (~25x faster `to_mat` on large inputs when you don't need to look at them). Pass `id_col = "gene"` (or any column name) to use that column for rownames instead of coordinates. Pass `value_cols = c("t1", "t2")` to subset which numeric columns go into the matrix.
+
 **Avoid:**
 - Looping `gextract` over a vector of tracks. Always one call with `c("track1", "track2", ...)`.
 - Bare unquoted expression arguments. Always use the character-vector form.
@@ -407,6 +418,7 @@ gextract("score > 5", intervals = gintervals.all(), iterator = 20,
 - `iterator = peaks` when you want sub-region resolution. Use `iterator = 20`.
 - Forgetting that `iterator = 20` is chromosome-relative, not interval-relative.
 - Skipping `arrange(intervalID)` when downstream code assumes input row order.
+- `misha.ext::intervs_to_mat` / `mat_to_intervs` - deprecated. Use `gintervals.to_mat` / `gintervals.from_mat` (in misha >= 5.7.0). The legacy versions corrupt chrom names containing underscores and lose integer typing on round-trip.
 
 ### 4.5 Aggregate signal in a flanking window
 
