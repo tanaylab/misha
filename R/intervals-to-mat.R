@@ -22,6 +22,12 @@
 #'   \code{start}, \code{end}, \code{intervalID}. Auto-detect errors if any
 #'   selected column is non-numeric; pass \code{value_cols} explicitly to
 #'   override.
+#' @param labels if \code{TRUE} (default), set \code{rownames(mat)} to either
+#'   \code{df[[id_col]]} (if \code{id_col} is supplied) or
+#'   \code{"chrom:start-end"}. If \code{FALSE}, leave rownames \code{NULL} -
+#'   useful in pipelines that don't need the display labels and would prefer to
+#'   skip the construction cost on large inputs. When \code{FALSE}, the
+#'   \code{id_col} argument is ignored.
 #'
 #' @return An \code{intervs_mat} object: a numeric matrix subclass with the
 #'   intervals attached as \code{attr(., "intervals")}. Supports row/column
@@ -46,7 +52,7 @@
 #' gintervals.from_mat(sub)
 #'
 #' @export
-gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL) {
+gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL, labels = TRUE) {
     if (!is.data.frame(df)) {
         stop("`df` must be a data.frame", call. = FALSE)
     }
@@ -86,13 +92,20 @@ gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL) {
 
     mat <- as.matrix(df[, value_cols, drop = FALSE])
 
-    if (is.null(id_col)) {
-        rownames(mat) <- paste0(df$chrom, ":", df$start, "-", df$end)
-    } else {
-        if (!(id_col %in% names(df))) {
-            stop(sprintf("`id_col` not found in `df`: %s", id_col), call. = FALSE)
+    if (labels) {
+        if (is.null(id_col)) {
+            rownames(mat) <- .Call(
+                "C_intervals_coord_strings",
+                df$chrom,
+                as.integer(df$start),
+                as.integer(df$end)
+            )
+        } else {
+            if (!(id_col %in% names(df))) {
+                stop(sprintf("`id_col` not found in `df`: %s", id_col), call. = FALSE)
+            }
+            rownames(mat) <- as.character(df[[id_col]])
         }
-        rownames(mat) <- as.character(df[[id_col]])
     }
 
     attr(mat, "intervals") <- df[, identity_cols, drop = FALSE]

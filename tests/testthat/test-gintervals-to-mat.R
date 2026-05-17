@@ -278,3 +278,59 @@ test_that("rbind of intervs_mat with plain matrix drops class (no false attr)", 
     expect_false(inherits(combined, "intervs_mat"))
     expect_null(attr(combined, "intervals"))
 })
+
+test_that("labels = FALSE leaves rownames NULL", {
+    df <- data.frame(
+        chrom = c("chr1", "chr2"),
+        start = c(100L, 200L),
+        end = c(200L, 400L),
+        t1 = c(1, 2),
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df, labels = FALSE)
+    expect_null(rownames(mat))
+    expect_equal(attr(mat, "intervals")$chrom, df$chrom)
+    # round-trip still works (identity flows through attribute)
+    out <- gintervals.from_mat(mat)
+    expect_equal(out$chrom, df$chrom)
+    expect_equal(out$t1, df$t1)
+})
+
+test_that("C++ helper output matches the R paste0 reference exactly", {
+    df <- data.frame(
+        chrom = c("chr1", "chrUn_KI270442v1", "chrX"),
+        start = c(1L, 5000L, 100L),
+        end = c(500L, 6000L, 200L),
+        t1 = c(1, 2, 3),
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df) # default labels = TRUE, no id_col -> C path
+    expect_equal(
+        rownames(mat),
+        paste0(df$chrom, ":", df$start, "-", df$end)
+    )
+})
+
+test_that("C++ helper handles factor chrom column", {
+    df <- data.frame(
+        chrom = factor(c("chr1", "chr2", "chr1")),
+        start = c(100L, 200L, 300L),
+        end   = c(200L, 400L, 500L),
+        t1    = c(1, 2, 3)
+    )
+    mat <- gintervals.to_mat(df)
+    expect_equal(
+        rownames(mat),
+        c("chr1:100-200", "chr2:200-400", "chr1:300-500")
+    )
+})
+
+test_that("labels = TRUE with id_col still uses the id_col (not the C path)", {
+    df <- data.frame(
+        chrom = "chr1", start = 100L, end = 200L,
+        gene = "FOO", t1 = 1.0,
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df, id_col = "gene", value_cols = "t1")
+    expect_equal(rownames(mat), "FOO")
+})
