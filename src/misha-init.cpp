@@ -114,6 +114,7 @@ extern "C" {
                                 SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_kmer_dist(SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_ggenome_implant(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+    extern SEXP C_intervals_coord_strings(SEXP, SEXP, SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -223,6 +224,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gsynth_score", (DL_FUNC)&C_gsynth_score, 14},
     {"C_gseq_kmer_dist", (DL_FUNC)&C_gseq_kmer_dist, 4},
     {"C_ggenome_implant", (DL_FUNC)&C_ggenome_implant, 7},
+    {"C_intervals_coord_strings", (DL_FUNC)&C_intervals_coord_strings, 3},
     {NULL, NULL, 0}
 };
 

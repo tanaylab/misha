@@ -74,6 +74,7 @@ reference:
       - gintervals.diff
       - gintervals.exists
       - gintervals.force_range
+      - gintervals.from_mat
       - gintervals.normalize
       - gintervals.annotate
       - gintervals.import_genes
@@ -99,6 +100,7 @@ reference:
       - gintervals.rm
       - gintervals.save
       - gintervals.summary
+      - gintervals.to_mat
       - gintervals.union
       - gintervals.update      
       - gintervals.2d.convert_to_indexed  
