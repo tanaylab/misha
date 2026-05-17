@@ -130,7 +130,7 @@ When posting GitHub PR comments, do not include the "Generated with Claude Code"
 - **Clarity and Conciseness**: Strive for clarity and conciseness in all development activities, from code to documentation.
 - **Modularity**: Keep components modular and well-defined.
 - **Testing**: All new features should be accompanied by tests.
-- **Documentation**: Document new features and changes in the relevant files. For development-related notes, use the `dev/notes/` directory.
+- **Documentation**: Document new features and changes in the relevant files.
 
 ## Notes Policy
 
