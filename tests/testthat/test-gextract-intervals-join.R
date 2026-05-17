@@ -99,6 +99,18 @@ test_that("multitask and serial produce identical results with intervals_join='i
     expect_equal(res_serial, res_mt)
 })
 
+test_that("intervals_join='none' still allows the track-parallel strategy", {
+    intervs <- gscreen("test.fixedbin > 0.2", gintervals(c(1, 2)))
+    withr::local_options(gmultitasking.strategy = "tracks", gmultitasking = TRUE)
+    # 8 expressions is the threshold .gmultitasking_strategy uses for "tracks"; we
+    # also force the option above to ensure the strategy is exercised.
+    exprs <- rep("test.fixedbin", 9)
+    cn <- paste0("v", seq_along(exprs))
+    res <- gextract(exprs, intervals = intervs, intervals_join = "none", colnames = cn)
+    expect_false("intervalID" %in% colnames(res))
+    expect_true(all(c("chrom", "start", "end", cn) %in% colnames(res)))
+})
+
 test_that("intervals_join='intervals' errors on file output", {
     intervs <- make_1d_intervals_with_meta()
     tmp <- tempfile()
