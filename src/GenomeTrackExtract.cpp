@@ -216,10 +216,174 @@ static void set_extract_value_column_names(SEXP answer, unsigned num_interv_cols
 	runprotect(1); // col_names
 }
 
+// intervals_join modes recognized by gextract C entrypoints.
+enum class IntervalsJoinMode {
+	ID,        // keep intervalID (default; current behavior)
+	NONE,      // drop intervalID, attach nothing
+	INTERVALS  // drop intervalID, attach all columns from input intervals data frame
+};
+
+static IntervalsJoinMode parse_intervals_join(SEXP _intervals_join) {
+	if (Rf_isNull(_intervals_join))
+		return IntervalsJoinMode::ID;
+	if (!Rf_isString(_intervals_join) || Rf_length(_intervals_join) != 1)
+		verror("intervals_join must be a single string");
+	const char *s = CHAR(STRING_ELT(_intervals_join, 0));
+	if (!strcmp(s, "id")) return IntervalsJoinMode::ID;
+	if (!strcmp(s, "none")) return IntervalsJoinMode::NONE;
+	if (!strcmp(s, "intervals")) return IntervalsJoinMode::INTERVALS;
+	verror("intervals_join must be one of 'id', 'intervals', 'none' (got '%s')", s);
+	return IntervalsJoinMode::ID;
+}
+
+// Replace the trailing intervalID column of `answer` according to `mode`.
+//   ID        -> return answer unchanged
+//   NONE      -> drop the intervalID column, return a new data frame without it
+//   INTERVALS -> drop intervalID, attach every column of `_intervals` indexed
+//                by the (1-based) intervalID values. Conflicting names get a "1" suffix.
+//
+// Supported input column types: INTSXP (incl. factor), REALSXP, LGLSXP, STRSXP.
+// Anything else triggers a verror naming the column.
+static SEXP transform_intervals_join(SEXP answer, SEXP _intervals, IntervalsJoinMode mode)
+{
+	if (Rf_isNull(answer) || mode == IntervalsJoinMode::ID)
+		return answer;
+
+	SEXP names = Rf_getAttrib(answer, R_NamesSymbol);
+	int n_old = Rf_length(answer);
+	if (n_old == 0)
+		return answer;
+
+	// Locate the intervalID column (last position by construction).
+	int id_idx = n_old - 1;
+	if (Rf_isNull(names) || strcmp(CHAR(STRING_ELT(names, id_idx)), "intervalID") != 0)
+		return answer; // unexpected layout; bail out conservatively
+
+	SEXP id_col = VECTOR_ELT(answer, id_idx);
+	if (TYPEOF(id_col) != INTSXP)
+		verror("internal: intervalID column is not integer");
+	int *id_p = INTEGER(id_col);
+	R_xlen_t nrows = Rf_xlength(id_col);
+
+	if (mode == IntervalsJoinMode::NONE) {
+		// Build a new VECSXP without the intervalID column.
+		SEXP out = rprotect_ptr(RSaneAllocVector(VECSXP, n_old - 1));
+		SEXP out_names = rprotect_ptr(RSaneAllocVector(STRSXP, n_old - 1));
+		for (int i = 0; i < n_old - 1; ++i) {
+			SET_VECTOR_ELT(out, i, VECTOR_ELT(answer, i));
+			SET_STRING_ELT(out_names, i, STRING_ELT(names, i));
+		}
+		Rf_setAttrib(out, R_NamesSymbol, out_names);
+		Rf_setAttrib(out, R_RowNamesSymbol, Rf_getAttrib(answer, R_RowNamesSymbol));
+		Rf_setAttrib(out, R_ClassSymbol, Rf_getAttrib(answer, R_ClassSymbol));
+		return out;
+	}
+
+	// INTERVALS mode: attach columns from `_intervals` indexed by id_p[i] - 1.
+	if (Rf_isNull(_intervals) || !Rf_isVectorList(_intervals))
+		verror("intervals_join='intervals' requires intervals to be a data frame");
+
+	SEXP in_names = Rf_getAttrib(_intervals, R_NamesSymbol);
+	int n_in = Rf_length(_intervals);
+	if (n_in == 0 || Rf_isNull(in_names))
+		verror("intervals_join='intervals' requires a named intervals data frame");
+
+	R_xlen_t intervs_nrows = (n_in > 0) ? Rf_xlength(VECTOR_ELT(_intervals, 0)) : 0;
+
+	// Build target column names: existing answer cols (without intervalID) + renamed input cols.
+	int n_keep = n_old - 1;
+	int n_total = n_keep + n_in;
+
+	SEXP out = rprotect_ptr(RSaneAllocVector(VECSXP, n_total));
+	SEXP out_names = rprotect_ptr(RSaneAllocVector(STRSXP, n_total));
+
+	// Carry over answer columns + their names, except intervalID.
+	for (int i = 0; i < n_keep; ++i) {
+		SET_VECTOR_ELT(out, i, VECTOR_ELT(answer, i));
+		SET_STRING_ELT(out_names, i, STRING_ELT(names, i));
+	}
+
+	// Build a name set for collision detection (existing answer cols only).
+	// O(n_keep * n_in) is fine - typical column counts are < 50.
+	auto name_clashes = [&](const char *nm) -> bool {
+		for (int i = 0; i < n_keep; ++i) {
+			if (!strcmp(nm, CHAR(STRING_ELT(names, i))))
+				return true;
+		}
+		return false;
+	};
+
+	for (int j = 0; j < n_in; ++j) {
+		SEXP in_col = VECTOR_ELT(_intervals, j);
+		const char *col_nm = CHAR(STRING_ELT(in_names, j));
+
+		// Compute output column name (append "1" once on conflict).
+		std::string out_nm = col_nm;
+		if (name_clashes(col_nm))
+			out_nm += "1";
+		SET_STRING_ELT(out_names, n_keep + j, Rf_mkChar(out_nm.c_str()));
+
+		// Copy values by id index.
+		int in_type = TYPEOF(in_col);
+		SEXP new_col = R_NilValue;
+		switch (in_type) {
+			case INTSXP: {
+				new_col = rprotect_ptr(RSaneAllocVector(INTSXP, nrows));
+				int *src = INTEGER(in_col);
+				int *dst = INTEGER(new_col);
+				for (R_xlen_t i = 0; i < nrows; ++i) {
+					int idx = id_p[i] - 1;
+					if (idx < 0 || idx >= intervs_nrows)
+						verror("internal: intervalID %d out of range for intervals (nrows=%lld)", id_p[i], (long long)intervs_nrows);
+					dst[i] = src[idx];
+				}
+				// Preserve factor levels/class if present.
+				SEXP levs = Rf_getAttrib(in_col, R_LevelsSymbol);
+				if (!Rf_isNull(levs)) {
+					Rf_setAttrib(new_col, R_LevelsSymbol, levs);
+					Rf_setAttrib(new_col, R_ClassSymbol, Rf_getAttrib(in_col, R_ClassSymbol));
+				}
+				break;
+			}
+			case REALSXP: {
+				new_col = rprotect_ptr(RSaneAllocVector(REALSXP, nrows));
+				double *src = REAL(in_col);
+				double *dst = REAL(new_col);
+				for (R_xlen_t i = 0; i < nrows; ++i)
+					dst[i] = src[id_p[i] - 1];
+				break;
+			}
+			case LGLSXP: {
+				new_col = rprotect_ptr(RSaneAllocVector(LGLSXP, nrows));
+				int *src = LOGICAL(in_col);
+				int *dst = LOGICAL(new_col);
+				for (R_xlen_t i = 0; i < nrows; ++i)
+					dst[i] = src[id_p[i] - 1];
+				break;
+			}
+			case STRSXP: {
+				new_col = rprotect_ptr(RSaneAllocVector(STRSXP, nrows));
+				for (R_xlen_t i = 0; i < nrows; ++i)
+					SET_STRING_ELT(new_col, i, STRING_ELT(in_col, id_p[i] - 1));
+				break;
+			}
+			default:
+				verror("intervals_join='intervals': column '%s' has unsupported type (%s); supported types are integer, double, logical, character, factor",
+					col_nm, Rf_type2char(in_type));
+		}
+		SET_VECTOR_ELT(out, n_keep + j, new_col);
+	}
+
+	Rf_setAttrib(out, R_NamesSymbol, out_names);
+	Rf_setAttrib(out, R_RowNamesSymbol, Rf_getAttrib(answer, R_RowNamesSymbol));
+	Rf_setAttrib(out, R_ClassSymbol, Rf_getAttrib(answer, R_ClassSymbol));
+	return out;
+}
+
 
 extern "C" {
 
-SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_policy, SEXP _band, SEXP _file, SEXP _intervals_set_out, SEXP _envir)
+SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_policy, SEXP _band, SEXP _file, SEXP _intervals_set_out, SEXP _intervals_join, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -242,6 +406,14 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 
 		if (!Rf_isNull(_file) && !Rf_isNull(_intervals_set_out))
 			verror("Cannot use both file and intervals.set.out arguments");
+
+		IntervalsJoinMode join_mode = parse_intervals_join(_intervals_join);
+		if (join_mode == IntervalsJoinMode::INTERVALS) {
+			if (!Rf_isNull(_file))
+				verror("intervals_join='intervals' cannot be combined with 'file'");
+			if (!Rf_isNull(_intervals_set_out))
+				verror("intervals_join='intervals' cannot be combined with 'intervals.set.out'");
+		}
 
 		const char *filename = Rf_isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
 		string intervset_out = Rf_isNull(_intervals_set_out) ? "" : CHAR(STRING_ELT(_intervals_set_out, 0));
@@ -564,7 +736,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			Rf_setAttrib(fb_answer, R_RowNamesSymbol, fb_rownames);
 			Rf_setAttrib(fb_answer, R_ClassSymbol, Rf_mkString("data.frame"));
 
-			return fb_answer;
+			return transform_intervals_join(fb_answer, _intervals, join_mode);
 		}
 
 		// We have a good estimate — use direct-to-R pre-allocation.
@@ -801,7 +973,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 		Rf_setAttrib(answer, R_RowNamesSymbol, r_row_names);
 		Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
 
-		return answer;
+		return transform_intervals_join(answer, _intervals, join_mode);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
 	} catch (const bad_alloc &e) {
@@ -810,7 +982,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 	return R_NilValue;
 }
 
-SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_policy, SEXP _band, SEXP _file, SEXP _intervals_set_out, SEXP _envir)
+SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_policy, SEXP _band, SEXP _file, SEXP _intervals_set_out, SEXP _intervals_join, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -834,6 +1006,14 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 
 		if (!Rf_isNull(_file) && !Rf_isNull(_intervals_set_out))
 			verror("Cannot use both file and intervals.set.out arguments");
+
+		IntervalsJoinMode join_mode = parse_intervals_join(_intervals_join);
+		if (join_mode == IntervalsJoinMode::INTERVALS) {
+			if (!Rf_isNull(_file))
+				verror("intervals_join='intervals' cannot be combined with 'file'");
+			if (!Rf_isNull(_intervals_set_out))
+				verror("intervals_join='intervals' cannot be combined with 'intervals.set.out'");
+		}
 
 		const char *filename = Rf_isNull(_file) ? NULL : CHAR(STRING_ELT(_file, 0));
 		unsigned num_exprs = (unsigned)Rf_length(_exprs);
@@ -1082,7 +1262,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 							estimated_records = inflate_estimated_records(iu, base_estimated_records, max_records_factor);
 							continue;
 						}
-					return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _envir);
+					return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _intervals_join, _envir);
 				}
 				throw;
 			}
@@ -1204,12 +1384,12 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				log_gextract_timing("parent_gather_ms", gather_ms);
 				log_gextract_timing("parent_assemble_ms", assemble_ms);
 			}
-            rreturn(answer);
+            rreturn(transform_intervals_join(answer, _intervals, join_mode));
 		}
 	} catch (TGLException &e) {
 		string msg(e.msg());
 		if (msg.find("Result size exceeded the maximal allowed") != string::npos) {
-			return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, _file, _intervals_set_out, _envir);
+			return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, _file, _intervals_set_out, _intervals_join, _envir);
 		}
 		rerror("%s", e.msg());
 	} catch (const bad_alloc &e) {

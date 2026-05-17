@@ -45,7 +45,7 @@ The silent footguns - code runs, output looks plausible, downstream conclusions 
 
 **A13. `iterator = 20` and assuming bin offsets are interval-relative.** Integer iterators are *chromosome-relative* - two peaks at different chromosome offsets get *misaligned* bin grids. If you need bin indices anchored to each peak's start, use `giterator.intervals(... interval_relative = TRUE)` (with the caveat that dense source tracks still align to their stored bin grid).
 
-**A14. Skipping `arrange(intervalID)` (or `order(.$intervalID)`) on gextract output.** With `gmultitasking = TRUE`, `gextract` returns rows in chunked-chromosome order, not input order. If the downstream code indexes by row position into the original peaks frame, the result is silently shuffled. Always `arrange(intervalID) |> select(-intervalID)` or equivalent.
+**A14. Skipping `arrange(intervalID)` (or `order(.$intervalID)`) on gextract output.** With `gmultitasking = TRUE`, `gextract` returns rows in chunked-chromosome order, not input order. If the downstream code indexes by row position into the original peaks frame, the result is silently shuffled. Always `arrange(intervalID) |> select(-intervalID)` or equivalent. If you want the input intervals' columns on every output row (the most common reason to need `intervalID`), use `gextract(..., intervals_join = "intervals")` instead - the C++ side attaches them inline, keyed by `intervalID`, with no R join.
 
 ## Quantiles / thresholds
 
