@@ -71,10 +71,15 @@ local_db_state <- function(env = parent.frame()) {
         NULL
     }
 
-    # Register cleanup
+    # Register cleanup. Guard against the saved GROOT having been deleted
+    # between save and restore -- happens when a prior test file used
+    # create_isolated_test_db(), whose deferred cleanup unlinks the tmpdir
+    # but leaves .misha$GROOT pointing at it. Tests that don't actually use
+    # GROOT (e.g. ggenome.implant with an explicit fasta) shouldn't fail on
+    # this stale pointer.
     withr::defer(
         {
-            if (!is.null(original_groot)) {
+            if (!is.null(original_groot) && dir.exists(original_groot)) {
                 suppressMessages(gdb.init(original_groot))
             }
         },
@@ -145,6 +150,12 @@ create_isolated_test_db <- function() {
     withr::defer(
         {
             unlink(testdb_dir, recursive = TRUE)
+            # Clear GROOT if it still points at the dir we just deleted, so
+            # the next test file doesn't inherit a dangling pointer.
+            if (exists("GROOT", envir = .misha, inherits = FALSE) &&
+                identical(get("GROOT", envir = .misha), testdb_dir)) {
+                rm("GROOT", envir = .misha)
+            }
         },
         envir = parent.frame()
     )
