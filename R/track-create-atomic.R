@@ -80,6 +80,12 @@
                     call. = FALSE
                 )
             }
+            # Drop any stale cache entry for final_dir left over from a
+            # previous track lifecycle at this path. Without this, readers
+            # consulting GenomeTrack::s_index_cache may route to the wrong
+            # layout (e.g., open a non-existent track.dat on what is now
+            # a per-chrom track).
+            .gdb.invalidate_dir_cache(final_dir)
             success <- TRUE
         },
         finally = {

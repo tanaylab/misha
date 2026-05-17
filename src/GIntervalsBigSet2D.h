@@ -116,6 +116,15 @@ private:
 	// Helper to get interval set directory from intervset name
 	static std::string get_intervset_dir(const std::string &intervset, SEXP envir);
 
+public:
+	// Drop the cached IntervalsIndex2D for `intervset_dir`. Call after
+	// rm/recreate/convert operations.
+	static void invalidate_index_cache(const std::string &intervset_dir);
+
+	// Wipe every cached entry.
+	static void clear_index_cache();
+
+private:
 	int chroms2idx(int chromid1, int chromid2) const { return GIntervalsMeta2D::chroms2idx(chromid1, chromid2); }
 	int idx2chrom1(int idx) const { return GIntervalsMeta2D::idx2chrom1(idx); }
 	int idx2chrom2(int idx) const { return GIntervalsMeta2D::idx2chrom2(idx); }
