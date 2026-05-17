@@ -1,3 +1,12 @@
+# misha (development version)
+
+### New features
+
+* New `glm_pred` virtual track type: a fused per-position GLM predictor over an arbitrary number of motif tracks with multi-axis strata defined by `selector_tracks` + `selector_breaks`. `glm_pred.create()` writes the model, `glm_pred.ls/info/rm` manage it, and the track is consumed via the usual `gextract` / `gscreen` paths. Weights/bias/interaction weights are labeled multi-axis arrays (`dim = c(N, K_1, ..., K_M)`); single-selector still accepts a plain `matrix(N, K_1)`.
+* Added `glm_extract_features()`: single C++ call that replaces the R training-side pipeline (chunked `gextract` -> scale -> pivot -> logistic transforms -> GC interactions) with one pass over motif + GC tracks, returning the full `n_peaks x n_features` matrix. Multithreaded with per-chromosome handle reuse.
+* Added `glm_batch_quantiles()`: parallel exact genome-wide quantiles for a batch of motif tracks (e.g. p=0.9999 per-motif caps for `glm_extract_features`). Bypasses `gquantiles` / virtual tracks; ~1.7x faster per track.
+* `gquantiles`, `gsummary`, `gscreen` accept a vector of expressions and return a `data.frame` for multi-track calls (single-expression matrix returns unchanged). An optimized C++ fast path runs automatically for bare-track / simple-vtrack shapes in `gsummary` / `gscreen`; `gquantiles` opts in via `fast = TRUE` (>=5x faster for extreme quantiles on a 10-motif benchmark).
+
 # misha 5.10.2
 
 * **Performance fix:** a single-function `lse` (or `sum`/`exists`/`size`) virtual track scanned over a sliding window (`gvtrack.iterator(sshift=, eshift=)`) genome-wide is fast again. Since 5.6.7 a single-function "fast path" recomputed the windowed reduction from scratch on every step, bypassing the incremental sliding-window path; the common motif-energy quantile workload (windowed `lse` + `gquantiles`/`gscreen`) was ~2.5x slower (worse with wider windows). Such single-function reducers now keep the sliding-window path. Output is unchanged.
