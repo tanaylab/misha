@@ -20,10 +20,7 @@ extern "C" SEXP C_intervals_coord_strings(SEXP chrom_sxp, SEXP start_sxp, SEXP e
     if (!chrom_is_factor && !chrom_is_char) {
         Rf_error("`chrom` must be character or factor");
     }
-    if (!chrom_is_factor && XLENGTH(chrom_sxp) != n) {
-        Rf_error("`chrom` length mismatch");
-    }
-    if (chrom_is_factor && XLENGTH(chrom_sxp) != n) {
+    if (XLENGTH(chrom_sxp) != n) {
         Rf_error("`chrom` length mismatch");
     }
 

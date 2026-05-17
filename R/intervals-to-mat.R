@@ -88,6 +88,17 @@ gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL, labels = TRU
                 paste(missing_vals, collapse = ", ")
             ), call. = FALSE)
         }
+        non_numeric <- value_cols[!vapply(df[value_cols], is.numeric, logical(1))]
+        if (length(non_numeric) > 0) {
+            stop(sprintf(
+                "Non-numeric value column(s): %s. `value_cols` must select numeric columns only.",
+                paste(non_numeric, collapse = ", ")
+            ), call. = FALSE)
+        }
+    }
+
+    if (!is.null(id_col) && !(id_col %in% names(df))) {
+        stop(sprintf("`id_col` not found in `df`: %s", id_col), call. = FALSE)
     }
 
     mat <- as.matrix(df[, value_cols, drop = FALSE])
@@ -101,9 +112,6 @@ gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL, labels = TRU
                 as.integer(df$end)
             )
         } else {
-            if (!(id_col %in% names(df))) {
-                stop(sprintf("`id_col` not found in `df`: %s", id_col), call. = FALSE)
-            }
             rownames(mat) <- as.character(df[[id_col]])
         }
     }
@@ -126,10 +134,13 @@ gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL, labels = TRU
 #' @param ... unused
 #' @param drop if \code{TRUE} and a single row is selected via \code{i},
 #'   collapse to a named vector and drop the class. Defaults to \code{TRUE}
-#'   to match base matrix \code{[} for row selection.
+#'   to match base matrix \code{[} for row selection. Column-only subsets
+#'   (\code{i} missing) are never dropped to a vector, even if \code{j}
+#'   selects a single column - this preserves the row-interval correspondence.
 #'
 #' @return An \code{intervs_mat} (still 2D), or a numeric vector (degenerate).
 #'
+#' @keywords internal
 #' @export
 `[.intervs_mat` <- function(x, i, j, ..., drop = TRUE) {
     intervals <- attr(x, "intervals")
@@ -260,6 +271,8 @@ gintervals.from_mat <- function(mat, intervals = NULL) {
 #' @return An \code{intervs_mat} if all inputs were \code{intervs_mat};
 #'   otherwise a plain matrix.
 #'
+#' @seealso [gintervals.to_mat()]
+#' @keywords internal
 #' @export
 rbind.intervs_mat <- function(..., deparse.level = 1) {
     args <- list(...)

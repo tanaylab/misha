@@ -17,7 +17,9 @@
 
 \item{drop}{if \code{TRUE} and a single row is selected via \code{i},
 collapse to a named vector and drop the class. Defaults to \code{TRUE}
-to match base matrix \code{[} for row selection.}
+to match base matrix \code{[} for row selection. Column-only subsets
+(\code{i} missing) are never dropped to a vector, even if \code{j}
+selects a single column - this preserves the row-interval correspondence.}
 }
 \value{
 An \code{intervs_mat} (still 2D), or a numeric vector (degenerate).
@@ -28,3 +30,4 @@ parallel. Column-only subset leaves the intervals attribute unchanged.
 Single-row results with \code{drop = TRUE} return a plain numeric vector
 (class dropped).
 }
+\keyword{internal}

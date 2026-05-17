@@ -334,3 +334,46 @@ test_that("labels = TRUE with id_col still uses the id_col (not the C path)", {
     mat <- gintervals.to_mat(df, id_col = "gene", value_cols = "t1")
     expect_equal(rownames(mat), "FOO")
 })
+
+test_that("explicit value_cols also errors on non-numeric column", {
+    df <- data.frame(
+        chrom = "chr1", start = 100L, end = 200L,
+        gene = "FOO", t1 = 1.0,
+        stringsAsFactors = FALSE
+    )
+    expect_error(gintervals.to_mat(df, value_cols = c("t1", "gene")),
+        "Non-numeric value column.*gene",
+        fixed = FALSE
+    )
+})
+
+test_that("id_col is validated even when labels = FALSE", {
+    df <- data.frame(
+        chrom = "chr1", start = 100L, end = 200L, t1 = 1.0,
+        stringsAsFactors = FALSE
+    )
+    expect_error(gintervals.to_mat(df, id_col = "nope", labels = FALSE),
+        "`id_col` not found",
+        fixed = FALSE
+    )
+})
+
+test_that("head() and tail() dispatch through [ and preserve intervs_mat", {
+    df <- data.frame(
+        chrom = paste0("chr", 1:5),
+        start = (1:5) * 100L,
+        end = (1:5) * 100L + 50L,
+        t1 = 1:5 * 1.0,
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df)
+    h <- head(mat, 2)
+    expect_s3_class(h, "intervs_mat")
+    expect_equal(nrow(h), 2L)
+    expect_equal(attr(h, "intervals")$chrom, c("chr1", "chr2"))
+
+    t <- tail(mat, 2)
+    expect_s3_class(t, "intervs_mat")
+    expect_equal(nrow(t), 2L)
+    expect_equal(attr(t, "intervals")$chrom, c("chr4", "chr5"))
+})

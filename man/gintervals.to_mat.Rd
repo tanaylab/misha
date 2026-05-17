@@ -4,7 +4,7 @@
 \alias{gintervals.to_mat}
 \title{Convert intervals + values data.frame to an interval-indexed matrix}
 \usage{
-gintervals.to_mat(df, id_col = NULL, value_cols = NULL)
+gintervals.to_mat(df, id_col = NULL, value_cols = NULL, labels = TRUE)
 }
 \arguments{
 \item{df}{data.frame with \code{chrom}, \code{start}, \code{end} and zero
@@ -21,6 +21,13 @@ If \code{NULL} (default), auto-detect: all columns except \code{chrom},
 \code{start}, \code{end}, \code{intervalID}. Auto-detect errors if any
 selected column is non-numeric; pass \code{value_cols} explicitly to
 override.}
+
+\item{labels}{if \code{TRUE} (default), set \code{rownames(mat)} to either
+\code{df[[id_col]]} (if \code{id_col} is supplied) or
+\code{"chrom:start-end"}. If \code{FALSE}, leave rownames \code{NULL} -
+useful in pipelines that don't need the display labels and would prefer to
+skip the construction cost on large inputs. When \code{FALSE}, the
+\code{id_col} argument is ignored.}
 }
 \value{
 An \code{intervs_mat} object: a numeric matrix subclass with the

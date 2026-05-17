@@ -21,3 +21,7 @@ Concatenates the rows of the matrices AND the rows of their
 falls back to plain matrix \code{rbind} (the result is a base matrix with
 no intervals attribute).
 }
+\seealso{
+[gintervals.to_mat()]
+}
+\keyword{internal}
