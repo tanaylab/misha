@@ -74,6 +74,7 @@
 <url><loc>/reference/gintervals.diff.html</loc></url>
 <url><loc>/reference/gintervals.exists.html</loc></url>
 <url><loc>/reference/gintervals.force_range.html</loc></url>
+<url><loc>/reference/gintervals.from_mat.html</loc></url>
 <url><loc>/reference/gintervals.html</loc></url>
 <url><loc>/reference/gintervals.import_bed.html</loc></url>
 <url><loc>/reference/gintervals.import_genes.html</loc></url>
@@ -96,6 +97,7 @@
 <url><loc>/reference/gintervals.rm.html</loc></url>
 <url><loc>/reference/gintervals.save.html</loc></url>
 <url><loc>/reference/gintervals.summary.html</loc></url>
+<url><loc>/reference/gintervals.to_mat.html</loc></url>
 <url><loc>/reference/gintervals.union.html</loc></url>
 <url><loc>/reference/gintervals.update.html</loc></url>
 <url><loc>/reference/giterator.cartesian_grid.html</loc></url>
@@ -185,5 +187,7 @@
 <url><loc>/reference/misha-package.html</loc></url>
 <url><loc>/reference/pipe.html</loc></url>
 <url><loc>/reference/print.gsynth.model.html</loc></url>
+<url><loc>/reference/rbind.intervs_mat.html</loc></url>
+<url><loc>/reference/sub-.intervs_mat.html</loc></url>
 </urlset>
 
