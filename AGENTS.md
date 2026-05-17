@@ -1,3 +1,10 @@
+> **For AI coding agents working on the misha source code.** This is the
+> *development* guide - workflow, hooks, build, test, release, contribution
+> conventions. It is **not** user documentation. If you (or whoever invoked
+> you) want to know how to *use* misha, read the
+> [README](README.md) and the
+> [package docs](https://tanaylab.github.io/misha/) instead.
+
 ## Initial Setup
 
 After cloning, install the repo's git hooks (one-time, per clone):
