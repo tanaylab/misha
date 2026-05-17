@@ -172,3 +172,75 @@ test_that("round-trip preserves chrom names containing underscores", {
     expect_equal(out$end, df$end)
     expect_equal(out$t1, df$t1)
 })
+
+test_that("[ row subset keeps attr$intervals aligned", {
+    df <- data.frame(
+        chrom = c("chr1", "chr1", "chr2"),
+        start = c(100L, 500L, 200L),
+        end = c(200L, 700L, 400L),
+        t1 = c(1, 2, 3), t2 = c(10, 20, 30),
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df)
+    sub <- mat[c(1, 3), ]
+    expect_s3_class(sub, "intervs_mat")
+    expect_equal(nrow(sub), 2L)
+    expect_equal(attr(sub, "intervals")$chrom, c("chr1", "chr2"))
+    expect_equal(attr(sub, "intervals")$start, c(100L, 200L))
+    expect_equal(rownames(sub), c("chr1:100-200", "chr2:200-400"))
+})
+
+test_that("[ column subset leaves attr$intervals unchanged", {
+    df <- data.frame(
+        chrom = "chr1", start = 100L, end = 200L,
+        t1 = 1, t2 = 2, t3 = 3,
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df)
+    sub <- mat[, c("t1", "t3")]
+    expect_s3_class(sub, "intervs_mat")
+    expect_equal(colnames(sub), c("t1", "t3"))
+    expect_equal(attr(sub, "intervals"), attr(mat, "intervals"))
+})
+
+test_that("[ drop=TRUE on single row returns vector and drops class", {
+    df <- data.frame(
+        chrom = c("chr1", "chr2"),
+        start = c(100L, 200L), end = c(200L, 400L),
+        t1 = c(1, 2), t2 = c(10, 20),
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df)
+    v <- mat[1, ]
+    expect_false(inherits(v, "intervs_mat"))
+    expect_null(attr(v, "intervals"))
+    expect_equal(as.numeric(v), c(1, 10))
+})
+
+test_that("[ drop=FALSE on single row preserves class and attr", {
+    df <- data.frame(
+        chrom = c("chr1", "chr2"),
+        start = c(100L, 200L), end = c(200L, 400L),
+        t1 = c(1, 2),
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df)
+    one <- mat[1, , drop = FALSE]
+    expect_s3_class(one, "intervs_mat")
+    expect_equal(nrow(one), 1L)
+    expect_equal(attr(one, "intervals")$chrom, "chr1")
+})
+
+test_that("from_mat round-trips after row subset", {
+    df <- data.frame(
+        chrom = c("chr1", "chr2", "chr3"),
+        start = c(100L, 200L, 300L),
+        end = c(200L, 400L, 600L),
+        t1 = c(1, 2, 3),
+        stringsAsFactors = FALSE
+    )
+    mat <- gintervals.to_mat(df)
+    out <- gintervals.from_mat(mat[c(3, 1), ])
+    expect_equal(out$chrom, c("chr3", "chr1"))
+    expect_equal(out$t1, c(3, 1))
+})

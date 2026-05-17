@@ -55,6 +55,48 @@ gintervals.to_mat <- function(df, id_col = NULL, value_cols = NULL) {
     mat
 }
 
+`[.intervs_mat` <- function(x, i, j, ..., drop = TRUE) {
+    intervals <- attr(x, "intervals")
+    bare <- unclass(x)
+    attr(bare, "intervals") <- NULL
+
+    i_missing <- missing(i)
+    j_missing <- missing(j)
+
+    # Always subset with drop=FALSE to preserve matrix dims.  We apply the
+    # caller's `drop` ourselves at the end, but only along the row axis and
+    # only when the caller actually supplied `i`.  Column-only subsets never
+    # collapse rows regardless of `drop`.
+    if (i_missing && j_missing) {
+        out <- bare[, , drop = FALSE]
+        row_selected <- FALSE
+    } else if (i_missing) {
+        out <- bare[, j, drop = FALSE]
+        row_selected <- FALSE
+    } else if (j_missing) {
+        out <- bare[i, , drop = FALSE]
+        intervals <- intervals[i, , drop = FALSE]
+        rownames(intervals) <- NULL
+        row_selected <- TRUE
+    } else {
+        out <- bare[i, j, drop = FALSE]
+        intervals <- intervals[i, , drop = FALSE]
+        rownames(intervals) <- NULL
+        row_selected <- TRUE
+    }
+
+    # Collapse to a named vector only when the caller specified `i` and the
+    # result has a single row and `drop = TRUE`.
+    if (row_selected && drop && nrow(out) == 1L) {
+        v <- out[1L, ]
+        return(v)
+    }
+
+    attr(out, "intervals") <- intervals
+    class(out) <- c("intervs_mat", "matrix", "array")
+    out
+}
+
 gintervals.from_mat <- function(mat, intervals = NULL) {
     if (inherits(mat, "intervs_mat")) {
         if (!is.null(intervals)) {
