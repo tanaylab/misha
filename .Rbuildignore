@@ -26,6 +26,7 @@
 ^CLAUDE\.md$
 ^AGENTS\.md$
 ^CONTRIBUTING\.md$
+^agent-guides($|/)
 ^dev$
 ^conda-recipe$
 ^.+.fa$

@@ -18,6 +18,9 @@ misha.Rcheck/
 ADAPTIVE_MEMORY_PLAN.md
 *.md
 !CONTRIBUTING.md
+!AGENTS.md
+!agent-guides/
+!agent-guides/*.md
 dev
 tests/testthat/tmpresfile
 *.fa
