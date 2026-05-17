@@ -1,3 +1,7 @@
+# misha 5.7.0
+
+* New `gintervals.to_mat()` and `gintervals.from_mat()` round-trip an intervals + values data.frame to a numeric matrix indexed by intervals. Intervals are carried in an attribute (rownames are display-only and never parsed back), fixing the corruption that occurred in the legacy `misha.ext::intervs_to_mat()` when chrom names contained underscores. The matching `misha.ext` functions are now deprecated thin wrappers.
+
 # misha 5.6.33
 
 ### Performance
