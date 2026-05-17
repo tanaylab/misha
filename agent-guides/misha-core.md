@@ -33,7 +33,7 @@ Three storage shapes:
 
 `gtrack.ls("pattern", perl=TRUE)` lists tracks; `gtrack.exists(name)` is the idempotency guard.
 
-**On-disk format.** Older trackdbs store one file per chromosome inside each track's directory. Newer trackdbs use an **indexed** format - `track.dat` + `track.idx` per track - which scales to thousands of contigs without dragging the filesystem. The R API hides this entirely: `gextract`, `gscreen`, etc. work on both formats. **Do not reason from per-chromosome files on disk; always go through the API.** Convert an existing trackdb (or a single track) to the indexed form with `gdb.convert_to_indexed()`, `gtrack.convert_to_indexed(track, remove.old = FALSE)`, or `gtrack.2d.convert_to_indexed(track, ...)` - important for fragmented assemblies (Zoonomia-style multi-contig genomes) where the per-chromosome layout is unworkable.
+**On-disk format.** Older trackdbs store one file per chromosome inside each track's directory. Newer trackdbs use an **indexed** format - `track.dat` + `track.idx` per track - which scales to thousands of contigs without dragging the filesystem. The R API hides this entirely: `gextract`, `gscreen`, etc. work on both formats. **Do not reason from per-chromosome files on disk; always go through the API.** Convert an existing trackdb (or a single track) to the indexed form with `gdb.convert_to_indexed(convert_tracks = TRUE, convert_intervals = TRUE)` (both flags default to `FALSE`, so the bare call is a no-op), `gtrack.convert_to_indexed(track)`, or `gtrack.2d.convert_to_indexed(track, ...)` - important for fragmented assemblies (Zoonomia-style multi-contig genomes) where the per-chromosome layout is unworkable.
 
 ### 1.3 Intervals
 

@@ -15,7 +15,7 @@ This wires up a pre-commit hook (styler on staged R files, blocks `dev/`)
 and a pre-push hook (`pkgbuild::compile_dll` on `src/` changes,
 `devtools::document()` on `R/` changes).
 
-## Running current R code 
+## Running current R code
 
 To run the current R code, use the following command:
 
@@ -53,7 +53,7 @@ R -e "devtools::check()"
 
 **Always prefer running all tests in parallel and not doing it one by one. It would be significantly slower without parallelism**
 
-## Adding debug prints in C++ code 
+## Adding debug prints in C++ code
 
 To add debug prints in C++ code, use REprintf.
 
@@ -64,7 +64,7 @@ Remove it afterwards, and compile the package with `R -e "pkgbuild::clean_dll();
 
 R -e 'styler::style_pkg(indent_by = 4); devtools::document()'
 
-## Adding new functions 
+## Adding new functions
 
 Add @export to roxygen documentation and run documentation. Add to _pkgdown.yml. Test with `R -e 'devtools::test(filter = "name_of_test_file_without_extension")'` and run `R -e "devtools::check()"`.
 
