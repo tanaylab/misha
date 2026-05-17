@@ -228,7 +228,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                             end = bed_parsed$intervals$end,
                             value = as.numeric(bed_parsed$values)
                         )
-                        .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, .misha_env())
+                        .gcall("gtrack_create_dense", trackstr, intervalData, binsize, defval, "weighted.mean", .misha_env())
                     } else {
                         .gcall("gtrack_create_sparse", trackstr, bed_parsed$intervals, bed_parsed$values, .misha_env())
                     }
