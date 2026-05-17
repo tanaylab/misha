@@ -109,11 +109,46 @@
 </h2>
 <p>See the <a href="https://tanaylab.github.io/misha/articles/Genomes.html" class="external-link">Genomes</a> vignette for instructions on how to create a misha database for common genomes.</p>
 <p>See the <a href="https://tanaylab.github.io/misha/articles/Manual.html" class="external-link">user manual</a> for more usage details.</p>
+<div class="section level3">
+<h3 id="using-misha-with-an-llm-agent">Using misha with an LLM agent<a class="anchor" aria-label="anchor" href="#using-misha-with-an-llm-agent"></a>
+</h3>
+<p>For agents (Claude Code, Copilot, Cursor, etc.) writing misha analysis code in a downstream project, point them at the maintained agent guides in this repo:</p>
+<ul>
+<li>
+<a href="https://github.com/tanaylab/misha/blob/master/agent-guides/misha-core.md" class="external-link"><code>agent-guides/misha-core.md</code></a>
+<ul>
+<li>concepts, bootstrap, and the everyday recipes (intervals, annotation, distance, extract, vtracks, gscreen, gdist, gtrack.create). Start here.</li>
+</ul>
+</li>
+<li>
+<a href="https://github.com/tanaylab/misha/blob/master/agent-guides/misha-advanced.md" class="external-link"><code>agent-guides/misha-advanced.md</code></a>
+<ul>
+<li>2D / Hi-C pile-ups, insulation, sequence and PWM tracks, bulk import/export, new genomes and cross-species.</li>
+</ul>
+</li>
+<li>
+<a href="https://github.com/tanaylab/misha/blob/master/agent-guides/misha-anti-patterns.md" class="external-link"><code>agent-guides/misha-anti-patterns.md</code></a>
+<ul>
+<li>silent footguns referenced inline from the above.</li>
+</ul>
+</li>
+</ul>
+<p>The core guide is ~4k words and targets a system-prompt-sized context. For Claude Code-style setups, dropping <code>misha-core.md</code> (or all three) into the project’s <code>CLAUDE.md</code> / <code>AGENTS.md</code> is the intended use.</p>
+<p><strong>Drop-in prompt (no clone needed).</strong> Paste the block below into your agent at the start of a misha task. It points the agent at the raw files on GitHub, so it works without a local checkout:</p>
+<pre><code>Before writing any misha code, fetch and read:
+
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-core.md  (mandatory: concepts + everyday recipes)
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-anti-patterns.md  (silent footguns; cross-referenced from core)
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-advanced.md  (consult on demand: 2D / Hi-C, PWM, import/export, new genomes)
+
+Follow the conventions in those files. When you hit a recipe with an
+"Avoid:" block, treat it as a hard rule.</code></pre>
+<p>Pin to a release tag for stability by replacing <code>master</code> with any tag that contains <code>agent-guides/</code> (the directory landed in <code>v5.7.0</code>, so <code>v5.7.0</code> or later).</p>
 <div class="section level4">
 <h4 id="running-scripts-from-old-versions-of-misha--420">Running scripts from old versions of misha (&lt; 4.2.0)<a class="anchor" aria-label="anchor" href="#running-scripts-from-old-versions-of-misha--420"></a>
 </h4>
 <p>Starting in <code>misha</code> 4.2.0, the package no longer stores global variables such as <code>ALLGENOME</code> or <code>GROOT</code>. Instead, these variables are stored in a special environment called <code>.misha</code>. This means that scripts written for older versions of <code>misha</code> will no longer work. To run such scripts, either add a prefix of <code>.misha$</code> to all those variables (<code>.misha$ALLGENOME</code> instead of <code>ALLGENOME</code>), or run the following command before running the script:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ALLGENOME</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span></span>
 <span><span class="va">GROOT</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GROOT</span></span>
 <span><span class="va">ALLGENOME</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">ALLGENOME</span></span>
@@ -122,6 +157,7 @@
 <span><span class="va">GROOT</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GROOT</span></span>
 <span><span class="va">GWD</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GWD</span></span>
 <span><span class="va">GTRACKS</span> <span class="op">&lt;&lt;-</span> <span class="va">.misha</span><span class="op">$</span><span class="va">GTRACKS</span></span></code></pre></div>
+</div>
 </div>
 </div>
 </div>
