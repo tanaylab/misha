@@ -122,11 +122,16 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
             if (!is.null(intervals)) {
                 if (.ggetOption("gmultitasking")) {
                     strategy <- .gmultitasking_strategy(tracks, intervals, iterator, file, intervals.set.out, band)
-                    # The track-parallel R strategy cbinds per-worker results in R; it can't ask
-                    # C++ to attach the intervals data frame. Force the C++ multitask path when
-                    # intervals_join != "id" so the join happens inside the C++ result assembly.
-                    if (identical(strategy, "tracks") && identical(intervals_join, "id")) {
+                    # Track-parallel cbinds per-worker results in R; it can't ask C++ to
+                    # attach the input intervals data frame, so intervals_join="intervals"
+                    # must force the C++ multitask path. intervals_join="none" stays
+                    # compatible because it only drops the intervalID column, which we can
+                    # do in R after track-parallel returns.
+                    if (identical(strategy, "tracks") && !identical(intervals_join, "intervals")) {
                         res <- .gextract_track_parallel(intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
+                        if (identical(intervals_join, "none") && is.data.frame(res) && "intervalID" %in% colnames(res)) {
+                            res$intervalID <- NULL
+                        }
                     } else {
                         res <- .gcall("gextract_multitask", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, intervals_join, .misha_env())
                     }
