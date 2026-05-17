@@ -1,6 +1,3 @@
-# gintervals.to_mat / gintervals.from_mat
-# See dev/notes/features/2026-05-17_gintervals-to-mat-design.md
-
 #' Convert intervals + values data.frame to an interval-indexed matrix
 #'
 #' Builds a numeric matrix of value columns whose rows are indexed by
