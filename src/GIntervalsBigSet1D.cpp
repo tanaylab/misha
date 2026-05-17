@@ -36,6 +36,16 @@ std::string GIntervalsBigSet1D::get_intervset_dir(const std::string &intervset, 
 	return interv2path(envir, intervset.c_str());
 }
 
+void GIntervalsBigSet1D::invalidate_index_cache(const std::string &intervset_dir) {
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	s_index_cache.erase(intervset_dir);
+}
+
+void GIntervalsBigSet1D::clear_index_cache() {
+	std::lock_guard<std::mutex> lock(s_cache_mutex);
+	s_index_cache.clear();
+}
+
 void GIntervalsBigSet1D::init(const char *intervset, SEXP meta, const IntervUtils &iu)
 {
 	GIntervalsBigSet::init(intervset, iu);

@@ -97,7 +97,11 @@ public:
     // Get-or-load the 2D track index for a track directory (thread-safe)
     static std::shared_ptr<TrackIndex2D> get_track_index_2d(const std::string &track_dir);
 
-    // Clear the index cache
+    // Drop the cached entry for `track_dir`. Call after rm/recreate/convert
+    // operations that change the on-disk track contents.
+    static void invalidate_cache(const std::string &track_dir);
+
+    // Clear every cached entry (used by 2D conversion and tests).
     static void clear_cache();
 
     // Write a 2D index file

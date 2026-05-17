@@ -249,6 +249,11 @@ std::shared_ptr<TrackIndex2D> TrackIndex2D::get_track_index_2d(const std::string
     }
 }
 
+void TrackIndex2D::invalidate_cache(const std::string &track_dir) {
+    std::lock_guard<std::mutex> lock(s_cache_mutex);
+    s_index_cache.erase(track_dir);
+}
+
 void TrackIndex2D::clear_cache() {
     std::lock_guard<std::mutex> lock(s_cache_mutex);
     s_index_cache.clear();
