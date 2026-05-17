@@ -1,5 +1,4 @@
 # Tests for dataset API
-# Following spec: dev/notes/2026-01-13-dataset-api-spec.md
 # Note: create_test_db() helper is defined in helper-test_db.R
 
 # ==============================================================================

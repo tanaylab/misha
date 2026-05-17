@@ -5,8 +5,6 @@
 #   gdb.list_genomes()           - list resolvable genome names
 #   gdb.genome_info()            - show resolved recipe without building
 #   gdb.install_gff3_converter() - pre-install UCSC's gff3ToGenePred binary
-#
-# Spec: dev/notes/specs/2026-04-30_genome-build-design.md
 
 # ---------------------------------------------------------------------------
 # Internal constants
