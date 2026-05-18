@@ -1,3 +1,7 @@
+# misha 5.7.1
+
+* Fixed `gtrack.import()` of BED files with `binsize` failing with `func argument is not a string`. The BED-to-dense path was not updated when `gtrack.create_dense()` gained the `func` argument in 5.6.31; it now passes the historical `"weighted.mean"` default.
+
 # misha 5.7.0
 
 * New `gintervals.to_mat()` and `gintervals.from_mat()` round-trip an intervals + values data.frame to a numeric matrix indexed by intervals. Pass `labels = FALSE` to skip rowname construction.
