@@ -11,7 +11,8 @@ gextract(
   iterator = NULL,
   band = NULL,
   file = NULL,
-  intervals.set.out = NULL
+  intervals.set.out = NULL,
+  intervals_join = c("id", "intervals", "none")
 )
 }
 \arguments{
@@ -32,6 +33,17 @@ tab-delimited format}
 
 \item{intervals.set.out}{intervals set name where the function result is
 optionally outputted}
+
+\item{intervals_join}{how the output relates to the input intervals data
+frame. \code{"id"} (default) appends an \code{intervalID} integer column
+carrying the 1-based row index of the originating input interval.
+\code{"intervals"} drops \code{intervalID} and instead attaches every column
+of the input intervals data frame (coords + metadata) to each output row,
+suffixing names that collide with existing output columns with \code{"1"}.
+\code{"none"} drops \code{intervalID} and attaches nothing. The
+\code{"intervals"} mode is only supported when the result is returned in
+memory; combining it with \code{file} or \code{intervals.set.out} raises an
+error.}
 }
 \value{
 If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with

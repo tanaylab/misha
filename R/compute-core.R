@@ -40,6 +40,16 @@
 #' tab-delimited format
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
+#' @param intervals_join how the output relates to the input intervals data
+#' frame. \code{"id"} (default) appends an \code{intervalID} integer column
+#' carrying the 1-based row index of the originating input interval.
+#' \code{"intervals"} drops \code{intervalID} and instead attaches every column
+#' of the input intervals data frame (coords + metadata) to each output row,
+#' suffixing names that collide with existing output columns with \code{"1"}.
+#' \code{"none"} drops \code{intervalID} and attaches nothing. The
+#' \code{"intervals"} mode is only supported when the result is returned in
+#' memory; combining it with \code{file} or \code{intervals.set.out} raises an
+#' error.
 #' @return If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
 #' an additional column for each of the track expressions and 'columnID'
 #' column.
@@ -64,10 +74,24 @@
 #' )
 #'
 #' @export gextract
-gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL) {
+gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL,
+                     intervals_join = c("id", "intervals", "none")) {
     args <- as.list(substitute(list(...)))[-1L]
     if (is.null(intervals) && length(args) < 2 || !is.null(intervals) && length(args) < 1) {
-        stop("Usage: gextract([expr]+, intervals, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL)", call. = FALSE)
+        stop("Usage: gextract([expr]+, intervals, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL, intervals_join = 'id')", call. = FALSE)
+    }
+    intervals_join <- match.arg(intervals_join)
+    if (identical(intervals_join, "intervals")) {
+        if (!is.null(file)) {
+            stop("intervals_join='intervals' cannot be combined with 'file'; extract to memory and write the joined result yourself.", call. = FALSE)
+        }
+        if (!is.null(substitute(intervals.set.out)) && !identical(substitute(intervals.set.out), as.name("NULL"))) {
+            # cheap pre-check; the C++ side also rejects this, but doing it here gives a cleaner trace
+            iso_val <- tryCatch(eval.parent(substitute(intervals.set.out)), error = function(e) NULL)
+            if (!is.null(iso_val)) {
+                stop("intervals_join='intervals' cannot be combined with 'intervals.set.out'; intervals sets carry only numeric value columns.", call. = FALSE)
+            }
+        }
     }
     .gcheckroot()
 
@@ -76,6 +100,20 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
     if (is.null(intervals)) {
         intervals <- eval.parent(args[[length(args)]])
         args <- args[1:(length(args) - 1)]
+    }
+
+    # For intervals_join='intervals' we'll attach chrom1 (or chrom11/chrom21
+    # for 2D) to a potentially 10s-of-millions-of-rows output. Normalizing
+    # those joined chrom columns on the output is O(N) and dominates the
+    # post-process cost. Normalize the input intervals' chrom columns ONCE up
+    # front (cheap - same shape as the user's intervals), so the joined
+    # columns are already canonical and we can skip the wide-row pass below.
+    .pre_normalized <- FALSE
+    if (identical(intervals_join, "intervals") &&
+        is.data.frame(intervals) &&
+        !isTRUE(.ggetOption("gmulticontig.indexed_format"))) {
+        intervals <- .gnormalize_chrom_names(intervals)
+        .pre_normalized <- TRUE
     }
 
     tracks <- c()
@@ -98,13 +136,21 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
             if (!is.null(intervals)) {
                 if (.ggetOption("gmultitasking")) {
                     strategy <- .gmultitasking_strategy(tracks, intervals, iterator, file, intervals.set.out, band)
-                    if (identical(strategy, "tracks")) {
+                    # Track-parallel cbinds per-worker results in R; it can't ask C++ to
+                    # attach the input intervals data frame, so intervals_join="intervals"
+                    # must force the C++ multitask path. intervals_join="none" stays
+                    # compatible because it only drops the intervalID column, which we can
+                    # do in R after track-parallel returns.
+                    if (identical(strategy, "tracks") && !identical(intervals_join, "intervals")) {
                         res <- .gextract_track_parallel(intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
+                        if (identical(intervals_join, "none") && is.data.frame(res) && "intervalID" %in% colnames(res)) {
+                            res$intervalID <- NULL
+                        }
                     } else {
-                        res <- .gcall("gextract_multitask", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
+                        res <- .gcall("gextract_multitask", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, intervals_join, .misha_env())
                     }
                 } else {
-                    res <- .gcall("C_gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, .misha_env())
+                    res <- .gcall("C_gextract", intervals, tracks, colnames, .iterator, band, file, intervals.set.out, intervals_join, .misha_env())
                 }
 
                 if (!is.null(intervals.set.out) && .gintervals.is_bigset(intervals.set.out, FALSE) && !.gintervals.needs_bigset(intervals.set.out)) {
@@ -133,7 +179,11 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 
     # Output normalization (chrom aliases) is only needed for per-chromosome DBs.
     # Indexed multi-contig stores canonical chrom names already; skip to avoid extra O(N) passes.
-    if (!isTRUE(.ggetOption("gmulticontig.indexed_format"))) {
+    # Additionally skip when intervals_join='intervals' already pre-normalized
+    # the input intervals: the iterator chrom comes from C++ (canonical by
+    # construction) and the joined chrom* columns are canonical via the
+    # upstream normalization.
+    if (!isTRUE(.ggetOption("gmulticontig.indexed_format")) && !.pre_normalized) {
         res <- normalize_output(res)
     }
 
