@@ -120,7 +120,7 @@
         # mclapply forks; on Windows fall back to the regular tile-parallel path.
         return(.gcall(
             "gextract_multitask", intervals, tracks, colnames,
-            iterator, band, file, intervals.set.out, envir
+            iterator, band, file, intervals.set.out, "id", envir
         ))
     }
 
@@ -146,7 +146,7 @@
         on.exit(options(old_mt), add = TRUE)
         .gcall(
             "C_gextract", intervals, chunks[[idx]], chunks_names[[idx]],
-            iterator, band, NULL, NULL, envir
+            iterator, band, NULL, NULL, "id", envir
         )
     }
 

@@ -1,5 +1,6 @@
 # misha 5.7.1
 
+* `gextract()` gains an `intervals_join` argument with values `"id"` (default; current behavior), `"intervals"` (drop `intervalID`, attach the input intervals data frame's columns to each output row), or `"none"` (drop `intervalID`). Built-in replacement for `misha.ext::gextract.left_join`, around 2x faster on wide-window workloads (e.g. TSS +/- 5kb at 50bp iterator).
 * Fixed `gtrack.import()` of BED files with `binsize` failing with `func argument is not a string`. The BED-to-dense path was not updated when `gtrack.create_dense()` gained the `func` argument in 5.6.31; it now passes the historical `"weighted.mean"` default.
 
 # misha 5.7.0
