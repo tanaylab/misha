@@ -119,7 +119,7 @@ Pick the verb by *what's returned*, not by alphabetical proximity.
 | `gintervals.neighbors` | intervals + nearest-feature cols | Nearest-feature annotation; supports `maxdist`/`mindist`. |
 | `gintervals.annotate` | input rows + selected annot cols + `dist` | Column-attach without changing row count or order. |
 | `gintervals.canonic` | merged intervals frame | After rbind / union when you want overlaps merged. |
-| `gintervals.to_mat` / `gintervals.from_mat` | `intervs_mat` (matrix subclass) / data.frame | Round-trip intervals + values to a numeric matrix for PCA / clustering / heatmaps. |
+| `gintervals.to_mat` / `gintervals.from_mat` | `intervs_mat` (matrix subclass) / data.frame | Round-trip intervals + values to a numeric matrix for clustering / heatmaps. |
 | `gtrack.create` / `gtrack.smooth` | (side effect) | Materialize a derived track. |
 
 ### Distance - which primitive?
@@ -148,8 +148,6 @@ Pick the verb by *what's returned*, not by alphabetical proximity.
 | Wrong | Right | Why it bites |
 |---|---|---|
 | `gquantiles(x, probs = 0.9)` | `gquantiles(x, percentiles = 0.9)` | `probs` is silently ignored; default `percentiles = 0.5` (median) is used. |
-| `gvtrack.create(..., eshif = W)` | `..., eshift = W` | Partial-match binds `eshif` to `eshift = 0` - half-window. |
-| `options(gmutitasking = FALSE)` | `options(gmultitasking = FALSE)` | `options()` accepts unknown names silently; no-op. |
 | Bare unquoted track names: `gextract(epi.k27me3.es, ...)` | `gextract("epi.k27me3.es", ...)` | The character-vector form is unambiguous and works with sprintf'd names. |
 
 ## 4. Recipes
@@ -400,7 +398,7 @@ gextract("score > 5", intervals = gintervals.all(), iterator = 20,
          intervals.set.out = "intervs.high_score")
 ```
 
-**Reshape to a matrix for downstream analysis.** After `gextract`, the typical next step for PCA / clustering / heatmaps is a numeric matrix indexed by interval. `gintervals.to_mat` and its inverse `gintervals.from_mat` round-trip cleanly:
+**Reshape to a matrix for downstream analysis.** After `gextract`, the typical next step for clustering / heatmaps is a numeric matrix indexed by interval. `gintervals.to_mat` and its inverse `gintervals.from_mat` round-trip cleanly:
 
 ```r
 mat <- gintervals.to_mat(profs)                # N peaks x K tracks; rownames = "chr:start-end"
