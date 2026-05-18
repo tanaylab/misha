@@ -52,12 +52,14 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 		vector<float> vals;
 		char filename[FILENAME_MAX];
 		bool is_csv = false;
+		string wig_err_msg;
 
 		try {
 			wig.init(iu.get_chromkey(), fname, true);
 		} catch (TGLException &e) {
 			if (e.type() != typeid(Wig) || e.code() == Wig::FILE_ERROR)
 				throw e;
+			wig_err_msg = e.msg();
 			is_csv = true;
 		}
 
@@ -69,7 +71,8 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 			} catch (TGLException &e) {
 				if (e.type() != typeid(GenomeArraysCsv) || e.code() == GenomeArraysCsv::FILE_ERROR)
 					throw e;
-				verror("Unrecognized format of file %s", fname);
+				verror("Unrecognized format of file %s.\nWIG parser error: %s\nCSV parser error: %s",
+				       fname, wig_err_msg.c_str(), e.msg());
 			}
 		}
 

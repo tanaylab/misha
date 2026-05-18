@@ -1,3 +1,7 @@
+# misha 5.7.2
+
+* `gtrack.import()` of a malformed WIG/CSV file now surfaces the underlying parser error (file name, line number, what was wrong) instead of the opaque `Unrecognized format of file ...`. Makes typical failure modes (e.g. a value line glued to a fixedStep header from a botched cat-style concatenation) diagnosable at a glance.
+
 # misha 5.7.1
 
 * `gextract()` gains an `intervals_join` argument with values `"id"` (default; current behavior), `"intervals"` (drop `intervalID`, attach the input intervals data frame's columns to each output row), or `"none"` (drop `intervalID`). Built-in replacement for `misha.ext::gextract.left_join`, around 2x faster on wide-window workloads (e.g. TSS +/- 5kb at 50bp iterator).
