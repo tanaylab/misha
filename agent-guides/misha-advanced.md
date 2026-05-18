@@ -66,19 +66,20 @@ mat <- spat |>
 
 **Goal.** From a 2D contact track (Hi-C / capture-HiC), build a feature-pair contact density matrix - e.g. CTCF × CTCF, enhancer × promoter - stratified by genomic distance.
 
-**Build a 2D pair iterator.** `giterator.cartesian_grid(intervals1, expansion1, intervals2, expansion2, min.band.idx, max.band.idx)` produces a 2D iterator over the cartesian product of two 1D intervals sets, each row expanded by `expansionN`:
+**Build a 2D pair iterator.** `giterator.cartesian_grid(intervals1, expansion1, intervals2, expansion2, min.band.idx, max.band.idx)` produces a 2D iterator over the cartesian product of two 1D intervals sets, each row expanded by `expansionN`.
+
+Self-pair (CTCF × CTCF) restricted to a cis off-diagonal band - the common case. `intervals2 = NULL` makes it a self-pair, which is the form that supports `min.band.idx` / `max.band.idx`:
 
 ```r
-sites_x <- gintervals.load("intervs.ctcf_peaks")
-sites_y <- gintervals.load("intervs.ctcf_peaks")
+sites <- gintervals.load("intervs.ctcf_peaks")
 
 it <- giterator.cartesian_grid(
-    intervals1   = sites_x, expansion1 = 1000,
-    intervals2   = sites_y, expansion2 = 1000,
+    intervals1   = sites,  expansion1 = 1000,
+    intervals2   = NULL,   expansion2 = 1000,
     min.band.idx = 1, max.band.idx = Inf)         # cis-only, off-diagonal
 ```
 
-`min.band.idx` / `max.band.idx` restrict to a diagonal band - `1, Inf` is "off-diagonal cis only", `1, 1` is "near-diagonal", `0, 0` is "diagonal only".
+`min.band.idx` / `max.band.idx` restrict to a diagonal band - `1, Inf` is "off-diagonal cis only", `1, 1` is "near-diagonal", `0, 0` is "diagonal only". **Constraint:** band-index filtering requires `intervals2 = NULL`. For an explicit pair of two different intervals sets (`sites_x` × `sites_y`), pass `intervals2 = sites_y` and omit `min.band.idx` / `max.band.idx` - the band filter is unavailable in that mode.
 
 **Aggregate contacts in the 2D window per pair.**
 
@@ -91,16 +92,22 @@ pair_mat <- gextract("obs", intervals = it, iterator = it,
 
 `band = c(-1e8, -1e3)` keeps only contacts at least 1kb off-diagonal. The `band =` arg is a 2D-specific feature of `gextract` / `gscreen` / `gdist`.
 
-**Per-axis distance binning** (asymmetric feature pile-up):
+**Per-axis distance binning** (asymmetric feature pile-up). Use the explicit-pair iterator (two different intervals sets, no band filter):
 
 ```r
+sites_x <- gintervals.load("intervs.ctcf_peaks")
+sites_y <- gintervals.load("intervs.global.tss")
+it_pair <- giterator.cartesian_grid(
+    intervals1 = sites_x, expansion1 = 1000,
+    intervals2 = sites_y, expansion2 = 1000)        # no band.idx in explicit-pair mode
+
 gvtrack.create("dx", src = sites_x, func = "distance.center"); gvtrack.iterator("dx", dim = 1)
 gvtrack.create("dy", src = sites_y, func = "distance.center"); gvtrack.iterator("dy", dim = 2)
 
 h <- gdist("dx", dist_breaks,
            "dy", dist_breaks,
            "obs", obs_breaks,
-           intervals = gintervals.2d.all(), iterator = it, include.lowest = TRUE)
+           intervals = gintervals.2d.all(), iterator = it_pair, include.lowest = TRUE)
 # Collapse the obs-value axis to (dx, dy) mean obs, weighting each obs-bin by
 # its midpoint (not its lower edge) and dividing by the total count per cell:
 mids   <- (head(obs_breaks, -1) + tail(obs_breaks, -1)) / 2
