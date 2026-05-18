@@ -59,27 +59,83 @@ For ChIP/ATAC/CUT&Tag pileup tracks, prefer `gtrack.create_dense(..., func = "co
 
 ## Liftover: intervals vs tracks
 
-Two related but distinct operations. By corpus frequency, the intervals form is dominant (~76 files, 17+ projects, used by ronisto, nettam, atanay, nimrodra, ofirr, aviezerl); the track form is much rarer.
+Two related operations. By corpus frequency the intervals form dominates (~76 files across 17+ projects: ronisto, nettam, atanay, nimrodra, ofirr, aviezerl, effi, evghenic). `gintervals.liftover` was substantially extended in the last year — picking the right policy combo is now the load-bearing decision.
 
-**Intervals across assemblies** — `gintervals.liftover(intervs, chain = "<srcToTgt>.over.chain.fixed1")`. Standard lab idiom: switch to the target assembly first, lift, then recenter to a fixed width and clamp:
+### Canonical idiom: lift then recenter
 
 ```r
 gsetroot("/path/to/mm9")   # target assembly
 lifted <- gintervals.liftover(intervs_mm10, chain = "mm10ToMm9.over.chain.fixed1")
 
-# Recenter to a fixed 300bp window so stretched / shrunk intervals don't
-# confound downstream extracts:
+# Recenter to a fixed 300bp window so stretched/shrunk intervals don't confound downstream extracts:
 mid          <- round((lifted$start + lifted$end) / 2)
 lifted$start <- mid - 150
 lifted$end   <- mid + 150
-lifted       <- gintervals.force_range(lifted)   # clamp to chrom bounds
+lifted       <- gintervals.force_range(lifted)        # clamp to chrom bounds
 # If overlap-free output is required (e.g. for sparse-track creation):
 # lifted    <- gintervals.canonic(lifted)
 ```
 
-Two non-negotiable post-liftover steps: `gintervals.force_range` (lifted intervals can extend past chrom ends — `gintervals()` then rejects them with `end coordinate exceeds chromosome boundaries`) and, if you need a non-overlapping set, `gintervals.canonic` (lifted intervals may overlap). Chain files are basename-passed and resolved via misha's chain-search path; `gintervals.load_chain(file)` lets you preload + inspect a chain.
+Two non-negotiable post-liftover steps: `gintervals.force_range` (lifted intervals can extend past chrom ends — `gintervals()` then rejects them with `end coordinate exceeds chromosome boundaries`) and, if disjoint output is required, `gintervals.canonic` (lifted intervals may overlap).
 
-**Whole tracks across assemblies** — `gtrack.liftover(track, desc, src.track.dir, chain, multi_target_agg = "mean")`. Reads every bin in the source track, projects via the chain, and aggregates contributors landing on the same target locus per `multi_target_agg` (`mean` / `median` / `sum` / `min` / `max` / `max.coverage_len` / etc.). The aggregation policy is load-bearing: defaults can drop most of the signal if many bins fold into one. On indexed destination DBs the writer skips the per-chrom placeholder files (5.6.30+).
+Output always carries `intervalID` (index into the input) and `chain_id` (which chain produced the mapping). The `chain_id` is essential when a source interval lifted via multiple chains (duplications): two rows with the same `intervalID` but different `chain_id` are distinct mappings.
+
+### Policy chooser
+
+**`src_overlap_policy` — source position mapped by multiple chains (paralogs / duplications):**
+
+| Value | When to use |
+|---|---|
+| `"error"` (default) | Strict: fail if input contains source duplications. Right for curated chains and 1:1 lift between close assemblies (mm9↔mm10, hg19↔hg38) |
+| `"keep"` | Cross-species / paralog-rich (e.g. cross-primate). One source → many output rows; distinguish by `chain_id` |
+| `"discard"` | Drop any source that has duplications. Use when downstream tooling can't tolerate ambiguity |
+
+**`tgt_overlap_policy` — multiple chains converging on overlapping target loci:**
+
+| Value | When to use |
+|---|---|
+| `"auto"` / `"auto_score"` (default) | Segment target overlaps and pick the highest-scoring chain per segment. Right default for almost everything |
+| `"auto_longer"` | Prefer the longer chain per segment. Useful when alignment scores are noisy or uniform across the chain file |
+| `"auto_first"` | Prefer the lowest `chain_id` per segment (= original chain-file order). Use when the chain file encodes ranked preference |
+| `"keep"` | Leave target overlaps untouched (downstream must handle them) |
+| `"discard"` | Drop any chain involved in a target overlap |
+| `"agg"` | Segment into disjoint regions and retain all contributors per region. **Pair with `value_col` + `multi_target_agg`** for proper value aggregation |
+| `"best_source_cluster"` | Cluster chains by source-side overlap: keep every "true duplication" cluster (chains whose source intervals overlap) but pick only the largest "conflicting alternative" cluster (disjoint source intervals). For paralog-aware lifts where you want duplications but not alternative competing mappings |
+| `"best_cluster_union"` / `"best_cluster_sum"` / `"best_cluster_max"` | Cluster-best variants for specialised cases (cluster scoring by union / sum / max). Most users want `"best_source_cluster"` or `"auto_score"` |
+
+**`min_score = N`** — filter out chains with alignment score below N. Useful with public chain files that include low-confidence alignments (e.g. liftOver's chains from older UCSC builds).
+
+### Lifting a value column
+
+When source intervals carry a value (peak score, methylation level, deep-learning prediction, …) and you need that value in the output, pass `value_col`. Pair with `tgt_overlap_policy = "agg"` so target-side conflicts are segmented and contributors aggregated:
+
+```r
+gintervals.liftover(intervs_with_score, chain,
+                    value_col          = "score",
+                    tgt_overlap_policy = "agg",
+                    multi_target_agg   = "mean",      # or sum / max / max.coverage_len / ...
+                    na.rm              = TRUE,
+                    min_n              = 1)            # require >=1 non-NA contributor per row
+```
+
+`multi_target_agg` choices: `mean` (default) / `median` / `sum` / `min` / `max` / `count` / `first` / `last` / `nth` (set `params = N`) / `max.coverage_len` / `min.coverage_len` / `max.coverage_frac` / `min.coverage_frac`. Pick deliberately — the default is `"mean"`, which is wrong for count-like or coverage-weighted values. The `na.rm` and `min_n` knobs are only consulted when `value_col` is set.
+
+### Other flags
+
+- `include_metadata = TRUE` adds a `score` column to the output (from the winning chain per row). Only meaningful with `tgt_overlap_policy = "auto"` / `"auto_score"`. Use when you want to threshold or weight lifted intervals by alignment quality post-lift.
+- `canonic = TRUE` merges adjacent target intervals that share the same `(intervalID, chain_id)` — collapses chain-gap splits into one row per source/chain. Cheaper than running `gintervals.canonic` after the fact when that's the only canonicalisation you need.
+
+### Pre-loaded chains + hand-built chains
+
+`gintervals.load_chain(file, src_overlap_policy, tgt_overlap_policy, src_groot, min_score)` parses a chain file once and stamps the policies as attributes on the returned data.frame. Reusing it across many `gintervals.liftover` calls is much faster than re-parsing per call. Once policies are baked in this way, `gintervals.liftover` rejects attempts to override them — set them at load time.
+
+`src_groot` is a path to the source-assembly groot; when provided, `gintervals.load_chain` validates that chain source chroms and coordinates exist there. Cheap safety net before a long batch.
+
+`gintervals.as_chain(intervals, src_overlap_policy, tgt_overlap_policy, min_score)` promotes an arbitrary data.frame with the chain columns (`chrom, start, end, strand, chromsrc, startsrc, endsrc, strandsrc, chain_id, score`) into a chain — for synthesised or hand-edited chains.
+
+### gtrack.liftover
+
+Whole-track form. Shares the `multi_target_agg` enum with `gintervals.liftover` (no `value_col` argument — the track's value IS the value column). Same caveat: the default `"mean"` can hide signal when many source bins fold to one target locus; for coverage / count tracks prefer `"sum"` or one of `max.coverage_*` / `min.coverage_*`. On indexed destination DBs the writer skips per-chrom placeholder files (5.6.30+).
 
 ## Validating a multi-file concatenated source before import
 
