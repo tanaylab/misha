@@ -102,6 +102,20 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
         args <- args[1:(length(args) - 1)]
     }
 
+    # For intervals_join='intervals' we'll attach chrom1 (or chrom11/chrom21
+    # for 2D) to a potentially 10s-of-millions-of-rows output. Normalizing
+    # those joined chrom columns on the output is O(N) and dominates the
+    # post-process cost. Normalize the input intervals' chrom columns ONCE up
+    # front (cheap - same shape as the user's intervals), so the joined
+    # columns are already canonical and we can skip the wide-row pass below.
+    .pre_normalized <- FALSE
+    if (identical(intervals_join, "intervals") &&
+        is.data.frame(intervals) &&
+        !isTRUE(.ggetOption("gmulticontig.indexed_format"))) {
+        intervals <- .gnormalize_chrom_names(intervals)
+        .pre_normalized <- TRUE
+    }
+
     tracks <- c()
     for (track in args) {
         tracks <- c(tracks, do.call(.gexpr2str, list(track), envir = parent.frame()))
@@ -165,7 +179,11 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 
     # Output normalization (chrom aliases) is only needed for per-chromosome DBs.
     # Indexed multi-contig stores canonical chrom names already; skip to avoid extra O(N) passes.
-    if (!isTRUE(.ggetOption("gmulticontig.indexed_format"))) {
+    # Additionally skip when intervals_join='intervals' already pre-normalized
+    # the input intervals: the iterator chrom comes from C++ (canonical by
+    # construction) and the joined chrom* columns are canonical via the
+    # upstream normalization.
+    if (!isTRUE(.ggetOption("gmulticontig.indexed_format")) && !.pre_normalized) {
         res <- normalize_output(res)
     }
 
