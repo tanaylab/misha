@@ -358,6 +358,8 @@ gvtrack.create("ctcf_region",
 
 **Goal.** Get external data into the misha track DB and round-trip tracks back out to standard formats for browser viewing, deposition, sharing.
 
+For the deep version (format chooser across all 9+ import paths, pre-import validation for concatenated inputs, post-import sanity protocol, failure-mode lookup) read [`skills/importing-tracks/SKILL.md`](skills/importing-tracks/SKILL.md). The recipes below are the everyday shorthand.
+
 **bigWig / WIG / TSV → dense fixed-bin track.**
 
 ```r

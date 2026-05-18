@@ -62,6 +62,8 @@ in this repo:
   import/export, new genomes and cross-species.
 - [`agent-guides/misha-anti-patterns.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-anti-patterns.md)
   - silent footguns referenced inline from the above.
+- [`agent-guides/skills/`](https://github.com/tanaylab/misha/tree/master/agent-guides/skills)
+  - deep playbooks for specific tasks. Currently: [`importing-tracks`](https://github.com/tanaylab/misha/blob/master/agent-guides/skills/importing-tracks/SKILL.md) (format chooser across all `gtrack.*import*` variants + pre/post-import validation). Load when the task specifically calls for one of these.
 
 The core guide is ~4k words and targets a system-prompt-sized context.
 For Claude Code-style setups, dropping `misha-core.md` (or all three)
