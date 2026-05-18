@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.2</span>
       </span>
     </div>
 
@@ -63,9 +63,14 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.7.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.7.2" id="misha-572">misha 5.7.2<a class="anchor" aria-label="anchor" href="#misha-572"></a></h2>
+<ul><li>
+<code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> of a malformed WIG/CSV file now surfaces the underlying parser error (file name, line number, what was wrong) instead of the opaque <code>Unrecognized format of file ...</code>. Makes typical failure modes (e.g. a value line glued to a fixedStep header from a botched cat-style concatenation) diagnosable at a glance.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.7.1" id="misha-571">misha 5.7.1<a class="anchor" aria-label="anchor" href="#misha-571"></a></h2>
 <ul><li>
