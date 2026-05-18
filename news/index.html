@@ -68,7 +68,9 @@
 
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.7.1" id="misha-571">misha 5.7.1<a class="anchor" aria-label="anchor" href="#misha-571"></a></h2>
-<ul><li>Fixed <code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> of BED files with <code>binsize</code> failing with <code>func argument is not a string</code>. The BED-to-dense path was not updated when <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code> gained the <code>func</code> argument in 5.6.31; it now passes the historical <code>"weighted.mean"</code> default.</li>
+<ul><li>
+<code><a href="../reference/gextract.html">gextract()</a></code> gains an <code>intervals_join</code> argument with values <code>"id"</code> (default; current behavior), <code>"intervals"</code> (drop <code>intervalID</code>, attach the input intervals data frame’s columns to each output row), or <code>"none"</code> (drop <code>intervalID</code>). Built-in replacement for <code>misha.ext::gextract.left_join</code>, around 2x faster on wide-window workloads (e.g. TSS +/- 5kb at 50bp iterator).</li>
+<li>Fixed <code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> of BED files with <code>binsize</code> failing with <code>func argument is not a string</code>. The BED-to-dense path was not updated when <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code> gained the <code>func</code> argument in 5.6.31; it now passes the historical <code>"weighted.mean"</code> default.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.7.0" id="misha-570">misha 5.7.0<a class="anchor" aria-label="anchor" href="#misha-570"></a></h2>

@@ -81,7 +81,8 @@ intervals.</p>
 <span>  iterator <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  band <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  file <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  intervals.set.out <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  intervals.set.out <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  intervals_join <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span>, <span class="st">"intervals"</span>, <span class="st">"none"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -119,6 +120,19 @@ tab-delimited format</p></dd>
 <dt id="arg-intervals-set-out">intervals.set.out<a class="anchor" aria-label="anchor" href="#arg-intervals-set-out"></a></dt>
 <dd><p>intervals set name where the function result is
 optionally outputted</p></dd>
+
+
+<dt id="arg-intervals-join">intervals_join<a class="anchor" aria-label="anchor" href="#arg-intervals-join"></a></dt>
+<dd><p>how the output relates to the input intervals data
+frame. <code>"id"</code> (default) appends an <code>intervalID</code> integer column
+carrying the 1-based row index of the originating input interval.
+<code>"intervals"</code> drops <code>intervalID</code> and instead attaches every column
+of the input intervals data frame (coords + metadata) to each output row,
+suffixing names that collide with existing output columns with <code>"1"</code>.
+<code>"none"</code> drops <code>intervalID</code> and attaches nothing. The
+<code>"intervals"</code> mode is only supported when the result is returned in
+memory; combining it with <code>file</code> or <code>intervals.set.out</code> raises an
+error.</p></dd>
 
 </dl></div>
     <div id="value">
