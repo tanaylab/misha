@@ -20,7 +20,7 @@ ADAPTIVE_MEMORY_PLAN.md
 !CONTRIBUTING.md
 !AGENTS.md
 !agent-guides/
-!agent-guides/*.md
+!agent-guides/**
 dev
 tests/testthat/tmpresfile
 *.fa
