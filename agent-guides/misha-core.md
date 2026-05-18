@@ -19,6 +19,8 @@ Compact reference for the everyday misha workflow. Concepts first, then chooser 
 
 ## 1. Concepts
 
+**Mental model.** Think of every misha query as a *walk across the genome*: an iterator visits one position (or one interval, or one pair of positions) at a time, in genomic order, gathering values from any tracks or virtual tracks you ask for at each stop. You don't load tracks into R and slice them; you describe *where to walk* (`intervals=`), *what step size* (`iterator=`), and *what to collect at each step* (the expression / vtracks). The engine streams the genome once, top to bottom, in C++. Almost everything else in this guide is a variation on that idea.
+
 ### 1.1 Track database
 
 A *track DB* is a directory tree on disk under `<GROOT>`. Each subdirectory is a namespace; each leaf is a **track**. Track names use dots, mirroring the layout: `epi.k27me3.es` lives at `<GROOT>/epi/k27me3/es/`. Attach with `gsetroot(<path>)`. Tracks are not loaded into R; every query streams off disk in C++. The common project-portability convention is a relative symlink at the project root (`db -> /full/path/to/groot`) so `gsetroot("db")` works from any check-out. Project-local intervals can live in a separate **dataset** attached with `gdataset.load(<path>)`.
@@ -31,7 +33,7 @@ Three storage shapes:
 - **Sparse** - values at named intervals, NA elsewhere. `gtrack.create_sparse`. Peaks, per-CpG methylation.
 - **2D** - value per rectangle in `(chrom1×coord1) × (chrom2×coord2)`. Hi-C / capture-C. Covered in [misha-advanced.md](misha-advanced.md).
 
-`gtrack.ls("pattern", perl=TRUE)` lists tracks; `gtrack.exists(name)` is the idempotency guard.
+`gtrack.ls("pattern", perl=TRUE)` lists tracks; `gtrack.exists(name)` is the idempotency guard. If a track you know exists on disk doesn't appear in `gtrack.ls` (for example, someone else added it after your session attached the DB, or you just dropped a file in by hand), run `gdb.reload()` to rescan and refresh the cached track / intervals index.
 
 **On-disk format.** Older trackdbs store one file per chromosome inside each track's directory. Newer trackdbs use an **indexed** format - `track.dat` + `track.idx` per track - which scales to thousands of contigs without dragging the filesystem. The R API hides this entirely: `gextract`, `gscreen`, etc. work on both formats. **Do not reason from per-chromosome files on disk; always go through the API.** Convert an existing trackdb (or a single track) to the indexed form with `gdb.convert_to_indexed(convert_tracks = TRUE, convert_intervals = TRUE)` (both flags default to `FALSE`, so the bare call is a no-op), `gtrack.convert_to_indexed(track)`, or `gtrack.2d.convert_to_indexed(track, ...)` - important for fragmented assemblies (Zoonomia-style multi-contig genomes) where the per-chromosome layout is unworkable.
 
@@ -68,6 +70,8 @@ Every query takes `iterator =` defining what one row of the answer is:
 - `iterator = giterator.cartesian_grid(...)` - 2D pair grid (see [misha-advanced.md](misha-advanced.md)).
 
 `intervals=` is the *scope*; `iterator=` is the *resolution*. They are independent.
+
+**`intervals =` is mandatory for most query functions.** `gextract`, `gscreen`, `gsummary`, `gdist`, `gintervals.neighbors`, `gintervals.annotate`, etc. don't default to "whole genome" - if you want the walk to cover everything, pass `intervals = gintervals.all()` (1D) or `intervals = gintervals.2d.all()` (2D) explicitly. The same applies to `iterator =` when there's no natural per-row resolution.
 
 ### 1.6 Two rules that apply everywhere
 
@@ -443,7 +447,6 @@ per_peak <- gextract(c("k27_flank", "atac_summit", "ctcf_max"),
 
 **Avoid:**
 - `gvtrack.create(...); gvtrack.iterator(name, sshift=, eshift=)` as two calls - current misha takes `sshift / eshift` directly in `gvtrack.create`. The two-call form is legacy.
-- `gvtrack.iterator(name, sshift = -W, eshif = W)` - `eshif` (missing the trailing `t`) silently binds to `eshift = 0` via partial-arg matching. Half-window.
 - Defensive `if (length(gvtrack.ls(n)) == 1) gvtrack.rm(n)` before every `gvtrack.create` - current misha silently overwrites on re-create.
 - Picking `avg` when you mean `sum` - for count tracks, `avg` divides by bin count and discards magnitude.
 - Forgetting that `sshift` / `eshift` are in *base pairs*, not bin counts.
