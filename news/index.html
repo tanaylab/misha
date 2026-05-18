@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.1</span>
       </span>
     </div>
 
@@ -63,9 +63,13 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.7.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.7.1" id="misha-571">misha 5.7.1<a class="anchor" aria-label="anchor" href="#misha-571"></a></h2>
+<ul><li>Fixed <code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> of BED files with <code>binsize</code> failing with <code>func argument is not a string</code>. The BED-to-dense path was not updated when <code><a href="../reference/gtrack.create_dense.html">gtrack.create_dense()</a></code> gained the <code>func</code> argument in 5.6.31; it now passes the historical <code>"weighted.mean"</code> default.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.7.0" id="misha-570">misha 5.7.0<a class="anchor" aria-label="anchor" href="#misha-570"></a></h2>
 <ul><li>New <code><a href="../reference/gintervals.to_mat.html">gintervals.to_mat()</a></code> and <code><a href="../reference/gintervals.from_mat.html">gintervals.from_mat()</a></code> round-trip an intervals + values data.frame to a numeric matrix indexed by intervals. Pass <code>labels = FALSE</code> to skip rowname construction.</li>
