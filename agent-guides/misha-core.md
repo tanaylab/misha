@@ -379,7 +379,7 @@ gextract(c("ifelse(is.na(epi.atac.es), 0, epi.atac.es)",
 
 Treat this as a default, not an edge case.
 
-**Expression functions must be vectorized.** The C++ engine passes track *vectors* to your expression and expects a same-length vector back. Standard vectorized R ops all work (basic arithmetic, `ifelse`, `pmin`/`pmax`, log/exp). The pitfall is scalar-result functions like `mean(track)` or `min(track)`: those collapse the vector to one number, which the engine then recycles across every bin. There is no `pmean` in base R - for per-element averaging across two tracks, use `(a + b) / 2`.
+**Expression functions must be vectorized.** The C++ engine passes track *vectors* to your expression and expects a same-length vector back. Standard vectorized R ops all work (basic arithmetic, `ifelse`, `pmin`/`pmax`, log/exp). The pitfall is scalar-result functions like `mean(track)` or `min(track)`: those collapse the vector to one number, which the engine then recycles across every bin. Base R has no `pmean`; for per-element averaging across two tracks, use `tgutil::pmean(a, b, na.rm = TRUE)` (`(a + b) / 2` is wrong: it propagates NA whenever *either* input is NA, so any position where one track has data and the other doesn't comes out as NA instead of the value you have).
 
 **Tiled bins inside intervals.** For sub-region resolution (per-bin profile), pass an integer iterator:
 
