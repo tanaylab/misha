@@ -277,28 +277,40 @@ For de-novo motifs, train a PSSM from labelled sequences with `prego::regress_pw
 |---|---|---|
 | `pwm`     | log-sum-exp of all window scores in the iterator interval | LSE (soft sum) |
 | `pwm.max` | the maximum window score in the iterator interval | best-window |
-| `pwm.max.pos` | the position (bp from interval start) of the best-scoring window | argmax |
+| `pwm.max.pos` | the **1-based** position of the best-scoring window's first base, measured in bp from the start of the scanned region. **Sign carries strand** when `bidirect = TRUE`: `+pos` = best window is on the forward strand, `-pos` = reverse strand. With `bidirect = FALSE` the value is always positive. | argmax |
 | `pwm.count` | number of windows with score ≥ `score.thresh` | count above threshold |
 | `pwm.edit_distance` | min #edits to raise (`direction = "above"`) or disrupt (`direction = "below"`) the best-window score across `score.thresh` | search over edit budget |
 | `pwm.edit_distance.lse` | same but LSE of windows, not the max | LSE-based |
-| `pwm.edit_distance.pos` / `pwm.edit_distance.lse.pos` | 1-based position of the most impactful single edit (signed by strand when `bidirect = TRUE`) | argmax over edit positions |
+| `pwm.edit_distance.pos` / `pwm.edit_distance.lse.pos` | 1-based position of the most impactful single edit; same sign-by-strand convention as `pwm.max.pos` when `bidirect = TRUE` | argmax over edit positions |
 
 **Edit-distance knobs.** `direction = "above"` (default) finds the minimum edits to *raise* the score across `score.thresh` - "how close is this site to becoming a hit". `direction = "below"` finds the minimum edits to *disrupt* an existing hit - "how robust is this site". `max_edits` caps the total budget (exhaustive search for `max_edits <= 2`, greedy heuristic for `max_edits >= 3`). `max_indels` allows insertions / deletions in addition to substitutions. `score.min` / `score.max` clip the per-window score range before the edit search to keep the optimization bounded. With `bidirect = TRUE`, an edit's effect is evaluated against both strands and the better orientation is kept.
 
 The iterator-bin width and the **PSSM width** interact. With `iterator = 20` and a 12bp PSSM, every 20bp bin contains 9 candidate windows (offsets 0..8 within the bin). With `iterator = 1`, each bin contains a single window.
 
-**`extend`** (default `0`): extends the window scan past the iterator-bin edges by N bp, so a motif straddling a bin boundary still gets scored. Set to `nrow(pssm) - 1` to ensure no candidate window is missed at boundaries.
+**`extend`** (logical, default `TRUE`): when `TRUE`, the scan window is extended by `nrow(pssm) - 1` bp past the *end* of the iterator interval, so a motif whose anchor sits just before the boundary still gets scored without being clipped. (No extension on the start side; the engine only walks anchors forward.) Set `FALSE` only if you specifically want to drop boundary-straddling motifs.
 
-**`bidirect` and `strand`.**
+**`bidirect` and `strand` - which strand(s) get scanned.**
+
+The two params interact, and which one wins depends on `bidirect`:
+
+| `bidirect` | `strand` | What the engine actually scans |
+|---|---|---|
+| `TRUE` *(default)* | *(ignored)* | Both strands at every window position; the per-window score is the LSE of forward + reverse-complement matches (for `pwm` / `pwm.count`) or the max of the two (for `pwm.max` / `*.pos`). |
+| `FALSE` | `+1` *(default)* | Forward strand only. |
+| `FALSE` | `-1` | Reverse-complement strand only. (Positions are remapped back to the original strand's coordinates, so values stay positive and comparable to the forward-strand walk.) |
+
+So `strand` is a no-op while `bidirect = TRUE`. To get strand-resolved hits, you must set `bidirect = FALSE` explicitly. Note also that there is **no `strand = 0`** for PWM (that's the kmer convention); the PWM equivalent of "both strands" is `bidirect = TRUE`.
 
 ```r
 # bidirect = TRUE (default): both strands at every position, keep the better.
+# The .pos value carries strand info: +pos = forward hit, -pos = reverse hit.
 gvtrack.create("ctcf_max",
                func   = "pwm.max",
                params = list(pssm = ctcf_pssm, prior = 0.01,
                              bidirect = TRUE))
 
 # Strand-specific: pair two vtracks, strand = +1 / -1, bidirect = FALSE.
+# Each .pos is always positive; you know the strand from which vtrack it came from.
 gvtrack.create("ctcf_fwd", func = "pwm.max",
                params = list(pssm = ctcf_pssm, prior = 0.01,
                              strand = +1, bidirect = FALSE))
@@ -306,6 +318,8 @@ gvtrack.create("ctcf_rev", func = "pwm.max",
                params = list(pssm = ctcf_pssm, prior = 0.01,
                              strand = -1, bidirect = FALSE))
 ```
+
+**Position semantics (`pwm.max.pos`, `pwm.edit_distance.pos`).** All `*.pos` values are **1-based** bp offsets *relative to the iterator interval* (after any `gvtrack.iterator()` `sshift` / `eshift` shifts), pointing at the first base of the best window. `pos = 1` means the best window starts at the very first base of the (possibly shifted) iterator interval; the motif occupies `pos .. pos + nrow(pssm) - 1`. The sign convention above only applies under `bidirect = TRUE`; under `bidirect = FALSE` the value is always positive regardless of `strand`.
 
 `prior` controls the strength of the uniform-background regularizer (smaller = sharper PWM; typical range 0.001-0.05). Tune by AUC on labelled data.
 
