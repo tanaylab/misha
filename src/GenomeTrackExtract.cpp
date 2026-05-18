@@ -7,11 +7,13 @@
 
 #include <cstdint>
 #include <inttypes.h>
+#include <atomic>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <thread>
 #include <vector>
 
 #include "rdbinterval.h"
@@ -236,6 +238,83 @@ static IntervalsJoinMode parse_intervals_join(SEXP _intervals_join) {
 	return IntervalsJoinMode::ID;
 }
 
+// Pick a reasonable thread count for parallel column gathering. Capped by
+// hardware concurrency and by gmax.processes (so users keep one knob to tune
+// total in-process parallelism). Returns >= 1.
+static unsigned pick_gather_threads(IntervUtils &iu, R_xlen_t nrows, int n_in)
+{
+	// No benefit from threads for tiny outputs.
+	if (nrows < 200000 || n_in <= 1)
+		return 1;
+	unsigned hw = std::thread::hardware_concurrency();
+	if (hw == 0)
+		hw = 1;
+	unsigned cap = (unsigned)iu.get_max_processes();
+	if (cap == 0)
+		cap = hw;
+	unsigned n = std::min<unsigned>(hw, cap);
+	// More threads than columns just wastes startup overhead.
+	if (n > (unsigned)n_in)
+		n = (unsigned)n_in;
+	// 8 threads saturate memory bandwidth for the per-column gather; more
+	// gives diminishing returns and risks contention with concurrent R work.
+	if (n > 8)
+		n = 8;
+	return n == 0 ? 1 : n;
+}
+
+// Gather a single column from `_intervals` (`in_col`) into `dst_col`, using
+// 1-based indices in `id_p`. Pure C++ data movement - safe to run from a
+// non-main thread. Callers must validate id_p range upfront.
+//
+// For STRSXP we bypass SET_STRING_ELT and write the SEXP* slots directly.
+// This is safe because:
+//   - dst_col was freshly allocated by R in the main thread (gen 0); the
+//     write barrier (CHECK_OLD_TO_NEW) would be a no-op for old->new with a
+//     young target.
+//   - Source CHARSXPs live in `_intervals`, which is PROTECTed on the R
+//     argument stack throughout the call, so they cannot be reclaimed.
+//   - We do not touch any R API from worker threads, so no GC can fire mid
+//     loop.
+static void gather_one_column(SEXP in_col, SEXP dst_col,
+                              const int *id_p, R_xlen_t nrows)
+{
+	switch (TYPEOF(in_col)) {
+		case INTSXP: {
+			const int *src = INTEGER(in_col);
+			int *dst = INTEGER(dst_col);
+			for (R_xlen_t i = 0; i < nrows; ++i)
+				dst[i] = src[id_p[i] - 1];
+			break;
+		}
+		case REALSXP: {
+			const double *src = REAL(in_col);
+			double *dst = REAL(dst_col);
+			for (R_xlen_t i = 0; i < nrows; ++i)
+				dst[i] = src[id_p[i] - 1];
+			break;
+		}
+		case LGLSXP: {
+			const int *src = LOGICAL(in_col);
+			int *dst = LOGICAL(dst_col);
+			for (R_xlen_t i = 0; i < nrows; ++i)
+				dst[i] = src[id_p[i] - 1];
+			break;
+		}
+		case STRSXP: {
+			// Direct pointer writes; see contract above.
+			const SEXP *src = STRING_PTR_RO(in_col);
+			SEXP *dst = (SEXP *)STRING_PTR_RO(dst_col);
+			for (R_xlen_t i = 0; i < nrows; ++i)
+				dst[i] = src[id_p[i] - 1];
+			break;
+		}
+		default:
+			// Caller must filter unsupported types before dispatch.
+			break;
+	}
+}
+
 // Replace the trailing intervalID column of `answer` according to `mode`.
 //   ID        -> return answer unchanged
 //   NONE      -> drop the intervalID column, return a new data frame without it
@@ -244,7 +323,12 @@ static IntervalsJoinMode parse_intervals_join(SEXP _intervals_join) {
 //
 // Supported input column types: INTSXP (incl. factor), REALSXP, LGLSXP, STRSXP.
 // Anything else triggers a verror naming the column.
-static SEXP transform_intervals_join(SEXP answer, SEXP _intervals, IntervalsJoinMode mode)
+//
+// In INTERVALS mode the per-column gather runs in parallel across std::thread
+// workers; the bottleneck on wide-window workloads is otherwise serial
+// per-cell SET_STRING_ELT on 8+ character columns.
+static SEXP transform_intervals_join(SEXP answer, SEXP _intervals,
+                                     IntervalsJoinMode mode, IntervUtils &iu)
 {
 	if (Rf_isNull(answer) || mode == IntervalsJoinMode::ID)
 		return answer;
@@ -262,7 +346,7 @@ static SEXP transform_intervals_join(SEXP answer, SEXP _intervals, IntervalsJoin
 	SEXP id_col = VECTOR_ELT(answer, id_idx);
 	if (TYPEOF(id_col) != INTSXP)
 		verror("internal: intervalID column is not integer");
-	int *id_p = INTEGER(id_col);
+	const int *id_p = INTEGER(id_col);
 	R_xlen_t nrows = Rf_xlength(id_col);
 
 	if (mode == IntervalsJoinMode::NONE) {
@@ -290,6 +374,34 @@ static SEXP transform_intervals_join(SEXP answer, SEXP _intervals, IntervalsJoin
 
 	R_xlen_t intervs_nrows = (n_in > 0) ? Rf_xlength(VECTOR_ELT(_intervals, 0)) : 0;
 
+	// One-shot validation of the intervalID range. The hot gather loops then
+	// run unconditional-load (no per-cell bounds checks), which is a big win
+	// since they're memory-bound.
+	{
+		int min_id = INT_MAX;
+		int max_id = INT_MIN;
+		for (R_xlen_t i = 0; i < nrows; ++i) {
+			int v = id_p[i];
+			if (v < min_id) min_id = v;
+			if (v > max_id) max_id = v;
+		}
+		if (nrows > 0 && (min_id < 1 || max_id > intervs_nrows))
+			verror("internal: intervalID range [%d, %d] out of bounds for intervals (nrows=%lld)",
+				min_id, max_id, (long long)intervs_nrows);
+	}
+
+	// Validate every input column type up front (so worker threads don't have
+	// to handle errors).
+	for (int j = 0; j < n_in; ++j) {
+		SEXP in_col = VECTOR_ELT(_intervals, j);
+		int t = TYPEOF(in_col);
+		if (t != INTSXP && t != REALSXP && t != LGLSXP && t != STRSXP) {
+			const char *col_nm = CHAR(STRING_ELT(in_names, j));
+			verror("intervals_join='intervals': column '%s' has unsupported type (%s); supported types are integer, double, logical, character, factor",
+				col_nm, Rf_type2char(t));
+		}
+	}
+
 	// Build target column names: existing answer cols (without intervalID) + renamed input cols.
 	int n_keep = n_old - 1;
 	int n_total = n_keep + n_in;
@@ -313,6 +425,9 @@ static SEXP transform_intervals_join(SEXP answer, SEXP _intervals, IntervalsJoin
 		return false;
 	};
 
+	// Pre-allocate all output columns + their names in the main thread (R API
+	// is not thread-safe). We park them at out[n_keep + j] so the workers can
+	// just do data movement.
 	for (int j = 0; j < n_in; ++j) {
 		SEXP in_col = VECTOR_ELT(_intervals, j);
 		const char *col_nm = CHAR(STRING_ELT(in_names, j));
@@ -323,55 +438,64 @@ static SEXP transform_intervals_join(SEXP answer, SEXP _intervals, IntervalsJoin
 			out_nm += "1";
 		SET_STRING_ELT(out_names, n_keep + j, Rf_mkChar(out_nm.c_str()));
 
-		// Copy values by id index.
 		int in_type = TYPEOF(in_col);
 		SEXP new_col = R_NilValue;
 		switch (in_type) {
-			case INTSXP: {
-				new_col = rprotect_ptr(RSaneAllocVector(INTSXP, nrows));
-				int *src = INTEGER(in_col);
-				int *dst = INTEGER(new_col);
-				for (R_xlen_t i = 0; i < nrows; ++i) {
-					int idx = id_p[i] - 1;
-					if (idx < 0 || idx >= intervs_nrows)
-						verror("internal: intervalID %d out of range for intervals (nrows=%lld)", id_p[i], (long long)intervs_nrows);
-					dst[i] = src[idx];
-				}
-				// Preserve factor levels/class if present.
-				SEXP levs = Rf_getAttrib(in_col, R_LevelsSymbol);
-				if (!Rf_isNull(levs)) {
-					Rf_setAttrib(new_col, R_LevelsSymbol, levs);
-					Rf_setAttrib(new_col, R_ClassSymbol, Rf_getAttrib(in_col, R_ClassSymbol));
-				}
+			case INTSXP:
+				new_col = RSaneAllocVector(INTSXP, nrows);
 				break;
-			}
-			case REALSXP: {
-				new_col = rprotect_ptr(RSaneAllocVector(REALSXP, nrows));
-				double *src = REAL(in_col);
-				double *dst = REAL(new_col);
-				for (R_xlen_t i = 0; i < nrows; ++i)
-					dst[i] = src[id_p[i] - 1];
+			case REALSXP:
+				new_col = RSaneAllocVector(REALSXP, nrows);
 				break;
-			}
-			case LGLSXP: {
-				new_col = rprotect_ptr(RSaneAllocVector(LGLSXP, nrows));
-				int *src = LOGICAL(in_col);
-				int *dst = LOGICAL(new_col);
-				for (R_xlen_t i = 0; i < nrows; ++i)
-					dst[i] = src[id_p[i] - 1];
+			case LGLSXP:
+				new_col = RSaneAllocVector(LGLSXP, nrows);
 				break;
-			}
-			case STRSXP: {
-				new_col = rprotect_ptr(RSaneAllocVector(STRSXP, nrows));
-				for (R_xlen_t i = 0; i < nrows; ++i)
-					SET_STRING_ELT(new_col, i, STRING_ELT(in_col, id_p[i] - 1));
+			case STRSXP:
+				new_col = RSaneAllocVector(STRSXP, nrows);
 				break;
-			}
 			default:
-				verror("intervals_join='intervals': column '%s' has unsupported type (%s); supported types are integer, double, logical, character, factor",
-					col_nm, Rf_type2char(in_type));
+				// Already filtered above.
+				break;
 		}
+		// Stash into out before any further allocation so it's GC-anchored.
 		SET_VECTOR_ELT(out, n_keep + j, new_col);
+
+		// Preserve factor levels/class on integer columns.
+		if (in_type == INTSXP) {
+			SEXP levs = Rf_getAttrib(in_col, R_LevelsSymbol);
+			if (!Rf_isNull(levs)) {
+				Rf_setAttrib(new_col, R_LevelsSymbol, levs);
+				Rf_setAttrib(new_col, R_ClassSymbol, Rf_getAttrib(in_col, R_ClassSymbol));
+			}
+		}
+	}
+
+	// Parallel column gather. Workers steal columns via an atomic counter.
+	unsigned nworkers = pick_gather_threads(iu, nrows, n_in);
+	if (nworkers <= 1) {
+		for (int j = 0; j < n_in; ++j)
+			gather_one_column(VECTOR_ELT(_intervals, j),
+			                  VECTOR_ELT(out, n_keep + j),
+			                  id_p, nrows);
+	} else {
+		std::atomic<int> next{0};
+		auto worker = [&]() {
+			for (;;) {
+				int j = next.fetch_add(1, std::memory_order_relaxed);
+				if (j >= n_in)
+					return;
+				gather_one_column(VECTOR_ELT(_intervals, j),
+				                  VECTOR_ELT(out, n_keep + j),
+				                  id_p, nrows);
+			}
+		};
+		std::vector<std::thread> threads;
+		threads.reserve(nworkers - 1);
+		for (unsigned t = 0; t < nworkers - 1; ++t)
+			threads.emplace_back(worker);
+		worker();
+		for (auto &th : threads)
+			th.join();
 	}
 
 	Rf_setAttrib(out, R_NamesSymbol, out_names);
@@ -736,7 +860,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			Rf_setAttrib(fb_answer, R_RowNamesSymbol, fb_rownames);
 			Rf_setAttrib(fb_answer, R_ClassSymbol, Rf_mkString("data.frame"));
 
-			return transform_intervals_join(fb_answer, _intervals, join_mode);
+			return transform_intervals_join(fb_answer, _intervals, join_mode, iu);
 		}
 
 		// We have a good estimate — use direct-to-R pre-allocation.
@@ -973,7 +1097,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 		Rf_setAttrib(answer, R_RowNamesSymbol, r_row_names);
 		Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
 
-		return transform_intervals_join(answer, _intervals, join_mode);
+		return transform_intervals_join(answer, _intervals, join_mode, iu);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
 	} catch (const bad_alloc &e) {
@@ -1384,7 +1508,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				log_gextract_timing("parent_gather_ms", gather_ms);
 				log_gextract_timing("parent_assemble_ms", assemble_ms);
 			}
-            rreturn(transform_intervals_join(answer, _intervals, join_mode));
+            rreturn(transform_intervals_join(answer, _intervals, join_mode, iu));
 		}
 	} catch (TGLException &e) {
 		string msg(e.msg());
