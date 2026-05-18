@@ -45,7 +45,9 @@ Non-empty diff → wrong gdb, naming-convention mismatch, or a gdb missing scaff
 | Mapped reads (TSV from `samtools view`, or pre-staged file) | `gtrack.import_mappedseq(name, desc, file, pileup, binsize, cols.order = c(9, 11, 13, 14), remove.dups = TRUE)` | for BAM input, pipe through `samtools view` first; the default `remove.dups = TRUE` is correct for ChIP/ATAC/CUT&RUN |
 | 2D Hi-C / capture-C contacts | `gtrack.2d.import_contacts(name, desc, contacts, fends, allow.duplicates = FALSE)` | `contacts =` accepts a vector (e.g. shaman per-rect scores are concatenated by the importer) |
 | 2D track from a per-rectangle R data.frame | `gtrack.2d.create(name, desc, intervals, values)` | rectangles must be non-overlapping |
-| Wide feature matrix (e.g. 450k array) | `gtrack.array.import(name, desc, file)` + `gtrack.var.set` for per-feature metadata | one wide TSV: chrom/start/end + N value columns |
+| Per-CpG methylation from bismark `.cov.gz` (per sample) | Read TSV in R, build the 4-track quartet (`.cov` / `.meth` / `.unmeth` / `.avg`) via `gtrack.create_sparse`. See "Methylation tracks" below | bismark is 1-based, misha is 0-based half-open — convert. Always CG-validate against the genome before importing |
+| 450k / EPIC array methylation matrix (TCGA-style wide TSV) | `gtrack.array.import(name, desc, file)` + `gtrack.var.set` for per-sample metadata | one wide TSV: chrom/start/end + N value columns (one per sample); use `gtrack.array.extract` to query later |
+| Wide feature matrix (non-methylation, e.g. signature scores) | `gtrack.array.import(name, desc, file)` + `gtrack.var.set` for per-feature metadata | one wide TSV: chrom/start/end + N value columns |
 | Track from another misha DB (same assembly) | `gtrack.copy(src, dest, db = "/path/to/other/trackdb", overwrite = FALSE)` | format conversion (per-chrom ↔ indexed) and chrom-order remap handled automatically; vector `src` supported |
 | Intervals from another assembly (liftover via chain) | `gintervals.liftover(intervs, chain = "<srcToTgt>.over.chain.fixed1")` after `gsetroot(target_assembly)` | lifted intervals may extend past chrom ends and may overlap each other — always follow with `gintervals.force_range()` and (if you need disjoint output) `gintervals.canonic()`. See "Liftover" below |
 | Track from another assembly (liftover via chain) | `gtrack.liftover(track, desc, src.track.dir, chain, multi_target_agg = "mean")` | requires a chain (`gintervals.load_chain`); aggregation policy controls how multiple source bins folded into one target bin combine — pick deliberately. Much less used in the lab than the intervals-side liftover above |
@@ -56,6 +58,79 @@ Non-empty diff → wrong gdb, naming-convention mismatch, or a gdb missing scaff
 For ChIP/ATAC/CUT&Tag pileup tracks, prefer `gtrack.create_dense(..., func = "coverage")` over the legacy `gtrack.import_mappedseq` round-trip. With `values = rep(1, nrow(reads))`, bin value = `sum(overlap_i) / binsize` = average per-base read count — exactly the ChIP-seq pileup definition, in one C++ pass over the data frame. Use `gtrack.import_mappedseq` only when reads are too large to load into R or when you specifically want the `pileup =` read-extension feature.
 
 `gtrack.create_dense` `func` choices (5.6.31+): `"weighted.mean"` (default), `"weighted.sum"`, `"coverage"`, `"max"`, `"min"`, `"median"`, `"count"`. Note that 5.6.32 fixed a bug where overlapping intervals of mixed lengths in the same bin gave plausible-looking but wrong means under the old default — re-import affected tracks if they predate 5.6.32.
+
+## Methylation tracks: the 4-track quartet convention
+
+Lab-wide convention (high-frequency, cross-user — 95+ files / 23+ projects in the corpus): every per-sample methylation dataset materialises as **four sparse tracks** sharing a common stem, not one:
+
+| Track | Value per CpG |
+|---|---|
+| `<sample>.cov`    | total reads at the CpG (`meth + unmeth`) |
+| `<sample>.meth`   | methylated read count |
+| `<sample>.unmeth` | unmethylated read count |
+| `<sample>.avg`    | methylation level `meth / cov` (often materialised; sometimes recomputed as an expression-derived vtrack at the CpG iterator) |
+
+Downstream tooling (lab helpers like `combine.libs` / `copy.lib`, the `gpatterns` package, methylation-aware `misha.ext` wrappers) walks the four suffixes by convention. Materialising only `.avg` and skipping the count pair breaks coverage-aware aggregations and re-binning.
+
+### Importing from a bismark `.cov.gz` (per sample)
+
+Bismark coverage files are 1-based, six columns: `chrom, start, end, avg, meth_count, unmeth_count` (start == end). Misha is 0-based half-open. **Always CG-validate against the reference** before importing — bismark coordinates can sit on either strand and ambiguous calls land on non-CG positions:
+
+```r
+library(data.table); library(dplyr); library(glue)
+
+df <- fread(filename,
+            col.names = c("chrom", "start", "end", "avg", "meth", "unmeth")) %>%
+    select(-avg) %>%
+    filter(chrom %in% gintervals.all()$chrom) %>%
+    mutate(start = start - 1, end = start + 1)            # 1-based -> 0-based half-open
+
+# Anchor to the C of the CpG: if the reference base at start is 'C' keep it; if it's
+# 'G' (= bismark called the minus strand) shift back by one so start points at the C.
+df <- df %>%
+    mutate(s = toupper(gseq.extract(.))) %>%
+    mutate(start = ifelse(s == "C", start, start - 1), end = start + 1)
+
+# Validate that the 2bp dinucleotide at the anchored position really is CG;
+# drop everything else (strand-ambiguous calls, soft-masked, sequencing errors).
+df1 <- df %>% mutate(end = start + 2) %>% mutate(s = toupper(gseq.extract(.)))
+df  <- df %>% filter(df1$s == "CG") %>%
+    group_by(chrom, start, end) %>%
+    summarise(meth = sum(meth), unmeth = sum(unmeth), .groups = "drop") %>%
+    mutate(cov = meth + unmeth, avg = meth / cov) %>%
+    filter(cov > 0)
+
+# Materialise the quartet
+for (suffix in c("cov", "meth", "unmeth", "avg")) {
+    tr <- glue("{track_stem}.{suffix}")
+    gtrack.create_sparse(track       = tr,
+                         description = sprintf("%s %s", description, suffix),
+                         intervals   = df[, c("chrom", "start", "end")],
+                         values      = df[[suffix]])
+}
+```
+
+Three points the corpus emphasises and that bite if skipped:
+
+1. **`start = bismark_pos - 1`.** Bismark uses 1-based coordinates; misha is 0-based. Off-by-one silently shifts every CpG one base.
+2. **The `gseq.extract` CG validation pair.** First call anchors to the C of the CpG; second call confirms the 2bp dinucleotide really is CG. Drops strand-ambiguous and miscalled rows. Skipping this leaks non-CG noise into the track.
+3. **Group-summarise before creating.** The same CpG can appear twice in a bismark file (plus/minus calls both pointing to the same C after anchoring); deduplicate by summing counts.
+
+### From bismark BAM (gpatterns pipeline)
+
+When the upstream is BAM (not `.cov`), the lab runs `gpatterns::import_from_bismark_bam` via `gcluster.run2` to parallelise across samples. The output is the same `.cov / .meth / .unmeth / .avg` quartet, plus optional pattern-derived suffixes (`n, n0, n1, nx, nc, ncpg, pat_meth, fid, epipoly`) — `gpatterns` extends the convention rather than replacing it.
+
+### Population matrices: 450k / EPIC / PBAT cohorts
+
+When you have a per-position × per-sample matrix (TCGA 450k arrays, PBAT cohort summaries, EWAS outputs), don't create N quartets — use the array form:
+
+```r
+# Wide TSV: chrom, start, end, sample1, sample2, ..., sampleN
+gtrack.array.import("meth.tcga_brca", "TCGA BRCA 450k beta values", "/path/to/wide.tsv")
+gtrack.var.set("meth.tcga_brca", "donors", donors_df)     # per-sample metadata
+```
+
+Query with `gtrack.array.extract(track, names_or_indices, intervals)` — pulls a sample-subset slice in one call. Build the wide TSV from N per-sample sparse `.avg` tracks via `gextract(c(samples), gintervals.all(), file = tempfile())` + `gtrack.array.import(... file = that_tempfile)` (`gextract` writes the right shape directly).
 
 ## Liftover: intervals vs tracks
 
