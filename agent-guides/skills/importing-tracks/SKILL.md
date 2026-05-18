@@ -47,7 +47,8 @@ Non-empty diff → wrong gdb, naming-convention mismatch, or a gdb missing scaff
 | 2D track from a per-rectangle R data.frame | `gtrack.2d.create(name, desc, intervals, values)` | rectangles must be non-overlapping |
 | Wide feature matrix (e.g. 450k array) | `gtrack.array.import(name, desc, file)` + `gtrack.var.set` for per-feature metadata | one wide TSV: chrom/start/end + N value columns |
 | Track from another misha DB (same assembly) | `gtrack.copy(src, dest, db = "/path/to/other/trackdb", overwrite = FALSE)` | format conversion (per-chrom ↔ indexed) and chrom-order remap handled automatically; vector `src` supported |
-| Track from another assembly (liftover via chain) | `gtrack.liftover(track, desc, src.track.dir, chain, multi_target_agg = "mean")` | requires a chain file (`gintervals.load_chain`); aggregation policy controls how multiple source bins folded into one target bin combine — pick deliberately |
+| Intervals from another assembly (liftover via chain) | `gintervals.liftover(intervs, chain = "<srcToTgt>.over.chain.fixed1")` after `gsetroot(target_assembly)` | lifted intervals may extend past chrom ends and may overlap each other — always follow with `gintervals.force_range()` and (if you need disjoint output) `gintervals.canonic()`. See "Liftover" below |
+| Track from another assembly (liftover via chain) | `gtrack.liftover(track, desc, src.track.dir, chain, multi_target_agg = "mean")` | requires a chain (`gintervals.load_chain`); aggregation policy controls how multiple source bins folded into one target bin combine — pick deliberately. Much less used in the lab than the intervals-side liftover above |
 | Intervals (BED / GFF / GTF / VCF) as an interval set, not a track | `gintervals.import_bed` / `gintervals.import_genes` / `gintervals.import_gff` / `gintervals.import_vcf` | for a sparse-track route instead, build the data frame in R and pass to `gtrack.create_sparse` |
 
 ## Pileup tracks: prefer the in-R path
@@ -55,6 +56,30 @@ Non-empty diff → wrong gdb, naming-convention mismatch, or a gdb missing scaff
 For ChIP/ATAC/CUT&Tag pileup tracks, prefer `gtrack.create_dense(..., func = "coverage")` over the legacy `gtrack.import_mappedseq` round-trip. With `values = rep(1, nrow(reads))`, bin value = `sum(overlap_i) / binsize` = average per-base read count — exactly the ChIP-seq pileup definition, in one C++ pass over the data frame. Use `gtrack.import_mappedseq` only when reads are too large to load into R or when you specifically want the `pileup =` read-extension feature.
 
 `gtrack.create_dense` `func` choices (5.6.31+): `"weighted.mean"` (default), `"weighted.sum"`, `"coverage"`, `"max"`, `"min"`, `"median"`, `"count"`. Note that 5.6.32 fixed a bug where overlapping intervals of mixed lengths in the same bin gave plausible-looking but wrong means under the old default — re-import affected tracks if they predate 5.6.32.
+
+## Liftover: intervals vs tracks
+
+Two related but distinct operations. By corpus frequency, the intervals form is dominant (~76 files, 17+ projects, used by ronisto, nettam, atanay, nimrodra, ofirr, aviezerl); the track form is much rarer.
+
+**Intervals across assemblies** — `gintervals.liftover(intervs, chain = "<srcToTgt>.over.chain.fixed1")`. Standard lab idiom: switch to the target assembly first, lift, then recenter to a fixed width and clamp:
+
+```r
+gsetroot("/path/to/mm9")   # target assembly
+lifted <- gintervals.liftover(intervs_mm10, chain = "mm10ToMm9.over.chain.fixed1")
+
+# Recenter to a fixed 300bp window so stretched / shrunk intervals don't
+# confound downstream extracts:
+mid          <- round((lifted$start + lifted$end) / 2)
+lifted$start <- mid - 150
+lifted$end   <- mid + 150
+lifted       <- gintervals.force_range(lifted)   # clamp to chrom bounds
+# If overlap-free output is required (e.g. for sparse-track creation):
+# lifted    <- gintervals.canonic(lifted)
+```
+
+Two non-negotiable post-liftover steps: `gintervals.force_range` (lifted intervals can extend past chrom ends — `gintervals()` then rejects them with `end coordinate exceeds chromosome boundaries`) and, if you need a non-overlapping set, `gintervals.canonic` (lifted intervals may overlap). Chain files are basename-passed and resolved via misha's chain-search path; `gintervals.load_chain(file)` lets you preload + inspect a chain.
+
+**Whole tracks across assemblies** — `gtrack.liftover(track, desc, src.track.dir, chain, multi_target_agg = "mean")`. Reads every bin in the source track, projects via the chain, and aggregates contributors landing on the same target locus per `multi_target_agg` (`mean` / `median` / `sum` / `min` / `max` / `max.coverage_len` / etc.). The aggregation policy is load-bearing: defaults can drop most of the signal if many bins fold into one. On indexed destination DBs the writer skips the per-chrom placeholder files (5.6.30+).
 
 ## Validating a multi-file concatenated source before import
 
