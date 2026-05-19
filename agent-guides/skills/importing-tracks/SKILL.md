@@ -43,8 +43,12 @@ Non-empty diff → wrong gdb, naming-convention mismatch, or a gdb missing scaff
 | Directory or URL-with-wildcards of WIG/bigWig files | `gtrack.import_set(description, path, binsize, track.prefix = "", defval = NaN)` | bulk import; `path` may be a glob (`/data/*.bw`) or an `ftp://` URL; continues on per-file errors and returns successes/failures |
 | ChIP/ATAC pileup from read intervals (data.frame in R) | `gtrack.create_dense(name, desc, intervals = reads, values = rep(1, nrow(reads)), binsize = 20, defval = 0, func = "coverage")` | one-call replacement for the old `gtrack.import_mappedseq` route when reads are already in R |
 | Mapped reads (TSV from `samtools view`, or pre-staged file) | `gtrack.import_mappedseq(name, desc, file, pileup, binsize, cols.order = c(9, 11, 13, 14), remove.dups = TRUE)` | for BAM input, pipe through `samtools view` first; the default `remove.dups = TRUE` is correct for ChIP/ATAC/CUT&RUN |
-| 2D Hi-C / capture-C contacts | `gtrack.2d.import_contacts(name, desc, contacts, fends, allow.duplicates = FALSE)` | `contacts =` accepts a vector (e.g. shaman per-rect scores are concatenated by the importer) |
+| 2D Hi-C / capture-C contacts (per-contact adj + fends) | `gtrack.2d.import_contacts(name, desc, contacts, fends = "<redb>/<RE>.fends", allow.duplicates = FALSE)` | `contacts =` accepts a vector (shaman per-rect scores, scHi-C per-core stagings — see "scHi-C pooling" below); `allow.duplicates = TRUE` for adj files that already count duplicates |
+| Restriction-enzyme fragment + fend prerequisites (any new 4C/Hi-C bootstrap) | `gtrack.import('redb.<RE>_flen', flen_file, 0)` + `gtrack.import('redb.<RE>_gc', gc_file, 0)` + `gtrack.create('redb.<RE>_map', mapab_track, iterator = 'redb.<RE>_flen')` | per-fragment iterator promotes a per-base mapability track to per-fragment mean. See "RE fragment-track bootstrap" below |
+| Pooled multi-cell scHi-C track | `gtrack.2d.import_contacts(pool_name, desc, contacts = c(stage_1, ..., stage_N), fends = "<redb>/<RE>.fends")` | parallel-stage per-cell `gextract`s to N TSVs, then a single pool call. See "scHi-C pooling" below |
+| Per-coordinate 2D matrix (already binned, no fends) | `gtrack.2d.import(name, desc, file)` | lower-level than `_contacts`; takes a coord-resolution TSV directly. Used for 4DN-style 1kb contacts. Skip when you have adj+fends |
 | 2D track from a per-rectangle R data.frame | `gtrack.2d.create(name, desc, intervals, values)` | rectangles must be non-overlapping |
+| Deep-learning model predictions (Borzoi / IceQream / equivalent) | `gtrack.import(track_name, desc, per_bin_tsv, binsize = res)` where the TSV is the model's per-bin output | lab convention: predicted tracks live under `seq.IQ.<model>.<genome>.<config>_<target>` (e.g. `seq.IQ.pcg.flashzoi.mm10.rf524k_EB4_cnt`). See "Deep-learning bridge" below |
 | Per-CpG methylation from bismark `.cov.gz` (per sample) | Read TSV in R, build the 4-track quartet (`.cov` / `.meth` / `.unmeth` / `.avg`) via `gtrack.create_sparse`. See "Methylation tracks" below | bismark is 1-based, misha is 0-based half-open — convert. Always CG-validate against the genome before importing |
 | 450k / EPIC array methylation matrix (TCGA-style wide TSV) | `gtrack.array.import(name, desc, file)` + `gtrack.var.set` for per-sample metadata | one wide TSV: chrom/start/end + N value columns (one per sample); use `gtrack.array.extract` to query later |
 | Wide feature matrix (non-methylation, e.g. signature scores) | `gtrack.array.import(name, desc, file)` + `gtrack.var.set` for per-feature metadata | one wide TSV: chrom/start/end + N value columns |
@@ -131,6 +135,88 @@ gtrack.var.set("meth.tcga_brca", "donors", donors_df)     # per-sample metadata
 ```
 
 Query with `gtrack.array.extract(track, names_or_indices, intervals)` — pulls a sample-subset slice in one call. Build the wide TSV from N per-sample sparse `.avg` tracks via `gextract(c(samples), gintervals.all(), file = tempfile())` + `gtrack.array.import(... file = that_tempfile)` (`gextract` writes the right shape directly).
+
+## RE fragment-track bootstrap (4C/Hi-C prerequisites)
+
+Before any 2D contact import, the destination DB needs the restriction-enzyme fragment family for the RE used in library prep. Standard layout: `redb.<RE>_{flen, gc, map}` per-fragment 1D tracks plus a `fe<RE>_*` family produced from them. Lab corpus: 90 files across 25 projects — every new 4C/Hi-C bootstrap touches this.
+
+```r
+# Per-fragment tracks (binsize = 0 -> sparse, one value per RE fragment).
+# flen_file / gc_file are produced by an external perl pipeline
+# (e.g. map3c/TG3C/gen_re_frags.pl); not part of misha proper.
+gtrack.import("redb.DpnII_flen", flen_file, binsize = 0)
+gtrack.import("redb.DpnII_gc",   gc_file,   binsize = 0)
+
+# Per-fragment mapability: aggregate a per-base mapability track using
+# the flen track as iterator — each output bin is one RE fragment.
+gtrack.create("redb.DpnII_map", mapab_per_base_track,
+              iterator = "redb.DpnII_flen")
+
+# Export back to text so re_frags_to_fends.pl can build the fends file
+# consumed by gtrack.2d.import_contacts later.
+gextract("redb.DpnII_map", gintervals.all(),
+         iterator = "redb.DpnII_map", file = fragmap_file)
+```
+
+The `<redb>/<RE>.fends` file produced downstream (`GATC.fends` for DpnII, etc.) is the `fends =` argument of every `gtrack.2d.import_contacts` call that follows.
+
+## scHi-C: pool many single-cell tracks into one 2D track
+
+Universal pattern (166 files, 19 projects): partition the cell list across cores, each core `gextract`s its cells' contacts into one TSV stage, then a single `gtrack.2d.import_contacts` call with a **vector** of stage files pools everything. Avoids both N separate import calls and concatenating gigabytes through R.
+
+```r
+library(parallel); library(glue)
+
+tmp_dir <- tempfile(); dir.create(tmp_dir)
+num.cores <- 16
+core.assignment <- rep(1:num.cores, length.out = length(cells))
+
+mclapply(1:num.cores, function(cur.core) {
+    all.cell.conts <- data.frame()
+    for (cell in cells[core.assignment == cur.core]) {
+        track.conts <- gextract(cell, gintervals.2d.all())[, 1:6]
+        all.cell.conts <- rbind(all.cell.conts, track.conts)
+    }
+    all.cell.conts$value <- 1
+    write.table(format(all.cell.conts, scientific = FALSE),
+                file.path(tmp_dir, cur.core),
+                sep = "\t", quote = FALSE, row.names = FALSE)
+}, mc.cores = num.cores)
+
+gtrack.2d.import_contacts(pool_track, "Pooled scHi-C contacts",
+                          contacts = file.path(tmp_dir, 1:num.cores),
+                          fends    = file.path(redb_dir, "GATC.fends"),
+                          allow.duplicates = FALSE)
+```
+
+Key points: `value = 1` per-contact (counts get aggregated by the importer); `format(..., scientific = FALSE)` is the 2D analogue of `options(scipen = 20)` for the TSV form — large coordinates serialised in scientific notation reject silently or partially. `allow.duplicates = TRUE` is appropriate only when the *same fend pair* should be counted more than once (e.g. raw bulk Hi-C); for pooled scHi-C, `FALSE` is the safer default.
+
+## Deep-learning bridge: model predictions → misha tracks
+
+Borzoi / IceQream / similar deep-learning genome models round-trip through misha: the training half is `gextract` (often via `gextract.left_join` or the 5.7.1 `intervals_join = "intervals"` form) to assemble per-bin training data; the inference half writes per-bin predictions back as a track. By lab convention, predicted tracks live under `seq.IQ.<model>.<genome>.<config>_<target>` (e.g. `seq.IQ.pcg.flashzoi.mm10.rf524k_EB4_cnt`).
+
+Training-side extraction:
+
+```r
+borzoi_data <- gextract.left_join(borzoi_vt, intervals = regs, iterator = 32) %>%
+    mutate(across(all_of(borzoi_vt), ~ ifelse(is.na(.), 0, .))) %>%
+    group_by(chrom) %>%
+    mutate(across(all_of(borzoi_vt), ~ iceqream::norm01(log2(1 + .))))
+fwrite(borzoi_data, here("output/data-for-borzoi/borzoi_data.tsv"), sep = "\t")
+```
+
+Prediction-side import (after the external model run produces per-bin TSVs):
+
+```r
+options(scipen = 20)
+gtrack.import("seq.IQ.pcg.flashzoi.mm10.rf524k_EB4_cnt",
+              description = "Flashzoi mm10 rf524k EB4_cnt predictions",
+              file        = pred_tsv,
+              binsize     = 32)         # bin width must match the model's output resolution
+stopifnot(gtrack.exists("seq.IQ.pcg.flashzoi.mm10.rf524k_EB4_cnt"))
+```
+
+The DL-prediction track behaves like any other dense track downstream — `gcor`, `gscreen`, peak overlap, vtrack composition all work. The `binsize` must match the model's per-bin resolution exactly (typically 1, 20, 32, or 128); a binsize mismatch silently re-bins predictions onto the wrong grid.
 
 ## Liftover: intervals vs tracks
 
