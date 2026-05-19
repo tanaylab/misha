@@ -143,6 +143,16 @@ create_isolated_test_db <- function() {
         ))
     }
 
+    # Capture the previous GROOT so we can restore it on teardown. Without
+    # this, the next test file in the same parallel-test worker inherits a
+    # missing/stale GROOT and any file-scope misha calls (or setup_db-style
+    # helpers that cache GWD before re-rooting) blow up.
+    prev_groot <- if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+        get("GROOT", envir = .misha)
+    } else {
+        NULL
+    }
+
     # Set as root and reload to recognize symlinked tracks
     gsetroot(testdb_dir)
     gdb.reload()
@@ -150,11 +160,19 @@ create_isolated_test_db <- function() {
     withr::defer(
         {
             unlink(testdb_dir, recursive = TRUE)
-            # Clear GROOT if it still points at the dir we just deleted, so
-            # the next test file doesn't inherit a dangling pointer.
-            if (exists("GROOT", envir = .misha, inherits = FALSE) &&
-                identical(get("GROOT", envir = .misha), testdb_dir)) {
-                rm("GROOT", envir = .misha)
+            current_groot <- if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+                get("GROOT", envir = .misha)
+            } else {
+                NULL
+            }
+            # Only restore if GROOT still points at the dir we just deleted;
+            # the test may have switched to another db in the meantime.
+            if (!is.null(current_groot) && identical(current_groot, testdb_dir)) {
+                if (!is.null(prev_groot) && dir.exists(prev_groot)) {
+                    suppressMessages(gdb.init(prev_groot))
+                } else {
+                    rm("GROOT", envir = .misha)
+                }
             }
         },
         envir = parent.frame()
