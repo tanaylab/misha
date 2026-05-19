@@ -1,3 +1,7 @@
+# misha 5.7.3
+
+* `gdb.reload()` now also clears the C++ track-index cache, so a track replaced out-of-process (sibling R session, manual rebuild from another script) is picked up by the running session without restarting R. Previously the cached track type could shadow the new on-disk track and surface as e.g. `function global.percentile.max is not supported by sparse tracks` after the track was already rebuilt as dense.
+
 # misha 5.7.2
 
 * `gtrack.import()` of a malformed WIG/CSV file now surfaces the underlying parser error (file name, line number, what was wrong) instead of the opaque `Unrecognized format of file ...`. Makes typical failure modes (e.g. a value line glued to a fixedStep header from a botched cat-style concatenation) diagnosable at a glance.

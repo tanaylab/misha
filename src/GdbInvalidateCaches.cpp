@@ -45,4 +45,21 @@ SEXP gdb_invalidate_dir_cache(SEXP _dir, SEXP _envir)
     return R_NilValue;
 }
 
+// Wipe every entry from every process-static index cache. Used by
+// gdb.reload(rescan = TRUE) so out-of-process mutations (a sibling R
+// session, a manual rm/cp, an external rebuild) cannot leave the
+// caller routing reads through a stale track-type / layout entry.
+SEXP gdb_clear_all_dir_caches(SEXP _envir)
+{
+    try {
+        GenomeTrack::clear_index_cache();
+        TrackIndex2D::clear_cache();
+        GIntervalsBigSet1D::clear_index_cache();
+        GIntervalsBigSet2D::clear_index_cache();
+    } catch (TGLException &e) {
+        rerror("%s", e.msg());
+    }
+    return R_NilValue;
+}
+
 }
