@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.3</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.7.3" id="misha-573">misha 5.7.3<a class="anchor" aria-label="anchor" href="#misha-573"></a></h2>
+<ul><li>
+<code><a href="../reference/gdb.reload.html">gdb.reload()</a></code> now also clears the C++ track-index cache, so a track replaced out-of-process (sibling R session, manual rebuild from another script) is picked up by the running session without restarting R. Previously the cached track type could shadow the new on-disk track and surface as e.g. <code>function global.percentile.max is not supported by sparse tracks</code> after the track was already rebuilt as dense.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.7.2" id="misha-572">misha 5.7.2<a class="anchor" aria-label="anchor" href="#misha-572"></a></h2>
 <ul><li>
