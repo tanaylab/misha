@@ -21,3 +21,18 @@
     )
     invisible(NULL)
 }
+
+# Wipe every process-static index-cache entry (1D / 2D track index, 1D /
+# 2D bigset index). Used by gdb.reload(rescan = TRUE) so out-of-process
+# mutations (a sibling R session, a manual rm/cp, an external rebuild)
+# cannot leave the caller routing reads through a stale `dir ->
+# shared_ptr<TrackIndex>` entry.
+#
+# Best-effort: failures swallowed.
+.gdb.clear_all_dir_caches <- function() {
+    tryCatch(
+        .gcall("gdb_clear_all_dir_caches", .misha_env()),
+        error = function(e) NULL
+    )
+    invisible(NULL)
+}

@@ -73,6 +73,7 @@ extern "C" {
     extern SEXP ginterv_convert(SEXP, SEXP, SEXP);
     extern SEXP ginterv2d_convert(SEXP, SEXP, SEXP);
     extern SEXP gdb_invalidate_dir_cache(SEXP, SEXP);
+    extern SEXP gdb_clear_all_dir_caches(SEXP);
     extern SEXP gtrackcor(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackcor_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrackcor_spearman(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -184,6 +185,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"ginterv_convert", (DL_FUNC)&ginterv_convert, 3},
     {"ginterv2d_convert", (DL_FUNC)&ginterv2d_convert, 3},
     {"gdb_invalidate_dir_cache", (DL_FUNC)&gdb_invalidate_dir_cache, 2},
+    {"gdb_clear_all_dir_caches", (DL_FUNC)&gdb_clear_all_dir_caches, 1},
     {"gtrackcor", (DL_FUNC)&gtrackcor, 5},
     {"gtrackcor_multitask", (DL_FUNC)&gtrackcor_multitask, 5},
     {"gtrackcor_spearman", (DL_FUNC)&gtrackcor_spearman, 5},
