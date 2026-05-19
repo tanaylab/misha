@@ -26,6 +26,17 @@ gdb.reload <- function(rescan = TRUE) {
         .gdb.clear_scan_cache()
     }
 
+    # Drop every entry from the process-static index caches the C++ side
+    # maintains (track type / layout, bigset layout). Without this, an
+    # out-of-process mutation (sibling R session, manual rm/cp, external
+    # rebuild) leaves the caller routing reads through stale entries -
+    # e.g. a track converted from sparse to dense reads back as the cached
+    # sparse type until R restarts. gdb.reload(rescan = TRUE) is the
+    # documented "rescan from disk" hook; the C++ caches must follow.
+    if (rescan && exists(".gdb.clear_all_dir_caches", mode = "function")) {
+        .gdb.clear_all_dir_caches()
+    }
+
     assign("GTRACKS", NULL, envir = .misha)
     assign("GINTERVS", NULL, envir = .misha)
     assign("GTRACK_DATASET", NULL, envir = .misha)
