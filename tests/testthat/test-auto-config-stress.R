@@ -95,7 +95,13 @@ test_that("parallel execution respects buffer size on real database", {
     tracks <- gtrack.ls()
     skip_if(length(tracks) == 0, "No tracks in database")
 
-    test_track <- tracks[1]
+    # Prefer a dense_perf_* fixture - they're guaranteed to cover every
+    # chrom. Other tracks in the indexed DB (e.g. bench_motif_*) may have
+    # been left in per-chrom format with only a subset of chroms, which
+    # makes gextract over gintervals.all() abort with "Chrom X presented
+    # in the global chrom list is missing in track Y".
+    candidate <- grep("^dense_perf_", tracks, value = TRUE)
+    test_track <- if (length(candidate) > 0) candidate[1] else tracks[1]
 
     # Try a moderately large query with multitasking enabled
     options(gmultitasking = TRUE)
