@@ -366,7 +366,7 @@ per_peak <- gextract(c("k27", "atac"),
 # + every other column of `peaks` (e.g. gene_id, score, ...)
 ```
 
-`intervalID` is dropped; conflicting names from `peaks` get a `"1"` suffix (`chrom` -> `chrom1`). Output rows are in genomic-sort order, not original `peaks` order. The C++ side copies the input columns by `intervalID` index, so this avoids the R-side `dplyr::left_join` round-trip that `misha.ext::gextract.left_join` did and removes the misha.ext dependency for the simple case. Use `intervals_join = "none"` to just drop `intervalID` without attaching anything. Only available when returning to memory; combining with `file=` or `intervals.set.out=` raises an error.
+`intervalID` is dropped; conflicting names from `peaks` get a `"1"` suffix (`chrom` -> `chrom1`). Output rows are in genomic-sort order, not original `peaks` order. The C++ side copies the input columns by `intervalID` index, replacing the older `misha.ext::gextract.left_join` R-side wrapper at ~2x the speed on wide-window workloads (e.g. TSS +/- 5kb at 50bp iterator) and dropping the misha.ext dependency. Use `intervals_join = "none"` to just drop `intervalID` without attaching anything. Only available when returning to memory; combining with `file=` or `intervals.set.out=` raises an error.
 
 **NA handling - crucial gotcha.** Sparse tracks return NA at unmeasured bins; many dense tracks also have NAs. Fill at extract time, inside the expression:
 
@@ -396,8 +396,6 @@ prof <- gextract("epi.k27me3.es",
 ```r
 m <- gextract("cpgs.meth", intervals = gintervals.all(), iterator = "cpgs.cov")
 ```
-
-**Left-join convenience.** For attaching the input intervals' columns to every output row, prefer the built-in `gextract(..., intervals_join = "intervals")`. `misha.ext::gextract.left_join` is the older R-side wrapper that does the same thing via `dplyr::left_join`; equivalent in performance but adds a misha.ext dependency.
 
 **Per-interval descriptive stats in one call.** When you want `nbins / n_nan / min / max / sum / mean / sd` per input region, `gintervals.summary(expr, intervals, iterator)` returns one row per interval with all of them appended:
 
@@ -434,6 +432,7 @@ The intervals are carried in `attr(mat, "intervals")` - rownames are display-onl
 - Forgetting that `iterator = 20` is chromosome-relative, not interval-relative.
 - Skipping `arrange(intervalID)` when downstream code assumes input row order.
 - `misha.ext::intervs_to_mat` / `mat_to_intervs` - deprecated. Use `gintervals.to_mat` / `gintervals.from_mat` (in misha >= 5.7.0). The legacy versions corrupt chrom names containing underscores and lose integer typing on round-trip.
+- `misha.ext::gextract.left_join(tracks, intervals, ...)` - deprecated. Use `gextract(tracks, intervals = ..., intervals_join = "intervals", ...)` (in misha >= 5.7.1). The built-in attaches the input columns at the C++ layer (~2x faster on wide-window workloads) and drops the misha.ext dependency.
 
 ### 4.5 Aggregate signal in a flanking window
 
