@@ -84,7 +84,7 @@ Follow the conventions in those files. When you hit a recipe with an
 
 Pin to a release tag for stability by replacing `master` with any tag
 that contains `agent-guides/` (the directory landed in `v5.7.0`, so
-`v5.7.0` or later).
+`v5.7.0` or later; `v5.7.3` for the current guide content).
 
 #### Running scripts from old versions of misha (\< 4.2.0)
 
