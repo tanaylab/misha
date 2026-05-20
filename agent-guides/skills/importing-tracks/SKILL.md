@@ -12,7 +12,7 @@ A "track import" is any operation that materializes a persistent on-disk track f
 Two failure modes worth pre-empting:
 
 1. **Picking the wrong variant** for the source shape.
-2. **Silent partial imports.** WIG/bigWig importers run with `ignore_unknown_chroms = TRUE` — chroms not in `gintervals.all()$chrom` are dropped without error. Mismatched naming (`1` vs `chr1`) yields an "all NaN" track, not a failure.
+2. **Silent partial imports.** WIG/bigWig importers run with the C++-internal flag `ignore_unknown_chroms` hard-wired to true (`src/GenomeTrackImportWig.cpp` instantiates `Wig` with that argument; there is no R parameter to flip it) - chroms not in `gintervals.all()$chrom` are dropped without error. Mismatched naming (`1` vs `chr1`) yields an "all NaN" track, not a failure.
 
 ## Precondition: chrom-name compatibility (mandatory)
 
@@ -34,6 +34,8 @@ Non-empty diff → wrong gdb, naming-convention mismatch, or a gdb missing scaff
 
 ## Format chooser
 
+Convention used throughout: `binsize > 0` produces a dense fixed-bin track (one value per `binsize`-wide genomic window); `binsize = 0` produces a sparse track (one value per source interval, no inter-record bookkeeping). Picking the wrong shape for the source is the second-most-common ingestion mistake after chrom-name mismatch.
+
 | Source | Function | Key args / caveats |
 |---|---|---|
 | In-memory R intervals + values | `gtrack.create_dense(name, desc, intervals, values, binsize, func = "weighted.mean"/"coverage"/"max"/"min"/"sum"/"median"/"count")` (5.6.31+) or `gtrack.create_sparse(name, desc, intervs, values)` | preferred whenever data is already in R — no TSV round-trip and no `scipen` traps |
@@ -43,15 +45,16 @@ Non-empty diff → wrong gdb, naming-convention mismatch, or a gdb missing scaff
 | Directory or URL-with-wildcards of WIG/bigWig files | `gtrack.import_set(description, path, binsize, track.prefix = "", defval = NaN)` | bulk import; `path` may be a glob (`/data/*.bw`) or an `ftp://` URL; continues on per-file errors and returns successes/failures |
 | ChIP/ATAC pileup from read intervals (data.frame in R) | `gtrack.create_dense(name, desc, intervals = reads, values = rep(1, nrow(reads)), binsize = 20, defval = 0, func = "coverage")` | one-call replacement for the old `gtrack.import_mappedseq` route when reads are already in R |
 | Mapped reads (TSV from `samtools view`, or pre-staged file) | `gtrack.import_mappedseq(name, desc, file, pileup, binsize, cols.order = c(9, 11, 13, 14), remove.dups = TRUE)` | for BAM input, pipe through `samtools view` first; the default `remove.dups = TRUE` is correct for ChIP/ATAC/CUT&RUN |
-| 2D Hi-C / capture-C contacts (per-contact adj + fends) | `gtrack.2d.import_contacts(name, desc, contacts, fends = "<redb>/<RE>.fends", allow.duplicates = FALSE)` | `contacts =` accepts a vector (shaman per-rect scores, scHi-C per-core stagings — see "scHi-C pooling" below); `allow.duplicates = TRUE` for adj files that already count duplicates |
+| BAM file(s) directly (single or list, optional MAPQ filter) | `misha.ext::gtrack.import_mappedseq_bam(bam_files, track, min_mapq = NULL, ...)` | misha.ext wrapper: stages `samtools view` (with `samtools cat` for multi-BAM) through a named fifo into `gtrack.import_mappedseq`. Same `pileup` / `binsize` / `remove.dups` knobs as the underlying call. Saves you from hand-rolling the fifo; the workflow vignette in `misha.workflows` uses this path |
+| 2D Hi-C / capture-C contacts (per-contact adj + fends) | `gtrack.2d.import_contacts(name, desc, contacts, fends = "<redb>/<RE>.fends", allow.duplicates = TRUE)` | `contacts =` accepts a vector (shaman per-rect scores, scHi-C per-core stagings - see "scHi-C pooling" below). `allow.duplicates = TRUE` (the default) sums repeated fend pairs; use `allow.duplicates = FALSE` only for pre-scored shaman per-rectangle outputs where any duplicate is an upstream bug |
 | Restriction-enzyme fragment + fend prerequisites (any new 4C/Hi-C bootstrap) | `gtrack.import('redb.<RE>_flen', flen_file, 0)` + `gtrack.import('redb.<RE>_gc', gc_file, 0)` + `gtrack.create('redb.<RE>_map', mapab_track, iterator = 'redb.<RE>_flen')` | per-fragment iterator promotes a per-base mapability track to per-fragment mean. See "RE fragment-track bootstrap" below |
 | Pooled multi-cell scHi-C track | `gtrack.2d.import_contacts(pool_name, desc, contacts = c(stage_1, ..., stage_N), fends = "<redb>/<RE>.fends")` | parallel-stage per-cell `gextract`s to N TSVs, then a single pool call. See "scHi-C pooling" below |
 | Per-coordinate 2D matrix (already binned, no fends) | `gtrack.2d.import(name, desc, file)` | lower-level than `_contacts`; takes a coord-resolution TSV directly. Used for 4DN-style 1kb contacts. Skip when you have adj+fends |
 | 2D track from a per-rectangle R data.frame | `gtrack.2d.create(name, desc, intervals, values)` | rectangles must be non-overlapping |
 | Deep-learning model predictions (Borzoi / IceQream / equivalent) | `gtrack.import(track_name, desc, per_bin_tsv, binsize = res)` where the TSV is the model's per-bin output | lab convention: predicted tracks live under `seq.IQ.<model>.<genome>.<config>_<target>` (e.g. `seq.IQ.pcg.flashzoi.mm10.rf524k_EB4_cnt`). See "Deep-learning bridge" below |
 | Per-CpG methylation from bismark `.cov.gz` (per sample) | Read TSV in R, build the 4-track quartet (`.cov` / `.meth` / `.unmeth` / `.avg`) via `gtrack.create_sparse`. See "Methylation tracks" below | bismark is 1-based, misha is 0-based half-open — convert. Always CG-validate against the genome before importing |
-| 450k / EPIC array methylation matrix (TCGA-style wide TSV) | `gtrack.array.import(name, desc, file)` + `gtrack.var.set` for per-sample metadata | one wide TSV: chrom/start/end + N value columns (one per sample); use `gtrack.array.extract` to query later |
-| Wide feature matrix (non-methylation, e.g. signature scores) | `gtrack.array.import(name, desc, file)` + `gtrack.var.set` for per-feature metadata | one wide TSV: chrom/start/end + N value columns |
+| 450k / EPIC array methylation matrix (TCGA-style wide TSV) | `gtrack.array.import(name, desc, ...)` + `gtrack.var.set` for per-sample metadata | varargs: each `...` entry is either a wide TSV (chrom/start/end + N value columns, one per sample) or another array track; columns from multiple sources are merged by interval. Use `gtrack.array.extract` to query later |
+| Wide feature matrix (non-methylation, e.g. signature scores) | `gtrack.array.import(name, desc, ...)` + `gtrack.var.set` for per-feature metadata | same varargs shape as above - one wide TSV per source |
 | Track from another misha DB (same assembly) | `gtrack.copy(src, dest, db = "/path/to/other/trackdb", overwrite = FALSE)` | format conversion (per-chrom ↔ indexed) and chrom-order remap handled automatically; vector `src` supported |
 | Intervals from another assembly (liftover via chain) | `gintervals.liftover(intervs, chain = "<srcToTgt>.over.chain.fixed1")` after `gsetroot(target_assembly)` | lifted intervals may extend past chrom ends and may overlap each other — always follow with `gintervals.force_range()` and (if you need disjoint output) `gintervals.canonic()`. See "Liftover" below |
 | Track from another assembly (liftover via chain) | `gtrack.liftover(track, desc, src.track.dir, chain, multi_target_agg = "mean")` | requires a chain (`gintervals.load_chain`); aggregation policy controls how multiple source bins folded into one target bin combine — pick deliberately. Much less used in the lab than the intervals-side liftover above |
@@ -87,13 +90,17 @@ df <- fread(filename,
             col.names = c("chrom", "start", "end", "avg", "meth", "unmeth")) %>%
     select(-avg) %>%
     filter(chrom %in% gintervals.all()$chrom) %>%
-    mutate(start = start - 1, end = start + 1)            # 1-based -> 0-based half-open
+    # 1-based -> 0-based half-open: written as two mutates so the second
+    # `start + 1` uses the post-shift `start`, not the original bismark value.
+    mutate(start = start - 1) %>%
+    mutate(end = start + 1)
 
 # Anchor to the C of the CpG: if the reference base at start is 'C' keep it; if it's
 # 'G' (= bismark called the minus strand) shift back by one so start points at the C.
 df <- df %>%
     mutate(s = toupper(gseq.extract(.))) %>%
-    mutate(start = ifelse(s == "C", start, start - 1), end = start + 1)
+    mutate(start = ifelse(s == "C", start, start - 1)) %>%
+    mutate(end = start + 1)
 
 # Validate that the 2bp dinucleotide at the anchored position really is CG;
 # drop everything else (strand-ambiguous calls, soft-masked, sequencing errors).
@@ -122,7 +129,20 @@ Three points the corpus emphasises and that bite if skipped:
 
 ### From bismark BAM (gpatterns pipeline)
 
-When the upstream is BAM (not `.cov`), the lab runs `gpatterns::import_from_bismark_bam` via `gcluster.run2` to parallelise across samples. The output is the same `.cov / .meth / .unmeth / .avg` quartet, plus optional pattern-derived suffixes (`n, n0, n1, nx, nc, ncpg, pat_meth, fid, epipoly`) — `gpatterns` extends the convention rather than replacing it.
+When the upstream is BAM (not `.cov`), the lab runs `gpatterns::gpatterns.import_from_bam` across samples via `misha.ext::gcluster.run2`. Canonical call shape (see `~/src/gpatterns/R/import.R` and the corpus pipeline pattern):
+
+```r
+cmds <- bams %>% mutate(cmd = glue('gpatterns::gpatterns.import_from_bam(
+    "{bam}", workdir = NULL,
+    steps     = c("bam2tidy_cpgs", "bind_tidy_cpgs", "pileup", "pat_freq"),
+    parallel  = TRUE, bismark = TRUE, add_chr_prefix = TRUE,
+    paired_end = FALSE, track = "{track}", description = "...",
+    pat_freq_len = 5, min_qual = 20)')) %>% pull(cmd)
+misha.ext::gcluster.run2(command_list = cmds, max.jobs = 25, threads = 5, io_saturation = 1)
+gdb.reload()
+```
+
+Output is the same `.cov / .meth / .unmeth / .avg` quartet, plus optional pattern-derived companion tracks (length-5 epi-pattern frequencies under `.pat5`, etc.). `gpatterns` extends the quartet convention rather than replacing it.
 
 ### Population matrices: 450k / EPIC / PBAT cohorts
 
@@ -169,14 +189,15 @@ library(parallel); library(glue)
 
 tmp_dir <- tempfile(); dir.create(tmp_dir)
 num.cores <- 16
-core.assignment <- rep(1:num.cores, length.out = length(cells))
+cells.partition <- split(cells, rep(1:num.cores, length.out = length(cells)))
 
-mclapply(1:num.cores, function(cur.core) {
-    all.cell.conts <- data.frame()
-    for (cell in cells[core.assignment == cur.core]) {
-        track.conts <- gextract(cell, gintervals.2d.all())[, 1:6]
-        all.cell.conts <- rbind(all.cell.conts, track.conts)
-    }
+mclapply(seq_along(cells.partition), function(cur.core) {
+    # do.call(rbind, lapply(...)) - NOT a NULL-init growing accumulator.
+    # An rbind-in-a-for-loop here is O(N^2) and is the standard scHi-C
+    # anti-pattern flagged across the lab corpus.
+    all.cell.conts <- do.call(rbind, lapply(cells.partition[[cur.core]], function(cell) {
+        gextract(cell, gintervals.2d.all())[, 1:6]
+    }))
     all.cell.conts$value <- 1
     write.table(format(all.cell.conts, scientific = FALSE),
                 file.path(tmp_dir, cur.core),
@@ -184,26 +205,31 @@ mclapply(1:num.cores, function(cur.core) {
 }, mc.cores = num.cores)
 
 gtrack.2d.import_contacts(pool_track, "Pooled scHi-C contacts",
-                          contacts = file.path(tmp_dir, 1:num.cores),
-                          fends    = file.path(redb_dir, "GATC.fends"),
-                          allow.duplicates = FALSE)
+                          contacts = file.path(tmp_dir, seq_len(num.cores)),
+                          fends    = file.path(redb_dir, "GATC.fends"))
+                          # allow.duplicates defaults to TRUE - the right
+                          # value for pooling; setting FALSE here would
+                          # error on the first cross-cell repeat.
 ```
 
-Key points: `value = 1` per-contact (counts get aggregated by the importer); `format(..., scientific = FALSE)` is the 2D analogue of `options(scipen = 20)` for the TSV form — large coordinates serialised in scientific notation reject silently or partially. `allow.duplicates = TRUE` is appropriate only when the *same fend pair* should be counted more than once (e.g. raw bulk Hi-C); for pooled scHi-C, `FALSE` is the safer default.
+Key points: `value = 1` per-contact (counts get aggregated by the importer); `format(..., scientific = FALSE)` is the 2D analogue of `options(scipen = 20)` for the TSV form - large coordinates serialised in scientific notation reject silently or partially. `allow.duplicates = TRUE` is correct (and is the function default - source: `R/track-2d.R:295`): when two cells contribute the same fend pair, the importer sums their counts, which is what pooling means. Setting `FALSE` makes the importer error on the first repeated fend pair, which kills any non-trivial pool. `FALSE` is appropriate only for pre-scored shaman per-rectangle imports, where each rectangle should be unique. The lab's canonical pooling idiom (e.g. `combine_adjs.pl` + import) simply omits the argument and relies on the default.
 
 ## Deep-learning bridge: model predictions → misha tracks
 
-Borzoi / IceQream / similar deep-learning genome models round-trip through misha: the training half is `gextract` (often via `gextract.left_join` or the 5.7.1 `intervals_join = "intervals"` form) to assemble per-bin training data; the inference half writes per-bin predictions back as a track. By lab convention, predicted tracks live under `seq.IQ.<model>.<genome>.<config>_<target>` (e.g. `seq.IQ.pcg.flashzoi.mm10.rf524k_EB4_cnt`).
+Borzoi / IceQream / similar deep-learning genome models round-trip through misha: the training half uses `gextract(..., intervals_join = "intervals")` (added in misha 5.7.1) to assemble per-bin training data with the input intervals' columns attached at the C++ layer; the inference half writes per-bin predictions back as a track. By lab convention, predicted tracks live under `seq.IQ.<model>.<genome>.<config>_<target>` (e.g. `seq.IQ.pcg.flashzoi.mm10.rf524k_EB4_cnt`).
 
 Training-side extraction:
 
 ```r
-borzoi_data <- gextract.left_join(borzoi_vt, intervals = regs, iterator = 32) %>%
+borzoi_data <- gextract(borzoi_vt, intervals = regs, iterator = 32,
+                        intervals_join = "intervals") %>%
     mutate(across(all_of(borzoi_vt), ~ ifelse(is.na(.), 0, .))) %>%
     group_by(chrom) %>%
     mutate(across(all_of(borzoi_vt), ~ iceqream::norm01(log2(1 + .))))
 fwrite(borzoi_data, here("output/data-for-borzoi/borzoi_data.tsv"), sep = "\t")
 ```
+
+`misha.ext::gextract.left_join` is the older R-side wrapper that does the same join via `dplyr::left_join`; deprecated in misha 5.7.1 (the built-in is ~2x faster on wide-window workloads and drops the misha.ext dependency). Don't introduce new calls.
 
 Prediction-side import (after the external model run produces per-bin TSVs):
 
@@ -237,7 +263,7 @@ lifted       <- gintervals.force_range(lifted)        # clamp to chrom bounds
 # lifted    <- gintervals.canonic(lifted)
 ```
 
-Two non-negotiable post-liftover steps: `gintervals.force_range` (lifted intervals can extend past chrom ends — `gintervals()` then rejects them with `end coordinate exceeds chromosome boundaries`) and, if disjoint output is required, `gintervals.canonic` (lifted intervals may overlap).
+Two non-negotiable post-liftover steps: `gintervals.force_range` (lifted intervals can extend past chrom ends - `gintervals()` then rejects them with `end coordinate exceeds chromosome boundaries`) and, if disjoint output is required, `gintervals.canonic` (lifted intervals may overlap). `gintervals.canonic` defaults to `unify_touching_intervals = TRUE`, which merges intervals that share an endpoint as well as overlapping ones - pass `unify_touching_intervals = FALSE` if you need to preserve adjacency as separate rows.
 
 Output always carries `intervalID` (index into the input) and `chain_id` (which chain produced the mapping). The `chain_id` is essential when a source interval lifted via multiple chains (duplications): two rows with the same `intervalID` but different `chain_id` are distinct mappings.
 
@@ -251,10 +277,11 @@ Output always carries `intervalID` (index into the input) and `chain_id` (which 
 | `"keep"` | Cross-species / paralog-rich (e.g. cross-primate). One source → many output rows; distinguish by `chain_id` |
 | `"discard"` | Drop any source that has duplications. Use when downstream tooling can't tolerate ambiguity |
 
-**`tgt_overlap_policy` — multiple chains converging on overlapping target loci:**
+**`tgt_overlap_policy` - multiple chains converging on overlapping target loci:**
 
 | Value | When to use |
 |---|---|
+| `"error"` | Strict: fail if any target overlap is detected. Use to catch unexpected chain-file structure before downstream work assumes there are none |
 | `"auto"` / `"auto_score"` (default) | Segment target overlaps and pick the highest-scoring chain per segment. Right default for almost everything |
 | `"auto_longer"` | Prefer the longer chain per segment. Useful when alignment scores are noisy or uniform across the chain file |
 | `"auto_first"` | Prefer the lowest `chain_id` per segment (= original chain-file order). Use when the chain file encodes ranked preference |
@@ -348,7 +375,25 @@ for (i in seq_len(min(5, nrow(all_chr)))) {
 }
 ```
 
-All-zero across every chrom you expect signal on → chrom-name mismatch (revisit the precondition). Non-zero with a sane range → import succeeded.
+All-zero across every chrom you expect signal on -> chrom-name mismatch (revisit the precondition). Non-zero with a sane range -> import succeeded.
+
+## Post-import metadata (provenance)
+
+Every imported track should carry enough metadata for someone (you, in six months; a collaborator; a paper companion repo) to figure out *what it is* without rereading the import script. The lab convention is `gtrack.attr.set` with a small, consistent attribute vocabulary:
+
+```r
+gtrack.attr.set(track, "source",      "ENCODE")               # or GEO, in-house, ...
+gtrack.attr.set(track, "experiment",  "chip-seq")             # chip-seq, atac, wgbs, hic, ...
+gtrack.attr.set(track, "protein",     "Oct4")                 # for chip-seq / cut&run
+gtrack.attr.set(track, "PMID",        "28212747")
+gtrack.attr.set(track, "data_link",   "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1910646")
+gtrack.attr.set(track, "liftover",    "mm9")                  # source assembly if lifted
+gtrack.attr.set(track, "pileup",      200)                    # for BAM/mappedseq imports
+```
+
+`created.by` and `created.date` are populated automatically. List everything attached to a track with `gtrack.attr.export(track)`; query one with `gtrack.attr.get`.
+
+Use `gtrack.var.set(track, var, value)` (not `attr.set`) when you need to attach a structured R object - a donors data frame for an array track, a per-sample metadata table, an arbitrary list. `attr` is for short character/numeric labels; `var` is for R objects.
 
 ## Failure modes
 
