@@ -77,9 +77,11 @@ Lab-wide convention (high-frequency, cross-user — 95+ files / 23+ projects in 
 | `<sample>.unmeth` | unmethylated read count |
 | `<sample>.avg`    | methylation level `meth / cov` (often materialised; sometimes recomputed as an expression-derived vtrack at the CpG iterator) |
 
-Downstream tooling (lab helpers like `combine.libs` / `copy.lib`, the `gpatterns` package, methylation-aware `misha.ext` wrappers) walks the four suffixes by convention. Materialising only `.avg` and skipping the count pair breaks coverage-aware aggregations and re-binning.
+Downstream tooling (lab helpers like `combine.libs` / `copy.lib`, methylation-aware `misha.ext` wrappers) walks the four suffixes by convention. Materialising only `.avg` and skipping the count pair breaks coverage-aware aggregations and re-binning.
 
 ### Importing from a bismark `.cov.gz` (per sample)
+
+The lab's current methylation entry point is bismark's `.cov` output piped into R. (The older `gpatterns`-based BAM-import path is deprecated and not used in recent projects; new methylation cohorts go through this `.cov` route.)
 
 Bismark coverage files are 1-based, six columns: `chrom, start, end, avg, meth_count, unmeth_count` (start == end). Misha is 0-based half-open. **Always CG-validate against the reference** before importing — bismark coordinates can sit on either strand and ambiguous calls land on non-CG positions:
 
@@ -127,22 +129,23 @@ Three points the corpus emphasises and that bite if skipped:
 2. **The `gseq.extract` CG validation pair.** First call anchors to the C of the CpG; second call confirms the 2bp dinucleotide really is CG. Drops strand-ambiguous and miscalled rows. Skipping this leaks non-CG noise into the track.
 3. **Group-summarise before creating.** The same CpG can appear twice in a bismark file (plus/minus calls both pointing to the same C after anchoring); deduplicate by summing counts.
 
-### From bismark BAM (gpatterns pipeline)
+### Parallelising over many samples
 
-When the upstream is BAM (not `.cov`), the lab runs `gpatterns::gpatterns.import_from_bam` across samples via `misha.ext::gcluster.run2`. Canonical call shape (see `~/src/gpatterns/R/import.R` and the corpus pipeline pattern):
+For a cohort, wrap the per-sample block in a function and dispatch via `misha.ext::gcluster.run2`:
 
 ```r
-cmds <- bams %>% mutate(cmd = glue('gpatterns::gpatterns.import_from_bam(
-    "{bam}", workdir = NULL,
-    steps     = c("bam2tidy_cpgs", "bind_tidy_cpgs", "pileup", "pat_freq"),
-    parallel  = TRUE, bismark = TRUE, add_chr_prefix = TRUE,
-    paired_end = FALSE, track = "{track}", description = "...",
-    pat_freq_len = 5, min_qual = 20)')) %>% pull(cmd)
+import_one <- function(filename, track_stem, description) {
+    # ... the per-sample body above ...
+}
+
+cmds <- samples %>%
+    mutate(cmd = glue("import_one('{cov_path}', '{track_stem}', '{description}')")) %>%
+    pull(cmd)
 misha.ext::gcluster.run2(command_list = cmds, max.jobs = 25, threads = 5, io_saturation = 1)
 gdb.reload()
 ```
 
-Output is the same `.cov / .meth / .unmeth / .avg` quartet, plus optional pattern-derived companion tracks (length-5 epi-pattern frequencies under `.pat5`, etc.). `gpatterns` extends the quartet convention rather than replacing it.
+`gdb.reload()` afterwards is mandatory - `gcluster.run2` writes the new tracks from worker processes, and the parent gdb won't see them until reload.
 
 ### Population matrices: 450k / EPIC / PBAT cohorts
 
