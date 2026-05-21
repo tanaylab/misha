@@ -24,7 +24,7 @@
 
         outofrange <- slice < 1 | slice > length(colnames)
         if (TRUE %in% outofrange) {
-            stop(sprintf("Slice index %d is out of range", slice[match(TRUE, outofrange)], trackstr), call. = FALSE)
+            stop(sprintf("Slice index %d is out of range for track %s", slice[match(TRUE, outofrange)], trackstr), call. = FALSE)
         }
 
         res$slice <- colnames[slice]
@@ -106,7 +106,7 @@
     }
 
     if (typeof(names) != "character") {
-        stop(sprintf("names parameter must be a character vector", trackstr), call. = FALSE)
+        stop("names parameter must be a character vector", call. = FALSE)
     }
 
     if (.gcall_noninteractive(gtrack.info, trackstr)$type != "array") {
@@ -114,7 +114,7 @@
     }
 
     if ("" %in% names) {
-        stop(sprintf("Column names cannot be empty", duplicated[1]), call. = FALSE)
+        stop("Column names cannot be empty", call. = FALSE)
     }
 
     duplicated <- names[duplicated(names)]
