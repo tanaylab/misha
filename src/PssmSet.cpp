@@ -75,7 +75,7 @@ void PssmSet::read(istream &pssm_key, istream &pssm_data, float prior, bool logo
 
 		if ((int)id >= (int)m_pssms.size()) {
 			ostringstream str;
-			str << "Read data on pssm id %d" << id << " pos " << pos << " but max id is " << m_pssms.size();
+			str << "Read data on pssm id " << id << " pos " << pos << " but max id is " << m_pssms.size();
 			TGLError<PssmSet>("%s", str.str().c_str());
 		}
 
@@ -145,7 +145,7 @@ void PssmSet::read_old(istream &pssm_key, istream &pssm_data, int max_range, int
 
 		if ((int)id >= (int)m_pssms.size()) {
 			ostringstream str;
-			str << "Read data on pssm id %d" << id << " pos " << pos << " but max id is " << m_pssms.size();
+			str << "Read data on pssm id " << id << " pos " << pos << " but max id is " << m_pssms.size();
 			TGLError<PssmSet>("%s", str.str().c_str());
 		}
 
