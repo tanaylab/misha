@@ -132,6 +132,12 @@
 <li>silent footguns referenced inline from the above.</li>
 </ul>
 </li>
+<li>
+<a href="https://github.com/tanaylab/misha/tree/master/agent-guides/skills" class="external-link"><code>agent-guides/skills/</code></a>
+<ul>
+<li>deep playbooks for specific tasks. Currently: <a href="https://github.com/tanaylab/misha/blob/master/agent-guides/skills/importing-tracks/SKILL.md" class="external-link"><code>importing-tracks</code></a> (format chooser across all <code>gtrack.*import*</code> variants + pre/post-import validation). Load when the task specifically calls for one of these.</li>
+</ul>
+</li>
 </ul>
 <p>The core guide is ~4k words and targets a system-prompt-sized context. For Claude Code-style setups, dropping <code>misha-core.md</code> (or all three) into the project’s <code>CLAUDE.md</code> / <code>AGENTS.md</code> is the intended use.</p>
 <p><strong>Drop-in prompt (no clone needed).</strong> Paste the block below into your agent at the start of a misha task. It points the agent at the raw files on GitHub, so it works without a local checkout:</p>
