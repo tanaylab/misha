@@ -209,8 +209,12 @@ gdir.rm <- function(dir = NULL, recursive = FALSE, force = FALSE) {
                 intervals <- res[[2]]
 
                 if (!force && length(tracks) + length(intervals) > 0) {
+                    if (!interactive()) {
+                        stop(sprintf("Directory %s contains tracks or intervals; refusing to delete in non-interactive session without force = TRUE", dir), call. = FALSE)
+                    }
                     message(sprintf("Directory %s contains tracks or intervals. Are you still sure you want to delete it (Y/N)? ", dir))
                     answer <- toupper(readLines(n = 1))
+                    if (!length(answer)) answer <- "N"
                 }
             }
 

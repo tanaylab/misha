@@ -883,9 +883,13 @@ gtrack.rm <- function(track = NULL, force = FALSE, db = NULL) {
     if (force) {
         answer <- "Y"
     } else {
+        if (!interactive()) {
+            stop(sprintf("Refusing to delete track %s in non-interactive session without force = TRUE", trackname), call. = FALSE)
+        }
         str <- sprintf("Are you sure you want to delete track %s (Y/N)? ", trackname)
         message(str)
         answer <- toupper(readLines(n = 1))
+        if (!length(answer)) answer <- "N"
     }
 
     if (answer == "Y" || answer == "YES") {

@@ -319,9 +319,13 @@ gintervals.rm <- function(intervals.set = NULL, force = FALSE, db = NULL) {
     if (force) {
         answer <- "Y"
     } else {
+        if (!interactive()) {
+            stop(sprintf("Refusing to delete intervals set %s in non-interactive session without force = TRUE", intervals.set), call. = FALSE)
+        }
         str <- sprintf("Are you sure you want to delete intervals set %s (Y/N)? ", intervals.set)
         message(str)
         answer <- toupper(readLines(n = 1))
+        if (!length(answer)) answer <- "N"
     }
 
     if (answer == "Y" || answer == "YES") {
