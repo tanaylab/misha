@@ -33,6 +33,13 @@
         indexed_state <- NULL
         index_entries <- NULL
 
+        # Per-chrom accumulators (list-of-row-data.frames). We bind once at
+        # the end instead of rbind'ing in the loop, which would be O(N^2)
+        # on genomes with many contigs.
+        n_chroms <- nrow(chroms)
+        stats_acc <- vector("list", n_chroms)
+        entries_acc <- vector("list", n_chroms)
+
         tryCatch(
             {
                 # if any of the source intervals sets is big then create the output intervals set big too
@@ -42,20 +49,9 @@
                     # Initialize indexed format writing if enabled
                     if (use_indexed_format) {
                         if (.gintervals.is1d(intervals[[1]])) {
-                            indexed_state <- .gcall("gbigintervs_indexed_create", fullpath, nrow(chroms), .misha_env())
-                            index_entries <- data.frame(
-                                chrom_id = integer(0),
-                                offset = numeric(0),
-                                length = numeric(0)
-                            )
+                            indexed_state <- .gcall("gbigintervs_indexed_create", fullpath, n_chroms, .misha_env())
                         } else {
-                            indexed_state <- .gcall("gbigintervs_2d_indexed_create", fullpath, nrow(chroms), .misha_env())
-                            index_entries <- data.frame(
-                                chrom_id1 = integer(0),
-                                chrom_id2 = integer(0),
-                                offset = numeric(0),
-                                length = numeric(0)
-                            )
+                            indexed_state <- .gcall("gbigintervs_2d_indexed_create", fullpath, n_chroms, .misha_env())
                         }
                     }
                 }
@@ -65,7 +61,7 @@
                     all_chroms <- get("ALLGENOME", envir = .misha)[[1]]$chrom
                     chrom_to_id <- setNames(seq_along(all_chroms) - 1L, as.character(all_chroms))
 
-                    mapply(function(chrom) {
+                    mapply(function(chrom, i) {
                         loaded_intervals <- lapply(intervals, function(intervals) {
                             .gintervals.load_ext(intervals, chrom = chrom)
                         })
@@ -80,41 +76,41 @@
                                     indexed_state$dat_path, res, .misha_env()
                                 )
                                 chrom_id <- chrom_to_id[as.character(chrom)]
-                                index_entries <<- rbind(index_entries, data.frame(
+                                entries_acc[[i]] <<- data.frame(
                                     chrom_id = chrom_id,
                                     offset = write_result["offset"],
                                     length = write_result["length"]
-                                ))
+                                )
                             } else {
                                 .gintervals.big.save(fullpath, res, chrom = chrom)
                             }
 
                             stat <- .gcall("gintervals_stats", res, .misha_env())
-                            stats <<- rbind(stats, data.frame(chrom = chrom, stat))
+                            stats_acc[[i]] <<- data.frame(chrom = chrom, stat)
                         } else if (use_indexed_format && !is.null(intervals.set.out)) {
                             # Record empty entry for this chromosome
                             chrom_id <- chrom_to_id[as.character(chrom)]
-                            index_entries <<- rbind(index_entries, data.frame(
+                            entries_acc[[i]] <<- data.frame(
                                 chrom_id = chrom_id,
                                 offset = 0,
                                 length = 0
-                            ))
+                            )
                         }
                         if (as.integer(difftime(Sys.time(), t, units = "secs")) > 3) {
                             t <<- Sys.time()
-                            percentage <- as.integer(100 * match(chrom, chroms$chrom) / nrow(chroms))
+                            percentage <- as.integer(100 * i / n_chroms)
                             if (percentage < 100 && progress.percentage != percentage) {
                                 message(sprintf("%d%%...", percentage), appendLF = FALSE)
                                 progress.percentage <<- percentage
                             }
                         }
-                    }, chroms$chrom)
+                    }, chroms$chrom, seq_len(n_chroms))
                 } else {
                     # Get chromosome ID mapping for 2D
                     all_chroms <- get("ALLGENOME", envir = .misha)[[1]]$chrom
                     chrom_to_id <- setNames(seq_along(all_chroms) - 1L, as.character(all_chroms))
 
-                    mapply(function(chrom1, chrom2) {
+                    mapply(function(chrom1, chrom2, i) {
                         loaded_intervals <- lapply(intervals, function(intervals) {
                             .gintervals.load_ext(intervals, chrom1 = chrom1, chrom2 = chrom2)
                         })
@@ -130,38 +126,48 @@
                                 )
                                 chrom_id1 <- chrom_to_id[as.character(chrom1)]
                                 chrom_id2 <- chrom_to_id[as.character(chrom2)]
-                                index_entries <<- rbind(index_entries, data.frame(
+                                entries_acc[[i]] <<- data.frame(
                                     chrom_id1 = chrom_id1,
                                     chrom_id2 = chrom_id2,
                                     offset = write_result["offset"],
                                     length = write_result["length"]
-                                ))
+                                )
                             } else {
                                 .gintervals.big.save(fullpath, res, chrom1 = chrom1, chrom2 = chrom2)
                             }
 
                             stat <- .gcall("gintervals_stats", res, .misha_env())
-                            stats <<- rbind(stats, data.frame(chrom1 = chrom1, chrom2 = chrom2, stat))
+                            stats_acc[[i]] <<- data.frame(chrom1 = chrom1, chrom2 = chrom2, stat)
                         } else if (use_indexed_format && !is.null(intervals.set.out)) {
                             # Record empty entry for this chromosome pair
                             chrom_id1 <- chrom_to_id[as.character(chrom1)]
                             chrom_id2 <- chrom_to_id[as.character(chrom2)]
-                            index_entries <<- rbind(index_entries, data.frame(
+                            entries_acc[[i]] <<- data.frame(
                                 chrom_id1 = chrom_id1,
                                 chrom_id2 = chrom_id2,
                                 offset = 0,
                                 length = 0
-                            ))
+                            )
                         }
                         if (as.integer(difftime(Sys.time(), t, units = "secs")) > 3) {
                             t <<- Sys.time()
-                            percentage <- as.integer(100 * which(chroms$chrom1 == chrom1 & chroms$chrom2 == chrom2) / nrow(chroms))
+                            percentage <- as.integer(100 * i / n_chroms)
                             if (percentage < 100 && progress.percentage != percentage) {
                                 message(sprintf("%d%%...", percentage), appendLF = FALSE)
                                 progress.percentage <<- percentage
                             }
                         }
-                    }, chroms$chrom1, chroms$chrom2)
+                    }, chroms$chrom1, chroms$chrom2, seq_len(n_chroms))
+                }
+
+                # Single rbind after the loop is O(N) total
+                stats_acc <- stats_acc[!vapply(stats_acc, is.null, logical(1))]
+                if (length(stats_acc) > 0) {
+                    stats <- do.call(rbind, stats_acc)
+                }
+                entries_acc <- entries_acc[!vapply(entries_acc, is.null, logical(1))]
+                if (length(entries_acc) > 0) {
+                    index_entries <- do.call(rbind, entries_acc)
                 }
 
                 if (!is.null(intervals.set.out)) {
