@@ -1052,13 +1052,13 @@ void rdb::RSaneSerialize(SEXP rexp, FILE *fp)
 
 void rdb::RSaneSerialize(SEXP rexp, const char *fname)
 {
-	FILE *fp = fopen(fname, "w");
+	// RAII guard: fclose runs even if RSaneSerialize() below throws
+	std::unique_ptr<FILE, int(*)(FILE*)> fp(fopen(fname, "w"), &fclose);
 
 	if (!fp)
 		verror("Failed to open file %s: %s", fname, strerror(errno));
 
-	RSaneSerialize(rexp, fp);
-	fclose(fp);
+	RSaneSerialize(rexp, fp.get());
 }
 
 struct RSaneUnserializeData {
@@ -1093,15 +1093,13 @@ SEXP rdb::RSaneUnserialize(FILE *fp)
 
 SEXP rdb::RSaneUnserialize(const char *fname)
 {
-	FILE *fp = fopen(fname, "r");
+	// RAII guard: fclose runs even if RSaneUnserialize() below throws
+	std::unique_ptr<FILE, int(*)(FILE*)> fp(fopen(fname, "r"), &fclose);
 
 	if (!fp)
 		verror("Failed to open file %s: %s", fname, strerror(errno));
 
-	SEXP retv = RSaneUnserialize(fp);
-
-	fclose(fp);
-	return retv;
+	return RSaneUnserialize(fp.get());
 }
 
 struct RSaneAllocVectorData {
