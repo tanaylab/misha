@@ -53,7 +53,7 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
     tryCatch(
         {
             # copy all supplimentary data of a track (vars, etc.)
-            if (!system(sprintf("cp -r -u %s/. %s", src.dirname, tgt.dirname))) {
+            if (!system(sprintf("cp -r -u %s %s", shQuote(paste0(src.dirname, "/.")), shQuote(tgt.dirname)))) {
                 # if tgt track is null move it to the source track
                 if (is.null(substitute(tgt.track))) {
                     unlink(src.dirname, recursive = TRUE)
