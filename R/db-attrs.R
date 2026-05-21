@@ -24,13 +24,12 @@ gdb.set_readonly_attrs <- function(attrs) {
     } else {
         attrs <- as.character(attrs)
 
-        idx <- which(duplicated(attrs))[1]
+        idx <- match(TRUE, duplicated(attrs))
         if (!is.na(idx)) {
             stop(sprintf("Attribute %s appears more than once", attrs[idx]), call. = FALSE)
         }
 
-        idx <- which(attrs == "")[1]
-        if (!is.na(idx)) {
+        if (any(attrs == "")) {
             stop("Attribute name cannot be an empty string", call. = FALSE)
         }
 

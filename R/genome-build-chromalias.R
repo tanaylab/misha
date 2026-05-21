@@ -758,6 +758,10 @@
     if (!length(groot_chroms)) {
         return(1)
     }
+    total <- sum(as.numeric(groot_lengths), na.rm = TRUE)
+    if (total <= 0) {
+        return(0)
+    }
     mapped <- groot_chroms %in% canonical[nzchar(canonical) & !is.na(canonical)]
-    sum(as.numeric(groot_lengths[mapped])) / sum(as.numeric(groot_lengths))
+    sum(as.numeric(groot_lengths[mapped]), na.rm = TRUE) / total
 }

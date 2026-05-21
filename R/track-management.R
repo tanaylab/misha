@@ -290,7 +290,7 @@ gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed =
 
             cols <- colnames(attrs_table)
             for (i in seq_along(attrs)) {
-                idx <- which(cols == attrs[i])[1]
+                idx <- match(attrs[i], cols)
                 if (!is.na(idx)) {
                     attrs_table <- subset(attrs_table, grepl(patterns[i], attrs_table[, idx], ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes))
                     if (!nrow(attrs_table)) {

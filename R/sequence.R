@@ -486,15 +486,12 @@ gseq.pwm_edits <- function(seqs,
         ext <- if (isTRUE(extend)) w - 1L + indel_extra else if (isFALSE(extend)) 0L else as.integer(extend) + indel_extra
         extended_intervals <- intervals_df
         extended_intervals$end <- extended_intervals$end + ext
-        # Clamp to chromosome boundaries
+        # Clamp to chromosome boundaries (vectorized: O(N) total, not O(N*M))
         chrom_sizes <- gintervals.all()
-        for (i in seq_len(nrow(extended_intervals))) {
-            chr <- as.character(extended_intervals$chrom[i])
-            chr_row <- chrom_sizes[chrom_sizes$chrom == chr, , drop = FALSE]
-            if (nrow(chr_row) > 0) {
-                extended_intervals$end[i] <- min(extended_intervals$end[i], chr_row$end[1])
-            }
-        }
+        chr_end <- setNames(chrom_sizes$end, as.character(chrom_sizes$chrom))
+        max_end <- chr_end[as.character(extended_intervals$chrom)]
+        keep <- !is.na(max_end)
+        extended_intervals$end[keep] <- pmin(extended_intervals$end[keep], max_end[keep])
         seqs <- gseq.extract(extended_intervals)
         # Without indels: the extended sequence has length
         # interval_length + w - 1, and C++ scans positions 0..(seqlen-w)
