@@ -246,7 +246,7 @@ gintervals.attr.export <- function(intervals.set = NULL, attrs = NULL) {
     if (is.null(intervals.set)) {
         intervals.set <- get("GINTERVS", envir = .misha)
     } else {
-        idx <- which(!(intervals.set %in% get("GINTERVS", envir = .misha)))[1]
+        idx <- match(FALSE, intervals.set %in% get("GINTERVS", envir = .misha))
         if (!is.na(idx)) {
             stop(sprintf("Intervals set %s does not exist", intervals.set[idx]), call. = FALSE)
         }
@@ -355,17 +355,17 @@ gintervals.attr.import <- function(table = NULL, remove.others = FALSE) {
         stop("Invalid format of attributes table", call. = FALSE)
     }
 
-    idx <- which(!(isets %in% get("GINTERVS", envir = .misha)))[1]
+    idx <- match(FALSE, isets %in% get("GINTERVS", envir = .misha))
     if (!is.na(idx)) {
         stop(sprintf("Intervals set %s does not exist", isets[idx]), call. = FALSE)
     }
 
-    idx <- which(duplicated(isets))[1]
+    idx <- match(TRUE, duplicated(isets))
     if (!is.na(idx)) {
         stop(sprintf("Intervals set %s appears more than once", isets[idx]), call. = FALSE)
     }
 
-    idx <- which(duplicated(attrs))[1]
+    idx <- match(TRUE, duplicated(attrs))
     if (!is.na(idx)) {
         stop(sprintf("Attribute %s appears more than once", attrs[idx]), call. = FALSE)
     }

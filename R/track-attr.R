@@ -74,7 +74,7 @@ gtrack.attr.export <- function(tracks = NULL, attrs = NULL) {
     if (is.null(tracks)) {
         tracks <- get("GTRACKS", envir = .misha)
     } else {
-        idx <- which(!(tracks %in% get("GTRACKS", envir = .misha)))[1]
+        idx <- match(FALSE, tracks %in% get("GTRACKS", envir = .misha))
         if (!is.na(idx)) {
             stop(sprintf("Track %s does not exist", tracks[idx]), call. = FALSE)
         }
@@ -138,17 +138,17 @@ gtrack.attr.import <- function(table = NULL, remove.others = FALSE) {
         stop("Invalid format of attributes table", call. = FALSE)
     }
 
-    idx <- which(!(tracks %in% get("GTRACKS", envir = .misha)))[1]
+    idx <- match(FALSE, tracks %in% get("GTRACKS", envir = .misha))
     if (!is.na(idx)) {
         stop(sprintf("Track %s does not exist", tracks[idx]), call. = FALSE)
     }
 
-    idx <- which(duplicated(tracks))[1]
+    idx <- match(TRUE, duplicated(tracks))
     if (!is.na(idx)) {
         stop(sprintf("Track %s appears more than once", tracks[idx]), call. = FALSE)
     }
 
-    idx <- which(duplicated(attrs))[1]
+    idx <- match(TRUE, duplicated(attrs))
     if (!is.na(idx)) {
         stop(sprintf("Attribute %s appears more than once", attrs[idx]), call. = FALSE)
     }
