@@ -203,8 +203,13 @@ double TechnicalComputer2D::compute(const Rectangle &rectangle, const DiagonalBa
 
     if (!m_loaded)
     {
+        // Set to nullptr after delete[] so that, on a retry following a
+        // partial failure, the destructor doesn't double-delete a
+        // dangling pointer left by a previously freed array.
         delete[] m_track1;
+        m_track1 = nullptr;
         delete[] m_track2;
+        m_track2 = nullptr;
         unsigned safe_m_dim = static_cast<unsigned>(m_dim);
         m_track1 = new GenomeTrackSparse[safe_m_dim];
         m_track2 = new GenomeTrackSparse[safe_m_dim];
