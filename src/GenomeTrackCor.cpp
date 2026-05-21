@@ -261,6 +261,11 @@ static double pearson_from_values(const vector<double> &x, const vector<double> 
     double var_x = (sum_x2 - (sum_x * sum_x) / n) / (n - 1);
     double var_y = (sum_y2 - (sum_y * sum_y) / n) / (n - 1);
 
+    // Clamp tiny negative variance from catastrophic cancellation; we
+    // still bail out on genuinely zero variance below.
+    if (var_x < 0 && var_x > -1e-12) var_x = 0;
+    if (var_y < 0 && var_y > -1e-12) var_y = 0;
+
     if (var_x <= 0 || var_y <= 0)
         return numeric_limits<double>::quiet_NaN();
 

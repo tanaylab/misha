@@ -66,8 +66,8 @@ const GIntervals &GenomeArraysCsv::get_intervals(int chromid)
 			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: invalid format of start coordinate", m_bfile.file_name().c_str(), lineno);
 
 		end = strtoll(m_fields[GInterval::END].c_str(), &endptr, 10);
-		if (*endptr) 
-			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: invalid format of start coordinate", m_bfile.file_name().c_str(), lineno);
+		if (*endptr)
+			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: invalid format of end coordinate", m_bfile.file_name().c_str(), lineno);
 
 		if (start >= end) 
 			TGLError<GenomeArraysCsv>(FORMAT_ERROR, "File %s, line %ld: start coordinate exceeds or equals the end coordinate", m_bfile.file_name().c_str(), lineno);
