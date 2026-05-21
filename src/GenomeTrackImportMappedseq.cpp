@@ -86,7 +86,17 @@ public:
 			TGLError("Failed to popen '%s': %s", cmd.c_str(), strerror(errno));
 	}
 	~PipeSource() override {
-		if (fp_) pclose(fp_);
+		if (!fp_) return;
+		// We get here only on the throw path - the success path goes
+		// through check_finalize() which already cleared fp_. Print the
+		// child's exit status so a samtools crash mid-stream still leaves
+		// a breadcrumb after the FSM's parser error.
+		int raw_status = pclose(fp_);
+		if (raw_status != 0) {
+			int code = WIFEXITED(raw_status) ? WEXITSTATUS(raw_status) : -1;
+			REprintf("note: samtools view exited with code %d (raw status %d) "
+			         "after the import error above.\n", code, raw_status);
+		}
 	}
 	// getc_unlocked avoids the per-byte stdio mutex; PipeSource isn't shared.
 	int getc() override { return getc_unlocked(fp_); }
