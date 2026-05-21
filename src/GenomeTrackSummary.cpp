@@ -33,7 +33,10 @@ struct IntervalSummary {
 		double mean = get_mean();
 		// we are calaculating unbiased standard deviation:
 		// sqrt(sum((x-mean)^2) / (N-1)) = sqrt(sum(x^2)/(N-1) - N*(mean^2)/(N-1))
-		return sqrt(mean_square_sum / (num_non_nan_bins - 1) - (mean * mean) * (num_non_nan_bins / (num_non_nan_bins - 1)));
+		// Clamp tiny negatives from catastrophic cancellation (the two
+		// terms are close when variance is small relative to mean^2).
+		double var = mean_square_sum / (num_non_nan_bins - 1) - (mean * mean) * (num_non_nan_bins / (num_non_nan_bins - 1));
+		return var > 0 ? sqrt(var) : 0;
 	}
 
 	void update(double v) {
