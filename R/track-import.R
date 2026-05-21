@@ -182,7 +182,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 }
 
                 file.unzipped <- paste(tmp.dirname, "/", basename(gsub("\\.(gz|zip)$", "", file, perl = TRUE)), sep = "")
-                retv <- system(paste("/bin/sh -c \"gunzip -q -c", file, ">", file.unzipped, "\""), intern = FALSE)
+                retv <- system(sprintf("gunzip -q -c %s > %s", shQuote(file), shQuote(file.unzipped)), intern = FALSE)
                 if (retv != 0) {
                     stop(sprintf("Failed to unzip file %s", file), call. = FALSE)
                 }
@@ -196,7 +196,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 used_bed <- TRUE
             } else if (length(grep("^.+\\.bw$", file, perl = TRUE)) || length(grep("^.+\\.bigWig$", file, perl = TRUE)) ||
                 # looks like all bigWig files start with "fc26" in their first two bytes
-                system(sprintf("od -x -N 2 \"%s\"", file), intern = TRUE)[1] == "0000000 fc26") {
+                system(sprintf("od -x -N 2 %s", shQuote(file)), intern = TRUE)[1] == "0000000 fc26") {
                 message("Converting from BigWig to WIG...\n")
                 report.progress <- TRUE
                 if (tmp.dirname == "") {
@@ -208,7 +208,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 
                 file.noext <- basename(gsub("^(.+)\\.(.+)$", "\\1", file, perl = TRUE))
                 file.converted <- paste(tmp.dirname, "/", file.noext, ".wig", sep = "")
-                retv <- system(paste(get_bigWigToWig_bin(), file, file.converted), intern = FALSE)
+                retv <- system(paste(shQuote(get_bigWigToWig_bin()), shQuote(file), shQuote(file.converted)), intern = FALSE)
                 if (retv != 0) {
                     stop("BigWigToWig conversion failed", call. = FALSE)
                 }
@@ -459,8 +459,9 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
                     stop("No files downloaded. Exiting.", call. = FALSE)
                 }
             } else {
-                # local path
-                files <- system(paste("/bin/sh -c \"ls -d -A", path, "\""), intern = TRUE)
+                # local path (glob); Sys.glob avoids shelling out so a path
+                # containing spaces or shell metacharacters works the same way.
+                files <- Sys.glob(path)
             }
 
             files <- files[!file.info(files)$isdir]
