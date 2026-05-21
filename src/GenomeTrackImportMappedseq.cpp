@@ -27,126 +27,130 @@ using namespace rdb;
 
 namespace {
 
-// ----- ByteSource: byte-stream abstraction over the import file ------------
-//
-// One of three concrete sources is selected by open_source() based on a
-// magic-byte sniff. The FSM in gtrackimport_mappedseq reads via src->getc()
-// and checks src->error() at EOF; PipeSource additionally exposes the child
-// process exit status via finish() after EOF.
+// ByteSource is a byte-stream abstraction over the import file. open_source()
+// returns a PlainSource (default), GzipSource (1f 8b magic), or PipeSource
+// (bgzip / BAM magic -> samtools view subprocess). The FSM reads via
+// src->getc() and checks src->error() at EOF; error() returns false at clean
+// EOF for all three sources. After EOF the FSM calls check_finalize() to give
+// PipeSource a chance to surface its child's exit status.
 
 class ByteSource {
 public:
-    virtual ~ByteSource() = default;
-    virtual int getc() = 0;
-    virtual bool error() const = 0;
+	virtual ~ByteSource() = default;
+	virtual int getc() = 0;
+	virtual bool error() const = 0;
+	virtual void check_finalize(const char *infilename) { (void)infilename; }
 };
 
 class PlainSource : public ByteSource {
-    BufferedFile buf_;
+	BufferedFile buf_;
 public:
-    explicit PlainSource(const std::string &path) {
-        buf_.open(path.c_str(), "r");
-        if (buf_.error())
-            TGLError("Failed to open %s: %s", path.c_str(), strerror(errno));
-    }
-    int getc() override { return buf_.getc(); }
-    bool error() const override { return buf_.error() != 0; }
+	explicit PlainSource(const std::string &path) {
+		buf_.open(path.c_str(), "r");
+		if (buf_.error())
+			TGLError("Failed to open %s: %s", path.c_str(), strerror(errno));
+	}
+	int getc() override { return buf_.getc(); }
+	bool error() const override { return buf_.error() != 0; }
 };
 
 class GzipSource : public ByteSource {
-    gzFile gz_;
+	gzFile gz_;
 public:
-    explicit GzipSource(const std::string &path) : gz_(nullptr) {
-        gz_ = gzopen(path.c_str(), "rb");
-        if (!gz_)
-            TGLError("Failed to open gzipped %s: %s", path.c_str(), strerror(errno));
-    }
-    ~GzipSource() override { if (gz_) gzclose(gz_); }
-    int getc() override { return gzgetc(gz_); }
-    bool error() const override {
-        if (!gz_) return true;
-        int err = 0;
-        gzerror(gz_, &err);
-        return err != Z_OK && err != Z_STREAM_END;
-    }
+	explicit GzipSource(const std::string &path) : gz_(nullptr) {
+		gz_ = gzopen(path.c_str(), "rb");
+		if (!gz_)
+			TGLError("Failed to open gzipped %s: %s", path.c_str(), strerror(errno));
+	}
+	~GzipSource() override { if (gz_) gzclose(gz_); }
+	int getc() override { return gzgetc(gz_); }
+	bool error() const override {
+		if (!gz_) return true;
+		int err = 0;
+		gzerror(gz_, &err);
+		return err != Z_OK && err != Z_STREAM_END;
+	}
 };
 
 // PipeSource wraps a popen() child (used for BAM auto-detect via
-// `samtools view <path>`). finish() must be called after the parser has
-// drained the pipe so the caller can inspect the child's exit status; if
-// finish() is not called, the destructor pcloses as a fallback (discarding
-// the status). 127 from pclose means "command not found" (samtools missing).
+// `samtools view <path>`). The caller invokes check_finalize() once parsing
+// is done so a non-zero child exit (notably 127 == "command not found"
+// for missing samtools) is surfaced as a clear error.
 class PipeSource : public ByteSource {
-    FILE *fp_;
-    std::string cmd_;
-    bool finished_;
-    int finish_status_;
+	FILE *fp_;
+	bool finished_;
 public:
-    explicit PipeSource(const std::string &cmd)
-        : fp_(nullptr), cmd_(cmd), finished_(false), finish_status_(-1)
-    {
-        fp_ = popen(cmd.c_str(), "r");
-        if (!fp_)
-            TGLError("Failed to popen '%s': %s", cmd.c_str(), strerror(errno));
-    }
-    ~PipeSource() override {
-        if (fp_) pclose(fp_);
-    }
-    int getc() override { return ::getc(fp_); }
-    bool error() const override { return fp_ ? ferror(fp_) != 0 : true; }
-    int finish() {
-        if (finished_) return finish_status_;
-        finished_ = true;
-        finish_status_ = pclose(fp_);
-        fp_ = nullptr;
-        return finish_status_;
-    }
-    const std::string &cmd() const { return cmd_; }
+	explicit PipeSource(const std::string &cmd) : fp_(nullptr), finished_(false) {
+		fp_ = popen(cmd.c_str(), "r");
+		if (!fp_)
+			TGLError("Failed to popen '%s': %s", cmd.c_str(), strerror(errno));
+	}
+	~PipeSource() override {
+		if (fp_) pclose(fp_);
+	}
+	// getc_unlocked avoids the per-byte stdio mutex; PipeSource isn't shared.
+	int getc() override { return getc_unlocked(fp_); }
+	bool error() const override { return fp_ ? ferror(fp_) != 0 : true; }
+	void check_finalize(const char *infilename) override {
+		if (finished_) return;
+		finished_ = true;
+		int raw_status = pclose(fp_);
+		fp_ = nullptr;
+		if (raw_status == 0) return;
+		int code = WIFEXITED(raw_status) ? WEXITSTATUS(raw_status) : -1;
+		if (code == 127) {
+			TGLError("BAM input detected at %s but samtools is not on PATH. "
+			         "Install samtools (e.g. `apt-get install samtools` or "
+			         "`conda install -c bioconda samtools`) or pre-convert: "
+			         "`samtools view %s > %s.sam`.",
+			         infilename, infilename, infilename);
+		} else {
+			TGLError("samtools view %s exited with code %d (raw status %d). "
+			         "Run `samtools view %s | head` to see the underlying error.",
+			         infilename, code, raw_status, infilename);
+		}
+	}
 };
 
 // Single-quote escape for paths handed to /bin/sh via popen: every ' becomes
 // '\'' and the whole string is wrapped in '...'. Safe against shell
 // metacharacters in filesystem paths.
 static std::string shellquote_single(const std::string &s) {
-    std::string out;
-    out.reserve(s.size() + 2);
-    out.push_back('\'');
-    for (char c : s) {
-        if (c == '\'') out.append("'\\''");
-        else out.push_back(c);
-    }
-    out.push_back('\'');
-    return out;
+	std::string out;
+	out.reserve(s.size() + 2);
+	out.push_back('\'');
+	for (char c : s) {
+		if (c == '\'') out.append("'\\''");
+		else out.push_back(c);
+	}
+	out.push_back('\'');
+	return out;
 }
 
-// Peek up to nbuf magic bytes from path. Returns count read (0 on open
-// failure).
+// Peek up to nbuf bytes from path. Returns count read (0 on open failure).
+// We deliberately use raw fopen/fread rather than BufferedFile because the
+// latter allocates a 128KB buffer for a 4-byte sniff.
 static size_t read_magic_bytes(const std::string &path, unsigned char *buf, size_t nbuf) {
-    FILE *fp = fopen(path.c_str(), "rb");
-    if (!fp) return 0;
-    size_t n = fread(buf, 1, nbuf, fp);
-    fclose(fp);
-    return n;
+	FILE *fp = fopen(path.c_str(), "rb");
+	if (!fp) return 0;
+	size_t n = fread(buf, 1, nbuf, fp);
+	fclose(fp);
+	return n;
 }
 
-// Select the right source for a path:
-//   - BAM (bgzip magic 1f 8b 08 04): popen("samtools view <quoted-path>")
-//   - plain gzip (magic 1f 8b ...):  GzipSource via zlib
-//   - else:                          PlainSource via BufferedFile
 static std::unique_ptr<ByteSource> open_source(const std::string &path) {
-    unsigned char magic[4] = {0, 0, 0, 0};
-    size_t n = read_magic_bytes(path, magic, 4);
-    if (n == 4 && magic[0] == 0x1f && magic[1] == 0x8b &&
-                  magic[2] == 0x08 && magic[3] == 0x04) {
-        // bgzip / BAM
-        const std::string cmd = "samtools view " + shellquote_single(path);
-        return std::unique_ptr<ByteSource>(new PipeSource(cmd));
-    }
-    if (n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b) {
-        // plain gzip
-        return std::unique_ptr<ByteSource>(new GzipSource(path));
-    }
-    return std::unique_ptr<ByteSource>(new PlainSource(path));
+	unsigned char magic[4] = {0, 0, 0, 0};
+	size_t n = read_magic_bytes(path, magic, 4);
+	// bgzip uses gzip magic with FLG.FEXTRA (0x04) and method 0x08; that
+	// distinguishes BAM/bgzip from plain gzip (which has FLG 0x00 or 0x08).
+	if (n == 4 && magic[0] == 0x1f && magic[1] == 0x8b &&
+	              magic[2] == 0x08 && magic[3] == 0x04) {
+		const std::string cmd = "samtools view " + shellquote_single(path);
+		return std::unique_ptr<ByteSource>(new PipeSource(cmd));
+	}
+	if (n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b)
+		return std::unique_ptr<ByteSource>(new GzipSource(path));
+	return std::unique_ptr<ByteSource>(new PlainSource(path));
 }
 
 }  // namespace
@@ -354,23 +358,9 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		if (src->error())
 			verror("Error while reading file %s: %s", infilename, strerror(errno));
 
-		if (auto *pipe_src = dynamic_cast<PipeSource *>(src.get())) {
-			int raw_status = pipe_src->finish();
-			if (raw_status != 0) {
-				int code = WIFEXITED(raw_status) ? WEXITSTATUS(raw_status) : -1;
-				if (code == 127) {
-					verror("BAM input detected at %s but samtools is not on PATH. "
-					       "Install samtools (e.g. `apt-get install samtools` or "
-					       "`conda install -c bioconda samtools`) or pre-convert: "
-					       "`samtools view %s > %s.sam`.",
-					       infilename, infilename, infilename);
-				} else {
-					verror("samtools view %s exited with code %d (raw status %d). "
-					       "Run `samtools view %s | head` to see the underlying error.",
-					       infilename, code, raw_status, infilename);
-				}
-			}
-		}
+		// For PipeSource this drains the child and surfaces non-zero exit
+		// (including 127 = "samtools not on PATH"); no-op for other sources.
+		src->check_finalize(infilename);
 
 		for (unsigned ichrom = 0; ichrom < num_chroms; ichrom++) {
 			char filename[FILENAME_MAX];

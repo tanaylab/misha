@@ -58,6 +58,7 @@ void Progress_reporter::report(uint64_t delta_steps_done)
 
 		if (delta > m_min_report_interval) {
 			int progress = m_maxsteps ? (int)(100. * m_numsteps / m_maxsteps) : 0;
+			if (progress > 100) progress = 100;
 
 			if (m_last_progress_reported < 0 && !m_report_prefix.empty())
 				REprintf("%s", m_report_prefix.c_str());
