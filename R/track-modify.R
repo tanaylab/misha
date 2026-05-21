@@ -106,7 +106,7 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
         {
             .gdb.add_track(trackstr)
             created.by <- sprintf("gtrack.lookup(%s, description, lookup_table", trackstr)
-            for (i in (1:length(exprs))) {
+            for (i in seq_along(exprs)) {
                 created.by <- sprintf("%s, %s, breaks%d", created.by, exprs[i], i)
             }
             created.by <- sprintf("%s, include.lowest = %s, force.binning = %s)", created.by, include.lowest, force.binning)
