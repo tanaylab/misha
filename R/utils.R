@@ -359,7 +359,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
                             # pack the answer
                             running.jobs <- .gcluster.running.jobs(submitted.jobs)
                             answer <- c()
-                            for (i in 1:length(commands)) {
+                            for (i in seq_along(commands)) {
                                 res <- list()
                                 res$exit.status <- NA
                                 res$retv <- NA

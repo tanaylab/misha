@@ -271,7 +271,7 @@ gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed =
         patterns <- c()
 
         # first filter out file names (this filtering is faster than filtering by track variable)
-        for (i in 1:length(args)) {
+        for (i in seq_along(args)) {
             arg <- as.character(args[[i]])
             if (is.null(names(args)) || names(args)[i] == "") {
                 tracks <- grep(arg, tracks, value = TRUE, ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes)
@@ -289,7 +289,7 @@ gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed =
             }
 
             cols <- colnames(attrs_table)
-            for (i in 1:length(attrs)) {
+            for (i in seq_along(attrs)) {
                 idx <- which(cols == attrs[i])[1]
                 if (!is.na(idx)) {
                     attrs_table <- subset(attrs_table, grepl(patterns[i], attrs_table[, idx], ignore.case = ignore.case, perl = perl, fixed = fixed, useBytes = useBytes))

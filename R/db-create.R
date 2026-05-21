@@ -203,7 +203,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             if (!is.null(genes.file)) {
                 intervs <- gintervals.import_genes(genes.file, annots.file, annots.names)
                 if (!is.null(intervs)) {
-                    for (i in 1:length(intervs)) {
+                    for (i in seq_along(intervs)) {
                         if (!is.null(intervs$tss)) {
                             .gcall_noninteractive(.gintervals.save_file, sprintf("%s/tracks/%s.interv", groot, names(intervs)[i]), intervs[[i]])
                         }

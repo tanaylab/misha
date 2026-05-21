@@ -729,7 +729,7 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
 
     tryCatch(
         {
-            for (i in 1:length(files)) {
+            for (i in seq_along(files)) {
                 if (is.null(files[[i]])) {
                     next
                 }

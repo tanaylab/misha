@@ -132,7 +132,7 @@
         }
     }
 
-    colnames <- as.integer(1:length(names))
+    colnames <- as.integer(seq_along(names))
     names(colnames) <- names
 
     trackdir <- .track_dir(trackstr)

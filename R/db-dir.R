@@ -127,7 +127,7 @@ gtrack.create_dirs <- function(track, mode = "0777") {
     dirs <- dirname(gsub("\\.", "/", track))
     dirs <- strsplit(dirs, "/")[[1]]
     dir <- dirs[1]
-    for (i in 1:length(dirs)) {
+    for (i in seq_along(dirs)) {
         if (i > 1) {
             dir <- paste(dir, dirs[i], sep = "/")
         }
