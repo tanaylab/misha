@@ -22,9 +22,23 @@ make_test_bam <- function(sam_text) {
     bam
 }
 
-# A SAM fixture covering chrom "chr1" from the test DB (misha normalizes to
-# "chr<N>" internally), with two reads on different strands plus one unmapped
-# read with an unknown chrom (exercises the chrom-mismatch path).
+# Memoized BAM for the default fixture: 4 tests use it; building it once
+# avoids 4 samtools forks (~100-300ms saved per test-file run).
+default_bam_path <- local({
+    cached <- NULL
+    function() {
+        skip_if_no_samtools()
+        if (is.null(cached) || !file.exists(cached)) {
+            cached <<- make_test_bam(default_sam_text())
+        }
+        cached
+    }
+})
+
+# SAM fixture for chrom "chr1" (misha normalizes test-DB chrom names to
+# "chr<N>" internally). Two mapped reads on opposite strands and one
+# unmapped record whose RNAME field will be rewritten to "*" by samtools
+# when converted to BAM, exercising the chrom-mismatch path.
 default_sam_text <- function() {
     c(
         "@HD\tVN:1.6",
