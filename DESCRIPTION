@@ -28,7 +28,7 @@ Imports:
     utils,
     tools,
     yaml
-SystemRequirements: samtools (>= 1.0, optional, only required for BAM input)
+SystemRequirements: samtools (>= 1.0; optional, required only for BAM input)
 Suggests:
     data.table,
     dplyr,
