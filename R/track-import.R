@@ -339,7 +339,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' @param pileup interval expansion
 #' @param binsize bin size of a dense track
 #' @param cols.order order of sequence, chromosome, coordinate and strand
-#' columns in mapped sequences file or NULL if SAM file is used
+#' columns in mapped sequences file or NULL if SAM file is used. For BAM
+#' input the only accepted values are `NULL` or omission; an explicit
+#' non-NULL `cols.order` with BAM input is an error.
 #' @param remove.dups if 'TRUE' the duplicated coordinates are counted only
 #' once.
 #' @return A list of conversion process statistics.

@@ -405,6 +405,7 @@ void TrackExprScanner::report_progress()
 
 			// In 2D the scope index may momentarily decrease; ensure monotonic progress display
 			progress = max(progress, m_last_progress_reported);
+			if (progress > 100) progress = 100;
             if (progress != 100) {
                 if (progress != m_last_progress_reported) {
                     REprintf("%d%%...", progress);
