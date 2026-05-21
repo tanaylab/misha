@@ -523,19 +523,19 @@
                 if (!is.null(chrom)) {
                     res <- res[res$chrom == chrom, ]
                     if (nrow(res)) {
-                        rownames(res) <- 1:nrow(res)
+                        rownames(res) <- seq_len(nrow(res))
                     }
                 }
                 if (!is.null(chrom1)) {
                     res <- res[res$chrom1 == chrom1, ]
                     if (nrow(res)) {
-                        rownames(res) <- 1:nrow(res)
+                        rownames(res) <- seq_len(nrow(res))
                     }
                 }
                 if (!is.null(chrom2)) {
                     res <- res[res$chrom2 == chrom2, ]
                     if (nrow(res)) {
-                        rownames(res) <- 1:nrow(res)
+                        rownames(res) <- seq_len(nrow(res))
                     }
                 }
             }

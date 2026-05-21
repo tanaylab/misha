@@ -171,20 +171,20 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             if (!use_indexed_format) {
                 intervals <- intervals[order(intervals$chrom), ]
             }
-            rownames(intervals) <- 1:nrow(intervals)
+            rownames(intervals) <- seq_len(nrow(intervals))
 
             # Lazy 2D generation: only materialize for small genomes
             contig_threshold <- getOption("gmulticontig.2d.threshold", 100)
 
             if (nrow(intervals) <= contig_threshold) {
                 # Small genome: materialize full 2D grid
-                cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
+                cartesian <- expand.grid(seq_len(nrow(intervals)), seq_len(nrow(intervals)))
                 intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
                 names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
                 # Ensure chrom1 and chrom2 have the same factor levels as intervals$chrom (including aliases)
                 intervals2d$chrom1 <- factor(intervals2d$chrom1, levels = all_chrom_names)
                 intervals2d$chrom2 <- factor(intervals2d$chrom2, levels = all_chrom_names)
-                rownames(intervals2d) <- 1:nrow(intervals2d)
+                rownames(intervals2d) <- seq_len(nrow(intervals2d))
             } else {
                 # Large genome: defer 2D generation
                 intervals2d <- .create_deferred_2d(nrow(intervals))
