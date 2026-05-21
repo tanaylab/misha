@@ -472,7 +472,7 @@
         names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
     } else if (mode == "full") {
         # Full cartesian product of all chromosome pairs
-        cartesian <- expand.grid(1:nrow(intervals), 1:nrow(intervals))
+        cartesian <- expand.grid(seq_len(nrow(intervals)), seq_len(nrow(intervals)))
         intervals2d <- cbind(intervals[cartesian[, 2], ], intervals[cartesian[, 1], ])
         names(intervals2d) <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
     } else {
@@ -483,7 +483,7 @@
     intervals2d$chrom1 <- factor(intervals2d$chrom1, levels = chrom_levels)
     intervals2d$chrom2 <- factor(intervals2d$chrom2, levels = chrom_levels)
 
-    rownames(intervals2d) <- 1:nrow(intervals2d)
+    rownames(intervals2d) <- seq_len(nrow(intervals2d))
     intervals2d
 }
 
