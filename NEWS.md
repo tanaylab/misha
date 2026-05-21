@@ -1,3 +1,8 @@
+# misha 5.8.0
+
+* `gtrack.import_mappedseq()` now accepts BAM files directly: bgzip magic bytes are auto-detected and the file is streamed through `samtools view` into the existing parser. Requires `samtools` on `PATH` (declared in `SystemRequirements`); a clear error names the missing tool otherwise. The legacy default `cols.order = c(9, 11, 13, 14)` is silently switched to `NULL` (SAM mode) for BAM input.
+* `gtrack.import_mappedseq()` also auto-detects plain gzipped SAM / TSV input (`.sam.gz`, `.tsv.gz`) via zlib. No user-facing API change.
+
 # misha 5.7.4
 
 ### Bug fixes
