@@ -272,7 +272,7 @@
     }
 
     if (!length(grep("^[A-Za-z][\\w.]*$", intervals.set, perl = TRUE))) {
-        stop("Invalid interval name %s. Only alphanumeric characters and _ are allowed in the name.")
+        stop(sprintf("Invalid interval name %s. Only alphanumeric characters and _ are allowed in the name.", intervals.set), call. = FALSE)
     }
 
     path <- gsub(".", "/", intervals.set, fixed = TRUE)
@@ -411,9 +411,9 @@
                 )
                 res <- do.call(.grbind, res) # much faster than calling rbind incrementally in mapply
             } else if (nrow(meta$stats) == 1) {
-                res <- .gintervals.load_file(intervals.set, chrom = meta$stat$chrom[1])
+                res <- .gintervals.load_file(intervals.set, chrom = meta$stats$chrom[1])
                 if (!identical(sapply(res, "class"), sapply(zeroline, "class"))) {
-                    stop(sprintf("Intervals set %s, chrom %s: invalid columns definition", intervals.set, meta$stat$chrom[1]), call. = FALSE)
+                    stop(sprintf("Intervals set %s, chrom %s: invalid columns definition", intervals.set, meta$stats$chrom[1]), call. = FALSE)
                 }
             } else {
                 res <- meta$zeroline
@@ -486,9 +486,9 @@
                 )
                 res <- do.call(.grbind, res) # much faster than calling rbind incrementally in mapply
             } else if (nrow(meta$stats) == 1) {
-                res <- .gintervals.load_file(intervals.set, chrom1 = meta$stat$chrom1[1], chrom2 = meta$stat$chrom2[1])
+                res <- .gintervals.load_file(intervals.set, chrom1 = meta$stats$chrom1[1], chrom2 = meta$stats$chrom2[1])
                 if (!identical(sapply(res, "class"), sapply(zeroline, "class"))) {
-                    stop(sprintf("Interval set %s, chrom1 %s, chrom2 %s: invalid columns definition", intervals.set, meta$stat$chrom1[1], meta$stat$chrom2[1]), call. = FALSE)
+                    stop(sprintf("Interval set %s, chrom1 %s, chrom2 %s: invalid columns definition", intervals.set, meta$stats$chrom1[1], meta$stats$chrom2[1]), call. = FALSE)
                 }
             } else {
                 res <- meta$zeroline
