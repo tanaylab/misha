@@ -42,7 +42,7 @@
             mapped[intervals$strand == "." | intervals$strand == "*" | intervals$strand == ""] <- 0L
             bad <- is.na(mapped)
             if (any(bad)) {
-                i <- which(bad)[1]
+                i <- match(TRUE, bad)
                 stop(sprintf("Invalid strand value \"%s\" of interval (%s, %g, %g)", intervals$strand[i], intervals$chrom[i], intervals$start[i], intervals$end[i]), call. = FALSE)
             }
             intervals$strand <- as.numeric(mapped)
@@ -51,7 +51,7 @@
         } else {
             err.intervs <- intervals[intervals$strand != as.integer(intervals$strand) | intervals$strand < -1 | intervals$strand > 1, ]
             if (nrow(err.intervs) > 0) {
-                stop(sprintf("Invalid strand value %g of interval (%s, %g, %g)", err.intervs$strand[1], err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]))
+                stop(sprintf("Invalid strand value %g of interval (%s, %g, %g)", err.intervs$strand[1], err.intervs$chrom[1], err.intervs$start[1], err.intervs$end[1]), call. = FALSE)
             }
         }
     }

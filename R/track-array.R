@@ -89,7 +89,7 @@
     filename <- paste(trackdir, ".colnames", sep = "/")
 
     if (!file.exists(filename)) {
-        stop(sprintf("File %s does not exist", filename))
+        stop(sprintf("File %s does not exist", filename), call. = FALSE)
     }
 
     f <- file(filename, "rb")
