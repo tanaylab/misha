@@ -138,7 +138,7 @@
                 file.rename(tmpfilename, path)
                 gintervs <- c(gintervs, intervals.set)
                 gintervs <- unique(gintervs)
-                sort(gintervs)
+                gintervs <- sort(gintervs)
                 assign("GINTERVS", gintervs, envir = .misha)
             }
             unlink(tmpfilename, recursive = TRUE)
