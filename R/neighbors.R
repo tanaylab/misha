@@ -157,11 +157,6 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
         ), call. = FALSE)
     }
 
-    if (is.null(colnames)) {
-        intervals1name <- deparse(substitute(intervals1), width.cutoff = 500)[1]
-        intervals2name <- deparse(substitute(intervals2), width.cutoff = 500)[1]
-    }
-
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     # Optional strand warning
