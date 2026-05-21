@@ -303,11 +303,10 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #' `.tsv.gz`), or in BAM format (auto-detected by bgzip magic; requires
 #' `samtools` on `PATH`).
 #'
-#' For a SAM file 'cols.order' must be set to 'NULL'.
-#'
-#' For BAM input, the legacy default `cols.order = c(9, 11, 13, 14)` is
-#' silently switched to `NULL` (SAM mode) because `samtools view` emits a
-#' SAM-format payload (columns 10/3/4/2).
+#' For a SAM file 'cols.order' must be set to 'NULL'. For BAM input the
+#' default `cols.order = c(9, 11, 13, 14)` is treated as SAM mode because
+#' `samtools view` emits SAM-format payload; passing a non-NULL `cols.order`
+#' explicitly with BAM input is an error.
 #'
 #' For a general TAB delimited text format the following columns must be
 #' presented in the file: sequence, chromosome, coordinate and strand. The
@@ -335,11 +334,8 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 #'
 #' @param track track name
 #' @param description a character string description
-#' @param file Path to a SAM, tab-delimited, gzipped (`.sam.gz` / `.tsv.gz`),
-#' or BAM file. BAM input is auto-detected by bgzip magic bytes and streamed
-#' through `samtools view`; `samtools` must be on `PATH`. For BAM the legacy
-#' default `cols.order = c(9, 11, 13, 14)` is silently switched to `NULL` (SAM
-#' mode).
+#' @param file path to the mapped sequences file (see Description for
+#' accepted formats)
 #' @param pileup interval expansion
 #' @param binsize bin size of a dense track
 #' @param cols.order order of sequence, chromosome, coordinate and strand
@@ -357,17 +353,14 @@ gtrack.import_mappedseq <- function(track = NULL, description = NULL, file = NUL
     }
     .gcheckroot()
 
-    # BAM auto-detect: samtools view emits SAM-format payload, but the
-    # legacy default cols.order = c(9, 11, 13, 14) is the tab-delimited
-    # layout. Silently switch to NULL (SAM mode) when the input is BAM
-    # AND the caller is using the default. If the caller passed an
-    # explicit non-default cols.order, warn before overriding.
+    # BAM auto-detect: samtools view emits SAM-format payload, so cols.order
+    # must be NULL. Honor the function-arg default (user didn't pass anything)
+    # by silently switching; error if the user passed something explicit.
     if (.is_bam_file(file)) {
-        legacy_default <- c(9, 11, 13, 14)
-        if (!is.null(cols.order) && !identical(as.numeric(cols.order), as.numeric(legacy_default))) {
-            warning(
-                "BAM input with non-default cols.order. samtools view emits ",
-                "SAM format; pass cols.order = NULL to use SAM defaults.",
+        if (!missing(cols.order) && !is.null(cols.order)) {
+            stop(
+                "BAM input forces SAM column layout. Pass `cols.order = NULL` ",
+                "or omit the argument.",
                 call. = FALSE
             )
         }

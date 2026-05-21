@@ -19,11 +19,8 @@ gtrack.import_mappedseq(
 
 \item{description}{a character string description}
 
-\item{file}{Path to a SAM, tab-delimited, gzipped (`.sam.gz` / `.tsv.gz`),
-or BAM file. BAM input is auto-detected by bgzip magic bytes and streamed
-through `samtools view`; `samtools` must be on `PATH`. For BAM the legacy
-default `cols.order = c(9, 11, 13, 14)` is silently switched to `NULL` (SAM
-mode).}
+\item{file}{path to the mapped sequences file (see Description for
+accepted formats)}
 
 \item{pileup}{interval expansion}
 
@@ -48,11 +45,10 @@ describes a single read, in gzipped variants of either (`.sam.gz`,
 `.tsv.gz`), or in BAM format (auto-detected by bgzip magic; requires
 `samtools` on `PATH`).
 
-For a SAM file 'cols.order' must be set to 'NULL'.
-
-For BAM input, the legacy default `cols.order = c(9, 11, 13, 14)` is
-silently switched to `NULL` (SAM mode) because `samtools view` emits a
-SAM-format payload (columns 10/3/4/2).
+For a SAM file 'cols.order' must be set to 'NULL'. For BAM input the
+default `cols.order = c(9, 11, 13, 14)` is treated as SAM mode because
+`samtools view` emits SAM-format payload; passing a non-NULL `cols.order`
+explicitly with BAM input is an error.
 
 For a general TAB delimited text format the following columns must be
 presented in the file: sequence, chromosome, coordinate and strand. The
