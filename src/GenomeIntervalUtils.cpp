@@ -6,6 +6,7 @@
  */
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -931,21 +932,21 @@ SEXP gbigintervs_load_chrom(SEXP _intervset, SEXP _chrom, SEXP _envir)
 				return df;
 			}
 
-			// Open dat file and seek to position
-			FILE *fp = fopen(dat_path.c_str(), "rb");
+			// Open dat file and seek to position (unique_ptr keeps the
+			// FILE* alive only until scope exit; if RSaneUnserialize throws
+			// the file handle is closed by the deleter, not leaked).
+			std::unique_ptr<FILE, int(*)(FILE*)> fp(fopen(dat_path.c_str(), "rb"), &fclose);
 			if (!fp) {
 				verror("Cannot open indexed intervals file %s: %s",
 					   dat_path.c_str(), strerror(errno));
 			}
 
-			if (fseek(fp, entry->offset, SEEK_SET) != 0) {
-				fclose(fp);
+			if (fseek(fp.get(), entry->offset, SEEK_SET) != 0) {
 				verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
 			}
 
 			// Read serialized R object from current position
-			rintervals = rprotect_ptr(RSaneUnserialize(fp));
-			fclose(fp);
+			rintervals = rprotect_ptr(RSaneUnserialize(fp.get()));
 			runprotect(1);
 
 			return rintervals;
@@ -1041,21 +1042,19 @@ SEXP gbigintervs_load_chrom2d(SEXP _intervset, SEXP _chrom1, SEXP _chrom2, SEXP 
 				return df;
 			}
 
-			// Open dat file and seek to position
-			FILE *fp = fopen(dat_path.c_str(), "rb");
+			// Open dat file and seek to position (unique_ptr fclose-on-throw)
+			std::unique_ptr<FILE, int(*)(FILE*)> fp(fopen(dat_path.c_str(), "rb"), &fclose);
 			if (!fp) {
 				verror("Cannot open indexed intervals2d file %s: %s",
 					   dat_path.c_str(), strerror(errno));
 			}
 
-			if (fseek(fp, entry->offset, SEEK_SET) != 0) {
-				fclose(fp);
+			if (fseek(fp.get(), entry->offset, SEEK_SET) != 0) {
 				verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
 			}
 
 			// Read serialized R object from current position
-			rintervals = rprotect_ptr(RSaneUnserialize(fp));
-			fclose(fp);
+			rintervals = rprotect_ptr(RSaneUnserialize(fp.get()));
 			runprotect(1);
 
 			return rintervals;
@@ -1128,8 +1127,8 @@ SEXP gbigintervs_load_all(SEXP _intervset, SEXP _envir)
 			return df;
 		}
 
-		// Open dat file
-		FILE *fp = fopen(dat_path.c_str(), "rb");
+		// Open dat file (unique_ptr fclose-on-throw)
+		std::unique_ptr<FILE, int(*)(FILE*)> fp(fopen(dat_path.c_str(), "rb"), &fclose);
 		if (!fp) {
 			verror("Cannot open indexed intervals file %s: %s",
 				   dat_path.c_str(), strerror(errno));
@@ -1145,16 +1144,14 @@ SEXP gbigintervs_load_all(SEXP _intervset, SEXP _envir)
 		for (const auto& entry : entries) {
 			if (entry.length == 0) continue;
 
-			if (fseek(fp, entry.offset, SEEK_SET) != 0) {
-				fclose(fp);
+			if (fseek(fp.get(), entry.offset, SEEK_SET) != 0) {
 				UNPROTECT(1);
 				verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
 			}
 
-			SEXP chrom_intervs = RSaneUnserialize(fp);
+			SEXP chrom_intervs = RSaneUnserialize(fp.get());
 			SET_VECTOR_ELT(obj_list, list_idx++, chrom_intervs);
 		}
-		fclose(fp);
 
 		UNPROTECT(1); // obj_list
 		return obj_list;
@@ -1229,8 +1226,8 @@ SEXP gbigintervs_load_all_2d(SEXP _intervset, SEXP _envir)
 			return df;
 		}
 
-		// Open dat file
-		FILE *fp = fopen(dat_path.c_str(), "rb");
+		// Open dat file (unique_ptr fclose-on-throw)
+		std::unique_ptr<FILE, int(*)(FILE*)> fp(fopen(dat_path.c_str(), "rb"), &fclose);
 		if (!fp) {
 			verror("Cannot open indexed intervals2d file %s: %s",
 				   dat_path.c_str(), strerror(errno));
@@ -1246,16 +1243,14 @@ SEXP gbigintervs_load_all_2d(SEXP _intervset, SEXP _envir)
 		for (const auto& entry : entries) {
 			if (entry.length == 0) continue;
 
-			if (fseek(fp, entry.offset, SEEK_SET) != 0) {
-				fclose(fp);
+			if (fseek(fp.get(), entry.offset, SEEK_SET) != 0) {
 				UNPROTECT(1);
 				verror("Failed to seek in %s: %s", dat_path.c_str(), strerror(errno));
 			}
 
-			SEXP chrom_intervs = RSaneUnserialize(fp);
+			SEXP chrom_intervs = RSaneUnserialize(fp.get());
 			SET_VECTOR_ELT(obj_list, list_idx++, chrom_intervs);
 		}
-		fclose(fp);
 
 		UNPROTECT(1); // obj_list
 		return obj_list;
