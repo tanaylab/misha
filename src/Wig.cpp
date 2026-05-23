@@ -215,13 +215,33 @@ bool Wig::read_record(Rec &rec, int64_t &lineno)
 			return true;
 		}
 
-		if (fields.size() == 4 && fields[0].size() > 3 && !fields[0].compare(0, 3, "chr")) {
-			rec.bedgraph.chromid = str2chromid(fields[0].c_str(), lineno - 1);
-			rec.bedgraph.start = str2coord(fields[1].c_str(), 0, lineno - 1);
-			rec.bedgraph.end = str2coord(fields[2].c_str(), 0, lineno - 1);
-			rec.bedgraph.val = str2val(fields[3].c_str(), lineno - 1);
-			rec.type = BEDGRAPH_REC;
-			return true;
+		if (fields.size() == 4) {
+			// Treat as bedGraph regardless of chrom-name prefix. The
+			// earlier "fields[0] starts with chr" gate spuriously
+			// rejected bedGraph from genomes whose contig names don't
+			// start with chr (Ensembl-style, non-mammalian, etc.).
+			//
+			// We still need to distinguish a real bedGraph row from a
+			// malformed WIG line that happens to split into 4 tokens
+			// (e.g. a value glued onto a fixedStep header by missing
+			// newlines: "0.5fixedStep chrom=X start=1 step=1"). Such
+			// lines carry "=" inside their fields; a real bedGraph row
+			// never does. Use that as the cheap disambiguator: if any
+			// field contains '=', fall through to the generic
+			// "invalid format" error path below.
+			bool looks_like_bedgraph = true;
+			for (int i = 0; i < 4 && looks_like_bedgraph; ++i) {
+				if (fields[i].find('=') != string::npos)
+					looks_like_bedgraph = false;
+			}
+			if (looks_like_bedgraph) {
+				rec.bedgraph.chromid = str2chromid(fields[0].c_str(), lineno - 1);
+				rec.bedgraph.start = str2coord(fields[1].c_str(), 0, lineno - 1);
+				rec.bedgraph.end = str2coord(fields[2].c_str(), 0, lineno - 1);
+				rec.bedgraph.val = str2val(fields[3].c_str(), lineno - 1);
+				rec.type = BEDGRAPH_REC;
+				return true;
+			}
 		}
 
 		TGLError<Wig>(INVALID_FORMAT, "Invalid format of WIG file %s, line %ld", m_bfile.file_name().c_str(), lineno - 1);
