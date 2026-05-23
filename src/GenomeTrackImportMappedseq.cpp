@@ -86,16 +86,23 @@ public:
 			TGLError("Failed to popen '%s': %s", cmd.c_str(), strerror(errno));
 	}
 	~PipeSource() override {
-		if (!fp_) return;
-		// We get here only on the throw path - the success path goes
-		// through check_finalize() which already cleared fp_. Print the
-		// child's exit status so a samtools crash mid-stream still leaves
-		// a breadcrumb after the FSM's parser error.
-		int raw_status = pclose(fp_);
-		if (raw_status != 0) {
-			int code = WIFEXITED(raw_status) ? WEXITSTATUS(raw_status) : -1;
-			REprintf("note: samtools view exited with code %d (raw status %d) "
-			         "after the import error above.\n", code, raw_status);
+		// Dtors are implicitly noexcept; any throw during stack unwinding
+		// would call std::terminate. The pclose itself can't throw, and
+		// REprintf is well-behaved on R 4.x, but be defensive.
+		try {
+			if (!fp_) return;
+			// We get here only on the throw path - the success path goes
+			// through check_finalize() which already cleared fp_. Print
+			// the child's exit status so a samtools crash mid-stream
+			// still leaves a breadcrumb after the FSM's parser error.
+			int raw_status = pclose(fp_);
+			if (raw_status != 0) {
+				int code = WIFEXITED(raw_status) ? WEXITSTATUS(raw_status) : -1;
+				REprintf("note: samtools view exited with code %d (raw status %d) "
+				         "after the import error above.\n", code, raw_status);
+			}
+		} catch (...) {
+			// swallow - destructors must not propagate exceptions
 		}
 	}
 	// getc_unlocked avoids the per-byte stdio mutex; PipeSource isn't shared.
@@ -155,12 +162,11 @@ static std::unique_ptr<ByteSource> open_source(const std::string &path) {
 	// distinguishes BAM/bgzip from plain gzip (which has FLG 0x00 or 0x08).
 	if (n == 4 && magic[0] == 0x1f && magic[1] == 0x8b &&
 	              magic[2] == 0x08 && magic[3] == 0x04) {
-		const std::string cmd = "samtools view " + shellquote_single(path);
-		return std::unique_ptr<ByteSource>(new PipeSource(cmd));
+		return std::make_unique<PipeSource>("samtools view " + shellquote_single(path));
 	}
 	if (n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b)
-		return std::unique_ptr<ByteSource>(new GzipSource(path));
-	return std::unique_ptr<ByteSource>(new PlainSource(path));
+		return std::make_unique<GzipSource>(path);
+	return std::make_unique<PlainSource>(path);
 }
 
 }  // namespace
@@ -366,7 +372,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		}
 
 		if (src->error())
-			verror("Error while reading file %s: %s", infilename, strerror(errno));
+			verror("Error while reading file %s", infilename);
 
 		// For PipeSource this drains the child and surfaces non-zero exit
 		// (including 127 = "samtools not on PATH"); no-op for other sources.
@@ -508,7 +514,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 		REAL(total_stat)[1] = total_mapped;
 		REAL(total_stat)[2] = total_unmapped;
 		REAL(total_stat)[3] = total_dups;
-		Rf_setAttrib(total_stat, R_NamesSymbol, RSaneAllocVector(STRSXP, 3));
+		Rf_setAttrib(total_stat, R_NamesSymbol, RSaneAllocVector(STRSXP, 4));
 		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 0, Rf_mkChar("total"));
 		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 1, Rf_mkChar("total.mapped"));
 		SET_STRING_ELT(Rf_getAttrib(total_stat, R_NamesSymbol), 2, Rf_mkChar("total.unmapped"));

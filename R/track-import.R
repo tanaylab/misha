@@ -280,9 +280,9 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
 
 # Returns TRUE if `path` looks like a BAM file (bgzip magic 1f 8b 08 04 in
 # the first 4 bytes). BAM files renamed away from `.bam` are still detected.
-# Returns FALSE on any read error.
+# Returns FALSE on any read error or non-character/NA input.
 .is_bam_file <- function(path) {
-    if (!file.exists(path)) {
+    if (!is.character(path) || length(path) != 1L || is.na(path) || !file.exists(path)) {
         return(FALSE)
     }
     bytes <- tryCatch(
