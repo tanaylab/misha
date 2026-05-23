@@ -2,7 +2,7 @@
 
 * `gtrack.import_mappedseq()` now accepts BAM files directly: bgzip magic bytes are auto-detected and the file is streamed through `samtools view` into the existing parser. Requires `samtools` on `PATH` (declared in `SystemRequirements`); a clear error names the missing tool otherwise. For BAM input the function treats the default `cols.order = c(9, 11, 13, 14)` as SAM mode (i.e. `NULL`); explicitly passing a non-NULL `cols.order` with a BAM file is rejected with an error.
 * `gtrack.import_mappedseq()` also auto-detects plain gzipped SAM / TSV input (`.sam.gz`, `.tsv.gz`) via zlib. No user-facing API change.
-* Progress reporting now caps at 100% in both `Progress_reporter` and the track-expression scanner. Previously a streaming or 2D iterator whose total step budget was under-estimated could print `103%...115%...`.
+* Progress reporting now caps at 100% (previously could overshoot when iterator step budgets were under-estimated).
 
 # misha 5.7.4
 
