@@ -106,14 +106,16 @@ gintervals.mapply <- function(FUN = NULL, ..., intervals = NULL, enable.gapply.i
 
     if (.gintervals.is_bigset(intervals) || !is.null(intervals.set.out)) {
         res <- NULL
+        res_nrows <- 0L
 
         INTERVALS_FUN <- function(intervals, intervals.set.out, envir) {
             intervals <- intervals[[1]]
             chrom_res <- .gcall("gmapply", intervals, FUN, tracks, enable.gapply.intervals, .iterator, band, FALSE, colnames, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
-                    assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
-                    .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+                    envir$res[[length(envir$res) + 1L]] <- chrom_res
+                    envir$res_nrows <- envir$res_nrows + nrow(chrom_res)
+                    .gverify_max_data_size(envir$res_nrows, arguments = "intervals.set.out")
                 }
             }
             chrom_res
