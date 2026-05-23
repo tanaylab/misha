@@ -178,13 +178,19 @@ gintervals.rbind <- function(..., intervals.set.out = NULL) {
     intervals.set.out <- do.call(.gexpr2str, list(substitute(intervals.set.out)), envir = parent.frame())
 
     res <- NULL
+    res_nrows <- 0L
     if (any(unlist(lapply(intervals, function(intervals) {
         .gintervals.is_bigset(intervals)
     }))) || !is.null(intervals.set.out)) {
         if (is.null(intervals.set.out)) {
             FUN <- function(intervals, intervals.set.out, envir) {
-                assign("res", c(get("res", envir = envir), intervals), envir = envir)
-                .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+                for (chrom_res in intervals) {
+                    envir$res[[length(envir$res) + 1L]] <- chrom_res
+                    if (!is.null(chrom_res)) {
+                        envir$res_nrows <- envir$res_nrows + nrow(chrom_res)
+                    }
+                }
+                .gverify_max_data_size(envir$res_nrows, arguments = "intervals.set.out")
                 intervals[[1]]
             }
 

@@ -171,6 +171,7 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
 
     if (.gintervals.is_bigset(intervals1) || .gintervals.is_bigset(intervals2) || !is.null(intervals.set.out)) {
         res <- NULL
+        res_nrows <- 0L
 
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
@@ -179,8 +180,9 @@ gintervals.neighbors <- function(intervals1 = NULL, intervals2 = NULL, maxneighb
             intervals2 <- .gnormalize_chrom_names(intervals2)
             chrom_res <- .gcall("gfind_neighbors", intervals1, intervals2, maxneighbors, mindist, maxdist, mindist1, maxdist1, mindist2, maxdist2, na.if.notfound, FALSE, use_intervals1_strand, .misha_env())
             if (!is.null(chrom_res) && is.null(intervals.set.out)) {
-                assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
-                .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+                envir$res[[length(envir$res) + 1L]] <- chrom_res
+                envir$res_nrows <- envir$res_nrows + nrow(chrom_res)
+                .gverify_max_data_size(envir$res_nrows, arguments = "intervals.set.out")
             }
             chrom_res
         }

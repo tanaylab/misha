@@ -243,6 +243,7 @@ gintervals.diff <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.
 
     if (.gintervals.is_bigset(intervals1) || .gintervals.is_bigset(intervals2) || !is.null(intervals.set.out)) {
         res <- NULL
+        res_nrows <- 0L
 
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
@@ -250,8 +251,9 @@ gintervals.diff <- function(intervals1 = NULL, intervals2 = NULL, intervals.set.
             chrom_res <- .gcall("gintervdiff", intervals1, intervals2, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
-                    assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
-                    .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+                    envir$res[[length(envir$res) + 1L]] <- chrom_res
+                    envir$res_nrows <- envir$res_nrows + nrow(chrom_res)
+                    .gverify_max_data_size(envir$res_nrows, arguments = "intervals.set.out")
                 }
             }
             chrom_res
@@ -432,6 +434,7 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
 
     # Original path: for bigsets or when intervals.set.out is specified
     res <- NULL
+    res_nrows <- 0L
     FUN <- function(intervals, intervals.set.out, envir) {
         intervals <- intervals[[1]]
         if (.gintervals.is1d(intervals)) {
@@ -446,8 +449,9 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
             intervals <- intervals[!is.na(intervals$end1) & !is.na(intervals$end2) & intervals$start1 < intervals$end1 & intervals$start2 < intervals$end2, ]
         }
         if (is.null(intervals.set.out)) {
-            assign("res", c(get("res", envir = envir), list(intervals)), envir = envir)
-            .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+            envir$res[[length(envir$res) + 1L]] <- intervals
+            envir$res_nrows <- envir$res_nrows + nrow(intervals)
+            .gverify_max_data_size(envir$res_nrows, arguments = "intervals.set.out")
         }
         intervals
     }
@@ -600,6 +604,7 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
 
     # Original path: for bigsets or when intervals.set.out is specified
     res <- NULL
+    res_nrows <- 0L
     FUN <- function(intervals, intervals.set.out, envir) {
         intervals <- intervals[[1]]
         if (.gintervals.is2d(intervals)) {
@@ -647,8 +652,11 @@ gintervals.normalize <- function(intervals = NULL, size = NULL, intervals.set.ou
         }
 
         if (is.null(intervals.set.out)) {
-            assign("res", c(get("res", envir = envir), list(normalized)), envir = envir)
-            .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+            envir$res[[length(envir$res) + 1L]] <- normalized
+            if (!is.null(normalized)) {
+                envir$res_nrows <- envir$res_nrows + nrow(normalized)
+            }
+            .gverify_max_data_size(envir$res_nrows, arguments = "intervals.set.out")
         }
         normalized
     }
@@ -809,6 +817,7 @@ gintervals.intersect <- function(intervals1 = NULL, intervals2 = NULL, intervals
 
     if (.gintervals.is_bigset(intervals1) || .gintervals.is_bigset(intervals2) || !is.null(intervals.set.out)) {
         res <- NULL
+        res_nrows <- 0L
 
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
@@ -816,8 +825,9 @@ gintervals.intersect <- function(intervals1 = NULL, intervals2 = NULL, intervals
             chrom_res <- .gcall("gintervintersect", intervals1, intervals2, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
-                    assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
-                    .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+                    envir$res[[length(envir$res) + 1L]] <- chrom_res
+                    envir$res_nrows <- envir$res_nrows + nrow(chrom_res)
+                    .gverify_max_data_size(envir$res_nrows, arguments = "intervals.set.out")
                 }
             }
             chrom_res
@@ -973,6 +983,7 @@ gintervals.union <- function(intervals1 = NULL, intervals2 = NULL, intervals.set
 
     if (.gintervals.is_bigset(intervals1) || .gintervals.is_bigset(intervals2) || !is.null(intervals.set.out)) {
         res <- NULL
+        res_nrows <- 0L
 
         FUN <- function(intervals, intervals.set.out, envir) {
             intervals1 <- intervals[[1]]
@@ -980,8 +991,9 @@ gintervals.union <- function(intervals1 = NULL, intervals2 = NULL, intervals.set
             chrom_res <- .gcall("gintervunion", intervals1, intervals2, .misha_env())
             if (!is.null(chrom_res) && nrow(chrom_res) > 0) {
                 if (is.null(intervals.set.out)) {
-                    assign("res", c(get("res", envir = envir), list(chrom_res)), envir = envir)
-                    .gverify_max_data_size(sum(unlist(lapply(get("res", envir), nrow))), arguments = "intervals.set.out")
+                    envir$res[[length(envir$res) + 1L]] <- chrom_res
+                    envir$res_nrows <- envir$res_nrows + nrow(chrom_res)
+                    .gverify_max_data_size(envir$res_nrows, arguments = "intervals.set.out")
                 }
             }
             chrom_res
