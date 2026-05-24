@@ -400,7 +400,7 @@ gdb.reload <- function(rescan = TRUE) {
         try(
             {
                 retv <- try(.gcall_noninteractive(gtrack.info, track))
-                if (inherits(retv, "try-error") & length(grep("obsolete", retv)) > 0) {
+                if (inherits(retv, "try-error") && length(grep("obsolete", retv)) > 0) {
                     message(sprintf("Converting track %s", track))
                     .gcall_noninteractive(gtrack.convert, track)
                 }
