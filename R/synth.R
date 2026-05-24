@@ -2504,11 +2504,15 @@ gsynth.random <- function(intervals = NULL,
     # Handle named vector - reorder to A, C, G, T
     if (!is.null(names(nuc_probs))) {
         expected_names <- c("A", "C", "G", "T")
-        if (!all(toupper(names(nuc_probs)) %in% expected_names)) {
-            stop("nuc_probs names must be A, C, G, T", call. = FALSE)
+        up_names <- toupper(names(nuc_probs))
+        # Require exactly one of each of A, C, G, T (in any order, any case).
+        # Loose "%in% expected_names" alone would silently accept duplicated
+        # or missing names and produce NA after the match() reorder below.
+        if (!setequal(up_names, expected_names) || anyDuplicated(up_names)) {
+            stop("nuc_probs must be a length-4 vector named with exactly one each of A, C, G, T", call. = FALSE)
         }
         # Reorder to A, C, G, T
-        nuc_probs <- nuc_probs[match(expected_names, toupper(names(nuc_probs)))]
+        nuc_probs <- nuc_probs[match(expected_names, up_names)]
     }
 
     # Normalize to sum to 1
