@@ -1,7 +1,7 @@
 # Big intervals set handling
 
 .gintervals.is_bigset <- function(intervals.set, err_if_non_exist = TRUE) {
-    if (is.character(intervals.set) & length(intervals.set) == 1) {
+    if (is.character(intervals.set) && length(intervals.set) == 1) {
         if (intervals.set %in% get("GTRACKS", envir = .misha)) {
             intervfname <- .track_dir(intervals.set)
         } else {
