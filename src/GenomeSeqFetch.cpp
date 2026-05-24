@@ -22,6 +22,11 @@ void GenomeSeqFetch::set_seqdir(const std::string &dir) {
     std::string idx_path = m_seqdir + "/genome.idx";
     struct stat st;
 
+    // Drop any index from a previous set_seqdir() call so repeated calls on
+    // the same object don't leak the earlier GenomeIndex.
+    delete m_index;
+    m_index = nullptr;
+
     if (stat(idx_path.c_str(), &st) == 0) {
         // Indexed mode: load index and open main genome.seq file
         m_indexed_mode = true;
