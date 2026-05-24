@@ -235,7 +235,7 @@ SEXP gtrackimport_mappedseq(SEXP _track, SEXP _infile, SEXP _pileup, SEXP _binsi
 
 		for (int i = 0; i < NUM_COLS; i++) {
 			if (cols_order[i] <= 0)
-				verror("Invalid columns order: %s column's order is %d", COL_NAMES[i]);
+				verror("Invalid columns order: %s column's order is %d", COL_NAMES[i], cols_order[i]);
 
 			for (int j = i + 1; j < NUM_COLS; j++) {
 				if (cols_order[i] == cols_order[j])
