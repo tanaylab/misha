@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.4</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.8.0</span>
       </span>
     </div>
 
@@ -66,6 +66,14 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.8.0" id="misha-580">misha 5.8.0<a class="anchor" aria-label="anchor" href="#misha-580"></a></h2>
+<ul><li>
+<code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> now accepts BAM files directly: bgzip magic bytes are auto-detected and the file is streamed through <code>samtools view</code> into the existing parser. Requires <code>samtools</code> on <code>PATH</code> (declared in <code>SystemRequirements</code>); a clear error names the missing tool otherwise. For BAM input the function treats the default <code>cols.order = c(9, 11, 13, 14)</code> as SAM mode (i.e. <code>NULL</code>); explicitly passing a non-NULL <code>cols.order</code> with a BAM file is rejected with an error.</li>
+<li>
+<code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> also auto-detects plain gzipped SAM / TSV input (<code>.sam.gz</code>, <code>.tsv.gz</code>) via zlib. No user-facing API change.</li>
+<li>Progress reporting now caps at 100% (previously could overshoot when iterator step budgets were under-estimated).</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.7.4" id="misha-574">misha 5.7.4<a class="anchor" aria-label="anchor" href="#misha-574"></a></h2>
 <div class="section level4">

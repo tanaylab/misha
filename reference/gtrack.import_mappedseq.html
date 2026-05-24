@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.4</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.8.0</span>
       </span>
     </div>
 
@@ -96,7 +96,8 @@
 
 
 <dt id="arg-file">file<a class="anchor" aria-label="anchor" href="#arg-file"></a></dt>
-<dd><p>name of mapped sequences file</p></dd>
+<dd><p>path to the mapped sequences file (see Description for
+accepted formats)</p></dd>
 
 
 <dt id="arg-pileup">pileup<a class="anchor" aria-label="anchor" href="#arg-pileup"></a></dt>
@@ -109,7 +110,9 @@
 
 <dt id="arg-cols-order">cols.order<a class="anchor" aria-label="anchor" href="#arg-cols-order"></a></dt>
 <dd><p>order of sequence, chromosome, coordinate and strand
-columns in mapped sequences file or NULL if SAM file is used</p></dd>
+columns in mapped sequences file or NULL if SAM file is used. For BAM
+input the only accepted values are `NULL` or omission; an explicit
+non-NULL `cols.order` with BAM input is an error.</p></dd>
 
 
 <dt id="arg-remove-dups">remove.dups<a class="anchor" aria-label="anchor" href="#arg-remove-dups"></a></dt>
@@ -124,9 +127,14 @@ once.</p></dd>
     <div id="details">
     <h2>Details</h2>
     <p>This function creates a track from a file of mapped sequences. The file can
-be in SAM format or in a general TAB delimited text format where each line
-describes a single read.</p>
-<p>For a SAM file 'cols.order' must be set to 'NULL'.</p>
+be in SAM format, in a general TAB delimited text format where each line
+describes a single read, in gzipped variants of either (`.sam.gz`,
+`.tsv.gz`), or in BAM format (auto-detected by bgzip magic; requires
+`samtools` on `PATH`).</p>
+<p>For a SAM file 'cols.order' must be set to 'NULL'. For BAM input the
+default `cols.order = c(9, 11, 13, 14)` is treated as SAM mode because
+`samtools view` emits SAM-format payload; passing a non-NULL `cols.order`
+explicitly with BAM input is an error.</p>
 <p>For a general TAB delimited text format the following columns must be
 presented in the file: sequence, chromosome, coordinate and strand. The
 position of these columns should be specified in 'cols.order' argument. The
