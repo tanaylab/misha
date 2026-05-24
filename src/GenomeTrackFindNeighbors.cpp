@@ -169,7 +169,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 
 		Progress_reporter progress;
 
-		if (type_mask1 &= IntervUtils::INTERVS1D) {
+		if (type_mask1 & IntervUtils::INTERVS1D) {
 			if (!Rf_isReal(_distrange_start))
 				verror("mindist argument is not numeric");
 			int64_t distance_start = (int64_t)REAL(_distrange_start)[0];
