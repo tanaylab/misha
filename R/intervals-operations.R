@@ -435,17 +435,24 @@ gintervals.force_range <- function(intervals = NULL, intervals.set.out = NULL) {
     # Original path: for bigsets or when intervals.set.out is specified
     res <- NULL
     res_nrows <- 0L
+    # Hoist the chromosome-end lookup out of the per-chromosome FUN. Computing
+    # it once as a named vector turns the per-call match() over the full
+    # ALLGENOME frame (O(num_chroms) each, called 2-4x per chromosome) into an
+    # O(1) named lookup - the same trick the fast path above uses. On genomes
+    # with ~1M scaffolds the old per-call match() was effectively O(M^2).
+    all_chrom_ends <- gintervals.all()
+    chrom_ends <- setNames(all_chrom_ends$end, all_chrom_ends$chrom)
     FUN <- function(intervals, intervals.set.out, envir) {
         intervals <- intervals[[1]]
         if (.gintervals.is1d(intervals)) {
             intervals$start <- pmax(intervals$start, 0)
-            intervals$end <- pmin(intervals$end, gintervals.all()[match(intervals$chrom, gintervals.all()$chrom), ]$end)
+            intervals$end <- pmin(intervals$end, chrom_ends[as.character(intervals$chrom)])
             intervals <- intervals[!is.na(intervals$end) & intervals$start < intervals$end, ]
         } else {
             intervals$start1 <- pmax(intervals$start1, 0)
-            intervals$end1 <- pmin(intervals$end1, gintervals.all()[match(intervals$chrom1, gintervals.all()$chrom), ]$end)
+            intervals$end1 <- pmin(intervals$end1, chrom_ends[as.character(intervals$chrom1)])
             intervals$start2 <- pmax(intervals$start2, 0)
-            intervals$end2 <- pmin(intervals$end2, gintervals.all()[match(intervals$chrom2, gintervals.all()$chrom), ]$end)
+            intervals$end2 <- pmin(intervals$end2, chrom_ends[as.character(intervals$chrom2)])
             intervals <- intervals[!is.na(intervals$end1) & !is.na(intervals$end2) & intervals$start1 < intervals$end1 & intervals$start2 < intervals$end2, ]
         }
         if (is.null(intervals.set.out)) {
