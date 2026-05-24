@@ -109,6 +109,18 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
         stop(sprintf("Output file already exists: %s. Use overwrite = TRUE to replace it.", output), call. = FALSE)
     }
 
+    # Resolve and validate the trackdb destination up front so a pre-existing
+    # trackdb fails before we do the expensive FASTA export/write below (which
+    # would otherwise leave an orphaned output file behind).
+    if (create_trackdb) {
+        if (is.null(trackdb_path)) {
+            trackdb_path <- file.path(dirname(output), "trackdb")
+        }
+        if (dir.exists(trackdb_path) && !overwrite) {
+            stop(sprintf("Trackdb directory already exists: %s. Use overwrite = TRUE to replace it.", trackdb_path), call. = FALSE)
+        }
+    }
+
     # --- resolve donor sequences ---
     donor_is_db <- is.character(donor) && length(donor) == 1L && dir.exists(donor)
 
@@ -195,14 +207,8 @@ ggenome.implant <- function(intervals, donor, output, genome_fasta = NULL,
         ), call. = FALSE)
     }
 
-    # --- create trackdb ---
+    # --- create trackdb (trackdb_path was resolved/validated up front) ---
     if (create_trackdb) {
-        if (is.null(trackdb_path)) {
-            trackdb_path <- file.path(dirname(output), "trackdb")
-        }
-        if (dir.exists(trackdb_path) && !overwrite) {
-            stop(sprintf("Trackdb directory already exists: %s. Use overwrite = TRUE to replace it.", trackdb_path), call. = FALSE)
-        }
         if (dir.exists(trackdb_path)) {
             unlink(trackdb_path, recursive = TRUE)
         }

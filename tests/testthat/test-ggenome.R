@@ -424,3 +424,35 @@ test_that("ggenome.implant overwrite guard works", {
         )
     )
 })
+
+test_that("ggenome.implant fails fast on pre-existing trackdb without writing output", {
+    local_db_state()
+
+    ref_fasta <- tempfile(fileext = ".fa")
+    out_fasta <- tempfile(fileext = ".fa")
+    trackdb_dir <- tempfile()
+    dir.create(trackdb_dir)
+    withr::defer({
+        unlink(ref_fasta)
+        unlink(out_fasta)
+        unlink(paste0(out_fasta, ".fai"))
+        unlink(trackdb_dir, recursive = TRUE)
+    })
+
+    cat(">chrA\nACGT\n", file = ref_fasta)
+    intervals <- data.frame(chrom = "chrA", start = 0, end = 2)
+    donor <- "NN"
+
+    # trackdb_dir already exists and overwrite = FALSE -> must error, and the
+    # error must come *before* the output FASTA is written (fail fast).
+    expect_error(
+        ggenome.implant(
+            intervals, donor, out_fasta,
+            genome_fasta = ref_fasta,
+            create_trackdb = TRUE,
+            trackdb_path = trackdb_dir
+        ),
+        "Trackdb directory already exists"
+    )
+    expect_false(file.exists(out_fasta))
+})
