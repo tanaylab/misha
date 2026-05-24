@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.3</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.7.4</span>
       </span>
     </div>
 
@@ -66,6 +66,30 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.7.4" id="misha-574">misha 5.7.4<a class="anchor" aria-label="anchor" href="#misha-574"></a></h2>
+<div class="section level4">
+<h4 id="bug-fixes-5-7-4">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-5-7-4"></a></h4>
+<ul><li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gintervals.load.html">gintervals.load()</a></code> of a 1D/2D big intervals set whose meta-stats has exactly one row was returning the wrong slice (typo <code>meta$stat</code> -&gt; <code>meta$stats</code>).</li>
+<li>
+<strong>Behavior fix:</strong> <code>gtracksummary()</code> / <code><a href="../reference/gintervals.summary.html">gintervals.summary()</a></code> standard deviation now returns 0 instead of NaN on nearly-constant input; same catastrophic-cancellation clamp applied in Spearman correlation.</li>
+<li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gtrack.rm.html">gtrack.rm()</a></code> / <code><a href="../reference/gintervals.rm.html">gintervals.rm()</a></code> / <code><a href="../reference/gdir.rm.html">gdir.rm()</a></code> in a non-interactive session without <code>force = TRUE</code> now stop with a clear message instead of crashing on <code>readLines(n = 1)</code> returning length-zero.</li>
+<li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gsynth.random.html">gsynth.random()</a></code> rejects <code>nuc_probs</code> with duplicated or missing names (previously silently produced NaN probabilities).</li>
+<li>
+<code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> accepts bedGraph from genomes whose contig names don’t start with <code>chr</code> (Ensembl-style, non-mammalian, scaffolded contigs).</li>
+<li>Plugged FILE-handle leaks on exception paths in big-intervals readers, <code>RSaneSerialize</code>/<code>RSaneUnserialize</code>, and <code>Computer2D::unserializeComputer2D</code>.</li>
+<li>Numerous correctness fixes in error messages (typos, missing <code>sprintf</code> args, broken format specifiers) and defensive emptiness handling (<code>1:length()</code> / <code>1:nrow()</code> -&gt; <code><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along()</a></code> / <code><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len()</a></code>).</li>
+</ul></div>
+<div class="section level4">
+<h4 id="performance-5-7-4">Performance<a class="anchor" aria-label="anchor" href="#performance-5-7-4"></a></h4>
+<ul><li>Removed O(N²) per-chromosome accumulator patterns in <code>.gintervals.apply</code> and the gintervals FUN closures (<code>gintervals.diff</code> / <code>.intersect</code> / <code>.union</code> / <code>.canonic</code> / <code>.normalize</code> / <code>.rbind</code> / <code>.neighbors</code> / <code>gintervals.mapply</code>). ~70× speedup at 5000+ chromosomes; previously catastrophic on million-contig scHi-C-scaffolded genomes.</li>
+<li>
+<code><a href="../reference/gseq.pwm_edits.html">gseq.pwm_edits()</a></code> chromosome-boundary clamp vectorized: O(N) instead of O(N · scaffolds).</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.7.3" id="misha-573">misha 5.7.3<a class="anchor" aria-label="anchor" href="#misha-573"></a></h2>
 <ul><li>
