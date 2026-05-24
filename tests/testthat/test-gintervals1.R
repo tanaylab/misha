@@ -214,3 +214,33 @@ test_that("gintervals.force_range handles 2D data correctly", {
         3L
     ), class = "data.frame"))
 })
+
+test_that("gintervals.force_range slow path (intervals.set.out) matches in-memory result", {
+    # The intervals.set.out path runs the per-chromosome FUN closure that was
+    # changed to hoist the chrom-end lookup. Verify it still produces the same
+    # clamped intervals as the vectorized in-memory fast path, across multiple
+    # chromosomes.
+    set_name <- paste0("test.force_range_", sample(1:1e9, 1))
+    gintervals.rm(set_name, force = TRUE)
+    withr::defer(gintervals.rm(set_name, force = TRUE))
+
+    input <- rbind(
+        data.frame(chrom = "chr1", start = 10, end = 100),
+        data.frame(chrom = "chr1", start = -100, end = 50),
+        data.frame(chrom = "chr1", start = 100, end = 1e+09),
+        data.frame(chrom = "chr2", start = 20, end = 200),
+        data.frame(chrom = "chr2", start = -50, end = 1e+09)
+    )
+
+    in_memory <- gintervals.force_range(input)
+    gintervals.force_range(input, intervals.set.out = set_name)
+    on_disk <- gintervals.load(set_name)
+
+    ord <- function(x) {
+        x$chrom <- as.character(x$chrom)
+        x <- x[order(x$chrom, x$start, x$end), c("chrom", "start", "end")]
+        rownames(x) <- NULL
+        x
+    }
+    expect_equal(ord(on_disk), ord(in_memory), ignore_attr = TRUE)
+})
