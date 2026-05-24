@@ -1,3 +1,20 @@
+# misha 5.7.4
+
+### Bug fixes
+
+* **Behavior fix:** `gintervals.load()` of a 1D/2D big intervals set whose meta-stats has exactly one row was returning the wrong slice (typo `meta$stat` -> `meta$stats`).
+* **Behavior fix:** `gtracksummary()` / `gintervals.summary()` standard deviation now returns 0 instead of NaN on nearly-constant input; same catastrophic-cancellation clamp applied in Spearman correlation.
+* **Behavior fix:** `gtrack.rm()` / `gintervals.rm()` / `gdir.rm()` in a non-interactive session without `force = TRUE` now stop with a clear message instead of crashing on `readLines(n = 1)` returning length-zero.
+* **Behavior fix:** `gsynth.random()` rejects `nuc_probs` with duplicated or missing names (previously silently produced NaN probabilities).
+* `gtrack.import()` accepts bedGraph from genomes whose contig names don't start with `chr` (Ensembl-style, non-mammalian, scaffolded contigs).
+* Plugged FILE-handle leaks on exception paths in big-intervals readers, `RSaneSerialize`/`RSaneUnserialize`, and `Computer2D::unserializeComputer2D`.
+* Numerous correctness fixes in error messages (typos, missing `sprintf` args, broken format specifiers) and defensive emptiness handling (`1:length()` / `1:nrow()` -> `seq_along()` / `seq_len()`).
+
+### Performance
+
+* Removed O(N²) per-chromosome accumulator patterns in `.gintervals.apply` and the gintervals FUN closures (`gintervals.diff` / `.intersect` / `.union` / `.canonic` / `.normalize` / `.rbind` / `.neighbors` / `gintervals.mapply`). ~70× speedup at 5000+ chromosomes; previously catastrophic on million-contig scHi-C-scaffolded genomes.
+* `gseq.pwm_edits()` chromosome-boundary clamp vectorized: O(N) instead of O(N · scaffolds).
+
 # misha 5.7.3
 
 * `gdb.reload()` now also clears the C++ track-index cache, so a track replaced out-of-process (sibling R session, manual rebuild from another script) is picked up by the running session without restarting R. Previously the cached track type could shadow the new on-disk track and surface as e.g. `function global.percentile.max is not supported by sparse tracks` after the track was already rebuilt as dense.
