@@ -2460,6 +2460,39 @@ test_that("gsynth.random handles named nuc_probs in any order", {
     expect_gte(at_count / length(chars), 0.99) # At least 99% A/T
 })
 
+test_that("gsynth.random rejects nuc_probs with duplicated names", {
+    gdb.init_examples()
+
+    # Regression: previously, length-4 nuc_probs with duplicated A/A/A/A
+    # passed the loose "all in c(A,C,G,T)" check and silently produced
+    # NAs after the match() reorder, which propagated through the C++
+    # sampler. Now this errors up-front with a clear message.
+    expect_error(
+        gsynth.random(
+            intervals = gintervals(1, 0, 100),
+            output_format = "vector",
+            nuc_probs = c(A = 0.25, A = 0.25, A = 0.25, A = 0.25),
+            seed = 1
+        ),
+        regexp = "exactly one each of A, C, G, T"
+    )
+})
+
+test_that("gsynth.random rejects nuc_probs missing a nucleotide", {
+    gdb.init_examples()
+
+    # Regression: c(A, C, G, G) - "T" missing, "G" duplicated.
+    expect_error(
+        gsynth.random(
+            intervals = gintervals(1, 0, 100),
+            output_format = "vector",
+            nuc_probs = c(A = 0.25, C = 0.25, G = 0.25, G = 0.25),
+            seed = 1
+        ),
+        regexp = "exactly one each of A, C, G, T"
+    )
+})
+
 test_that("gsynth.random normalizes probabilities", {
     gdb.init_examples()
 
@@ -2644,7 +2677,7 @@ test_that("gsynth.random error handling", {
             output_format = "vector",
             nuc_probs = c(X = 0.25, Y = 0.25, Z = 0.25, W = 0.25)
         ),
-        "names must be A, C, G, T"
+        "exactly one each of A, C, G, T"
     )
 })
 
