@@ -74,11 +74,11 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 			verror("Invalid binsize value %g", binsize);
 
 		if (maxread <= 0)
-			verror("Invalid maxread value %g", binsize);
+			verror("Invalid maxread value %g", maxread);
 
 		for (int i = 0; i < NUM_COLS; i++) {
 			if (cols_order[i] <= 0)
-				verror("Invalid columns order: %s column's order is %d", COL_NAMES[i]);
+				verror("Invalid columns order: %s column's order is %d", COL_NAMES[i], cols_order[i]);
 
 			for (int j = i + 1; j < NUM_COLS; j++) {
 				if (cols_order[i] == cols_order[j]) {
