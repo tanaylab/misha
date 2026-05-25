@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.8.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.9.0</span>
       </span>
     </div>
 
@@ -63,9 +63,23 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.8.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.9.0" id="misha-590">misha 5.9.0<a class="anchor" aria-label="anchor" href="#misha-590"></a></h2>
+<div class="section level4">
+<h4 id="new-features-5-9-0">New features<a class="anchor" aria-label="anchor" href="#new-features-5-9-0"></a></h4>
+<ul><li>
+<code><a href="../reference/gintervals.2d.intersect.html">gintervals.2d.intersect()</a></code> and <code><a href="../reference/gintervals.2d.union.html">gintervals.2d.union()</a></code> for general 2D (rectangle) interval set operations, complementing the existing <code><a href="../reference/gintervals.2d.band_intersect.html">gintervals.2d.band_intersect()</a></code>. Intersection clips overlapping rectangles pairwise per chromosome pair; union concatenates without merging (the union of two rectangles is not a rectangle).</li>
+<li>
+<code><a href="../reference/gintervals.from_strings.html">gintervals.from_strings()</a></code> builds 1D intervals from UCSC-style coordinate strings such as <code>"chr1:1000-2000"</code> (optional <code>:+</code>/<code>:-</code> strand; a bare <code>"chr1"</code> is the whole chromosome).</li>
+<li>
+<code><a href="../reference/gvtrack.clear.html">gvtrack.clear()</a></code> removes all virtual tracks of the current working directory in one call.</li>
+<li>
+<code><a href="../reference/gdb.unload.html">gdb.unload()</a></code> unloads the active genome database and resets the session to an uninitialized state.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.8.1" id="misha-581">misha 5.8.1<a class="anchor" aria-label="anchor" href="#misha-581"></a></h2>
 <div class="section level4">
