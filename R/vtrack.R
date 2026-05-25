@@ -1401,6 +1401,51 @@ gvtrack.rm <- function(vtrack = NULL) {
 }
 
 
+#' Deletes all virtual tracks
+#'
+#' Deletes all virtual tracks of the current working directory.
+#'
+#' This function removes every virtual track defined for the current working
+#' directory in one call. After it returns \code{\link{gvtrack.ls}} reports no
+#' virtual tracks. It is a convenient way to reset virtual-track state between
+#' analyses. Use \code{\link{gvtrack.rm}} to remove a single virtual track.
+#'
+#' @return None.
+#' @seealso \code{\link{gvtrack.rm}}, \code{\link{gvtrack.ls}},
+#' \code{\link{gvtrack.create}}
+#' @keywords ~virtual
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gvtrack.create("vtrack1", "dense_track", "max")
+#' gvtrack.create("vtrack2", "dense_track", "avg")
+#' gvtrack.ls()
+#' gvtrack.clear()
+#' gvtrack.ls()
+#'
+#' @export gvtrack.clear
+gvtrack.clear <- function() {
+    .gcheckroot()
+
+    if (!exists("GVTRACKS", envir = .misha)) {
+        return(invisible(NULL))
+    }
+
+    gvtracks <- get("GVTRACKS", envir = .misha)
+    gwd <- get("GWD", envir = .misha)
+    idx <- match(gwd, names(gvtracks))
+    if (!is.na(idx)) {
+        gvtracks[[idx]] <- list()
+        assign("GVTRACKS", gvtracks, envir = .misha)
+    }
+
+    invisible(NULL)
+}
+
+
 #' Defines rules for a single value calculation of a virtual 'Array' track
 #'
 #' Defines how a single value within an interval is achieved for a virtual

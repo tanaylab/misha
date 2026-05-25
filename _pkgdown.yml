@@ -51,6 +51,7 @@ reference:
       - gvtrack.iterator.2d
       - gvtrack.ls
       - gvtrack.rm
+      - gvtrack.clear
       - gvtrack.filter
   - title: Intervals functions
     desc:  Functions to manipulate and create intervals
@@ -59,6 +60,8 @@ reference:
       - gintervals.2d
       - gintervals.2d.all
       - gintervals.2d.band_intersect
+      - gintervals.2d.intersect
+      - gintervals.2d.union
       - gintervals.all
       - gintervals.attr.export
       - gintervals.attr.get
@@ -75,6 +78,7 @@ reference:
       - gintervals.exists
       - gintervals.force_range
       - gintervals.from_mat
+      - gintervals.from_strings
       - gintervals.normalize
       - gintervals.annotate
       - gintervals.import_genes
@@ -187,6 +191,7 @@ reference:
       - gdb.mark_cache_dirty
       - gdb.reload
       - gdb.set_readonly_attrs
+      - gdb.unload
       - gdb.convert_to_indexed
       - gdb.export_fasta
       - gdir.cd

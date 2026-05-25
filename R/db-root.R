@@ -262,6 +262,62 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     )
 }
 
+
+#' Unloads the genome database
+#'
+#' Unloads the currently active genome database and clears the session state.
+#'
+#' Resets the misha session to an uninitialized state: the database root, the
+#' working directory, the genome intervals, the virtual tracks, the loaded
+#' datasets, the chromosome aliases and the track / intervals-set
+#' auto-completion symbols are all cleared. After calling this function
+#' \code{\link{gdb.init}} (or \code{\link{gsetroot}}) must be called again
+#' before any other misha function is used.
+#'
+#' Package internals are preserved, so the package itself stays loaded; this is
+#' not the same as detaching the package.
+#'
+#' @return None.
+#' @seealso \code{\link{gdb.init}}, \code{\link{gsetroot}},
+#' \code{\link{gdb.reload}}
+#' @keywords ~database
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gdb.unload()
+#' gdb.init_examples()
+#'
+#' @export gdb.unload
+gdb.unload <- function() {
+    # Remove the per-name auto-completion symbols first, then their registries.
+    for (listvar in c("GTRACKS", "GINTERVS")) {
+        if (exists(listvar, envir = .misha, inherits = FALSE)) {
+            syms <- get(listvar, envir = .misha)
+            syms <- syms[vapply(syms, function(s) exists(s, envir = .misha, inherits = FALSE), logical(1))]
+            if (length(syms)) {
+                remove(list = syms, envir = .misha)
+            }
+            remove(list = listvar, envir = .misha)
+        }
+    }
+
+    session_vars <- c(
+        "GROOT", "GWD", "ALLGENOME", "GINTERVID", "GITERATOR.INTERVALS",
+        "GVTRACKS", "GDATASETS", "GTRACK_DATASET", "GINTERVALS_DATASET",
+        "CHROM_ALIAS", "DB_IS_PER_CHROMOSOME"
+    )
+    for (v in session_vars) {
+        if (exists(v, envir = .misha, inherits = FALSE)) {
+            remove(list = v, envir = .misha)
+        }
+    }
+
+    invisible(NULL)
+}
+
 #' Create a linked database with symlinks to a parent database
 #'
 #' Creates a new database directory structure with symbolic links to the

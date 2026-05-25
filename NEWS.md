@@ -1,3 +1,12 @@
+# misha 5.9.0
+
+### New features
+
+* `gintervals.2d.intersect()` and `gintervals.2d.union()` for general 2D (rectangle) interval set operations, complementing the existing `gintervals.2d.band_intersect()`. Intersection clips overlapping rectangles pairwise per chromosome pair; union concatenates without merging (the union of two rectangles is not a rectangle).
+* `gintervals.from_strings()` builds 1D intervals from UCSC-style coordinate strings such as `"chr1:1000-2000"` (optional `:+`/`:-` strand; a bare `"chr1"` is the whole chromosome).
+* `gvtrack.clear()` removes all virtual tracks of the current working directory in one call.
+* `gdb.unload()` unloads the active genome database and resets the session to an uninitialized state.
+
 # misha 5.8.1
 
 ### Bug fixes
