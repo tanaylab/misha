@@ -1,3 +1,14 @@
+# misha 5.8.1
+
+### Bug fixes
+
+* `gtrack.import_mappedseq()` and the strand-autocorrelation importer now print a correct message (instead of a garbage value or a possible crash) when given a non-positive `cols.order` entry; the latter also reports the offending `maxread` rather than `binsize`.
+* `ggenome.implant()` validates the output trackdb destination before writing the FASTA, so a pre-existing trackdb with `overwrite = FALSE` no longer leaves an orphaned output file behind.
+
+### Performance
+
+* `gintervals.force_range()` is markedly faster when writing to an output set (or with big-set inputs) on genomes with many contigs: the per-chromosome chromosome-end lookup is computed once instead of being re-derived from the full genome on every chromosome.
+
 # misha 5.8.0
 
 * `gtrack.import_mappedseq()` now accepts BAM files directly: bgzip magic bytes are auto-detected and the file is streamed through `samtools view` into the existing parser. Requires `samtools` on `PATH` (declared in `SystemRequirements`); a clear error names the missing tool otherwise. For BAM input the function treats the default `cols.order = c(9, 11, 13, 14)` as SAM mode (i.e. `NULL`); explicitly passing a non-NULL `cols.order` with a BAM file is rejected with an error.
