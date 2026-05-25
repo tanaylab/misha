@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.8.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.8.1</span>
       </span>
     </div>
 
@@ -66,6 +66,21 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.8.1" id="misha-581">misha 5.8.1<a class="anchor" aria-label="anchor" href="#misha-581"></a></h2>
+<div class="section level4">
+<h4 id="bug-fixes-5-8-1">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-5-8-1"></a></h4>
+<ul><li>
+<code><a href="../reference/gtrack.import_mappedseq.html">gtrack.import_mappedseq()</a></code> and the strand-autocorrelation importer now print a correct message (instead of a garbage value or a possible crash) when given a non-positive <code>cols.order</code> entry; the latter also reports the offending <code>maxread</code> rather than <code>binsize</code>.</li>
+<li>
+<code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code> validates the output trackdb destination before writing the FASTA, so a pre-existing trackdb with <code>overwrite = FALSE</code> no longer leaves an orphaned output file behind.</li>
+</ul></div>
+<div class="section level4">
+<h4 id="performance-5-8-1">Performance<a class="anchor" aria-label="anchor" href="#performance-5-8-1"></a></h4>
+<ul><li>
+<code><a href="../reference/gintervals.force_range.html">gintervals.force_range()</a></code> is markedly faster when writing to an output set (or with big-set inputs) on genomes with many contigs: the per-chromosome chromosome-end lookup is computed once instead of being re-derived from the full genome on every chromosome.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.8.0" id="misha-580">misha 5.8.0<a class="anchor" aria-label="anchor" href="#misha-580"></a></h2>
 <ul><li>
