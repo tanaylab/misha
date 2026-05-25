@@ -72,6 +72,171 @@ gintervals.2d.band_intersect <- function(intervals = NULL, band = NULL, interval
 }
 
 
+.gintervals.2d.load_df <- function(intervals, argname) {
+    if (is.character(intervals)) {
+        intervals <- .gintervals.load(intervals)
+    }
+    if (is.null(intervals) || !is.data.frame(intervals) || !.gintervals.is2d(intervals)) {
+        stop(sprintf("'%s' must be a set of 2D intervals", argname), call. = FALSE)
+    }
+    intervals
+}
+
+
+#' Intersects two sets of 2D intervals
+#'
+#' Intersects two sets of two-dimensional intervals.
+#'
+#' Returns the pairwise rectangle intersections between 'intervals1' and
+#' 'intervals2'. For every pair of rectangles that share the same
+#' (chrom1, chrom2) chromosome pair, the overlapping rectangle is computed by
+#' clipping each axis independently:
+#'
+#' \itemize{
+#' \item start1 = max(start1 of the two rectangles), end1 = min(end1 ...)
+#' \item start2 = max(start2 of the two rectangles), end2 = min(end2 ...)
+#' }
+#'
+#' A rectangle is emitted only when it remains non-empty on both axes
+#' (start1 < end1 and start2 < end2). The result is not merged or
+#' canonicalized: because the union of two rectangles is not generally a
+#' rectangle, overlapping outputs are left as-is (unlike the 1D
+#' \code{\link{gintervals.intersect}}).
+#'
+#' @param intervals1,intervals2 two-dimensional intervals (a data frame or the
+#' name of an intervals set)
+#' @return A data frame with the six 2D interval columns, sorted as by
+#' \code{\link{gintervals.2d}}, or 'NULL' if the intersection is empty.
+#' @seealso \code{\link{gintervals.2d}}, \code{\link{gintervals.2d.union}},
+#' \code{\link{gintervals.intersect}}
+#' @keywords ~intersect ~2d
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' a <- gintervals.2d("chr1", 0, 1000, "chr2", 0, 1000)
+#' b <- gintervals.2d("chr1", 500, 1500, "chr2", 500, 1500)
+#' gintervals.2d.intersect(a, b)
+#'
+#' @export gintervals.2d.intersect
+gintervals.2d.intersect <- function(intervals1 = NULL, intervals2 = NULL) {
+    if (is.null(intervals1) || is.null(intervals2)) {
+        stop("Usage: gintervals.2d.intersect(intervals1, intervals2)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    intervals1 <- .gintervals.2d.load_df(intervals1, "intervals1")
+    intervals2 <- .gintervals.2d.load_df(intervals2, "intervals2")
+
+    if (nrow(intervals1) == 0 || nrow(intervals2) == 0) {
+        return(NULL)
+    }
+
+    key1 <- paste(as.character(intervals1$chrom1), as.character(intervals1$chrom2), sep = "\r")
+    key2 <- paste(as.character(intervals2$chrom1), as.character(intervals2$chrom2), sep = "\r")
+    common <- intersect(unique(key1), unique(key2))
+
+    pieces <- vector("list", length(common))
+    for (ix in seq_along(common)) {
+        s1 <- intervals1[key1 == common[ix], , drop = FALSE]
+        s2 <- intervals2[key2 == common[ix], , drop = FALSE]
+        i <- rep(seq_len(nrow(s1)), times = nrow(s2))
+        j <- rep(seq_len(nrow(s2)), each = nrow(s1))
+
+        new_s1 <- pmax(s1$start1[i], s2$start1[j])
+        new_e1 <- pmin(s1$end1[i], s2$end1[j])
+        new_s2 <- pmax(s1$start2[i], s2$start2[j])
+        new_e2 <- pmin(s1$end2[i], s2$end2[j])
+        valid <- new_s1 < new_e1 & new_s2 < new_e2
+
+        if (any(valid)) {
+            pieces[[ix]] <- data.frame(
+                chrom1 = as.character(s1$chrom1[i[valid]]),
+                start1 = new_s1[valid], end1 = new_e1[valid],
+                chrom2 = as.character(s1$chrom2[i[valid]]),
+                start2 = new_s2[valid], end2 = new_e2[valid],
+                stringsAsFactors = FALSE
+            )
+        }
+    }
+
+    pieces <- pieces[!vapply(pieces, is.null, logical(1))]
+    if (length(pieces) == 0) {
+        return(NULL)
+    }
+
+    res <- do.call(rbind, pieces)
+    glevels <- levels(gintervals.all()$chrom)
+    res$chrom1 <- factor(res$chrom1, levels = glevels)
+    res$chrom2 <- factor(res$chrom2, levels = glevels)
+    res <- res[order(res$chrom1, res$start1, res$chrom2, res$start2), , drop = FALSE]
+    rownames(res) <- NULL
+    res
+}
+
+
+#' Unites two sets of 2D intervals
+#'
+#' Unites two sets of two-dimensional intervals.
+#'
+#' Concatenates 'intervals1' and 'intervals2' and returns the combined set
+#' sorted as by \code{\link{gintervals.2d}}. Overlapping rectangles are not
+#' merged: because the union of two rectangles is not generally a rectangle,
+#' the result is simply the combined set (unlike the 1D
+#' \code{\link{gintervals.union}}).
+#'
+#' @param intervals1,intervals2 two-dimensional intervals (a data frame or the
+#' name of an intervals set)
+#' @return A data frame with the six 2D interval columns, sorted as by
+#' \code{\link{gintervals.2d}}.
+#' @seealso \code{\link{gintervals.2d}}, \code{\link{gintervals.2d.intersect}},
+#' \code{\link{gintervals.union}}
+#' @keywords ~union ~2d
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' a <- gintervals.2d("chr1", 0, 1000, "chr2", 0, 1000)
+#' b <- gintervals.2d("chr1", 500, 1500, "chr2", 500, 1500)
+#' gintervals.2d.union(a, b)
+#'
+#' @export gintervals.2d.union
+gintervals.2d.union <- function(intervals1 = NULL, intervals2 = NULL) {
+    if (is.null(intervals1) || is.null(intervals2)) {
+        stop("Usage: gintervals.2d.union(intervals1, intervals2)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    intervals1 <- .gintervals.2d.load_df(intervals1, "intervals1")
+    intervals2 <- .gintervals.2d.load_df(intervals2, "intervals2")
+
+    cols <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2")
+    glevels <- levels(gintervals.all()$chrom)
+    combined <- rbind(
+        data.frame(
+            chrom1 = factor(as.character(intervals1$chrom1), levels = glevels),
+            start1 = intervals1$start1, end1 = intervals1$end1,
+            chrom2 = factor(as.character(intervals1$chrom2), levels = glevels),
+            start2 = intervals1$start2, end2 = intervals1$end2
+        ),
+        data.frame(
+            chrom1 = factor(as.character(intervals2$chrom1), levels = glevels),
+            start1 = intervals2$start1, end1 = intervals2$end1,
+            chrom2 = factor(as.character(intervals2$chrom2), levels = glevels),
+            start2 = intervals2$start2, end2 = intervals2$end2
+        )
+    )
+    colnames(combined) <- cols
+    combined <- combined[order(combined$chrom1, combined$start1, combined$chrom2, combined$start2), , drop = FALSE]
+    rownames(combined) <- NULL
+    combined
+}
+
+
 #' Converts intervals to canonic form
 #'
 #' Converts intervals to canonic form.
