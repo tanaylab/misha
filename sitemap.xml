@@ -46,6 +46,7 @@
 <url><loc>/reference/gdb.mark_cache_dirty.html</loc></url>
 <url><loc>/reference/gdb.reload.html</loc></url>
 <url><loc>/reference/gdb.set_readonly_attrs.html</loc></url>
+<url><loc>/reference/gdb.unload.html</loc></url>
 <url><loc>/reference/gdir.cd.html</loc></url>
 <url><loc>/reference/gdir.create.html</loc></url>
 <url><loc>/reference/gdir.cwd.html</loc></url>
@@ -58,6 +59,8 @@
 <url><loc>/reference/gintervals.2d.band_intersect.html</loc></url>
 <url><loc>/reference/gintervals.2d.convert_to_indexed.html</loc></url>
 <url><loc>/reference/gintervals.2d.html</loc></url>
+<url><loc>/reference/gintervals.2d.intersect.html</loc></url>
+<url><loc>/reference/gintervals.2d.union.html</loc></url>
 <url><loc>/reference/gintervals.all.html</loc></url>
 <url><loc>/reference/gintervals.annotate.html</loc></url>
 <url><loc>/reference/gintervals.as_chain.html</loc></url>
@@ -76,6 +79,7 @@
 <url><loc>/reference/gintervals.exists.html</loc></url>
 <url><loc>/reference/gintervals.force_range.html</loc></url>
 <url><loc>/reference/gintervals.from_mat.html</loc></url>
+<url><loc>/reference/gintervals.from_strings.html</loc></url>
 <url><loc>/reference/gintervals.html</loc></url>
 <url><loc>/reference/gintervals.import_bed.html</loc></url>
 <url><loc>/reference/gintervals.import_genes.html</loc></url>
@@ -175,6 +179,7 @@
 <url><loc>/reference/gtrack.var.rm.html</loc></url>
 <url><loc>/reference/gtrack.var.set.html</loc></url>
 <url><loc>/reference/gvtrack.array.slice.html</loc></url>
+<url><loc>/reference/gvtrack.clear.html</loc></url>
 <url><loc>/reference/gvtrack.create.html</loc></url>
 <url><loc>/reference/gvtrack.filter.html</loc></url>
 <url><loc>/reference/gvtrack.info.html</loc></url>
