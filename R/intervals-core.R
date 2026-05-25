@@ -135,6 +135,78 @@ gintervals <- function(chroms = NULL, starts = 0, ends = -1, strands = NULL) {
 }
 
 
+#' Creates 1D intervals from coordinate strings
+#'
+#' Creates a set of 1D intervals by parsing UCSC-style coordinate strings.
+#'
+#' Parses strings of the form \code{"chrom:start-end"} (\code{"chrom:start..end"}
+#' is also accepted) into a 1D intervals data frame. A chromosome-only string
+#' such as \code{"chr1"} expands to the full chromosome extent. An optional
+#' trailing strand suffix \code{":+"} or \code{":-"} adds a "strand" column.
+#'
+#' Coordinates are zero-based and half-open, matching the convention used by
+#' \code{\link{gintervals}}.
+#'
+#' @param regions a character vector of region strings. Accepted formats per
+#' element: \code{"chrom"}, \code{"chrom:start-end"}, \code{"chrom:start..end"},
+#' optionally followed by \code{":+"} or \code{":-"}.
+#' @return A data frame representing the intervals, sorted as by
+#' \code{\link{gintervals}}. A "strand" column is added only when at least one
+#' region specifies a strand.
+#' @seealso \code{\link{gintervals}}, \code{\link{gintervals.2d}}
+#' @keywords ~intervals
+#' @examples
+#' \dontshow{
+#' options(gmax.processes = 2)
+#' }
+#'
+#' gdb.init_examples()
+#' gintervals.from_strings("chr1:1000-2000")
+#' gintervals.from_strings(c("chr1:1000-2000:+", "chr2:50-60:-"))
+#'
+#' @export gintervals.from_strings
+gintervals.from_strings <- function(regions = NULL) {
+    if (is.null(regions)) {
+        stop("Usage: gintervals.from_strings(regions)", call. = FALSE)
+    }
+    .gcheckroot()
+
+    regions <- as.character(regions)
+    pattern <- "^([^:]+)(?::(\\d+)[-.]{1,2}(\\d+))?(?::([+-]))?$"
+    matches <- regmatches(regions, regexec(pattern, regions, perl = TRUE))
+
+    n <- length(regions)
+    chroms <- character(n)
+    starts <- numeric(n)
+    ends <- numeric(n)
+    strands <- numeric(n)
+    has_strand <- FALSE
+
+    for (i in seq_len(n)) {
+        g <- matches[[i]]
+        if (length(g) == 0L) {
+            stop(sprintf("Invalid interval string: %s", regions[i]), call. = FALSE)
+        }
+        chroms[i] <- g[2]
+        if (nzchar(g[3])) {
+            starts[i] <- as.numeric(g[3])
+            ends[i] <- as.numeric(g[4])
+        } else {
+            starts[i] <- 0
+            ends[i] <- -1
+        }
+        if (nzchar(g[5])) {
+            has_strand <- TRUE
+            strands[i] <- if (g[5] == "+") 1 else -1
+        } else {
+            strands[i] <- 0
+        }
+    }
+
+    gintervals(chroms, starts, ends, if (has_strand) strands else NULL)
+}
+
+
 #' Creates a set of 2D intervals
 #'
 #' Creates a set of 2D intervals.
