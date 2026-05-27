@@ -119,8 +119,11 @@
     if (asset$format == "gtf") {
         converter <- .gtf_to_genepred_resolve_or_install()
         gp_raw <- file.path(workdir, "raw.genePred")
+        # -geneNameAsName2 writes the gene_name attribute (the symbol) into
+        # name2 instead of gene_id, so the installed sets carry symbols; falls
+        # back to gene_id when gene_name is absent.
         ret <- system2(converter,
-            args = c("-genePredExt", shQuote(src), shQuote(gp_raw)),
+            args = c("-genePredExt", "-geneNameAsName2", shQuote(src), shQuote(gp_raw)),
             stdout = if (verbose) "" else FALSE,
             stderr = if (verbose) "" else FALSE
         )
@@ -200,12 +203,40 @@
         gp_trim <- gp_xlat
     }
 
-    # 4. Import into the groot. Returns a named list of data frames:
-    #    tss, exons, utr3, utr5 (NULL if the set is empty).
-    if (verbose) message("  Importing genes via gintervals.import_genes() ...")
-    result <- gintervals.import_genes(gp_trim)
+    # 4. Build a (name -> gene symbol) sidecar from the trimmed genePred so the
+    #    installed sets carry gene names. Col 1 is the transcript/RNA accession
+    #    (the join key the annots mechanism keys on), col 12 is name2 (the gene
+    #    symbol). Deduplicate by col 1: gintervals.import_genes' annots reader
+    #    rejects a repeated id. Empty name2 stays an empty field (na = ""), so
+    #    sources without symbols still build, just with a blank geneName.
+    use_dt <- requireNamespace("data.table", quietly = TRUE)
+    if (use_dt) {
+        name_map <- data.table::fread(gp_trim,
+            sep = "\t", header = FALSE, quote = "", showProgress = FALSE,
+            data.table = FALSE, select = c(1L, 12L), colClasses = "character",
+            na.strings = NULL
+        )
+    } else {
+        name_map <- utils::read.table(gp_trim,
+            sep = "\t", header = FALSE, quote = "", comment.char = "",
+            colClasses = "character", na.strings = character(0)
+        )[, c(1L, 12L), drop = FALSE]
+    }
+    name_map <- name_map[!duplicated(name_map[[1L]]), , drop = FALSE]
+    annots_file <- file.path(workdir, "gene_names.annots")
+    utils::write.table(name_map, annots_file,
+        sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE, na = ""
+    )
 
-    # 5. Save each role under the (prefixed, renamed) name. NA skips the role.
+    # 5. Import into the groot. Returns a named list of data frames:
+    #    tss, exons, utr3, utr5 (NULL if the set is empty), each with the
+    #    name / geneName annotation columns attached.
+    if (verbose) message("  Importing genes via gintervals.import_genes() ...")
+    result <- gintervals.import_genes(gp_trim, annots_file,
+        annots.names = c("name", "geneName")
+    )
+
+    # 6. Save each role under the (prefixed, renamed) name. NA skips the role.
     roles <- c("tss", "exons", "utr3", "utr5")
     for (role in roles) {
         target_name <- gene_sets[[role]]
@@ -235,7 +266,7 @@
         if (verbose) message(sprintf("  %s: saved %d intervals", full_name, nrow(df)))
     }
 
-    # 6. Reload so new sets are visible.
+    # 7. Reload so new sets are visible.
     gdb.reload()
     invisible(NULL)
 }

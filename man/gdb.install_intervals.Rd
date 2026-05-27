@@ -104,6 +104,11 @@ and we can skip the entry rescan. Users never set this directly.}
 Invisible \code{NULL}. Side effects: writes \code{.interv} files under
   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
   \code{<groot>/genome_info.yaml}, and re-initializes the active groot.
+
+  The gene-derived sets (\code{tss}, \code{exons}, \code{utr3}, \code{utr5})
+  carry a \code{name} column (transcript/RNA accession) and a \code{geneName}
+  column (gene symbol from the source annotation; blank when the source has
+  no symbol).
 }
 \description{
 Given an existing groot and a source recipe (or registry name, or accession),

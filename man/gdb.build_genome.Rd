@@ -93,7 +93,10 @@ stricter single-column-only behavior.}
 \item{verbose}{If \code{TRUE}, prints progress.}
 }
 \value{
-None (invisible \code{NULL}).
+None (invisible \code{NULL}). The installed gene-derived sets
+  (\code{tss}, \code{exons}, \code{utr3}, \code{utr5}) carry a \code{name}
+  column (transcript/RNA accession) and a \code{geneName} column (gene symbol
+  from the source annotation; blank when the source has no symbol).
 }
 \description{
 Builds a misha genomic database for a named assembly. Resolves the name

@@ -825,7 +825,10 @@
 #' @param format \code{"indexed"} or \code{"per-chromosome"}; \code{NULL} =>
 #'   \code{getOption("gmulticontig.indexed_format", TRUE)}.
 #' @param verbose If \code{TRUE}, prints progress.
-#' @return None (invisible \code{NULL}).
+#' @return None (invisible \code{NULL}). The installed gene-derived sets
+#'   (\code{tss}, \code{exons}, \code{utr3}, \code{utr5}) carry a \code{name}
+#'   column (transcript/RNA accession) and a \code{geneName} column (gene symbol
+#'   from the source annotation; blank when the source has no symbol).
 #'
 #' @seealso \code{\link{gdb.install_intervals}}, \code{\link{gdb.create}},
 #'   \code{\link{gdb.list_genomes}}, \code{\link{gdb.genome_info}}.
@@ -1225,6 +1228,11 @@ gdb.install_gtf_converter <- function(force = FALSE) {
 #' @return Invisible \code{NULL}. Side effects: writes \code{.interv} files under
 #'   \code{<groot>/tracks/}, extends \code{<groot>/chrom_aliases.tsv}, appends to
 #'   \code{<groot>/genome_info.yaml}, and re-initializes the active groot.
+#'
+#'   The gene-derived sets (\code{tss}, \code{exons}, \code{utr3}, \code{utr5})
+#'   carry a \code{name} column (transcript/RNA accession) and a \code{geneName}
+#'   column (gene symbol from the source annotation; blank when the source has
+#'   no symbol).
 #'
 #' @seealso \code{\link{gdb.build_genome}}, \code{\link{gdb.install_gtf_converter}}.
 #'
