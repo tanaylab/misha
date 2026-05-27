@@ -166,6 +166,11 @@ test_that(".install_genes_set with default gene_sets produces tss/exons/utr3/utr
     expect_true(gintervals.exists("exons"))
     expect_true(gintervals.exists("utr3"))
     expect_true(gintervals.exists("utr5"))
+
+    tss <- gintervals.load("tss")
+    expect_true(all(c("name", "geneName") %in% colnames(tss)))
+    expect_equal(tss$name, "tx1")
+    expect_equal(tss$geneName, "gene1")
 })
 
 test_that(".install_genes_set drops genePred rows whose chrom didn't translate to a groot contig", {
