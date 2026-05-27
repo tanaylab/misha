@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.9.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.10.0</span>
       </span>
     </div>
 
@@ -63,9 +63,14 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.9.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.10.0" id="misha-5100">misha 5.10.0<a class="anchor" aria-label="anchor" href="#misha-5100"></a></h2>
+<ul><li>
+<code><a href="../reference/gdb.install_intervals.html">gdb.install_intervals()</a></code> / <code><a href="../reference/gdb.build_genome.html">gdb.build_genome()</a></code> now attach <code>name</code> (transcript accession) and <code>geneName</code> (gene symbol) columns to the installed <code>tss</code>/<code>exons</code>/<code>utr3</code>/<code>utr5</code> sets, taken from the source annotation. Sources without symbols build cleanly with a blank <code>geneName</code>.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.9.1" id="misha-591">misha 5.9.1<a class="anchor" aria-label="anchor" href="#misha-591"></a></h2>
 <div class="section level4">
