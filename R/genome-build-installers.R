@@ -119,8 +119,11 @@
     if (asset$format == "gtf") {
         converter <- .gtf_to_genepred_resolve_or_install()
         gp_raw <- file.path(workdir, "raw.genePred")
+        # -geneNameAsName2 writes the gene_name attribute (the symbol) into
+        # name2 instead of gene_id, so the installed sets carry symbols; falls
+        # back to gene_id when gene_name is absent.
         ret <- system2(converter,
-            args = c("-genePredExt", shQuote(src), shQuote(gp_raw)),
+            args = c("-genePredExt", "-geneNameAsName2", shQuote(src), shQuote(gp_raw)),
             stdout = if (verbose) "" else FALSE,
             stderr = if (verbose) "" else FALSE
         )
