@@ -1,3 +1,10 @@
+# misha 5.9.1
+
+### Bug fixes
+
+* **Behavior fix:** the `distance`, `distance.edge`, and `distance.center` virtual-track functions now always return the true nearest source interval. With overlapping or nested sources (e.g. `intervs.global.rmsk`) the old scan could return a non-nearest interval - even a nonzero distance for a query that overlaps the source. `distance.edge` again matches `gintervals.neighbors` exactly.
+* `distance.center` now accepts overlapping source intervals (a query center inside several resolves to the nearest center) instead of erroring at vtrack creation.
+
 # misha 5.9.0
 
 ### New features

@@ -40,6 +40,7 @@
 #include "GenomeTrackInMemory.h"
 #include "GInterval.h"
 #include "GInterval2D.h"
+#include "SegmentFinder.h"
 #include "TrackExpressionIteratorBase.h"
 #include "PWMScorer.h"
 #include "PWMEditDistanceScorer.h"
@@ -202,6 +203,13 @@ public:
         GIntervals::const_iterator siinterv;
         GIntervals::const_iterator eiinterv;
         double                     dist_margin;
+        // Per-chromosome nearest-neighbor index for the distance family
+        // (distance / distance.center / distance.edge). Built lazily during the
+        // genome walk and rebuilt when the chromosome changes. Replaces the old
+        // greedy sequential scan that returned non-nearest intervals on
+        // overlapping / nested source sets.
+        std::unique_ptr<SegmentFinder<GInterval>> finder;
+        int                        finder_chromid{-1};
         // Filter for masking genomic regions (applied after iterator modifiers)
         std::shared_ptr<Genome1DFilter> filter;
     };

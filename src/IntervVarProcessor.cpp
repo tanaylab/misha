@@ -41,103 +41,53 @@ void IntervVarProcessor::process_interv_vars(
 	}
 }
 
+namespace {
+// Build (or rebuild on chromosome change) the per-chromosome nearest-neighbor
+// index for `var`, populated from its start-sorted source intervals. Returns the
+// finder ready to query the given chromosome. An empty chromosome yields a finder
+// with no objects, so NNIterator::begin returns false and callers emit NaN.
+void ensure_finder(TrackExpressionVars::Interv_var &var, int chromid, const GenomeChromKey &chromkey)
+{
+	if (var.finder && var.finder_chromid == chromid)
+		return;
+
+	if (!var.finder)
+		var.finder = std::make_unique<SegmentFinder<GInterval>>();
+
+	var.finder->reset(0, (int64_t)chromkey.get_chrom_size(chromid));
+	for (var.sintervs.begin_chrom_iter(chromid); !var.sintervs.isend_chrom(); var.sintervs.next_in_chrom())
+		var.finder->insert(var.sintervs.cur_interval());
+
+	var.finder_chromid = chromid;
+}
+}
+
 void IntervVarProcessor::process_distance(
 	TrackExpressionVars::Interv_var &var,
 	const GInterval &interval,
 	unsigned idx)
 {
-	// if iterator modifier exists, iterator intervals might not come sorted => perform a binary search
-	if (var.imdf1d) {
-		const GInterval &eval_interval = var.imdf1d->interval;
-		double min_dist = numeric_limits<double>::max();
-		double dist;
-		int64_t coord = (eval_interval.start + eval_interval.end) / 2;
-		GIntervals::const_iterator iinterv = lower_bound(var.sintervs.begin(), var.sintervs.end(), eval_interval, GIntervals::compare_by_start_coord);
+	const GInterval &q = var.imdf1d ? var.imdf1d->interval : interval;
 
-		if (iinterv != var.sintervs.end() && iinterv->chromid == eval_interval.chromid)
-			min_dist = iinterv->dist2coord(coord, var.dist_margin);
-
-		if (iinterv != var.sintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid) {
-			dist = (iinterv - 1)->dist2coord(coord, var.dist_margin);
-			if (fabs(min_dist) > fabs(dist))
-				min_dist = dist;
-		}
-
-		// if min_dist == double_max then we haven't found an interval with the same chromosome as the iterator interval =>
-		// we can skip the second binary search
-		if (min_dist == numeric_limits<double>::max())
-			var.var[idx] = numeric_limits<double>::quiet_NaN();
-		else {
-			iinterv = lower_bound(var.eintervs.begin(), var.eintervs.end(), eval_interval, GIntervals::compare_by_end_coord);
-
-			if (iinterv != var.eintervs.end() && iinterv->chromid == eval_interval.chromid) {
-				dist = iinterv->dist2coord(coord, var.dist_margin);
-				if (fabs(min_dist) > fabs(dist))
-					min_dist = dist;
-			}
-
-			if (iinterv != var.eintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid) {
-				dist = (iinterv - 1)->dist2coord(coord, var.dist_margin);
-				if (fabs(min_dist) > fabs(dist))
-					min_dist = dist;
-			}
-
-			var.var[idx] = min_dist;
-		}
-	} else {
-		const GIntervals *pintervs[2] = { &var.sintervs, &var.eintervs };
-		GIntervals::const_iterator *piinterv[2] = { &var.siinterv, &var.eiinterv };
-		double dist[2] = { 0, 0 };
-
-		for (int i = 0; i < 2; ++i) {
-			const GIntervals &intervs = *pintervs[i];
-			GIntervals::const_iterator &iinterv = *piinterv[i];
-
-			while (iinterv != intervs.end() && iinterv->chromid < interval.chromid)
-				++iinterv;
-
-			if (iinterv == intervs.end() || iinterv->chromid != interval.chromid)
-				dist[i] = numeric_limits<double>::quiet_NaN();
-			else {
-				int64_t coord = (interval.start + interval.end) / 2;
-
-				// Scan backward to handle non-monotone access (overlapping regions)
-				while (iinterv != intervs.begin()) {
-					GIntervals::const_iterator prev = iinterv - 1;
-					if (prev->chromid != interval.chromid)
-						break;
-					double curr_dist = iinterv->dist2coord(coord, var.dist_margin);
-					double prev_dist = prev->dist2coord(coord, var.dist_margin);
-					if (fabs(curr_dist) <= fabs(prev_dist))
-						break;
-					--iinterv;
-				}
-
-				dist[i] = (double)iinterv->dist2coord(coord, var.dist_margin);
-				GIntervals::const_iterator iinterv_next = iinterv + 1;
-
-				while (iinterv_next != intervs.end() && iinterv_next->chromid == interval.chromid) {
-					double dist_next = iinterv_next->dist2coord(coord, var.dist_margin);
-
-					if (fabs(dist[i]) < fabs(dist_next))
-						break;
-
-					iinterv = iinterv_next;
-					dist[i] = dist_next;
-					++iinterv_next;
-				}
-			}
-		}
-
-		if (std::isnan(dist[0]) && std::isnan(dist[1]))
-			var.var[idx] = numeric_limits<double>::quiet_NaN();
-		else if (std::isnan(dist[0]))
-			var.var[idx] = dist[1];
-		else if (std::isnan(dist[1]))
-			var.var[idx] = dist[0];
-		else
-			var.var[idx] = fabs(dist[0]) < fabs(dist[1]) ? dist[0] : dist[1];
+	if (var.imdf1d && var.imdf1d->out_of_range) {
+		var.var[idx] = numeric_limits<double>::quiet_NaN();
+		return;
 	}
+
+	ensure_finder(var, q.chromid, m_iu.get_chromkey());
+
+	int64_t coord = (q.start + q.end) / 2;
+	SegmentFinder<GInterval>::NNIterator nn(var.finder.get());
+
+	// No source intervals on this chromosome => NaN.
+	if (!nn.begin(Segment(coord, coord + 1))) {
+		var.var[idx] = numeric_limits<double>::quiet_NaN();
+		return;
+	}
+
+	// The nearest interval to the query-bin center, measured at its edges
+	// (dist2coord returns the signed distance, 0 / normalized fraction when inside).
+	var.var[idx] = nn->dist2coord(coord, var.dist_margin);
 }
 
 void IntervVarProcessor::process_distance_center(
@@ -145,54 +95,36 @@ void IntervVarProcessor::process_distance_center(
 	const GInterval &interval,
 	unsigned idx)
 {
-	// if iterator modifier exists, iterator intervals might not come sorted => perform a binary search
-	if (var.imdf1d) {
-		if (var.imdf1d->out_of_range) {
-			var.var[idx] = numeric_limits<double>::quiet_NaN();
-			return;
-		}
+	const GInterval &q = var.imdf1d ? var.imdf1d->interval : interval;
 
-		int64_t coord = (var.imdf1d->interval.start + var.imdf1d->interval.end) / 2;
-		GInterval eval_interval(var.imdf1d->interval.chromid, coord, coord + 1, 0);
-		GIntervals::const_iterator iinterv = lower_bound(var.sintervs.begin(), var.sintervs.end(), eval_interval, GIntervals::compare_by_start_coord);
-		double dist = numeric_limits<double>::quiet_NaN();
-
+	if (var.imdf1d && var.imdf1d->out_of_range) {
 		var.var[idx] = numeric_limits<double>::quiet_NaN();
-
-		if (iinterv != var.sintervs.end() && iinterv->chromid == eval_interval.chromid)
-			dist = iinterv->dist2center(coord);
-
-		if (std::isnan(dist) && iinterv != var.sintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid)
-			dist = (iinterv - 1)->dist2center(coord);
-
-		var.var[idx] = dist;
-	} else {
-		int64_t coord = (interval.start + interval.end) / 2;
-		GIntervals::const_iterator &iinterv = var.siinterv;
-		double dist = numeric_limits<double>::quiet_NaN();
-
-		while (iinterv != var.sintervs.end() && var.siinterv->chromid < interval.chromid)
-			++iinterv;
-
-		// Scan backward to handle non-monotone access (overlapping regions)
-		while (iinterv != var.sintervs.begin()) {
-			GIntervals::const_iterator prev = iinterv - 1;
-			if (prev->chromid != interval.chromid)
-				break;
-			if (prev->end > coord)
-				--iinterv;
-			else
-				break;
-		}
-
-		while (iinterv != var.sintervs.end() && iinterv->chromid == interval.chromid && iinterv->start <= coord) {
-			if (iinterv->end > coord)
-				dist = iinterv->dist2center(coord);
-			++iinterv;
-		}
-
-		var.var[idx] = dist;
+		return;
 	}
+
+	ensure_finder(var, q.chromid, m_iu.get_chromkey());
+
+	int64_t coord = (q.start + q.end) / 2;
+	double best = numeric_limits<double>::quiet_NaN();
+
+	// distance.center is defined only when the query-bin center sits inside a
+	// source interval. NNIterator yields candidates by increasing proximity, so
+	// every interval containing the point precedes the first one that doesn't;
+	// among the containing intervals we keep the nearest center. With
+	// non-overlapping sources there is at most one such interval, preserving the
+	// historical behavior; overlapping sources now resolve to the nearest center
+	// instead of erroring.
+	SegmentFinder<GInterval>::NNIterator nn(var.finder.get());
+	for (bool ok = nn.begin(Segment(coord, coord + 1)); ok; ok = nn.next()) {
+		const GInterval &iv = *nn;
+		if (coord < iv.start || coord >= iv.end)
+			break;
+		double d = iv.dist2center(coord);
+		if (std::isnan(best) || fabs(d) < fabs(best))
+			best = d;
+	}
+
+	var.var[idx] = best;
 }
 
 void IntervVarProcessor::process_distance_edge(
@@ -200,120 +132,27 @@ void IntervVarProcessor::process_distance_edge(
 	const GInterval &interval,
 	unsigned idx)
 {
-	// If iterator modifier exists, intervals might not come sorted => perform binary search
-	if (var.imdf1d) {
-		const GInterval &eval_interval = var.imdf1d->interval;
+	const GInterval &q = var.imdf1d ? var.imdf1d->interval : interval;
 
-		if (var.imdf1d->out_of_range) {
-			var.var[idx] = numeric_limits<double>::quiet_NaN();
-			return;
-		}
-
-		int64_t min_dist = numeric_limits<int64_t>::max();
-		int64_t dist;
-
-		// Search in start-sorted intervals
-		GIntervals::const_iterator iinterv = lower_bound(var.sintervs.begin(), var.sintervs.end(),
-														 eval_interval, GIntervals::compare_by_start_coord);
-
-		// Check the interval at and after the lower_bound position
-		if (iinterv != var.sintervs.end() && iinterv->chromid == eval_interval.chromid) {
-			dist = eval_interval.dist2interv(*iinterv);
-			if (llabs(dist) < llabs(min_dist) || min_dist == numeric_limits<int64_t>::max())
-				min_dist = dist;
-		}
-
-		// Check the interval before the lower_bound position
-		if (iinterv != var.sintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid) {
-			dist = eval_interval.dist2interv(*(iinterv - 1));
-			if (llabs(dist) < llabs(min_dist))
-				min_dist = dist;
-		}
-
-		// If no interval found on same chromosome, return NaN
-		if (min_dist == numeric_limits<int64_t>::max()) {
-			var.var[idx] = numeric_limits<double>::quiet_NaN();
-			return;
-		}
-
-		// Also search in end-sorted intervals to find potentially closer intervals
-		iinterv = lower_bound(var.eintervs.begin(), var.eintervs.end(),
-							  eval_interval, GIntervals::compare_by_end_coord);
-
-		if (iinterv != var.eintervs.end() && iinterv->chromid == eval_interval.chromid) {
-			dist = eval_interval.dist2interv(*iinterv);
-			if (llabs(dist) < llabs(min_dist))
-				min_dist = dist;
-		}
-
-		if (iinterv != var.eintervs.begin() && (iinterv - 1)->chromid == eval_interval.chromid) {
-			dist = eval_interval.dist2interv(*(iinterv - 1));
-			if (llabs(dist) < llabs(min_dist))
-				min_dist = dist;
-		}
-
-		var.var[idx] = (double)min_dist;
-	} else {
-		// Sequential access mode - iterate through sorted intervals
-		const GIntervals *pintervs[2] = { &var.sintervs, &var.eintervs };
-		GIntervals::const_iterator *piinterv[2] = { &var.siinterv, &var.eiinterv };
-		int64_t dist[2] = { 0, 0 };
-
-		for (int i = 0; i < 2; ++i) {
-			const GIntervals &intervs = *pintervs[i];
-			GIntervals::const_iterator &iinterv = *piinterv[i];
-
-			// Skip past intervals on earlier chromosomes
-			while (iinterv != intervs.end() && iinterv->chromid < interval.chromid)
-				++iinterv;
-
-			if (iinterv == intervs.end() || iinterv->chromid != interval.chromid) {
-				// No intervals on this chromosome
-				dist[i] = numeric_limits<int64_t>::max();
-			} else {
-				// Scan backward to handle non-monotone access (overlapping regions)
-				while (iinterv != intervs.begin()) {
-					GIntervals::const_iterator prev = iinterv - 1;
-					if (prev->chromid != interval.chromid)
-						break;
-					int64_t curr_dist = interval.dist2interv(*iinterv);
-					int64_t prev_dist = interval.dist2interv(*prev);
-					if (llabs(curr_dist) <= llabs(prev_dist))
-						break;
-					--iinterv;
-				}
-
-				// Calculate edge-to-edge distance using dist2interv
-				// Use default touch_is_at_dist_one = false to match gintervals.neighbors
-				dist[i] = interval.dist2interv(*iinterv);
-				GIntervals::const_iterator iinterv_next = iinterv + 1;
-
-				// Look ahead for closer intervals
-				while (iinterv_next != intervs.end() && iinterv_next->chromid == interval.chromid) {
-					int64_t dist_next = interval.dist2interv(*iinterv_next);
-
-					// Stop if we're getting further away
-					if (llabs(dist[i]) < llabs(dist_next))
-						break;
-
-					iinterv = iinterv_next;
-					dist[i] = dist_next;
-					++iinterv_next;
-				}
-			}
-		}
-
-		// Return the distance with smaller absolute value
-		if (dist[0] == numeric_limits<int64_t>::max() && dist[1] == numeric_limits<int64_t>::max()) {
-			var.var[idx] = numeric_limits<double>::quiet_NaN();
-		} else if (dist[0] == numeric_limits<int64_t>::max()) {
-			var.var[idx] = (double)dist[1];
-		} else if (dist[1] == numeric_limits<int64_t>::max()) {
-			var.var[idx] = (double)dist[0];
-		} else {
-			var.var[idx] = llabs(dist[0]) <= llabs(dist[1]) ? (double)dist[0] : (double)dist[1];
-		}
+	if (var.imdf1d && var.imdf1d->out_of_range) {
+		var.var[idx] = numeric_limits<double>::quiet_NaN();
+		return;
 	}
+
+	ensure_finder(var, q.chromid, m_iu.get_chromkey());
+
+	SegmentFinder<GInterval>::NNIterator nn(var.finder.get());
+
+	// No source intervals on this chromosome => NaN.
+	if (!nn.begin(Segment(q.start, q.end))) {
+		var.var[idx] = numeric_limits<double>::quiet_NaN();
+		return;
+	}
+
+	// Edge-to-edge distance to the nearest source interval, signed by the source
+	// strand and 0 on overlap - identical to gintervals.neighbors, since both
+	// consume the same NNIterator over start-sorted intervals.
+	var.var[idx] = (double)q.dist2interv(*nn);
 }
 
 void IntervVarProcessor::process_neighbor_count(

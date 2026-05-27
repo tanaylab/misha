@@ -438,14 +438,13 @@ test_that("intervals with value column work with interval-based summarizers even
     expect_true(!is.na(result$value))
     gvtrack.rm("test.distance.vt")
 
-    # Test distance.center function - note: this function requires non-overlapping intervals
-    # but the key point is that it's treated as an interval-based function, not value-based
-    # So the overlap check in the value-based path is skipped (which is the fix)
-    # However, distance.center itself will check for overlaps and error if they exist
-    expect_error(
-        gvtrack.create("test.distance.center.vt", src = intervals_df, func = "distance.center"),
-        regexp = "overlapping"
-    )
+    # Test distance.center function - overlapping source intervals are now allowed;
+    # a query center inside several of them resolves to the nearest center.
+    gvtrack.create("test.distance.center.vt", src = intervals_df, func = "distance.center")
+    iter_int <- gintervals("chr1", 170, 180) # center 175: inside [100,200) (center 150) and [150,250) (center 200)
+    result <- gextract("test.distance.center.vt", intervals = iter_int, iterator = iter_int, colnames = "value")
+    expect_equal(result$value, 25) # nearest center is 25bp away
+    gvtrack.rm("test.distance.center.vt")
 })
 
 test_that("intervals with value column and interval-based functions ignore value column", {
