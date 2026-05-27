@@ -166,6 +166,70 @@ test_that(".install_genes_set with default gene_sets produces tss/exons/utr3/utr
     expect_true(gintervals.exists("exons"))
     expect_true(gintervals.exists("utr3"))
     expect_true(gintervals.exists("utr5"))
+
+    tss <- gintervals.load("tss")
+    expect_true(all(c("name", "geneName") %in% colnames(tss)))
+    expect_equal(tss$name, "tx1")
+    expect_equal(tss$geneName, "gene1")
+})
+
+test_that(".install_genes_set tolerates empty gene names and duplicate ids", {
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    dir.create(file.path(groot, "downloads"), showWarnings = FALSE)
+    gdb.init(groot, rescan = TRUE)
+
+    gp <- tempfile(fileext = ".genePred")
+    # 15-col extended genePred (as gff3ToGenePred / gtfToGenePred emit): cols
+    # 13-15 are cdsStartStat/cdsEndStat/exonFrames. Row 1 has an empty name2
+    # (col 12) - a real source-without-symbol case, and unlike a 12-col trailing
+    # empty it survives strsplit because cols 13-15 follow. Rows 2-3 share the
+    # transcript id "dup" to exercise the sidecar dedup.
+    writeLines(c(
+        "txEmpty\tchr1\t+\t100\t200\t150\t190\t1\t100,\t200,\t0\t\tcmpl\tcmpl\t0,",
+        "dup\tchr1\t+\t300\t400\t320\t380\t1\t300,\t400,\t0\tGeneD\tcmpl\tcmpl\t0,",
+        "dup\tchr1\t-\t500\t600\t520\t580\t1\t500,\t600,\t0\tGeneD\tcmpl\tcmpl\t0,"
+    ), gp)
+
+    expect_silent(
+        .install_genes_set(
+            list(file = gp, format = "genepred"),
+            prefix = "",
+            gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
+            overwrite = FALSE, verbose = FALSE
+        )
+    )
+    tss <- gintervals.load("tss")
+    expect_true("geneName" %in% colnames(tss))
+    # The empty-name2 transcript installs with a blank geneName, not dropped.
+    expect_true(any(tss$geneName == ""))
+})
+
+test_that(".install_genes_set concatenates symbols for overlapping TSS", {
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    dir.create(file.path(groot, "downloads"), showWarnings = FALSE)
+    gdb.init(groot, rescan = TRUE)
+
+    gp <- tempfile(fileext = ".genePred")
+    # Two +-strand transcripts sharing txStart = 100 -> identical 1bp TSS, which
+    # the importer unifies; their distinct symbols concatenate with ";".
+    writeLines(c(
+        "txA\tchr1\t+\t100\t500\t150\t450\t1\t100,\t500,\t0\tGeneA",
+        "txB\tchr1\t+\t100\t600\t150\t550\t1\t100,\t600,\t0\tGeneB"
+    ), gp)
+
+    .install_genes_set(
+        list(file = gp, format = "genepred"),
+        prefix = "",
+        gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
+        overwrite = FALSE, verbose = FALSE
+    )
+    tss <- gintervals.load("tss")
+    # Both TSS share start 100 -> one unified interval with both symbols.
+    expect_equal(nrow(tss), 1L)
+    expect_true(grepl("GeneA", tss$geneName) && grepl("GeneB", tss$geneName))
+    expect_match(tss$geneName, ";", fixed = TRUE)
 })
 
 test_that(".install_genes_set drops genePred rows whose chrom didn't translate to a groot contig", {

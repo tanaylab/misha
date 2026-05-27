@@ -1,3 +1,7 @@
+# misha 5.10.0
+
+* `gdb.install_intervals()` / `gdb.build_genome()` now attach `name` (transcript accession) and `geneName` (gene symbol) columns to the installed `tss`/`exons`/`utr3`/`utr5` sets, taken from the source annotation. Sources without symbols build cleanly with a blank `geneName`.
+
 # misha 5.9.1
 
 ### Bug fixes
