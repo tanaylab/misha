@@ -205,6 +205,33 @@ test_that(".install_genes_set tolerates empty gene names and duplicate ids", {
     expect_true(any(tss$geneName == ""))
 })
 
+test_that(".install_genes_set concatenates symbols for overlapping TSS", {
+    groot <- make_test_groot()
+    on.exit(unlink(groot, recursive = TRUE))
+    dir.create(file.path(groot, "downloads"), showWarnings = FALSE)
+    gdb.init(groot, rescan = TRUE)
+
+    gp <- tempfile(fileext = ".genePred")
+    # Two +-strand transcripts sharing txStart = 100 -> identical 1bp TSS, which
+    # the importer unifies; their distinct symbols concatenate with ";".
+    writeLines(c(
+        "txA\tchr1\t+\t100\t500\t150\t450\t1\t100,\t500,\t0\tGeneA",
+        "txB\tchr1\t+\t100\t600\t150\t550\t1\t100,\t600,\t0\tGeneB"
+    ), gp)
+
+    .install_genes_set(
+        list(file = gp, format = "genepred"),
+        prefix = "",
+        gene_sets = c(tss = "tss", exons = "exons", utr3 = "utr3", utr5 = "utr5"),
+        overwrite = FALSE, verbose = FALSE
+    )
+    tss <- gintervals.load("tss")
+    # Both TSS share start 100 -> one unified interval with both symbols.
+    expect_equal(nrow(tss), 1L)
+    expect_true(grepl("GeneA", tss$geneName) && grepl("GeneB", tss$geneName))
+    expect_match(tss$geneName, ";", fixed = TRUE)
+})
+
 test_that(".install_genes_set drops genePred rows whose chrom didn't translate to a groot contig", {
     # Real-world bison case: the genes GTF carries an MT transcript whose
     # refseq accession (NC_012346.1) lives in the chromAlias but the groot
