@@ -239,7 +239,9 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ++ivar) {
 		ivar->siinterv = ivar->sintervs.begin();
-		if (ivar->val_func == Interv_var::DIST || ivar->val_func == Interv_var::DIST_EDGE || ivar->val_func == Interv_var::NEIGHBOR_COUNT)
+		// Only neighbor.count still uses the end-sorted (expanded) list; the
+		// distance family now queries the nearest-neighbor index instead.
+		if (ivar->val_func == Interv_var::NEIGHBOR_COUNT)
 			ivar->eiinterv = ivar->eintervs.begin();
 	}
 
@@ -1254,9 +1256,8 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 		var.dist_margin = dist_margin * 0.5;
 		var.sintervs.swap(intervs1d);
 		var.sintervs.sort();
-		var.eintervs = var.sintervs;
-		var.eintervs.sort(GIntervals::compare_by_end_coord);
-		// cannot not set var.siinterv and var.eiinterv now because these iterators will be invalidated one a new var is added to m_interv_vars
+		// The nearest-neighbor index (built lazily per chromosome) supersedes the
+		// old end-sorted scan, so eintervs is no longer needed here.
 
 		if (var.dist_margin) {
 			// if dist_margin is not zero => we are measuring distances from the centers of the interval, therefore the intervals cannot overlap
@@ -1274,12 +1275,9 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 		var.dist_margin = 0.;
 		var.sintervs.swap(intervs1d);
 		var.sintervs.sort();
-		// cannot not set var.siinterv and var.eiinterv now because these iterators will be invalidated one a new var is added to m_interv_vars
-
-		for (GIntervals::const_iterator iinterv = var.sintervs.begin() + 1; iinterv < var.sintervs.end(); ++iinterv) {
-			if (iinterv->do_touch(*(iinterv - 1)))
-				verror("Virtual track %s: intervals are overlapping and hence incompatible with %s function", vtrack.c_str(), func.c_str());
-		}
+		// Overlapping source intervals are allowed: the nearest-neighbor index
+		// resolves a query-bin center that falls inside several intervals to the
+		// one with the nearest center.
 	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::DIST_EDGE])) {
 		var.val_func = Interv_var::DIST_EDGE;
 
@@ -1289,9 +1287,8 @@ TrackExpressionVars::Interv_var &TrackExpressionVars::add_vtrack_var_src_interv(
 		var.dist_margin = 0.;
 		var.sintervs.swap(intervs1d);
 		var.sintervs.sort();
-		var.eintervs = var.sintervs;
-		var.eintervs.sort(GIntervals::compare_by_end_coord);
-		// Overlapping intervals are allowed for edge-to-edge distance
+		// Overlapping intervals are allowed for edge-to-edge distance; the
+		// nearest-neighbor index replaces the old end-sorted scan (no eintervs).
 	} else if (!strcmp(func.c_str(), Interv_var::FUNC_NAMES[Interv_var::COVERAGE])) {
         var.val_func = Interv_var::COVERAGE;
 
