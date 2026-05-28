@@ -1151,7 +1151,25 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 
 		auto entry = idx->get_entry(chromid);
 		if (!entry || entry->length == 0) {
-			// Chromosome not in index or empty contig - treat as empty
+			// Chromosome not in index or empty contig - treat as empty.
+			// But still populate m_bin_size from the first non-empty entry,
+			// otherwise gtrack.info on an indexed track whose probed chrom
+			// has no data (e.g. produced by gtrack.copy with a destination
+			// chrom that is not in the source's per-chrom file list) reports
+			// bin_size = 0, and subsequent unguarded `/ m_bin_size` divisions
+			// in the read paths (lines 236/249/402/450/652/663) trigger
+			// SIGFPE.
+			if (m_bin_size == 0) {
+				for (const auto &e : idx->get_all_entries()) {
+					if (e.length == 0) continue;
+					if (m_bfile.seek(e.offset, SEEK_SET))
+						TGLError<GenomeTrackFixedBin>("Failed to seek to offset %llu in %s",
+							(unsigned long long)e.offset, dat_path.c_str());
+					if (m_bfile.read(&m_bin_size, sizeof(m_bin_size)) != sizeof(m_bin_size))
+						TGLError<GenomeTrackFixedBin>("Invalid fixed-bin header in %s", dat_path.c_str());
+					break;
+				}
+			}
 			m_num_samples = 0;
 			m_chromid = chromid;
 			return;
