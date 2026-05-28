@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.10.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.10.1</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.10.1" id="misha-5101">misha 5.10.1<a class="anchor" aria-label="anchor" href="#misha-5101"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> indexed dense tracks whose first genome chrom has no data (typically produced by <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> when the destination DB has a leading chrom that was not in the source’s per-chrom files) no longer report <code>bin.size = 0</code> from <code><a href="../reference/gtrack.info.html">gtrack.info()</a></code> and no longer SIGFPE on subsequent reads. <code>GenomeTrackFixedBin::init_read</code> now back-fills <code>m_bin_size</code> from the first non-empty index entry on a length-0 lookup, instead of leaving it at the constructor default.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.10.0" id="misha-5100">misha 5.10.0<a class="anchor" aria-label="anchor" href="#misha-5100"></a></h2>
 <ul><li>
