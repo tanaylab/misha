@@ -65,10 +65,32 @@ SEXP gtrackinfo(SEXP _track, SEXP _validate, SEXP _envir)
 			char filename[FILENAME_MAX];
             SEXP rbinsize;
 
-			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, all_genome_intervs.front().chromid);
+			// gtrack.info probes a single chromosome just to read bin_size,
+			// which is invariant across chromosomes. By convention it uses the
+			// genome's first chrom, but a per-chromosome track may legitimately
+			// have no file for that chrom (an empty contig / scaffold with no
+			// signal). Probing it would error with "No such file or directory"
+			// (and breaks gtrack.copy, which calls gtrack.info on the source).
+			// Fall back to the first chrom that actually has a per-chrom file.
+			// Indexed tracks have no per-chrom files at all and handle empty
+			// leading chroms inside init_read (see GenomeTrackFixedBin.cpp), so
+			// keep their original behavior of probing the first chrom.
+			int probe_chromid = all_genome_intervs.front().chromid;
+			string resolved = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, probe_chromid);
+			if (!is_indexed) {
+				for (GIntervals::const_iterator iinterv = all_genome_intervs.begin(); iinterv != all_genome_intervs.end(); ++iinterv) {
+					string candidate = GenomeTrack::find_existing_1d_filename(iu.get_chromkey(), trackpath, iinterv->chromid);
+					string full = trackpath + "/" + candidate;
+					if (access(full.c_str(), F_OK) == 0) {
+						probe_chromid = iinterv->chromid;
+						resolved = candidate;
+						break;
+					}
+				}
+			}
 			snprintf(filename, sizeof(filename), "%s/%s", trackpath.c_str(), resolved.c_str());
 
-			gtrack.init_read(filename, all_genome_intervs.front().chromid);
+			gtrack.init_read(filename, probe_chromid);
             rbinsize = rprotect_ptr(Rf_ScalarInteger(gtrack.get_bin_size()));
 			SET_VECTOR_ELT(answer, BINSIZE, rbinsize);
 			SET_STRING_ELT(names, BINSIZE, Rf_mkChar("bin.size"));
