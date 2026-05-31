@@ -1,6 +1,7 @@
 # misha 5.10.1
 
 * **Behavior fix:** indexed dense tracks whose first genome chrom has no data (typically produced by `gtrack.copy()` when the destination DB has a leading chrom that was not in the source's per-chrom files) no longer report `bin.size = 0` from `gtrack.info()` and no longer SIGFPE on subsequent reads. `GenomeTrackFixedBin::init_read` now back-fills `m_bin_size` from the first non-empty index entry on a length-0 lookup, instead of leaving it at the constructor default.
+* **Behavior fix:** `gtrack.info()` on a per-chromosome dense track whose first genome chrom has no per-chrom file (an empty scaffold, or a partial track) now reports the correct `bin.size` instead of erroring with "No such file or directory". This also unblocks `gtrack.copy()` of such tracks, which calls `gtrack.info()` on the source.
 
 # misha 5.10.0
 
