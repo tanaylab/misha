@@ -91,10 +91,22 @@ void GenomeTrackFixedBin::classify_fast_path_mode()
 {
 	// Single-function fast path: if exactly one function is registered and no quantile,
 	// we can run a tight loop for just that function.
+	//
+	// Exception: SUM/LSE/EXISTS/SIZE are reducer functions that mode 1
+	// (read_interval_reducers_only) maintains incrementally with a sliding
+	// window across consecutive overlapping interval reads. Routing a single
+	// LSE through read_interval_single_function recomputes the whole window
+	// from scratch on every step, which is dramatically slower for the windowed
+	// vtrack scan pattern (e.g. func="lse" with sshift/eshift scanned bin-by-bin
+	// genome-wide - the motif-energy quantile workload). Let those fall through
+	// to the reducer classification so they keep the sliding-window fast path.
 	if (!m_use_quantile && __builtin_popcount(m_func_mask) == 1) {
-		m_fast_path_mode = 3;
-		m_single_func = static_cast<Functions>(__builtin_ctz(m_func_mask));
-		return;
+		const Functions f = static_cast<Functions>(__builtin_ctz(m_func_mask));
+		if (f != SUM && f != LSE && f != EXISTS && f != SIZE) {
+			m_fast_path_mode = 3;
+			m_single_func = f;
+			return;
+		}
 	}
 
 	bool reducer_only = !m_use_quantile;

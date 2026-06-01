@@ -1,3 +1,7 @@
+# misha 5.10.2
+
+* **Performance fix:** a single-function `lse` (or `sum`/`exists`/`size`) virtual track scanned over a sliding window (`gvtrack.iterator(sshift=, eshift=)`) genome-wide is fast again. Since 5.6.7 a single-function "fast path" recomputed the windowed reduction from scratch on every step, bypassing the incremental sliding-window path; the common motif-energy quantile workload (windowed `lse` + `gquantiles`/`gscreen`) was ~2.5x slower (worse with wider windows). Such single-function reducers now keep the sliding-window path. Output is unchanged.
+
 # misha 5.10.1
 
 * **Behavior fix:** indexed dense tracks whose first genome chrom has no data (typically produced by `gtrack.copy()` when the destination DB has a leading chrom that was not in the source's per-chrom files) no longer report `bin.size = 0` from `gtrack.info()` and no longer SIGFPE on subsequent reads. `GenomeTrackFixedBin::init_read` now back-fills `m_bin_size` from the first non-empty index entry on a length-0 lookup, instead of leaving it at the constructor default.
