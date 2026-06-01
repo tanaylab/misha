@@ -128,6 +128,35 @@ test_that("gextract vtrack with LSE sliding window stays fast", {
     expect_perf_baseline(measured, "vtrack lse+window", baseline_ms = 18)
 })
 
+test_that("gquantiles vtrack LSE windowed full-chr scan stays fast (mode-3 sliding-bypass regression)", {
+    # Bug history: v5.6.7 (commit 1cbfa801, "C++ optimization audit") added a
+    # single-function fast path (mode 3) in GenomeTrackFixedBin that intercepted
+    # single-function LSE *before* the mode-1 reducer path. Mode 3 recomputes the
+    # log-sum-exp from scratch over the whole window on every output bin, bypassing
+    # the incremental sliding-window LSE that mode 1 maintains. For a windowed lse
+    # vtrack scanned bin-by-bin genome-wide - Tamar's motif-energy quantile
+    # workload (compute_genomewide_motif_quantiles) - this was ~7.7x slower at a
+    # 40-bin window (5111ms vs 667ms here) and grows with the window width.
+    #
+    # Two reasons the small_chr1 LSE test above could not catch it: (1) a ~20-bin
+    # scope is dominated by fixed overhead, hiding the per-bin sliding advantage;
+    # (2) it uses gextract, which materializes every output row back to R and so
+    # dwarfs the C++ inner-loop cost. This test uses gquantiles (a streaming
+    # reduction, exactly her workload) over full chr1 (~5M bins) with a wide
+    # 40-bin window, so the per-bin LSE cost dominates and the regressed path
+    # lands well outside the 3x budget.
+    skip_unless_perf()
+    fix <- .perf_setup(n_dense_tracks = 1)
+    on.exit(.perf_cleanup(fix), add = TRUE)
+    on.exit(try(gvtrack.rm("v_lse_full"), silent = TRUE), add = TRUE)
+
+    gvtrack.create("v_lse_full", fix$dense_tracks[1], func = "lse")
+    gvtrack.iterator("v_lse_full", sshift = -1000, eshift = 1000)
+
+    measured <- time_op(gquantiles("v_lse_full", percentiles = 0.99, intervals = fix$full_chr1, iterator = 50))
+    expect_perf_baseline(measured, "vtrack lse+window full-chr", baseline_ms = 667)
+})
+
 test_that("gscreen on many dense tracks stays fast", {
     # gscreen is the second hottest entry point after gextract for Tamar's
     # workloads. Same setup-cost characteristic as gextract — the validation
