@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.10.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.10.2</span>
       </span>
     </div>
 
@@ -63,9 +63,14 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.10.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.10.2" id="misha-5102">misha 5.10.2<a class="anchor" aria-label="anchor" href="#misha-5102"></a></h2>
+<ul><li>
+<strong>Performance fix:</strong> a single-function <code>lse</code> (or <code>sum</code>/<code>exists</code>/<code>size</code>) virtual track scanned over a sliding window (<code>gvtrack.iterator(sshift=, eshift=)</code>) genome-wide is fast again. Since 5.6.7 a single-function “fast path” recomputed the windowed reduction from scratch on every step, bypassing the incremental sliding-window path; the common motif-energy quantile workload (windowed <code>lse</code> + <code>gquantiles</code>/<code>gscreen</code>) was ~2.5x slower (worse with wider windows). Such single-function reducers now keep the sliding-window path. Output is unchanged.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.10.1" id="misha-5101">misha 5.10.1<a class="anchor" aria-label="anchor" href="#misha-5101"></a></h2>
 <ul><li>
