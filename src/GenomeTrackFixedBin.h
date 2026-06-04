@@ -142,6 +142,16 @@ protected:
 
 inline void GenomeTrackFixedBin::goto_bin(uint64_t bin)
 {
+	// Empty contig (e.g. a length-0 chrom in an indexed track.dat): there is no
+	// data to position to. Skip the seek: for an indexed track m_bfile is the
+	// shared track.dat and a seek would land in another chromosome's bytes; for a
+	// per-chrom file it would seek past EOF and error. read_next_bin returns NA.
+	if (m_num_samples == 0) {
+		m_cur_bin = bin;
+		m_cur_coord = bin * m_bin_size;
+		return;
+	}
+
 	if (m_mmap_data) {
 		m_cur_bin = bin;
 	} else {
@@ -154,6 +164,13 @@ inline void GenomeTrackFixedBin::goto_bin(uint64_t bin)
 
 inline bool GenomeTrackFixedBin::read_next_bin(float &val)
 {
+	// Empty contig: no data, so every read is "missing" (NA). This also stops the
+	// bfile fallback from reading a neighbouring chromosome's bytes out of a shared
+	// indexed track.dat (read_bins_bulk already clamps on m_num_samples). One extra
+	// already-hot comparison; negligible on the non-empty path.
+	if (m_num_samples == 0)
+		return false;
+
 	if (m_mmap_data) {
 		if (m_cur_bin >= m_mmap_num_bins)
 			return false;
