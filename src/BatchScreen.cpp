@@ -318,7 +318,13 @@ extern "C" SEXP C_gscreen_multi(
                 SET_STRING_ELT(chrom_col, row,
                                Rf_mkChar(iu.id2chrom(g.chromid).c_str()));
                 REAL(start_col)[row] = (double)g.start;
-                REAL(end_col)[row] = (double)g.end;
+                // A run flushes as [cur_start, cur_end + iterator_step); the
+                // last passing position on a chrom whose size is not a multiple
+                // of the iterator step would otherwise emit an end past the
+                // chromosome. Clamp to chrom size, matching the slow path,
+                // which clips the final iterator interval to the chrom end.
+                REAL(end_col)[row] = std::min(
+                    (double)g.end, (double)chromkey.get_chrom_size(g.chromid));
                 INTEGER(track_idx_col)[row] = m;
                 ++row;
             }
