@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.10.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.10.3</span>
       </span>
     </div>
 
@@ -63,9 +63,16 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.10.2/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.10.3" id="misha-5103">misha 5.10.3<a class="anchor" aria-label="anchor" href="#misha-5103"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> reading an indexed dense track on an empty (length-0) contig that follows a populated one in the same scan no longer returns the previous chromosome’s values. The mmap read path (added in 5.6.7) left its window pointing at the prior chrom on a length-0 entry, so <code>max.pos.*</code>/<code>min.pos.*</code>, mixed-function, and <code>avg</code>+<code>nearest</code> virtual tracks could read stale values for the empty contig instead of <code>NA</code>. Single-function <code>avg</code>/<code>sum</code>/<code>lse</code> tracks were unaffected.</li>
+<li>
+<strong>Behavior fix:</strong> <code>pwm.edit_distance</code> / <code>pwm.edit_distance.pos</code> / <code>pwm.max.edit_distance</code> with <code>direction = "below"</code> and <code>max_edits</code> set no longer skip N-containing windows. An N is not a mandatory edit when going below threshold, so an N-heavy window already scoring below threshold needs 0 edits; the N-count skip (added in 5.6.11) wrongly pruned such windows, returning <code>NA</code> or missing the true minimum. The skip is now restricted to <code>direction = "above"</code> substitutions-only, where it is exact.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.10.2" id="misha-5102">misha 5.10.2<a class="anchor" aria-label="anchor" href="#misha-5102"></a></h2>
 <ul><li>
