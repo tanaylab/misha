@@ -800,7 +800,19 @@ PWMEditDistanceScorer::ScanMetrics PWMEditDistanceScorer::evaluate_windows(const
     // Sliding-window N-count for fast skip of N-heavy regions.
     // N bases force mandatory edits; if a window has more than max_edits Ns,
     // it's unreachable. We maintain a running count, O(1) per window step.
-    bool use_n_skip = (m_max_edits >= 0 && max_start > 0);
+    //
+    // This is only sound for ABOVE direction with substitutions only:
+    //   - BELOW: an N is NOT a mandatory edit (m_mandatory_table[i][4] == false,
+    //     see precompute_tables). An N is scored at col_max (worst case for going
+    //     below), so an all-N window can already be <= threshold (0 edits). Skipping
+    //     it on N-count alone wrongly returns NA / misses the true minimum.
+    //   - indels (m_max_indels > 0): the alignment span is not fixed at
+    //     motif_length, so an N counted in the leading motif_length window may fall
+    //     outside the optimal alignment (e.g. shortened by deletions) and not force
+    //     an edit. Counting over a fixed window then over-rejects.
+    // For ABOVE + subs-only the true edit count is >= mandatory_edits >= n_count,
+    // so the skip is exact (matches the pigeonhole prefilter's own domain).
+    bool use_n_skip = (m_max_edits >= 0 && max_start > 0 && !is_below() && m_max_indels == 0);
     int n_count = 0;
     if (use_n_skip) {
         for (size_t j = 0; j < motif_length && j < target_length; j++) {

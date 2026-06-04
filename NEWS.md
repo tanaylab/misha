@@ -1,3 +1,8 @@
+# misha 5.10.3
+
+* **Behavior fix:** reading an indexed dense track on an empty (length-0) contig that follows a populated one in the same scan no longer returns the previous chromosome's values. The mmap read path (added in 5.6.7) left its window pointing at the prior chrom on a length-0 entry, so `max.pos.*`/`min.pos.*`, mixed-function, and `avg`+`nearest` virtual tracks could read stale values for the empty contig instead of `NA`. Single-function `avg`/`sum`/`lse` tracks were unaffected.
+* **Behavior fix:** `pwm.edit_distance` / `pwm.edit_distance.pos` / `pwm.max.edit_distance` with `direction = "below"` and `max_edits` set no longer skip N-containing windows. An N is not a mandatory edit when going below threshold, so an N-heavy window already scoring below threshold needs 0 edits; the N-count skip (added in 5.6.11) wrongly pruned such windows, returning `NA` or missing the true minimum. The skip is now restricted to `direction = "above"` substitutions-only, where it is exact.
+
 # misha 5.10.2
 
 * **Performance fix:** a single-function `lse` (or `sum`/`exists`/`size`) virtual track scanned over a sliding window (`gvtrack.iterator(sshift=, eshift=)`) genome-wide is fast again. Since 5.6.7 a single-function "fast path" recomputed the windowed reduction from scratch on every step, bypassing the incremental sliding-window path; the common motif-energy quantile workload (windowed `lse` + `gquantiles`/`gscreen`) was ~2.5x slower (worse with wider windows). Such single-function reducers now keep the sliding-window path. Output is unchanged.

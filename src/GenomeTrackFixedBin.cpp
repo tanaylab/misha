@@ -1141,6 +1141,17 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 	m_lse_sliding_valid = false;
 	m_running_lse_initialized = false;
 
+	// Reset the mmap read window up front, BEFORE any early return. Otherwise a
+	// reused object (indexed tracks keep one GenomeTrackFixedBin alive across all
+	// chromosomes) that reads a non-empty chrom and then an empty/length-0 contig
+	// would keep m_mmap_data / m_mmap_num_bins pointing at the previous chrom, and
+	// read_next_bin/goto_bin (which bound on m_mmap_num_bins, not m_num_samples)
+	// would return the previous chromosome's values instead of NA. Re-established
+	// below for non-empty chromosomes.
+	m_mmap_data = nullptr;
+	m_mmap_num_bins = 0;
+	m_cur_bin = 0;
+
 	// Check for indexed format FIRST. get_track_index() hits the process-
 	// static index cache (avoiding a stat() per chromosome transition on the
 	// hot iterator path) and returns nullptr when the track has no index.
@@ -1231,10 +1242,7 @@ void GenomeTrackFixedBin::init_read(const char *filename, const char *mode, int 
 
 	// Set up mmap for read-only mode (naryn pattern)
 	// For indexed format: reuse existing mmap if same file (avoid re-mmap per chromosome)
-	m_mmap_data = nullptr;
-	m_mmap_num_bins = 0;
-	m_cur_bin = 0;
-
+	// (m_mmap_data / m_mmap_num_bins / m_cur_bin were reset at the top of init_read.)
 	if (setup_mmap && strcmp(mode, "rb") == 0 && m_num_samples > 0) {
 		const std::string file_path = m_dat_open ? m_dat_path : std::string(filename);
 
