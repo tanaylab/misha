@@ -37,13 +37,22 @@
         }
         # Bare track → window equals one iterator step (sshift=eshift=0).
         # `default_iterator` is the natural step when the caller passes
-        # iterator=NULL: bin_size for dense tracks (one bin per step), 1
-        # for sparse tracks (no native bin grid).
-        bsz <- info$bin.size
-        if (is.null(bsz) || !is.numeric(bsz)) bsz <- 1L
+        # iterator=NULL: bin_size for a dense track (one bin per step). A
+        # sparse track has no bin grid and its implicit (iterator=NULL)
+        # iterator is the irregular sparse iterator (one position per stored
+        # interval), which the grid-based fast path does NOT reproduce. So a
+        # bare sparse track is only eligible with an EXPLICIT iterator;
+        # default_iterator = NA forces that (mirrors the vtrack rule).
+        if (identical(info$type, "sparse")) {
+            default_it <- NA_integer_
+        } else {
+            bsz <- info$bin.size
+            if (is.null(bsz) || !is.numeric(bsz)) bsz <- 1L
+            default_it <- as.integer(bsz)
+        }
         return(list(
             track = e, func = "avg", sshift = 0L, eshift = 0L,
-            default_iterator = as.integer(bsz)
+            default_iterator = default_it
         ))
     }
     # Virtual track?
@@ -80,6 +89,23 @@
         }
     }
     NULL
+}
+
+# TRUE iff every scope interval sits on the iterator grid (origin 0), so the
+# fast path's global-grid + point-membership scan matches the slow path's
+# clipped fixed-bin iterator. A non-aligned start or a non-aligned end that is
+# NOT the chromosome end would shift or truncate a partial bin differently
+# between the two paths, so such scopes must fall back to the slow path. An end
+# equal to the chromosome size is allowed: both paths clip the final window to
+# the chromosome boundary identically.
+.scope_grid_aligned <- function(iv, it_int) {
+    allg <- get("ALLGENOME", envir = misha:::.misha)[[1]]
+    chrom_size <- stats::setNames(as.numeric(allg$end), as.character(allg$chrom))
+    starts <- as.numeric(iv$start)
+    ends <- as.numeric(iv$end)
+    csz <- chrom_size[as.character(iv$chrom)]
+    all(starts %% it_int == 0) &&
+        all((ends %% it_int == 0) | (!is.na(csz) & ends == csz))
 }
 
 .detect_fast_path <- function(exprs, iterator, intervals, band) {
@@ -153,6 +179,10 @@
             return(NULL)
         }
         if ("chrom1" %in% colnames(iv)) {
+            return(NULL)
+        }
+        # Only grid-aligned scopes match the slow path (see .scope_grid_aligned).
+        if (!.scope_grid_aligned(iv, it_int)) {
             return(NULL)
         }
     }
@@ -243,6 +273,10 @@
             return(NULL)
         }
         if ("chrom1" %in% colnames(iv)) {
+            return(NULL)
+        }
+        # Only grid-aligned scopes match the slow path (see .scope_grid_aligned).
+        if (!.scope_grid_aligned(iv, it_int)) {
             return(NULL)
         }
     }

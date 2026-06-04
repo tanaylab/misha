@@ -197,48 +197,62 @@ void scan_fixedbin_inner(GenomeTrackFixedBin *fb, unsigned bin_size,
             // on a gap, next_bin_to_push is 0, and we don't want to walk
             // through the skipped region — skip directly to sbin.
             if (next_bin_to_push < (int)sbin) next_bin_to_push = (int)sbin;
-            // Push all bins up to ebin that we haven't seen yet.
-            while (next_bin_to_push < (int)ebin) {
-                int b = next_bin_to_push;
-                float v = all_bins[b];
-                smax.push_bin(b, std::isnan(v) ? -std::numeric_limits<float>::infinity() : v);
-                if constexpr (Reducer::needs_lower_bound) {
-                    smin.push_bin(b, std::isnan(v) ? std::numeric_limits<float>::infinity() : v);
-                }
-                ++next_bin_to_push;
-            }
-            // Advance fronts to current window start.
+            // Drop bins that have left the window BEFORE pushing the new ones.
+            // Pushing first could momentarily hold ~2x the window's bins across
+            // a step transition (old front not yet dropped + new bins), which
+            // can alias past WINDOW_CAP for large iterators. Advancing first
+            // bounds the live deque span to n_bins_per_window (<= WINDOW_CAP).
+            // The final deque state is identical (advance only touches the
+            // front, push only the back; all pushed indices are >= sbin).
             smax.advance_front((int)sbin);
             if constexpr (Reducer::needs_lower_bound) {
                 smin.advance_front((int)sbin);
             }
+            // Push all bins up to ebin that we haven't seen yet. A non-finite
+            // bin (NaN or +/-inf) is "missing" (same rule as aggregate_window
+            // and the legacy read path), pushed as the dominated sentinel so it
+            // never becomes the window extremum.
+            while (next_bin_to_push < (int)ebin) {
+                int b = next_bin_to_push;
+                float v = all_bins[b];
+                bool miss = !std::isfinite(v);
+                smax.push_bin(b, miss ? -std::numeric_limits<float>::infinity() : v);
+                if constexpr (Reducer::needs_lower_bound) {
+                    smin.push_bin(b, miss ? std::numeric_limits<float>::infinity() : v);
+                }
+                ++next_bin_to_push;
+            }
 
             float wmax = smax.current_extremum();
-            float wmin = Reducer::needs_lower_bound
-                         ? smin.current_extremum()
-                         : std::numeric_limits<float>::quiet_NaN();
-            float upper = aggregate_upper_bound(F, wmax, pre_const);
-            float lower = Reducer::needs_lower_bound
-                          ? aggregate_lower_bound(F, wmin, pre_const)
-                          : std::numeric_limits<float>::quiet_NaN();
-            if (state.prune(upper, lower)) {
-                // Pruned position still counts as a valid sample if at
-                // least one bin in the window is non-NaN (wmax > -inf).
-                // Without this, the effective N used for rank
-                // calculation in heap-mode reducers drifts off from the
-                // fallback N.
-                if (wmax > -std::numeric_limits<float>::infinity())
+            // An empty / all-missing window has wmax == -inf and a NaN
+            // aggregate; its bounds are meaningless. Skip prune/certain-pass
+            // and fall through to aggregate_window -> nan_seen, so a threshold
+            // screen flushes the run (matching the slow path) rather than
+            // pruning (which would fuse runs across the gap) or certain-passing
+            // (which would emit a phantom interval: the MIN>t / MAX<t case
+            // where the non-informative bound lands on the predicate side).
+            if (wmax > -std::numeric_limits<float>::infinity()) {
+                float wmin = Reducer::needs_lower_bound
+                             ? smin.current_extremum()
+                             : std::numeric_limits<float>::quiet_NaN();
+                float upper = aggregate_upper_bound(F, wmax, pre_const);
+                float lower = Reducer::needs_lower_bound
+                              ? aggregate_lower_bound(F, wmin, pre_const)
+                              : std::numeric_limits<float>::quiet_NaN();
+                if (state.prune(upper, lower)) {
+                    // wmax > -inf, so this window has a valid (non-NaN) sample.
                     state.count_pruned();
-                continue;
-            }
-            // Symmetric to prune: when the bound already guarantees the
-            // predicate passes (e.g. `lower > threshold` for GT), skip
-            // aggregate_window entirely. Only applies to reducers that
-            // don't need the actual value (ThresholdScreen).
-            if constexpr (Reducer::supports_certain_pass) {
-                if (state.certain_pass(upper, lower)) {
-                    state.accept_certain_pass(c);
                     continue;
+                }
+                // Symmetric to prune: when the bound already guarantees the
+                // predicate passes (e.g. `lower > threshold` for GT), skip
+                // aggregate_window entirely. Only applies to reducers that
+                // don't need the actual value (ThresholdScreen).
+                if constexpr (Reducer::supports_certain_pass) {
+                    if (state.certain_pass(upper, lower)) {
+                        state.accept_certain_pass(c);
+                        continue;
+                    }
                 }
             }
           }
@@ -312,7 +326,7 @@ void scan_sparse_inner(GenomeTrackSparse *sp, int64_t chrom_size,
         for (size_t i = lo; i < intervals.size(); ++i) {
             if ((int64_t)intervals[i].start >= win_e) break;
             float v = vals[i];
-            if (std::isnan(v)) continue;
+            if (!std::isfinite(v)) continue;  // NaN or +/-inf -> missing (legacy parity)
             ++n;
             if constexpr (F == WindowAggFunc::LSE) lse_accumulate(acc_lse, v);
             else if constexpr (F == WindowAggFunc::SUM) acc_sum += v;
