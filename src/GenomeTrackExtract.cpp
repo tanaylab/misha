@@ -152,7 +152,7 @@ static SEXP build_rintervals_extract(GIntervalsFetcher1D *out_intervals1d, GInte
     SEXP col_names = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 		if (Rf_isNull(_colnames))
-			SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
+			SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_exprs, iexpr));
 		else
 			SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
 	}
@@ -210,7 +210,7 @@ static void set_extract_value_column_names(SEXP answer, unsigned num_interv_cols
 	SEXP col_names = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 	for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 		if (Rf_isNull(_colnames))
-			SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
+			SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_exprs, iexpr));
 		else
 			SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
 	}
@@ -577,7 +577,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 				if (iexpr)
 					outfile << "\t";
 				if (Rf_isNull(_colnames))
-					outfile << get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr)));
+					outfile << CHAR(STRING_ELT(_exprs, iexpr));
 				else
 					outfile << CHAR(STRING_ELT(_colnames, iexpr));
 			}
@@ -845,7 +845,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			}
 			for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 				const char *cn = Rf_isNull(_colnames) ?
-					get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str() :
+					CHAR(STRING_ELT(_exprs, iexpr)) :
 					CHAR(STRING_ELT(_colnames, iexpr));
 				SET_STRING_ELT(fb_colnames, fb_interv_cols + iexpr, Rf_mkChar(cn));
 			}
@@ -1087,7 +1087,7 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 		}
 		for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
 			if (Rf_isNull(_colnames))
-				SET_STRING_ELT(col_names, num_interv_cols + iexpr, Rf_mkChar(get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr))).c_str()));
+				SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_exprs, iexpr));
 			else
 				SET_STRING_ELT(col_names, num_interv_cols + iexpr, STRING_ELT(_colnames, iexpr));
 		}
@@ -1182,7 +1182,7 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 				if (iexpr)
 					outfile << "\t";
 				if (Rf_isNull(_colnames))
-					outfile << get_bounded_colname(CHAR(STRING_ELT(_exprs, iexpr)));
+					outfile << CHAR(STRING_ELT(_exprs, iexpr));
 				else
 					outfile << CHAR(STRING_ELT(_colnames, iexpr));
 			}
