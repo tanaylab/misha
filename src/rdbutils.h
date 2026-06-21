@@ -184,8 +184,6 @@ string interv2path(SEXP envir, const string &intervname);
 // Creates trackset and trackname directories using trackset.trackname. Verifies that the track name is valid.
 string create_track_dir(SEXP envir, const string &trackname);
 
-string get_bounded_colname(const char *str, unsigned maxlen = 40);
-
 // the result is already protected
 SEXP eval_in_R(SEXP parsed_command, SEXP envir);
 

@@ -1,3 +1,7 @@
+# misha 5.11.0
+
+* **Breaking:** `gextract()` no longer truncates auto-generated column names to 40 characters - columns are named after the full expression (the complete track name) instead of `<first 37 chars>...`. Long names that previously collapsed to the same truncated name, hiding a column, are now distinct. Pass `colnames=` to set names explicitly.
+
 # misha 5.10.3
 
 * **Behavior fix:** reading an indexed dense track on an empty (length-0) contig that follows a populated one in the same scan no longer returns the previous chromosome's values. The mmap read path (added in 5.6.7) left its window pointing at the prior chrom on a length-0 entry, so `max.pos.*`/`min.pos.*`, mixed-function, and `avg`+`nearest` virtual tracks could read stale values for the empty contig instead of `NA`. Single-function `avg`/`sum`/`lse` tracks were unaffected.

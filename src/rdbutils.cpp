@@ -959,19 +959,6 @@ string rdb::create_track_dir(SEXP envir, const string &trackname)
 	return path;
 }
 
-string rdb::get_bounded_colname(const char *str, unsigned maxlen)
-{
-	string colname;
-
-	maxlen = max(maxlen, 4u);
-	if (strlen(str) > maxlen) {
-		colname.assign(str, maxlen - 3);
-		colname += "...";
-	} else
-		colname = str;
-	return colname;
-}
-
 SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 {
 	int check_error;
