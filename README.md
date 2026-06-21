@@ -49,6 +49,21 @@ usage details.
 
 ### Using misha with an LLM agent
 
+**Drop-in prompt (no clone needed).** Paste the block below into your
+agent at the start of a misha task. It points the agent at the raw
+files on GitHub, so it works without a local checkout:
+
+````
+Before writing any misha code, fetch and read:
+
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-core.md  (mandatory: concepts + everyday recipes)
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-anti-patterns.md  (silent footguns; cross-referenced from core)
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-advanced.md  (consult on demand: 2D / Hi-C, PWM, import/export, new genomes)
+
+Follow the conventions in those files. When you hit a recipe with an
+"Avoid:" block, treat it as a hard rule.
+````
+
 For agents (Claude Code, Copilot, Cursor, etc.) writing misha analysis
 code in a downstream project, point them at the maintained agent guides
 in this repo:
@@ -68,25 +83,6 @@ in this repo:
 The core guide is ~4k words and targets a system-prompt-sized context.
 For Claude Code-style setups, dropping `misha-core.md` (or all three)
 into the project’s `CLAUDE.md` / `AGENTS.md` is the intended use.
-
-**Drop-in prompt (no clone needed).** Paste the block below into your
-agent at the start of a misha task. It points the agent at the raw
-files on GitHub, so it works without a local checkout:
-
-````
-Before writing any misha code, fetch and read:
-
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-core.md  (mandatory: concepts + everyday recipes)
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-anti-patterns.md  (silent footguns; cross-referenced from core)
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-advanced.md  (consult on demand: 2D / Hi-C, PWM, import/export, new genomes)
-
-Follow the conventions in those files. When you hit a recipe with an
-"Avoid:" block, treat it as a hard rule.
-````
-
-Pin to a release tag for stability by replacing `master` with any tag
-that contains `agent-guides/` (the directory landed in `v5.7.0`, so
-`v5.7.0` or later; `v5.7.3` for the current guide content).
 
 #### Running scripts from old versions of misha (\< 4.2.0)
 
