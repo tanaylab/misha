@@ -112,6 +112,15 @@
 <div class="section level3">
 <h3 id="using-misha-with-an-llm-agent">Using misha with an LLM agent<a class="anchor" aria-label="anchor" href="#using-misha-with-an-llm-agent"></a>
 </h3>
+<p><strong>Drop-in prompt (no clone needed).</strong> Paste the block below into your agent at the start of a misha task. It points the agent at the raw files on GitHub, so it works without a local checkout:</p>
+<pre><code>Before writing any misha code, fetch and read:
+
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-core.md  (mandatory: concepts + everyday recipes)
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-anti-patterns.md  (silent footguns; cross-referenced from core)
+- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-advanced.md  (consult on demand: 2D / Hi-C, PWM, import/export, new genomes)
+
+Follow the conventions in those files. When you hit a recipe with an
+"Avoid:" block, treat it as a hard rule.</code></pre>
 <p>For agents (Claude Code, Copilot, Cursor, etc.) writing misha analysis code in a downstream project, point them at the maintained agent guides in this repo:</p>
 <ul>
 <li>
@@ -140,16 +149,6 @@
 </li>
 </ul>
 <p>The core guide is ~4k words and targets a system-prompt-sized context. For Claude Code-style setups, dropping <code>misha-core.md</code> (or all three) into the project’s <code>CLAUDE.md</code> / <code>AGENTS.md</code> is the intended use.</p>
-<p><strong>Drop-in prompt (no clone needed).</strong> Paste the block below into your agent at the start of a misha task. It points the agent at the raw files on GitHub, so it works without a local checkout:</p>
-<pre><code>Before writing any misha code, fetch and read:
-
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-core.md  (mandatory: concepts + everyday recipes)
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-anti-patterns.md  (silent footguns; cross-referenced from core)
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-advanced.md  (consult on demand: 2D / Hi-C, PWM, import/export, new genomes)
-
-Follow the conventions in those files. When you hit a recipe with an
-"Avoid:" block, treat it as a hard rule.</code></pre>
-<p>Pin to a release tag for stability by replacing <code>master</code> with any tag that contains <code>agent-guides/</code> (the directory landed in <code>v5.7.0</code>, so <code>v5.7.0</code> or later; <code>v5.7.3</code> for the current guide content).</p>
 <div class="section level4">
 <h4 id="running-scripts-from-old-versions-of-misha--420">Running scripts from old versions of misha (&lt; 4.2.0)<a class="anchor" aria-label="anchor" href="#running-scripts-from-old-versions-of-misha--420"></a>
 </h4>
