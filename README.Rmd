@@ -50,14 +50,6 @@ See the [user manual](https://tanaylab.github.io/misha/articles/Manual.html) for
 
 ### Using misha with an LLM agent
 
-For agents (Claude Code, Copilot, Cursor, etc.) writing misha analysis code in a downstream project, point them at the maintained agent guides in this repo:
-
-- [`agent-guides/misha-core.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-core.md) - concepts, bootstrap, and the everyday recipes (intervals, annotation, distance, extract, vtracks, gscreen, gdist, gtrack.create). Start here.
-- [`agent-guides/misha-advanced.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-advanced.md) - 2D / Hi-C pile-ups, insulation, sequence and PWM tracks, bulk import/export, new genomes and cross-species.
-- [`agent-guides/misha-anti-patterns.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-anti-patterns.md) - silent footguns referenced inline from the above.
-
-The core guide is ~4k words and targets a system-prompt-sized context. For Claude Code-style setups, dropping `misha-core.md` (or all three) into the project's `CLAUDE.md` / `AGENTS.md` is the intended use.
-
 **Drop-in prompt (no clone needed).** Paste the block below into your agent at the start of a misha task. It points the agent at the raw files on GitHub, so it works without a local checkout:
 
 ````
@@ -70,7 +62,13 @@ Before writing any misha code, fetch and read:
 Follow the conventions in those files. When you hit a recipe with an "Avoid:" block, treat it as a hard rule.
 ````
 
-Pin to a release tag for stability by replacing `master` with any tag that contains `agent-guides/` (the directory landed in `v5.7.0`, so `v5.7.0` or later).
+For agents (Claude Code, Copilot, Cursor, etc.) writing misha analysis code in a downstream project, point them at the maintained agent guides in this repo:
+
+- [`agent-guides/misha-core.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-core.md) - concepts, bootstrap, and the everyday recipes (intervals, annotation, distance, extract, vtracks, gscreen, gdist, gtrack.create). Start here.
+- [`agent-guides/misha-advanced.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-advanced.md) - 2D / Hi-C pile-ups, insulation, sequence and PWM tracks, bulk import/export, new genomes and cross-species.
+- [`agent-guides/misha-anti-patterns.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-anti-patterns.md) - silent footguns referenced inline from the above.
+
+The core guide is ~4k words and targets a system-prompt-sized context. For Claude Code-style setups, dropping `misha-core.md` (or all three) into the project's `CLAUDE.md` / `AGENTS.md` is the intended use.
 
 #### Running scripts from old versions of misha (< 4.2.0)
 
