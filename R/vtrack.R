@@ -814,7 +814,8 @@
 #' \itemize{
 #'   \item \code{kmer}: DNA sequence (case-insensitive) to count.
 #'   \item \code{extend}: If TRUE (default), counts kmers whose anchor lies in the interval even if the kmer extends beyond it; when FALSE, only kmers fully contained in the interval are considered.
-#'   \item \code{strand}: 1 counts forward-strand occurrences, -1 counts reverse-strand occurrences, 0 counts both strands (default). For palindromic kmers, consider using 1 or -1 to avoid double counting.
+#'   \item \code{strand}: 1 counts matches on the forward strand, -1 counts matches on the reverse-complement strand, 0 counts both strands and sums them (default). Unlike the PWM functions - where the both-strand mode is set by \code{bidirect} and \code{strand} must be 1 or -1 - the k-mer functions accept \code{strand = 0} directly. For palindromic kmers (equal to their own reverse complement) use 1 or -1 to avoid double counting; \code{strand = 0} issues a warning in that case.
+#'   \item For \code{kmer.frac} the denominator is the number of possible anchor positions in the interval; with \code{strand = 0} positions on both strands are counted, so the fraction stays in \code{[0, 1]} and remains comparable to the single-strand fraction.
 #' }
 #'
 #' K-mer parameters can be supplied as a list or via named arguments (see examples).
