@@ -58,7 +58,9 @@ PWMEditDistanceScorer::Direction parse_direction_param(SEXP rparams, const std::
 const char *TrackExpressionVars::Track_var::FUNC_NAMES[TrackExpressionVars::Track_var::NUM_FUNCS] = {
 	"avg", "min", "max", "nearest", "stddev", "sum", "lse", "quantile",
 	"global.percentile", "global.percentile.min", "global.percentile.max",
-	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count", "kmer.count", "kmer.frac",
+	"weighted.sum", "area", "pwm", "pwm.max", "pwm.max.pos", "pwm.count",
+	"pwm.grad", "pwm.grad.ism",
+	"kmer.count", "kmer.frac",
     "masked.count", "masked.frac",
     "max.pos.abs", "max.pos.relative", "min.pos.abs", "min.pos.relative",
     "exists", "size", "sample", "sample.pos.abs", "sample.pos.relative",
@@ -457,7 +459,8 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
         string func = CHAR(STRING_ELT(rfunc, 0));
         transform(func.begin(), func.end(), func.begin(), ::tolower);
         
-        if (func == "pwm" || func == "pwm.max" || func == "pwm.max.pos" || func == "pwm.count") {
+        if (func == "pwm" || func == "pwm.max" || func == "pwm.max.pos" || func == "pwm.count" ||
+            func == "pwm.grad" || func == "pwm.grad.ism") {
             // Create the Track_var without a Track_n_imdf
             m_track_vars.push_back(Track_var());
             Track_var &var = m_track_vars.back();
@@ -465,24 +468,48 @@ void TrackExpressionVars::add_vtrack_var(const string &vtrack, SEXP rvtrack)
             var.val_func = (func == "pwm" ? Track_var::PWM :
                            func == "pwm.max" ? Track_var::PWM_MAX :
                            func == "pwm.max.pos" ? Track_var::PWM_MAX_POS :
-                           Track_var::PWM_COUNT);
+                           func == "pwm.count" ? Track_var::PWM_COUNT :
+                           func == "pwm.grad" ? Track_var::PWM_GRAD :
+                           Track_var::PWM_GRAD_ISM);
             var.track_n_imdf = nullptr;  // No track needed for PWM
             var.seq_imdf1d = nullptr;
-            
+
             SEXP rparams = get_rvector_col(rvtrack, "params", vtrack.c_str(), false);
 
 			// Parse PWM parameters using helper struct
 			TrackExprParams::PWMParams pwm_params = TrackExprParams::PWMParams::parse(rparams, vtrack);
+
+			// Gradient functions read aggregate ("lse" or "max") from params
+			std::string aggregate = "lse";
+			if (func == "pwm.grad" || func == "pwm.grad.ism") {
+				SEXP r_agg = get_rvector_col(rparams, "aggregate", vtrack.c_str(), false);
+				if (!Rf_isNull(r_agg)) {
+					if (!Rf_isString(r_agg) || Rf_length(r_agg) != 1) {
+						verror("Virtual track %s: aggregate must be a single string",
+						       vtrack.c_str());
+					}
+					aggregate = CHAR(STRING_ELT(r_agg, 0));
+				}
+				if (aggregate != "lse" && aggregate != "max") {
+					verror("Virtual track %s: aggregate must be 'lse' or 'max', got '%s'",
+					       vtrack.c_str(), aggregate.c_str());
+				}
+			}
+
+			PWMScorer::ScoringMode mode =
+				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
+				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
+				func == "pwm.max.pos" ? PWMScorer::MAX_LIKELIHOOD_POS :
+				func == "pwm.count" ? PWMScorer::MOTIF_COUNT :
+				func == "pwm.grad" ? (aggregate == "lse" ? PWMScorer::GRAD_LSE : PWMScorer::GRAD_MAX) :
+				(aggregate == "lse" ? PWMScorer::GRAD_LSE_ISM : PWMScorer::GRAD_MAX_ISM);
 
 			// Construct scorer with shared sequence fetcher for caching
 			var.pwm_scorer = std::make_unique<PWMScorer>(
 				pwm_params.core.pssm,
 				&m_shared_seqfetch,
 				pwm_params.extend_flag,
-				func == "pwm" ? PWMScorer::TOTAL_LIKELIHOOD :
-				func == "pwm.max" ? PWMScorer::MAX_LIKELIHOOD :
-				func == "pwm.max.pos" ? PWMScorer::MAX_LIKELIHOOD_POS :
-				PWMScorer::MOTIF_COUNT,
+				mode,
 				static_cast<char>(pwm_params.core.strand_mode),
 				pwm_params.core.spat_factor,
 				pwm_params.core.spat_bin_size,

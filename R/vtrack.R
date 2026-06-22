@@ -246,6 +246,36 @@
     kmer_params
 }
 
+#' Validate and process PWM gradient function parameters
+#' @noRd
+.vtrack_params_pwm_grad <- function(func, params, dots) {
+    if (!is.null(params)) {
+        if (!is.list(params) || !("pssm" %in% names(params))) {
+            stop(sprintf("%s requires a list with at least 'pssm' matrix parameter", func))
+        }
+        merged_dots <- params
+    } else {
+        merged_dots <- dots
+    }
+
+    if (!is.null(merged_dots$score.thresh)) {
+        stop(sprintf("%s does not accept score.thresh", func))
+    }
+    aggregate <- if (!is.null(merged_dots$aggregate)) merged_dots$aggregate else "lse"
+    if (!aggregate %in% c("lse", "max")) {
+        stop(sprintf(
+            "%s: aggregate must be 'lse' or 'max', got %s",
+            func, aggregate
+        ))
+    }
+    out <- .vtrack_params_pwm(func, params, dots)
+    out$aggregate <- aggregate
+    # gradient functions never take score.thresh; force-clear the default 0
+    # introduced by .vtrack_params_pwm so it cannot be misinterpreted downstream.
+    out$score.thresh <- NULL
+    out
+}
+
 #' Validate and process PWM edit distance function parameters
 #' @noRd
 .vtrack_params_pwm_edit_distance <- function(func, params, dots) {
@@ -560,6 +590,8 @@
     pwm.max = .vtrack_params_pwm,
     pwm.max.pos = .vtrack_params_pwm,
     pwm.count = .vtrack_params_pwm,
+    pwm.grad = .vtrack_params_pwm_grad,
+    pwm.grad.ism = .vtrack_params_pwm_grad,
     kmer.count = .vtrack_params_kmer,
     kmer.frac = .vtrack_params_kmer,
     masked.count = .vtrack_params_masked,
@@ -576,6 +608,7 @@
 # Functions that don't require a source track
 .VTRACK_SOURCELESS_FUNCS <- c(
     "pwm", "pwm.max", "pwm.max.pos", "pwm.count",
+    "pwm.grad", "pwm.grad.ism",
     "kmer.count", "kmer.frac",
     "masked.count", "masked.frac",
     "pwm.edit_distance", "pwm.edit_distance.pos", "pwm.max.edit_distance",
@@ -672,6 +705,8 @@
 #'   NULL (sequence) \tab pwm.max \tab pssm, bidirect, prior, extend, spat_* \tab Maximum log-likelihood score among all anchors (per-position union across strands). \cr
 #'   NULL (sequence) \tab pwm.max.pos \tab pssm, bidirect, prior, extend, spat_* \tab 1-based position of the best-scoring anchor (signed by strand when \code{bidirect = TRUE}); coordinates are always relative to the iterator interval after any \code{gvtrack.iterator()} shifts/extensions. \cr
 #'   NULL (sequence) \tab pwm.count \tab pssm, score.thresh, bidirect, prior, extend, strand, spat_* \tab Count of anchors whose score exceeds \code{score.thresh} (per-position union). \cr
+#'   NULL (sequence) \tab pwm.grad \tab pssm, aggregate, bidirect, prior, extend, spat_* \tab Softmax-weighted per-bp PSSM-column contribution at the interval start (linearized form). \cr
+#'   NULL (sequence) \tab pwm.grad.ism \tab pssm, aggregate, bidirect, prior, extend, spat_* \tab In-silico mutagenesis per-bp gradient at the interval start. \cr
 #' }
 #'
 #' \strong{Edit distance summarizers}
