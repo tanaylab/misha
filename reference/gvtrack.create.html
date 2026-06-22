@@ -63,7 +63,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Creates a new virtual track</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.0/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
     <div class="hidden name"><code>gvtrack.create.Rd</code></div>
     </div>
 
@@ -236,7 +236,8 @@ range divisible by <code>spat_bin</code> if needed.</p>
 <p><strong>Difference between distance functions:</strong> The <code>distance</code> function measures from the <em>center</em> of the iterator interval (a single coordinate point) to the closest <em>edge</em> of source intervals when outside, or returns a normalized distance within the interval when inside. The <code>distance.center</code> function measures from the center of the iterator interval to the <em>center</em> of source intervals. The <code>distance.edge</code> function measures <em>edge-to-edge</em> distance between intervals, exactly like <code>gintervals.neighbors</code>. Use <code>distance.edge</code> when you need the same distance computation as <code>gintervals.neighbors</code> within a virtual track context.</p>
 <p><strong>K-mer notes</strong></p><ul><li><p><code>kmer</code>: DNA sequence (case-insensitive) to count.</p></li>
 <li><p><code>extend</code>: If TRUE (default), counts kmers whose anchor lies in the interval even if the kmer extends beyond it; when FALSE, only kmers fully contained in the interval are considered.</p></li>
-<li><p><code>strand</code>: 1 counts forward-strand occurrences, -1 counts reverse-strand occurrences, 0 counts both strands (default). For palindromic kmers, consider using 1 or -1 to avoid double counting.</p></li>
+<li><p><code>strand</code>: 1 counts matches on the forward strand, -1 counts matches on the reverse-complement strand, 0 counts both strands and sums them (default). Unlike the PWM functions - where the both-strand mode is set by <code>bidirect</code> and <code>strand</code> must be 1 or -1 - the k-mer functions accept <code>strand = 0</code> directly. For palindromic kmers (equal to their own reverse complement) use 1 or -1 to avoid double counting; <code>strand = 0</code> issues a warning in that case.</p></li>
+<li><p>For <code>kmer.frac</code> the denominator is the number of possible anchor positions in the interval; with <code>strand = 0</code> positions on both strands are counted, so the fraction stays in <code>[0, 1]</code> and remains comparable to the single-strand fraction.</p></li>
 </ul><p>K-mer parameters can be supplied as a list or via named arguments (see examples).</p>
 <p>Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.</p>
     </div>
