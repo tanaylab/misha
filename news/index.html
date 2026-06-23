@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.0</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.1</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.1" id="misha-5111">misha 5.11.1<a class="anchor" aria-label="anchor" href="#misha-5111"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gquantiles.html">gquantiles()</a></code> / <code><a href="../reference/gintervals.quantiles.html">gintervals.quantiles()</a></code> name percentile columns with the shortest decimal that round-trips each percentile, so nearby percentiles no longer collapse to the same name - e.g. <code>0.123456789</code> and <code>0.1234567891</code> previously both became <code>"0.123457"</code>, and <code>0.9999999</code> became <code>"1"</code> (colliding with the <code>1.0</code> quantile). Common percentiles (<code>0.5</code>, <code>0.95</code>, …) are unchanged.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.0" id="misha-5110">misha 5.11.0<a class="anchor" aria-label="anchor" href="#misha-5110"></a></h2>
 <ul><li>
