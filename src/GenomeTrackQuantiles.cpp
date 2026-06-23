@@ -6,6 +6,7 @@
  */
 
 #include <cstdint>
+#include <cstdlib>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -39,6 +40,19 @@ struct Percentile {
 	bool operator<(const Percentile &p) const { return percentile < p.percentile; }
 };
 
+// Write into buf the shortest decimal string that round-trips v, so nearby
+// percentiles don't collapse to the same column name the way a fixed "%g"
+// (6 significant digits) would (e.g. 0.123456789 and 0.1234567891 both ->
+// "0.123457", and 0.9999999 -> "1" colliding with the 1.0 quantile).
+static void format_percentile(char *buf, size_t bufsize, double v)
+{
+	for (int prec = 1; prec <= 17; ++prec) {
+		snprintf(buf, bufsize, "%.*g", prec, v);
+		if (strtod(buf, NULL) == v)
+			return;
+	}
+}
+
 static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIntervalsFetcher2D *out_intervals2d,
 									   const vector<Percentile> &percentiles, const vector<double> &quantiles,
 									   IntervUtils &iu, bool use_original_index)
@@ -70,7 +84,7 @@ static SEXP build_rintervals_quantiles(GIntervalsFetcher1D *out_intervals1d, GIn
 	for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 		char buf[100];
 
-		snprintf(buf, sizeof(buf), "%g", ip->percentile);
+		format_percentile(buf, sizeof(buf), ip->percentile);
 		SET_STRING_ELT(colnames, num_interv_cols + ip->index, Rf_mkChar(buf));
 	}
 
@@ -240,7 +254,7 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 
 			REAL(answer)[ip->index] = medians[ip->index];
 
-			snprintf(buf, sizeof(buf), "%g", ip->percentile);
+			format_percentile(buf, sizeof(buf), ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, Rf_mkChar(buf));
 		}
 
@@ -562,7 +576,7 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 			REAL(answer)[ip->index] = medians[ip->index];
 
-			snprintf(buf, sizeof(buf), "%g", ip->percentile);
+			format_percentile(buf, sizeof(buf), ip->percentile);
 			SET_STRING_ELT(colnames, ip->index, Rf_mkChar(buf));
 		}
 
@@ -1285,7 +1299,7 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		for (vector<Percentile>::const_iterator ip = percentiles.begin(); ip != percentiles.end(); ++ip) {
 			char buf[100];
 
-			snprintf(buf, sizeof(buf), "%g", ip->percentile);
+			format_percentile(buf, sizeof(buf), ip->percentile);
 			SET_STRING_ELT(dimname, ip->index, Rf_mkChar(buf));
 		}
 		SET_VECTOR_ELT(dimnames, bins_manager.get_num_bin_finders(), dimname);

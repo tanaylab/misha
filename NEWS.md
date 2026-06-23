@@ -1,3 +1,7 @@
+# misha 5.11.1
+
+* **Behavior fix:** `gquantiles()` / `gintervals.quantiles()` name percentile columns with the shortest decimal that round-trips each percentile, so nearby percentiles no longer collapse to the same name - e.g. `0.123456789` and `0.1234567891` previously both became `"0.123457"`, and `0.9999999` became `"1"` (colliding with the `1.0` quantile). Common percentiles (`0.5`, `0.95`, ...) are unchanged.
+
 # misha 5.11.0
 
 * **Breaking:** `gextract()` no longer truncates auto-generated column names to 40 characters - columns are named after the full expression (the complete track name) instead of `<first 37 chars>...`. Long names that previously collapsed to the same truncated name, hiding a column, are now distinct. Pass `colnames=` to set names explicitly.
