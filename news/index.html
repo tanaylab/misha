@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.2</span>
       </span>
     </div>
 
@@ -63,9 +63,14 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.2" id="misha-5112">misha 5.11.2<a class="anchor" aria-label="anchor" href="#misha-5112"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> <code>gintervals.load_chain(..., src_groot=)</code> no longer leaves the session pointing at the source database after validation. It now fully restores the active database - the working directory (<code>GWD</code>), loaded datasets and virtual tracks included, not just the genome root.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.1" id="misha-5111">misha 5.11.1<a class="anchor" aria-label="anchor" href="#misha-5111"></a></h2>
 <ul><li>
