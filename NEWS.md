@@ -1,3 +1,7 @@
+# misha 5.11.2
+
+* **Behavior fix:** `gintervals.load_chain(..., src_groot=)` no longer leaves the session pointing at the source database after validation. It now fully restores the active database - the working directory (`GWD`), loaded datasets and virtual tracks included, not just the genome root.
+
 # misha 5.11.1
 
 * **Behavior fix:** `gquantiles()` / `gintervals.quantiles()` name percentile columns with the shortest decimal that round-trips each percentile, so nearby percentiles no longer collapse to the same name - e.g. `0.123456789` and `0.1234567891` previously both became `"0.123457"`, and `0.9999999` became `"1"` (colliding with the `1.0` quantile). Common percentiles (`0.5`, `0.95`, ...) are unchanged.

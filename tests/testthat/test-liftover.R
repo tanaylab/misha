@@ -672,6 +672,29 @@ test_that("gintervals.load_chain with src_groot validates source chromosomes", {
     expect_equal(.misha$GROOT, target_db)
 })
 
+test_that("gintervals.load_chain with src_groot fully restores the session (GWD etc.)", {
+    local_db_state()
+
+    setup_db(list(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n"))
+    target_db <- .misha$GROOT
+
+    source_db <- setup_source_db(list(">source1\nTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\n"))
+
+    chain_file <- new_chain_file()
+    write_chain_entry(chain_file, "source1", 100, "+", 0, 20, "chr1", 32, "+", 0, 20, 1)
+
+    gdb.init(target_db)
+    before <- as.list(.misha, all.names = TRUE)
+
+    gintervals.load_chain(chain_file, src_groot = source_db)
+
+    # The whole session must be untouched - GWD in particular must not be left
+    # pointing at the source database (the original bug).
+    expect_equal(.misha$GWD, before$GWD)
+    expect_equal(.misha$GROOT, target_db)
+    expect_setequal(ls(.misha, all.names = TRUE), names(before))
+})
+
 test_that("gintervals.load_chain with src_groot rejects invalid source chromosomes", {
     local_db_state()
 
