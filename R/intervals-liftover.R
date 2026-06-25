@@ -265,50 +265,6 @@ gintervals.load <- function(intervals.set = NULL, chrom = NULL, chrom1 = NULL, c
     .gintervals.load_ext(intervals.set, chrom, chrom1, chrom2, TRUE)
 }
 
-#' Validate source chromosomes against source genome
-#'
-#' @param chain Chain data frame with source chromosome information
-#' @param src_groot Path to source genome database
-#' @return NULL (stops with error if validation fails)
-#' @keywords internal
-#' @noRd
-.validate_source_chromosomes <- function(chain, src_groot) {
-    # Save current genome state
-    old_groot <- .misha$GROOT
-    old_allgenome <- .misha$ALLGENOME
-    old_chrom_alias <- if (exists("CHROM_ALIAS", envir = .misha)) .misha$CHROM_ALIAS else NULL
-
-    # Ensure genome is restored even if error occurs
-    on.exit(
-        {
-            .misha$GROOT <- old_groot
-            .misha$ALLGENOME <- old_allgenome
-            if (!is.null(old_chrom_alias)) {
-                .misha$CHROM_ALIAS <- old_chrom_alias
-            } else if (exists("CHROM_ALIAS", envir = .misha)) {
-                rm("CHROM_ALIAS", envir = .misha)
-            }
-        },
-        add = TRUE
-    )
-
-    # Temporarily switch to source genome for validation
-    gdb.init(src_groot)
-
-    # Create source intervals data frame
-    src_intervals <- data.frame(
-        chrom = chain$chromsrc,
-        start = chain$startsrc,
-        end = chain$endsrc,
-        stringsAsFactors = FALSE
-    )
-
-    validated <- .gintervals(chain$chromsrc, chain$startsrc, chain$endsrc, chain$strandsrc)
-
-    # Genome will be restored by on.exit
-}
-
-
 #' Loads assembly conversion table from a chain file
 #'
 #' Loads assembly conversion table from a chain file.
@@ -537,37 +493,22 @@ gintervals.as_chain <- function(intervals = NULL, src_overlap_policy = "error", 
 }
 
 .validate_source_chromosomes <- function(chain, src_groot) {
-    # Save current genome state
-    old_groot <- .misha$GROOT
-    old_allgenome <- .misha$ALLGENOME
-    old_chrom_alias <- if (exists("CHROM_ALIAS", envir = .misha)) .misha$CHROM_ALIAS else NULL
-
-    # Ensure genome is restored even if error occurs
+    # gdb.init() rewrites the whole misha session (GROOT, GWD, ALLGENOME,
+    # CHROM_ALIAS, GTRACKS, datasets, autocompletion symbols, ...). Snapshot
+    # every binding and restore it on exit so the user's session is left
+    # exactly as found - restoring a hand-picked subset previously left GWD
+    # (and other vars) dangling at the source database.
+    old_vars <- as.list(.misha, all.names = TRUE)
     on.exit(
         {
-            .misha$GROOT <- old_groot
-            .misha$ALLGENOME <- old_allgenome
-            if (!is.null(old_chrom_alias)) {
-                .misha$CHROM_ALIAS <- old_chrom_alias
-            } else if (exists("CHROM_ALIAS", envir = .misha)) {
-                rm("CHROM_ALIAS", envir = .misha)
-            }
+            rm(list = ls(.misha, all.names = TRUE), envir = .misha)
+            list2env(old_vars, envir = .misha)
         },
         add = TRUE
     )
 
-    # Temporarily switch to source genome for validation
+    # Temporarily switch to source genome; .gintervals() errors if any source
+    # chromosome is missing or any coordinate is out of bounds.
     gdb.init(src_groot)
-
-    # Create source intervals data frame
-    src_intervals <- data.frame(
-        chrom = chain$chromsrc,
-        start = chain$startsrc,
-        end = chain$endsrc,
-        stringsAsFactors = FALSE
-    )
-
-    validated <- .gintervals(chain$chromsrc, chain$startsrc, chain$endsrc, chain$strandsrc)
-
-    # Genome will be restored by on.exit
+    .gintervals(chain$chromsrc, chain$startsrc, chain$endsrc, chain$strandsrc)
 }
