@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.3</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.4</span>
       </span>
     </div>
 
@@ -63,9 +63,14 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.3/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.4" id="misha-5114">misha 5.11.4<a class="anchor" aria-label="anchor" href="#misha-5114"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> / <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> no longer drop a mapping through a wider earlier source chain when source chains overlap (<code>src_overlap_policy = "keep"</code>). The <code>map_interval</code> fast path trusted a carried cursor as the leftmost overlap after checking only its immediate predecessor; it now confirms leftmost-ness via the per-chromosome prefix-max, falling back to the full search otherwise.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.3" id="misha-5113">misha 5.11.3<a class="anchor" aria-label="anchor" href="#misha-5113"></a></h2>
 <ul><li>
