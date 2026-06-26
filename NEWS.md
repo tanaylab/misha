@@ -1,3 +1,7 @@
+# misha 5.11.3
+
+* **Behavior fix:** `gtrack.liftover(tgt_overlap_policy = "agg")` no longer drops a lifted contribution that spans a target bin boundary when an overlapping chain shares its interval. The per-bin sweep over-advanced its cursor, losing the spanning contribution for the next bin and producing spurious `NaN`s (or wrong aggregates) in bins fed by multiple overlapping chains.
+
 # misha 5.11.2
 
 * **Behavior fix:** `gintervals.load_chain(..., src_groot=)` no longer leaves the session pointing at the source database after validation. It now fully restores the active database - the working directory (`GWD`), loaded datasets and virtual tracks included, not just the genome root.

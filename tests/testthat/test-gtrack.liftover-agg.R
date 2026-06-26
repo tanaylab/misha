@@ -736,3 +736,88 @@ test_that("gtrack.liftover aggregation with partial overlaps and varying coverag
     # All values should be from our source track
     expect_true(all(result[[lifted_track]] %in% c(100, 200, 300)))
 })
+
+# Regression: under tgt_overlap_policy = "agg", a source contribution whose mapped
+# target interval spans a bin boundary must not be dropped when an overlapping
+# sibling (a parallel chain kept by "agg") shares that interval. The FIXED_BIN
+# sweep used to over-advance its cursor past the first of two overlapping
+# contributions, so the spanning contribution was lost for the *next* bin. With a
+# finite + NaN pair this surfaced as a spurious NaN; with two finite values it
+# silently dropped one. (Found via a mouse->human lift where a main-chrom chain and
+# an unplaced-scaffold chain mapped to the same target interval.)
+test_that("gtrack.liftover agg: boundary-spanning contribution survives an overlapping NaN sibling", {
+    local_db_state()
+
+    src_seq <- paste(rep("A", 60), collapse = "")
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", src_seq, "\n"),
+        paste0(">source2\n", src_seq, "\n")
+    ))
+    # Dense binsize-20 source: source1 finite (5), source2 NaN.
+    gtrack.create_dense(
+        "agg_span_src", "boundary-span source",
+        data.frame(
+            chrom = c("chrsource1", "chrsource2"),
+            start = c(0L, 0L), end = c(60L, 60L), stringsAsFactors = FALSE
+        ),
+        c(5, NaN), 20, NaN
+    )
+    src_dir <- file.path(source_db, "tracks", "agg_span_src.track")
+
+    setup_db(list(paste0(">chrA\n", paste(rep("T", 60), collapse = ""), "\n")))
+
+    # Both source chroms map their first 20bp bin onto the SAME target interval
+    # [10,30), which straddles target bins [0,20) and [20,40). Distinct chain ids;
+    # chrsource1 (finite) sorts before chrsource2 (NaN).
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chrsource1", 60, "+", 0, 20, "chrA", 60, "+", 10, 30, 1)
+    write_chain_entry(chain, "chrsource2", 60, "+", 0, 20, "chrA", 60, "+", 10, 30, 2)
+
+    lifted <- "agg_span_lifted"
+    withr::defer(if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE))
+    gtrack.liftover(lifted, "x", src_dir, chain,
+        tgt_overlap_policy = "agg", multi_target_agg = "max"
+    )
+    res <- gextract(lifted, gintervals("chrA", 0, 40), iterator = 20)
+    # Both bins overlapping [10,30) keep the finite value; pre-fix bin [20,40)
+    # collected only the NaN sibling and returned NaN.
+    expect_equal(res[res$start == 0, lifted], 5)
+    expect_equal(res[res$start == 20, lifted], 5)
+})
+
+test_that("gtrack.liftover agg: overlapping sibling does not drop a boundary-spanning finite value", {
+    local_db_state()
+
+    src_seq <- paste(rep("A", 60), collapse = "")
+    source_db <- setup_source_db(list(
+        paste0(">source1\n", src_seq, "\n"),
+        paste0(">source2\n", src_seq, "\n")
+    ))
+    # Two finite sources (5 and 9) mapping to the same boundary-spanning interval.
+    gtrack.create_dense(
+        "agg_span_src2", "boundary-span source 2",
+        data.frame(
+            chrom = c("chrsource1", "chrsource2"),
+            start = c(0L, 0L), end = c(60L, 60L), stringsAsFactors = FALSE
+        ),
+        c(5, 9), 20, NaN
+    )
+    src_dir <- file.path(source_db, "tracks", "agg_span_src2.track")
+
+    setup_db(list(paste0(">chrA\n", paste(rep("T", 60), collapse = ""), "\n")))
+
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chrsource1", 60, "+", 0, 20, "chrA", 60, "+", 10, 30, 1)
+    write_chain_entry(chain, "chrsource2", 60, "+", 0, 20, "chrA", 60, "+", 10, 30, 2)
+
+    lifted <- "agg_span_lifted2"
+    withr::defer(if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE))
+    gtrack.liftover(lifted, "x", src_dir, chain,
+        tgt_overlap_policy = "agg", multi_target_agg = "max"
+    )
+    res <- gextract(lifted, gintervals("chrA", 0, 40), iterator = 20)
+    # max over both overlapping chains = 9 in BOTH bins; pre-fix the second bin
+    # dropped one contributor.
+    expect_equal(res[res$start == 0, lifted], 9)
+    expect_equal(res[res$start == 20, lifted], 9)
+})
