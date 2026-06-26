@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.2</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.3</span>
       </span>
     </div>
 
@@ -63,9 +63,14 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.2/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.3" id="misha-5113">misha 5.11.3<a class="anchor" aria-label="anchor" href="#misha-5113"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> <code>gtrack.liftover(tgt_overlap_policy = "agg")</code> no longer drops a lifted contribution that spans a target bin boundary when an overlapping chain shares its interval. The per-bin sweep over-advanced its cursor, losing the spanning contribution for the next bin and producing spurious <code>NaN</code>s (or wrong aggregates) in bins fed by multiple overlapping chains.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.2" id="misha-5112">misha 5.11.2<a class="anchor" aria-label="anchor" href="#misha-5112"></a></h2>
 <ul><li>
