@@ -556,3 +556,42 @@ test_that("gintervals.liftover aggregates across multiple chain_ids mapping to s
     expect_equal(nrow(result_count), 1, info = "Should return 1 row")
     expect_equal(result_count$value[1], 2, info = "Count should be 2 (two contributing sources)")
 })
+
+# Regression: ChainIntervals::map_interval carries a `hint` iterator across source
+# intervals as a fast-path lower bound. With overlapping source chains
+# (src_overlap_policy = "keep") end_src is not monotone in start order, so a wider
+# EARLIER chain can overlap a later query while the chain immediately before the
+# hint does not. The old fast-path guard checked only `hint - 1`, so it skipped the
+# earlier wide chain and dropped that mapping. (Found auditing the 5.11.3 fix.)
+test_that("gintervals.liftover: carried hint does not skip a wider earlier overlapping source chain", {
+    local_db_state()
+
+    # Target genome only (gintervals.liftover maps coordinates, reads no track).
+    setup_db(list(paste0(">chrA\n", paste(rep("T", 400), collapse = ""), "\n")))
+
+    # Overlapping source chains: a wide chain A over [0,100); a decoy B and a later
+    # C so that, for a query inside A, B (the predecessor of C) does not overlap but
+    # A (earlier) does.
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chrsource1", 400, "+", 0, 100, "chrA", 400, "+", 0, 100, 1) # A (wide)
+    write_chain_entry(chain, "chrsource1", 400, "+", 10, 20, "chrA", 400, "+", 200, 210, 2) # B (decoy)
+    write_chain_entry(chain, "chrsource1", 400, "+", 30, 40, "chrA", 400, "+", 300, 310, 3) # C
+    ch <- gintervals.load_chain(chain, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    # Two source intervals processed in one call (so the hint is carried): a wide
+    # first one, then a short second one nested inside chains A and C.
+    q <- data.frame(
+        chrom = "chrsource1", start = c(5, 35), end = c(40, 38),
+        stringsAsFactors = FALSE
+    )
+    batch <- gintervals.liftover(q, ch, include_metadata = TRUE)
+    solo2 <- gintervals.liftover(q[2, ], ch, include_metadata = TRUE) # fresh hint = ground truth
+
+    b2 <- batch[batch$intervalID == 2, ]
+    # Carried-hint result must equal the fresh-hint result: both chains A and C, not
+    # just C. Pre-fix the batch lift returned only the chain-C mapping.
+    expect_equal(nrow(b2), nrow(solo2))
+    expect_equal(nrow(b2), 2L)
+    expect_setequal(b2$chain_id, c(1, 3))
+    expect_setequal(b2$start, c(35, 305))
+})

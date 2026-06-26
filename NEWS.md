@@ -1,3 +1,7 @@
+# misha 5.11.4
+
+* **Behavior fix:** `gintervals.liftover()` / `gtrack.liftover()` no longer drop a mapping through a wider earlier source chain when source chains overlap (`src_overlap_policy = "keep"`). The `map_interval` fast path trusted a carried cursor as the leftmost overlap after checking only its immediate predecessor; it now confirms leftmost-ness via the per-chromosome prefix-max, falling back to the full search otherwise.
+
 # misha 5.11.3
 
 * **Behavior fix:** `gtrack.liftover(tgt_overlap_policy = "agg")` no longer drops a lifted contribution that spans a target bin boundary when an overlapping chain shares its interval. The per-bin sweep over-advanced its cursor, losing the spanning contribution for the next bin and producing spurious `NaN`s (or wrong aggregates) in bins fed by multiple overlapping chains.
