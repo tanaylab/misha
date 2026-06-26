@@ -201,7 +201,28 @@ private:
 	string               m_tgt_overlap_policy;   // target overlap policy for score-based selection
 
 	bool check_first_overlap_src(const const_iterator &iinterval1, const GInterval &interval2) {
-		return iinterval1->do_overlap_src(interval2) && (iinterval1 == begin() || !(iinterval1 - 1)->do_overlap_src(interval2));
+		if (!iinterval1->do_overlap_src(interval2))
+			return false;
+		// iinterval1 overlaps; the fast path in map_interval may only trust it when
+		// it is the FIRST overlapping chain in this source chromosome. With
+		// overlapping source chains (src_overlap_policy = "keep") end_src is not
+		// monotone in start order, so a wider EARLIER chain can also overlap while
+		// the immediate predecessor does not. Checking only iinterval1-1 then
+		// skipped that earlier chain. Use the per-chrom prefix-max of end_src
+		// (buildSrcAux): iinterval1 is leftmost iff no earlier chain in the chrom
+		// reaches past interval2.start.
+		const int chrom = iinterval1->chromid_src;
+		if (chrom >= 0 && chrom <= m_max_src_chromid &&
+		    !m_chrom_first.empty() && (size_t)chrom < m_chrom_first.size() &&
+		    m_chrom_first[chrom] != (size_t)-1 && !m_pmax_end_src.empty()) {
+			const size_t idx = (size_t)(iinterval1 - begin());
+			const size_t first = m_chrom_first[chrom];
+			if (idx <= first)
+				return true; // first chain in this source chromosome
+			return m_pmax_end_src[idx - 1] <= interval2.start;
+		}
+		// Auxiliary structures not built: fall back to the predecessor-only check.
+		return iinterval1 == begin() || !(iinterval1 - 1)->do_overlap_src(interval2);
 	}
 
 	const_iterator add2tgt(const_iterator hint, const GInterval &src_interval, GIntervals &tgt_intervs, std::vector<ChainMappingMetadata> *metadata);
