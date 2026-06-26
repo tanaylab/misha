@@ -718,14 +718,25 @@ SEXP gtrack_liftover(SEXP _track,
 
 					for (int64_t bin = 0; bin < end_bin; ++bin) {
 						agg_state.reset();
-						bool intersect = false;
 
-						vector<GIntervalVal>::const_iterator iter = iinterv_val;
-						for (; iter != interv_vals.end(); ++iter) {
+						// Advance the persistent cursor past contributions that end at or before this
+						// bin's start. interv_vals is sorted by start, so a contribution with end <=
+						// coord1 cannot overlap this bin or any later one (coord1 only increases).
+						// Contributions with end > coord1 may still overlap a later bin, so we must NOT
+						// advance past them here: doing so dropped a contribution that spanned a bin
+						// boundary whenever an overlapping sibling (e.g. a parallel chain kept by the
+						// "agg" target-overlap policy) shared its interval.
+						while (iinterv_val != interv_vals.end() && iinterv_val->interval.end <= coord1)
+							++iinterv_val;
+
+						// Collect every contribution overlapping [coord1, coord2). Sorted by start, so
+						// stop as soon as a contribution starts at or after coord2.
+						for (vector<GIntervalVal>::const_iterator iter = iinterv_val; iter != interv_vals.end(); ++iter) {
+							if (iter->interval.start >= coord2)
+								break;
 							int64_t overlap_start = max(coord1, iter->interval.start);
 							int64_t overlap_end = min(coord2, iter->interval.end);
 							if (overlap_start < overlap_end) {
-								intersect = true;
 								double overlap_len = static_cast<double>(overlap_end - overlap_start);
 								int64_t bin_end_clamped = std::min<int64_t>(coord2, chrom_size);
 								double locus_len = static_cast<double>(std::max<int64_t>(0, bin_end_clamped - coord1));
@@ -740,15 +751,9 @@ SEXP gtrack_liftover(SEXP _track,
 									overlap_end,
 									iter->chain_id
 								);
-							} else if (iter->interval.end > coord1) {
-								if (intersect && iter->interval.start > coord2)
-									--iter;
-								break;
 							}
 							check_interrupt();
 						}
-
-						iinterv_val = iter;
 
 						double aggregated = aggregate_values(agg_cfg, agg_state);
 						float out_val = numeric_limits<float>::quiet_NaN();
