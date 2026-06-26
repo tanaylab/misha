@@ -124,10 +124,25 @@ inline void aggregation_state_add(AggregationState &state,
 }
 
 inline double aggregate_values(const AggregationConfig &cfg, const AggregationState &state) {
+	// Under na.rm = FALSE, any NaN contribution makes the whole locus NaN.
+	if (!cfg.na_rm) {
+		for (const auto &contrib : state.contributions) {
+			if (contrib.is_na)
+				return numeric_limits<double>::quiet_NaN();
+		}
+	}
+
+	// Merge contributions by chain_id so a single chain (possibly split into several
+	// pieces over this locus - parallel slices under "agg", or several source bins
+	// mapping in) counts once. NaN pieces are dropped FIRST (na.rm) so that a chain
+	// mapping both finite and NaN source bins into this locus keeps its finite value
+	// instead of being discarded wholesale by an is_na carried over the whole chain.
 	vector<Contribution> merged;
 	merged.reserve(state.contributions.size());
 
 	for (const auto &contrib : state.contributions) {
+		if (contrib.is_na)
+			continue; // na.rm == true here (the na.rm == false case already returned)
 		bool found = false;
 		for (auto &existing : merged) {
 			if (existing.chain_id == contrib.chain_id) {
@@ -135,7 +150,6 @@ inline double aggregate_values(const AggregationConfig &cfg, const AggregationSt
 				existing.coverage_frac += contrib.coverage_frac;
 				existing.start = std::min(existing.start, contrib.start);
 				existing.end = std::max(existing.end, contrib.end);
-				existing.is_na = existing.is_na || contrib.is_na;
 				found = true;
 				break;
 			}
@@ -144,19 +158,10 @@ inline double aggregate_values(const AggregationConfig &cfg, const AggregationSt
 			merged.push_back(contrib);
 	}
 
-	const vector<Contribution> &contribs = merged.empty() ? state.contributions : merged;
-
 	vector<const Contribution *> valid;
-	valid.reserve(contribs.size());
-
-	for (const auto &contrib : contribs) {
-		if (contrib.is_na) {
-			if (!cfg.na_rm)
-				return numeric_limits<double>::quiet_NaN();
-			continue;
-		}
+	valid.reserve(merged.size());
+	for (const auto &contrib : merged)
 		valid.push_back(&contrib);
-	}
 
 	if (cfg.min_n >= 0 && (int)valid.size() < cfg.min_n)
 		return numeric_limits<double>::quiet_NaN();
