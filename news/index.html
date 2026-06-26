@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.4</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.5</span>
       </span>
     </div>
 
@@ -63,9 +63,18 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.4/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.5" id="misha-5115">misha 5.11.5<a class="anchor" aria-label="anchor" href="#misha-5115"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> / <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> with a minus-strand chain that the target-overlap sweep truncates or splits (e.g. under <code>tgt_overlap_policy = "auto"</code>) now keep the correct reversed source coordinates for the surviving slice instead of the coordinates of the discarded half.</li>
+<li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> / <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> no longer drop a chain’s finite contribution to a target locus when the same chain also maps a <code>NaN</code> source bin there with <code>na.rm = TRUE</code>; NaN pieces are now removed before the per-chain merge.</li>
+<li>
+<strong>Behavior fix:</strong> 2D <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> no longer drops rectangles when the chain has multiple blocks (the quadtree’s spatial iteration order defeated a carried mapping cursor).</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.4" id="misha-5114">misha 5.11.4<a class="anchor" aria-label="anchor" href="#misha-5114"></a></h2>
 <ul><li>
