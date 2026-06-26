@@ -821,3 +821,82 @@ test_that("gtrack.liftover agg: overlapping sibling does not drop a boundary-spa
     expect_equal(res[res$start == 0, lifted], 9)
     expect_equal(res[res$start == 20, lifted], 9)
 })
+
+# Regression: under na.rm=TRUE, when ONE chain maps both a finite and a NaN source
+# bin into the same target bin (common with phase-offset chains), aggregate_values
+# used to OR-merge is_na over the whole chain and drop the finite value too.
+test_that("gtrack.liftover agg: na.rm keeps a chain's finite piece when the same chain also maps a NaN piece into the bin", {
+    local_db_state()
+
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 80), collapse = ""), "\n")))
+    # dense 20bp: bin0=5 (finite), bin1=NaN, bin2=5
+    gtrack.create_dense(
+        "isna_src", "mixed finite/NaN source",
+        data.frame(chrom = "chrsource1", start = c(0L, 20L, 40L), end = c(20L, 40L, 60L), stringsAsFactors = FALSE),
+        c(5, NaN, 5), 20, NaN
+    )
+    src_dir <- file.path(source_db, "tracks", "isna_src.track")
+
+    setup_db(list(paste0(">chrA\n", paste(rep("T", 80), collapse = ""), "\n")))
+
+    # One chain, 1:1, offset 10: src[0,60)->tgt[10,70). So src bin0[0,20)->tgt[10,30),
+    # bin1[20,40)(NaN)->tgt[30,50). Target bin [20,40) then gets a finite piece (bin0,
+    # tgt[20,30)) and a NaN piece (bin1, tgt[30,40)) from the SAME chain.
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chrsource1", 80, "+", 0, 60, "chrA", 80, "+", 10, 70, 1)
+
+    lifted <- "isna_lifted"
+    withr::defer(if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE))
+    for (agg in c("mean", "max")) {
+        if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE)
+        gtrack.liftover(lifted, "x", src_dir, chain, tgt_overlap_policy = "agg", multi_target_agg = agg, na.rm = TRUE)
+        v <- gextract(lifted, gintervals("chrA", 20, 40), iterator = 20)[[lifted]]
+        expect_equal(v, 5, info = agg) # finite piece survives; NaN piece must not poison the bin
+    }
+})
+
+# Regression: the 2D liftover walked source rects in quadtree (spatial) order while
+# carrying a map_interval hint, which is only valid for coordinate-sorted access. A
+# multi-block chain then dropped rects whose iteration order moved the hint backward.
+test_that("gtrack.liftover 2D: a multi-block chain does not drop rects", {
+    local_db_state()
+
+    SZ <- 10000L
+    mk_pc_db <- function(nm) {
+        d <- tempfile("liftagg2d_")
+        dir.create(d)
+        fa <- file.path(d, paste0(nm, ".fasta")) # chrom name derives from the file name
+        cat(sprintf(">%s\n%s\n", nm, paste(rep("A", SZ), collapse = "")), file = fa)
+        db <- tempfile("liftagg2d_db_")
+        suppressMessages(gdb.create(groot = db, fasta = fa, format = "per-chromosome"))
+        withr::defer(
+            {
+                unlink(db, recursive = TRUE)
+                unlink(d, recursive = TRUE)
+            },
+            envir = testthat::teardown_env()
+        )
+        db
+    }
+
+    src_db <- mk_pc_db("source1")
+    gdb.init(src_db)
+    # two rects: one at high x, one at low x, so spatial iteration moves the hint backward
+    intervs <- gintervals.2d("source1", c(5000, 750), c(5050, 800), "source1", c(5000, 0), c(5050, 50))
+    gtrack.2d.create("src2d", "x", intervs, c(11, 31))
+    src_dir <- file.path(src_db, "tracks", "src2d.track")
+
+    tgt_db <- mk_pc_db("chr1")
+    gdb.init(tgt_db)
+    chain <- new_chain_file()
+    for (s in seq(0L, SZ - 200L, by = 200L)) {
+        write_chain_entry(chain, "source1", SZ, "+", s, s + 200, "chr1", SZ, "+", s, s + 200, s / 200 + 1)
+    }
+
+    lifted <- "lh2d"
+    withr::defer(if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE))
+    gtrack.liftover(lifted, "x", src_dir, chain, tgt_overlap_policy = "keep")
+    res <- gextract(lifted, gintervals.2d.all())
+    expect_equal(nrow(res), 2L) # both rects survive; pre-fix the low-x rect was dropped
+    expect_setequal(res[["lh2d"]], c(11, 31))
+})

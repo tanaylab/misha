@@ -880,11 +880,22 @@ void ChainIntervals::handle_tgt_overlaps(const string &policy, const GenomeChrom
 			return;
 
 		ChainInterval slice = interval;
-		const int64_t delta = seg_start - interval.start;
 		slice.start = seg_start;
 		slice.end = seg_end;
-		slice.start_src = interval.start_src + delta;
-		slice.end_src = slice.start_src + (seg_end - seg_start);
+		if (slice.strand == 0) {
+			// Plus strand: target and source run in the same direction.
+			const int64_t delta = seg_start - interval.start;
+			slice.start_src = interval.start_src + delta;
+			slice.end_src = slice.start_src + (seg_end - seg_start);
+		} else {
+			// Minus strand: target and source run in OPPOSITE directions, so a
+			// target slice maps to the mirrored source range. Computing the source
+			// coords with the forward formula (the previous behaviour) gave a
+			// truncated/split minus chain the source coordinates of the discarded
+			// half, inverting the lifted source<->target correspondence.
+			slice.start_src = interval.start_src + (interval.end - seg_end);
+			slice.end_src = interval.start_src + (interval.end - seg_start);
+		}
 
 		if (allow_merge && !out.empty()) {
 			ChainInterval &prev = out.back();

@@ -595,3 +595,30 @@ test_that("gintervals.liftover: carried hint does not skip a wider earlier overl
     expect_setequal(b2$chain_id, c(1, 3))
     expect_setequal(b2$start, c(35, 305))
 })
+
+# Regression: when the target-overlap sweep truncates/splits a MINUS-strand chain,
+# append_slice recomputed the source coordinates with the forward formula, giving the
+# surviving slice the source coords of the discarded half (inverting the lifted
+# source<->target correspondence). Confirmed against UCSC liftOver.
+test_that("gintervals.liftover auto_score: truncated minus-strand chain keeps reversed source coords", {
+    local_db_state()
+
+    setup_db(list(paste0(">chrT\n", paste(rep("T", 1000), collapse = ""), "\n")))
+
+    # chain1 (minus target): src chrS[100,200) -> forward tgt chrT[600,700)
+    #   (minus coords 300..400 over size 1000 -> forward 600..700).
+    # chain2 (plus, higher score) covers tgt[650,700), forcing chain1's target to be
+    # truncated to [600,650).
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chrS", 100000, "+", 100, 200, "chrT", 1000, "-", 300, 400, 1, score = 100)
+    write_chain_entry(chain, "chrS", 100000, "+", 2000, 2050, "chrT", 1000, "+", 650, 700, 2, score = 900)
+    ch <- gintervals.load_chain(chain, tgt_overlap_policy = "auto_score")
+
+    s1 <- ch[ch$chain_id == 1, ]
+    expect_equal(nrow(s1), 1L)
+    expect_equal(s1$start, 600)
+    expect_equal(s1$end, 650)
+    # minus correspondence: fwd tgt700<->src100, tgt600<->src200; kept tgt[600,650)<->src[150,200)
+    expect_equal(s1$startsrc, 150)
+    expect_equal(s1$endsrc, 200)
+})

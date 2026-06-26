@@ -885,7 +885,10 @@ SEXP gtrack_liftover(SEXP _track,
 						continue;
 					}
 
-					ChainIntervals::const_iterator hints[2] = { chain_intervs.begin(), chain_intervs.begin() };
+					// The quadtree iterates rects/points in spatial (not coordinate) order,
+					// so a carried map_interval hint is not a monotonically advancing lower
+					// bound and would drop mappings. Map each axis from begin() every time
+					// (the same per-interval reset the 1D sparse path uses).
 					GInterval src_intervals[2];
 
 					src_intervals[0].chromid = chromid1;
@@ -902,8 +905,8 @@ SEXP gtrack_liftover(SEXP _track,
 							src_intervals[1].start = iqtree->y1;
 							src_intervals[1].end = iqtree->y2;
 
-							hints[0] = chain_intervs.map_interval(src_intervals[0], tgt_intervals[0], hints[0]);
-							hints[1] = chain_intervs.map_interval(src_intervals[1], tgt_intervals[1], hints[1]);
+							chain_intervs.map_interval(src_intervals[0], tgt_intervals[0], chain_intervs.begin());
+							chain_intervs.map_interval(src_intervals[1], tgt_intervals[1], chain_intervs.begin());
 
 							for (GIntervals::const_iterator iinterv1 = tgt_intervals[0].begin(); iinterv1 != tgt_intervals[0].end(); ++iinterv1) {
 								for (GIntervals::const_iterator iinterv2 = tgt_intervals[1].begin(); iinterv2 != tgt_intervals[1].end(); ++iinterv2) {
@@ -928,8 +931,8 @@ SEXP gtrack_liftover(SEXP _track,
 							src_intervals[1].start = iqtree->y;
 							src_intervals[1].end = iqtree->y + 1;
 
-							hints[0] = chain_intervs.map_interval(src_intervals[0], tgt_intervals[0], hints[0]);
-							hints[1] = chain_intervs.map_interval(src_intervals[1], tgt_intervals[1], hints[1]);
+							chain_intervs.map_interval(src_intervals[0], tgt_intervals[0], chain_intervs.begin());
+							chain_intervs.map_interval(src_intervals[1], tgt_intervals[1], chain_intervs.begin());
 
 							for (GIntervals::const_iterator iinterv1 = tgt_intervals[0].begin(); iinterv1 != tgt_intervals[0].end(); ++iinterv1) {
 								for (GIntervals::const_iterator iinterv2 = tgt_intervals[1].begin(); iinterv2 != tgt_intervals[1].end(); ++iinterv2) {

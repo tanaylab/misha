@@ -1,3 +1,9 @@
+# misha 5.11.5
+
+* **Behavior fix:** `gtrack.liftover()` / `gintervals.liftover()` with a minus-strand chain that the target-overlap sweep truncates or splits (e.g. under `tgt_overlap_policy = "auto"`) now keep the correct reversed source coordinates for the surviving slice instead of the coordinates of the discarded half.
+* **Behavior fix:** `gtrack.liftover()` / `gintervals.liftover()` no longer drop a chain's finite contribution to a target locus when the same chain also maps a `NaN` source bin there with `na.rm = TRUE`; NaN pieces are now removed before the per-chain merge.
+* **Behavior fix:** 2D `gtrack.liftover()` no longer drops rectangles when the chain has multiple blocks (the quadtree's spatial iteration order defeated a carried mapping cursor).
+
 # misha 5.11.4
 
 * **Behavior fix:** `gintervals.liftover()` / `gtrack.liftover()` no longer drop a mapping through a wider earlier source chain when source chains overlap (`src_overlap_policy = "keep"`). The `map_interval` fast path trusted a carried cursor as the leftmost overlap after checking only its immediate predecessor; it now confirms leftmost-ness via the per-chromosome prefix-max, falling back to the full search otherwise.
