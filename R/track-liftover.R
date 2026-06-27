@@ -174,6 +174,14 @@ gtrack.liftover <- function(track = NULL,
         }
     }
 
+    # Cluster target-overlap policies are implemented only for gintervals.liftover
+    # (the union-find clustering in IntervalsLiftover.cpp). gtrack.liftover would
+    # otherwise fail deep in C++ with a confusing "Invalid target overlap policy"
+    # message, so reject them here with an actionable error.
+    if (tgt_overlap_policy %in% c("best_source_cluster", "best_cluster_union", "best_cluster_sum", "best_cluster_max")) {
+        stop(sprintf("tgt_overlap_policy = '%s' is only supported by gintervals.liftover(), not gtrack.liftover(). Use 'auto', 'agg', 'keep', or 'discard'.", tgt_overlap_policy), call. = FALSE)
+    }
+
     .gconfirmtrackcreate(trackstr)
 
     .gtrack.create_atomic(trackstr, function() {

@@ -622,3 +622,28 @@ test_that("gintervals.liftover auto_score: truncated minus-strand chain keeps re
     expect_equal(s1$startsrc, 150)
     expect_equal(s1$endsrc, 200)
 })
+
+# Regression: map_interval's slow path, when no chain starts before the query
+# (query.start <= the leftmost overlapping chain's start_src), checked only
+# iend_interval and missed the leftmost chain. With a carried hint advanced by an
+# earlier (wider) interval, a narrow interval was silently dropped. Confirmed
+# against UCSC liftOver.
+test_that("gintervals.liftover: narrow interval starting at its leftmost chain is not dropped after a wide one", {
+    local_db_state()
+
+    setup_db(list(paste0(">chrA\n", paste(rep("T", 5000), collapse = ""), "\n")))
+    chain <- new_chain_file()
+    write_chain_entry(chain, "src", 5000, "+", 100, 200, "chrA", 5000, "+", 1000, 1100, 1)
+    write_chain_entry(chain, "src", 5000, "+", 400, 600, "chrA", 5000, "+", 2000, 2200, 2)
+    ch <- gintervals.load_chain(chain) # defaults: src=error, tgt=auto
+
+    # The wide [0,1000) is processed first and advances the carried hint; the narrow
+    # [100,200) starts exactly at chain 1's start_src (100).
+    inp <- data.frame(chrom = "src", start = c(0, 100), end = c(1000, 200), stringsAsFactors = FALSE)
+    res <- gintervals.liftover(inp, ch, include_metadata = TRUE)
+
+    r2 <- res[res$intervalID == 2, ]
+    expect_equal(nrow(r2), 1L) # was dropped pre-fix
+    expect_equal(r2$start, 1000)
+    expect_equal(r2$end, 1100)
+})
