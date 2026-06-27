@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.5</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.6</span>
       </span>
     </div>
 
@@ -63,9 +63,14 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.5/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.6" id="misha-5116">misha 5.11.6<a class="anchor" aria-label="anchor" href="#misha-5116"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> aggregation (<code>multi_target_agg</code>) now combines all distinct source bins that map to a target bin, instead of keeping only the first when several come from the same chain. Previously, with a chain whose blocks are not aligned to the bin grid (i.e. most real liftovers), <code>max</code>/<code>sum</code>/<code>mean</code>/<code>count</code> reflected only the first contributing source bin. (<code>gintervals.liftover</code> was already correct.) Lifted track values change accordingly.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.5" id="misha-5115">misha 5.11.5<a class="anchor" aria-label="anchor" href="#misha-5115"></a></h2>
 <ul><li>
