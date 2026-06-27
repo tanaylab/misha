@@ -900,3 +900,41 @@ test_that("gtrack.liftover 2D: a multi-block chain does not drop rects", {
     expect_equal(nrow(res), 2L) # both rects survive; pre-fix the low-x rect was dropped
     expect_setequal(res[["lh2d"]], c(11, 31))
 })
+
+# Regression: distinct source bins of ONE chain that land in the same target bin
+# (via a phase-offset chain) must be aggregated, not collapsed to the first bin's
+# value. The aggregation deduped contributions by chain_id alone, which correctly
+# folds the pieces of a single source bin split by "agg" segmentation but wrongly
+# also folded different source bins of the same chain. The key now includes the
+# source bin index. Verified against UCSC liftOver: both source bins map into the
+# output bin.
+test_that("gtrack.liftover agg: distinct source bins of one chain are aggregated, not collapsed to the first", {
+    local_db_state()
+
+    source_db <- setup_source_db(list(paste0(">source1\n", paste(rep("A", 80), collapse = ""), "\n")))
+    # dense 20bp: three distinct values
+    gtrack.create_dense(
+        "multibin_src", "distinct-value source bins",
+        data.frame(chrom = "chrsource1", start = c(0L, 20L, 40L), end = c(20L, 40L, 60L), stringsAsFactors = FALSE),
+        c(5, 7, 9), 20, NaN
+    )
+    src_dir <- file.path(source_db, "tracks", "multibin_src.track")
+
+    setup_db(list(paste0(">chrA\n", paste(rep("T", 80), collapse = ""), "\n")))
+
+    # One chain, 1:1, offset 10: src[0,60)->tgt[10,70). Output bin chrA[20,40) gets
+    # source bin0 (value 5, piece tgt[20,30)) AND source bin1 (value 7, piece tgt[30,40)),
+    # both via the SAME chain_id.
+    chain <- new_chain_file()
+    write_chain_entry(chain, "chrsource1", 80, "+", 0, 60, "chrA", 80, "+", 10, 70, 1)
+
+    lifted <- "multibin_lifted"
+    withr::defer(if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE))
+    expected <- list(max = 7, sum = 12, mean = 6, count = 2, min = 5)
+    for (agg in names(expected)) {
+        if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE)
+        gtrack.liftover(lifted, "x", src_dir, chain, tgt_overlap_policy = "agg", multi_target_agg = agg)
+        v <- gextract(lifted, gintervals("chrA", 20, 40), iterator = 20)[[lifted]]
+        expect_equal(v, expected[[agg]], info = agg)
+    }
+})
