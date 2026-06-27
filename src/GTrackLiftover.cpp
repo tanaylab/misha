@@ -545,8 +545,16 @@ SEXP gtrack_liftover(SEXP _track,
 						hint = chain_intervs.map_interval(src_interval, tgt_intervals, hint, &mapping_meta);
 						if (!tgt_intervals.empty() && mapping_meta.size() != tgt_intervals.size())
 							TGLError("Metadata size mismatch: %zu vs %zu", mapping_meta.size(), tgt_intervals.size());
-						for (size_t idx = 0; idx < tgt_intervals.size(); ++idx)
-							chrom_intervals[tgt_intervals[idx].chromid].push_back(GIntervalVal(tgt_intervals[idx], val, mapping_meta[idx].chain_id));
+						for (size_t idx = 0; idx < tgt_intervals.size(); ++idx) {
+							// Aggregation dedup key = (chain id, source bin index i). Pieces of
+							// the SAME source bin split by "agg" target segmentation share the key
+							// (counted once), while DIFFERENT source bins of the same chain that
+							// land in one target bin stay distinct and are aggregated. Keying by
+							// chain_id alone collapsed them, returning only the first bin's value.
+							// (Mirrors IntervalsLiftover's (chain_id, interval_id) key.)
+							int64_t agg_key = ((int64_t)mapping_meta[idx].chain_id << 32) ^ (int64_t)i;
+							chrom_intervals[tgt_intervals[idx].chromid].push_back(GIntervalVal(tgt_intervals[idx], val, agg_key));
+						}
 
 						src_interval.start += src_track.get_bin_size();
 						src_interval.end += src_track.get_bin_size();
@@ -601,8 +609,12 @@ SEXP gtrack_liftover(SEXP _track,
 						ChainIntervals::const_iterator hint = chain_intervs.begin();
 						mapping_meta.clear();
 						hint = chain_intervs.map_interval(remapped_interval, tgt_intervals, hint, &mapping_meta);
-						for (size_t idx = 0; idx < tgt_intervals.size(); ++idx)
-							chrom_intervals[tgt_intervals[idx].chromid].push_back(GIntervalVal(tgt_intervals[idx], vals[i], mapping_meta[idx].chain_id));
+						for (size_t idx = 0; idx < tgt_intervals.size(); ++idx) {
+							// Dedup key = (chain id, source interval index i); see the FIXED_BIN
+							// path above. Keeps distinct source intervals of one chain separate.
+							int64_t agg_key = ((int64_t)mapping_meta[idx].chain_id << 32) ^ (int64_t)i;
+							chrom_intervals[tgt_intervals[idx].chromid].push_back(GIntervalVal(tgt_intervals[idx], vals[i], agg_key));
+						}
 						check_interrupt();
 					}
 

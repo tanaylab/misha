@@ -1,3 +1,7 @@
+# misha 5.11.6
+
+* **Behavior fix:** `gtrack.liftover()` aggregation (`multi_target_agg`) now combines all distinct source bins that map to a target bin, instead of keeping only the first when several come from the same chain. Previously, with a chain whose blocks are not aligned to the bin grid (i.e. most real liftovers), `max`/`sum`/`mean`/`count` reflected only the first contributing source bin. (`gintervals.liftover` was already correct.) Lifted track values change accordingly.
+
 # misha 5.11.5
 
 * **Behavior fix:** `gtrack.liftover()` / `gintervals.liftover()` with a minus-strand chain that the target-overlap sweep truncates or splits (e.g. under `tgt_overlap_policy = "auto"`) now keep the correct reversed source coordinates for the surviving slice instead of the coordinates of the discarded half.
