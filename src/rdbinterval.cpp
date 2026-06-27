@@ -1241,9 +1241,13 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 		}
 	}
 
-	// No left overlap exists; check the right neighbor (iend_interval)
-	if (iend_interval != end() && iend_interval->do_overlap_src(src_interval))
-		return add2tgt(iend_interval, src_interval, tgt_intervs, metadata);
+	// No chain starting before the query reaches into it. The leftmost overlap, if
+	// any, is then the first chain whose start_src >= query.start (lb). The previous
+	// code checked iend_interval here, which after the binary search need not equal
+	// lb, so a query that starts at or before its only overlapping chain was dropped
+	// (e.g. a carried hint had advanced past that chain).
+	if (lb != slice_end && lb->do_overlap_src(src_interval))
+		return add2tgt(lb, src_interval, tgt_intervs, metadata);
 
 	// Nothing overlaps
 	return istart_interval;

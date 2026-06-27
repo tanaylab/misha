@@ -1,3 +1,8 @@
+# misha 5.11.7
+
+* **Behavior fix:** `gintervals.liftover()` no longer silently drops an interval whose start coincides with its leftmost overlapping chain when it is lifted in the same call after a wider interval (a `map_interval` slow-path miss; the carried hint had advanced past the chain). Affected multi-interval lifts under any target policy.
+* `gtrack.liftover()` now rejects the cluster target-overlap policies (`best_source_cluster`, `best_cluster_union`, `best_cluster_sum`, `best_cluster_max`) with a clear error - they are implemented only for `gintervals.liftover()`; previously they failed with a confusing internal message.
+
 # misha 5.11.6
 
 * **Behavior fix:** `gtrack.liftover()` aggregation (`multi_target_agg`) now combines all distinct source bins that map to a target bin, instead of keeping only the first when several come from the same chain. Previously, with a chain whose blocks are not aligned to the bin grid (i.e. most real liftovers), `max`/`sum`/`mean`/`count` reflected only the first contributing source bin. (`gintervals.liftover` was already correct.) Lifted track values change accordingly.
