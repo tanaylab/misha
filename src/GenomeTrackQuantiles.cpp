@@ -752,7 +752,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 					int size = intervals1d->size(*ichromid);
 					iu.verify_max_data_size(size, "Result", false);
-					medians.resize(size, numeric_limits<double>::quiet_NaN());
+					medians.resize(size * num_percentiles, numeric_limits<double>::quiet_NaN());
 					SEXP rintervals = build_rintervals_quantiles(out_intervals.get(), NULL, percentiles, medians, iu, false);
 					GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats1d);
 					medians.clear();
@@ -767,7 +767,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 					int size = intervals2d->size(ichrompair->chromid1, ichrompair->chromid2);
 					iu.verify_max_data_size(size, "Result", false);
-					medians.resize(size, numeric_limits<double>::quiet_NaN());
+					medians.resize(size * num_percentiles, numeric_limits<double>::quiet_NaN());
 					SEXP rintervals = build_rintervals_quantiles(NULL, out_intervals.get(), percentiles, medians, iu, false);
 					GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats2d);
 					medians.clear();

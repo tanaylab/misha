@@ -160,9 +160,13 @@ void PWMEditDistanceScorer::precompute_tables()
     }
 
     // Populate flat PSSM lookup tables for cache-friendly access.
+    // Sized to L (not MAX_MOTIF_LEN_OPT) so long motifs don't read out of bounds.
     // For ABOVE: mandatory = log-zero → assume col_max score, gain = 0
     // For BELOW: log-zero makes score -Inf → already below any threshold → not mandatory
-    for (int i = 0; i < L && i < MAX_MOTIF_LEN_OPT; i++) {
+    m_score_table.assign(L, std::array<float, 5>{});
+    m_gain_table.assign(L, std::array<float, 5>{});
+    m_mandatory_table.assign(L, std::array<bool, 5>{});
+    for (int i = 0; i < L; i++) {
         for (int b = 0; b < 4; b++) {
             float raw = m_pssm[i].get_log_prob_from_code(b);
             bool is_logzero = (raw <= kLogZeroThreshold || !std::isfinite(raw));

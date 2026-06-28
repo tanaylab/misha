@@ -128,14 +128,14 @@
     if (is.na(n_workers) || n_workers < 1) n_workers <- 1L
     n_workers <- min(n_workers, length(tracks))
 
-    # Split track expressions into n_workers contiguous chunks. Round-robin
-    # assignment helps balance per-track cost when tracks have similar sizes.
-    chunks <- split(tracks, rep(seq_len(n_workers), length.out = length(tracks)))
+    # Split track expressions across workers. Round-robin assignment helps
+    # balance per-track cost when tracks have similar sizes; `assignment` records
+    # which worker each original track position went to, so the merge below can
+    # restore the requested column order (the round-robin split scrambles it).
+    assignment <- rep(seq_len(n_workers), length.out = length(tracks))
+    chunks <- split(tracks, assignment)
     if (!is.null(colnames)) {
-        chunks_names <- split(
-            colnames,
-            rep(seq_len(n_workers), length.out = length(colnames))
-        )
+        chunks_names <- split(colnames, assignment)
     } else {
         chunks_names <- replicate(n_workers, NULL, simplify = FALSE)
     }
@@ -185,6 +185,7 @@
 
     out_value_cols <- list()
     out_value_names <- character(0)
+    orig_pos <- integer(0)
     for (i in seq_len(n_workers)) {
         if (nullish[i]) next
         n_chunk <- length(chunks[[i]])
@@ -192,9 +193,14 @@
         idx <- seq.int(iv_n + 1L, iv_n + n_chunk)
         out_value_cols[[length(out_value_cols) + 1L]] <- results[[i]][, idx, drop = FALSE]
         out_value_names <- c(out_value_names, names(results[[i]])[idx])
+        # original track positions handled by worker i, in chunk order
+        orig_pos <- c(orig_pos, which(assignment == i))
     }
     value_df <- do.call(cbind, out_value_cols)
     names(value_df) <- out_value_names
+    # Restore the requested track order: the round-robin split emits columns as
+    # worker1's tracks, worker2's, ... which is not the caller's track order.
+    value_df <- value_df[, order(orig_pos), drop = FALSE]
 
     iv_df <- base[, seq_len(iv_n), drop = FALSE]
     out <- cbind(iv_df, value_df)
