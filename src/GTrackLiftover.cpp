@@ -297,6 +297,81 @@ struct GIntervalVal {
 	}
 };
 
+// Aggregate possibly-overlapping mapped rectangles into DISJOINT rectangles before
+// inserting them into a StatQuadTree (which requires non-overlapping objects -
+// overlapping inserts corrupt read-back and double-count). Disjoint source rects can
+// map onto overlapping target rects because the chain shifts x and y independently, so
+// the 2D path needs the same collect -> segment -> aggregate treatment the 1D path has.
+//
+// We coordinate-compress the x and y boundaries into a grid and, for every grid cell,
+// aggregate (via agg_cfg) the values of all source rects covering it. Each cell carries
+// a unique contribution id so aggregate_values never folds distinct sources together.
+// Cells are emitted one rect each (no run merging).
+//
+// ponytail: per-cell cost is O(active rects per x-slab); for grid-aligned data
+// (Hi-C points / uniform bins, each rect == one cell) that is ~O(N), but it is O(N^2)
+// worst case for pathological nested/offset rectangles, and a non-grid-aligned disjoint
+// rect gets split at a neighbour's boundary (more rects, identical values). Upgrade path
+// if it ever bites: decompose per overlap-cluster and merge equal-value runs.
+struct RectVal2D { int64_t x1, y1, x2, y2; float v; };
+
+static void aggregate_2d_rects(vector<RectVal2D> &rects, const AggregationConfig &agg_cfg, RectsQuadTree &qtree)
+{
+	if (rects.empty())
+		return;
+
+	vector<int64_t> xs, ys;
+	xs.reserve(rects.size() * 2);
+	ys.reserve(rects.size() * 2);
+	for (vector<RectVal2D>::const_iterator r = rects.begin(); r != rects.end(); ++r) {
+		xs.push_back(r->x1); xs.push_back(r->x2);
+		ys.push_back(r->y1); ys.push_back(r->y2);
+	}
+	sort(xs.begin(), xs.end()); xs.erase(unique(xs.begin(), xs.end()), xs.end());
+	sort(ys.begin(), ys.end()); ys.erase(unique(ys.begin(), ys.end()), ys.end());
+
+	vector<size_t> by_x1(rects.size()), by_x2(rects.size());
+	for (size_t i = 0; i < rects.size(); ++i) { by_x1[i] = i; by_x2[i] = i; }
+	sort(by_x1.begin(), by_x1.end(), [&](size_t a, size_t b) { return rects[a].x1 < rects[b].x1; });
+	sort(by_x2.begin(), by_x2.end(), [&](size_t a, size_t b) { return rects[a].x2 < rects[b].x2; });
+
+	set<size_t> active;
+	size_t ia = 0, ir = 0;
+	int64_t encounter = 0; // unique id per contribution -> aggregate_values never merges them
+
+	for (size_t xi = 0; xi + 1 < xs.size(); ++xi) {
+		int64_t xa = xs[xi], xb = xs[xi + 1];
+
+		while (ir < by_x2.size() && rects[by_x2[ir]].x2 <= xa) { active.erase(by_x2[ir]); ++ir; }
+		while (ia < by_x1.size() && rects[by_x1[ia]].x1 <= xa) { active.insert(by_x1[ia]); ++ia; }
+
+		if (active.empty())
+			continue;
+
+		// Per y-band aggregation over the rects active in this x-slab. Every active rect
+		// fully covers each cell it touches, so all contributors weigh equally (len = 1).
+		map<int, AggregationState> band_states;
+		for (set<size_t>::const_iterator it = active.begin(); it != active.end(); ++it) {
+			const RectVal2D &r = rects[*it];
+			int b_lo = (int)(lower_bound(ys.begin(), ys.end(), r.y1) - ys.begin());
+			int b_hi = (int)(lower_bound(ys.begin(), ys.end(), r.y2) - ys.begin());
+			for (int b = b_lo; b < b_hi; ++b) {
+				aggregation_state_add(band_states[b], (double)r.v, 1.0, 1.0, encounter, encounter, encounter);
+				++encounter;
+			}
+		}
+
+		for (map<int, AggregationState>::iterator kv = band_states.begin(); kv != band_states.end(); ++kv) {
+			double aggregated = aggregate_values(agg_cfg, kv->second);
+			float out_val = numeric_limits<float>::quiet_NaN();
+			if (!std::isnan(aggregated))
+				out_val = (float)aggregated;
+			qtree.insert(RectsQuadTree::ValueType(xa, ys[kv->first], xb, ys[kv->first + 1], out_val));
+		}
+		check_interrupt();
+	}
+}
+
 extern "C" {
 
 SEXP gtrack_liftover(SEXP _track,
@@ -976,8 +1051,18 @@ SEXP gtrack_liftover(SEXP _track,
 					ibuffered_interv->flush();
 					ibuffered_interv->seek(0, SEEK_SET);
 
-					while (ibuffered_interv->read_interval())
-						qtree.insert(RectsQuadTree::ValueType(ibuffered_interv->last_interval(), ibuffered_interv->last_val()));
+					// Collect the mapped rects, then aggregate overlaps into disjoint
+					// rects before inserting (the quadtree forbids overlapping objects).
+					vector<RectVal2D> rects;
+					while (ibuffered_interv->read_interval()) {
+						const GInterval2D &gi = ibuffered_interv->last_interval();
+						RectVal2D rv;
+						rv.x1 = gi.start1(); rv.x2 = gi.end1();
+						rv.y1 = gi.start2(); rv.y2 = gi.end2();
+						rv.v = ibuffered_interv->last_val();
+						rects.push_back(rv);
+					}
+					aggregate_2d_rects(rects, agg_cfg, qtree);
 
 					if (!qtree.empty()) {
 						GenomeTrackRectsRects gtrack(iu.get_track_chunk_size(), iu.get_track_num_chunks());
