@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.7</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.8</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.8" id="misha-5118">misha 5.11.8<a class="anchor" aria-label="anchor" href="#misha-5118"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> 2D <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> now aggregates overlapping mapped rectangles instead of inserting them as overlapping objects (which corrupted read-back and double-counted). <code>multi_target_agg</code>, <code>na.rm</code>, and <code>min_n</code> now apply to 2D tracks too, matching the 1D path. Overlaps arise when a chain maps disjoint source rectangles onto overlapping target rectangles; lifted 2D track values change accordingly.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.7" id="misha-5117">misha 5.11.7<a class="anchor" aria-label="anchor" href="#misha-5117"></a></h2>
 <ul><li>
