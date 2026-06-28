@@ -187,7 +187,9 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
 
     str <- sprintf("gtrack.modify(%s, %s, intervs)", trackstr, exprstr)
     created.by.str <- gtrack.attr.export(trackstr, "created.by")[1, 1]
-    if (is.null(created.by.str)) {
+    # [1,1] is a scalar (NA / "" when the attribute is absent), never NULL, so check
+    # those too - otherwise the new provenance gets an "NA\n" prefix.
+    if (is.null(created.by.str) || is.na(created.by.str) || !nzchar(created.by.str)) {
         created.by.str <- str
     } else {
         created.by.str <- paste(created.by.str, str, sep = "\n")

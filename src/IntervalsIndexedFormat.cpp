@@ -923,8 +923,9 @@ SEXP gbigintervs_2d_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _inter
             verror("Cannot open %s: %s", idx_path_tmp.c_str(), strerror(errno));
         }
 
-        // Seek past header
-        if (fseek(idx_fp, 36, SEEK_SET) != 0) {
+        // Seek past the 2D header (40 bytes). NOT 36 - that is the 1D header size;
+        // using it misaligned every entry and made the set unreadable.
+        if (fseek(idx_fp, sizeof(Index2DHeader), SEEK_SET) != 0) {
             fclose(idx_fp);
             verror("Failed to seek in index file: %s", strerror(errno));
         }
@@ -940,13 +941,16 @@ SEXP gbigintervs_2d_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _inter
             entry.offset = (uint64_t)REAL(offsets)[i];
             entry.length = (uint64_t)REAL(lengths)[i];
 
-            // Write entry in one call (note: 2D finalize writes 24 bytes, no reserved field)
+            // Write a 28-byte entry matching IntervalsIndex2D::load's DiskPairEntry
+            // (includes the trailing reserved field). 24 bytes here made the reader
+            // drift 4 bytes per entry.
 #pragma pack(push, 1)
             struct DiskPairEntry2D {
                 uint32_t chrom1_id;
                 uint32_t chrom2_id;
                 uint64_t offset;
                 uint64_t length;
+                uint32_t reserved;
             };
 #pragma pack(pop)
             DiskPairEntry2D disk_entry;
@@ -954,6 +958,7 @@ SEXP gbigintervs_2d_indexed_finalize(SEXP _idx_path, SEXP _dat_path, SEXP _inter
             disk_entry.chrom2_id = entry.chrom2_id;
             disk_entry.offset = entry.offset;
             disk_entry.length = entry.length;
+            disk_entry.reserved = 0;
 
             if (fwrite(&disk_entry, sizeof(disk_entry), 1, idx_fp) != 1) {
                 fclose(idx_fp);

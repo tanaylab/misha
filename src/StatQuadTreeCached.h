@@ -675,6 +675,12 @@ const typename StatQuadTreeCached<T, Size>::Chunk &StatQuadTreeCached<T, Size>::
 		TGLError< StatQuadTreeCached<T, Size> >("Invalid format of file %s", m_bfile->file_name().c_str());
 	}
 
+	// A chunk holds at least its own size field; reject a corrupt size before
+	// allocating (size < 8 would overflow on the *(int64_t*) store below, and
+	// size - sizeof(size) would underflow the subsequent read length).
+	if (size < (int64_t)sizeof(size))
+		TGLError< StatQuadTreeCached<T, Size> >("Invalid chunk size in file %s", m_bfile->file_name().c_str());
+
 	chunk.mem = new char[size];
 	*(int64_t *)chunk.mem = size;
 	if (m_bfile->read(chunk.mem + sizeof(size), size - sizeof(size)) != size - sizeof(size)) {
