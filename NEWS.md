@@ -10,6 +10,14 @@ Fixes from a full source audit (see commit messages for details):
 * `gextract()` errors whose R message contains a `%` are reported cleanly instead of crashing the session.
 * `gtrack.create()` / `gtrack.rm()` run from a database subdirectory (`gdir.cd()`) no longer corrupt the root track listing cache for the next session.
 * `gextract(..., file=)` with very many expressions no longer overflows its line buffer.
+* **Behavior fix:** `gintervals.canonic()` / `gintervals.mark_overlaps()` return the correct `mapping` for 2D intervals (it was inverted, breaking the documented `tapply(..., mapping, ...)` pattern and 2D `mark_overlaps`).
+* **Behavior fix:** `gintervals.annotate()` fills `na_value` for query intervals that have no neighbor in range (previously left as `NA`).
+* `gtrack.convert()` with an explicit target track now registers the new track (previously it was unusable, or trashed on an indexed database, until a reload).
+* `gtrack.import_set()` derives the track name from the file name only; a dot in a parent directory no longer truncates it (which silently collided imports).
+* `gtrack.ls(db=...)` returns the tracks when only one database is loaded (previously `NULL`).
+* `gtrack.var.ls()` accepts an expression (e.g. `tracks[i]`) as the track argument, like `gtrack.var.get/set/rm`.
+* `gsetroot()` leaves the current database loaded when the target's `chrom_sizes.txt` is missing or malformed (previously it unloaded the session first).
+* Fixed out-of-bounds memory accesses in `gintervals.liftover()` aggregation, strand-autocorrelation reads near contig ends, and indexed fixed-bin track validation; clearer "data size exceeded" message.
 
 # misha 5.11.8
 

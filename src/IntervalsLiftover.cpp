@@ -507,9 +507,14 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			tgt_intervs1d.swap(aggregated_intervs);
 			src_indices.swap(aggregated_src_indices);
 			chain_ids.swap(aggregated_chain_ids);
-			if (include_metadata)
-				scores.swap(aggregated_scores);
+			scores.swap(aggregated_scores);
 			values.swap(aggregated_values);
+			// aggregated_scores is only populated when include_metadata; otherwise
+			// it is empty. Size `scores` to the aggregated interval count (NaN-filled)
+			// so the canonic loop's scores[idx] (idx over [0, M)) never reads out of
+			// bounds when aggregation produced more segments than raw mappings.
+			if (scores.size() != tgt_intervs1d.size())
+				scores.assign(tgt_intervs1d.size(), numeric_limits<double>::quiet_NaN());
 		}
 
 		// Canonicalization: merge adjacent intervals within the same intervalID and chain_id

@@ -78,16 +78,9 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
 
     groot <- normalizePath(groot, mustWork = TRUE)
 
-    # Clear all state
-    assign("ALLGENOME", NULL, envir = .misha)
-    assign("GROOT", NULL, envir = .misha)
-    assign("CHROM_ALIAS", NULL, envir = .misha)
-    .refresh_chrom_alias_env()
-    assign("GTRACK_DATASET", NULL, envir = .misha)
-    assign("GINTERVALS_DATASET", NULL, envir = .misha)
-    assign("GDATASETS", character(0), envir = .misha)
-
-    # Read and validate chrom_sizes
+    # Read and validate chrom_sizes BEFORE clearing the current session state, so
+    # a missing/malformed chrom_sizes.txt leaves the previously-loaded database
+    # intact instead of unloading it on a failed gsetroot.
     chrom_sizes_path <- file.path(groot, "chrom_sizes.txt")
     if (!file.exists(chrom_sizes_path)) {
         stop(sprintf("Database directory '%s' does not contain a chrom_sizes.txt file. This does not appear to be a valid misha database.", groot), call. = FALSE)
@@ -105,6 +98,19 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
             stop(sprintf("Failed to read chrom_sizes.txt from '%s': %s", groot, e$message), call. = FALSE)
         }
     )
+
+    if (nrow(chromsizes) == 0) {
+        stop("chrom_sizes.txt file does not contain any chromosomes", call. = FALSE)
+    }
+
+    # Clear all state
+    assign("ALLGENOME", NULL, envir = .misha)
+    assign("GROOT", NULL, envir = .misha)
+    assign("CHROM_ALIAS", NULL, envir = .misha)
+    .refresh_chrom_alias_env()
+    assign("GTRACK_DATASET", NULL, envir = .misha)
+    assign("GINTERVALS_DATASET", NULL, envir = .misha)
+    assign("GDATASETS", character(0), envir = .misha)
 
     is_per_chromosome <- .is_per_chromosome_db(groot, chromsizes)
     assign("DB_IS_PER_CHROMOSOME", is_per_chromosome, envir = .misha)
