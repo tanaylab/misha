@@ -46,6 +46,10 @@ SEXP C_ggenome_implant(SEXP _genome_fasta, SEXP _output,
                        SEXP _pert_seq, SEXP _line_width)
 {
     try {
+        // RdbInitializer makes verror() below throw a TGLException (caught here)
+        // instead of long-jumping, so the local C++ objects' destructors run.
+        RdbInitializer rdb_init;
+
         // --- unpack R arguments ---
         const char *genome_fasta = CHAR(STRING_ELT(_genome_fasta, 0));
         const char *output_path  = CHAR(STRING_ELT(_output, 0));
@@ -73,13 +77,13 @@ SEXP C_ggenome_implant(SEXP _genome_fasta, SEXP _output,
         // --- open files with large buffers ---
         FILE *fin = fopen(genome_fasta, "r");
         if (!fin) {
-            Rf_error("Cannot open input FASTA: %s", genome_fasta);
+            verror("Cannot open input FASTA: %s", genome_fasta);
         }
 
         FILE *fout = fopen(output_path, "w");
         if (!fout) {
             fclose(fin);
-            Rf_error("Cannot open output file: %s", output_path);
+            verror("Cannot open output file: %s", output_path);
         }
 
         // 4MB I/O buffers
@@ -113,7 +117,7 @@ SEXP C_ggenome_implant(SEXP _genome_fasta, SEXP _output,
                     if (p.start < 0 || p.end > seq_len) {
                         fclose(fin);
                         fclose(fout);
-                        Rf_error("Interval out of bounds: %s:%d-%d (chromosome length: %lld)",
+                        verror("Interval out of bounds: %s:%d-%d (chromosome length: %lld)",
                                  current_chrom.c_str(), p.start, p.end, seq_len);
                     }
                     int donor_len = p.end - p.start;
@@ -182,7 +186,7 @@ SEXP C_ggenome_implant(SEXP _genome_fasta, SEXP _output,
         FILE *ffai = fopen(fai_path.c_str(), "w");
         if (!ffai) {
             fclose(fout);
-            Rf_error("Cannot open .fai file for writing: %s", fai_path.c_str());
+            verror("Cannot open .fai file for writing: %s", fai_path.c_str());
         }
         for (const auto &e : fai_entries) {
             fprintf(ffai, "%s\t%lld\t%lld\t%d\t%d\n",

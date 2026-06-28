@@ -18,6 +18,12 @@ Fixes from a full source audit (see commit messages for details):
 * `gtrack.var.ls()` accepts an expression (e.g. `tracks[i]`) as the track argument, like `gtrack.var.get/set/rm`.
 * `gsetroot()` leaves the current database loaded when the target's `chrom_sizes.txt` is missing or malformed (previously it unloaded the session first).
 * Fixed out-of-bounds memory accesses in `gintervals.liftover()` aggregation, strand-autocorrelation reads near contig ends, and indexed fixed-bin track validation; clearer "data size exceeded" message.
+* Non-ASCII track attribute values no longer truncate when read back.
+* `gtrack.array.extract()` rejects `NA` column indices instead of forwarding them.
+* Fixed a 2D indexed-format writer that produced unreadable interval sets under `options(gmulticontig.indexed_format = TRUE)`.
+* `created.by` provenance strings for `gtrack.2d.create()`, `gtrack.2d.import_contacts()`, and `gtrack.modify()` are now well-formed.
+* `gmax.processes` is floored at 1 (was 0 on single-core / undetectable-core hosts).
+* Internal hardening: `ggenome.implant()` no longer leaks buffers on error paths; corrupt-file checks in the on-disk 2D quadtree.
 
 # misha 5.11.8
 
