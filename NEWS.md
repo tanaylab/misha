@@ -1,3 +1,7 @@
+# misha 5.11.8
+
+* **Behavior fix:** 2D `gtrack.liftover()` now aggregates overlapping mapped rectangles instead of inserting them as overlapping objects (which corrupted read-back and double-counted). `multi_target_agg`, `na.rm`, and `min_n` now apply to 2D tracks too, matching the 1D path. Overlaps arise when a chain maps disjoint source rectangles onto overlapping target rectangles; lifted 2D track values change accordingly.
+
 # misha 5.11.7
 
 * **Behavior fix:** `gintervals.liftover()` no longer silently drops an interval whose start coincides with its leftmost overlapping chain when it is lifted in the same call after a wider interval (a `map_interval` slow-path miss; the carried hint had advanced past the chain). Affected multi-interval lifts under any target policy.

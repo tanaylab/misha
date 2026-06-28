@@ -901,6 +901,63 @@ test_that("gtrack.liftover 2D: a multi-block chain does not drop rects", {
     expect_setequal(res[["lh2d"]], c(11, 31))
 })
 
+# Regression for #142: 2D liftover must aggregate OVERLAPPING mapped rectangles.
+# Disjoint source rects can map onto overlapping target rects (x and y are shifted
+# independently by a multi-block "keep" chain). Pre-fix those overlapping rects were
+# inserted straight into the StatQuadTree (corruption / double-counting) and
+# multi_target_agg was a no-op for 2D. Now the 2D path coordinate-compresses into
+# disjoint cells and aggregates per cell, like the 1D path.
+test_that("gtrack.liftover 2D: overlapping mapped rects are aggregated", {
+    local_db_state()
+
+    SZ <- 1000L
+    mk_pc_db <- function(nm) {
+        d <- tempfile("lift2dagg_")
+        dir.create(d)
+        fa <- file.path(d, paste0(nm, ".fasta"))
+        cat(sprintf(">%s\n%s\n", nm, paste(rep("A", SZ), collapse = "")), file = fa)
+        db <- tempfile("lift2dagg_db_")
+        suppressMessages(gdb.create(groot = db, fasta = fa, format = "per-chromosome"))
+        withr::defer(
+            {
+                unlink(db, recursive = TRUE)
+                unlink(d, recursive = TRUE)
+            },
+            envir = testthat::teardown_env()
+        )
+        db
+    }
+
+    src_db <- mk_pc_db("source1")
+    gdb.init(src_db)
+    # R1 = x[0,10] x y[100,110] (val 10); R2 = x[100,110] x y[0,10] (val 20). Disjoint.
+    intervs <- gintervals.2d("source1", c(0, 100), c(10, 110), "source1", c(100, 0), c(110, 10))
+    gtrack.2d.create("src2d", "x", intervs, c(10, 20))
+    src_dir <- file.path(src_db, "tracks", "src2d.track")
+
+    tgt_db <- mk_pc_db("chr1")
+    gdb.init(tgt_db)
+    # Chain: src[0,10]->tgt[0,10] and src[100,110]->tgt[5,15] (overlapping targets, kept).
+    # => R1 -> x[0,10] x y[5,15]; R2 -> x[5,15] x y[0,10]; overlap = x[5,10] x y[5,10].
+    chain <- new_chain_file()
+    write_chain_entry(chain, "source1", SZ, "+", 0, 10, "chr1", SZ, "+", 0, 10, 1)
+    write_chain_entry(chain, "source1", SZ, "+", 100, 110, "chr1", SZ, "+", 5, 15, 2)
+
+    overlap_val <- function(agg) {
+        lifted <- paste0("lh2d_", agg)
+        withr::defer(if (gtrack.exists(lifted)) gtrack.rm(lifted, force = TRUE))
+        gtrack.liftover(lifted, "x", src_dir, chain, tgt_overlap_policy = "keep", multi_target_agg = agg)
+        res <- gextract(lifted, gintervals.2d.all())
+        hit <- res[res$start1 <= 7 & res$end1 > 7 & res$start2 <= 7 & res$end2 > 7, ]
+        expect_equal(nrow(hit), 1L) # disjoint output: exactly one rect covers the overlap centre
+        hit[[lifted]]
+    }
+
+    expect_equal(overlap_val("mean"), 15)
+    expect_equal(overlap_val("sum"), 30)
+    expect_equal(overlap_val("max"), 20)
+})
+
 # Regression: distinct source bins of ONE chain that land in the same target bin
 # (via a phase-offset chain) must be aggregated, not collapsed to the first bin's
 # value. The aggregation deduped contributions by chain_id alone, which correctly
