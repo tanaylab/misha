@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <array>
 #include <set>
 #include <algorithm>
 #include <cmath>
@@ -124,9 +125,12 @@ private:
 
     // Flat precomputed PSSM lookup tables for cache-friendly access
     static constexpr int MAX_MOTIF_LEN_OPT = 64;
-    float m_score_table[MAX_MOTIF_LEN_OPT][5];    // [motif_pos][base_index 0-3, 4=N]
-    float m_gain_table[MAX_MOTIF_LEN_OPT][5];     // col_max - score
-    bool m_mandatory_table[MAX_MOTIF_LEN_OPT][5];  // true if score is log-zero or non-finite
+    // Sized to motif length L (contiguous, not capped at MAX_MOTIF_LEN_OPT): the
+    // subs-only solvers (compute_exact/heuristic/n_mutations) index these over
+    // [0, L), so a fixed [64] bound would OOB on motifs longer than 64bp.
+    std::vector<std::array<float, 5>> m_score_table;    // [motif_pos][base_index 0-3, 4=N]
+    std::vector<std::array<float, 5>> m_gain_table;     // col_max - score
+    std::vector<std::array<bool, 5>> m_mandatory_table; // true if score is log-zero or non-finite
 
     // IC-ordered column processing for early-abandon in compute_heuristic (subs-only)
     int m_ic_col_order[MAX_MOTIF_LEN_OPT];         // columns sorted by IC descending

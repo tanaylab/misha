@@ -134,9 +134,17 @@ gtrack.export_bedgraph <- function(track, file, intervals = NULL, iterator = NUL
     # Write header
     writeLines(sprintf("track type=bedGraph name=\"%s\"", name), con)
 
-    # Write data lines (tab-separated: chrom, start, end, value)
+    # Write data lines (tab-separated: chrom, start, end, value).
+    # Coordinates are doubles; format as plain integers so large round values
+    # (e.g. 1e8) are not written in scientific notation, which bedGraphToBigWig
+    # parses as 1 -> out-of-order intervals / corrupt bigwig.
     if (nrow(data) > 0) {
-        lines <- paste(data$chrom, data$start, data$end, data[[value_col]], sep = "\t")
+        lines <- paste(data$chrom,
+            sprintf("%.0f", data$start),
+            sprintf("%.0f", data$end),
+            data[[value_col]],
+            sep = "\t"
+        )
         writeLines(lines, con)
     }
 
@@ -288,7 +296,7 @@ gtrack.export_bigwig <- function(track, file, intervals = NULL, iterator = NULL)
     genome_intervals <- gintervals.all()
     chrom_lines <- paste0(
         genome_intervals$chrom, "\t",
-        formatC(genome_intervals$end, format = "d")
+        sprintf("%.0f", genome_intervals$end)
     )
     writeLines(chrom_lines, tmp_chromsizes)
 

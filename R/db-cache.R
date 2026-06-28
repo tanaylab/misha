@@ -626,6 +626,17 @@ gdb.reload <- function(rescan = TRUE) {
         return(invisible(FALSE))
     }
 
+    # If the working directory is a subdirectory of the database (not a root
+    # "tracks" dir), GTRACKS holds only that subtree's tracks under subdir-relative
+    # names (see .gdb.reload, which scans only from GWD in that case). Persisting
+    # that partial, relative list to the cache would corrupt the next session's
+    # listing, so mark the cache dirty (forcing a rescan) instead of writing it.
+    gwd <- get("GWD", envir = .misha)
+    if (!any(gwd == file.path(groots, "tracks"))) {
+        .gdb.cache_mark_dirty(groot)
+        return(invisible(FALSE))
+    }
+
     tracks <- get("GTRACKS", envir = .misha)
     intervals <- get("GINTERVS", envir = .misha)
 

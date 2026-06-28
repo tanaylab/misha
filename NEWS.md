@@ -1,3 +1,16 @@
+# misha 5.11.9
+
+Fixes from a full source audit (see commit messages for details):
+
+* **Behavior fix:** `gintervals.liftover()` / `gtrack.liftover()` no longer drop a mapping reachable only through a wider earlier chain when source chains overlap (`src_overlap_policy = "keep"`).
+* **Behavior fix:** `gtrack.export_bedgraph()` / `gtrack.export_bigwig()` write coordinates as plain integers; large round positions were previously emitted in scientific notation, corrupting the output.
+* **Behavior fix:** track-parallel `gextract()` (many tracks over an interval iterator) now returns value columns in the requested track order; worker scheduling could reorder them (column names were already correct).
+* **Behavior fix:** `gintervals.quantiles()` with multiple percentiles and `intervals.set.out=` no longer writes stale values for in-scope chromosomes the iterator does not cover (now correctly `NaN`).
+* `pwm.edit_distance*` virtual tracks no longer read out of bounds for motifs longer than 64 bp.
+* `gextract()` errors whose R message contains a `%` are reported cleanly instead of crashing the session.
+* `gtrack.create()` / `gtrack.rm()` run from a database subdirectory (`gdir.cd()`) no longer corrupt the root track listing cache for the next session.
+* `gextract(..., file=)` with very many expressions no longer overflows its line buffer.
+
 # misha 5.11.8
 
 * **Behavior fix:** 2D `gtrack.liftover()` now aggregates overlapping mapped rectangles instead of inserting them as overlapping objects (which corrupted read-back and double-counted). `multi_target_agg`, `na.rm`, and `min_n` now apply to 2D tracks too, matching the 1D path. Overlaps arise when a chain maps disjoint source rectangles onto overlapping target rectangles; lifted 2D track values change accordingly.
