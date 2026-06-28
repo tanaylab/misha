@@ -656,6 +656,12 @@ for (unsigned ivar = 0; ivar < vars.get_num_track_vars(); ++ivar) {
 								verror("Invalid fixed-bin format in %s", dat_path.c_str());
 							const int64_t num_samples = (int64_t)(data_bytes / sizeof(float));
 							const int chromid = (int)entry.chrom_id;
+							// chrom_id comes straight from the on-disk index; validate it
+							// against the current genome before indexing (a stale index
+							// built under a different chrom set could point past the end).
+							if (chromid < 0 || chromid >= (int)all_genome_intervs.size())
+								verror("Track %s index references chromosome id %d outside the current genome (stale index?)",
+								       itrack_name->c_str(), chromid);
 							const int64_t expected_num_bins = (int64_t)ceil(all_genome_intervs[chromid].end / (double)bin_size);
 							if (num_samples != expected_num_bins)
 								verror("Number of bins in track %s, chrom %s do not match the chromosome size (expecting: %ld, reading: %ld)",

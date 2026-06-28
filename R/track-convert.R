@@ -73,6 +73,13 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
                 warning(msg, call. = FALSE)
             }
 
+            # Register an explicitly-named target track so it is visible to the
+            # user and findable by gtrack.convert_to_indexed below. (For NULL
+            # tgt.track the data is renamed onto the already-registered source.)
+            if (!is.null(substitute(tgt.track))) {
+                .gdb.add_track(tgt.trackstr)
+            }
+
             # If database is indexed, automatically convert the track to indexed format
             if (.gdb.is_indexed()) {
                 # Route the indexed conversion at the trackname that actually
@@ -103,13 +110,10 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
                         ), call. = FALSE)
                     }
                 }
+                # Drop any registry entry for the failed target - the explicit-target
+                # .gdb.add_track above, or a stale entry from a previous failed run.
+                try(.gdb.rm_track(tgt.trackstr), silent = TRUE)
             }
-            # Defensive cache-scrub: tgt.trackstr was never .gdb.add_track'd
-            # by this function, so it is not in GTRACKS under normal flow.
-            # We still call rm_track in case a previous failed run left a
-            # stale entry in the in-memory registry. try(..., silent=TRUE)
-            # because the entry typically isn't there.
-            try(.gdb.rm_track(tgt.trackstr), silent = TRUE)
         }
     )
     invisible(0)

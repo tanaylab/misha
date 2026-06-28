@@ -170,7 +170,12 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 							forward[idx] = min(MAX_COV, forward[idx] + 1);
 						}
 						else if (str[STRAND_COL] == "-" || str[STRAND_COL] == "R") {
+							// A minus-strand read is projected to its 3' end (coord + read length),
+							// which can land at/after chromsize for a read near the contig end;
+							// clamp to the last bin so the write stays in bounds.
 							uint64_t idx = (uint64_t)((coord + str[SEQ_COL].size()) / binsize);
+							if (idx >= reverse.size())
+								idx = reverse.size() - 1;
 							reverse[idx] = min(MAX_COV, reverse[idx] + 1);
 						}
 
