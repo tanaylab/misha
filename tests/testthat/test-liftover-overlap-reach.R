@@ -56,3 +56,49 @@ test_that("ADVERSARIAL H5: relaxing the back() guard did not start mapping out-o
     expect_null(lift(500, 600)) # past all chains (the back() guard's job)
     expect_null(lift(950, 1000)) # far past all chains
 })
+
+test_that("ADVERSARIAL H5: minus-strand chains still lift correctly (back() guard change)", {
+    local_db_state()
+    setup_db(list(paste0(">chr1\n", strrep("ACGT", 50), "\n"))) # 200 bp
+
+    chain_file <- new_chain_file()
+    # source1[0,100) -> chr1[0,100) on the MINUS target strand
+    write_chain_entry(chain_file, "source1", 200, "+", 0, 100, "chr1", 200, "-", 0, 100, 1)
+    chain <- gintervals.load_chain(chain_file)
+
+    res <- gintervals.liftover(
+        data.frame(chrom = "source1", start = 10, end = 20, stringsAsFactors = FALSE), chain
+    )
+    expect_false(is.null(res))
+    expect_equal(as.character(res$chrom[1]), "chr1")
+    expect_equal(res$end[1] - res$start[1], 10) # width preserved under reversal
+    expect_true(res$start[1] >= 0 && res$end[1] <= 200) # within the target chromosome
+})
+
+test_that("ADVERSARIAL M1: liftover value_col + canonic + aggregation returns finite output (scores-OOB path)", {
+    local_db_state()
+    setup_source_db(list(paste0(">source1\n", strrep("A", 400), "\n")))
+    setup_db(list(paste0(">chrA\n", strrep("T", 400), "\n")))
+
+    cf <- new_chain_file()
+    # three sources mapping to OVERLAPPING target regions -> aggregation segments
+    write_chain_entry(cf, "chrsource1", 400, "+", 0, 10, "chrA", 400, "+", 0, 10, 1)
+    write_chain_entry(cf, "chrsource1", 400, "+", 10, 20, "chrA", 400, "+", 3, 13, 2)
+    write_chain_entry(cf, "chrsource1", 400, "+", 20, 30, "chrA", 400, "+", 7, 17, 3)
+    src <- data.frame(
+        chrom = "chrsource1", start = c(0, 10, 20), end = c(10, 20, 30),
+        value = c(1, 2, 3), stringsAsFactors = FALSE
+    )
+
+    # value_col + agg + canonic=TRUE, include_metadata=FALSE (default): the path where
+    # `scores` was read out of bounds. Output must be correct, with no crash.
+    res <- gintervals.liftover(src, cf, value_col = "value", multi_target_agg = "sum", canonic = TRUE)
+    expect_false(is.null(res))
+    expect_true("value" %in% names(res))
+    expect_true(all(is.finite(res$value)))
+
+    # include_metadata=TRUE path (unchanged by the fix) still emits a finite score column
+    res2 <- gintervals.liftover(src, cf, tgt_overlap_policy = "auto_score", include_metadata = TRUE, canonic = TRUE)
+    expect_true("score" %in% names(res2))
+    expect_true(all(is.finite(res2$score)))
+})
