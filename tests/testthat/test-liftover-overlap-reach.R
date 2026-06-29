@@ -33,3 +33,26 @@ test_that("gintervals.liftover keeps a mapping reached only by a wide earlier ov
     expect_equal(as.numeric(chr1_rows$start), 50)
     expect_equal(as.numeric(chr1_rows$end), 51)
 })
+
+test_that("ADVERSARIAL H5: relaxing the back() guard did not start mapping out-of-range queries", {
+    local_db_state()
+    setup_db(list(paste0(">chr1\n", strrep("ACGT", 50), "\n"))) # 200 bp
+
+    chain_file <- new_chain_file()
+    # Two non-overlapping source chains, both onto chr1.
+    write_chain_entry(chain_file, "source1", 1000, "+", 100, 200, "chr1", 200, "+", 0, 100, 1)
+    write_chain_entry(chain_file, "source1", 1000, "+", 300, 400, "chr1", 200, "+", 100, 200, 2)
+    chain <- gintervals.load_chain(chain_file, src_overlap_policy = "keep", tgt_overlap_policy = "keep")
+
+    lift <- function(s, e) {
+        gintervals.liftover(data.frame(chrom = "source1", start = s, end = e, stringsAsFactors = FALSE), chain)
+    }
+
+    # Inside a chain -> maps; gap / before / after / wrong-chrom -> must stay unmapped.
+    expect_false(is.null(lift(120, 130))) # inside chain 1
+    expect_false(is.null(lift(350, 360))) # inside chain 2
+    expect_null(lift(0, 50)) # before all chains
+    expect_null(lift(220, 260)) # in the gap between chains
+    expect_null(lift(500, 600)) # past all chains (the back() guard's job)
+    expect_null(lift(950, 1000)) # far past all chains
+})
