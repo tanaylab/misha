@@ -263,7 +263,14 @@ gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed =
             }
         } else {
             db_by_track <- track_db[tracks]
-            tracks <- tracks[!is.na(db_by_track) & db_by_track == db]
+            if (identical(db, get("GROOT", envir = .misha))) {
+                # GTRACK_DATASET may be only partially populated (e.g. it lists
+                # only tracks created this session); tracks with no entry are base
+                # tracks that belong to GROOT, so keep NA alongside == GROOT.
+                tracks <- tracks[is.na(db_by_track) | db_by_track == db]
+            } else {
+                tracks <- tracks[!is.na(db_by_track) & db_by_track == db]
+            }
             if (length(tracks) == 0) {
                 return(NULL)
             }
