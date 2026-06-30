@@ -7,8 +7,8 @@ create_isolated_test_db()
 
 test_that("ADV H2-2D: 2D quantiles bigset == in-memory on the non-multitask streaming path", {
     # exercises the 2D save (line 770) - pass 1 only covered the 1D save (line 755).
-    # Use a controlled subset (a huge 1x1 screen has a pre-existing, unrelated
-    # boundary discrepancy at scale - see notes).
+    # Uses a small subset here; the >gbuf.size truncation that this once worked
+    # around (issue #149) is now fixed and covered by test-issue-149-*.R.
     withr::local_options(list(gmultitasking = FALSE, gbig.intervals.size = 5))
     full <- gscreen("test.rects > 40", gintervals.2d(c(1, 2), 0, -1))
     scope <- full[seq_len(min(80, nrow(full))), ]
