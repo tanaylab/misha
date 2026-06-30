@@ -1,3 +1,7 @@
+# misha 5.11.10
+
+* **Behavior fix:** non-multitask `gintervals.quantiles()` (`options(gmultitasking = FALSE)`) no longer truncates the result to the first ~1000 intervals on a large scope; the streaming (`intervals.set.out=`) and in-memory results now match the multitasking output (#149).
+
 # misha 5.11.9
 
 Fixes from a full source audit (see commit messages for details):
