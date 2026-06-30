@@ -18,7 +18,8 @@
 
     # Set gmax.processes based on cores:
     # - Use 70% of cores for parallelism while leaving headroom for system
-    options(gmax.processes = as.integer(num_cores * 0.7))
+    # - Floor at 1 so single-core / undetectable-core hosts don't get 0.
+    options(gmax.processes = max(1L, as.integer(num_cores * 0.7)))
     options(gmax.processes2core = 2)
 
     # Auto-configure gmax.data.size based on system memory and cores

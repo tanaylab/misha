@@ -589,33 +589,44 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 			size_t buffer_pos = 0;
 
 			for (; !scanner.isend(); scanner.next()) {
-				char line[4096];  // Temporary buffer for one line
-				int len = 0;
+				std::string line;  // one output row; grows as needed (no fixed cap)
+				char field[64];
+				int n;
 
 				if (scanner.get_iterator()->is_1d()) {
 					const GInterval &interval = scanner.last_interval1d();
-					len = snprintf(line, sizeof(line), "%s\t%" PRId64 "\t%" PRId64,
-						iu.id2chrom(interval.chromid).c_str(), interval.start, interval.end);
+					line = iu.id2chrom(interval.chromid);
+					n = snprintf(field, sizeof(field), "\t%" PRId64 "\t%" PRId64, interval.start, interval.end);
+					line.append(field, n);
 				} else {
 					const GInterval2D &interval = scanner.last_interval2d();
-					len = snprintf(line, sizeof(line), "%s\t%" PRId64 "\t%" PRId64 "\t%s\t%" PRId64 "\t%" PRId64,
-						iu.id2chrom(interval.chromid1()).c_str(), interval.start1(), interval.end1(),
-						iu.id2chrom(interval.chromid2()).c_str(), interval.start2(), interval.end2());
+					line = iu.id2chrom(interval.chromid1());
+					n = snprintf(field, sizeof(field), "\t%" PRId64 "\t%" PRId64, interval.start1(), interval.end1());
+					line.append(field, n);
+					line += '\t';
+					line += iu.id2chrom(interval.chromid2());
+					n = snprintf(field, sizeof(field), "\t%" PRId64 "\t%" PRId64, interval.start2(), interval.end2());
+					line.append(field, n);
 				}
 
 				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-					len += snprintf(line + len, sizeof(line) - len, "\t%.15g", scanner.last_real(iexpr));
+					n = snprintf(field, sizeof(field), "\t%.15g", scanner.last_real(iexpr));
+					line.append(field, n);
 				}
-				len += snprintf(line + len, sizeof(line) - len, "\n");
+				line += '\n';
 
 				// Flush buffer if not enough space for this line
-				if (buffer_pos + len >= BUFFER_SIZE) {
+				if (buffer_pos + line.size() >= BUFFER_SIZE) {
 					outfile.write(buffer, buffer_pos);
 					buffer_pos = 0;
 				}
 
-				memcpy(buffer + buffer_pos, line, len);
-				buffer_pos += len;
+				if (line.size() >= BUFFER_SIZE) {
+					outfile.write(line.data(), line.size());  // row larger than buffer: write directly
+				} else {
+					memcpy(buffer + buffer_pos, line.data(), line.size());
+					buffer_pos += line.size();
+				}
 
 				check_interrupt();
 			}
@@ -1194,33 +1205,44 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			size_t buffer_pos = 0;
 
 			for (; !scanner.isend(); scanner.next()) {
-				char line[4096];  // Temporary buffer for one line
-				int len = 0;
+				std::string line;  // one output row; grows as needed (no fixed cap)
+				char field[64];
+				int n;
 
 				if (scanner.get_iterator()->is_1d()) {
 					const GInterval &interval = scanner.last_interval1d();
-					len = snprintf(line, sizeof(line), "%s\t%" PRId64 "\t%" PRId64,
-						iu.id2chrom(interval.chromid).c_str(), interval.start, interval.end);
+					line = iu.id2chrom(interval.chromid);
+					n = snprintf(field, sizeof(field), "\t%" PRId64 "\t%" PRId64, interval.start, interval.end);
+					line.append(field, n);
 				} else {
 					const GInterval2D &interval = scanner.last_interval2d();
-					len = snprintf(line, sizeof(line), "%s\t%" PRId64 "\t%" PRId64 "\t%s\t%" PRId64 "\t%" PRId64,
-						iu.id2chrom(interval.chromid1()).c_str(), interval.start1(), interval.end1(),
-						iu.id2chrom(interval.chromid2()).c_str(), interval.start2(), interval.end2());
+					line = iu.id2chrom(interval.chromid1());
+					n = snprintf(field, sizeof(field), "\t%" PRId64 "\t%" PRId64, interval.start1(), interval.end1());
+					line.append(field, n);
+					line += '\t';
+					line += iu.id2chrom(interval.chromid2());
+					n = snprintf(field, sizeof(field), "\t%" PRId64 "\t%" PRId64, interval.start2(), interval.end2());
+					line.append(field, n);
 				}
 
 				for (unsigned iexpr = 0; iexpr < num_exprs; ++iexpr) {
-					len += snprintf(line + len, sizeof(line) - len, "\t%.15g", scanner.last_real(iexpr));
+					n = snprintf(field, sizeof(field), "\t%.15g", scanner.last_real(iexpr));
+					line.append(field, n);
 				}
-				len += snprintf(line + len, sizeof(line) - len, "\n");
+				line += '\n';
 
 				// Flush buffer if not enough space for this line
-				if (buffer_pos + len >= BUFFER_SIZE) {
+				if (buffer_pos + line.size() >= BUFFER_SIZE) {
 					outfile.write(buffer, buffer_pos);
 					buffer_pos = 0;
 				}
 
-				memcpy(buffer + buffer_pos, line, len);
-				buffer_pos += len;
+				if (line.size() >= BUFFER_SIZE) {
+					outfile.write(line.data(), line.size());  // row larger than buffer: write directly
+				} else {
+					memcpy(buffer + buffer_pos, line.data(), line.size());
+					buffer_pos += line.size();
+				}
 
 				check_interrupt();
 			}
