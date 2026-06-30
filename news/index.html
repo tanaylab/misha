@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.8</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.10</span>
       </span>
     </div>
 
@@ -66,6 +66,55 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.10" id="misha-51110">misha 5.11.10<a class="anchor" aria-label="anchor" href="#misha-51110"></a></h2>
+<ul><li>
+<strong>Behavior fix:</strong> non-multitask <code><a href="../reference/gintervals.quantiles.html">gintervals.quantiles()</a></code> (<code>options(gmultitasking = FALSE)</code>) no longer truncates the result to the first ~1000 intervals on a large scope; the streaming (<code>intervals.set.out=</code>) and in-memory results now match the multitasking output (<a href="https://github.com/tanaylab/misha/issues/149" class="external-link">#149</a>).</li>
+</ul></div>
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.9" id="misha-5119">misha 5.11.9<a class="anchor" aria-label="anchor" href="#misha-5119"></a></h2>
+<p>Fixes from a full source audit (see commit messages for details):</p>
+<ul><li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> / <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> no longer drop a mapping reachable only through a wider earlier chain when source chains overlap (<code>src_overlap_policy = "keep"</code>).</li>
+<li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gtrack.export_bedgraph.html">gtrack.export_bedgraph()</a></code> / <code><a href="../reference/gtrack.export_bigwig.html">gtrack.export_bigwig()</a></code> write coordinates as plain integers; large round positions were previously emitted in scientific notation, corrupting the output.</li>
+<li>
+<strong>Behavior fix:</strong> track-parallel <code><a href="../reference/gextract.html">gextract()</a></code> (many tracks over an interval iterator) now returns value columns in the requested track order; worker scheduling could reorder them (column names were already correct).</li>
+<li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gintervals.quantiles.html">gintervals.quantiles()</a></code> with multiple percentiles and <code>intervals.set.out=</code> no longer writes stale values for in-scope chromosomes the iterator does not cover (now correctly <code>NaN</code>).</li>
+<li>
+<code>pwm.edit_distance*</code> virtual tracks no longer read out of bounds for motifs longer than 64 bp.</li>
+<li>
+<code><a href="../reference/gextract.html">gextract()</a></code> errors whose R message contains a <code>%</code> are reported cleanly instead of crashing the session.</li>
+<li>
+<code><a href="../reference/gtrack.create.html">gtrack.create()</a></code> / <code><a href="../reference/gtrack.rm.html">gtrack.rm()</a></code> run from a database subdirectory (<code><a href="../reference/gdir.cd.html">gdir.cd()</a></code>) no longer corrupt the root track listing cache for the next session.</li>
+<li>
+<code>gextract(..., file=)</code> with very many expressions no longer overflows its line buffer.</li>
+<li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gintervals.canonic.html">gintervals.canonic()</a></code> / <code><a href="../reference/gintervals.mark_overlaps.html">gintervals.mark_overlaps()</a></code> return the correct <code>mapping</code> for 2D intervals (it was inverted, breaking the documented <code>tapply(..., mapping, ...)</code> pattern and 2D <code>mark_overlaps</code>).</li>
+<li>
+<strong>Behavior fix:</strong> <code><a href="../reference/gintervals.annotate.html">gintervals.annotate()</a></code> fills <code>na_value</code> for query intervals that have no neighbor in range (previously left as <code>NA</code>).</li>
+<li>
+<code><a href="../reference/gtrack.convert.html">gtrack.convert()</a></code> with an explicit target track now registers the new track (previously it was unusable, or trashed on an indexed database, until a reload).</li>
+<li>
+<code><a href="../reference/gtrack.import_set.html">gtrack.import_set()</a></code> derives the track name from the file name only; a dot in a parent directory no longer truncates it (which silently collided imports).</li>
+<li>
+<code>gtrack.ls(db=...)</code> returns the tracks when only one database is loaded (previously <code>NULL</code>).</li>
+<li>
+<code><a href="../reference/gtrack.var.ls.html">gtrack.var.ls()</a></code> accepts an expression (e.g. <code>tracks[i]</code>) as the track argument, like <code>gtrack.var.get/set/rm</code>.</li>
+<li>
+<code><a href="../reference/gdb.init.html">gsetroot()</a></code> leaves the current database loaded when the target’s <code>chrom_sizes.txt</code> is missing or malformed (previously it unloaded the session first).</li>
+<li>Fixed out-of-bounds memory accesses in <code><a href="../reference/gintervals.liftover.html">gintervals.liftover()</a></code> aggregation, strand-autocorrelation reads near contig ends, and indexed fixed-bin track validation; clearer “data size exceeded” message.</li>
+<li>Non-ASCII track attribute values no longer truncate when read back.</li>
+<li>
+<code><a href="../reference/gtrack.array.extract.html">gtrack.array.extract()</a></code> rejects <code>NA</code> column indices instead of forwarding them.</li>
+<li>Fixed a 2D indexed-format writer that produced unreadable interval sets under <code>options(gmulticontig.indexed_format = TRUE)</code>.</li>
+<li>
+<code>created.by</code> provenance strings for <code><a href="../reference/gtrack.2d.create.html">gtrack.2d.create()</a></code>, <code><a href="../reference/gtrack.2d.import_contacts.html">gtrack.2d.import_contacts()</a></code>, and <code><a href="../reference/gtrack.modify.html">gtrack.modify()</a></code> are now well-formed.</li>
+<li>
+<code>gmax.processes</code> is floored at 1 (was 0 on single-core / undetectable-core hosts).</li>
+<li>Internal hardening: <code><a href="../reference/ggenome.implant.html">ggenome.implant()</a></code> no longer leaks buffers on error paths; corrupt-file checks in the on-disk 2D quadtree.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.8" id="misha-5118">misha 5.11.8<a class="anchor" aria-label="anchor" href="#misha-5118"></a></h2>
 <ul><li>
