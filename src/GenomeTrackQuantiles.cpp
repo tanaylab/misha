@@ -630,10 +630,16 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		intervals2d->sort();
 		intervals2d->verify_no_overlaps(iu.get_chromkey());
 
+		// estimate_num_bins iterates the scope (begin_iter + run to end), so it must run
+		// BEFORE scanner.begin: the scanner's iterator shares this same scope object, and
+		// estimating afterwards would leave the scope cursor at end(), silently truncating
+		// the scan to the first evaluation buffer (see issue #149).
+		uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
+
 		scanner.begin(_expr, intervals1d, intervals2d, _iterator_policy, _band);
 
 		uint64_t num_intervals = scanner.get_iterator()->is_1d() ? intervals1d->size() : intervals2d->size();
-		if (!num_intervals) 
+		if (!num_intervals)
 			return R_NilValue;
 
 		bool do_small_intervset_out = !Rf_isNull(_intervals_set_out) && !iu.needs_bigset(num_intervals);
@@ -647,7 +653,6 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 		vector<double> medians;
 		uint64_t sampling_buf_size = iu.get_max_data_size();
-		uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
 		if (estimated_bins > 0 && estimated_bins < sampling_buf_size)
 			sampling_buf_size = estimated_bins;
 		StreamPercentiler<double> sp(sampling_buf_size, iu.get_quantile_edge_data_size(), iu.get_quantile_edge_data_size());
@@ -752,7 +757,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 					int size = intervals1d->size(*ichromid);
 					iu.verify_max_data_size(size, "Result", false);
-					medians.resize(size, numeric_limits<double>::quiet_NaN());
+					medians.resize(size * num_percentiles, numeric_limits<double>::quiet_NaN());
 					SEXP rintervals = build_rintervals_quantiles(out_intervals.get(), NULL, percentiles, medians, iu, false);
 					GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats1d);
 					medians.clear();
@@ -767,7 +772,7 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 					int size = intervals2d->size(ichrompair->chromid1, ichrompair->chromid2);
 					iu.verify_max_data_size(size, "Result", false);
-					medians.resize(size, numeric_limits<double>::quiet_NaN());
+					medians.resize(size * num_percentiles, numeric_limits<double>::quiet_NaN());
 					SEXP rintervals = build_rintervals_quantiles(NULL, out_intervals.get(), percentiles, medians, iu, false);
 					GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), out_intervals.get(), rintervals, iu, chromstats2d);
 					medians.clear();

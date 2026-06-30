@@ -105,7 +105,7 @@ gtrack.var.get <- function(track = NULL, var = NULL) {
 #'
 #' @export gtrack.var.ls
 gtrack.var.ls <- function(track = NULL, pattern = "", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
-    if (length(substitute(track)) != 1) {
+    if (is.null(substitute(track))) {
         stop("Usage: gtrack.var.ls(track, pattern = \"\", ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE)", call. = FALSE)
     }
     .gcheckroot()

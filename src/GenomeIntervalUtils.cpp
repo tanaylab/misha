@@ -296,8 +296,12 @@ SEXP gintervcanonic(SEXP _intervs, SEXP _unify_touching_intervals, SEXP _envir)
 
             rprotect(old2new_mapping = RSaneAllocVector(REALSXP, intervs2d.size()));
 
+            // Match the 1D convention (and the documented contract / mark_overlaps):
+            // mapping[original_index] = result_position + 1. 2D canonic only sorts
+            // (verify_no_overlaps above rejects merges), so udata() is the original
+            // index and this is a bijection.
             for (GIntervals2D::const_iterator interv = intervs2d.begin(); interv != intervs2d.end(); ++interv)
-                REAL(old2new_mapping)[interv - intervs2d.begin()] = ((int64_t)interv->udata()) + 1;
+                REAL(old2new_mapping)[(int64_t)interv->udata()] = (interv - intervs2d.begin()) + 1;
 
 			SEXP answer = iu.convert_intervs(&intervs2d);
 			Rf_setAttrib(answer, Rf_install("mapping"), old2new_mapping);

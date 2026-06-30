@@ -15,6 +15,9 @@
             stop(sprintf("%s does not appear among the column names of track %s", slice[idx], trackstr), call. = FALSE)
         }
     } else if (is.numeric(slice) || is.integer(slice)) {
+        if (anyNA(slice)) {
+            stop("Slice indices must not be NA", call. = FALSE)
+        }
         if (TRUE %in% (as.integer(slice) != slice)) {
             stop("Invalid type of slice parameter", call. = FALSE)
         }

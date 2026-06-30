@@ -247,6 +247,23 @@ gintervals.annotate <- function(intervals,
         }
     }
 
+    # Query intervals with no neighbor in range (na.if.notfound gave them NA dist
+    # and NA annotation columns) must also be filled with na_value. The whole-empty
+    # case is handled above; this covers the per-row case when other queries matched.
+    not_found <- is.na(neighbors_result$dist)
+    if (any(not_found)) {
+        for (i in seq_along(annotation_columns)) {
+            col_name <- annotation_columns[i]
+            if (col_name %in% colnames(neighbors_result)) {
+                if (is.list(na_value) && column_names[i] %in% names(na_value)) {
+                    neighbors_result[not_found, col_name] <- na_value[[column_names[i]]]
+                } else {
+                    neighbors_result[not_found, col_name] <- na_value
+                }
+            }
+        }
+    }
+
     # Select and rename annotation columns
     result_cols <- c(colnames(intervals))
     if (!is.null(dist_column)) {

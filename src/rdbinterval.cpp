@@ -1142,8 +1142,18 @@ ChainIntervals::const_iterator ChainIntervals::map_interval(const GInterval &src
 	if (front().chromid_src > src_interval.chromid || (front().chromid_src == src_interval.chromid && front().start_src >= src_interval.end))
 		return begin();
 
-	if (back().chromid_src < src_interval.chromid || (back().chromid_src == src_interval.chromid && back().start_src + back().end - back().start <= src_interval.start))
+	// Query entirely past all chains?  Cross-chromosome: query's chromosome is
+	// beyond the last chain's.  Same-chromosome: query starts at/after the
+	// maximum source reach on that chromosome -- use the per-chrom prefix-max of
+	// end_src, NOT back()'s own end_src, which is not the max reach when source
+	// chains overlap (a wider earlier chain can reach past the last-by-start one).
+	if (back().chromid_src < src_interval.chromid)
 		return end() - 1;
+	if (back().chromid_src == src_interval.chromid) {
+		const size_t lastEx = m_chrom_last_excl[src_interval.chromid];
+		if (m_pmax_end_src[lastEx - 1] <= src_interval.start)
+			return end() - 1;
+	}
 
 	if (check_first_overlap_src(hint, src_interval))
 		return add2tgt(hint, src_interval, tgt_intervs, metadata);

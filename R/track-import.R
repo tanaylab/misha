@@ -512,7 +512,10 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
                 tryCatch(
                     {
                         message(sprintf("Importing file %s", file))
-                        file.noext <- basename(gsub("^([^.]+)(\\..*)*$", "\\1", file, perl = TRUE))
+                        # Strip the extension from the file NAME (basename first):
+                        # applying the regex to the full path truncated the name at
+                        # the first dot in any ancestor directory (e.g. "GSE123.RAW/").
+                        file.noext <- gsub("^([^.]+)(\\..*)*$", "\\1", basename(file), perl = TRUE)
                         trackstr <- paste(track.prefix, file.noext, sep = "")
 
                         .gcall_noninteractive(gtrack.import, trackstr, description, file, binsize, defval)

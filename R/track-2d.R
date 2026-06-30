@@ -88,11 +88,14 @@ gtrack.2d.create <- function(track = NULL, description = NULL, intervals = NULL,
     }
     .gcheckroot()
 
+    # Capture the deparsed argument expressions for `created.by` BEFORE reassigning
+    # `intervals` below - otherwise substitute(intervals) deparses the data frame value.
+    intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
+    valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
+
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
-    intervalsstr <- deparse(substitute(intervals), width.cutoff = 500)[1]
-    valuesstr <- deparse(substitute(values), width.cutoff = 500)[1]
     .gconfirmtrackcreate(trackstr)
 
     .gtrack.create_atomic(trackstr, function() {
@@ -310,11 +313,13 @@ gtrack.2d.import_contacts <- function(track = NULL, description = NULL, contacts
     tryCatch(
         {
             .gdb.add_track(trackstr)
+            # Emit NULL unquoted (a quoted "NULL" would re-run as a filename).
+            fends_str <- if (is.null(fends)) "NULL" else sprintf("\"%s\"", fends)
             .gtrack.attr.set(
                 trackstr, "created.by",
                 sprintf(
-                    "gtrack.2d.import_contacts(\"%s\", description, c(\"%s\"), \"%s\", %s)",
-                    trackstr, paste(contacts, collapse = "\", \""), ifelse(is.null(fends), "NULL", fends), allow.duplicates
+                    "gtrack.2d.import_contacts(\"%s\", description, c(\"%s\"), %s, %s)",
+                    trackstr, paste(contacts, collapse = "\", \""), fends_str, allow.duplicates
                 ),
                 TRUE
             )

@@ -1,3 +1,34 @@
+# misha 5.11.10
+
+* **Behavior fix:** non-multitask `gintervals.quantiles()` (`options(gmultitasking = FALSE)`) no longer truncates the result to the first ~1000 intervals on a large scope; the streaming (`intervals.set.out=`) and in-memory results now match the multitasking output (#149).
+
+# misha 5.11.9
+
+Fixes from a full source audit (see commit messages for details):
+
+* **Behavior fix:** `gintervals.liftover()` / `gtrack.liftover()` no longer drop a mapping reachable only through a wider earlier chain when source chains overlap (`src_overlap_policy = "keep"`).
+* **Behavior fix:** `gtrack.export_bedgraph()` / `gtrack.export_bigwig()` write coordinates as plain integers; large round positions were previously emitted in scientific notation, corrupting the output.
+* **Behavior fix:** track-parallel `gextract()` (many tracks over an interval iterator) now returns value columns in the requested track order; worker scheduling could reorder them (column names were already correct).
+* **Behavior fix:** `gintervals.quantiles()` with multiple percentiles and `intervals.set.out=` no longer writes stale values for in-scope chromosomes the iterator does not cover (now correctly `NaN`).
+* `pwm.edit_distance*` virtual tracks no longer read out of bounds for motifs longer than 64 bp.
+* `gextract()` errors whose R message contains a `%` are reported cleanly instead of crashing the session.
+* `gtrack.create()` / `gtrack.rm()` run from a database subdirectory (`gdir.cd()`) no longer corrupt the root track listing cache for the next session.
+* `gextract(..., file=)` with very many expressions no longer overflows its line buffer.
+* **Behavior fix:** `gintervals.canonic()` / `gintervals.mark_overlaps()` return the correct `mapping` for 2D intervals (it was inverted, breaking the documented `tapply(..., mapping, ...)` pattern and 2D `mark_overlaps`).
+* **Behavior fix:** `gintervals.annotate()` fills `na_value` for query intervals that have no neighbor in range (previously left as `NA`).
+* `gtrack.convert()` with an explicit target track now registers the new track (previously it was unusable, or trashed on an indexed database, until a reload).
+* `gtrack.import_set()` derives the track name from the file name only; a dot in a parent directory no longer truncates it (which silently collided imports).
+* `gtrack.ls(db=...)` returns the tracks when only one database is loaded (previously `NULL`).
+* `gtrack.var.ls()` accepts an expression (e.g. `tracks[i]`) as the track argument, like `gtrack.var.get/set/rm`.
+* `gsetroot()` leaves the current database loaded when the target's `chrom_sizes.txt` is missing or malformed (previously it unloaded the session first).
+* Fixed out-of-bounds memory accesses in `gintervals.liftover()` aggregation, strand-autocorrelation reads near contig ends, and indexed fixed-bin track validation; clearer "data size exceeded" message.
+* Non-ASCII track attribute values no longer truncate when read back.
+* `gtrack.array.extract()` rejects `NA` column indices instead of forwarding them.
+* Fixed a 2D indexed-format writer that produced unreadable interval sets under `options(gmulticontig.indexed_format = TRUE)`.
+* `created.by` provenance strings for `gtrack.2d.create()`, `gtrack.2d.import_contacts()`, and `gtrack.modify()` are now well-formed.
+* `gmax.processes` is floored at 1 (was 0 on single-core / undetectable-core hosts).
+* Internal hardening: `ggenome.implant()` no longer leaks buffers on error paths; corrupt-file checks in the on-disk 2D quadtree.
+
 # misha 5.11.8
 
 * **Behavior fix:** 2D `gtrack.liftover()` now aggregates overlapping mapped rectangles instead of inserting them as overlapping objects (which corrupted read-back and double-counted). `multi_target_agg`, `na.rm`, and `min_n` now apply to 2D tracks too, matching the 1D path. Overlaps arise when a chain maps disjoint source rectangles onto overlapping target rectangles; lifted 2D track values change accordingly.

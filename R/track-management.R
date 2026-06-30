@@ -255,14 +255,25 @@ gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed =
         db <- normalizePath(db, mustWork = FALSE)
         track_db <- get("GTRACK_DATASET", envir = .misha)
         if (is.null(track_db)) {
+            # Single database: every track belongs to GROOT. (Without this the
+            # filter below ran `NULL[tracks]` and dropped every track, so
+            # gtrack.ls(db = GROOT) returned NULL.)
             if (!identical(db, get("GROOT", envir = .misha))) {
                 return(NULL)
             }
-        }
-        db_by_track <- track_db[tracks]
-        tracks <- tracks[!is.na(db_by_track) & db_by_track == db]
-        if (length(tracks) == 0) {
-            return(NULL)
+        } else {
+            db_by_track <- track_db[tracks]
+            if (identical(db, get("GROOT", envir = .misha))) {
+                # GTRACK_DATASET may be only partially populated (e.g. it lists
+                # only tracks created this session); tracks with no entry are base
+                # tracks that belong to GROOT, so keep NA alongside == GROOT.
+                tracks <- tracks[is.na(db_by_track) | db_by_track == db]
+            } else {
+                tracks <- tracks[!is.na(db_by_track) & db_by_track == db]
+            }
+            if (length(tracks) == 0) {
+                return(NULL)
+            }
         }
     }
 

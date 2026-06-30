@@ -95,22 +95,25 @@
     max.data.size <- .ggetOption("gmax.data.size")
 
     if (size > max.data.size) {
+        # gmax.data.size is a (multi-GB) double; format as a plain integer string
+        # so sprintf doesn't error with "%d" on a non-integer/over-2^31 value.
+        max.data.size.str <- format(max.data.size, scientific = FALSE, trim = TRUE)
         if (is.null(arguments)) {
             stop(sprintf(
-                paste("%s size exceeded the maximal allowed (%d).",
+                paste("%s size exceeded the maximal allowed (%s).",
                     "Note: the maximum data size is controlled via gmax.data.size option (see options, getOptions).",
                     sep = "\n"
                 ),
-                data_name, max.data.size
+                data_name, max.data.size.str
             ), call. = FALSE)
         } else {
             stop(sprintf(
-                paste("%s size exceeded the maximal allowed (%d).",
+                paste("%s size exceeded the maximal allowed (%s).",
                     "Consider saving the result in a file (use %s argument).",
                     "Note: the maximum data size is controlled via gmax.data.size option (see options, getOptions).",
                     sep = "\n"
                 ),
-                data_name, max.data.size, paste(arguments, collapse = " or ")
+                data_name, max.data.size.str, paste(arguments, collapse = " or ")
             ), call. = FALSE)
         }
     }

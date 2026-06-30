@@ -983,7 +983,7 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 				error_msg += 7;
 			else if (strncmp(error_msg, "Error ", 6) == 0)
 				error_msg += 6;
-			verror(error_msg);
+			verror("%s", error_msg);
 		}
 		else
 		{
