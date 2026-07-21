@@ -915,7 +915,7 @@ void DnaPSSM::integrate_energy(const string &target, float &energy, vector<float
 					break;
 				}
 				if(DnaLookupTables::NEUTRAL_CHAR[(unsigned char)*j]) {
-					logp += c_log_quarter;
+					logp += p->get_avg_log_prob();
 				} else {
 					int code = DnaLookupTables::COMPLEMENT_ENCODE[(unsigned char)*j];
 					if(code >= 0) {
@@ -986,7 +986,7 @@ void DnaPSSM::integrate_energy_logspat(const string &target, float &energy, vect
 					break;
 				}
 				if(DnaLookupTables::NEUTRAL_CHAR[(unsigned char)*j]) {
-					logp += c_log_quarter;
+					logp += p->get_avg_log_prob();
 				} else {
 					int code = DnaLookupTables::COMPLEMENT_ENCODE[(unsigned char)*j];
 					if(code >= 0) {
@@ -1058,7 +1058,7 @@ void DnaPSSM::integrate_energy_max_logspat(const string &target, float &energy, 
 					break;
 				}
 				if(DnaLookupTables::NEUTRAL_CHAR[(unsigned char)*j]) {
-					logp_rev += c_log_quarter;
+					logp_rev += p->get_avg_log_prob();
 				} else {
 					int code = DnaLookupTables::COMPLEMENT_ENCODE[(unsigned char)*j];
 					if(code >= 0) {
