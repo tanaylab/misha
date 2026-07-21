@@ -1,3 +1,7 @@
+# misha 5.11.11
+
+* **Internal consistency:** `N`/`*` are now scored the same on both strands in the PWM energy routines (reverse used `log(0.25)`, forward used the column average; both now use the average). No behavior change for genomic scoring, where `N`-windows are masked to `-Inf`; keeps `DnaPSSM` in sync with the `prego` package.
+
 # misha 5.11.10
 
 * **Behavior fix:** non-multitask `gintervals.quantiles()` (`options(gmultitasking = FALSE)`) no longer truncates the result to the first ~1000 intervals on a large scope; the streaming (`intervals.set.out=`) and in-memory results now match the multitasking output (#149).
