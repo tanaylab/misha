@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.10</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.11</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.11" id="misha-51111">misha 5.11.11<a class="anchor" aria-label="anchor" href="#misha-51111"></a></h2>
+<ul><li>
+<strong>Internal consistency:</strong> <code>N</code>/<code>*</code> are now scored the same on both strands in the PWM energy routines (reverse used <code>log(0.25)</code>, forward used the column average; both now use the average). No behavior change for genomic scoring, where <code>N</code>-windows are masked to <code>-Inf</code>; keeps <code>DnaPSSM</code> in sync with the <code>prego</code> package.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.10" id="misha-51110">misha 5.11.10<a class="anchor" aria-label="anchor" href="#misha-51110"></a></h2>
 <ul><li>
@@ -1848,7 +1853,7 @@ gtrack.import.wigs =&gt; gtrack.import_set</li>
 </div>
 
 <div class="pkgdown">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
       </footer></div>
