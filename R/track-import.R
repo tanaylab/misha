@@ -1,9 +1,29 @@
 # Track import functions and helpers
 
 get_bigWigToWig_bin <- function() {
-    dir <- tempdir()
-    utils::untar(system.file("bigWigToWig.tar.gz", package = "misha"), exdir = dir)
-    return(file.path(dir, "bigWigToWig"))
+    bin <- getOption("misha.bigWigToWig", "")
+    if (nzchar(bin)) {
+        return(bin)
+    }
+
+    # ponytail: only a Linux x86-64 binary is bundled; elsewhere fall back to PATH
+    if (Sys.info()[["sysname"]] == "Linux") {
+        dir <- tempdir()
+        utils::untar(system.file("bigWigToWig.tar.gz", package = "misha"), exdir = dir)
+        return(file.path(dir, "bigWigToWig"))
+    }
+
+    bin <- Sys.which("bigWigToWig")
+    if (!nzchar(bin)) {
+        stop(sprintf(paste0(
+            "The bigWigToWig executable bundled with misha is a Linux x86-64 binary and cannot run on %s.\n",
+            "Install UCSC's bigWigToWig for your platform, e.g.:\n",
+            "  conda install -c bioconda ucsc-bigwigtowig\n",
+            "  or download it from http://hgdownload.soe.ucsc.edu/admin/exe/\n",
+            "Then put it on PATH, or set options(misha.bigWigToWig = \"/path/to/bigWigToWig\")."
+        ), Sys.info()[["sysname"]]), call. = FALSE)
+    }
+    bin
 }
 
 
