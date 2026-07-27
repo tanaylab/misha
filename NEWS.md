@@ -1,3 +1,8 @@
+# misha 5.11.12
+
+* `gtrack.import()` no longer fails on non-Linux platforms: the bundled `bigWigToWig` is a Linux x86-64 binary, so macOS/Windows now use one found on `PATH` (or `options(misha.bigWigToWig = "...")`), with an actionable error if none is installed.
+* `gtrack.create_sparse()` can take the values from a `value` column of `intervals` when `values` is omitted, which rules out a values/intervals order mismatch. Documented that `gintervals()` returns its rows sorted, so a separately held value vector must be reordered too.
+
 # misha 5.11.11
 
 * **Internal consistency:** `N`/`*` are now scored the same on both strands in the PWM energy routines (reverse used `log(0.25)`, forward used the column average; both now use the average). No behavior change for genomic scoring, where `N`-windows are masked to `-Inf`; keeps `DnaPSSM` in sync with the `prego` package.
