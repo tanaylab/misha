@@ -99,13 +99,50 @@ local_db_state <- function(env = parent.frame()) {
 #' This approach provides complete isolation between parallel test processes
 #' while minimizing disk space and setup time.
 #'
-#' @return Path to the isolated test database
-create_isolated_test_db <- function() {
-    source_db <- if (getOption("gmulticontig.indexed_format", FALSE)) {
+#' Path to the shared, read-only test database
+shared_test_db_path <- function() {
+    if (getOption("gmulticontig.indexed_format", FALSE)) {
         "/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/misha_test_db_indexed/"
     } else {
         "/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"
     }
+}
+
+#' Guarantee this test file leaves a usable GROOT behind
+#'
+#' Files that build their own temporary database and re-root into it leave
+#' .misha$GROOT dangling as soon as that directory is removed (withr deletes
+#' it at the end of the test or the file). Under TESTTHAT_PARALLEL the next
+#' file in the same worker process inherits the dangling root and fails with
+#' something unrelated to its own subject matter - "Database directory does
+#' not exist", "Chromosome chr1 does not exist ... Known chromosomes: chrA",
+#' or "Cannot delete track from read-only database" (a deleted directory is
+#' not writable, so it reads as read-only).
+#'
+#' Call this once at the top of any file that re-roots. It is idempotent and
+#' does nothing when the file leaves a valid root behind.
+ensure_valid_groot <- function() {
+    groot <- if (exists("GROOT", envir = .misha, inherits = FALSE)) {
+        get("GROOT", envir = .misha)
+    } else {
+        NULL
+    }
+    if (is.null(groot) || !dir.exists(groot)) {
+        src <- shared_test_db_path()
+        if (dir.exists(src)) {
+            suppressMessages(gdb.init(src))
+        }
+    }
+    invisible(NULL)
+}
+
+restore_groot_on_exit <- function(envir = parent.frame()) {
+    withr::defer(ensure_valid_groot(), envir = envir)
+}
+
+#' @return Path to the isolated test database
+create_isolated_test_db <- function() {
+    source_db <- shared_test_db_path()
 
     # Fail loudly instead of leaving a half-built DB behind. A silent failure
     # here (a full tempdir() is the usual cause) surfaces much later as a

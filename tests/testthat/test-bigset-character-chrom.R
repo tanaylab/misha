@@ -4,6 +4,8 @@
 # files store $chrom as factor while the persisted .meta zeroline kept the
 # original character class.
 
+restore_groot_on_exit()
+
 test_that("bigset save then load works when input has character chrom", {
     skip_if_not_installed("withr")
     withr::local_options(list(gmulticontig.indexed_format = FALSE))

@@ -13,6 +13,8 @@
 #  2. Meta creation completes for an indexed track where the overwhelming
 #     majority of chromids have no data (the large-contig case).
 
+restore_groot_on_exit()
+
 setup_db <- function(num_chroms, chrom_size = 1e6, indexed = FALSE) {
     tmp_root <- withr::local_tempdir(.local_envir = parent.frame())
     chrom_sizes <- data.frame(

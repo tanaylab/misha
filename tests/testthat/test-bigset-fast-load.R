@@ -1,5 +1,7 @@
 # Tests for fast-path loading of indexed bigsets
 
+restore_groot_on_exit()
+
 test_that(".gintervals.is_indexed_bigset detects indexed bigsets correctly", {
     skip_if_not_installed("withr")
     withr::local_options(list(gmulticontig.indexed_format = FALSE))

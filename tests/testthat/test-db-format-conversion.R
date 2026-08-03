@@ -1,3 +1,5 @@
+restore_groot_on_exit()
+
 load_test_db()
 test_that("gdb.convert_to_indexed converts per-chromosome database to indexed format", {
     local_db_state()
