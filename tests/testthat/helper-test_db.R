@@ -107,22 +107,37 @@ create_isolated_test_db <- function() {
         "/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"
     }
 
+    # Fail loudly instead of leaving a half-built DB behind. A silent failure
+    # here (a full tempdir() is the usual cause) surfaces much later as a
+    # baffling "Interval test.fixedbin does not exist" in an unrelated test.
+    checked_system <- function(cmd) {
+        status <- system(cmd)
+        if (status != 0) {
+            stop(sprintf(
+                "create_isolated_test_db(): `%s` failed with status %d.\nIs tempdir() (%s) out of space? Set TMPDIR to a volume with room.",
+                cmd, status, tempdir()
+            ), call. = FALSE)
+        }
+    }
+
     # Create unique temp dir for this test file/process
     testdb_dir <- tempfile(pattern = "misha_testdb_", tmpdir = tempdir())
     dir.create(testdb_dir, showWarnings = FALSE)
 
     # Copy small files that might be read
-    file.copy(
-        file.path(source_db, "chrom_sizes.txt"),
-        testdb_dir
-    )
+    if (!file.copy(file.path(source_db, "chrom_sizes.txt"), testdb_dir)) {
+        stop(sprintf(
+            "create_isolated_test_db(): failed to copy chrom_sizes.txt into %s (out of space?)",
+            testdb_dir
+        ), call. = FALSE)
+    }
 
     # Copy interval sets and PSSM directories
-    system(sprintf("cp -r %s/intervs %s/", source_db, testdb_dir))
-    system(sprintf("cp -r %s/pssms %s/", source_db, testdb_dir))
+    checked_system(sprintf("cp -r %s/intervs %s/", source_db, testdb_dir))
+    checked_system(sprintf("cp -r %s/pssms %s/", source_db, testdb_dir))
 
     # Symlink the large seq directory (read-only)
-    system(sprintf("ln -s %s/seq %s/seq", source_db, testdb_dir))
+    checked_system(sprintf("ln -s %s/seq %s/seq", source_db, testdb_dir))
 
     # Create tracks directory for this test file
     tracks_dir <- file.path(testdb_dir, "tracks")
@@ -137,7 +152,7 @@ create_isolated_test_db <- function() {
 
     # Symlink each fixture track
     for (track in source_tracks) {
-        system(sprintf(
+        checked_system(sprintf(
             "ln -s %s/tracks/%s %s/tracks/%s",
             source_db, track, testdb_dir, track
         ))
@@ -170,6 +185,14 @@ create_isolated_test_db <- function() {
             if (!is.null(current_groot) && identical(current_groot, testdb_dir)) {
                 if (!is.null(prev_groot) && dir.exists(prev_groot)) {
                     suppressMessages(gdb.init(prev_groot))
+                } else if (dir.exists(source_db)) {
+                    # prev_groot was itself an isolated db that has already been
+                    # torn down. Fall back to the shared test db rather than
+                    # unsetting GROOT: in a parallel run the next file in this
+                    # worker may be one that relies on the ambient root, and it
+                    # would otherwise fail with a confusing "does not exist" or
+                    # "Chromosome chr1 does not exist" error.
+                    suppressMessages(gdb.init(source_db))
                 } else {
                     rm("GROOT", envir = .misha)
                 }
