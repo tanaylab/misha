@@ -18,7 +18,9 @@ gtrack.create_sparse(
 
 \item{intervals}{a set of one-dimensional intervals}
 
-\item{values}{an array of numeric values - one for each interval}
+\item{values}{an array of numeric values - one for each interval, in the same
+order as the rows of \code{intervals}. If \code{NULL}, the \code{value}
+column of \code{intervals} is used.}
 }
 \value{
 None.
@@ -34,6 +36,14 @@ When multiple databases are connected via \code{\link{gsetroot}}, the track
 is created in the current working directory (.misha$GWD), which defaults to the
 last connected database. Use \code{\link{gdir.cd}} with an absolute path to
 change where new tracks are created.
+
+\code{values} is matched to \code{intervals} row by row, in the order the
+intervals are passed; \code{intervals} need not be sorted. Note however that
+\code{\link{gintervals}} returns its result sorted in the canonical
+chromosome order, so building \code{intervals} with \code{gintervals()} while
+keeping \code{values} in the original order will bind values to the wrong
+intervals. Keep the values in a \code{value} column of the intervals data
+frame and omit \code{values} to make such a mismatch impossible.
 }
 \examples{
 \dontshow{

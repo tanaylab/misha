@@ -215,10 +215,20 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
 #' last connected database. Use \code{\link{gdir.cd}} with an absolute path to
 #' change where new tracks are created.
 #'
+#' \code{values} is matched to \code{intervals} row by row, in the order the
+#' intervals are passed; \code{intervals} need not be sorted. Note however that
+#' \code{\link{gintervals}} returns its result sorted in the canonical
+#' chromosome order, so building \code{intervals} with \code{gintervals()} while
+#' keeping \code{values} in the original order will bind values to the wrong
+#' intervals. Keep the values in a \code{value} column of the intervals data
+#' frame and omit \code{values} to make such a mismatch impossible.
+#'
 #' @param track track name
 #' @param description a character string description
 #' @param intervals a set of one-dimensional intervals
-#' @param values an array of numeric values - one for each interval
+#' @param values an array of numeric values - one for each interval, in the same
+#' order as the rows of \code{intervals}. If \code{NULL}, the \code{value}
+#' column of \code{intervals} is used.
 #' @return None.
 #' @seealso \code{\link{gtrack.create}}, \code{\link{gtrack.2d.create}},
 #' \code{\link{gtrack.smooth}}, \code{\link{gtrack.modify}},
@@ -241,12 +251,19 @@ gtrack.create_pwm_energy <- function(track = NULL, description = NULL, pssmset =
 #'
 #' @export gtrack.create_sparse
 gtrack.create_sparse <- function(track = NULL, description = NULL, intervals = NULL, values = NULL) {
-    if (is.null(substitute(track)) || is.null(description) || is.null(intervals) || is.null(values)) {
+    if (is.null(substitute(track)) || is.null(description) || is.null(intervals)) {
         stop("Usage: gtrack.create_sparse(track, description, intervals, values)", call. = FALSE)
     }
     .gcheckroot()
 
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
+
+    if (is.null(values)) {
+        if (!is.data.frame(intervals) || !("value" %in% colnames(intervals))) {
+            stop("values is missing and intervals has no \"value\" column", call. = FALSE)
+        }
+        values <- intervals$value
+    }
 
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     .gconfirmtrackcreate(trackstr)
