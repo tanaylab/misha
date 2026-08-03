@@ -4,6 +4,8 @@
 
 # Build a small indexed DB from a 5-chromosome FASTA and create the
 # named track via gtrack.create. Returns the path to the track dir.
+restore_groot_on_exit()
+
 .make_indexed_db_with_track <- function(track_name, bin_size = 4) {
     test_fasta <- tempfile(fileext = ".fasta")
     cat(">chr1\nACTGACTGACTGACTGACTGACTGACTGACTG\n",

@@ -108,6 +108,9 @@ setup_db <- function(chrom_defs, return_db = FALSE) {
         {
             unlink(db, recursive = TRUE)
             unlink(fastas)
+            # Do not leave GROOT pointing at the directory we just removed:
+            # the next file in this parallel worker would inherit it.
+            ensure_valid_groot()
         },
         testthat::teardown_env()
     )

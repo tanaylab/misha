@@ -4,6 +4,8 @@
 # load + query path here with a moderate-sized N (1000 contigs) and only a
 # handful of populated chrom-pairs.
 
+restore_groot_on_exit()
+
 build_many_contig_db <- function(n_contigs, defer_envir) {
     skip_if_not_installed("withr")
     tmp_root <- withr::local_tempdir(.local_envir = defer_envir)
