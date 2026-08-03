@@ -105,7 +105,11 @@
 #' @param ends an array of end coordinates. If '-1' chromosome size is assumed.
 #' @param strands 'NULL', a numeric vector of '-1', '0' or '1' values, or a
 #' character/factor vector with values "+", "-", ".", "*" or ""
-#' @return A data frame representing the intervals.
+#' @return A data frame representing the intervals, sorted in the canonical
+#' chromosome order (which is not the order of the arguments). Beware of keeping
+#' per-interval data in a separate parallel vector across a \code{gintervals()}
+#' call: the rows are reordered and the vector is not. Put such data in a column
+#' of the resulting data frame instead.
 #' @seealso \code{\link{gintervals.2d}}, \code{\link{gintervals.force_range}}
 #' @keywords ~intervals
 #' @examples

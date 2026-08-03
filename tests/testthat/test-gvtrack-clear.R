@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("gvtrack.clear removes all virtual tracks for the current working directory", {
     gvtrack.create("vt_clear_1", "test.fixedbin", "max")
     gvtrack.create("vt_clear_2", "test.fixedbin", "avg")
