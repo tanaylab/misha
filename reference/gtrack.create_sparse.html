@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.11</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.12</span>
       </span>
     </div>
 
@@ -97,7 +97,9 @@
 
 
 <dt id="arg-values">values<a class="anchor" aria-label="anchor" href="#arg-values"></a></dt>
-<dd><p>an array of numeric values - one for each interval</p></dd>
+<dd><p>an array of numeric values - one for each interval, in the same
+order as the rows of <code>intervals</code>. If <code>NULL</code>, the <code>value</code>
+column of <code>intervals</code> is used.</p></dd>
 
 </dl></div>
     <div id="value">
@@ -112,6 +114,13 @@
 is created in the current working directory (.misha$GWD), which defaults to the
 last connected database. Use <code><a href="gdir.cd.html">gdir.cd</a></code> with an absolute path to
 change where new tracks are created.</p>
+<p><code>values</code> is matched to <code>intervals</code> row by row, in the order the
+intervals are passed; <code>intervals</code> need not be sorted. Note however that
+<code><a href="gintervals.html">gintervals</a></code> returns its result sorted in the canonical
+chromosome order, so building <code>intervals</code> with <code><a href="gintervals.html">gintervals()</a></code> while
+keeping <code>values</code> in the original order will bind values to the wrong
+intervals. Keep the values in a <code>value</code> column of the intervals data
+frame and omit <code>values</code> to make such a mismatch impossible.</p>
     </div>
     <div id="see-also">
     <h2>See also</h2>

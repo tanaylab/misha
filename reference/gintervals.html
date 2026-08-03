@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.11</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.12</span>
       </span>
     </div>
 
@@ -99,7 +99,11 @@ character/factor vector with values "+", "-", ".", "*" or ""</p></dd>
 </dl></div>
     <div id="value">
     <h2>Value</h2>
-    <p>A data frame representing the intervals.</p>
+    <p>A data frame representing the intervals, sorted in the canonical
+chromosome order (which is not the order of the arguments). Beware of keeping
+per-interval data in a separate parallel vector across a <code>gintervals()</code>
+call: the rows are reordered and the vector is not. Put such data in a column
+of the resulting data frame instead.</p>
     </div>
     <div id="details">
     <h2>Details</h2>

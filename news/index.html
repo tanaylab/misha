@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.11</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.12</span>
       </span>
     </div>
 
@@ -66,6 +66,13 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.12" id="misha-51112">misha 5.11.12<a class="anchor" aria-label="anchor" href="#misha-51112"></a></h2>
+<ul><li>
+<code><a href="../reference/gtrack.import.html">gtrack.import()</a></code> no longer fails on non-Linux platforms: the bundled <code>bigWigToWig</code> is a Linux x86-64 binary, so macOS/Windows now use one found on <code>PATH</code> (or <code>options(misha.bigWigToWig = "...")</code>), with an actionable error if none is installed.</li>
+<li>
+<code><a href="../reference/gtrack.create_sparse.html">gtrack.create_sparse()</a></code> can take the values from a <code>value</code> column of <code>intervals</code> when <code>values</code> is omitted, which rules out a values/intervals order mismatch. Documented that <code><a href="../reference/gintervals.html">gintervals()</a></code> returns its rows sorted, so a separately held value vector must be reordered too.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.11" id="misha-51111">misha 5.11.11<a class="anchor" aria-label="anchor" href="#misha-51111"></a></h2>
 <ul><li>
