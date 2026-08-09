@@ -33,3 +33,6 @@
 ^.a5c$
 ^README\.html$
 ^tools$
+^tests/testthat/fixtures/tiny-hub-groot/\.db\.cache$
+^tests/testthat/fixtures/tiny-hub-groot/\.ro_attributes$
+^\.worktrees$

@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 # Local test helper: read a FASTA file into a named list of sequences
 read_fasta <- function(fasta_path) {
     lines <- readLines(fasta_path)
