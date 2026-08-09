@@ -1,3 +1,5 @@
+restore_groot_on_exit()
+
 load_test_db()
 
 # Tests for parallel gdb.convert_to_indexed (threads argument). Each test

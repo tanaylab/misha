@@ -1,3 +1,5 @@
+create_isolated_test_db()
+
 test_that("gintervals.from_strings parses a single chrom:start-end string", {
     res <- gintervals.from_strings("chr1:100-200")
     expect_equal(nrow(res), 1)

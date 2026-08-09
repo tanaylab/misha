@@ -1,3 +1,5 @@
+restore_groot_on_exit()
+
 load_test_db()
 # Integration tests for indexed genome format
 

@@ -16,6 +16,8 @@
 # These tests exercise the rm-then-recreate cycle and verify the next
 # read succeeds.
 
+restore_groot_on_exit()
+
 # Build a tiny per-chromosome DB then convert it to indexed format.
 build_indexed_test_db <- function() {
     test_db <- tempfile("misha_idxcache_")
