@@ -101,15 +101,18 @@
 <span><span class="co"># without cluster-only data)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>TESTTHAT_PARALLEL <span class="op">=</span> <span class="st">"TRUE"</span><span class="op">)</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">test</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>A parallel run gives each test file its own copy of the test database under <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>, so point <code>TMPDIR</code> at a filesystem with several GB free before starting R:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="va">TMPDIR</span><span class="op">=</span>/path/with/space <span class="ex">R</span> <span class="at">-e</span> <span class="st">'Sys.setenv(TESTTHAT_PARALLEL="TRUE"); devtools::test()'</span></span></code></pre></div>
+<p>On a shared machine <code>/tmp</code> often sits on a full root filesystem. Running out of space mid-run leaves partially copied test databases, and the resulting failures point at whichever test file happened to use them rather than at the disk — expect errors like <code>Interval test.fixedbin does not exist</code>. Failures that move between files across runs are a symptom of this, not of flaky tests.</p>
 <p>GitHub Actions runs <code>R CMD check</code> on every push and PR — treat that as the authoritative signal.</p>
 </div>
 <div class="section level2">
 <h2 id="other-dev-commands">Other dev commands<a class="anchor" aria-label="anchor" href="#other-dev-commands"></a></h2>
 <p>Compile after C++ changes:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">pkgbuild</span><span class="fu">::</span><span class="fu"><a href="https://pkgbuild.r-lib.org/reference/compile_dll.html" class="external-link">compile_dll</a></span><span class="op">(</span>debug <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
 <p>Regenerate documentation:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">document</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </div>
 </div>
