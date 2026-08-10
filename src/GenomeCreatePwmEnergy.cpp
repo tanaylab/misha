@@ -192,8 +192,6 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 		pssm_set.read(pssmkey_filename, pssmdata_filename, prior);
 
 		DnaPSSM &pssm = pssm_set.get_pssm(pssmid);
-		GenomeSeqFetch seqfetch;
-		seqfetch.set_seqdir(seqdir);
 		IntervUtils iu(_envir);
 		GIntervals scope;
 		iu.get_all_genome_intervs(scope);
@@ -212,6 +210,13 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 			GenomeTrackSparse sparse_track;
 			GInterval cur_interval(-1, -1, -1, -1);
 			char filename[PATH_MAX];
+
+			// Must be opened AFTER the fork: forked processes share the file offset of an
+			// inherited descriptor, so kids seeking concurrently would read each other's bytes.
+			// On an indexed genome set_seqdir() opens genome.seq immediately, so opening it in
+			// the parent would hand every kid the same descriptor.
+			GenomeSeqFetch seqfetch;
+			seqfetch.set_seqdir(seqdir);
 
 			Progress_reporter progress;
 			progress.init(kid_intervals1d->range(), 1000000);
