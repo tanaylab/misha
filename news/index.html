@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.12</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.13</span>
       </span>
     </div>
 
@@ -66,6 +66,13 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.13" id="misha-51113">misha 5.11.13<a class="anchor" aria-label="anchor" href="#misha-51113"></a></h2>
+<ul><li>
+<strong>Data corruption fix:</strong> <code><a href="../reference/gtrack.create_pwm_energy.html">gtrack.create_pwm_energy()</a></code> (and, for sequence-based virtual tracks, <code><a href="../reference/gtrack.smooth.html">gtrack.smooth()</a></code>, <code><a href="../reference/glookup.html">glookup()</a></code> and <code><a href="../reference/gcis_decay.html">gcis_decay()</a></code>) opened the genome sequence before forking. Forked workers share the file offset of an inherited descriptor, so on an indexed database they read each other’s bytes - producing a small fraction of silently wrong values, varying run to run. Measured at 0.2% of bins on a 120 Mb scope.</li>
+<li>
+<code><a href="../reference/gseq.extract.html">gseq.extract()</a></code> distributes large interval sets (500+) across processes when the sequence files are not already cached, which is where it spent nearly all of its time (19,000 intervals on an NFS database: ~200s -&gt; ~23s). Cached extractions and densely tiled interval sets stay in one process. Note it now forks like the other multitasking functions, and peak memory roughly doubles while the result is assembled; <code>gmultitasking = FALSE</code> restores the old behaviour.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.12" id="misha-51112">misha 5.11.12<a class="anchor" aria-label="anchor" href="#misha-51112"></a></h2>
 <ul><li>
