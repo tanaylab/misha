@@ -410,6 +410,16 @@ public:
 	int prepare4multitasking(GIntervalsFetcher1D *scope1D, GIntervalsFetcher2D *scope2d, int64_t split_align_1d = 0,
 							 bool allow_multichrom_1d_range_split = false);
 
+	// Splits [ibegin, iend) into contiguous chunks of WHOLE intervals, one per kid, balanced by
+	// range() + interval_overhead. Unlike the two functions above it can split inside a chromosome
+	// but never cuts an interval, so each interval's udata (its original row index) still maps to
+	// exactly one result slot -- which is what per-interval results such as gseq.extract need.
+	// interval_overhead models the fixed per-interval cost (seek + read-ahead) in range units.
+	// desired_kids is capped by max_processes and by the number of intervals.
+	// Returns the number of planned kids, or 0 if that comes out below 2.
+	int prepare4multitasking_whole_intervals(GIntervals::const_iterator ibegin, GIntervals::const_iterator iend,
+											 uint64_t interval_overhead, uint64_t desired_kids);
+
 	// multi-tasking: divides intervals and forks child processes each with its own kid_intervals.
 	// Returns true if a child, false if a parent.
 	bool distribute_task(uint64_t res_const_size,    // data size in bytes for all the result

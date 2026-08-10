@@ -157,6 +157,17 @@
 #' 'intervals'. If intervals contain an additional 'strand' column and its
 #' value is '-1', the reverse-complementary sequence is returned.
 #'
+#' Each interval costs one disk read, so large interval sets are dominated by
+#' I/O latency rather than by the sequence data itself. When the sequence files
+#' are not in the page cache, the work is split across up to 'gmax.processes'
+#' processes. The decision is made by timing the first few reads: if they are
+#' served from cache, distributing would only add fork overhead, so the whole
+#' extraction stays in one process. Set 'gseq.extract.probe.usec' to override
+#' the per-interval microsecond threshold at which distributing kicks in (0
+#' always distributes, a large value never does), or 'gmultitasking = FALSE' to
+#' disable it entirely. Named intervals sets stored in the "big" format are
+#' always read sequentially.
+#'
 #' @param intervals intervals for which DNA sequence is returned
 #' @return An array of character strings representing DNA sequence.
 #' @seealso \code{\link{gextract}}
