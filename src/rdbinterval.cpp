@@ -675,6 +675,54 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 	return m_num_planned_kids;
 }
 
+int IntervUtils::prepare4multitasking_whole_intervals(GIntervals::const_iterator ibegin, GIntervals::const_iterator iend,
+													  uint64_t interval_overhead, uint64_t desired_kids)
+{
+	m_kids_intervals1d.clear();
+	m_kids_intervals2d.clear();
+	m_num_planned_kids = 0;
+
+	if (ibegin >= iend)
+		return 0;
+
+	uint64_t total_work = 0;
+	for (GIntervals::const_iterator iinterv = ibegin; iinterv != iend; ++iinterv)
+		total_work += (uint64_t)iinterv->range() + interval_overhead;
+
+	if (!total_work)
+		return 0;
+
+	int num_cores = max(1, (int)sysconf(_SC_NPROCESSORS_ONLN));
+	uint64_t max_num_pids = max<uint64_t>(1, min(get_max_processes2core() * (uint64_t)num_cores, get_max_processes()));
+
+	// The chromosome-based splitters are implicitly bounded by the number of chromosomes; this one
+	// is not, so cap it before RdbInitializer::prepare4multitasking errors out on MAX_KIDS.
+	max_num_pids = min(max_num_pids, (uint64_t)MAX_KIDS);
+
+	uint64_t num_kids = min(desired_kids, max_num_pids);
+	num_kids = min(num_kids, (uint64_t)(iend - ibegin));
+
+	if (num_kids < 2)
+		return 0;
+
+	// Kid k takes the intervals whose cumulative work falls in [k/num_kids, (k+1)/num_kids) of the
+	// total. The boundary is tested before appending, so every kid gets at least one interval even
+	// when a single huge interval spans several shares.
+	m_kids_intervals1d.push_back(new GIntervals());
+
+	uint64_t cum_work = 0;
+	for (GIntervals::const_iterator iinterv = ibegin; iinterv != iend; ++iinterv) {
+		if (m_kids_intervals1d.size() < num_kids && cum_work * num_kids >= total_work * m_kids_intervals1d.size())
+			m_kids_intervals1d.push_back(new GIntervals());
+
+		((GIntervals *)m_kids_intervals1d.back())->push_back(*iinterv);
+		cum_work += (uint64_t)iinterv->range() + interval_overhead;
+	}
+
+	m_num_planned_kids = m_kids_intervals1d.size();
+	return m_num_planned_kids;
+}
+
 static uint64_t estimate_fixed_bin_bins(GIntervalsFetcher1D *intervals1d, int64_t binsize)
 {
 	if (!intervals1d || binsize <= 0)

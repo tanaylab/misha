@@ -21,6 +21,14 @@ class GenomeIndex;
 
 // -------------------- GenomeSeqFetch  -----------------------
 // !!!!!!!!! IN CASE OF ERROR THIS CLASS THROWS TGLException  !!!!!!!!!!!!!!!!
+//
+// !!!!!!!!! NEVER READ THROUGH ONE INSTANCE FROM SEVERAL FORKED PROCESSES !!!!!!!!!!!!!!!!
+// Forked processes inherit the same open file description, i.e. the same file offset, so two
+// children seeking and reading concurrently hand each other's bytes back -- silently, with the
+// right length and the wrong bases. Multitasking code must construct its GenomeSeqFetch (and
+// anything owning one, such as TrackExprScanner) AFTER distribute_task() returns in the child.
+// set_seqdir() opens genome.seq immediately on an indexed database, and the per-chromosome mode
+// keeps its file open across reads, so both formats are affected.
 
 class GenomeSeqFetch {
 public:

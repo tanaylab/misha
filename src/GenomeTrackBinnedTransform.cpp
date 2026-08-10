@@ -304,6 +304,13 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 								   rdb::MT_MODE_MMAP,
 								   estimated_records))
 			{  // child process
+				// Constructed AFTER the fork, and deliberately shadowing the one above (as the
+				// intervals.set.out branch already does): TrackExprScanner opens the genome
+				// sequence eagerly on an indexed database, and forked processes share the file
+				// offset of an inherited descriptor -- kids seeking concurrently would read each
+				// other's bytes. The outer scanner stays for the non-multitasking paths.
+				TrackExprScanner scanner(iu);
+
 				for (scanner.begin(_track_exprs, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band); !scanner.isend(); scanner.next()) {
 					if (scanner.get_iterator()->is_1d()) {
 						out_intervals1d.push_back(scanner.last_interval1d());
