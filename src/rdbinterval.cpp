@@ -695,6 +695,10 @@ int IntervUtils::prepare4multitasking_whole_intervals(GIntervals::const_iterator
 	int num_cores = max(1, (int)sysconf(_SC_NPROCESSORS_ONLN));
 	uint64_t max_num_pids = max<uint64_t>(1, min(get_max_processes2core() * (uint64_t)num_cores, get_max_processes()));
 
+	// The chromosome-based splitters are implicitly bounded by the number of chromosomes; this one
+	// is not, so cap it before RdbInitializer::prepare4multitasking errors out on MAX_KIDS.
+	max_num_pids = min(max_num_pids, (uint64_t)MAX_KIDS);
+
 	uint64_t num_kids = min(desired_kids, max_num_pids);
 	num_kids = min(num_kids, (uint64_t)(iend - ibegin));
 

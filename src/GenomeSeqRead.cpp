@@ -76,7 +76,10 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 		// Only in-memory interval sets are distributed; big sets stay on the serial path.
 		GIntervals *plain_intervals = dynamic_cast<GIntervals *>(intervals);
 
-		if (iu.get_multitasking() && plain_intervals && num_intervs >= SEQ_MIN_INTERVALS4MT) {
+		// A kid must not fork again: the nested distribute_task would find the outer job's shared
+		// memory already mapped and reuse its record size and offsets.
+		if (iu.get_multitasking() && !RdbInitializer::is_kid() &&
+			plain_intervals && num_intervs >= SEQ_MIN_INTERVALS4MT) {
 			struct timespec probe_start, probe_end;
 
 			// The probed sequences are kept, so a probe that decides against forking costs nothing.
@@ -125,7 +128,20 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 			for (GIntervals::const_iterator iinterv = plain_intervals->begin() + num_probed; iinterv != plain_intervals->end(); ++iinterv)
 				max_res_bytes += (uint64_t)iinterv->range();
 
-			if (iu.distribute_task(0, 1, rdb::MT_MODE_MMAP, max_res_bytes)) { // child
+			// Shared memory big enough for the whole result may not be available even though the
+			// sequential path would have coped; fall through to it rather than failing outright,
+			// the same way gscreen/gextract retry without multitasking.
+			bool do_child;
+			try {
+				do_child = iu.distribute_task(0, 1, rdb::MT_MODE_MMAP, max_res_bytes);
+			} catch (TGLException &e) {
+				if (!strstr(e.msg(), "Failed to allocate shared memory"))
+					throw;
+				num_kids = 0;   // nothing has been forked yet: the mmap happens first
+				do_child = false;
+			}
+
+			if (num_kids > 1 && do_child) { // child
 				GIntervalsFetcher1D *kid_intervals = iu.get_kid_intervals1d();
 				vector<char> packed;
 
@@ -159,8 +175,11 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 
 				rreturn(R_NilValue);
 			}
+		}
 
+		if (num_kids > 1) {
 			// parent: reassemble the kids' records into the original row order
+			uint64_t num_distributed = num_intervs - num_probed;
 			uint64_t num_unpacked = 0;
 
 			for (int ikid = 0; ikid < get_num_kids(); ++ikid) {
