@@ -1,5 +1,15 @@
 create_isolated_test_db()
 
+# COVERAGE LIMIT, read before trusting this file: every test here asserts
+# parallel == sequential. That is the right correctness property, but it is also
+# satisfied when the multitasking path never runs - so if the gate silently stopped
+# engaging (SEQ_MIN_INTERVALS4MT raised, the dynamic_cast regressing to NULL,
+# prepare4multitasking_whole_intervals returning 0), every test below would still
+# pass. There is currently no observable from R that says "this call forked", so
+# that failure mode is unguarded here. It was checked by hand for this change
+# (forced-parallel is ~1000x slower than sequential on warm data, and 41 live
+# children were observed during a long extraction) but nothing re-checks it.
+
 # gseq.extract decides whether to distribute by timing its first few reads, and the test DB is
 # always in the page cache, so it would (correctly) stay sequential here. gseq.extract.probe.usec = 0
 # means "always distribute" and is what lets these tests reach the multitasking path at all.
@@ -121,9 +131,24 @@ test_that("gseq.extract timing probe does not disturb the sequential result", {
 })
 
 test_that("gseq.extract multitasking still enforces gmax.data.size", {
+    # The limit has to be above what the 16-interval timing probe reads (16 x 100 b) and below the
+    # whole result, or the probe's own check throws and the multitasking path is never reached.
     set.seed(9)
-    intervs <- rand_intervs(1500)
-    expect_error(
-        withr::with_options(c(parallel_opts(), list(gmax.data.size = 1000)), gseq.extract(intervs))
+    intervs <- rand_intervs(1500) # 150,000 b total
+    limit <- 50000
+
+    parallel_err <- tryCatch(
+        withr::with_options(c(parallel_opts(), list(gmax.data.size = limit)), gseq.extract(intervs)),
+        error = conditionMessage
     )
+    sequential_err <- tryCatch(
+        withr::with_options(list(gmultitasking = FALSE, gmax.data.size = limit), gseq.extract(intervs)),
+        error = conditionMessage
+    )
+
+    # Both paths must refuse, and with the message that names gmax.data.size - the multitasking
+    # path used to fail later and with the generic shared-memory wording instead.
+    expect_match(parallel_err, "Result sequence size")
+    expect_match(parallel_err, "gmax.data.size")
+    expect_match(sequential_err, "Result sequence size")
 })

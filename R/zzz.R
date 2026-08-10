@@ -35,6 +35,7 @@
     options(gbig.intervals.size = 1000000)
     options(gbuf.size = 1000)
     options(gmin.scope4process = 10000)
+    options(gseq.extract.probe.usec = 100)
     options(gmultitasking = TRUE)
 
     # gmultitasking.strategy: how gextract distributes work when gmultitasking

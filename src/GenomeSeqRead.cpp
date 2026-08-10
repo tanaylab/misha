@@ -28,6 +28,40 @@ static const double   SEQ_MIN_USEC4PROCESS = 100000.;  // give each kid ~10x the
 // One shared-memory record: [uint64 original row index][uint64 sequence length][length bytes]
 static const uint64_t SEQ_REC_HEADER = 2 * sizeof(uint64_t);
 
+// Reads are served out of BufferedFile's read-ahead window, so the unit of I/O cost is a window
+// miss, not an interval: 5000 tiled 200 bp intervals over 1 Mb touch 8 windows, not 5000. Counting
+// the windows a (sorted) interval range spans lets the probe below extrapolate by window instead of
+// by interval. Timing per interval and scaling by interval count overestimates a clustered set by
+// however many intervals share a window - measured 4.9x SLOWER than sequential on a cold tiled scan
+// before this was accounted for.
+static uint64_t count_readahead_windows(GIntervals::const_iterator ibegin, GIntervals::const_iterator iend)
+{
+	uint64_t windows = 0;
+	int last_chromid = -1;
+	int64_t last_window = -1;
+
+	for (GIntervals::const_iterator iinterv = ibegin; iinterv != iend; ++iinterv) {
+		int64_t first = iinterv->start / (int64_t)SEQ_INTERVAL_OVERHEAD;
+		int64_t last = max(iinterv->end - 1, iinterv->start) / (int64_t)SEQ_INTERVAL_OVERHEAD;
+
+		if (iinterv->chromid != last_chromid) {
+			windows += last - first + 1;
+			last_chromid = iinterv->chromid;
+			last_window = last;
+		} else {
+			// intervals are sorted, so only the part past the previous interval is a fresh miss
+			int64_t from = max(first, last_window + 1);
+
+			if (last >= from)
+				windows += last - from + 1;
+			if (last > last_window)
+				last_window = last;
+		}
+	}
+
+	return windows;
+}
+
 // gseq.extract.probe.usec overrides SEQ_PROBE_MIN_USEC: 0 always distributes (which is how the
 // tests reach the parallel path on a cached example genome), a huge value never does.
 static double get_probe_min_usec()
@@ -100,19 +134,30 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 
 			// CLOCK_REALTIME to match the rest of misha (macOS builds shim it); a backwards NTP
 			// step would only cost us one missed chance to distribute, so clamp and move on.
-			double usec_per_interv = ((probe_end.tv_sec - probe_start.tv_sec) * 1000000. +
-									  (probe_end.tv_nsec - probe_start.tv_nsec) / 1000.) / num_probed;
+			double probe_usec = (probe_end.tv_sec - probe_start.tv_sec) * 1000000. +
+								(probe_end.tv_nsec - probe_start.tv_nsec) / 1000.;
 
-			if (usec_per_interv < 0.)
-				usec_per_interv = 0.;
+			if (probe_usec < 0.)
+				probe_usec = 0.;
+
+			// Cost per read-ahead window, extrapolated over the windows the whole set spans, then
+			// amortised back over the intervals. A clustered set has far fewer windows than
+			// intervals and so lands below the threshold, which is what keeps it sequential.
+			uint64_t probe_windows = count_readahead_windows(plain_intervals->begin(),
+															 plain_intervals->begin() + num_probed);
+			uint64_t total_windows = count_readahead_windows(plain_intervals->begin(),
+															 plain_intervals->end());
+			double usec_per_interv = probe_usec / (double)max<uint64_t>(1, probe_windows) *
+									 (double)total_windows / (double)num_intervs;
 
 			double probe_min_usec = get_probe_min_usec();
 
 			if (usec_per_interv >= probe_min_usec) {
 				// A zero threshold means "always distribute"; otherwise scale the number of kids to
 				// the measured cost so each one gets meaningfully more work than forking it costs.
+				double kids_by_cost = usec_per_interv * num_intervs / SEQ_MIN_USEC4PROCESS;
 				uint64_t desired_kids = probe_min_usec > 0 ?
-					(uint64_t)(usec_per_interv * num_intervs / SEQ_MIN_USEC4PROCESS) : (uint64_t)-1;
+					(uint64_t)min(kids_by_cost, (double)MAX_KIDS) : (uint64_t)MAX_KIDS;
 
 				num_kids = iu.prepare4multitasking_whole_intervals(plain_intervals->begin() + num_probed,
 																   plain_intervals->end(),
@@ -125,8 +170,17 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 
 			// A sequence is never longer than its interval, so this bounds the shared memory.
 			uint64_t max_res_bytes = num_distributed * SEQ_REC_HEADER;
-			for (GIntervals::const_iterator iinterv = plain_intervals->begin() + num_probed; iinterv != plain_intervals->end(); ++iinterv)
+			uint64_t max_seqlen = seqlen;
+			for (GIntervals::const_iterator iinterv = plain_intervals->begin() + num_probed; iinterv != plain_intervals->end(); ++iinterv) {
 				max_res_bytes += (uint64_t)iinterv->range();
+				max_seqlen += (uint64_t)iinterv->range();
+			}
+
+			// Check the same quantity the sequential path checks, up front. Otherwise the per-record
+			// headers push an over-budget call past the limit only once the kids have already done
+			// all the I/O, and it reports the generic shared-memory message instead of the one
+			// naming the sizes and gmax.data.size.
+			iu.verify_max_data_size(max_seqlen, "Result sequence");
 
 			// Shared memory big enough for the whole result may not be available even though the
 			// sequential path would have coped; fall through to it rather than failing outright,
@@ -135,14 +189,19 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 			try {
 				do_child = iu.distribute_task(0, 1, rdb::MT_MODE_MMAP, max_res_bytes);
 			} catch (TGLException &e) {
-				if (!strstr(e.msg(), "Failed to allocate shared memory"))
+				// Only safe while nothing has been forked; the mmap happens before the first
+				// launch_process(), so get_num_kids() is still 0. If that ever stops holding,
+				// re-reading everything serially would race the orphaned children.
+				if (!strstr(e.msg(), "Failed to allocate shared memory") || get_num_kids())
 					throw;
-				num_kids = 0;   // nothing has been forked yet: the mmap happens first
+				num_kids = 0;
 				do_child = false;
 			}
 
 			if (num_kids > 1 && do_child) { // child
 				GIntervalsFetcher1D *kid_intervals = iu.get_kid_intervals1d();
+				uint64_t kid_num_intervs = kid_intervals->size();
+				uint64_t num_read = 0;
 				vector<char> packed;
 
 				// The seqfetch above was opened before the fork, and forked processes SHARE the
@@ -165,6 +224,9 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 					memcpy(&packed[offset + sizeof(idx)], &len, sizeof(len));
 					if (len)
 						memcpy(&packed[offset + SEQ_REC_HEADER], &buf[0], len);
+
+					if (++num_read % 128 == 0)
+						update_progress((unsigned char)(100 * num_read / max<uint64_t>(1, kid_num_intervs)));
 
 					check_interrupt();
 				}
