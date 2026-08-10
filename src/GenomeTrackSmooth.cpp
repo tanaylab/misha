@@ -352,7 +352,6 @@ SEXP gsmooth(SEXP _track, SEXP _expr, SEXP _winsize, SEXP _weight_thr, SEXP _smo
 		string dirname = create_track_dir(_envir, track);
 
 		IntervUtils iu(_envir);
-		TrackExprScanner scanner(iu);
 		int cur_scope_idx = -1;
 		char filename[FILENAME_MAX];
 		GenomeTrackFixedBin gtrack;
@@ -365,6 +364,11 @@ SEXP gsmooth(SEXP _track, SEXP _expr, SEXP _winsize, SEXP _weight_thr, SEXP _smo
 		if (!iu.get_multitasking() || iu.distribute_task(0, 0)) {  // child process
 			GIntervalsFetcher1D &scanner_intervals1d = iu.get_multitasking() ? *iu.get_kid_intervals1d() : all_genome_intervs;
 			Smoother *smoother = NULL;
+
+			// Constructed AFTER the fork: TrackExprScanner opens the genome sequence eagerly on an
+			// indexed database, and forked processes share the file offset of an inherited
+			// descriptor -- kids seeking concurrently would read each other's bytes.
+			TrackExprScanner scanner(iu);
 
 			scanner.begin(_expr, &scanner_intervals1d, NULL, _iterator_policy);
 

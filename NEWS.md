@@ -1,3 +1,7 @@
+# misha 5.11.13
+
+* **Data corruption fix:** `gtrack.create_pwm_energy()` (and, for sequence-based virtual tracks, `gtrack.smooth()` and `gcis_decay()`) opened the genome sequence before forking. Forked workers share the file offset of an inherited descriptor, so on an indexed database they read each other's bytes - producing a small fraction of silently wrong values, varying run to run. Measured at 0.2% of bins on a 120 Mb scope.
+
 # misha 5.11.12
 
 * `gtrack.import()` no longer fails on non-Linux platforms: the bundled `bigWigToWig` is a Linux x86-64 binary, so macOS/Windows now use one found on `PATH` (or `options(misha.bigWigToWig = "...")`), with an actionable error if none is installed.
