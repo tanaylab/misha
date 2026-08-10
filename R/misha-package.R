@@ -22,10 +22,10 @@
 #' gmax.processes \tab AUTO \tab Auto-configured to 70\% of CPU cores. \cr \tab
 #' \tab Maximal number of processes for multitasking. \cr gmax.processes2core
 #' \tab 2 \tab Maximal number of processes per CPU core for multitasking \cr
-#' gseq.extract.probe.usec \tab 100 \tab gseq.extract times its first reads and
-#' \tab \tab distributes across processes when the measured cost per interval
-#' \tab \tab reaches this many microseconds. 0 always distributes, a large
-#' \tab \tab value never does. \cr
+#' gseq.extract.probe.usec \tab 100 \tab gseq.extract times its first reads \cr
+#' \tab \tab and distributes across processes when the measured cost per \cr
+#' \tab \tab interval reaches this many microseconds. 0 always distributes, \cr
+#' \tab \tab a large value never does. \cr
 #' gmin.scope4process \tab 10000 \tab Minimal scope range (for 2D: surface)
 #' assigned to a process \cr \tab \tab in multitasking mode. \cr gbuf.size \tab
 #' 1000 \tab Size of track expression values buffer. \cr
