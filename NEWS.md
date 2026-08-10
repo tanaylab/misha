@@ -1,7 +1,7 @@
 # misha 5.11.13
 
 * **Data corruption fix:** `gtrack.create_pwm_energy()` (and, for sequence-based virtual tracks, `gtrack.smooth()`, `glookup()` and `gcis_decay()`) opened the genome sequence before forking. Forked workers share the file offset of an inherited descriptor, so on an indexed database they read each other's bytes - producing a small fraction of silently wrong values, varying run to run. Measured at 0.2% of bins on a 120 Mb scope.
-* `gseq.extract()` distributes large interval sets across processes when the sequence files are not already cached, which is where it spent nearly all of its time (19,000 intervals on an NFS database: ~200s -> ~23s). Cached extractions are unaffected - the decision is made by timing the first few reads.
+* `gseq.extract()` distributes large interval sets (500+) across processes when the sequence files are not already cached, which is where it spent nearly all of its time (19,000 intervals on an NFS database: ~200s -> ~23s). Cached extractions and densely tiled interval sets stay in one process. Note it now forks like the other multitasking functions, and peak memory roughly doubles while the result is assembled; `gmultitasking = FALSE` restores the old behaviour.
 
 # misha 5.11.12
 
