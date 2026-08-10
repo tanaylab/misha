@@ -28,7 +28,6 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 		BinFinder bin_finder(REAL(_breaks), Rf_length(_breaks), LOGICAL(_include_lowest)[0]);
 
 		IntervUtils iu(_envir);
-		TrackExprScanner scanner(iu);
 		iu.verify_max_data_size(bin_finder.get_numbins(), "Result");
 		vector<uint64_t> inter_domain_dist(bin_finder.get_numbins(), 0);
 		vector<uint64_t> intra_domain_dist(bin_finder.get_numbins(), 0);
@@ -83,6 +82,11 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 				uint64_t *inter_domain_dist = distribution + bin_finder.get_numbins();
 				memset(distribution, 0, 2 * bin_finder.get_numbins() * sizeof(uint64_t));
 
+				// Constructed AFTER the fork: TrackExprScanner opens the genome sequence eagerly on an
+				// indexed database, and forked processes share the file offset of an inherited
+				// descriptor -- kids seeking concurrently would read each other's bytes.
+				TrackExprScanner scanner(iu);
+
 				for (scanner.begin(_expr, NULL, iu.get_kid_intervals2d(), _iterator_policy, _band); !scanner.isend(); scanner.next()) {
 					const GInterval2D &interv = scanner.last_interval2d();
 					GInterval contact1(interv.chromid1(), interv.start1(), interv.end1(), 0);
@@ -120,6 +124,8 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 				}
 			}
 		} else {   // no multitasking
+			TrackExprScanner scanner(iu);
+
 			for (scanner.begin(_expr, NULL, scope.get(), _iterator_policy, _band); !scanner.isend(); scanner.next()) {
 				const GInterval2D &interv = scanner.last_interval2d();
 				GInterval contact1(interv.chromid1(), interv.start1(), interv.end1(), 0);
