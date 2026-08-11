@@ -108,6 +108,31 @@ static inline float pos_value_with_dir(const DnaPSSM& pssm,
     return best_val;
 }
 
+// Precompute the worst-base log-prob at the head and tail PSSM columns. These
+// are used as the "neutral" baseline for the linearized gradient
+// (g = M[col, b_p] - min_b M[col, b]). Computed once at construction so the
+// per-call gradient path is O(1) on top of the existing scan.
+static inline void compute_worst_col_logprobs(const DnaPSSM& pssm,
+                                              float& worst_col0,
+                                              float& worst_col_last)
+{
+    if (pssm.size() == 0) {
+        worst_col0 = 0.0f;
+        worst_col_last = 0.0f;
+        return;
+    }
+    const DnaProbVec& col0 = pssm[0];
+    worst_col0 = std::min({col0.get_log_prob_from_code(0),
+                           col0.get_log_prob_from_code(1),
+                           col0.get_log_prob_from_code(2),
+                           col0.get_log_prob_from_code(3)});
+    const DnaProbVec& col_last = pssm[pssm.size() - 1];
+    worst_col_last = std::min({col_last.get_log_prob_from_code(0),
+                               col_last.get_log_prob_from_code(1),
+                               col_last.get_log_prob_from_code(2),
+                               col_last.get_log_prob_from_code(3)});
+}
+
 PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool extend,
                      ScoringMode mode, char strand,
                      const std::vector<float>& spat_factor, int spat_bin_size, float score_thresh)
@@ -123,6 +148,8 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, const std::string& genome_root, bool e
             m_spat_log_factors[i] = std::log(std::max(1e-30f, spat_factor[i]));
         }
     }
+
+    compute_worst_col_logprobs(m_pssm, m_worst_col0_fwd, m_worst_col_last_fwd);
 }
 
 PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool extend,
@@ -140,6 +167,8 @@ PWMScorer::PWMScorer(const DnaPSSM& pssm, GenomeSeqFetch* shared_seqfetch, bool 
             m_spat_log_factors[i] = std::log(std::max(1e-30f, spat_factor[i]));
         }
     }
+
+    compute_worst_col_logprobs(m_pssm, m_worst_col0_fwd, m_worst_col_last_fwd);
 }
 
 void PWMScorer::invalidate_cache()
@@ -147,6 +176,7 @@ void PWMScorer::invalidate_cache()
     m_slide.valid = false;
     m_slide.stride = 0;
     m_spat_slide.valid = false;
+    m_grad_slide.clear();
 }
 
 // Get spatial log factor for a given position index
@@ -335,6 +365,411 @@ float PWMScorer::score_without_spatial(const std::string& target, int64_t motif_
     // MAX_LIKELIHOOD_POS
     size_t pos_idx = best_pos - target.begin();
     return compute_position_result(pos_idx, target.length(), motif_length, best_dir);
+}
+
+// Per-bp gradient at the iterator interval start.
+//
+// Two definitions are available:
+//   - Linearized (ism=false): "actual minus worst" weighted by softmax (LSE)
+//     or argmax indicator (MAX). Closed-form, O(1) on top of the scan.
+//   - In-silico mutagenesis (ism=true): f(actual) - min_b' f(seq with seq[p]
+//     flipped to b'). With the pivot at the head anchor, only the head's
+//     per-anchor score changes under a flip, so 3 alternative aggregates can
+//     be computed in O(1) each.
+//
+// Pivot is the iterator interval start (target[0] in fwd-target, target[tlen-1]
+// in rc'd target). Anchors are scanned over [i_min, i_max]; this matches the
+// clamping applied to pwm/pwm.max so the denominator/argmax agree with the
+// un-gradient aggregate.
+//
+// Strand handling unifies bidirect / fwd-only / rc-only via score_*_original,
+// which canonicalize the rc'd target back to fwd-genome semantics.
+//
+// Linearized result:
+//   - MAX:  return combined_diff if argmax == head_idx, else 0
+//   - LSE:  return w_p * combined_diff, w_p = exp(head_score - f_LSE)
+//   where combined_diff = sm_fwd * diff_fwd + sm_rc * diff_rc (bidirect) or
+//   the single-strand diff. diff_fwd = M[0,b_p] - min_b M[0,b],
+//   diff_rc = M[L-1,b_p_comp] - min_b M[L-1,b].
+//
+// ISM result: flip the pivot's base to each of 3 alternatives. Only the head
+// anchor's per-anchor score changes (column 0 fwd, last col rc, or both for
+// bidirect). For each alternative b':
+//   - fwd_alt = head_fwd - M[0, b_p_fwd] + M[0, b']
+//   - rc_alt  = head_rc  - M[L-1, b_p_fwd_comp] + M[L-1, comp(b')]
+//   - s_alt   = log(exp(fwd_alt) + exp(rc_alt)) (bidirect) or single-strand
+//   - MAX: f_alt = max(s_alt, max_excluding_head)
+//   - LSE: f_alt = log(exp(f_LSE) - exp(head_score) + exp(s_alt))    [stable form]
+// The ISM gradient is f_actual - min_b' f_alt.
+float PWMScorer::score_grad(const std::string& target,
+                            size_t i_min, size_t i_max,
+                            size_t motif_length,
+                            int chromid, int64_t interval_start, int64_t interval_end,
+                            bool lse_aggregate, bool ism)
+{
+    // Precondition: only the score_thresh / spatial restrictions need not be
+    // re-checked here. Caller is score_interval, which handles iterator
+    // clamping and parameter validation upstream.
+
+    if (i_min > i_max) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    if (target.size() < (size_t)motif_length) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    if (i_max + (size_t)motif_length > target.size()) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    const bool bidirect = m_pssm.is_bidirect();
+    const bool use_fwd = bidirect || m_strand == 1;
+    const bool use_rc  = bidirect || m_strand == -1;
+    const size_t L     = (size_t)motif_length;
+
+    // The "head anchor" in fwd-genome (= the anchor at genomic interval.start)
+    // sits at a different target index depending on strand_mode:
+    //   - strand_mode != -1 (target is fwd):  head_idx = 0
+    //   - strand_mode == -1 (target is rc'd): head_idx = tlen - L
+    // If the head anchor is outside the iterator-clamped scan, the gradient at
+    // the pivot is 0 by construction (column 0 of every scanned anchor uses
+    // some other genomic base).
+    const size_t head_idx = (m_strand == -1)
+        ? (target.size() - (size_t)motif_length)
+        : 0;
+    if (head_idx < i_min || head_idx > i_max) {
+        return 0.0f;
+    }
+
+    // Pivot's fwd-genome base, in fwd PSSM coords (b_p_fwd) plus its complement
+    // for rc-strand contributions.
+    int b_p_fwd;
+    if (m_strand == -1) {
+        const unsigned char tail = (unsigned char)target[target.size() - 1];
+        b_p_fwd = DnaLookupTables::COMPLEMENT_ENCODE[tail];
+    } else {
+        b_p_fwd = DnaLookupTables::BASE_ENCODE[(unsigned char)target[0]];
+    }
+    if (b_p_fwd < 0) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    const int b_p_fwd_comp = 3 - b_p_fwd;
+
+    // Per-strand diffs at the head anchor (in fwd-genome semantics).
+    const float diff_fwd = m_pssm[0].get_log_prob_from_code(b_p_fwd) - m_worst_col0_fwd;
+    const float diff_rc  = m_pssm[L - 1].get_log_prob_from_code(b_p_fwd_comp) - m_worst_col_last_fwd;
+
+    // Scan and accumulate. We track all-anchor stats plus excluding-head
+    // stats; the latter let ISM compute max/LSE after a single-base flip in
+    // O(1) without a second pass. When spatial weighting is on, each anchor's
+    // score is augmented by a position-dependent log factor; head_fwd/head_rc
+    // are kept *raw* (no spat) so the ISM flip math can recompute them.
+    // ---- Slide-or-seed phase --------------------------------------------------
+    //
+    // Populate m_grad_slide.fwd / m_grad_slide.rc so they hold per-anchor RAW
+    // scores in target-index order [i_min, i_max]. On consecutive iterator
+    // steps with the same chrom / strand / window geometry, slide the deque
+    // (pop trailing anchors, score & push leading anchors) instead of doing a
+    // full O(W*L) rescan; otherwise seed from scratch.
+    const size_t W = (i_min <= i_max) ? (i_max - i_min + 1) : 0;
+    bool can_slide = false;
+    size_t stride = 0;
+    if (m_grad_slide.valid &&
+        m_grad_slide.chromid == chromid &&
+        m_grad_slide.strand_mode == m_strand &&
+        m_grad_slide.i_min == i_min &&
+        m_grad_slide.i_max == i_max &&
+        m_grad_slide.fwd.size() == W &&
+        m_grad_slide.rc.size() == W) {
+        const int64_t step = interval_start - m_grad_slide.last_interval_start;
+        const int64_t step_end = interval_end - m_grad_slide.last_interval_end;
+        if (step > 0 && step == step_end && (size_t)step <= W) {
+            stride = (size_t)step;
+            can_slide = true;
+        }
+    }
+
+    if (can_slide) {
+        if (m_strand != -1) {
+            // Target is fwd-orientation: a 1bp genomic forward step drops the
+            // anchor at the LEFT of the target (low target index) and adds a
+            // new anchor at the RIGHT (high target index). The fetched window
+            // for the new pivot has its left edge advanced by `stride`, so
+            // target indices for the SAME genomic anchor have shifted by
+            // -stride; in target-local terms we pop_front and push_back.
+            for (size_t k = 0; k < stride; ++k) {
+                m_grad_slide.fwd.pop_front();
+                m_grad_slide.rc.pop_front();
+                const size_t new_anchor_i = i_max - stride + 1 + k;
+                float fwd_v = -std::numeric_limits<float>::infinity();
+                float rc_v  = -std::numeric_limits<float>::infinity();
+                if (use_fwd) fwd_v = score_forward_original(m_pssm, target, new_anchor_i, m_strand);
+                if (use_rc)  rc_v  = score_reverse_original(m_pssm, target, new_anchor_i, m_strand);
+                m_grad_slide.fwd.push_back(fwd_v);
+                m_grad_slide.rc.push_back(rc_v);
+            }
+        } else {
+            // Target is rc'd: the rc'd buffer's HIGH target index corresponds
+            // to the LOW genomic coordinate. A genomic forward step still adds
+            // new anchors at the LOW genomic coordinates (because the iterator
+            // step extends the END of the genomic window), which in rc'd-target
+            // space means LOW target indices. Pop trailing tail anchors
+            // (high target indices) and push new anchors at the front to
+            // preserve target-index ordering.
+            for (size_t k = 0; k < stride; ++k) {
+                m_grad_slide.fwd.pop_back();
+                m_grad_slide.rc.pop_back();
+            }
+            for (size_t k = stride; k > 0; --k) {
+                const size_t new_anchor_i = i_min + (k - 1);
+                float fwd_v = -std::numeric_limits<float>::infinity();
+                float rc_v  = -std::numeric_limits<float>::infinity();
+                if (use_fwd) fwd_v = score_forward_original(m_pssm, target, new_anchor_i, m_strand);
+                if (use_rc)  rc_v  = score_reverse_original(m_pssm, target, new_anchor_i, m_strand);
+                m_grad_slide.fwd.push_front(fwd_v);
+                m_grad_slide.rc.push_front(rc_v);
+            }
+        }
+        m_grad_slide.last_interval_start = interval_start;
+        m_grad_slide.last_interval_end = interval_end;
+    } else {
+        // Seed: full scan once.
+        m_grad_slide.fwd.clear();
+        m_grad_slide.rc.clear();
+        for (size_t k = 0; k < W; ++k) {
+            const size_t i = i_min + k;
+            float fwd_v = -std::numeric_limits<float>::infinity();
+            float rc_v  = -std::numeric_limits<float>::infinity();
+            if (use_fwd) fwd_v = score_forward_original(m_pssm, target, i, m_strand);
+            if (use_rc)  rc_v  = score_reverse_original(m_pssm, target, i, m_strand);
+            m_grad_slide.fwd.push_back(fwd_v);
+            m_grad_slide.rc.push_back(rc_v);
+        }
+        m_grad_slide.valid = true;
+        m_grad_slide.chromid = chromid;
+        m_grad_slide.strand_mode = m_strand;
+        m_grad_slide.last_interval_start = interval_start;
+        m_grad_slide.last_interval_end = interval_end;
+        m_grad_slide.i_min = i_min;
+        m_grad_slide.i_max = i_max;
+    }
+
+    // ---- Aggregation phase ----------------------------------------------------
+
+    float lse           = -std::numeric_limits<float>::infinity();
+    float lse_no_head   = -std::numeric_limits<float>::infinity();
+    float best          = -std::numeric_limits<float>::infinity();
+    float best_no_head  = -std::numeric_limits<float>::infinity();
+    size_t argmax       = i_min;
+    float head_fwd      = -std::numeric_limits<float>::infinity(); // raw, no spat
+    float head_rc       = -std::numeric_limits<float>::infinity(); // raw, no spat
+    float head_score    = -std::numeric_limits<float>::infinity(); // with spat
+    float head_spat_log = 0.0f;
+    bool any_finite     = false;
+
+    for (size_t k = 0; k < W; ++k) {
+        const size_t i = i_min + k;
+        const float fwd = m_grad_slide.fwd[k];
+        const float rc  = m_grad_slide.rc[k];
+
+        // Per-anchor raw score: comb (bidirect) or single-strand.
+        float s_raw;
+        if (bidirect) {
+            if (!std::isfinite(fwd) && !std::isfinite(rc)) {
+                s_raw = -std::numeric_limits<float>::infinity();
+            } else if (!std::isfinite(fwd)) {
+                s_raw = rc;
+            } else if (!std::isfinite(rc)) {
+                s_raw = fwd;
+            } else {
+                s_raw = fwd;
+                log_sum_log(s_raw, rc);
+            }
+        } else {
+            s_raw = use_fwd ? fwd : rc;
+        }
+
+        // Apply spatial log factor (= 0 when m_use_spat is false). Spatial is
+        // iterator-local (indexed by k = i - i_min), so it's recomputed per
+        // pivot even though the underlying fwd/rc are cached.
+        const float spat_log = get_spatial_log_factor(k);
+        const float s = std::isfinite(s_raw) ? (s_raw + spat_log) : s_raw;
+
+        if (i == head_idx) {
+            head_fwd      = fwd;
+            head_rc       = rc;
+            head_score    = s;
+            head_spat_log = spat_log;
+        }
+
+        if (std::isfinite(s)) {
+            any_finite = true;
+            log_sum_log(lse, s);
+            if (s > best) {
+                best   = s;
+                argmax = i;
+            }
+            if (i != head_idx) {
+                log_sum_log(lse_no_head, s);
+                if (s > best_no_head) {
+                    best_no_head = s;
+                }
+            }
+        }
+    }
+
+    // Tie-break: if the head anchor matches `best`, prefer it. This matches
+    // the oracle's R `which.max` semantics, which returns the first index of
+    // the max in fwd-anchor order. For strand=-1 the rc'd-target scan visits
+    // fwd-anchors in reverse order, so without this tie-break ties land on
+    // the wrong anchor.
+    if (std::isfinite(head_score) && head_score == best) {
+        argmax = head_idx;
+    }
+
+    if (!any_finite) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    // Combined diff at the head anchor.
+    float combined_diff;
+    if (bidirect) {
+        // If the head's comb score is -Inf (both strands hit -Inf at i=0),
+        // gradient is 0 (head doesn't participate in the aggregate).
+        const bool fwd_finite = std::isfinite(head_fwd);
+        const bool rc_finite  = std::isfinite(head_rc);
+        if (!fwd_finite && !rc_finite) {
+            return 0.0f;
+        }
+        if (!fwd_finite) {
+            combined_diff = diff_rc;
+        } else if (!rc_finite) {
+            combined_diff = diff_fwd;
+        } else {
+            float comb_p = head_fwd;
+            log_sum_log(comb_p, head_rc);
+            const float sm_fwd = std::exp(head_fwd - comb_p);
+            const float sm_rc  = 1.0f - sm_fwd;
+            combined_diff = sm_fwd * diff_fwd + sm_rc * diff_rc;
+        }
+    } else {
+        const float head_single = use_fwd ? head_fwd : head_rc;
+        if (!std::isfinite(head_single)) {
+            return 0.0f;
+        }
+        combined_diff = use_fwd ? diff_fwd : diff_rc;
+    }
+
+    if (!ism) {
+        // Linearized gradient.
+        if (!lse_aggregate) {
+            return (argmax == head_idx) ? combined_diff : 0.0f;
+        }
+        if (!std::isfinite(head_score)) {
+            return 0.0f;
+        }
+        const float w_p = std::exp(head_score - lse);
+        return w_p * combined_diff;
+    }
+
+    // ---- ISM ---------------------------------------------------------------
+    //
+    // Flip the pivot's base to each of 3 alternatives, recompute the head
+    // anchor's per-anchor score in O(1), recompute the aggregate in O(1) using
+    // the excluding-head stats, take the min, return f_actual - min_alt.
+    //
+    // If the head's per-anchor score is -Inf (head doesn't participate), the
+    // gradient is f_actual - min_b' f_alt where every f_alt equals the
+    // excluding-head aggregate (head still won't participate after flip if
+    // the alt also becomes -Inf, which won't happen since alt is always ACGT).
+    // Fall through to the general formula below.
+    const float f_actual = lse_aggregate ? lse : best;
+    if (!std::isfinite(f_actual)) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    // Per-column log-prob deltas: subtract the actual base's contribution,
+    // add the alternative's. fwd uses M[0, .], rc uses M[L-1, complement(.)].
+    const float fwd_minus_actual = use_fwd
+        ? m_pssm[0].get_log_prob_from_code(b_p_fwd) : 0.0f;
+    const float rc_minus_actual = use_rc
+        ? m_pssm[L - 1].get_log_prob_from_code(b_p_fwd_comp) : 0.0f;
+
+    float min_f_alt = std::numeric_limits<float>::infinity();
+    for (int b_alt = 0; b_alt < 4; ++b_alt) {
+        if (b_alt == b_p_fwd) continue;
+
+        // Flipped per-strand head scores (in fwd-genome semantics).
+        float fwd_alt = -std::numeric_limits<float>::infinity();
+        float rc_alt  = -std::numeric_limits<float>::infinity();
+        if (use_fwd) {
+            const float add = m_pssm[0].get_log_prob_from_code(b_alt);
+            if (std::isfinite(head_fwd) && std::isfinite(add)) {
+                fwd_alt = head_fwd - fwd_minus_actual + add;
+            } else if (std::isfinite(add)) {
+                // head_fwd was -Inf because actual base hit a -Inf prob col.
+                // The flipped score is just the column-by-column sum with the
+                // new base at column 0. We can't recover that without a full
+                // re-eval; treat as -Inf (the alt also can't fix unrelated
+                // -Inf columns, which only happen for non-ACGT bases at non-
+                // pivot positions).
+            }
+        }
+        if (use_rc) {
+            const int b_alt_comp = 3 - b_alt;
+            const float add = m_pssm[L - 1].get_log_prob_from_code(b_alt_comp);
+            if (std::isfinite(head_rc) && std::isfinite(add)) {
+                rc_alt = head_rc - rc_minus_actual + add;
+            }
+        }
+
+        // Combined per-anchor raw score after flip, then apply head's spat_log.
+        float s_alt_raw;
+        if (bidirect) {
+            if (!std::isfinite(fwd_alt) && !std::isfinite(rc_alt)) {
+                s_alt_raw = -std::numeric_limits<float>::infinity();
+            } else if (!std::isfinite(fwd_alt)) {
+                s_alt_raw = rc_alt;
+            } else if (!std::isfinite(rc_alt)) {
+                s_alt_raw = fwd_alt;
+            } else {
+                s_alt_raw = fwd_alt;
+                log_sum_log(s_alt_raw, rc_alt);
+            }
+        } else {
+            s_alt_raw = use_fwd ? fwd_alt : rc_alt;
+        }
+        const float s_alt = std::isfinite(s_alt_raw)
+            ? (s_alt_raw + head_spat_log) : s_alt_raw;
+
+        // Aggregate after flip: only the head anchor's score changes.
+        float f_alt;
+        if (lse_aggregate) {
+            // f_alt = log(exp(lse_no_head) + exp(s_alt))
+            if (!std::isfinite(s_alt)) {
+                f_alt = lse_no_head;
+            } else if (!std::isfinite(lse_no_head)) {
+                f_alt = s_alt;
+            } else {
+                f_alt = s_alt;
+                log_sum_log(f_alt, lse_no_head);
+            }
+        } else {
+            // f_alt = max(s_alt, best_no_head)
+            f_alt = std::max(s_alt, best_no_head);
+        }
+
+        if (f_alt < min_f_alt) {
+            min_f_alt = f_alt;
+        }
+    }
+
+    if (!std::isfinite(min_f_alt)) {
+        // All alternatives produced -Inf; gradient undefined.
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    const float g = f_actual - min_f_alt;
+    // Clamp tiny numerical underflow to zero.
+    return (g < 0.0f && g > -1e-5f) ? 0.0f : g;
 }
 
 // Score with spatial weighting
@@ -741,6 +1176,30 @@ float PWMScorer::score_with_sliding_window(const std::string& target,
 
 float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey& chromkey)
 {
+    // Gradient modes: GRAD_MAX (single-strand fwd) is implemented below via a
+    // dedicated answer path. The remaining gradient modes are not yet wired up
+    // and must produce a clear error instead of falling through into the
+    // generic scan paths.
+    //
+    // NOTE: these checks are intentionally placed BEFORE the try/catch block
+    // below so that verror surfaces as an R-level error rather than being
+    // swallowed and converted to NaN by the TGLException handler.
+    switch (m_mode) {
+        case GRAD_MAX:
+        case GRAD_LSE:
+        case GRAD_MAX_ISM:
+        case GRAD_LSE_ISM:
+            // All gradient modes support bidirect, single-strand fwd, and
+            // single-strand rc. m_strand must be in {-1, 0, 1} (the parser
+            // already enforces this; defensive check).
+            if (m_strand != -1 && m_strand != 0 && m_strand != 1) {
+                rdb::verror("pwm.grad: strand must be -1, 0, or 1");
+            }
+            break;
+        default:
+            break;
+    }
+
     // Calculate expanded interval to include full motif coverage
     int64_t motif_length = m_pssm.size();
     GInterval expanded_interval = calculate_expanded_interval(interval, chromkey, motif_length);
@@ -803,6 +1262,18 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                 i_min = 0;
             }
 
+            // Gradient modes route through score_grad regardless of spatial.
+            // They share the iterator clamping (i_min..i_max) above so that the
+            // argmax convention matches pwm.max exactly.
+            if (m_mode == GRAD_MAX || m_mode == GRAD_LSE ||
+                m_mode == GRAD_MAX_ISM || m_mode == GRAD_LSE_ISM) {
+                const bool lse_aggregate = (m_mode == GRAD_LSE || m_mode == GRAD_LSE_ISM);
+                const bool ism = (m_mode == GRAD_MAX_ISM || m_mode == GRAD_LSE_ISM);
+                return score_grad(target, i_min, i_max, motif_len,
+                                  interval.chromid, interval.start, interval.end,
+                                  lse_aggregate, ism);
+            }
+
             // Try spatial sliding window optimization
             if (m_use_spat) {
                 size_t stride = 0;
@@ -842,8 +1313,14 @@ float PWMScorer::score_interval(const GInterval& interval, const GenomeChromKey&
                 return score_with_spatial(target, motif_length);
             }
 
-            // Non-spatial sliding window optimization (original code)
-            if (!m_use_spat && m_mode != MAX_LIKELIHOOD_POS) {
+            // Non-spatial sliding window optimization (original code).
+            // Gradient modes are not supported by the sliding window machinery
+            // (they need a per-call full scan), so force them through the
+            // dedicated gradient answer paths above (or, if not yet
+            // implemented, the verror dispatch at the top of score_interval).
+            if (!m_use_spat && m_mode != MAX_LIKELIHOOD_POS &&
+                m_mode != GRAD_LSE && m_mode != GRAD_MAX &&
+                m_mode != GRAD_LSE_ISM && m_mode != GRAD_MAX_ISM) {
                 return score_with_sliding_window(target, interval, expanded_interval, i_min, i_max, motif_len);
             }
         }

@@ -18,7 +18,11 @@ public:
         TOTAL_LIKELIHOOD,   // Integrated log-likelihood across all positions
         MAX_LIKELIHOOD,     // Maximum log-likelihood score
         MAX_LIKELIHOOD_POS, // Position of maximum log-likelihood
-        MOTIF_COUNT         // Count of positions exceeding threshold
+        MOTIF_COUNT,        // Count of positions exceeding threshold
+        GRAD_LSE,           // Softmax-weighted per-bp PSSM-column contribution under LSE aggregate
+        GRAD_MAX,           // Argmax-conditioned per-bp PSSM-column contribution under MAX aggregate
+        GRAD_LSE_ISM,       // In-silico mutagenesis per-bp contribution under LSE aggregate
+        GRAD_MAX_ISM        // In-silico mutagenesis per-bp contribution under MAX aggregate
     };
 
     PWMScorer(const DnaPSSM &pssm, const std::string &genome_root, bool extend = true,
@@ -60,6 +64,38 @@ private:
         RunningMaxDeque  rmax;
         std::deque<uint8_t> hits;
         int hit_count = 0;
+    };
+
+    // Per-anchor (fwd, rc) raw score cache for grad modes. Sliding by 1bp pops
+    // one anchor at the trailing edge and adds one at the leading edge; the
+    // per-pivot aggregate is recomputed from the cache (O(W)) but the per-anchor
+    // scoring is amortized to O(L) across slides, replacing an O(W*L) full scan.
+    //
+    // Cache holds RAW (no spatial weighting) per-strand scores so the per-pivot
+    // spatial assignment can be re-applied: different pivots assign different
+    // spatial bins to the same anchor (spatial is iterator-local, not anchor-
+    // genomic).
+    struct GradSlideCache {
+        bool valid = false;
+        int chromid = -1;
+        char strand_mode = 0;
+        int64_t last_interval_start = -1;
+        int64_t last_interval_end = -1;
+        size_t i_min = 0;
+        size_t i_max = 0;          // i_max - i_min + 1 == window size
+        std::deque<float> fwd;     // raw fwd score per anchor in target-index order
+        std::deque<float> rc;      // raw rc score per anchor in target-index order
+
+        void clear() {
+            valid = false;
+            chromid = -1;
+            last_interval_start = -1;
+            last_interval_end = -1;
+            i_min = 0;
+            i_max = 0;
+            fwd.clear();
+            rc.clear();
+        }
     };
 
     // Spatial sliding window cache with bin-aware delta updates
@@ -167,10 +203,27 @@ private:
     // Utilities
     inline float get_spatial_log_factor(size_t pos_index) const;
 
+    // Per-bp gradient at the iterator interval start.
+    // Handles fwd-only, rc-only, and bidirect strand modes with either MAX
+    // (lse_aggregate=false) or LSE (lse_aggregate=true) aggregation, and
+    // either linearized (ism=false) or in-silico-mutagenesis (ism=true)
+    // gradient definitions.
+    float score_grad(const std::string& target,
+                     size_t i_min, size_t i_max,
+                     size_t motif_length,
+                     int chromid, int64_t interval_start, int64_t interval_end,
+                     bool lse_aggregate, bool ism);
+
     // Core members
     DnaPSSM m_pssm;
     ScoringMode m_mode;
     float m_score_thresh = 0.0f;
+
+    // Worst per-base log-prob at the head and tail PSSM columns. Used as the
+    // baseline for the linearized gradient ("actual minus worst" per spec).
+    // Computed once at construction.
+    float m_worst_col0_fwd = 0.0f;
+    float m_worst_col_last_fwd = 0.0f;
 
     // Spatial weighting
     bool m_use_spat = false;
@@ -180,6 +233,7 @@ private:
     // Cache
     SlideCache m_slide;
     SpatSlideCache m_spat_slide;
+    GradSlideCache m_grad_slide;
 };
 
 #endif // PWM_SCORER_H_
