@@ -1,3 +1,8 @@
+# misha 5.11.14
+
+* **Database corruption fix:** creating or removing a track/interval set wrote the in-memory listing into `<groot>/.db.cache` without checking which database that listing came from. If `GROOT` and the listing had drifted apart - `gsetroot()` interrupted with Ctrl-C mid-reload, or `misha.ext::gset_genome(force = FALSE)` restoring a memoized session - one database's inventory was published into another's cache, and every subsequent session on that database saw the wrong tracks until someone ran `gdb.reload(rescan = TRUE)`. The cache is now only written when the listing provably came from that database; otherwise it is marked dirty and rescanned.
+* Ctrl-C during `gsetroot()` is no longer swallowed: it unloads the session instead of returning as if it had succeeded.
+
 # misha 5.11.13
 
 * **Data corruption fix:** `gtrack.create_pwm_energy()` (and, for sequence-based virtual tracks, `gtrack.smooth()`, `glookup()` and `gcis_decay()`) opened the genome sequence before forking. Forked workers share the file offset of an inherited descriptor, so on an indexed database they read each other's bytes - producing a small fraction of silently wrong values, varying run to run. Measured at 0.2% of bins on a 120 Mb scope.

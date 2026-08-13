@@ -38,9 +38,11 @@
             setwd(oldwd)
             gdb.reload(rescan)
         },
-        interrupt = function(interrupt) {
-            setwd(oldwd)
-        },
+        # No interrupt handler: Ctrl-C during gdb.reload() used to be swallowed
+        # here, so gsetroot() reported success while GROOT pointed at the new
+        # database and GTRACKS still listed the old one. Let it propagate so
+        # gsetroot()'s cleanup unloads the session instead. `finally` already
+        # restores the working directory.
         finally = {
             setwd(oldwd)
         }
@@ -108,6 +110,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
     assign("GROOT", NULL, envir = .misha)
     assign("CHROM_ALIAS", NULL, envir = .misha)
     .refresh_chrom_alias_env()
+    assign("GTRACKS_SRC", NULL, envir = .misha)
     assign("GTRACK_DATASET", NULL, envir = .misha)
     assign("GINTERVALS_DATASET", NULL, envir = .misha)
     assign("GDATASETS", character(0), envir = .misha)
@@ -260,6 +263,7 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
                 assign("CHROM_ALIAS", NULL, envir = .misha)
                 .refresh_chrom_alias_env()
                 assign("DB_IS_PER_CHROMOSOME", NULL, envir = .misha)
+                assign("GTRACKS_SRC", NULL, envir = .misha)
                 assign("GTRACK_DATASET", NULL, envir = .misha)
                 assign("GINTERVALS_DATASET", NULL, envir = .misha)
                 assign("GDATASETS", character(0), envir = .misha)
@@ -312,7 +316,7 @@ gdb.unload <- function() {
 
     session_vars <- c(
         "GROOT", "GWD", "ALLGENOME", "GINTERVID", "GITERATOR.INTERVALS",
-        "GVTRACKS", "GDATASETS", "GTRACK_DATASET", "GINTERVALS_DATASET",
+        "GVTRACKS", "GDATASETS", "GTRACK_DATASET", "GINTERVALS_DATASET", "GTRACKS_SRC",
         "CHROM_ALIAS", "DB_IS_PER_CHROMOSOME"
     )
     for (v in session_vars) {

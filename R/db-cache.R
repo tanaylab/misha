@@ -39,6 +39,7 @@ gdb.reload <- function(rescan = TRUE) {
 
     assign("GTRACKS", NULL, envir = .misha)
     assign("GINTERVS", NULL, envir = .misha)
+    assign("GTRACKS_SRC", NULL, envir = .misha)
     assign("GTRACK_DATASET", NULL, envir = .misha)
     assign("GINTERVALS_DATASET", NULL, envir = .misha)
 
@@ -292,6 +293,11 @@ gdb.reload <- function(rescan = TRUE) {
 
     assign("GTRACKS", tracks, envir = .misha)
     assign("GINTERVS", intervals, envir = .misha)
+    # Provenance stamp: which database set this listing was actually scanned
+    # from. .gdb.cache_update_lists() refuses to persist the in-memory listing
+    # to <groot>/.db.cache unless the stamp still matches, so a listing that
+    # belongs to another database can never be published to this one.
+    assign("GTRACKS_SRC", groots, envir = .misha)
     if (length(gdatasets) > 0) {
         assign("GTRACK_DATASET", track_db, envir = .misha)
         assign("GINTERVALS_DATASET", intervals_db, envir = .misha)
@@ -623,6 +629,24 @@ gdb.reload <- function(rescan = TRUE) {
         groot <- working_db
     }
     if (is.null(groot) || groot == "") {
+        return(invisible(FALSE))
+    }
+
+    # GTRACKS/GINTERVS may describe a *different* database than the one we are
+    # about to persist. gdb.reload() is the only thing that scans a database and
+    # it stamps GTRACKS_SRC with the groots it scanned; if GROOT moved on without
+    # a completed reload - gsetroot() interrupted mid-reload, or a caller that
+    # restores a memoized session snapshot (misha.ext::gset_genome) - the stamp
+    # no longer matches. Writing anyway would publish one database's inventory
+    # into another's .db.cache, where every other user then reads it. Mark dirty
+    # instead and let the next gsetroot()/gdb.reload() rescan from disk.
+    src <- if (exists("GTRACKS_SRC", envir = .misha, inherits = FALSE)) {
+        get("GTRACKS_SRC", envir = .misha)
+    } else {
+        NULL
+    }
+    if (!identical(src, groots)) {
+        .gdb.cache_mark_dirty(groot)
         return(invisible(FALSE))
     }
 
