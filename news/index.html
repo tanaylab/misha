@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.13</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.14</span>
       </span>
     </div>
 
@@ -66,6 +66,12 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.14" id="misha-51114">misha 5.11.14<a class="anchor" aria-label="anchor" href="#misha-51114"></a></h2>
+<ul><li>
+<strong>Database corruption fix:</strong> creating or removing a track/interval set wrote the in-memory listing into <code>&lt;groot&gt;/.db.cache</code> without checking which database that listing came from. If <code>GROOT</code> and the listing had drifted apart - <code><a href="../reference/gdb.init.html">gsetroot()</a></code> interrupted with Ctrl-C mid-reload, or <code>misha.ext::gset_genome(force = FALSE)</code> restoring a memoized session - one database’s inventory was published into another’s cache, and every subsequent session on that database saw the wrong tracks until someone ran <code>gdb.reload(rescan = TRUE)</code>. The cache is now only written when the listing provably came from that database; otherwise it is marked dirty and rescanned.</li>
+<li>Ctrl-C during <code><a href="../reference/gdb.init.html">gsetroot()</a></code> is no longer swallowed: it unloads the session instead of returning as if it had succeeded.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.13" id="misha-51113">misha 5.11.13<a class="anchor" aria-label="anchor" href="#misha-51113"></a></h2>
 <ul><li>
