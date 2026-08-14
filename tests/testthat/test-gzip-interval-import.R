@@ -85,12 +85,14 @@ test_that("gintervals.import_vcf: gzipped VCF matches uncompressed VCF", {
 })
 
 # --- data.table-unavailable fallback ---------------------------------------
-# .gread_table_filtered's final fallback (utils::read.table(), reached
-# whenever data.table isn't installed) already auto-decompresses gz content
-# via R's connection layer and needed no change. Force that branch by
-# mocking the internal .gdata_table_available() indirection to FALSE, so
-# this test exercises and locks in that behaviour regardless of whether
-# data.table happens to be installed on the machine running the suite.
+# .gread_table_filtered's final fallback is utils::read.table(), reached
+# whenever data.table isn't installed. It reads the decompressed temp file
+# when gunzip is available, and the compressed file itself otherwise (R's
+# connection layer decompresses gz content by itself); either way the result
+# must match the uncompressed import. Force that branch by mocking the
+# internal .gdata_table_available() indirection to FALSE, so this test
+# exercises and locks in that behaviour regardless of whether data.table
+# happens to be installed on the machine running the suite.
 test_that("gzipped import works via the data.table-unavailable fallback", {
     testthat::skip_if_not_installed("testthat", "3.1.7")
     testthat::local_mocked_bindings(
