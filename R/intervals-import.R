@@ -36,7 +36,20 @@
                 # underneath. Decompress before grep sees it so the
                 # filter-then-parse pipeline behaves exactly as it does for
                 # uncompressed input.
-                can_grep <- nzchar(Sys.which("grep")) && (!is_gz || nzchar(Sys.which("gunzip")))
+                #
+                # Deliberately no Sys.which("gunzip") check here: if gunzip
+                # is missing, the shell pipe below fails with a nonzero exit
+                # status, data.table::fread(cmd=) turns that into an R
+                # error, and the tryCatch below catches it and falls through
+                # to the utils::read.table() fallback -- which decompresses
+                # gzip content by itself regardless of what's on PATH. Doing
+                # our own availability check and rerouting into the
+                # direct-fread branch instead would be actively worse: that
+                # branch reads the still-gzipped bytes without any
+                # header-line pre-filter, and fread locks its column count
+                # from the first line, so a gz BED with a leading "track"
+                # header would come back as a single (wrong) column.
+                can_grep <- nzchar(Sys.which("grep"))
                 if (can_grep) {
                     cmd <- if (is_gz) {
                         sprintf("gunzip -q -c %s | grep -vE %s", shQuote(file), shQuote(header_pat))
