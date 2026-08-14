@@ -197,3 +197,26 @@ test_that("a truncated gzipped BED errors instead of importing part of the file"
     # ... and the truncated one is refused rather than silently truncated.
     expect_error(gintervals.import_bed(truncated), "decompress")
 })
+
+# gzip exits 2 ("warning") for a file whose data decompressed correctly but
+# that has, for instance, trailing garbage after the gzip stream. Those files
+# imported fine before the exit-status check was added and must keep doing so -
+# only a real decompression failure (status 1) is an error.
+test_that("a gz with trailing garbage still imports (gunzip warning, not failure)", {
+    skip_if(!nzchar(Sys.which("gunzip")), "gunzip not found on this system")
+
+    plain <- write_plain(bed_lines(), ".bed")
+    gz <- write_gz(bed_lines(), ".bed")
+    messy <- tempfile(fileext = ".bed.gz")
+    on.exit(unlink(c(plain, gz, messy)), add = TRUE)
+    writeBin(
+        c(readBin(gz, "raw", n = file.info(gz)$size), charToRaw("TRAILING GARBAGE")),
+        messy
+    )
+    skip_if(
+        suppressWarnings(system(sprintf("gunzip -q -c %s > /dev/null", shQuote(messy)))) != 2,
+        "this gunzip does not report trailing garbage as a warning"
+    )
+
+    expect_equal(gintervals.import_bed(messy), gintervals.import_bed(plain))
+})

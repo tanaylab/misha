@@ -23,12 +23,17 @@
 
 # Internal: decompress a gzipped file to a temp file, the same way
 # gtrack.import() does (R/track-import.R), and check the exit status.
-# Returns the temp file path on success, or NULL when gunzip itself could not
-# be run (status 127 = command not found), which tells the caller to leave the
-# file compressed and let utils::read.table() decompress it through R's
-# connection layer. Any other nonzero status means gunzip did run and failed
-# on the data - a truncated or corrupt archive - which must be an error: the
-# alternative is a partial, plausible-looking interval set.
+# Returns the temp file path when the data came out whole, or NULL when gunzip
+# itself could not be run (status 127 = command not found), which tells the
+# caller to leave the file compressed and let utils::read.table() decompress it
+# through R's connection layer. A real decompression failure - a truncated or
+# corrupt archive - is an error: the alternative is a partial,
+# plausible-looking interval set.
+#
+# gzip's exit conventions: 0 = ok, 1 = fatal error, 2 = warning. Status 2 means
+# the data decompressed correctly and something else was odd about the file
+# (typically "trailing garbage ignored"), so it is accepted - such files
+# imported fine before this check existed.
 #
 # Note this cannot be done as "gunzip -c f | grep ...": a pipeline's exit
 # status is the status of its *last* command, so gunzip dying mid-stream is
@@ -40,7 +45,7 @@
     status <- suppressWarnings(
         system(sprintf("gunzip -q -c %s > %s", shQuote(file), shQuote(out)), intern = FALSE)
     )
-    if (status == 0) {
+    if (status == 0 || status == 2) {
         return(out)
     }
     unlink(out)
