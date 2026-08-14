@@ -207,8 +207,9 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 #' When multiple databases are connected, the 'db' parameter can be used to
 #' filter tracks to only those from a specific database.
 #'
-#' @param ... additional arguments of the form 'attribute = pattern', used to
-#' filter tracks by track attribute value
+#' @param ... additional arguments of either form 'pattern' (matched against
+#' track names) or 'attribute = pattern' (matched against a track attribute
+#' value)
 #' @param pattern optional pattern to match against track names, equivalent to
 #' passing it positionally (e.g. \code{gtrack.ls("den*")} and
 #' \code{gtrack.ls(pattern = "den*")} are the same). Note that this means a
@@ -256,10 +257,9 @@ gtrack.ls <- function(..., pattern = NULL, db = NULL, ignore.case = FALSE, perl 
 
     # 'pattern' is a real formal (unlike the attribute filters below, which arrive
     # through ...) so it is matched by exact name and can no longer be captured as an
-    # attribute filter for a track attribute literally named "pattern". That form never
-    # worked anyway (named ... args are always routed to the attribute filter, so
-    # gtrack.ls(pattern = "x") unconditionally returned NULL), so no working call
-    # changes behavior; treat it exactly like an extra unnamed/positional pattern.
+    # attribute filter for a track attribute literally named "pattern" (deliberate,
+    # accepted tradeoff - see @param pattern above). Treat it exactly like an extra
+    # unnamed/positional pattern.
     if (!is.null(pattern)) {
         args <- c(args, list(pattern))
     }

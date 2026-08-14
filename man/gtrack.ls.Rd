@@ -15,8 +15,9 @@ gtrack.ls(
 )
 }
 \arguments{
-\item{...}{additional arguments of the form 'attribute = pattern', used to
-filter tracks by track attribute value}
+\item{...}{additional arguments of either form 'pattern' (matched against
+track names) or 'attribute = pattern' (matched against a track attribute
+value)}
 
 \item{pattern}{optional pattern to match against track names, equivalent to
 passing it positionally (e.g. \code{gtrack.ls("den*")} and

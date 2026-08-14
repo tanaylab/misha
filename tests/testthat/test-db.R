@@ -167,6 +167,32 @@ test_that("gtrack.ls(pattern = ) matches the positional pattern form", {
     expect_null(gtrack.ls(pattern = "dense", blalaattr = "bubu"))
 })
 
+test_that("gtrack.ls(pattern = ) shadows a track attribute literally named 'pattern' (accepted tradeoff)", {
+    # Track attributes are arbitrary user-set key/value pairs with no reserved
+    # names, so a track can legally have an attribute literally named "pattern".
+    # Giving gtrack.ls() a real 'pattern' formal means that name is now always a
+    # track-name match, even for such a track - a deliberate, accepted tradeoff
+    # (see @param pattern in ?gtrack.ls), not something that used to be impossible.
+    gdb.init_examples()
+    gdir.create("test", showWarnings = FALSE)
+    tmptrack <- paste0("test.pattern_attr_", sample(1:1e9, 1))
+    gtrack.rm(tmptrack, force = TRUE)
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    gtrack.create_sparse(tmptrack, "Track with a 'pattern' attribute", gintervals(1, 0, 1000), 1)
+
+    gtrack.attr.set(tmptrack, "pattern", "puppy")
+    expect_equal(gtrack.attr.get(tmptrack, "pattern"), "puppy")
+
+    # gtrack.ls(pattern = "puppy") no longer finds this track by its "pattern"
+    # attribute - it is interpreted purely as a track-name regex, and the track's
+    # name does not contain "puppy".
+    expect_false(tmptrack %in% gtrack.ls(pattern = "puppy"))
+
+    # the attribute is still readable directly - just no longer reachable via
+    # gtrack.ls(pattern = ) by name.
+    expect_equal(gtrack.attr.get(tmptrack, "pattern"), "puppy")
+})
+
 test_that("gtrack modify and extract for fixedbin", {
     load_test_db()
     tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
