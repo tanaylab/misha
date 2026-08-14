@@ -120,17 +120,15 @@ test_that("gzipped import works via the data.table-unavailable fallback", {
 })
 
 # --- missing gunzip binary ---------------------------------------------------
-# .gread_table_filtered deliberately does not pre-check Sys.which("gunzip")
-# before building the "gunzip -q -c ... | grep -vE ..." pipeline: if gunzip is
-# missing, the shell command fails with a nonzero exit status, fread(cmd=)
-# turns that into an R error, and the existing tryCatch() already catches it
-# and falls through to utils::read.table() -- which decompresses gzip content
-# itself, independent of PATH. An earlier version of this fix added a
-# Sys.which("gunzip") guard that rerouted into the direct-fread branch
-# instead; that branch reads the still-gzipped bytes with no header-line
-# pre-filter, and fread locks its column count from the first line, so a gz
-# BED with a leading "track" header came back as a single (wrong) column --
-# i.e. the guard silently reintroduced the exact bug this file exists to
+# When gunzip cannot be run at all, .gunzip_to_tempfile() gets status 127 from
+# the shell and returns NULL, and .gread_table_filtered() then skips the
+# fread/grep branch entirely and reads the still-compressed file with
+# utils::read.table(), which decompresses gzip content itself, independent of
+# PATH. That routing matters: handing the gzipped bytes to fread instead (as an
+# earlier version of this fix did, via a Sys.which("gunzip") guard) drops the
+# header-line pre-filter, and fread locks its column count from the first line,
+# so a gz BED with a leading "track" header came back as a single (wrong)
+# column -- i.e. it silently reintroduced the exact bug this file exists to
 # catch. Simulate "gunzip missing" by restricting PATH, for the duration of
 # this test only, to a directory containing nothing but a symlink to the
 # real grep -- so grep keeps working and gunzip genuinely cannot be found.
@@ -164,4 +162,38 @@ test_that("gzipped BED import still works when gunzip is unavailable on PATH", {
     out_gz <- gintervals.import_bed(gz)
     expect_equal(nrow(out_plain), 3)
     expect_equal(out_gz, out_plain)
+})
+
+# --- truncated / corrupt gz --------------------------------------------------
+# A shell pipeline exits with the status of its *last* command, so
+# "gunzip -q -c f | grep -vE pat" reported grep's status, not gunzip's: on a
+# truncated archive gunzip died mid-stream, grep still exited 0 on the bytes it
+# had already received, fread parsed them, and the import silently returned a
+# partial interval set. Decompressing to a temp file first (as gtrack.import()
+# has always done) makes the failure visible.
+test_that("a truncated gzipped BED errors instead of importing part of the file", {
+    skip_if_not_installed("data.table")
+    skip_if(!nzchar(Sys.which("gunzip")), "gunzip not found on this system")
+    skip_if(!nzchar(Sys.which("grep")), "grep not found on this system")
+
+    # Needs to be big enough that gunzip emits a useful chunk before hitting
+    # the truncation - that partial output is what used to be imported.
+    n <- 3000
+    lines <- c(
+        "track name=\"x\"",
+        sprintf(
+            "chr1\t%d\t%d\tn%d\t0.5\t+",
+            seq(0, by = 200, length.out = n), seq(100, by = 200, length.out = n), seq_len(n)
+        )
+    )
+    full <- write_gz(lines, ".bed")
+    truncated <- tempfile(fileext = ".bed.gz")
+    on.exit(unlink(c(full, truncated)), add = TRUE)
+    bytes <- readBin(full, "raw", n = file.info(full)$size)
+    writeBin(bytes[seq_len(floor(length(bytes) * 0.6))], truncated)
+
+    # The intact archive imports every interval ...
+    expect_equal(nrow(gintervals.import_bed(full)), n)
+    # ... and the truncated one is refused rather than silently truncated.
+    expect_error(gintervals.import_bed(truncated), "decompress")
 })
