@@ -1,6 +1,6 @@
 # misha 5.11.15
 
-* **Bug fix:** `gintervals.import_bed()`, `gintervals.import_gff()` and `gintervals.import_vcf()` now correctly import gzipped files; they previously mistook grep's "binary file" notice for the data and failed with a misleading "malformed" error.
+* **Bug fix:** `gintervals.import_bed()`, `gintervals.import_gff()` and `gintervals.import_vcf()` now correctly import gzipped files; they previously mistook grep's "binary file" notice for the data and failed with a misleading "malformed" error. A truncated or corrupt `.gz` now errors instead of importing the part that happened to decompress.
 * **Behavior fix:** `gvtrack.create()` now validates parameter names against those accepted by `func`, whether they arrive via `params` or as named arguments; a misspelled key (e.g. `bidrect` instead of `bidirect`) used to be silently dropped and defaulted. Functions that take no named parameters now reject stray ones too, so `gvtrack.create("v", "trk", "avg", iterator = 10)` errors instead of silently doing nothing; `masked.count`/`masked.frac` keep their pre-existing warning.
 * **Behavior fix:** `gvtrack.create()` errors when the same call mixes `params` with named parameters (e.g. `params = list(pssm = p), bidirect = FALSE`); the named ones were silently ignored and the default used.
 * **Bug fix:** `gbins.quantiles()` and `gbins.summary()` no longer drop the last `bin_expr`/`breaks` pair when `expr` is passed by name; a 2-dimensional binning silently came back 1-dimensional.
