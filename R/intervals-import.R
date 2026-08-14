@@ -4,16 +4,45 @@
 # misha uses 0-based, half-open [start, end) coordinates, like BED.
 # GFF/GTF/VCF are 1-based; the importers below subtract 1 from start.
 
+# Internal: whether the data.table package is available. Indirection point
+# so tests can force the utils::read.table() fallback below without
+# requiring data.table to actually be uninstalled.
+.gdata_table_available <- function() {
+    requireNamespace("data.table", quietly = TRUE)
+}
+
+# Internal: does `file` start with the gzip magic bytes (1f 8b)? Detected
+# from content rather than the ".gz" suffix so a misnamed-but-gzipped file
+# is still handled correctly.
+.gis_gzip_file <- function(file) {
+    con <- file(file, "rb")
+    on.exit(close(con))
+    magic <- tryCatch(readBin(con, "raw", n = 2), error = function(e) raw(0))
+    length(magic) == 2 && magic[1] == as.raw(0x1f) && magic[2] == as.raw(0x8b)
+}
+
 # Internal: read a tabular file, drop common header lines, return a
 # stringsAsFactors=FALSE data frame. Used by BED/GFF/VCF importers.
 .gread_table_filtered <- function(file, header_pat) {
     bed <- NULL
-    if (requireNamespace("data.table", quietly = TRUE)) {
+    is_gz <- .gis_gzip_file(file)
+    if (.gdata_table_available()) {
         tryCatch(
             {
-                can_grep <- nzchar(Sys.which("grep"))
+                # grep treats gzipped content as binary and, instead of
+                # filtering it, just prints "Binary file ... matches" -- a
+                # single line that fread happily parses as a 1x1 frame,
+                # masking the real (tab-separated, multi-column) data
+                # underneath. Decompress before grep sees it so the
+                # filter-then-parse pipeline behaves exactly as it does for
+                # uncompressed input.
+                can_grep <- nzchar(Sys.which("grep")) && (!is_gz || nzchar(Sys.which("gunzip")))
                 if (can_grep) {
-                    cmd <- sprintf("grep -vE %s %s", shQuote(header_pat), shQuote(file))
+                    cmd <- if (is_gz) {
+                        sprintf("gunzip -q -c %s | grep -vE %s", shQuote(file), shQuote(header_pat))
+                    } else {
+                        sprintf("grep -vE %s %s", shQuote(header_pat), shQuote(file))
+                    }
                     bed <- data.table::fread(
                         cmd = cmd,
                         header = FALSE, sep = "\t", quote = "",
