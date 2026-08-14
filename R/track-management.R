@@ -252,7 +252,6 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 gtrack.ls <- function(..., pattern = NULL, db = NULL, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     .gcheckroot()
 
-    args <- as.list(substitute(list(...)))[-1L]
     args <- list(...)
 
     # 'pattern' is a real formal (unlike the attribute filters below, which arrive
