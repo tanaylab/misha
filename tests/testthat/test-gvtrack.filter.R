@@ -270,7 +270,7 @@ test_that("gvtrack.filter updates when changed", {
 })
 
 test_that("gvtrack.filter works with iterator modifiers", {
-    gvtrack.create("test_itermdf", "test.fixedbin", func = "avg", iterator = 10)
+    gvtrack.create("test_itermdf", "test.fixedbin", func = "avg")
 
     # Create mask
     mask <- gintervals(1, 1000, 2000)

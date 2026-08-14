@@ -493,7 +493,7 @@ test_that("kmer.count and kmer.frac work with other virtual track functions", {
 
     # Create a distance virtual track
     annotations <- gintervals(1, 220, 240)
-    gvtrack.create("dist_track", annotations, "distance", strand = 1)
+    gvtrack.create("dist_track", annotations, "distance")
 
     # Extract all tracks together
     scores <- gextract(c("count_a", "frac_a", "dist_track"),
