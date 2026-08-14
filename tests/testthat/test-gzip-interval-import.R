@@ -104,9 +104,64 @@ test_that("gzipped import works via the data.table-unavailable fallback", {
     gz_gff <- write_gz(gff_lines(), ".gff")
     plain_vcf <- write_plain(vcf_lines(), ".vcf")
     gz_vcf <- write_gz(vcf_lines(), ".vcf")
-    on.exit(unlink(c(plain_bed, gz_bed, plain_gff, gz_gff, plain_vcf, gz_vcf)))
+    # add = TRUE: local_mocked_bindings() above already registered its own
+    # restore-the-binding on.exit() handler on this same test frame. A bare
+    # on.exit() call (default add = FALSE) would silently discard that
+    # handler instead of appending to it, leaking the .gdata_table_available
+    # mock into whichever test_that() block runs next in this file -- which
+    # is exactly what happened here until this was caught: it made the
+    # "missing gunzip" test below vacuously pass by skipping the fread/grep
+    # branch entirely, regardless of whether that branch was actually fixed.
+    on.exit(unlink(c(plain_bed, gz_bed, plain_gff, gz_gff, plain_vcf, gz_vcf)), add = TRUE)
 
     expect_equal(gintervals.import_bed(gz_bed), gintervals.import_bed(plain_bed))
     expect_equal(gintervals.import_gff(gz_gff), gintervals.import_gff(plain_gff))
     expect_equal(gintervals.import_vcf(gz_vcf), gintervals.import_vcf(plain_vcf))
+})
+
+# --- missing gunzip binary ---------------------------------------------------
+# .gread_table_filtered deliberately does not pre-check Sys.which("gunzip")
+# before building the "gunzip -q -c ... | grep -vE ..." pipeline: if gunzip is
+# missing, the shell command fails with a nonzero exit status, fread(cmd=)
+# turns that into an R error, and the existing tryCatch() already catches it
+# and falls through to utils::read.table() -- which decompresses gzip content
+# itself, independent of PATH. An earlier version of this fix added a
+# Sys.which("gunzip") guard that rerouted into the direct-fread branch
+# instead; that branch reads the still-gzipped bytes with no header-line
+# pre-filter, and fread locks its column count from the first line, so a gz
+# BED with a leading "track" header came back as a single (wrong) column --
+# i.e. the guard silently reintroduced the exact bug this file exists to
+# catch. Simulate "gunzip missing" by restricting PATH, for the duration of
+# this test only, to a directory containing nothing but a symlink to the
+# real grep -- so grep keeps working and gunzip genuinely cannot be found.
+test_that("gzipped BED import still works when gunzip is unavailable on PATH", {
+    grep_path <- Sys.which("grep")
+    skip_if(!nzchar(grep_path), "grep not found on this system")
+
+    restricted_dir <- tempfile("path_no_gunzip_")
+    dir.create(restricted_dir)
+    file.symlink(grep_path, file.path(restricted_dir, "grep"))
+    old_path <- Sys.getenv("PATH")
+    Sys.setenv(PATH = restricted_dir)
+    on.exit(
+        {
+            Sys.setenv(PATH = old_path)
+            unlink(restricted_dir, recursive = TRUE)
+        },
+        add = TRUE
+    )
+
+    # Sanity-check the simulated environment before trusting the assertions
+    # below: grep must still resolve, gunzip must not.
+    expect_true(nzchar(Sys.which("grep")))
+    expect_false(nzchar(Sys.which("gunzip")))
+
+    plain <- write_plain(bed_lines(), ".bed")
+    gz <- write_gz(bed_lines(), ".bed")
+    on.exit(unlink(c(plain, gz)), add = TRUE)
+
+    out_plain <- gintervals.import_bed(plain)
+    out_gz <- gintervals.import_bed(gz)
+    expect_equal(nrow(out_plain), 3)
+    expect_equal(out_gz, out_plain)
 })
