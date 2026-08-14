@@ -44,7 +44,13 @@ track and supports all track-based summarizer functions. Intervals must not over
   \item NULL to clear the filter
 }}
 
-\item{...}{additional PWM parameters}
+\item{...}{additional named parameters for functions that accept them this
+way instead of (or in addition to) \code{params} - currently the PWM,
+k-mer and edit-distance families, and \code{neighbor.count}. Both
+\code{params} and \code{...} are validated against the accepted parameter
+names for \code{func}; an unrecognised name, or any name passed via
+\code{...} for a \code{func} that does not accept extra parameters at all,
+raises an error naming the offending argument and the accepted ones.}
 }
 \value{
 None.

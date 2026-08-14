@@ -1,3 +1,7 @@
+# misha 5.11.15
+
+* **Behavior fix:** `gvtrack.create()` now validates `params`/`...` against the accepted parameter names for `func`; a misspelled key (e.g. `bidrect` instead of `bidirect`) or an unrecognized `...` argument now errors, naming the offending key and the accepted ones, instead of being silently dropped and defaulted.
+
 # misha 5.11.14
 
 * **Database corruption fix:** creating or removing a track/interval set wrote the in-memory listing into `<groot>/.db.cache` without checking which database that listing came from. If `GROOT` and the listing had drifted apart - `gsetroot()` interrupted with Ctrl-C mid-reload, or `misha.ext::gset_genome(force = FALSE)` restoring a memoized session - one database's inventory was published into another's cache, and every subsequent session on that database saw the wrong tracks until someone ran `gdb.reload(rescan = TRUE)`. The cache is now only written when the listing provably came from that database; otherwise it is marked dirty and rescanned.
