@@ -15,7 +15,9 @@ gdist(
 )
 }
 \arguments{
-\item{...}{pairs of 'expr', 'breaks' where 'expr' is a track expression and the breaks determine the bin}
+\item{...}{pairs of 'expr', 'breaks' where 'expr' is a track expression and the breaks determine the bin.
+An extra, unpaired trailing argument is taken as the genomic scope (equivalent to 'intervals'); it cannot
+be combined with a named 'intervals' argument - that combination is ambiguous and raises an error.}
 
 \item{intervals}{genomic scope for which the function is applied}
 

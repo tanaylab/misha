@@ -1,6 +1,7 @@
 # misha 5.11.15
 
 * **Behavior fix:** `gvtrack.create()` now validates `params`/`...` against the accepted parameter names for `func`; a misspelled key (e.g. `bidrect` instead of `bidirect`) or an unrecognized `...` argument now errors, naming the offending key and the accepted ones, instead of being silently dropped and defaulted.
+* **Behavior fix:** `gdist()`, `gbins.quantiles()` and `gbins.summary()` now error when a genomic scope (or, for the `gbins.*` functions, `expr`) is supplied both positionally and by name; the positional value used to silently win and discard the named argument with no message.
 
 # misha 5.11.14
 

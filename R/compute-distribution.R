@@ -116,7 +116,9 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 #' an individual value can be accessed by [i1,i2,...,iN] notation, where 'i1'
 #' is the first track and 'iN' is the last track expression.
 #'
-#' @param ... pairs of 'expr', 'breaks' where 'expr' is a track expression and the breaks determine the bin
+#' @param ... pairs of 'expr', 'breaks' where 'expr' is a track expression and the breaks determine the bin.
+#' An extra, unpaired trailing argument is taken as the genomic scope (equivalent to 'intervals'); it cannot
+#' be combined with a named 'intervals' argument - that combination is ambiguous and raises an error.
 #' @param intervals genomic scope for which the function is applied
 #' @param include.lowest if 'TRUE', the lowest value of the range determined by
 #' breaks is included
@@ -157,6 +159,12 @@ gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL
     intervals <- rescue_ALLGENOME(intervals, as.character(substitute(intervals)))
 
     if (length(args) %% 2 != 0) {
+        if (!is.null(intervals)) {
+            stop(sprintf(
+                "gdist: intervals scope supplied both positionally (trailing argument: %s) and by name (intervals = ...). Remove one - the call is ambiguous.",
+                deparse(args[[length(args)]])
+            ), call. = FALSE)
+        }
         intervals <- eval.parent(args[[length(args)]])
     } else if (is.null(intervals)) {
         intervals <- get("ALLGENOME", envir = .misha)
