@@ -45,12 +45,16 @@ track and supports all track-based summarizer functions. Intervals must not over
 }}
 
 \item{...}{additional named parameters for functions that accept them this
-way instead of (or in addition to) \code{params} - currently the PWM,
-k-mer and edit-distance families, and \code{neighbor.count}. Both
-\code{params} and \code{...} are validated against the accepted parameter
-names for \code{func}; an unrecognised name, or any name passed via
-\code{...} for a \code{func} that does not accept extra parameters at all,
-raises an error naming the offending argument and the accepted ones.}
+way instead of \code{params} - currently the PWM, k-mer and edit-distance
+families, and \code{neighbor.count}. Use one style or the other: supplying
+\code{params} together with named \code{...} arguments in the same call is
+ambiguous (the named arguments would be ignored) and raises an error.
+Parameter names are validated against the accepted names for \code{func},
+whether they arrive through \code{params} or through \code{...}; an
+unrecognised name, or any name passed via \code{...} for a \code{func} that
+takes no additional named parameters, raises an error naming the offending
+argument and the accepted ones. \code{masked.count} / \code{masked.frac}
+are the exception: they warn and ignore the extra arguments.}
 }
 \value{
 None.
@@ -268,7 +272,7 @@ not divisible by \code{spat_bin}, the last bin is shorter (e.g., scanning 500 bp
 bins 0-11 of 40 bp plus bin 12 of 20 bp). Use \code{spat_min} and \code{spat_max} to restrict scanning to a
 range divisible by \code{spat_bin} if needed.
 
-PWM parameters can be supplied either as a single list (\code{params}) or via named arguments (see examples).
+PWM parameters can be supplied either as a single list (\code{params}) or via named arguments (see examples), but not both in the same call.
 
 \strong{Interval distance notes}
 
@@ -290,7 +294,7 @@ For \code{distance} and \code{distance.center}, distance can be positive or nega
   \item For \code{kmer.frac} the denominator is the number of possible anchor positions in the interval; with \code{strand = 0} positions on both strands are counted, so the fraction stays in \code{[0, 1]} and remains comparable to the single-strand fraction.
 }
 
-K-mer parameters can be supplied as a list or via named arguments (see examples).
+K-mer parameters can be supplied as a list or via named arguments (see examples), but not both in the same call.
 
 Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 }

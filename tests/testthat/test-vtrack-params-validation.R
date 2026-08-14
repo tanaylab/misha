@@ -155,6 +155,39 @@ test_that("neighbor.count rejects unknown named arguments via '...'", {
     )
 })
 
+test_that("mixing 'params' and named '...' arguments in one call errors", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- test_pssm()
+
+    # Every handler does `dots <- params` when params is non-NULL, so the
+    # named arguments never reached the unknown-key check and were silently
+    # dropped: this call used to return the bidirect = TRUE numbers.
+    expect_error(
+        gvtrack.create("v_mixed", NULL, "pwm", params = list(pssm = pssm), bidirect = FALSE),
+        "bidirect"
+    )
+    expect_error(
+        gvtrack.create("v_mixed", NULL, "pwm", params = list(pssm = pssm), bidirect = FALSE),
+        "params"
+    )
+    expect_false("v_mixed" %in% gvtrack.ls())
+
+    # Same hole in the kmer handler (params wins over dots there too).
+    expect_error(
+        gvtrack.create("v_mixed2", NULL, "kmer.count", params = list(kmer = "AC"), strand = 1),
+        "strand"
+    )
+
+    # Either style alone still works, and they still agree with each other.
+    scope <- gintervals(1, 0, 300)
+    expect_silent(gvtrack.create("v_p", NULL, "pwm", params = list(pssm = pssm, bidirect = FALSE)))
+    expect_silent(gvtrack.create("v_d", NULL, "pwm", pssm = pssm, bidirect = FALSE))
+    res <- gextract(c("v_p", "v_d"), scope, iterator = 100)
+    expect_equal(res$v_p, res$v_d)
+})
+
 test_that("masked.count/masked.frac extra-parameter behavior (warning) is unchanged", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())

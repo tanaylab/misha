@@ -1,9 +1,10 @@
 # misha 5.11.15
 
 * **Bug fix:** `gintervals.import_bed()`, `gintervals.import_gff()` and `gintervals.import_vcf()` now correctly import gzipped files; they previously mistook grep's "binary file" notice for the data and failed with a misleading "malformed" error.
-* **Behavior fix:** `gvtrack.create()` now validates `params`/`...` against the accepted parameter names for `func`; a misspelled key (e.g. `bidrect` instead of `bidirect`) or an unrecognized `...` argument now errors, naming the offending key and the accepted ones, instead of being silently dropped and defaulted.
+* **Behavior fix:** `gvtrack.create()` now validates parameter names against those accepted by `func`, whether they arrive via `params` or as named arguments; a misspelled key (e.g. `bidrect` instead of `bidirect`) used to be silently dropped and defaulted. Functions that take no named parameters now reject stray ones too, so `gvtrack.create("v", "trk", "avg", iterator = 10)` errors instead of silently doing nothing; `masked.count`/`masked.frac` keep their pre-existing warning.
+* **Behavior fix:** `gvtrack.create()` errors when the same call mixes `params` with named parameters (e.g. `params = list(pssm = p), bidirect = FALSE`); the named ones were silently ignored and the default used.
 * **Behavior fix:** `gdist()`, `gbins.quantiles()` and `gbins.summary()` now error when a genomic scope (or, for the `gbins.*` functions, `expr`) is supplied both positionally and by name; the positional value used to silently win and discard the named argument with no message.
-* **Behavior fix:** `gtrack.ls()` now has an explicit `pattern` argument, like its `gintervals.ls()`/`gvtrack.ls()`/`gtrack.var.ls()` siblings; `gtrack.ls(pattern = "x")` used to be routed to the track-attribute filter, so it silently returned `NULL` unless some track happened to have an attribute literally named "pattern" - in the unlikely case a database uses that attribute name, `pattern = ` is now always a track-name match instead, which is a deliberate, accepted tradeoff.
+* `gtrack.ls()` now accepts `pattern =` like its `gintervals.ls()`/`gvtrack.ls()` siblings (previously it returned `NULL`); as with `db`/`perl`/`fixed`, a track attribute of that name can no longer be filtered by name.
 
 # misha 5.11.14
 
