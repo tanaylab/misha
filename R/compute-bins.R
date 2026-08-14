@@ -72,7 +72,10 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
     breaks <- list()
 
     exprs <- append(exprs, do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame()))
-    for (i in (0:((length(args) - 1) / 2 - 1))) {
+    # length(args) is even when 'expr' was passed by name and odd when it was
+    # the trailing positional argument; either way the leading arguments are
+    # 'bin_expr'/'breaks' pairs.
+    for (i in seq_len(length(args) %/% 2) - 1L) {
         exprs <- append(exprs, do.call(.gexpr2str, list(args[[i * 2 + 1]]), envir = parent.frame()))
         breaks[[length(breaks) + 1]] <- eval.parent(args[[i * 2 + 2]])
     }
@@ -154,7 +157,9 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
     breaks <- list()
 
     exprs <- append(exprs, do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame()))
-    for (i in (0:((length(args) - 1) / 2 - 1))) {
+    # See gbins.quantiles(): length(args) %/% 2 is the number of
+    # 'bin_expr'/'breaks' pairs whether or not 'expr' was passed by name.
+    for (i in seq_len(length(args) %/% 2) - 1L) {
         exprs <- append(exprs, do.call(.gexpr2str, list(args[[i * 2 + 1]]), envir = parent.frame()))
         breaks[[length(breaks) + 1]] <- eval.parent(args[[i * 2 + 2]])
     }
