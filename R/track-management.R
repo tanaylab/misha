@@ -196,9 +196,10 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 #' returned.
 #'
 #' If pattern is specified without a track attribute (i.e. in the form of
-#' 'pattern') then filtering is applied to the track names. If pattern is
-#' supplied with a track attribute (i.e. in the form of 'name = pattern') then
-#' track attribute is matched against the pattern.
+#' 'pattern', either positionally or via the 'pattern' argument) then filtering
+#' is applied to the track names. If pattern is supplied with a track attribute
+#' (i.e. in the form of 'name = pattern') then track attribute is matched
+#' against the pattern.
 #'
 #' Multiple patterns are applied one after another. The resulted list of tracks
 #' should match all the patterns.
@@ -206,8 +207,14 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 #' When multiple databases are connected, the 'db' parameter can be used to
 #' filter tracks to only those from a specific database.
 #'
-#' @param ... these arguments are of either form 'pattern' or 'attribute =
-#' pattern'
+#' @param ... additional arguments of the form 'attribute = pattern', used to
+#' filter tracks by track attribute value
+#' @param pattern optional pattern to match against track names, equivalent to
+#' passing it positionally (e.g. \code{gtrack.ls("den*")} and
+#' \code{gtrack.ls(pattern = "den*")} are the same). Note that this means a
+#' track attribute literally named "pattern" can no longer be filtered by name
+#' via \code{...}; use \code{gtrack.ls()} followed by
+#' \code{\link{gtrack.attr.get}} instead.
 #' @param db optional database path to filter tracks. If specified, only tracks
 #' from that database are returned.
 #' @param ignore.case,perl,fixed,useBytes see 'grep'
@@ -229,6 +236,9 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 #' # get track names that match the pattern "den*"
 #' gtrack.ls("den*")
 #'
+#' # equivalent, using the 'pattern' argument
+#' gtrack.ls(pattern = "den*")
+#'
 #' # get track names whose "created.by" attribute match the pattern
 #' # "create_sparse"
 #' gtrack.ls(created.by = "create_sparse")
@@ -238,11 +248,21 @@ gtrack.info <- function(track = NULL, validate = FALSE) {
 #' gtrack.ls("den*", created.by = "track")
 #'
 #' @export gtrack.ls
-gtrack.ls <- function(..., db = NULL, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
+gtrack.ls <- function(..., pattern = NULL, db = NULL, ignore.case = FALSE, perl = FALSE, fixed = FALSE, useBytes = FALSE) {
     .gcheckroot()
 
     args <- as.list(substitute(list(...)))[-1L]
     args <- list(...)
+
+    # 'pattern' is a real formal (unlike the attribute filters below, which arrive
+    # through ...) so it is matched by exact name and can no longer be captured as an
+    # attribute filter for a track attribute literally named "pattern". That form never
+    # worked anyway (named ... args are always routed to the attribute filter, so
+    # gtrack.ls(pattern = "x") unconditionally returned NULL), so no working call
+    # changes behavior; treat it exactly like an extra unnamed/positional pattern.
+    if (!is.null(pattern)) {
+        args <- c(args, list(pattern))
+    }
 
     tracks <- get("GTRACKS", envir = .misha)
 

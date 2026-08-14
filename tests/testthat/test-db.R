@@ -137,6 +137,36 @@ test_that("gtrack.ls works", {
     expect_null(gtrack.ls("wig", created.by = "import"))
 })
 
+test_that("gtrack.ls(pattern = ) matches the positional pattern form", {
+    gdb.init_examples()
+
+    # named 'pattern' must behave exactly like the equivalent positional argument
+    expect_identical(gtrack.ls(pattern = "dense"), gtrack.ls("dense"))
+    expect_true(length(gtrack.ls(pattern = "dense")) > 0)
+
+    # attribute filtering through ... must still work once 'pattern' is a real formal
+    expect_identical(
+        gtrack.ls(created.by = "create_sparse"),
+        gtrack.ls()[grepl("create_sparse", vapply(gtrack.ls(), function(t) gtrack.attr.get(t, "created.by"), character(1)))]
+    )
+
+    # 'pattern' combined with an attribute filter still ANDs the two together
+    expect_identical(
+        gtrack.ls(pattern = "sparse", created.by = "create_sparse"),
+        gtrack.ls("sparse", created.by = "create_sparse")
+    )
+
+    # a pattern with no matching track name still behaves exactly like the
+    # positional form (character(0), not NULL - see gtrack.ls("no_such_track_xyz"))
+    expect_identical(gtrack.ls(pattern = "no_such_track_xyz"), gtrack.ls("no_such_track_xyz"))
+
+    # a pattern combined with a non-matching attribute filter still returns NULL,
+    # exactly like the equivalent all-through-... call (unchanged NULL-on-no-match
+    # semantics for the attribute-filter path)
+    expect_identical(gtrack.ls(pattern = "dense", blalaattr = "bubu"), gtrack.ls("dense", blalaattr = "bubu"))
+    expect_null(gtrack.ls(pattern = "dense", blalaattr = "bubu"))
+})
+
 test_that("gtrack modify and extract for fixedbin", {
     load_test_db()
     tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
