@@ -408,8 +408,7 @@ gdb.export_fasta <- function(file = NULL,
 #' @param min.coord minimal coordinate used for statistics
 #' @param max.coord maximal coordinate used for statistics
 #' @return Statistics for each strand and auto-correlation by given bins.
-#' @keywords ~gcompute_strands_autocorr ~auto-correlation ~autocorrelation
-#' ~correlation
+#' @keywords ~gcompute_strands_autocorr ~auto-correlation ~autocorrelation ~correlation
 #' @examples
 #' \dontshow{
 #' options(gmax.processes = 2)
