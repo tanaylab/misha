@@ -97,6 +97,10 @@ sem_t               *RdbInitializer::s_shm_sem = SEM_FAILED;
 sem_t               *RdbInitializer::s_alloc_suspend_sem = SEM_FAILED;
 int                  RdbInitializer::s_kid_index;
 vector<RdbInitializer::LiveStat>     RdbInitializer::s_running_pids;
+// Keys already used by rdb::once_per_call() during the current top-level .Call.
+// Cleared by the outermost RdbInitializer.
+static set<string> s_once_per_call_keys;
+
 RdbInitializer::Shm *RdbInitializer::s_shm = (RdbInitializer::Shm *)MAP_FAILED;
 struct sigaction     RdbInitializer::s_old_sigint_act;
 struct sigaction     RdbInitializer::s_old_sigchld_act;
@@ -123,6 +127,7 @@ RdbInitializer::RdbInitializer()
 		s_shm = (Shm *)MAP_FAILED;
 		s_kid_index = 0;
 		s_running_pids.clear();
+		s_once_per_call_keys.clear();
 
 		m_old_error_handler = TGLException::set_error_handler(TGLException::throw_error_handler);
 
@@ -725,6 +730,16 @@ void rdb::verror(const char *fmt, ...)
 		TGLError("%s", buf);
 	else
 		RdbInitializer::handle_error(buf);
+}
+
+bool rdb::once_per_call(const char *key)
+{
+	// A child process either loses its warnings or repeats them once per fork,
+	// and the parent has already run the same check before distributing the task.
+	if (RdbInitializer::is_kid())
+		return false;
+
+	return s_once_per_call_keys.insert(key).second;
 }
 
 SEXP rdb::rprotect(SEXP &expr)

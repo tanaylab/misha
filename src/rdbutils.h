@@ -134,6 +134,14 @@ void rerror(const char *fmt, ...);
 
 void verror(const char *fmt, ...);
 
+// Returns true the first time it is called with a given key within one top-level
+// .Call, and always false inside a multitasking child process. Use it to run a
+// diagnostic - and emit its warning - exactly once per user-level call: the track
+// expression scanner, for instance, is built several times in the parent
+// (prepare4multitasking, is_1d_iterator, the record estimate) and once more in
+// every forked child.
+bool once_per_call(const char *key);
+
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 
