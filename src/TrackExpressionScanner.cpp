@@ -471,9 +471,11 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP rtrack_
 //
 // The test is deliberately one-sided, so that the recommended per-interval idiom
 // (the same intervals as both scope and iterator) never warns. It therefore stays
-// silent on an interval nested inside - or duplicating - another one, which a wide
-// scope drops without widening any row. Erroring on any overlap at all, under an
-// opt-in strict mode, is the complete answer to that.
+// silent whenever an interval ends up nested in another one *after clipping to the
+// scope* - a nested or duplicated input, but also [0,100] and [50,150] under a
+// [0,100] scope, where the two rows collapse into one that is still covered.
+// Erroring on any overlap at all, under an opt-in strict mode, is the complete
+// answer to that.
 
 // intervals must be sorted
 static bool intervals_overlap(const vector<GInterval> &intervals)
@@ -600,7 +602,9 @@ static void warn_merged_iterator(const vector<GInterval> &intervals, const vecto
 	// handler (tryCatch, or options(warn = 2)) longjmps out of the C++ frame, skipping
 	// ~RdbInitializer and leaving misha's PROTECT counter inflated for the rest of the
 	// session. The message is left for .gcall() to raise once the call has returned.
-	define_in_misha(iu.get_env(), ".GPENDING.WARNING", Rf_mkString(msg));
+	SEXP rmsg = rprotect_ptr(Rf_mkString(msg));
+	define_in_misha(iu.get_env(), ".GPENDING.WARNING", rmsg);
+	runprotect(1);
 }
 
 TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterator, const TrackExpressionVars &vars, const vector<string> &track_exprs,
