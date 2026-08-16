@@ -454,6 +454,155 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP rtrack_
     return m_expr_itr;
 }
 
+//---------------------------- overlapping 1D iterator intervals --------------------------------
+//
+// A 1D intervals iterator is unified below, so overlapping intervals are folded
+// into maximal blocks and the result carries one row per block instead of one per
+// interval. The 2D branch errors out on the same condition, but erroring here would
+// break every script that iterates over sliding windows or unioned peak calls, so
+// the merge stays and the caller gets a warning instead.
+//
+// The merge is not always observable: the emitted rows are (block x scope)
+// intersections, so when the same intervals are also passed as the scope, every row
+// is clipped back to a single input interval and nothing is lost. Without merging
+// every emitted row would be contained in some iterator interval; the merge is
+// observable exactly when some emitted row is not. That is what is looked for here,
+// and the search stops at the first such row.
+//
+// The test is deliberately one-sided, so that the recommended per-interval idiom
+// (the same intervals as both scope and iterator) never warns. It therefore stays
+// silent on an interval nested inside - or duplicating - another one, which a wide
+// scope drops without widening any row. Erroring on any overlap at all, under an
+// opt-in strict mode, is the complete answer to that.
+
+// intervals must be sorted
+static bool intervals_overlap(const vector<GInterval> &intervals)
+{
+	for (size_t i = 1; i < intervals.size(); ++i) {
+		if (intervals[i].chromid == intervals[i - 1].chromid && intervals[i].start < intervals[i - 1].end)
+			return true;
+	}
+	return false;
+}
+
+// max_end[i] is the maximal end coordinate among the intervals of the same chromosome up to i
+static bool is_row_covered(const vector<GInterval> &intervals, const vector<int64_t> &max_end, const GInterval &row)
+{
+	// the last interval that starts at or before the row (GInterval::operator< orders by
+	// chromosome and then by start coordinate, which is how the intervals were sorted)
+	vector<GInterval>::const_iterator iinterv = upper_bound(intervals.begin(), intervals.end(), row);
+
+	if (iinterv == intervals.begin())
+		return false;
+
+	--iinterv;
+	if (iinterv->chromid != row.chromid)
+		return false;
+
+	return max_end[iinterv - intervals.begin()] >= row.end;
+}
+
+// Returns the first emitted row that no single iterator interval contains, along with the
+// block it came from.
+static bool find_merged_row(const vector<GInterval> &intervals, const vector<GInterval> &unified,
+							GIntervalsFetcher1D *scope, GInterval &row, GInterval &block)
+{
+	vector<int64_t> max_end(intervals.size());
+
+	for (size_t i = 0; i < intervals.size(); ++i)
+		max_end[i] = i && intervals[i - 1].chromid == intervals[i].chromid ? max(max_end[i - 1], intervals[i].end) : intervals[i].end;
+
+	for (scope->begin_iter(); !scope->isend(); scope->next()) {
+		const GInterval &scope_interv = scope->cur_interval();
+		vector<GInterval>::const_iterator iblock = lower_bound(unified.begin(), unified.end(), scope_interv);
+
+		// the preceding block might start before the scope interval and still reach into it
+		if (iblock != unified.begin() && (iblock - 1)->chromid == scope_interv.chromid && (iblock - 1)->end > scope_interv.start)
+			--iblock;
+
+		for (; iblock != unified.end() && iblock->chromid == scope_interv.chromid && iblock->start < scope_interv.end; ++iblock) {
+			GInterval emitted(scope_interv.chromid, max(iblock->start, scope_interv.start), min(iblock->end, scope_interv.end), 0);
+
+			if (emitted.start < emitted.end && !is_row_covered(intervals, max_end, emitted)) {
+				row = emitted;
+				block = *iblock;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+// The first pair of overlapping intervals, optionally restricted to those inside `block`.
+static bool first_overlapping_pair(const vector<GInterval> &intervals, const GInterval *block,
+								   GInterval &interv1, GInterval &interv2)
+{
+	int64_t max_end = -1;
+	size_t imax_end = 0;
+	bool started = false;
+
+	for (size_t i = 0; i < intervals.size(); ++i) {
+		if (block) {
+			if (intervals[i].chromid != block->chromid || intervals[i].end <= block->start)
+				continue;
+			if (intervals[i].start >= block->end)
+				break;
+		}
+
+		bool same_chrom = started && intervals[i].chromid == intervals[imax_end].chromid;
+
+		if (same_chrom && intervals[i].start < max_end) {
+			interv1 = intervals[imax_end];
+			interv2 = intervals[i];
+			return true;
+		}
+
+		if (!same_chrom || intervals[i].end > max_end) {
+			max_end = intervals[i].end;
+			imax_end = i;
+			started = true;
+		}
+	}
+	return false;
+}
+
+static void warn_merged_iterator(const vector<GInterval> &intervals, const vector<GInterval> &unified,
+								 GIntervalsFetcher1D *scope, const IntervUtils &iu)
+{
+	GInterval row;
+	GInterval block;
+
+	if (!find_merged_row(intervals, unified, scope, row, block))
+		return;
+
+	// name the pair that produced the row; the fallback cannot normally happen, since a
+	// row is only uncovered when its block was built out of more than one interval
+	GInterval interv1;
+	GInterval interv2;
+
+	if (!first_overlapping_pair(intervals, &block, interv1, interv2) &&
+		!first_overlapping_pair(intervals, NULL, interv1, interv2))
+		return;
+
+	char msg[1000];
+
+	snprintf(msg, sizeof(msg),
+			 "Overlapping intervals were used as an iterator: %llu intervals were merged into %llu non-overlapping block%s. "
+			 "For example %s %lld-%lld and %s %lld-%lld are reported as a single row %s %lld-%lld, so the results do not "
+			 "correspond one-to-one to the iterator intervals. To get one value per interval, call gextract() with the "
+			 "same intervals as the scope (its 'intervals' argument) and map the rows back with the intervalID column.",
+			 (unsigned long long)intervals.size(), (unsigned long long)unified.size(), unified.size() == 1 ? "" : "s",
+			 iu.id2chrom(interv1.chromid).c_str(), (long long)interv1.start, (long long)interv1.end,
+			 iu.id2chrom(interv2.chromid).c_str(), (long long)interv2.start, (long long)interv2.end,
+			 iu.id2chrom(row.chromid).c_str(), (long long)row.start, (long long)row.end);
+
+	// Rf_warning() is unsafe here: a caller that catches the warning with an exiting
+	// handler (tryCatch, or options(warn = 2)) longjmps out of the C++ frame, skipping
+	// ~RdbInitializer and leaving misha's PROTECT counter inflated for the rest of the
+	// session. The message is left for .gcall() to raise once the call has returned.
+	define_in_misha(iu.get_env(), ".GPENDING.WARNING", Rf_mkString(msg));
+}
+
 TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterator, const TrackExpressionVars &vars, const vector<string> &track_exprs,
 		GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, GIntervals &intervals1d, GIntervals2D &intervals2d, const DiagonalBand &band, bool call_begin)
 {
@@ -547,7 +696,18 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 			if (intervs_type_mask == IntervUtils::INTERVS1D) {
 				verify_1d_iter(scope1d, scope2d);
 				intervals1d.sort();
+
+				// The merge below is silent and whether it is observable depends on the scope,
+				// so the check runs once per call (see rdb::once_per_call) and only pays for
+				// the copy when the intervals really do overlap.
+				vector<GInterval> orig_intervals;
+				if (scope1d && once_per_call("iterator1d.overlaps") && intervals_overlap(intervals1d))
+					orig_intervals.assign(intervals1d.begin(), intervals1d.end());
+
 				intervals1d.unify_overlaps(false);
+
+				if (!orig_intervals.empty())
+					warn_merged_iterator(orig_intervals, intervals1d, scope1d, m_iu);
 				expr_itr = new TrackExpressionIntervals1DIterator();
 				if (call_begin) 
 					((TrackExpressionIntervals1DIterator *)expr_itr)->begin(intervals1d, *scope1d);

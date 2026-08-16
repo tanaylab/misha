@@ -1,3 +1,7 @@
+# misha 5.11.16
+
+* Passing overlapping intervals as a 1D iterator now warns when the overlapping intervals are merged into wider blocks, naming the merged rows. Results are unchanged; to get one value per interval, call `gextract()` with the same intervals as its scope and map the rows back with the `intervalID` column.
+
 # misha 5.11.15
 
 * **Bug fix:** `gintervals.import_bed()`, `gintervals.import_gff()` and `gintervals.import_vcf()` now import gzipped files, and error on a truncated or corrupt `.gz` instead of importing whatever happened to decompress.

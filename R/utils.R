@@ -1,4 +1,9 @@
 .gcall <- function(...) {
+    # C++ cannot raise the warning itself: a caller that catches it with an exiting
+    # handler (tryCatch, or options(warn = 2)) would longjmp out of the C frame and
+    # leave misha's PROTECT counter inflated. Warnings are therefore left in
+    # .misha$.GPENDING.WARNING and raised here, once the call has returned.
+    .gclear_pending_warning()
     tryCatch(
         {
             res <- .Call(...)
@@ -7,7 +12,21 @@
             stop("Command interrupted!", call. = FALSE)
         }
     )
+    msg <- .gclear_pending_warning()
+    if (!is.null(msg)) {
+        warning(msg, call. = FALSE)
+    }
     res
+}
+
+# Removes the pending warning left by the C++ layer, if any, and returns it.
+.gclear_pending_warning <- function() {
+    if (!exists(".GPENDING.WARNING", envir = .misha, inherits = FALSE)) {
+        return(NULL)
+    }
+    msg <- get(".GPENDING.WARNING", envir = .misha)
+    rm(".GPENDING.WARNING", envir = .misha)
+    msg
 }
 
 .misha_env <- function() {
