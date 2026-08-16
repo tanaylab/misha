@@ -62,17 +62,16 @@ test_that("PWM sliding window works with MOTIF_COUNT mode", {
     colnames(pwm) <- c("A", "C", "G", "T")
 
     # NOTE: this originally passed `threshold = -10`, which was never a real
-    # pwm.count parameter (the accepted key is `score.thresh`) and was
-    # silently ignored, so pwm.count actually ran with the default
-    # score.thresh = 0. Making that explicit here to keep this test's
-    # computed values - and the golden snapshot below - unchanged. Whether
-    # these tests were meant to run with score.thresh = -10 is an open
-    # question; answering it means regenerating the shared golden snapshots
-    # in /net/mraid20/export/tgdata/db/tgdb/misha_snapshot, which is out of
-    # scope here.
+    # pwm.count parameter (the accepted key is `score.thresh`), so it was
+    # silently dropped and the test ran at the default score.thresh = 0.
+    # A PWM score here is a plain log-likelihood and is therefore always
+    # negative, so score.thresh = 0 can never be reached and the counts -
+    # and the golden snapshot - were all zeros. Restored to the intended -10,
+    # which is the threshold the non-sliding pwm.count tests further down
+    # this file use; the golden snapshot was regenerated to match.
     gvtrack.create("pwm_count_test", "seq",
         func = "pwm.count",
-        params = list(pssm = pwm, score.thresh = 0)
+        params = list(pssm = pwm, score.thresh = -10)
     )
     result <- gextract("pwm_count_test", gintervals(1, 10000, 11000), iterator = 1)
     expect_regression(result, "pwm_sliding_window_test_3")
@@ -80,6 +79,8 @@ test_that("PWM sliding window works with MOTIF_COUNT mode", {
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_count_test)))
     expect_true(all(result$pwm_count_test >= 0))
+    # Guard against an unreachable threshold silently making this test vacuous
+    expect_true(any(result$pwm_count_test > 0))
 
     gvtrack.rm("pwm_count_test")
 })
@@ -430,12 +431,11 @@ test_that("PWM sliding window MOTIF_COUNT mode works with iterator=20 and shifts
     colnames(pssm) <- c("A", "C", "G", "T")
 
     # NOTE: originally `threshold = -10` (not a real pwm.count parameter -
-    # see the comment at the first occurrence of this pattern above); making
-    # the effective score.thresh = 0 default explicit to keep the golden
-    # snapshot below unchanged.
+    # see the comment at the first occurrence of this pattern above);
+    # restored to the intended score.thresh = -10.
     gvtrack.create("pwm_count_iter20", "seq",
         func = "pwm.count",
-        params = list(pssm = pssm, score.thresh = 0)
+        params = list(pssm = pssm, score.thresh = -10)
     )
     gvtrack.iterator("pwm_count_iter20", sshift = -100, eshift = 100)
 
@@ -444,6 +444,8 @@ test_that("PWM sliding window MOTIF_COUNT mode works with iterator=20 and shifts
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_count_iter20)))
     expect_true(all(result$pwm_count_iter20 >= 0))
+    # Guard against an unreachable threshold silently making this test vacuous
+    expect_true(any(result$pwm_count_iter20 > 0))
 
     gvtrack.rm("pwm_count_iter20")
 })
@@ -813,17 +815,18 @@ test_that("PWM regression: MOTIF_COUNT mode with shifts", {
     colnames(pssm) <- c("A", "C", "G", "T")
 
     # NOTE: originally `threshold = -10` (not a real pwm.count parameter -
-    # see the comment at the first occurrence of this pattern above); making
-    # the effective score.thresh = 0 default explicit to keep the golden
-    # snapshot below unchanged.
+    # see the comment at the first occurrence of this pattern above);
+    # restored to the intended score.thresh = -10.
     gvtrack.create("pwm_count_reg", "seq",
         func = "pwm.count",
-        params = list(pssm = pssm, score.thresh = 0)
+        params = list(pssm = pssm, score.thresh = -10)
     )
     gvtrack.iterator("pwm_count_reg", sshift = -100, eshift = 100)
 
     result <- gextract("pwm_count_reg", gintervals(1, 1000000, 1050000), iterator = 20)
 
+    # Guard against an unreachable threshold silently making this test vacuous
+    expect_true(any(result$pwm_count_reg > 0))
     expect_regression(result, "pwm_sliding_window_count_iter20_shifts")
 })
 
