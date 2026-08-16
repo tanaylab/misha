@@ -1,6 +1,7 @@
 # misha 5.11.16
 
 * Passing overlapping intervals as a 1D iterator now warns when the overlapping intervals are merged into wider blocks, naming the merged rows. Results are unchanged; to get one value per interval, call `gextract()` with the same intervals as its scope and map the rows back with the `intervalID` column.
+* **Behavior fix:** `gtrack.import()` errors when none of the chromosome names in a WIG / bedGraph / tab file exist in the genome database, instead of creating an all-NaN track and reporting success. The error names both sides of the mismatch and points at `chrom_aliases.tsv`. A file that matches only some of its chromosomes now warns and imports the rest.
 
 # misha 5.11.15
 

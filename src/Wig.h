@@ -1,6 +1,8 @@
 #ifndef WIG_H_
 #define WIG_H_
 
+#include <set>
+#include <string>
 #include <vector>
 #include "BufferedFile.h"
 #include "GenomeChromKey.h"
@@ -25,7 +27,20 @@ public:
 	// returns true if data for chromosome exists; (float)udata of each interval contains the value
 	bool get_data(int chromid, GIntervals &intervals);
 
+	// Chromosome names that appear in the file but do not exist in the genome database.
+	// Aliases are resolved by GenomeChromKey::chrom2id, so a name reachable through the
+	// alias chain (chr1 <-> 1, M <-> MT, chrom_aliases.tsv) never lands here.
+	// Only the first MAX_REPORTED_UNKNOWN_CHROMS distinct names are kept for reporting;
+	// get_num_unknown_chroms() returns the true number of distinct names.
+	const vector<string> &get_unknown_chroms() const { return m_unknown_chroms; }
+	uint64_t get_num_unknown_chroms() const { return m_unknown_chroms_seen.size(); }
+
+	// Number of database chromosomes for which the file contains data.
+	uint64_t get_num_matched_chroms() const;
+
 private:
+	static const size_t MAX_REPORTED_UNKNOWN_CHROMS = 32;
+
 	enum { CHROM_FIELD, START_FIELD, STEP_FIELD, SPAN_FIELD, NUM_FIELDS };
 	enum RecordType { FIXED_STEP_REC, VAR_STEP_REC, VAL_REC, COORD_VAL_REC, BEDGRAPH_REC };
 
@@ -72,8 +87,12 @@ private:
 	vector<int64_t> m_chrom_lineno;
 	BufferedFile    m_bfile;
 	bool            m_ignore_unknown_chroms;
+	vector<string>  m_unknown_chroms;
+	set<string>     m_unknown_chroms_seen;
 
 	bool read_record(Rec &rec, int64_t &lineno);
+
+	void record_unknown_chrom(const char *chrom);
 
 	int     str2chromid(const char *str, int64_t lineno);
 	int64_t str2span(const char *str, int64_t lineno);
@@ -86,13 +105,21 @@ private:
 
 //-------------------------------------IMPLEMENTATION -----------------------------------------
 
+inline void Wig::record_unknown_chrom(const char *chrom)
+{
+	if (m_unknown_chroms_seen.insert(chrom).second && m_unknown_chroms.size() < MAX_REPORTED_UNKNOWN_CHROMS)
+		m_unknown_chroms.push_back(chrom);
+}
+
 inline int Wig::str2chromid(const char *str, int64_t lineno)
 {
 	try {
 		return m_chromkey->chrom2id(str);
 	} catch (TGLException &e) {
-		if (m_ignore_unknown_chroms)
+		if (m_ignore_unknown_chroms) {
+			record_unknown_chrom(str);
 			return -1;
+		}
 		TGLError<Wig>(BAD_CHROM, "WIG file %s, line %ld: %s\n", m_bfile.file_name().c_str(), lineno, e.msg());
 	}
 	return -1;

@@ -14,6 +14,86 @@
 using namespace std;
 using namespace rdb;
 
+// Formats up to max_shown names as "a, b, c (and N more)".
+static string format_chrom_names(const vector<string> &names, uint64_t total, size_t max_shown)
+{
+	string res;
+	size_t shown = min(names.size(), max_shown);
+
+	for (size_t i = 0; i < shown; ++i) {
+		if (i)
+			res += ", ";
+		res += names[i];
+	}
+
+	if (total > shown) {
+		char buf[100];
+		snprintf(buf, sizeof(buf), "%s(and %llu more)", shown ? " " : "", (unsigned long long)(total - shown));
+		res += buf;
+	}
+	return res;
+}
+
+static string format_db_chroms(const GenomeChromKey &chromkey, size_t max_shown)
+{
+	vector<string> names;
+	size_t shown = min((size_t)chromkey.get_num_chroms(), max_shown);
+
+	for (size_t i = 0; i < shown; ++i)
+		names.push_back(chromkey.id2chrom((int)i));
+	return format_chrom_names(names, chromkey.get_num_chroms(), max_shown);
+}
+
+static string format_alias_hint(SEXP envir)
+{
+	string hint = "Chromosome aliases are resolved automatically (chr1 <-> 1, M <-> MT, plus ";
+
+	hint += get_groot(envir);
+	hint += "/chrom_aliases.tsv if present). If the file's names should map to database chromosomes, "
+	        "add them to that file (tab separated: canonical<TAB>alias<TAB>source) and reload the database "
+	        "with gdb.init(rescan = TRUE), or rename the chromosomes in the file.";
+	return hint;
+}
+
+// Decides what an import that could not map all of the file's chromosome names should do.
+//
+// The importer knows two things here: how many database chromosomes the file supplied data
+// for, and which names in the file matched nothing. A file that covers only part of the
+// database (a chr1-only bedGraph) has no unmatched names and is silent; a file whose names
+// belong to another naming convention has unmatched names and either loses everything
+// (error) or loses part of its data (warning).
+static void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname,
+                                  const vector<string> &unknown_chroms, uint64_t num_unknown,
+                                  uint64_t num_matched, SEXP envir)
+{
+	if (!num_unknown)
+		return;
+
+	string unknown_str = format_chrom_names(unknown_chroms, num_unknown, 5);
+
+	if (!num_matched) {
+		verror("None of the chromosome names in %s exist in the genome database, so the track would be empty (all NaN).\n"
+		       "File chromosomes: %s.\n"
+		       "Database chromosomes: %s.\n"
+		       "%s",
+		       fname, unknown_str.c_str(), format_db_chroms(chromkey, 5).c_str(), format_alias_hint(envir).c_str());
+	}
+
+	char msg[10000];
+	snprintf(msg, sizeof(msg),
+	         "%llu chromosome name(s) in %s do not exist in the genome database and were skipped: %s. "
+	         "Data for the remaining %llu chromosome(s) was imported. %s",
+	         (unsigned long long)num_unknown, fname, unknown_str.c_str(),
+	         (unsigned long long)num_matched, format_alias_hint(envir).c_str());
+
+	// Rf_warning() is unsafe here: a caller that catches the warning with an exiting
+	// handler (tryCatch, or options(warn = 2)) longjmps out of the C++ frame, skipping
+	// ~RdbInitializer. The message is left for .gcall() to raise once the call returns.
+	SEXP rmsg = rprotect_ptr(Rf_mkString(msg));
+	define_in_misha(envir, ".GPENDING.WARNING", rmsg);
+	runprotect(1);
+}
+
 extern "C" {
 
 SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP _envir)
@@ -74,7 +154,12 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 				verror("Unrecognized format of file %s.\nWIG parser error: %s\nCSV parser error: %s",
 				       fname, wig_err_msg.c_str(), e.msg());
 			}
-		}
+
+			verify_chroms_matched(iu.get_chromkey(), fname, csv.get_unknown_chroms(), csv.get_num_unknown_chroms(),
+			                      csv.get_num_matched_chroms(), _envir);
+		} else
+			verify_chroms_matched(iu.get_chromkey(), fname, wig.get_unknown_chroms(), wig.get_num_unknown_chroms(),
+			                      wig.get_num_matched_chroms(), _envir);
 
 		GIntervals all_genome_intervs;
 		iu.get_all_genome_intervs(all_genome_intervs);
