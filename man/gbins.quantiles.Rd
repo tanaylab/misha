@@ -15,7 +15,9 @@ gbins.quantiles(
 )
 }
 \arguments{
-\item{...}{pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See \code{\link{gdist}}.}
+\item{...}{pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See \code{\link{gdist}}.
+An extra, unpaired trailing argument is taken as 'expr'; it cannot be combined with a named 'expr'
+argument - that combination is ambiguous and raises an error.}
 
 \item{expr}{track expression for which quantiles are calculated}
 

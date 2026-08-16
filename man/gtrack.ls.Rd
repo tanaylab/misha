@@ -6,6 +6,7 @@
 \usage{
 gtrack.ls(
   ...,
+  pattern = NULL,
   db = NULL,
   ignore.case = FALSE,
   perl = FALSE,
@@ -14,8 +15,16 @@ gtrack.ls(
 )
 }
 \arguments{
-\item{...}{these arguments are of either form 'pattern' or 'attribute =
-pattern'}
+\item{...}{additional arguments of either form 'pattern' (matched against
+track names) or 'attribute = pattern' (matched against a track attribute
+value)}
+
+\item{pattern}{optional pattern to match against track names, equivalent to
+passing it positionally (e.g. \code{gtrack.ls("den*")} and
+\code{gtrack.ls(pattern = "den*")} are the same). Note that this means a
+track attribute literally named "pattern" can no longer be filtered by name
+via \code{...}; use \code{gtrack.ls()} followed by
+\code{\link{gtrack.attr.get}} instead.}
 
 \item{db}{optional database path to filter tracks. If specified, only tracks
 from that database are returned.}
@@ -35,9 +44,10 @@ match a pattern (see 'grep'). If called without any arguments all tracks are
 returned.
 
 If pattern is specified without a track attribute (i.e. in the form of
-'pattern') then filtering is applied to the track names. If pattern is
-supplied with a track attribute (i.e. in the form of 'name = pattern') then
-track attribute is matched against the pattern.
+'pattern', either positionally or via the 'pattern' argument) then filtering
+is applied to the track names. If pattern is supplied with a track attribute
+(i.e. in the form of 'name = pattern') then track attribute is matched
+against the pattern.
 
 Multiple patterns are applied one after another. The resulted list of tracks
 should match all the patterns.
@@ -57,6 +67,9 @@ gtrack.ls()
 
 # get track names that match the pattern "den*"
 gtrack.ls("den*")
+
+# equivalent, using the 'pattern' argument
+gtrack.ls(pattern = "den*")
 
 # get track names whose "created.by" attribute match the pattern
 # "create_sparse"

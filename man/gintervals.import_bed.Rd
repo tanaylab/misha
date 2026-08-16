@@ -7,8 +7,8 @@
 gintervals.import_bed(file = NULL, name = TRUE, score = TRUE, strand = TRUE)
 }
 \arguments{
-\item{file}{path to a BED file (\code{.bed}, \code{.bed.gz}, or
-\code{.bed.zip}).}
+\item{file}{path to a BED file (\code{.bed} or \code{.bed.gz}). Zip
+archives are not supported - unzip them first.}
 
 \item{name}{if \code{TRUE} and a 4th column exists, include it as
 \code{name}.}
@@ -23,7 +23,7 @@ it as \code{score}.}
 A 1D intervals data frame, sorted by chrom and start.
 }
 \description{
-Reads a BED/BED.gz/BED.zip file and returns a misha 1D intervals data
+Reads a BED file, plain or gzipped, and returns a misha 1D intervals data
 frame. Track/browser/comment header lines are skipped automatically.
 Chromosome names are normalized through the active database's
 \code{CHROM_ALIAS} mechanism (so \code{chr1} <-> \code{1} works without

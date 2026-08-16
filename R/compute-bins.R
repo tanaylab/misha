@@ -20,6 +20,8 @@
 #' first interval, i.e. in [x1, x2].
 #'
 #' @param ... pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See \code{\link{gdist}}.
+#' An extra, unpaired trailing argument is taken as 'expr'; it cannot be combined with a named 'expr'
+#' argument - that combination is ambiguous and raises an error.
 #' @param expr track expression for which quantiles are calculated
 #' @param percentiles an array of percentiles of quantiles in [0, 1] range
 #' @param intervals genomic scope for which the function is applied.
@@ -50,6 +52,12 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
     args <- as.list(substitute(list(...)))[-1L]
 
     if (length(args) >= 0 && length(args) %% 2 != 0) {
+        if (!is.null(substitute(expr))) {
+            stop(sprintf(
+                "gbins.quantiles: 'expr' supplied both positionally (trailing argument: %s) and by name (expr = %s). Remove one - the call is ambiguous.",
+                deparse(args[[length(args)]]), deparse(substitute(expr))
+            ), call. = FALSE)
+        }
         expr <- args[[length(args)]]
     }
 
@@ -64,7 +72,10 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
     breaks <- list()
 
     exprs <- append(exprs, do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame()))
-    for (i in (0:((length(args) - 1) / 2 - 1))) {
+    # length(args) is even when 'expr' was passed by name and odd when it was
+    # the trailing positional argument; either way the leading arguments are
+    # 'bin_expr'/'breaks' pairs.
+    for (i in seq_len(length(args) %/% 2) - 1L) {
         exprs <- append(exprs, do.call(.gexpr2str, list(args[[i * 2 + 1]]), envir = parent.frame()))
         breaks[[length(breaks) + 1]] <- eval.parent(args[[i * 2 + 2]])
     }
@@ -97,6 +108,8 @@ gbins.quantiles <- function(..., expr = NULL, percentiles = 0.5, intervals = get
 #' first interval, i.e. in [x1, x2].
 #'
 #' @param ... pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See \code{\link{gdist}}.
+#' An extra, unpaired trailing argument is taken as 'expr'; it cannot be combined with a named 'expr'
+#' argument - that combination is ambiguous and raises an error.
 #' @param expr track expression for which summary statistics is calculated
 #' @param intervals genomic scope for which the function is applied
 #' @param include.lowest if 'TRUE', the lowest value of the range determined by
@@ -124,6 +137,12 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
     args <- as.list(substitute(list(...)))[-1L]
 
     if (length(args) >= 0 && length(args) %% 2 != 0) {
+        if (!is.null(substitute(expr))) {
+            stop(sprintf(
+                "gbins.summary: 'expr' supplied both positionally (trailing argument: %s) and by name (expr = %s). Remove one - the call is ambiguous.",
+                deparse(args[[length(args)]]), deparse(substitute(expr))
+            ), call. = FALSE)
+        }
         expr <- args[[length(args)]]
     }
 
@@ -138,7 +157,9 @@ gbins.summary <- function(..., expr = NULL, intervals = get("ALLGENOME", envir =
     breaks <- list()
 
     exprs <- append(exprs, do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame()))
-    for (i in (0:((length(args) - 1) / 2 - 1))) {
+    # See gbins.quantiles(): length(args) %/% 2 is the number of
+    # 'bin_expr'/'breaks' pairs whether or not 'expr' was passed by name.
+    for (i in seq_len(length(args) %/% 2) - 1L) {
         exprs <- append(exprs, do.call(.gexpr2str, list(args[[i * 2 + 1]]), envir = parent.frame()))
         breaks[[length(breaks) + 1]] <- eval.parent(args[[i * 2 + 2]])
     }

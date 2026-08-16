@@ -61,9 +61,18 @@ test_that("PWM sliding window works with MOTIF_COUNT mode", {
     )
     colnames(pwm) <- c("A", "C", "G", "T")
 
+    # NOTE: this originally passed `threshold = -10`, which was never a real
+    # pwm.count parameter (the accepted key is `score.thresh`) and was
+    # silently ignored, so pwm.count actually ran with the default
+    # score.thresh = 0. Making that explicit here to keep this test's
+    # computed values - and the golden snapshot below - unchanged. Whether
+    # these tests were meant to run with score.thresh = -10 is an open
+    # question; answering it means regenerating the shared golden snapshots
+    # in /net/mraid20/export/tgdata/db/tgdb/misha_snapshot, which is out of
+    # scope here.
     gvtrack.create("pwm_count_test", "seq",
         func = "pwm.count",
-        params = list(pssm = pwm, threshold = -10)
+        params = list(pssm = pwm, score.thresh = 0)
     )
     result <- gextract("pwm_count_test", gintervals(1, 10000, 11000), iterator = 1)
     expect_regression(result, "pwm_sliding_window_test_3")
@@ -420,9 +429,13 @@ test_that("PWM sliding window MOTIF_COUNT mode works with iterator=20 and shifts
     pssm <- pssm / rowSums(pssm)
     colnames(pssm) <- c("A", "C", "G", "T")
 
+    # NOTE: originally `threshold = -10` (not a real pwm.count parameter -
+    # see the comment at the first occurrence of this pattern above); making
+    # the effective score.thresh = 0 default explicit to keep the golden
+    # snapshot below unchanged.
     gvtrack.create("pwm_count_iter20", "seq",
         func = "pwm.count",
-        params = list(pssm = pssm, threshold = -10)
+        params = list(pssm = pssm, score.thresh = 0)
     )
     gvtrack.iterator("pwm_count_iter20", sshift = -100, eshift = 100)
 
@@ -799,9 +812,13 @@ test_that("PWM regression: MOTIF_COUNT mode with shifts", {
     pssm <- pssm / rowSums(pssm)
     colnames(pssm) <- c("A", "C", "G", "T")
 
+    # NOTE: originally `threshold = -10` (not a real pwm.count parameter -
+    # see the comment at the first occurrence of this pattern above); making
+    # the effective score.thresh = 0 default explicit to keep the golden
+    # snapshot below unchanged.
     gvtrack.create("pwm_count_reg", "seq",
         func = "pwm.count",
-        params = list(pssm = pssm, threshold = -10)
+        params = list(pssm = pssm, score.thresh = 0)
     )
     gvtrack.iterator("pwm_count_reg", sshift = -100, eshift = 100)
 

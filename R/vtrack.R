@@ -114,6 +114,66 @@
 # Each handler validates and processes parameters for a specific function type.
 # Handlers return the processed params list, or stop() on validation errors.
 
+#' Stop with an informative error if 'dots' contains names outside 'accepted'
+#'
+#' Used by every '.vtrack_params_*' handler (and by gvtrack.create itself, for
+#' functions with no handler) to reject misspelled/unknown parameter names
+#' instead of silently ignoring them. Unnamed elements are also rejected.
+#' @noRd
+.vtrack_check_unknown_params <- function(func, dots, accepted) {
+    if (length(dots) == 0) {
+        return(invisible(NULL))
+    }
+    nm <- names(dots)
+    if (is.null(nm)) {
+        nm <- rep("", length(dots))
+    }
+    unknown <- unique(nm[!nzchar(nm) | !(nm %in% accepted)])
+    if (length(unknown) == 0) {
+        return(invisible(NULL))
+    }
+    unknown <- ifelse(nzchar(unknown), unknown, "<unnamed>")
+    key_list <- paste(sprintf("'%s'", unknown), collapse = ", ")
+    func_label <- if (is.null(func)) "NULL" else func
+    plural <- if (length(unknown) > 1) "s" else ""
+    if (length(accepted) == 0) {
+        stop(sprintf(
+            "function '%s' does not accept parameter%s %s; this function takes no additional named parameters",
+            func_label, plural, key_list
+        ), call. = FALSE)
+    }
+    stop(sprintf(
+        "function '%s' does not accept parameter%s %s; accepted parameters are: %s",
+        func_label, plural, key_list, paste(accepted, collapse = ", ")
+    ), call. = FALSE)
+}
+
+#' Stop if the same call supplies parameters both via 'params' and via '...'
+#'
+#' 'params' and the named '...' arguments are two alternative spellings of the
+#' same parameter set, and every '.vtrack_params_*' handler resolves the
+#' ambiguity by ignoring '...' whenever 'params' is given (it does
+#' 'dots <- params'). That silently drops the named arguments and returns the
+#' default-valued result, so the combination is rejected instead. Called once
+#' from gvtrack.create() for every function that has a handler.
+#' @noRd
+.vtrack_check_params_dots_collision <- function(func, params, dots) {
+    if (is.null(params) || length(dots) == 0) {
+        return(invisible(NULL))
+    }
+    nm <- names(dots)
+    if (is.null(nm)) {
+        nm <- rep("", length(dots))
+    }
+    nm <- ifelse(nzchar(nm), nm, "<unnamed>")
+    key_list <- paste(sprintf("'%s'", unique(nm)), collapse = ", ")
+    stop(sprintf(
+        "function '%s': parameters supplied both via 'params' and as named argument%s %s. These are two alternative ways of passing the same parameters - the named arguments would be ignored, so supply either 'params = list(...)' or the named arguments, not both.",
+        if (is.null(func)) "NULL" else func,
+        if (length(unique(nm)) > 1) "s" else "", key_list
+    ), call. = FALSE)
+}
+
 #' Validate and process PWM function parameters
 #' @noRd
 .vtrack_params_pwm <- function(func, params, dots) {
@@ -123,6 +183,11 @@
         }
         dots <- params
     }
+
+    .vtrack_check_unknown_params(func, dots, c(
+        "pssm", "bidirect", "prior", "extend", "strand",
+        "spat_factor", "spat_bin", "spat_min", "spat_max", "score.thresh"
+    ))
 
     if (!("pssm" %in% names(dots))) {
         stop("pwm function requires a 'pssm' matrix parameter")
@@ -227,6 +292,8 @@
         stop("kmer functions require a 'kmer' parameter")
     }
 
+    .vtrack_check_unknown_params(func, kmer_params, c("kmer", "extend", "strand"))
+
     kmer_params$extend <- if (!is.null(kmer_params$extend)) kmer_params$extend else TRUE
     kmer_params$strand <- if (!is.null(kmer_params$strand)) kmer_params$strand else 0
 
@@ -255,6 +322,11 @@
         }
         dots <- params
     }
+
+    .vtrack_check_unknown_params(func, dots, c(
+        "pssm", "score.thresh", "max_edits", "max_indels", "score.min", "score.max",
+        "bidirect", "prior", "extend", "strand", "direction"
+    ))
 
     if (!("pssm" %in% names(dots))) {
         stop("pwm edit distance functions require a 'pssm' matrix parameter")
@@ -358,6 +430,11 @@
         dots <- params
     }
 
+    .vtrack_check_unknown_params(func, dots, c(
+        "pssm", "score.thresh", "score.min", "score.max",
+        "bidirect", "prior", "extend", "strand", "direction"
+    ))
+
     if (!("pssm" %in% names(dots))) {
         stop("pwm.n_mutations requires a 'pssm' matrix parameter")
     }
@@ -440,6 +517,11 @@
         }
         dots <- params
     }
+
+    .vtrack_check_unknown_params(func, dots, c(
+        "pssm", "score.thresh", "max_edits", "score.min", "score.max",
+        "bidirect", "prior", "extend", "strand", "direction"
+    ))
 
     if (!("pssm" %in% names(dots))) {
         stop("pwm LSE edit distance functions require a 'pssm' matrix parameter")
@@ -536,6 +618,8 @@
 #' Validate and process neighbor.count function parameters
 #' @noRd
 .vtrack_params_neighbor_count <- function(func, params, dots) {
+    .vtrack_check_unknown_params(func, dots, character(0))
+
     if (is.null(params)) {
         params <- 0
     }
@@ -796,7 +880,7 @@
 #' bins 0-11 of 40 bp plus bin 12 of 20 bp). Use \code{spat_min} and \code{spat_max} to restrict scanning to a
 #' range divisible by \code{spat_bin} if needed.
 #'
-#' PWM parameters can be supplied either as a single list (\code{params}) or via named arguments (see examples).
+#' PWM parameters can be supplied either as a single list (\code{params}) or via named arguments (see examples), but not both in the same call.
 #'
 #' \strong{Interval distance notes}
 #'
@@ -818,7 +902,7 @@
 #'   \item For \code{kmer.frac} the denominator is the number of possible anchor positions in the interval; with \code{strand = 0} positions on both strands are counted, so the fraction stays in \code{[0, 1]} and remains comparable to the single-strand fraction.
 #' }
 #'
-#' K-mer parameters can be supplied as a list or via named arguments (see examples).
+#' K-mer parameters can be supplied as a list or via named arguments (see examples), but not both in the same call.
 #'
 #' Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.
 #'
@@ -829,7 +913,17 @@
 #' track and supports all track-based summarizer functions. Intervals must not overlap.
 #' @param func function name (see above)
 #' @param params function parameters (see above)
-#' @param ... additional PWM parameters
+#' @param ... additional named parameters for functions that accept them this
+#' way instead of \code{params} - currently the PWM, k-mer and edit-distance
+#' families, and \code{neighbor.count}. Use one style or the other: supplying
+#' \code{params} together with named \code{...} arguments in the same call is
+#' ambiguous (the named arguments would be ignored) and raises an error.
+#' Parameter names are validated against the accepted names for \code{func},
+#' whether they arrive through \code{params} or through \code{...}; an
+#' unrecognised name, or any name passed via \code{...} for a \code{func} that
+#' takes no additional named parameters, raises an error naming the offending
+#' argument and the accepted ones. \code{masked.count} / \code{masked.frac}
+#' are the exception: they warn and ignore the extra arguments.
 #' @inheritParams gvtrack.iterator
 #' @inheritParams gvtrack.filter
 #' @return None.
@@ -1096,8 +1190,17 @@ gvtrack.create <- function(vtrack = NULL, src = NULL, func = NULL, params = NULL
 
     # Process function-specific parameters using dispatch table
     if (!is.null(func) && func %in% names(.VTRACK_PARAM_HANDLERS)) {
+        dots <- list(...)
+        # The handlers drop '...' whenever 'params' is given, so mixing the
+        # two styles in one call silently discards the named arguments.
+        .vtrack_check_params_dots_collision(func, params, dots)
         handler <- .VTRACK_PARAM_HANDLERS[[func]]
-        params <- handler(func, params, list(...))
+        params <- handler(func, params, dots)
+    } else {
+        # Functions with no handler don't accept extra named arguments via
+        # '...' at all; catch misspelled formals (e.g. sshfit vs sshift)
+        # instead of silently dropping them.
+        .vtrack_check_unknown_params(func, list(...), character(0))
     }
 
     vtrackstr <- do.call(.gexpr2str, list(substitute(vtrack)), envir = parent.frame())

@@ -4,25 +4,105 @@
 # misha uses 0-based, half-open [start, end) coordinates, like BED.
 # GFF/GTF/VCF are 1-based; the importers below subtract 1 from start.
 
+# Internal: whether the data.table package is available. Indirection point
+# so tests can force the utils::read.table() fallback below without
+# requiring data.table to actually be uninstalled.
+.gdata_table_available <- function() {
+    requireNamespace("data.table", quietly = TRUE)
+}
+
+# Internal: does `file` start with the gzip magic bytes (1f 8b)? Detected
+# from content rather than the ".gz" suffix so a misnamed-but-gzipped file
+# is still handled correctly.
+.gis_gzip_file <- function(file) {
+    con <- file(file, "rb")
+    on.exit(close(con))
+    magic <- tryCatch(readBin(con, "raw", n = 2), error = function(e) raw(0))
+    length(magic) == 2 && magic[1] == as.raw(0x1f) && magic[2] == as.raw(0x8b)
+}
+
+# Internal: decompress a gzipped file to a temp file, the same way
+# gtrack.import() does (R/track-import.R), and check the exit status.
+# Returns the temp file path when the data came out whole, or NULL when gunzip
+# itself could not be run (status 127 = command not found), which tells the
+# caller to leave the file compressed and let utils::read.table() decompress it
+# through R's connection layer. A real decompression failure - a truncated or
+# corrupt archive - is an error: the alternative is a partial,
+# plausible-looking interval set.
+#
+# gzip's exit conventions: 0 = ok, 1 = fatal error, 2 = warning. Status 2 means
+# the data decompressed correctly and something else was odd about the file
+# (typically "trailing garbage ignored"), so it is accepted - such files
+# imported fine before this check existed.
+#
+# Note this cannot be done as "gunzip -c f | grep ...": a pipeline's exit
+# status is the status of its *last* command, so gunzip dying mid-stream is
+# invisible (grep exits 0 on the bytes it did receive).
+.gunzip_to_tempfile <- function(file) {
+    out <- tempfile(pattern = "misha_gunzip_")
+    # suppressWarnings: system() warns ("error in running command") when the
+    # command cannot be run at all; that case is handled below via status 127.
+    status <- suppressWarnings(
+        system(sprintf("gunzip -q -c %s > %s", shQuote(file), shQuote(out)), intern = FALSE)
+    )
+    if (status == 0 || status == 2) {
+        return(out)
+    }
+    unlink(out)
+    if (status == 127) {
+        return(NULL)
+    }
+    stop(sprintf(
+        "Failed to decompress %s: gunzip exited with status %d. The file appears to be truncated or corrupt.",
+        file, status
+    ), call. = FALSE)
+}
+
 # Internal: read a tabular file, drop common header lines, return a
 # stringsAsFactors=FALSE data frame. Used by BED/GFF/VCF importers.
 .gread_table_filtered <- function(file, header_pat) {
     bed <- NULL
-    if (requireNamespace("data.table", quietly = TRUE)) {
+    src <- file
+    use_fread <- .gdata_table_available()
+
+    if (.gis_gzip_file(file)) {
+        # grep treats gzipped content as binary and, instead of filtering it,
+        # just prints "Binary file ... matches" -- a single line that fread
+        # happily parses as a 1x1 frame, masking the real (tab-separated,
+        # multi-column) data underneath. Decompress to a temp file before
+        # anything else looks at it, so both branches below behave exactly as
+        # they do for uncompressed input.
+        unzipped <- .gunzip_to_tempfile(file)
+        if (is.null(unzipped)) {
+            # gunzip is not installed. Neither grep nor fread can see through
+            # the compression, so skip them entirely and go straight to
+            # utils::read.table(), which decompresses gzip content by itself
+            # regardless of what is on PATH. (Handing the still-gzipped file
+            # to fread instead would be actively worse: no header-line
+            # pre-filter, and fread locks its column count from the first
+            # line, so a gz BED with a leading "track" header comes back as a
+            # single wrong column.)
+            use_fread <- FALSE
+        } else {
+            on.exit(unlink(unzipped), add = TRUE)
+            src <- unzipped
+        }
+    }
+
+    if (use_fread) {
         tryCatch(
             {
                 can_grep <- nzchar(Sys.which("grep"))
                 if (can_grep) {
-                    cmd <- sprintf("grep -vE %s %s", shQuote(header_pat), shQuote(file))
                     bed <- data.table::fread(
-                        cmd = cmd,
+                        cmd = sprintf("grep -vE %s %s", shQuote(header_pat), shQuote(src)),
                         header = FALSE, sep = "\t", quote = "",
                         fill = TRUE, stringsAsFactors = FALSE,
                         data.table = FALSE, showProgress = FALSE
                     )
                 } else {
                     bed <- data.table::fread(
-                        file,
+                        src,
                         header = FALSE, sep = "\t", quote = "",
                         fill = TRUE, stringsAsFactors = FALSE,
                         data.table = FALSE, showProgress = FALSE
@@ -40,7 +120,7 @@
     }
     if (is.null(bed)) {
         bed <- utils::read.table(
-            file,
+            src,
             header = FALSE, sep = "\t", quote = "", comment.char = "",
             fill = TRUE, stringsAsFactors = FALSE, colClasses = "character"
         )
@@ -96,7 +176,7 @@
 
 #' Import intervals from a BED file
 #'
-#' Reads a BED/BED.gz/BED.zip file and returns a misha 1D intervals data
+#' Reads a BED file, plain or gzipped, and returns a misha 1D intervals data
 #' frame. Track/browser/comment header lines are skipped automatically.
 #' Chromosome names are normalized through the active database's
 #' \code{CHROM_ALIAS} mechanism (so \code{chr1} <-> \code{1} works without
@@ -104,8 +184,8 @@
 #'
 #' BED is already 0-based half-open, so coordinates are taken as-is.
 #'
-#' @param file path to a BED file (\code{.bed}, \code{.bed.gz}, or
-#'   \code{.bed.zip}).
+#' @param file path to a BED file (\code{.bed} or \code{.bed.gz}). Zip
+#'   archives are not supported - unzip them first.
 #' @param name if \code{TRUE} and a 4th column exists, include it as
 #'   \code{name}.
 #' @param score if \code{TRUE} and a 5th (numeric) column exists, include
