@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.14</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.15</span>
       </span>
     </div>
 
@@ -63,7 +63,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Calculates summary statistics of a track expression for bins</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.14/R/compute-bins.R" class="external-link"><code>R/compute-bins.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/compute-bins.R" class="external-link"><code>R/compute-bins.R</code></a></small>
     <div class="hidden name"><code>gbins.summary.Rd</code></div>
     </div>
 
@@ -87,7 +87,9 @@
 
 
 <dl><dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See <code><a href="gdist.html">gdist</a></code>.</p></dd>
+<dd><p>pairs of track expressions ('bin_expr') that determines the bins and breaks that define the bins. See <code><a href="gdist.html">gdist</a></code>.
+An extra, unpaired trailing argument is taken as 'expr'; it cannot be combined with a named 'expr'
+argument - that combination is ambiguous and raises an error.</p></dd>
 
 
 <dt id="arg-expr">expr<a class="anchor" aria-label="anchor" href="#arg-expr"></a></dt>
