@@ -17,7 +17,6 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 	m_chrom_fpos.resize(chromkey.get_num_chroms(), -1);
 	m_chrom_lineno.resize(chromkey.get_num_chroms(), -1);
 	m_unknown_chroms.clear();
-	m_unknown_chroms_seen.clear();
 
 	// read the file to determine the positions of first chrom appearences
 	int last_chromid = -1;

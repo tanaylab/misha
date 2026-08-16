@@ -2,7 +2,6 @@
 #define GENOMEARRAYSCSV_H_
 
 #include <cstdint>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -10,6 +9,7 @@
 #include "GenomeChromKey.h"
 #include "GIntervals.h"
 #include "TGLException.h"
+#include "UnknownChroms.h"
 
 using namespace std;
 
@@ -26,18 +26,12 @@ public:
 	void  get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals);
 
 	// Chromosome names that appear in the file but do not exist in the genome database.
-	// Aliases are resolved by GenomeChromKey::chrom2id, so a name reachable through the
-	// alias chain never lands here. Only the first MAX_REPORTED_UNKNOWN_CHROMS distinct
-	// names are kept; get_num_unknown_chroms() returns the true number of distinct names.
-	const vector<string> &get_unknown_chroms() const { return m_unknown_chroms; }
-	uint64_t get_num_unknown_chroms() const { return m_unknown_chroms_seen.size(); }
+	const UnknownChroms &get_unknown_chroms() const { return m_unknown_chroms; }
 
 	// Number of database chromosomes for which the file contains data.
 	uint64_t get_num_matched_chroms() const;
 
 protected:
-	static const size_t MAX_REPORTED_UNKNOWN_CHROMS = 32;
-
 	struct Position {
 		long bytes;
 		long lineno;
@@ -55,12 +49,9 @@ protected:
 	GIntervals            m_intervals;
 	vector<string>        m_colnames;
 	vector<string>        m_fields;
-	vector<string>        m_unknown_chroms;
-	set<string>           m_unknown_chroms_seen;
+	UnknownChroms         m_unknown_chroms;
 
 	int read_fields(const Position &pos);
-
-	void record_unknown_chrom(const string &chrom);
 };
 
 #endif
