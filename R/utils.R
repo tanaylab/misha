@@ -3,7 +3,10 @@
     # handler (tryCatch, or options(warn = 2)) would longjmp out of the C frame and
     # leave misha's PROTECT counter inflated. Warnings are therefore left in
     # .misha$.GPENDING.WARNING and raised here, once the call has returned.
-    .gclear_pending_warning()
+    # An outer call may have left a message of its own: gintervals.mapply runs the
+    # user's FUN, and any misha call inside it nests under it. Take the outer
+    # message aside and put it back, so this call raises only what it produced.
+    outer_msg <- .gclear_pending_warning()
     tryCatch(
         {
             res <- .Call(...)
@@ -13,6 +16,9 @@
         }
     )
     msg <- .gclear_pending_warning()
+    if (!is.null(outer_msg)) {
+        assign(".GPENDING.WARNING", outer_msg, envir = .misha)
+    }
     if (!is.null(msg)) {
         warning(msg, call. = FALSE)
     }

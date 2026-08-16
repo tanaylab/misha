@@ -71,15 +71,60 @@ test_that("passing the intervals as the scope does not help where the scope is u
     expect_equal(itr$end, c(400, 1300))
 })
 
-test_that("known gap: an interval nested in another one is dropped without a warning", {
+test_that("known gap: an interval nested after clipping is dropped without a warning", {
     # The check is one-sided on purpose (see TrackExpressionScanner.cpp): it fires when a
     # row is wider than every input interval, which is what merging normally produces.
-    # A nested interval disappears into its container without widening any row, so it is
-    # still dropped silently. Pinned here so that closing the gap is a deliberate change.
+    # An interval that ends up nested inside another one - in the input, or only after
+    # the scope clips it - disappears without widening any row, so it is still dropped
+    # silently. Pinned here so that closing the gap is a deliberate change.
     nested <- gintervals(1, c(0, 200), c(1000, 300))
     expect_no_warning(res <- gextract("test.fixedbin", gintervals.all(), iterator = nested))
     expect_equal(nrow(res), 1)
     expect_equal(res$end, 1000)
+
+    # neither interval is nested in the input here; the scope is what makes them so
+    clipped <- gintervals(1, c(0, 50), c(100, 150))
+    expect_no_warning(res <- gextract("test.fixedbin", gintervals(1, 0, 100), iterator = clipped))
+    expect_equal(nrow(res), 1)
+    expect_equal(res$end, 100)
+})
+
+test_that("the warning survives gextract's track-parallel path", {
+    withr::local_options(gmultitasking = TRUE, gmax.data.size = 1e9)
+    st <- seq(0, by = 10000, length.out = 1200)
+    scope <- gintervals(1, st, st + 10000)
+    pk <- gintervals(1, c(0, 100, 20000), c(300, 400, 20300))
+    exprs <- sprintf("test.fixedbin + %d", 0:8)
+
+    # mclapply workers never deliver their warnings, so the parent has to re-raise
+    # them. Assert the dispatch really goes track-parallel: on any other path this
+    # test would pass without exercising anything.
+    expect_equal(.gmultitasking_strategy(exprs, scope, pk, NULL, NULL, NULL), "tracks")
+
+    ws <- character()
+    res <- withCallingHandlers(
+        do.call(gextract, c(as.list(exprs), list(intervals = scope, iterator = pk))),
+        warning = function(w) {
+            ws <<- c(ws, conditionMessage(w))
+            invokeRestart("muffleWarning")
+        }
+    )
+    expect_equal(sum(grepl("were merged into", ws)), 1)
+    expect_equal(nrow(res), 2)
+    expect_equal(ncol(res), length(exprs) + 4L)
+})
+
+test_that("a misha call inside gintervals.mapply's FUN does not swallow the warning", {
+    withr::local_options(gmultitasking = FALSE)
+    pk <- overlapping_peaks()
+    expect_warning(
+        gintervals.mapply(
+            function(x) gsummary("test.fixedbin", gintervals(1, 0, 1000))[["Mean"]],
+            "test.fixedbin", gintervals.all(),
+            iterator = pk
+        ),
+        "overlap"
+    )
 })
 
 test_that("the warning is emitted once per call, not once per process", {
