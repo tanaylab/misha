@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.14</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.15</span>
       </span>
     </div>
 
@@ -63,7 +63,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Creates a new virtual track</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.14/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/vtrack.R" class="external-link"><code>R/vtrack.R</code></a></small>
     <div class="hidden name"><code>gvtrack.create.Rd</code></div>
     </div>
 
@@ -131,7 +131,17 @@ track and supports all track-based summarizer functions. Intervals must not over
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>additional PWM parameters</p></dd>
+<dd><p>additional named parameters for functions that accept them this
+way instead of <code>params</code> - currently the PWM, k-mer and edit-distance
+families, and <code>neighbor.count</code>. Use one style or the other: supplying
+<code>params</code> together with named <code>...</code> arguments in the same call is
+ambiguous (the named arguments would be ignored) and raises an error.
+Parameter names are validated against the accepted names for <code>func</code>,
+whether they arrive through <code>params</code> or through <code>...</code>; an
+unrecognised name, or any name passed via <code>...</code> for a <code>func</code> that
+takes no additional named parameters, raises an error naming the offending
+argument and the accepted ones. <code>masked.count</code> / <code>masked.frac</code>
+are the exception: they warn and ignore the extra arguments.</p></dd>
 
 </dl></div>
     <div id="value">
@@ -227,7 +237,7 @@ genomic position. Positions beyond the last bin reuse the final bin's weight. If
 not divisible by <code>spat_bin</code>, the last bin is shorter (e.g., scanning 500 bp with 40 bp bins yields
 bins 0-11 of 40 bp plus bin 12 of 20 bp). Use <code>spat_min</code> and <code>spat_max</code> to restrict scanning to a
 range divisible by <code>spat_bin</code> if needed.</p>
-<p>PWM parameters can be supplied either as a single list (<code>params</code>) or via named arguments (see examples).</p>
+<p>PWM parameters can be supplied either as a single list (<code>params</code>) or via named arguments (see examples), but not both in the same call.</p>
 <p><strong>Interval distance notes</strong></p>
 <p><code>distance</code>: Given the center 'C' of the current iterator interval, returns 'DC * X/2' where 'DC' is the normalized distance to the center of the interval that contains 'C', and 'X' is the value of the parameter (default: 0). If no interval contains 'C', the result is 'D + X/2' where 'D' is the distance between 'C' and the edge of the closest interval.</p>
 <p><code>distance.center</code>: Given the center 'C' of the current iterator interval, returns <code>NaN</code> if 'C' is outside of all intervals, otherwise returns the distance between 'C' and the center of the closest interval.</p>
@@ -238,7 +248,7 @@ range divisible by <code>spat_bin</code> if needed.</p>
 <li><p><code>extend</code>: If TRUE (default), counts kmers whose anchor lies in the interval even if the kmer extends beyond it; when FALSE, only kmers fully contained in the interval are considered.</p></li>
 <li><p><code>strand</code>: 1 counts matches on the forward strand, -1 counts matches on the reverse-complement strand, 0 counts both strands and sums them (default). Unlike the PWM functions - where the both-strand mode is set by <code>bidirect</code> and <code>strand</code> must be 1 or -1 - the k-mer functions accept <code>strand = 0</code> directly. For palindromic kmers (equal to their own reverse complement) use 1 or -1 to avoid double counting; <code>strand = 0</code> issues a warning in that case.</p></li>
 <li><p>For <code>kmer.frac</code> the denominator is the number of possible anchor positions in the interval; with <code>strand = 0</code> positions on both strands are counted, so the fraction stays in <code>[0, 1]</code> and remains comparable to the single-strand fraction.</p></li>
-</ul><p>K-mer parameters can be supplied as a list or via named arguments (see examples).</p>
+</ul><p>K-mer parameters can be supplied as a list or via named arguments (see examples), but not both in the same call.</p>
 <p>Modify iterator behavior with 'gvtrack.iterator' or 'gvtrack.iterator.2d'.</p>
     </div>
     <div id="see-also">

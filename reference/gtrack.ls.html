@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.14</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.15</span>
       </span>
     </div>
 
@@ -63,7 +63,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Returns a list of track names</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.14/R/track-management.R" class="external-link"><code>R/track-management.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/master/R/track-management.R" class="external-link"><code>R/track-management.R</code></a></small>
     <div class="hidden name"><code>gtrack.ls.Rd</code></div>
     </div>
 
@@ -74,6 +74,7 @@
     <div id="ref-usage">
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">gtrack.ls</span><span class="op">(</span></span>
 <span>  <span class="va">...</span>,</span>
+<span>  pattern <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  db <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  ignore.case <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  perl <span class="op">=</span> <span class="cn">FALSE</span>,</span>
@@ -87,8 +88,18 @@
 
 
 <dl><dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>these arguments are of either form 'pattern' or 'attribute =
-pattern'</p></dd>
+<dd><p>additional arguments of either form 'pattern' (matched against
+track names) or 'attribute = pattern' (matched against a track attribute
+value)</p></dd>
+
+
+<dt id="arg-pattern">pattern<a class="anchor" aria-label="anchor" href="#arg-pattern"></a></dt>
+<dd><p>optional pattern to match against track names, equivalent to
+passing it positionally (e.g. <code>gtrack.ls("den*")</code> and
+<code>gtrack.ls(pattern = "den*")</code> are the same). Note that this means a
+track attribute literally named "pattern" can no longer be filtered by name
+via <code>...</code>; use <code>gtrack.ls()</code> followed by
+<code><a href="gtrack.attr.get.html">gtrack.attr.get</a></code> instead.</p></dd>
 
 
 <dt id="arg-db">db<a class="anchor" aria-label="anchor" href="#arg-db"></a></dt>
@@ -111,9 +122,10 @@ patterns.</p>
 match a pattern (see 'grep'). If called without any arguments all tracks are
 returned.</p>
 <p>If pattern is specified without a track attribute (i.e. in the form of
-'pattern') then filtering is applied to the track names. If pattern is
-supplied with a track attribute (i.e. in the form of 'name = pattern') then
-track attribute is matched against the pattern.</p>
+'pattern', either positionally or via the 'pattern' argument) then filtering
+is applied to the track names. If pattern is supplied with a track attribute
+(i.e. in the form of 'name = pattern') then track attribute is matched
+against the pattern.</p>
 <p>Multiple patterns are applied one after another. The resulted list of tracks
 should match all the patterns.</p>
 <p>When multiple databases are connected, the 'db' parameter can be used to
@@ -137,6 +149,10 @@ filter tracks to only those from a specific database.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># get track names that match the pattern "den*"</span></span></span>
 <span class="r-in"><span><span class="fu">gtrack.ls</span><span class="op">(</span><span class="st">"den*"</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "dense_track"         "subdir.dense_track2"</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># equivalent, using the 'pattern' argument</span></span></span>
+<span class="r-in"><span><span class="fu">gtrack.ls</span><span class="op">(</span>pattern <span class="op">=</span> <span class="st">"den*"</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "dense_track"         "subdir.dense_track2"</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># get track names whose "created.by" attribute match the pattern</span></span></span>
