@@ -237,6 +237,99 @@ test_that("mixed scaffolds and a primary chromosome warn about the primary one",
     })
 })
 
+test_that("a skipped mitochondrial name is a message, not a warning", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        # The alias chain generates every mito spelling for whatever mito contig a
+        # database has, so an unmatched MT proves the database has no mito contig at
+        # all - unfixable by an alias, and the everyday case for hg19 / mm10 as built
+        # here. It belongs in the message channel with the other absent contigs.
+        bg <- write_lines_to("mito.bedgraph", c(
+            "chr1\t0\t100\t1.0",
+            "MT\t0\t100\t5.0"
+        ))
+
+        expect_no_warning(
+            expect_message(
+                gtrack.import("mito_bg", "mito", bg, binsize = 10),
+                "MT"
+            )
+        )
+        v <- gextract("mito_bg", gintervals("chr1", 0, 100), colnames = "v")
+        expect_equal(unique(v$v), 1.0)
+    })
+})
+
+test_that("chrM in a whole-genome file does not push the report into the warning channel", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        bg <- write_lines_to("wg.bedgraph", c(
+            "chr1\t0\t100\t1.0",
+            "chr1_gl000191_random\t0\t100\t5.0",
+            "chrM\t0\t100\t5.0"
+        ))
+
+        expect_no_warning(expect_message(
+            gtrack.import("wg_bg", "whole genome", bg, binsize = 10),
+            "chrM"
+        ))
+    })
+})
+
+test_that("a primary chromosome after the tracking cap is still noticed", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        # 120 junk names exhaust the distinct-name cap; chr7 comes after all of them
+        # and must still route the report to the warning channel.
+        junk <- sprintf("READ%05d\t0\t100\t1.0", 1:120)
+        bg <- write_lines_to("late_primary.bedgraph", c(
+            "chr1\t0\t100\t1.0", junk, "chr7\t0\t100\t5.0"
+        ))
+
+        w <- capture_warnings(gtrack.import("late_bg", "late", bg, binsize = 10))
+        expect_length(w, 1)
+        expect_match(w, "chr7")
+        # the junk names blew past the cap, so the count is reported as approximate
+        expect_match(w, "^100\\+ chromosome name")
+    })
+})
+
+test_that("the skipped-name count is only marked approximate when names were dropped", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        # exactly at the cap, with one name repeated: nothing was dropped, so no "+"
+        junk <- sprintf("READ%05d\t0\t100\t1.0", 1:100)
+        bg <- write_lines_to("exact_cap.bedgraph", c(
+            "chr1\t0\t100\t1.0", junk, "READ00001\t200\t300\t1.0"
+        ))
+
+        m <- capture_messages(gtrack.import("cap_bg", "cap", bg, binsize = 10))
+        m <- paste(m, collapse = "")
+        expect_match(m, "100 chromosome name")
+        expect_false(grepl("100+ chromosome name", m, fixed = TRUE))
+    })
+})
+
+test_that("a warning naming more primary chromosomes than it can print says how many", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        bg <- write_lines_to("many_primary.bedgraph", c(
+            "chr1\t0\t100\t1.0",
+            sprintf("chr%d\t0\t100\t5.0", 3:10)
+        ))
+
+        w <- capture_warnings(gtrack.import("many_bg", "many", bg, binsize = 10))
+        expect_length(w, 1)
+        # 8 primary names dropped, 5 printed
+        expect_match(w, "(and 3 more)", fixed = TRUE)
+    })
+})
+
 test_that("a file with no chromosome records at all still imports silently", {
     local_db_state()
     withr::with_tempdir({

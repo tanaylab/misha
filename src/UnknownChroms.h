@@ -19,9 +19,16 @@ using namespace std;
 // Two kinds of unmatched name mean very different things to a caller:
 //   - "chr1_gl000191_random", "GL000220.1", "chrUn_KI270302v1": a contig the
 //     database deliberately does not have. Everyday, and no alias can fix it.
-//   - "chr7", "X", "MT": a primary chromosome. The database should have had it,
-//     so the naming is probably wrong.
+//   - "chr7", "X": a primary chromosome. The database should have had it, so the
+//     naming is probably wrong.
 // They are collected separately so each can be reported in its own channel.
+//
+// Mitochondria are the first kind, not the second, even though "MT" looks like a
+// chromosome name: .compute_chrom_aliases auto-generates every mito spelling
+// (M / MT / chrM) for whatever mito contig a database has, so a mito name that
+// reached here proves the database has no mito contig at all. That can never be
+// fixed by an alias, and hg19 / mm10 as built here have no chrM - so treating it
+// as primary would put every whole-genome bigWig back in the warning channel.
 
 class UnknownChroms {
 public:
@@ -39,12 +46,23 @@ public:
 		m_names.clear();
 		m_primary_names.clear();
 		m_seen.clear();
+		m_primary_seen.clear();
 		m_truncated = false;
 	}
 
 	void record(const string &chrom) {
+		// Primary-shaped names are tracked without a cap, deliberately: the cap exists to
+		// bound a mis-columned file's junk names, and there are only so many names that can
+		// look like a chromosome. Capping them would let a chr7 that appears after 100
+		// scaffolds go unnoticed and silently downgrade the report to a message.
+		if (is_primary_chrom_name(chrom) && m_primary_seen.insert(chrom).second &&
+		    m_primary_names.size() < (size_t)MAX_REPORTED)
+			m_primary_names.push_back(chrom);
+
 		if (m_seen.size() >= (size_t)MAX_TRACKED) {
-			m_truncated = true;
+			// only a name that is not already tracked is actually being dropped
+			if (m_seen.find(chrom) == m_seen.end())
+				m_truncated = true;
 			return;
 		}
 
@@ -53,43 +71,42 @@ public:
 
 		if (m_names.size() < (size_t)MAX_REPORTED)
 			m_names.push_back(chrom);
-
-		if (is_primary_chrom_name(chrom) && m_primary_names.size() < (size_t)MAX_REPORTED)
-			m_primary_names.push_back(chrom);
 	}
 
-	bool empty() const { return m_seen.empty(); }
+	bool empty() const { return m_seen.empty() && m_primary_seen.empty(); }
 
-	// Number of distinct names; equals MAX_TRACKED when truncated() is true.
+	// Number of distinct names; capped at MAX_TRACKED, in which case truncated() is true.
 	uint64_t num() const { return (uint64_t)m_seen.size(); }
 	bool truncated() const { return m_truncated; }
 
 	// Up to MAX_REPORTED names, in order of appearance.
 	const vector<string> &names() const { return m_names; }
 
-	// Up to MAX_REPORTED of those names that look like a primary chromosome.
+	// Up to MAX_REPORTED of the names that look like a primary chromosome, and the true
+	// number of distinct such names.
 	const vector<string> &primary_names() const { return m_primary_names; }
+	uint64_t num_primary() const { return (uint64_t)m_primary_seen.size(); }
 
-	// "chr7", "7", "X", "MT" (any case, with or without the chr prefix) - the names a
-	// genome database is expected to have. Scaffolds, patches and unplaced contigs
-	// carry extra tokens and do not match.
+	// "chr7", "7", "X" (any case, with or without the chr prefix) - the names a genome
+	// database is expected to have. Scaffolds, patches and unplaced contigs carry extra
+	// tokens and do not match; neither does a mitochondrial name (see above).
+	//
+	// Allocation-free: this runs once per unmatched record, not once per distinct name.
 	static bool is_primary_chrom_name(const string &name) {
-		string s = name;
+		size_t off = 0;
 
-		if (s.size() > 3) {
-			string prefix = s.substr(0, 3);
-			for (size_t i = 0; i < prefix.size(); ++i)
-				prefix[i] = (char)tolower((unsigned char)prefix[i]);
-			if (prefix == "chr")
-				s = s.substr(3);
-		}
+		if (name.size() > 3 && tolower((unsigned char)name[0]) == 'c' &&
+		    tolower((unsigned char)name[1]) == 'h' && tolower((unsigned char)name[2]) == 'r')
+			off = 3;
 
-		if (s.empty() || s.size() > 2)
+		size_t len = name.size() - off;
+
+		if (!len || len > 2)
 			return false;
 
 		bool all_digits = true;
-		for (size_t i = 0; i < s.size(); ++i) {
-			if (!isdigit((unsigned char)s[i])) {
+		for (size_t i = off; i < name.size(); ++i) {
+			if (!isdigit((unsigned char)name[i])) {
 				all_digits = false;
 				break;
 			}
@@ -97,15 +114,18 @@ public:
 		if (all_digits)
 			return true;
 
-		for (size_t i = 0; i < s.size(); ++i)
-			s[i] = (char)toupper((unsigned char)s[i]);
-		return s == "X" || s == "Y" || s == "Z" || s == "W" || s == "M" || s == "MT";
+		if (len > 1)
+			return false;
+
+		char c = (char)toupper((unsigned char)name[off]);
+		return c == 'X' || c == 'Y' || c == 'Z' || c == 'W';
 	}
 
 private:
 	vector<string> m_names;
 	vector<string> m_primary_names;
 	set<string>    m_seen;
+	set<string>    m_primary_seen;
 	bool           m_truncated;
 };
 

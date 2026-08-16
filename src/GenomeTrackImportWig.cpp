@@ -85,8 +85,9 @@ static void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fn
 //     from the main chromosomes deliberately does not have it, no alias can fix it, and this
 //     is what every whole-genome bigWig looks like. A message: visible and in order, and it
 //     cannot be aggregated away into "there were 50 or more warnings".
-//   - a primary chromosome (chr7, X, MT): the database was supposed to have that one, so the
-//     naming is probably wrong. A warning, with the alias hint.
+//   - a primary chromosome (chr7, X): the database was supposed to have that one, so the
+//     naming is probably wrong. A warning, with the alias hint. Mitochondria are the first
+//     kind, not this one - see UnknownChroms.
 static void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
 {
 	if (unknown.empty())
@@ -108,7 +109,7 @@ static void report_skipped_chroms(const char *fname, const UnknownChroms &unknow
 		         "%llu%s chromosome name(s) in %s do not exist in the genome database and were skipped, among them "
 		         "primary chromosome(s): %s. Data for the remaining %llu chromosome(s) was imported. %s",
 		         (unsigned long long)unknown.num(), unknown.truncated() ? "+" : "", fname,
-		         format_chrom_names(unknown.primary_names(), unknown.primary_names().size(), false).c_str(),
+		         format_chrom_names(unknown.primary_names(), unknown.num_primary(), false).c_str(),
 		         (unsigned long long)num_matched, format_alias_hint(envir).c_str());
 		slot = ".GPENDING.WARNING";
 	}
