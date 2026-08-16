@@ -14,34 +14,34 @@
 using namespace std;
 using namespace rdb;
 
-// Formats up to max_shown names as "a, b, c (and N more)".
-static string format_chrom_names(const vector<string> &names, uint64_t total, size_t max_shown)
+// Formats names as "a, b, c (and N more)". "N+" when the count itself was capped.
+static string format_chrom_names(const vector<string> &names, uint64_t total, bool truncated)
 {
 	string res;
-	size_t shown = min(names.size(), max_shown);
 
-	for (size_t i = 0; i < shown; ++i) {
+	for (size_t i = 0; i < names.size(); ++i) {
 		if (i)
 			res += ", ";
 		res += names[i];
 	}
 
-	if (total > shown) {
+	if (total > names.size()) {
 		char buf[100];
-		snprintf(buf, sizeof(buf), "%s(and %llu more)", shown ? " " : "", (unsigned long long)(total - shown));
+		snprintf(buf, sizeof(buf), "%s(and %llu%s more)", names.empty() ? "" : " ",
+		         (unsigned long long)(total - names.size()), truncated ? "+" : "");
 		res += buf;
 	}
 	return res;
 }
 
-static string format_db_chroms(const GenomeChromKey &chromkey, size_t max_shown)
+static string format_db_chroms(const GenomeChromKey &chromkey)
 {
 	vector<string> names;
-	size_t shown = min((size_t)chromkey.get_num_chroms(), max_shown);
+	size_t shown = min((size_t)chromkey.get_num_chroms(), (size_t)UnknownChroms::MAX_REPORTED);
 
 	for (size_t i = 0; i < shown; ++i)
 		names.push_back(chromkey.id2chrom((int)i));
-	return format_chrom_names(names, chromkey.get_num_chroms(), max_shown);
+	return format_chrom_names(names, chromkey.get_num_chroms(), false);
 }
 
 static string format_alias_hint(SEXP envir)
@@ -55,48 +55,77 @@ static string format_alias_hint(SEXP envir)
 	return hint;
 }
 
-// Decides what an import that could not map all of the file's chromosome names should do.
+// A file that named chromosomes and matched none of them contributes nothing to the track:
+// whatever the track would end up holding (all NaN, or defval everywhere) comes from nowhere
+// in the file. Refuse before writing anything.
 //
-// The importer knows two things here: how many database chromosomes the file supplied data
-// for, and which names in the file matched nothing. A file that covers only part of the
-// database (a chr1-only bedGraph) has no unmatched names and is silent; a file whose names
-// belong to another naming convention has unmatched names and either loses everything
-// (error) or loses part of its data (warning).
+// A file that matched some of them is a different matter, and is left to
+// report_skipped_chroms below. The distinction the importer can actually make here is
+// between names in the file that resolved and names that did not - not between database
+// chromosomes the file covered and ones it did not. A chr1-only bedGraph dropped nothing,
+// so it is silent; it is unmatched names that prove data in the file never reached the track.
 static void verify_chroms_matched(const GenomeChromKey &chromkey, const char *fname,
-                                  const vector<string> &unknown_chroms, uint64_t num_unknown,
-                                  uint64_t num_matched, SEXP envir)
+                                  const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
 {
-	if (!num_unknown)
+	if (unknown.empty() || num_matched)
 		return;
 
-	string unknown_str = format_chrom_names(unknown_chroms, num_unknown, 5);
+	verror("None of the chromosome names in %s exist in the genome database: no data from the file would reach the track.\n"
+	       "File chromosomes: %s.\n"
+	       "Database chromosomes: %s.\n"
+	       "%s",
+	       fname, format_chrom_names(unknown.names(), unknown.num(), unknown.truncated()).c_str(),
+	       format_db_chroms(chromkey).c_str(), format_alias_hint(envir).c_str());
+}
 
-	if (!num_matched) {
-		verror("None of the chromosome names in %s exist in the genome database, so the track would be empty (all NaN).\n"
-		       "File chromosomes: %s.\n"
-		       "Database chromosomes: %s.\n"
-		       "%s",
-		       fname, unknown_str.c_str(), format_db_chroms(chromkey, 5).c_str(), format_alias_hint(envir).c_str());
-	}
+// Reports the names dropped by an import that did produce data. Which channel it goes to
+// depends on what was dropped, because the two cases are not equally alarming:
+//
+//   - a scaffold / patch / unplaced contig (chrUn_*, *_random, GL000220.1): a database built
+//     from the main chromosomes deliberately does not have it, no alias can fix it, and this
+//     is what every whole-genome bigWig looks like. A message: visible and in order, and it
+//     cannot be aggregated away into "there were 50 or more warnings".
+//   - a primary chromosome (chr7, X, MT): the database was supposed to have that one, so the
+//     naming is probably wrong. A warning, with the alias hint.
+static void report_skipped_chroms(const char *fname, const UnknownChroms &unknown, uint64_t num_matched, SEXP envir)
+{
+	if (unknown.empty())
+		return;
 
 	char msg[10000];
-	snprintf(msg, sizeof(msg),
-	         "%llu chromosome name(s) in %s do not exist in the genome database and were skipped: %s. "
-	         "Data for the remaining %llu chromosome(s) was imported. %s",
-	         (unsigned long long)num_unknown, fname, unknown_str.c_str(),
-	         (unsigned long long)num_matched, format_alias_hint(envir).c_str());
+	const char *slot;
 
-	// Rf_warning() is unsafe here: a caller that catches the warning with an exiting
-	// handler (tryCatch, or options(warn = 2)) longjmps out of the C++ frame, skipping
-	// ~RdbInitializer. The message is left for .gcall() to raise once the call returns.
+	if (unknown.primary_names().empty()) {
+		snprintf(msg, sizeof(msg),
+		         "%llu%s chromosome name(s) in %s do not exist in the genome database and were skipped: %s. "
+		         "Data for the remaining %llu chromosome(s) was imported.",
+		         (unsigned long long)unknown.num(), unknown.truncated() ? "+" : "", fname,
+		         format_chrom_names(unknown.names(), unknown.num(), unknown.truncated()).c_str(),
+		         (unsigned long long)num_matched);
+		slot = ".GPENDING.MESSAGE";
+	} else {
+		snprintf(msg, sizeof(msg),
+		         "%llu%s chromosome name(s) in %s do not exist in the genome database and were skipped, among them "
+		         "primary chromosome(s): %s. Data for the remaining %llu chromosome(s) was imported. %s",
+		         (unsigned long long)unknown.num(), unknown.truncated() ? "+" : "", fname,
+		         format_chrom_names(unknown.primary_names(), unknown.primary_names().size(), false).c_str(),
+		         (unsigned long long)num_matched, format_alias_hint(envir).c_str());
+		slot = ".GPENDING.WARNING";
+	}
+
+	// Neither Rf_warning() nor an R-level message() can be raised from here: a caller that
+	// catches either with an exiting handler (tryCatch, or options(warn = 2)) longjmps out of
+	// the C++ frame, skipping ~RdbInitializer. The text is left for .gcall() to raise once the
+	// call has returned - and it is only set once the import can no longer fail, so an error
+	// downstream cannot leave it behind as permanent state in .misha.
 	SEXP rmsg = rprotect_ptr(Rf_mkString(msg));
-	define_in_misha(envir, ".GPENDING.WARNING", rmsg);
+	define_in_misha(envir, slot, rmsg);
 	runprotect(1);
 }
 
 extern "C" {
 
-SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP _envir)
+SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _srcname, SEXP _binsize, SEXP _defvalue, SEXP _envir)
 {
 	try {
 		RdbInitializer rdb_init;
@@ -107,6 +136,9 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 		if (!Rf_isString(_wig) || Rf_length(_wig) != 1)
 			verror("Wig argument is not a string");
 
+		if (!Rf_isString(_srcname) || Rf_length(_srcname) != 1)
+			verror("Source name argument is not a string");
+
 		if ((!Rf_isReal(_binsize) && !Rf_isInteger(_binsize)) || Rf_length(_binsize) != 1)
 			verror("Binsize argument is not a number");
 
@@ -115,6 +147,11 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 
 		const char *track = CHAR(STRING_ELT(_track, 0));
 		const char *fname = CHAR(STRING_ELT(_wig, 0));
+		// What the user asked to import. gtrack.import unzips and converts bigWig into a
+		// temporary file that is deleted before the call returns, so messages that name
+		// fname would point at a path that no longer exists (and, in gtrack.import_set,
+		// disagree with the file name reported as failed).
+		const char *srcname = CHAR(STRING_ELT(_srcname, 0));
 		double dbinsize = Rf_isReal(_binsize) ? REAL(_binsize)[0] : INTEGER(_binsize)[0];
 		unsigned binsize = (unsigned)dbinsize;
 		double defvalue = Rf_isReal(_defvalue) ? REAL(_defvalue)[0] : INTEGER(_defvalue)[0];
@@ -155,11 +192,12 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 				       fname, wig_err_msg.c_str(), e.msg());
 			}
 
-			verify_chroms_matched(iu.get_chromkey(), fname, csv.get_unknown_chroms(), csv.get_num_unknown_chroms(),
-			                      csv.get_num_matched_chroms(), _envir);
-		} else
-			verify_chroms_matched(iu.get_chromkey(), fname, wig.get_unknown_chroms(), wig.get_num_unknown_chroms(),
-			                      wig.get_num_matched_chroms(), _envir);
+		}
+
+		const UnknownChroms &unknown_chroms = is_csv ? csv.get_unknown_chroms() : wig.get_unknown_chroms();
+		uint64_t num_matched_chroms = is_csv ? csv.get_num_matched_chroms() : wig.get_num_matched_chroms();
+
+		verify_chroms_matched(iu.get_chromkey(), srcname, unknown_chroms, num_matched_chroms, _envir);
 
 		GIntervals all_genome_intervs;
 		iu.get_all_genome_intervs(all_genome_intervs);
@@ -291,6 +329,10 @@ SEXP gtrackimportwig(SEXP _track, SEXP _wig, SEXP _binsize, SEXP _defvalue, SEXP
 			progress.report(1);
 		}
 		progress.report_last();
+
+		// Only now, when nothing downstream can throw, is it safe to leave a pending
+		// message behind for .gcall() to raise.
+		report_skipped_chroms(srcname, unknown_chroms, num_matched_chroms, _envir);
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {

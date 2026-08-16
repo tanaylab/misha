@@ -2,11 +2,13 @@
     # C++ cannot raise the warning itself: a caller that catches it with an exiting
     # handler (tryCatch, or options(warn = 2)) would longjmp out of the C frame and
     # leave misha's PROTECT counter inflated. Warnings are therefore left in
-    # .misha$.GPENDING.WARNING and raised here, once the call has returned.
+    # .misha$.GPENDING.WARNING and raised here, once the call has returned. Messages
+    # travel the same way, in .misha$.GPENDING.MESSAGE.
     # An outer call may have left a message of its own: gintervals.mapply runs the
     # user's FUN, and any misha call inside it nests under it. Take the outer
     # message aside and put it back, so this call raises only what it produced.
     outer_msg <- .gclear_pending_warning()
+    outer_note <- .gclear_pending_message()
     tryCatch(
         {
             res <- .Call(...)
@@ -16,8 +18,15 @@
         }
     )
     msg <- .gclear_pending_warning()
+    note <- .gclear_pending_message()
     if (!is.null(outer_msg)) {
         assign(".GPENDING.WARNING", outer_msg, envir = .misha)
+    }
+    if (!is.null(outer_note)) {
+        assign(".GPENDING.MESSAGE", outer_note, envir = .misha)
+    }
+    if (!is.null(note)) {
+        message(note)
     }
     if (!is.null(msg)) {
         warning(msg, call. = FALSE)
@@ -27,11 +36,20 @@
 
 # Removes the pending warning left by the C++ layer, if any, and returns it.
 .gclear_pending_warning <- function() {
-    if (!exists(".GPENDING.WARNING", envir = .misha, inherits = FALSE)) {
+    .gclear_pending(".GPENDING.WARNING")
+}
+
+# Removes the pending message left by the C++ layer, if any, and returns it.
+.gclear_pending_message <- function() {
+    .gclear_pending(".GPENDING.MESSAGE")
+}
+
+.gclear_pending <- function(slot) {
+    if (!exists(slot, envir = .misha, inherits = FALSE)) {
         return(NULL)
     }
-    msg <- get(".GPENDING.WARNING", envir = .misha)
-    rm(".GPENDING.WARNING", envir = .misha)
+    msg <- get(slot, envir = .misha)
+    rm(list = slot, envir = .misha)
     msg
 }
 

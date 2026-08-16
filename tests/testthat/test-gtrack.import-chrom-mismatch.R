@@ -7,8 +7,11 @@
 #
 # Policy under test:
 #   - zero chromosomes matched  -> error
-#   - some matched, some not    -> warning, matched data imported
+#   - some matched, some not    -> matched data imported, skipped names reported:
+#     a message for contigs the database does not have, a warning when a skipped
+#     name looks like a primary chromosome (chr7, X, MT)
 #   - all of the file's names matched (even if the database has more) -> silent
+#   - no chromosome records in the file at all -> silent (deliberate carve-out)
 #   - names the alias chain resolves (chr1 <-> 1) count as matched
 
 ensure_valid_groot()
@@ -148,7 +151,7 @@ test_that("a file covering only part of the database imports silently", {
     })
 })
 
-test_that("partially matching file warns, names the skipped chromosomes and imports the rest", {
+test_that("skipped scaffolds are reported as a message, not a warning, and the rest is imported", {
     local_db_state()
     withr::with_tempdir({
         setup_mismatch_db()
@@ -158,9 +161,13 @@ test_that("partially matching file warns, names the skipped chromosomes and impo
             "scaffold_9\t0\t100\t5.0"
         ))
 
-        expect_warning(
-            gtrack.import("partial_bg", "partial", bg, binsize = 10),
-            "scaffold_9"
+        # A contig the database does not have is the everyday case (whole-genome
+        # bigWigs are full of them), so it must not consume the warning channel.
+        expect_no_warning(
+            expect_message(
+                gtrack.import("partial_bg", "partial", bg, binsize = 10),
+                "scaffold_9"
+            )
         )
         expect_true(gtrack.exists("partial_bg"))
         v <- gextract("partial_bg", gintervals("chr1", 0, 200), colnames = "v")
@@ -169,7 +176,7 @@ test_that("partially matching file warns, names the skipped chromosomes and impo
     })
 })
 
-test_that("partially matching tab file warns", {
+test_that("skipped scaffolds in a tab file are reported as a message", {
     local_db_state()
     withr::with_tempdir({
         setup_mismatch_db()
@@ -179,12 +186,89 @@ test_that("partially matching tab file warns", {
             "scaffold_9\t0\t100\t5.0"
         ))
 
-        expect_warning(
-            gtrack.import("partial_tab", "partial", tab, binsize = 10),
-            "scaffold_9"
+        expect_no_warning(
+            expect_message(
+                gtrack.import("partial_tab", "partial", tab, binsize = 10),
+                "scaffold_9"
+            )
         )
         v <- gextract("partial_tab", gintervals("chr1", 0, 100), colnames = "v")
         expect_equal(unique(v$v), 1.0)
+    })
+})
+
+test_that("a skipped primary chromosome warns and points at the alias mechanism", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        # chr3 is not a scaffold the database chose to omit - it looks like a
+        # chromosome that should have been there, so this one is a warning.
+        bg <- write_lines_to("primary.bedgraph", c(
+            "chr1\t0\t100\t1.0",
+            "chr3\t0\t100\t5.0"
+        ))
+
+        w <- capture_warnings(gtrack.import("primary_bg", "primary", bg, binsize = 10))
+        expect_length(w, 1)
+        expect_match(w, "chr3")
+        expect_match(w, "chrom_aliases.tsv")
+        v <- gextract("primary_bg", gintervals("chr1", 0, 100), colnames = "v")
+        expect_equal(unique(v$v), 1.0)
+    })
+})
+
+test_that("mixed scaffolds and a primary chromosome warn about the primary one", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        bg <- write_lines_to("mixed.bedgraph", c(
+            "chr1\t0\t100\t1.0",
+            "chr1_gl000191_random\t0\t100\t5.0",
+            "chrUn_KI270302v1\t0\t100\t5.0",
+            "chrX\t0\t100\t5.0"
+        ))
+
+        w <- capture_warnings(gtrack.import("mixed_bg", "mixed", bg, binsize = 10))
+        expect_length(w, 1)
+        expect_match(w, "chrX")
+        # the scaffolds are counted, but they are not what the warning is about
+        expect_match(w, "^3 chromosome name")
+        expect_false(grepl("gl000191", w))
+    })
+})
+
+test_that("a file with no chromosome records at all still imports silently", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        # Deliberate carve-out: nothing was skipped and no name mismatched, so
+        # there is nothing to report. An empty sample in a batch keeps working.
+        wig <- write_lines_to("empty.wig", c("track type=wiggle_0 name=\"empty\""))
+
+        expect_no_warning(expect_no_message(
+            gtrack.import("empty_wig", "empty", wig, binsize = 10)
+        ))
+        expect_true(gtrack.exists("empty_wig"))
+        expect_true(all(is.na(gextract("empty_wig", gintervals.all(), colnames = "v")$v)))
+    })
+})
+
+test_that("diagnostics name the file the user asked for, not the temporary copy", {
+    skip_if(Sys.which("gunzip") == "", "gunzip not on PATH")
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        plain <- write_lines_to("gzipped.bedgraph", c("scaffold_1\t0\t100\t1.0"))
+        system(sprintf("gzip -f %s", shQuote(plain)))
+        gz <- paste0(plain, ".gz")
+        expect_true(file.exists(gz))
+
+        # gtrack.import unzips into a temp file that is gone by the time the user
+        # reads the error; the message must still name the .gz they passed.
+        err <- tryCatch(suppressMessages(gtrack.import("gz_nomatch", "gz", gz, binsize = 10)),
+            error = function(e) conditionMessage(e)
+        )
+        expect_match(err, "gzipped.bedgraph.gz", fixed = TRUE)
     })
 })
 
