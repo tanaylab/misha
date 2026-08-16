@@ -53,3 +53,30 @@ test_that("gdist dataframe = TRUE with names", {
     colnames(dst1) <- c("mytrack1", "mytrack2", "n")
     expect_equal(dst, dst1)
 })
+
+test_that("gdist errors when a positional scope collides with a named intervals=", {
+    restore_groot_on_exit() # this test re-roots to the example db; put GROOT back for tests after it
+    gdb.init_examples()
+    br <- c(0, 0.2, 0.5, 1)
+    small <- gintervals(1, 0, 50000)
+    big <- gintervals(1, 0, 500000)
+
+    # Non-colliding forms - verified numbers from the review's reproducer.
+    dist_named_big <- sum(gdist("dense_track", br, intervals = big))
+    dist_named_small <- sum(gdist("dense_track", br, intervals = small))
+    expect_equal(dist_named_big, 6546)
+    expect_equal(dist_named_small, 901)
+
+    # Positional scope alone (no named intervals=) still works, and matches
+    # the equivalent named call.
+    expect_equal(sum(gdist("dense_track", br, small)), dist_named_small)
+
+    # Colliding call: positional scope AND named intervals= must error
+    # instead of silently discarding the named argument. Before the fix this
+    # returned 901 (using `small`, discarding `intervals = big`) with no
+    # message at all.
+    expect_error(
+        gdist("dense_track", br, small, intervals = big),
+        "intervals"
+    )
+})

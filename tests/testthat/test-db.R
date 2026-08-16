@@ -137,6 +137,62 @@ test_that("gtrack.ls works", {
     expect_null(gtrack.ls("wig", created.by = "import"))
 })
 
+test_that("gtrack.ls(pattern = ) matches the positional pattern form", {
+    gdb.init_examples()
+
+    # named 'pattern' must behave exactly like the equivalent positional argument
+    expect_identical(gtrack.ls(pattern = "dense"), gtrack.ls("dense"))
+    expect_true(length(gtrack.ls(pattern = "dense")) > 0)
+
+    # attribute filtering through ... must still work once 'pattern' is a real formal
+    expect_identical(
+        gtrack.ls(created.by = "create_sparse"),
+        gtrack.ls()[grepl("create_sparse", vapply(gtrack.ls(), function(t) gtrack.attr.get(t, "created.by"), character(1)))]
+    )
+
+    # 'pattern' combined with an attribute filter still ANDs the two together
+    expect_identical(
+        gtrack.ls(pattern = "sparse", created.by = "create_sparse"),
+        gtrack.ls("sparse", created.by = "create_sparse")
+    )
+
+    # a pattern with no matching track name still behaves exactly like the
+    # positional form (character(0), not NULL - see gtrack.ls("no_such_track_xyz"))
+    expect_identical(gtrack.ls(pattern = "no_such_track_xyz"), gtrack.ls("no_such_track_xyz"))
+
+    # a pattern combined with a non-matching attribute filter still returns NULL,
+    # exactly like the equivalent all-through-... call (unchanged NULL-on-no-match
+    # semantics for the attribute-filter path)
+    expect_identical(gtrack.ls(pattern = "dense", blalaattr = "bubu"), gtrack.ls("dense", blalaattr = "bubu"))
+    expect_null(gtrack.ls(pattern = "dense", blalaattr = "bubu"))
+})
+
+test_that("gtrack.ls(pattern = ) shadows a track attribute literally named 'pattern' (accepted tradeoff)", {
+    # Track attributes are arbitrary user-set key/value pairs with no reserved
+    # names, so a track can legally have an attribute literally named "pattern".
+    # Giving gtrack.ls() a real 'pattern' formal means that name is now always a
+    # track-name match, even for such a track - a deliberate, accepted tradeoff
+    # (see @param pattern in ?gtrack.ls), not something that used to be impossible.
+    gdb.init_examples()
+    gdir.create("test", showWarnings = FALSE)
+    tmptrack <- paste0("test.pattern_attr_", sample(1:1e9, 1))
+    gtrack.rm(tmptrack, force = TRUE)
+    withr::defer(gtrack.rm(tmptrack, force = TRUE))
+    gtrack.create_sparse(tmptrack, "Track with a 'pattern' attribute", gintervals(1, 0, 1000), 1)
+
+    gtrack.attr.set(tmptrack, "pattern", "puppy")
+    expect_equal(gtrack.attr.get(tmptrack, "pattern"), "puppy")
+
+    # gtrack.ls(pattern = "puppy") no longer finds this track by its "pattern"
+    # attribute - it is interpreted purely as a track-name regex, and the track's
+    # name does not contain "puppy".
+    expect_false(tmptrack %in% gtrack.ls(pattern = "puppy"))
+
+    # the attribute is still readable directly - just no longer reachable via
+    # gtrack.ls(pattern = ) by name.
+    expect_equal(gtrack.attr.get(tmptrack, "pattern"), "puppy")
+})
+
 test_that("gtrack modify and extract for fixedbin", {
     load_test_db()
     tmptrack <- paste0("test.tmptrack_", sample(1:1e9, 1))
