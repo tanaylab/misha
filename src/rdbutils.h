@@ -257,6 +257,42 @@ static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
     runprotect(2);
 }
 
+// Helper: queue a diagnostic for .gcall() to raise once the .Call has returned.
+//
+// Neither Rf_warning() nor an R-level message() can be raised from here: a caller that
+// catches either with an exiting handler (tryCatch, or options(warn = 2)) longjmps out
+// of the C++ frame, skipping ~RdbInitializer and leaving misha's PROTECT counter
+// inflated for the rest of the session.
+//
+// The queue is .misha$.GPENDING.DIAGNOSTICS: a list of length-2 character vectors,
+// c(severity, text), in the order they were produced. `severity` is "message" or
+// "warning". Appending rather than assigning one slot per severity means a second
+// diagnostic within one call cannot silently overwrite the first, and a new severity
+// costs nothing on either side of the boundary.
+static inline void add_pending_diagnostic(SEXP envir, const char *severity, const char *text) {
+    SEXP prev = find_in_misha(envir, ".GPENDING.DIAGNOSTICS");
+    int n = (prev != R_UnboundValue && TYPEOF(prev) == VECSXP) ? Rf_length(prev) : 0;
+
+    // find_in_misha does not protect its result and the allocations below can collect
+    SEXP held = R_NilValue;
+    if (n)
+        held = rprotect_ptr(prev);
+
+    SEXP queue = R_NilValue;
+    queue = rprotect_ptr(Rf_allocVector(VECSXP, n + 1));
+    for (int i = 0; i < n; ++i)
+        SET_VECTOR_ELT(queue, i, VECTOR_ELT(held, i));
+
+    SEXP entry = R_NilValue;
+    entry = rprotect_ptr(Rf_allocVector(STRSXP, 2));
+    SET_STRING_ELT(entry, 0, Rf_mkChar(severity));
+    SET_STRING_ELT(entry, 1, Rf_mkChar(text));
+    SET_VECTOR_ELT(queue, n, entry);
+
+    define_in_misha(envir, ".GPENDING.DIAGNOSTICS", queue);
+    runprotect(n ? 3 : 2);
+}
+
 
 void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
 

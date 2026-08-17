@@ -155,6 +155,72 @@ test_that("a disjoint outer iterator does not silence an overlapping inner one",
     expect_equal(sum(grepl("were merged into", seen)), 1)
 })
 
+# A queued diagnostic describes the call that queued it. .gcall has to keep that true
+# across an error or an interrupt, which is what the on.exit in it is for.
+
+# gmax.data.size is verified after the expression iterator has been built, so the
+# overlap warning is already queued by the time the call dies.
+too_big_for_the_buffer <- function(expr) {
+    withr::with_options(list(gmax.data.size = 1), expr)
+}
+
+test_that("a call that errors after queueing a diagnostic leaves nothing behind in .misha", {
+    pk <- overlapping_peaks()
+    expect_error(
+        too_big_for_the_buffer(gextract("test.fixedbin", gintervals.all(), iterator = pk)),
+        "exceeded the maximum"
+    )
+    expect_equal(grep("^\\.GPENDING", ls(.misha, all.names = TRUE), value = TRUE), character(0))
+    expect_no_warning(gextract("test.fixedbin", gintervals(1, 0, 1000)))
+})
+
+test_that("the outer call's own diagnostic survives an error inside FUN", {
+    withr::local_options(gmultitasking = FALSE)
+    pk <- overlapping_peaks()
+    # The inner call takes the outer queue aside while it runs; erroring must not be a
+    # way to lose it. This is the shape a user writes without thinking about it:
+    # tryCatch inside FUN so one bad interval does not abort the whole apply.
+    expect_warning(
+        gintervals.mapply(
+            function(x) {
+                tryCatch(
+                    too_big_for_the_buffer(gextract("test.fixedbin", gintervals(1, 0, 1000))),
+                    error = function(e) NA_real_
+                )
+                1
+            },
+            "test.fixedbin", gintervals(1, 0, 1300),
+            iterator = pk
+        ),
+        "were merged into"
+    )
+})
+
+test_that("a diagnostic queued by an inner call that errored is not raised by the outer one", {
+    withr::local_options(gmultitasking = FALSE)
+    pk <- overlapping_peaks()
+    nk <- disjoint_peaks()
+    # The outer iterator does not overlap, so the outer call has nothing to report. The
+    # inner one does, but it errors before returning, and the user handled that error -
+    # blaming the outer call for the inner call's merge names the wrong iterator.
+    expect_no_warning(
+        gintervals.mapply(
+            function(x) {
+                tryCatch(
+                    too_big_for_the_buffer(
+                        gextract("test.fixedbin", gintervals(1, 0, 1300), iterator = pk)
+                    ),
+                    error = function(e) NA_real_
+                )
+                1
+            },
+            "test.fixedbin", gintervals(1, 0, 1300),
+            iterator = nk
+        )
+    )
+    expect_equal(grep("^\\.GPENDING", ls(.misha, all.names = TRUE), value = TRUE), character(0))
+})
+
 test_that("the warning is emitted once per call, not once per process", {
     pk <- overlapping_peaks()
     withr::local_options(gmultitasking = TRUE, gmin.scope4process = 1)

@@ -383,3 +383,64 @@ test_that("gtrack.import_set reports a zero-match file as failed and keeps impor
         expect_false(gtrack.exists("bad"))
     })
 })
+
+test_that("a skipped-contig message queued inside gintervals.mapply's FUN is delivered, and does not displace the outer call's warning", {
+    local_db_state()
+    withr::local_options(gmultitasking = FALSE)
+    withr::with_tempdir({
+        setup_mismatch_db()
+        base <- write_lines_to("base.bedgraph", c(
+            "chr1\t0\t1000\t1.0",
+            "chr2\t0\t1000\t2.0"
+        ))
+        gtrack.import("base", "base", base, binsize = 100)
+
+        # A partial match: chr1 lands, scaffold_9 is skipped and reported as a message.
+        partial <- write_lines_to("partial.bedgraph", c(
+            "chr1\t0\t100\t1.0",
+            "scaffold_9\t0\t100\t5.0"
+        ))
+
+        # Overlapping iterator for the outer call, so it queues a warning of its own
+        # while FUN - and the import nested inside it - runs.
+        pk <- gintervals("chr1", c(0, 50), c(100, 300))
+        notes <- character()
+        # The inner call's diagnostics have to be caught inside FUN: gintervals.mapply
+        # evaluates FUN through R_tryEval, which resets R's handler stack.
+        expect_warning(
+            gintervals.mapply(
+                function(x) {
+                    withCallingHandlers(
+                        gtrack.import("partial", "partial", partial, binsize = 10),
+                        message = function(m) {
+                            notes <<- c(notes, conditionMessage(m))
+                            invokeRestart("muffleMessage")
+                        }
+                    )
+                    1
+                },
+                "base", gintervals("chr1", 0, 300),
+                iterator = pk
+            ),
+            "were merged into"
+        )
+        expect_equal(sum(grepl("scaffold_9", notes)), 1)
+        expect_true(gtrack.exists("partial"))
+    })
+})
+
+test_that("under options(warn = 2) a partial import aborts and leaves no track behind", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        # chrX is primary-shaped, so it goes to the warning channel; warn = 2 turns
+        # that into an error, and .gtrack.create_atomic rolls the half-built track back.
+        bg <- write_lines_to("warn2.bedgraph", c(
+            "chr1\t0\t100\t1.0",
+            "chrX\t0\t100\t5.0"
+        ))
+        withr::local_options(warn = 2)
+        expect_error(gtrack.import("warn2_bg", "warn2", bg, binsize = 10), "chrX")
+        expect_false(gtrack.exists("warn2_bg"))
+    })
+})
