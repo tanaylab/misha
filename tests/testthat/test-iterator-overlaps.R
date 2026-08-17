@@ -127,6 +127,34 @@ test_that("a misha call inside gintervals.mapply's FUN does not swallow the warn
     )
 })
 
+test_that("a disjoint outer iterator does not silence an overlapping inner one", {
+    withr::local_options(gmultitasking = FALSE)
+    pk <- overlapping_peaks()
+    nk <- disjoint_peaks()
+    # The once-per-call key is consumed only by a call that has something to report.
+    # The outer iterator here does not overlap, so it must leave the key for the inner
+    # call, whose iterator does - otherwise the merge that actually happened is silent.
+    #
+    # The handler has to be installed inside FUN: gintervals.mapply evaluates FUN
+    # through R_tryEval, which resets R's handler stack, so a handler around the
+    # gintervals.mapply call never sees a condition raised inside it.
+    seen <- character()
+    gintervals.mapply(
+        function(x) {
+            withCallingHandlers(
+                gsummary("test.fixedbin", gintervals(1, 0, 1000), iterator = pk)[["Mean"]],
+                warning = function(w) {
+                    seen <<- c(seen, conditionMessage(w))
+                    invokeRestart("muffleWarning")
+                }
+            )
+        },
+        "test.fixedbin", gintervals(1, 0, 1300),
+        iterator = nk
+    )
+    expect_equal(sum(grepl("were merged into", seen)), 1)
+})
+
 test_that("the warning is emitted once per call, not once per process", {
     pk <- overlapping_peaks()
     withr::local_options(gmultitasking = TRUE, gmin.scope4process = 1)

@@ -703,9 +703,14 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 
 				// The merge below is silent and whether it is observable depends on the scope,
 				// so the check runs once per call (see rdb::once_per_call) and only pays for
-				// the copy when the intervals really do overlap.
+				// the copy when the intervals really do overlap. The overlap test comes
+				// first, and deliberately so: once_per_call consumes the key, and a call
+				// whose iterator does not overlap has nothing to report - if it consumed
+				// the key anyway it would silence a nested call that does overlap (an
+				// inner gextract under gintervals.mapply's FUN, say). The linear scan is
+				// the cheap half; the expensive half is the copy on the next line.
 				vector<GInterval> orig_intervals;
-				if (scope1d && once_per_call("iterator1d.overlaps") && intervals_overlap(intervals1d))
+				if (scope1d && intervals_overlap(intervals1d) && once_per_call("iterator1d.overlaps"))
 					orig_intervals.assign(intervals1d.begin(), intervals1d.end());
 
 				intervals1d.unify_overlaps(false);
