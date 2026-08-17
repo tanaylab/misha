@@ -1,14 +1,34 @@
 .gcall <- function(...) {
-    # C++ cannot raise the warning itself: a caller that catches it with an exiting
-    # handler (tryCatch, or options(warn = 2)) would longjmp out of the C frame and
-    # leave misha's PROTECT counter inflated. Warnings are therefore left in
-    # .misha$.GPENDING.WARNING and raised here, once the call has returned. Messages
-    # travel the same way, in .misha$.GPENDING.MESSAGE.
-    # An outer call may have left a message of its own: gintervals.mapply runs the
-    # user's FUN, and any misha call inside it nests under it. Take the outer
-    # message aside and put it back, so this call raises only what it produced.
-    outer_msg <- .gclear_pending_warning()
-    outer_note <- .gclear_pending_message()
+    # C++ cannot raise a warning or a message itself: a caller that catches either with
+    # an exiting handler (tryCatch, or options(warn = 2)) would longjmp out of the C
+    # frame and leave misha's PROTECT counter inflated. Diagnostics are appended to
+    # .misha$.GPENDING.DIAGNOSTICS - a list of c(severity, text) pairs, see
+    # rdb::add_pending_diagnostic - and raised here, in the order they were produced,
+    # once the call has returned.
+    #
+    # An outer call may have queued diagnostics of its own: gintervals.mapply runs the
+    # user's FUN, and any misha call inside it nests under it. Take the outer queue
+    # aside and put it back, so this call raises only what it produced. That has to
+    # happen on the way out of an error or an interrupt too, or the outer call loses
+    # its own diagnostics and inherits whatever the failed inner call had queued.
+    outer <- .gtake_pending_diagnostics()
+    completed <- FALSE
+    on.exit(
+        {
+            mine <- .gtake_pending_diagnostics()
+            if (length(outer)) {
+                assign(".GPENDING.DIAGNOSTICS", outer, envir = .misha)
+            }
+            # A call that did not return produced no results for a diagnostic to
+            # qualify, so its queue is dropped rather than raised - both because the
+            # error is the thing worth reporting and because a warning raised while an
+            # error unwinds would replace it under options(warn = 2).
+            if (completed) {
+                .graise_diagnostics(mine)
+            }
+        },
+        add = TRUE
+    )
     tryCatch(
         {
             res <- .Call(...)
@@ -17,40 +37,29 @@
             stop("Command interrupted!", call. = FALSE)
         }
     )
-    msg <- .gclear_pending_warning()
-    note <- .gclear_pending_message()
-    if (!is.null(outer_msg)) {
-        assign(".GPENDING.WARNING", outer_msg, envir = .misha)
-    }
-    if (!is.null(outer_note)) {
-        assign(".GPENDING.MESSAGE", outer_note, envir = .misha)
-    }
-    if (!is.null(note)) {
-        message(note)
-    }
-    if (!is.null(msg)) {
-        warning(msg, call. = FALSE)
-    }
+    completed <- TRUE
     res
 }
 
-# Removes the pending warning left by the C++ layer, if any, and returns it.
-.gclear_pending_warning <- function() {
-    .gclear_pending(".GPENDING.WARNING")
-}
-
-# Removes the pending message left by the C++ layer, if any, and returns it.
-.gclear_pending_message <- function() {
-    .gclear_pending(".GPENDING.MESSAGE")
-}
-
-.gclear_pending <- function(slot) {
-    if (!exists(slot, envir = .misha, inherits = FALSE)) {
-        return(NULL)
+# Removes the diagnostics queued by the C++ layer, if any, and returns them: a list of
+# c(severity, text) character pairs, oldest first.
+.gtake_pending_diagnostics <- function() {
+    if (!exists(".GPENDING.DIAGNOSTICS", envir = .misha, inherits = FALSE)) {
+        return(list())
     }
-    msg <- get(slot, envir = .misha)
-    rm(list = slot, envir = .misha)
-    msg
+    diags <- get(".GPENDING.DIAGNOSTICS", envir = .misha)
+    rm(list = ".GPENDING.DIAGNOSTICS", envir = .misha)
+    diags
+}
+
+.graise_diagnostics <- function(diags) {
+    for (diag in diags) {
+        if (identical(diag[[1]], "message")) {
+            message(diag[[2]])
+        } else {
+            warning(diag[[2]], call. = FALSE)
+        }
+    }
 }
 
 .misha_env <- function() {

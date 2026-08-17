@@ -94,7 +94,7 @@ static void report_skipped_chroms(const char *fname, const UnknownChroms &unknow
 		return;
 
 	char msg[10000];
-	const char *slot;
+	const char *severity;
 
 	if (unknown.primary_names().empty()) {
 		snprintf(msg, sizeof(msg),
@@ -103,7 +103,7 @@ static void report_skipped_chroms(const char *fname, const UnknownChroms &unknow
 		         (unsigned long long)unknown.num(), unknown.truncated() ? "+" : "", fname,
 		         format_chrom_names(unknown.names(), unknown.num(), unknown.truncated()).c_str(),
 		         (unsigned long long)num_matched);
-		slot = ".GPENDING.MESSAGE";
+		severity = "message";
 	} else {
 		snprintf(msg, sizeof(msg),
 		         "%llu%s chromosome name(s) in %s do not exist in the genome database and were skipped, among them "
@@ -111,17 +111,12 @@ static void report_skipped_chroms(const char *fname, const UnknownChroms &unknow
 		         (unsigned long long)unknown.num(), unknown.truncated() ? "+" : "", fname,
 		         format_chrom_names(unknown.primary_names(), unknown.num_primary(), false).c_str(),
 		         (unsigned long long)num_matched, format_alias_hint(envir).c_str());
-		slot = ".GPENDING.WARNING";
+		severity = "warning";
 	}
 
-	// Neither Rf_warning() nor an R-level message() can be raised from here: a caller that
-	// catches either with an exiting handler (tryCatch, or options(warn = 2)) longjmps out of
-	// the C++ frame, skipping ~RdbInitializer. The text is left for .gcall() to raise once the
-	// call has returned - and it is only set once the import can no longer fail, so an error
-	// downstream cannot leave it behind as permanent state in .misha.
-	SEXP rmsg = rprotect_ptr(Rf_mkString(msg));
-	define_in_misha(envir, slot, rmsg);
-	runprotect(1);
+	// Queued for .gcall() to raise once the call has returned (see add_pending_diagnostic
+	// for why it cannot be raised here), and only once the import can no longer fail.
+	add_pending_diagnostic(envir, severity, msg);
 }
 
 extern "C" {

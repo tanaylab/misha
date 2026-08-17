@@ -598,13 +598,9 @@ static void warn_merged_iterator(const vector<GInterval> &intervals, const vecto
 			 iu.id2chrom(interv2.chromid).c_str(), (long long)interv2.start, (long long)interv2.end,
 			 iu.id2chrom(row.chromid).c_str(), (long long)row.start, (long long)row.end);
 
-	// Rf_warning() is unsafe here: a caller that catches the warning with an exiting
-	// handler (tryCatch, or options(warn = 2)) longjmps out of the C++ frame, skipping
-	// ~RdbInitializer and leaving misha's PROTECT counter inflated for the rest of the
-	// session. The message is left for .gcall() to raise once the call has returned.
-	SEXP rmsg = rprotect_ptr(Rf_mkString(msg));
-	define_in_misha(iu.get_env(), ".GPENDING.WARNING", rmsg);
-	runprotect(1);
+	// Rf_warning() is unsafe here (see add_pending_diagnostic for why): the text is
+	// queued for .gcall() to raise once the call has returned.
+	add_pending_diagnostic(iu.get_env(), "warning", msg);
 }
 
 TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterator, const TrackExpressionVars &vars, const vector<string> &track_exprs,
