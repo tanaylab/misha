@@ -9,7 +9,7 @@
 #   - zero chromosomes matched  -> error
 #   - some matched, some not    -> matched data imported, skipped names reported:
 #     a message for contigs the database does not have, a warning when a skipped
-#     name looks like a primary chromosome (chr7, X, MT)
+#     name looks like a primary chromosome (chr7, X); MT is not one of those
 #   - all of the file's names matched (even if the database has more) -> silent
 #   - no chromosome records in the file at all -> silent (deliberate carve-out)
 #   - names the alias chain resolves (chr1 <-> 1) count as matched
