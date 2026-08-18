@@ -936,14 +936,19 @@ SEXP gtrack_liftover(SEXP _track,
 			if (src_track_type != GenomeTrack::RECTS && src_track_type != GenomeTrack::POINTS)
 				TGLError("Source track type %s is currently not supported in liftover", GenomeTrack::TYPE_NAMES[src_track_type]);
 
-			GIntervals2D all_genome_intervs;
-			iu.get_all_genome_intervs(all_genome_intervs);
-			vector<BufferedIntervals2D> buffered_intervs(all_genome_intervs.size());
+			// The buffers are keyed by target chrom-pair. Sizing this container from the
+			// whole-genome 2D intervals set was wrong twice over: that set is a deferred
+			// placeholder (length 0) on databases above gmulticontig.2d.threshold contigs,
+			// making every buffered_intervs[chromid1 * num_chroms + chromid2] access run off
+			// the end of an empty vector; and even when it is materialised it allocates
+			// num_chroms^2 objects (207,025 on hg38 with scaffolds) to open a handful of
+			// files. A sparse map creates a buffer only for the pairs that are written to.
+			map<ChromPair, BufferedIntervals2D> buffered_intervs;
 			char filename[FILENAME_MAX];
 			GIntervals tgt_intervals[2];
 
 			Progress_reporter progress;
-			progress.init(src_id2chrom.size() * src_id2chrom.size() + all_genome_intervs.size(), 1);
+			progress.init(src_id2chrom.size() * src_id2chrom.size(), 1);
 
 			// convert source intervals and write them to files
 			for (vector<string>::const_iterator ichrom1 = src_id2chrom.begin(); ichrom1 != src_id2chrom.end(); ++ichrom1) {
@@ -997,12 +1002,12 @@ SEXP gtrack_liftover(SEXP _track,
 
 							for (GIntervals::const_iterator iinterv1 = tgt_intervals[0].begin(); iinterv1 != tgt_intervals[0].end(); ++iinterv1) {
 								for (GIntervals::const_iterator iinterv2 = tgt_intervals[1].begin(); iinterv2 != tgt_intervals[1].end(); ++iinterv2) {
-									int idx = iinterv1->chromid * iu.get_chromkey().get_num_chroms() + iinterv2->chromid;
-									if (!buffered_intervs[idx].opened()) {
+									BufferedIntervals2D &buffered_interv = buffered_intervs[ChromPair(iinterv1->chromid, iinterv2->chromid)];
+									if (!buffered_interv.opened()) {
 										snprintf(filename, sizeof(filename), "%s/_%s-%s", dirname.c_str(), iu.get_chromkey().id2chrom(iinterv1->chromid).c_str(), iu.get_chromkey().id2chrom(iinterv2->chromid).c_str());
-										buffered_intervs[idx].open(filename, "w+", iinterv1->chromid, iinterv2->chromid);
+										buffered_interv.open(filename, "w+", iinterv1->chromid, iinterv2->chromid);
 									}
-									buffered_intervs[idx].write_interval(*iinterv1, *iinterv2, iqtree->v);
+									buffered_interv.write_interval(*iinterv1, *iinterv2, iqtree->v);
 								}
 							}
 							check_interrupt();
@@ -1023,12 +1028,12 @@ SEXP gtrack_liftover(SEXP _track,
 
 							for (GIntervals::const_iterator iinterv1 = tgt_intervals[0].begin(); iinterv1 != tgt_intervals[0].end(); ++iinterv1) {
 								for (GIntervals::const_iterator iinterv2 = tgt_intervals[1].begin(); iinterv2 != tgt_intervals[1].end(); ++iinterv2) {
-									int idx = iinterv1->chromid * iu.get_chromkey().get_num_chroms() + iinterv2->chromid;
-									if (!buffered_intervs[idx].opened()) {
+									BufferedIntervals2D &buffered_interv = buffered_intervs[ChromPair(iinterv1->chromid, iinterv2->chromid)];
+									if (!buffered_interv.opened()) {
 										snprintf(filename, sizeof(filename), "%s/_%s-%s", dirname.c_str(), iu.get_chromkey().id2chrom(iinterv1->chromid).c_str(), iu.get_chromkey().id2chrom(iinterv2->chromid).c_str());
-										buffered_intervs[idx].open(filename, "w+", iinterv1->chromid, iinterv2->chromid);
+										buffered_interv.open(filename, "w+", iinterv1->chromid, iinterv2->chromid);
 									}
-									buffered_intervs[idx].write_interval(*iinterv1, *iinterv2, iqtree->v);
+									buffered_interv.write_interval(*iinterv1, *iinterv2, iqtree->v);
 								}
 							}
 							check_interrupt();
@@ -1039,27 +1044,30 @@ SEXP gtrack_liftover(SEXP _track,
 				}
 			}
 
+			progress.report_last();
+
 			// read the temporary files one by one into memory, build the quad tree and save it in corresponding track
-			for (vector<BufferedIntervals2D>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
-				if (ibuffered_interv->opened()) {
-					int chromid1 = ibuffered_interv->chromid1();
-					int chromid2 = ibuffered_interv->chromid2();
+			progress.init(buffered_intervs.size(), 1);
+			for (map<ChromPair, BufferedIntervals2D>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
+				if (ibuffered_interv->second.opened()) {
+					int chromid1 = ibuffered_interv->second.chromid1();
+					int chromid2 = ibuffered_interv->second.chromid2();
 					RectsQuadTree qtree;
 
 					qtree.reset(0, 0, iu.get_chromkey().get_chrom_size(chromid1), iu.get_chromkey().get_chrom_size(chromid2));
 
-					ibuffered_interv->flush();
-					ibuffered_interv->seek(0, SEEK_SET);
+					ibuffered_interv->second.flush();
+					ibuffered_interv->second.seek(0, SEEK_SET);
 
 					// Collect the mapped rects, then aggregate overlaps into disjoint
 					// rects before inserting (the quadtree forbids overlapping objects).
 					vector<RectVal2D> rects;
-					while (ibuffered_interv->read_interval()) {
-						const GInterval2D &gi = ibuffered_interv->last_interval();
+					while (ibuffered_interv->second.read_interval()) {
+						const GInterval2D &gi = ibuffered_interv->second.last_interval();
 						RectVal2D rv;
 						rv.x1 = gi.start1(); rv.x2 = gi.end1();
 						rv.y1 = gi.start2(); rv.y2 = gi.end2();
-						rv.v = ibuffered_interv->last_val();
+						rv.v = ibuffered_interv->second.last_val();
 						rects.push_back(rv);
 					}
 					aggregate_2d_rects(rects, agg_cfg, qtree);
@@ -1077,10 +1085,10 @@ SEXP gtrack_liftover(SEXP _track,
 			}
 
 			// remove the buffered intervals files
-			for (vector<BufferedIntervals2D>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
-				if (ibuffered_interv->opened()) {
-					string filename = ibuffered_interv->file_name();
-					ibuffered_interv->close();
+			for (map<ChromPair, BufferedIntervals2D>::iterator ibuffered_interv = buffered_intervs.begin(); ibuffered_interv != buffered_intervs.end(); ++ibuffered_interv) {
+				if (ibuffered_interv->second.opened()) {
+					string filename = ibuffered_interv->second.file_name();
+					ibuffered_interv->second.close();
 					unlink(filename.c_str());
 				}
 			}
