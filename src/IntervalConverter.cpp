@@ -370,8 +370,17 @@ SEXP IntervalConverter::convert_rintervs(SEXP rintervals, GIntervals *intervals,
 			intervals->push_back(interval);
 		}
 
-		if (zero_length_bumped > 0)
-			Rf_warning("%u interval(s) had start == end and were extended by 1bp on load. misha does not support zero-length intervals; if this is unintended, fix the source data.", zero_length_bumped);
+		if (zero_length_bumped > 0) {
+			// Rf_warning() is unsafe here (see add_pending_diagnostic for why): the text is
+			// queued and .gcall() raises it once the call has returned. One call converts
+			// several named intervals sets - a scope and an iterator, or the two operands of
+			// gintervals.intersect() - so the queue can hold more than one of these, one per
+			// set, exactly as it raised more than one warning before.
+			char msg[1000];
+			snprintf(msg, sizeof(msg),
+					"%u interval(s) had start == end and were extended by 1bp on load. misha does not support zero-length intervals; if this is unintended, fix the source data.", zero_length_bumped);
+			add_pending_diagnostic(m_iu.get_env(), "warning", msg);
+		}
 	}
 
 	if (intervs_type_mask == (rdb::IntervUtils::INTERVS1D | rdb::IntervUtils::INTERVS2D))

@@ -732,6 +732,11 @@ void rdb::verror(const char *fmt, ...)
 		RdbInitializer::handle_error(buf);
 }
 
+bool rdb::is_kid()
+{
+	return RdbInitializer::is_kid();
+}
+
 bool rdb::once_per_call(const char *key)
 {
 	// A child process either loses its warnings or repeats them once per fork,

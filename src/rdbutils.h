@@ -142,6 +142,9 @@ void verror(const char *fmt, ...);
 // every forked child.
 bool once_per_call(const char *key);
 
+// True inside a multitasking child process launched by distribute_task().
+bool is_kid();
+
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 
@@ -269,7 +272,17 @@ static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
 // "warning". Appending rather than assigning one slot per severity means a second
 // diagnostic within one call cannot silently overwrite the first, and a new severity
 // costs nothing on either side of the boundary.
+//
+// A multitasking child gets nothing queued: the .misha environment it would write to is
+// the fork's private copy, which dies with the child, so a diagnostic queued there can
+// never be raised - the same reason once_per_call() returns false in a kid. Every site
+// that can queue from a kid also runs in the parent (the parent converts the same
+// intervals before it forks, and merges the kids' flags after), so the user still gets
+// the diagnostic, once.
 static inline void add_pending_diagnostic(SEXP envir, const char *severity, const char *text) {
+    if (is_kid())
+        return;
+
     SEXP prev = find_in_misha(envir, ".GPENDING.DIAGNOSTICS");
     int n = (prev != R_UnboundValue && TYPEOF(prev) == VECSXP) ? Rf_length(prev) : 0;
 
