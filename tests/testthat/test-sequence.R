@@ -2122,16 +2122,21 @@ test_that("gseq.pwm(mode='count') requires score.thresh", {
     )
 })
 
-test_that("gseq.pwm(mode='count') coerces a character score.thresh but rejects a vector", {
+test_that("gseq.pwm(mode='count') coerces character/factor score.thresh, rejects vector and logical", {
     seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTT")
     pssm <- gseq_count_pssm()
 
+    expected <- gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3)
+    expect_gt(length(unique(expected)), 1)
+
     # A character threshold worked before this rule existed, because the
     # .Call already ran it through as.numeric(); it still works.
-    expect_equal(
-        gseq.pwm(seqs, pssm, mode = "count", score.thresh = "-3"),
-        gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3)
-    )
+    expect_equal(gseq.pwm(seqs, pssm, mode = "count", score.thresh = "-3"), expected)
+
+    # A factor is what read.csv(stringsAsFactors = TRUE) hands you. Plain
+    # as.numeric() would return the level index (1 for factor("-3")), which is
+    # a threshold no PSSM reaches with a non-zero prior - a silent zero.
+    expect_equal(gseq.pwm(seqs, pssm, mode = "count", score.thresh = factor("-3")), expected)
 
     # A vector used to be truncated to its first element, silently.
     expect_error(
@@ -2141,6 +2146,17 @@ test_that("gseq.pwm(mode='count') coerces a character score.thresh but rejects a
 
     expect_error(
         gseq.pwm(seqs, pssm, mode = "count", score.thresh = "loose"),
+        "score.thresh must be a single number"
+    )
+
+    # A logical coerces to 1 or 0, both unreachable here, so it must not be
+    # accepted quietly.
+    expect_error(
+        gseq.pwm(seqs, pssm, mode = "count", score.thresh = TRUE),
+        "score.thresh must be a single number"
+    )
+    expect_error(
+        gseq.pwm(seqs, pssm, mode = "count", score.thresh = FALSE),
         "score.thresh must be a single number"
     )
 })
