@@ -389,9 +389,10 @@
         stop("direction must be 'above' or 'below'")
     }
 
-    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
-        stop("score.thresh must be a single numeric value")
-    }
+    # Same contract as pwm.count's threshold, and the same helper: one value,
+    # numbers and character/factor spellings of numbers accepted, everything
+    # else rejected by name. See .coerce_score_thresh().
+    score.thresh <- .coerce_score_thresh(score.thresh)
 
     if (!is.null(max_edits)) {
         if (!is.numeric(max_edits) || length(max_edits) != 1 || max_edits < 1) {
@@ -494,9 +495,10 @@
         stop("direction must be 'above' or 'below'")
     }
 
-    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
-        stop("score.thresh must be a single numeric value")
-    }
+    # Same contract as pwm.count's threshold, and the same helper: one value,
+    # numbers and character/factor spellings of numbers accepted, everything
+    # else rejected by name. See .coerce_score_thresh().
+    score.thresh <- .coerce_score_thresh(score.thresh)
 
     if (!is.null(score.min)) {
         if (!is.numeric(score.min) || length(score.min) != 1) {
@@ -583,9 +585,10 @@
         stop("direction must be 'above' or 'below'")
     }
 
-    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
-        stop("score.thresh must be a single numeric value")
-    }
+    # Same contract as pwm.count's threshold, and the same helper: one value,
+    # numbers and character/factor spellings of numbers accepted, everything
+    # else rejected by name. See .coerce_score_thresh().
+    score.thresh <- .coerce_score_thresh(score.thresh)
 
     if (!is.null(max_edits)) {
         if (!is.numeric(max_edits) || length(max_edits) != 1 || max_edits < 1) {
@@ -822,7 +825,7 @@
 #'     Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
 #'     PWM scores are log-likelihoods, so the usable range depends on the PSSM, the prior and any spatial
 #'     weights; calibrate with a \code{pwm} or \code{pwm.max} virtual track over the same intervals before
-#'     choosing one. The other members of the family accept \code{score.thresh} but ignore it.
+#'     choosing one. \code{pwm}, \code{pwm.max} and \code{pwm.max.pos} accept \code{score.thresh} but ignore it.
 #'   \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
 #'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Ties resolve to the most 5' anchor; the forward strand wins ties at the same coordinate. Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse).
 #' }
@@ -865,7 +868,8 @@
 #' \strong{Parameters:}
 #' \itemize{
 #'   \item \code{score.thresh}: The target PWM log-likelihood score that the edit distance
-#'     algorithm tries to reach. For \code{direction = "above"}, this is the score to reach
+#'     algorithm tries to reach; mandatory, and it must be a single value. For
+#'     \code{direction = "above"}, this is the score to reach
 #'     or exceed; for \code{direction = "below"}, this is the score to fall below.
 #'   \item \code{score.min}, \code{score.max}: Optional numeric pre-filters on the \strong{current}
 #'     (unedited) PWM score. Windows scoring outside the [\code{score.min}, \code{score.max}]
