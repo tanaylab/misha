@@ -315,7 +315,10 @@ test_that("every primary chromosome past the cap is counted, not just tracked", 
 
         w <- capture_warnings(gtrack.import("late_bgs", "lates", bg, binsize = 10))
         expect_length(w, 1)
-        expect_match(w, "^103\\+ chromosome name")
+        # and no "+": the cap is full, but the only names that arrived after it were
+        # primary-shaped ones, which are tracked rather than dropped. The marker means
+        # names were left out of the count (see the test below), and none were.
+        expect_match(w, "^103 chromosome name")
         expect_match(w, "chr7, chr8, chr9", fixed = TRUE)
     })
 })
