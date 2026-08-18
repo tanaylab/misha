@@ -101,11 +101,6 @@ test_that("the nested warning names the interval that disappeared", {
 })
 
 test_that("nesting deeper than the walk-back budget is still judged correctly", {
-    # gmultitasking = FALSE: an iterator whose merged block spans more than one process
-    # tile crashes the forked path, on 5.11.13 as much as here, and that has nothing to do
-    # with what this test is about.
-    withr::local_options(gmultitasking = FALSE)
-
     # One container over 200 nested peaks. Finding the intervals that reach into a given
     # scope interval walks back over the ones that start earlier, and the container keeps
     # the prefix maximum high across the whole block, so the walk gives up and hands the
@@ -128,8 +123,6 @@ test_that("nesting deeper than the walk-back budget is still judged correctly", 
 })
 
 test_that("windows that reach back past the walk cap are marked as one run", {
-    withr::local_options(gmultitasking = FALSE)
-
     # 300 windows of 200bp at a 1bp step: each one reaches back over 199 predecessors, well
     # past the walk-back budget, so every query is answered by the tree. Unlike the nested
     # container above, the reaching set here is dense - it is the whole unbroken run of
@@ -374,4 +367,79 @@ test_that("the warning is emitted once per call, not once per process", {
         }
     )
     expect_equal(sum(grepl("were merged into", ws)), 1)
+})
+
+test_that("a merged block wider than one row's worth of scope does not kill the forked worker", {
+    # The shape the merge warning tells the user to write, at the size that used to break it.
+    # A multitasking worker sizes its shared-memory result arena from the *iterator* interval
+    # count, but one iterator interval emits one row per scope interval it spans: 76 rows out
+    # of a single merged block against an arena sized for 64 (the interval count times
+    # gmultitask.max.records.factor). Released misha - 5.11.13 included - answered the
+    # overflow by re-running the whole call and returning into R from inside the fork, so the
+    # worker went on to run the caller's R code and exit through R's own shutdown, which
+    # deletes the session tempdir. The caller got "Child process exited unexpectedly with
+    # status 0" and, if its database lived under tempdir(), no database.
+    withr::local_options(gmultitasking = TRUE)
+
+    pk <- gintervals(1, c(0, seq(100, 15000, by = 200)), c(20000, seq(300, 15200, by = 200)))
+    expect_equal(nrow(pk), 76)
+
+    expect_no_warning(res <- gextract("test.fixedbin", pk, iterator = pk))
+    expect_equal(nrow(res), nrow(pk))
+    expect_equal(res$start, pk$start)
+    expect_equal(res$end, pk$end)
+    expect_equal(res$intervalID, seq_len(nrow(pk)))
+
+    serial <- withr::with_options(
+        list(gmultitasking = FALSE),
+        gextract("test.fixedbin", pk, iterator = pk)
+    )
+    expect_equal(res, serial)
+})
+
+test_that("the same worker crash is reachable with no overlap anywhere", {
+    # Nothing overlaps here: 65 disjoint scope intervals under one long iterator interval.
+    # What breaks the arena is how many rows one iterator interval emits, not the merge - the
+    # merge only reaches it by collapsing a peak set into one long block. 64 rows were fine
+    # and 65 were not, which is the arena size to the record.
+    withr::local_options(gmultitasking = TRUE)
+
+    scope <- gintervals(1, seq(100, by = 200, length.out = 65), seq(300, by = 200, length.out = 65))
+    expect_no_warning(res <- gextract("test.fixedbin", scope, iterator = gintervals(1, 0, 400000)))
+    expect_equal(nrow(res), 65)
+    expect_equal(res$start, scope$start)
+    expect_equal(res$end, scope$end)
+})
+
+test_that("an arena the worker really does outgrow falls back instead of returning into R", {
+    # The estimate cannot bound a self-overlapping scope, so the overflow has to stay
+    # survivable: 50 scope intervals over the same 20 kb under 100 iterator intervals emit
+    # 5000 rows out of an arena sized for 150 here. The worker must report that to the parent
+    # and die, and the parent re-runs the call serially - the retry is the parent's to make.
+    withr::local_options(gmultitasking = TRUE, gmultitask.max.records.factor = 1)
+
+    scope <- gintervals(1, 0:49, 20000 + 0:49)
+    itr <- gintervals(1, seq(100, by = 200, length.out = 100), seq(300, by = 200, length.out = 100))
+    expect_no_warning(res <- gextract("test.fixedbin", scope, iterator = itr))
+    expect_equal(nrow(res), 5000)
+})
+
+test_that("a forked worker takes nothing of the caller's with it", {
+    # The second-order damage, pinned on its own: a worker that reaches R's shutdown deletes
+    # the session tempdir, which is where this file's database lives (create_isolated_test_db)
+    # and where gdb.init_examples() puts its own. Both the canary and the database have to
+    # outlive the call.
+    withr::local_options(gmultitasking = TRUE)
+
+    canary <- tempfile("misha_fork_canary_")
+    writeLines("intact", canary)
+    withr::defer(unlink(canary))
+    groot <- get("GROOT", envir = .misha)
+
+    pk <- gintervals(1, c(0, seq(100, 15000, by = 200)), c(20000, seq(300, 15200, by = 200)))
+    gextract("test.fixedbin", pk, iterator = pk)
+
+    expect_true(file.exists(canary))
+    expect_true(dir.exists(groot))
+    expect_equal(nrow(gextract("test.fixedbin", gintervals(1, 0, 1000), iterator = 500)), 2)
 })

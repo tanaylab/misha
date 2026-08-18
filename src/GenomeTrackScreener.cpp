@@ -328,7 +328,8 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 						estimated_records = inflate_estimated_records(iu, base_estimated_records, max_records_factor);
 						continue;
 					}
-					return C_gscreen(_expr, _intervals, _iterator_policy, _band, _intervals_set_out, _envir);
+					if (!RdbInitializer::is_kid())   // see the outer catch: a kid must never return to R
+						return C_gscreen(_expr, _intervals, _iterator_policy, _band, _intervals_set_out, _envir);
 				}
 				throw;
 			}
@@ -460,7 +461,11 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		}
 	} catch (TGLException &e) {
 		string msg(e.msg());
-		if (msg.find("Result size exceeded the maximal allowed") != string::npos) {
+		// Only the parent may re-run the call serially: returning from a child process
+		// hands control back to R inside the fork, and the child then exits through R's
+		// own shutdown, deleting the session tempdir out from under the parent.
+		// rerror() publishes the message to the parent, which retries.
+		if (msg.find("Result size exceeded the maximal allowed") != string::npos && !RdbInitializer::is_kid()) {
 			return C_gscreen(_expr, _intervals, _iterator_policy, _band, _intervals_set_out, _envir);
 		}
 		rerror("%s", e.msg());
