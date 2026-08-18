@@ -1314,6 +1314,10 @@ gvtrack.info <- function(vtrack = NULL) {
 #' Iterator interval's 'start' coordinate is modified by adding 'sshift'.
 #' Similarly 'end' coordinate is altered by adding 'eshift'.
 #'
+#' A shifted interval that runs past a chromosome boundary is clamped to it. If
+#' nothing is left of it - it falls entirely outside the chromosome, or the
+#' shifts collapse it to zero length - the virtual track returns 'NaN'.
+#'
 #' @param vtrack virtual track name
 #' @param dim use 'NULL' or '0' for 1D iterators. '1' converts 2D iterator to
 #' (chrom1, start1, end1) , '2' converts 2D iterator to (chrom2, start2, end2)
@@ -1364,6 +1368,10 @@ gvtrack.iterator <- function(vtrack = NULL, dim = NULL, sshift = 0, eshift = 0) 
 #' Iterator interval's 'start1' coordinate is modified by adding 'sshift1'.
 #' Similarly 'end1', 'start2', 'end2' coordinates are altered by adding
 #' 'eshift1', 'sshift2' and 'eshift2' accordingly.
+#'
+#' A shifted interval that runs past a chromosome boundary is clamped to it. If
+#' nothing is left of it - it falls entirely outside the chromosome, or the
+#' shifts collapse it to zero length - the virtual track returns 'NaN'.
 #'
 #' @param vtrack virtual track name
 #' @param sshift1 shift of 'start1' coordinate
