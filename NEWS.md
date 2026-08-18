@@ -1,3 +1,8 @@
+# misha 5.11.19
+
+* **Crash fix:** `gtrack.liftover()` of a 2D track (`rects`/`points`) into a database with more than `getOption("gmulticontig.2d.threshold", 100)` contigs - which includes hg38 with scaffolds - wrote past the end of an internal per-chromosome-pair buffer, crashing R or corrupting the track it was writing. Any 2D track produced by `gtrack.liftover()` into such a database before this release should be regenerated.
+* **Bug fix:** 2D queries over an explicitly given 2D scope (a 2D track or a 2D intervals set) returned `NULL` on a database with more than `getOption("gmulticontig.2d.threshold", 100)` contigs while `gmultitasking` was on, and the correct result with it off. Every 2D entry point that multitasks was affected, including `gextract()`, `gsummary()`, `gquantiles()`, `gdist()`, `gcor()`, `gscreen()` and `gintervals.mapply()`.
+
 # misha 5.11.18
 
 * **Behavior fix:** passing overlapping intervals as a 1D iterator now warns that they were merged into wider blocks, naming one merged pair and the row it became. An interval nested inside another one counts as merged too: it widens no row, so it used to disappear silently. Exact duplicates stay silent - both copies come back as the same row, so no interval is missing from the output. Results are unchanged; to get one value per interval, call `gextract()` with the same intervals as its scope and map the rows back with the `intervalID` column.
