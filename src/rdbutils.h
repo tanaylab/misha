@@ -142,6 +142,9 @@ void verror(const char *fmt, ...);
 // every forked child.
 bool once_per_call(const char *key);
 
+// True inside a multitasking child process launched by distribute_task().
+bool is_kid();
+
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 
@@ -214,6 +217,9 @@ SEXP RSaneUnserialize(const char *fname);
 // Same as above: replaces Rf_allocVector which can fail on memory allocation and then R makes a longmp, skipping all the destructors
 SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
+// Same as above for Rf_mkChar, which allocates a CHARSXP and can fail the same way
+SEXP RSaneMkChar(const char *str);
+
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 
 // Backward-compatible shims for R < 4.5.0
@@ -269,7 +275,17 @@ static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
 // "warning". Appending rather than assigning one slot per severity means a second
 // diagnostic within one call cannot silently overwrite the first, and a new severity
 // costs nothing on either side of the boundary.
+//
+// A multitasking child gets nothing queued: the .misha environment it would write to is
+// the fork's private copy, which dies with the child, so a diagnostic queued there can
+// never be raised - the same reason once_per_call() returns false in a kid. Every site
+// that can queue from a kid also runs in the parent (the parent converts the same
+// intervals before it forks, and merges the kids' flags after), so the user still gets
+// the diagnostic, once.
 static inline void add_pending_diagnostic(SEXP envir, const char *severity, const char *text) {
+    if (is_kid())
+        return;
+
     SEXP prev = find_in_misha(envir, ".GPENDING.DIAGNOSTICS");
     int n = (prev != R_UnboundValue && TYPEOF(prev) == VECSXP) ? Rf_length(prev) : 0;
 
@@ -278,15 +294,19 @@ static inline void add_pending_diagnostic(SEXP envir, const char *severity, cons
     if (n)
         held = rprotect_ptr(prev);
 
+    // RSaneAllocVector/RSaneMkChar rather than the plain R allocators: a failing
+    // Rf_allocVector or Rf_mkChar longjmps out of here, which is precisely the unwind
+    // this queue exists to avoid. These allocations are small, but the failure mode is
+    // the same one, and it would strike while a diagnostic is being recorded.
     SEXP queue = R_NilValue;
-    queue = rprotect_ptr(Rf_allocVector(VECSXP, n + 1));
+    queue = rprotect_ptr(RSaneAllocVector(VECSXP, n + 1));
     for (int i = 0; i < n; ++i)
         SET_VECTOR_ELT(queue, i, VECTOR_ELT(held, i));
 
     SEXP entry = R_NilValue;
-    entry = rprotect_ptr(Rf_allocVector(STRSXP, 2));
-    SET_STRING_ELT(entry, 0, Rf_mkChar(severity));
-    SET_STRING_ELT(entry, 1, Rf_mkChar(text));
+    entry = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
+    SET_STRING_ELT(entry, 0, RSaneMkChar(severity));
+    SET_STRING_ELT(entry, 1, RSaneMkChar(text));
     SET_VECTOR_ELT(queue, n, entry);
 
     define_in_misha(envir, ".GPENDING.DIAGNOSTICS", queue);

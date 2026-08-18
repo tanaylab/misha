@@ -732,6 +732,11 @@ void rdb::verror(const char *fmt, ...)
 		RdbInitializer::handle_error(buf);
 }
 
+bool rdb::is_kid()
+{
+	return RdbInitializer::is_kid();
+}
+
 bool rdb::once_per_call(const char *key)
 {
 	// A child process either loses its warnings or repeats them once per fork,
@@ -1123,6 +1128,29 @@ SEXP rdb::RSaneAllocVector(SEXPTYPE type, R_xlen_t len)
     data.type = type;
     data.len = len;
     Rboolean ok = R_ToplevelExec(RSaneAllocVectorCallback, &data);
+    if (!ok)
+        verror("Allocation failed");
+    return data.retv;
+}
+
+struct RSaneMkCharData {
+    const char *str;
+    SEXP        retv;
+};
+
+static void RSaneMkCharCallback(void *_data)
+{
+    RSaneMkCharData *data = (RSaneMkCharData *)_data;
+    data->retv = Rf_mkChar(data->str);
+}
+
+SEXP rdb::RSaneMkChar(const char *str)
+{
+    RSaneMkCharData data;
+
+    data.str = str;
+    data.retv = R_NilValue;
+    Rboolean ok = R_ToplevelExec(RSaneMkCharCallback, &data);
     if (!ok)
         verror("Allocation failed");
     return data.retv;

@@ -145,7 +145,10 @@ gseq.comp <- function(seq) {
 #' @param mode character; one of "lse", "max", "pos", or "count"
 #' @param bidirect logical; if TRUE, scans both strands (default: TRUE)
 #' @param strand integer; 1=forward, -1=reverse, 0=both strands (default: 0)
-#' @param score.thresh numeric; score threshold for \code{mode="count"} (default: 0)
+#' @param score.thresh single number; windows scoring at or above this value are counted.
+#'   Required when \code{mode="count"} and ignored otherwise. PWM scores are
+#'   log-likelihoods, so the usable range depends on the PSSM, the prior and any
+#'   spatial weights - calibrate with \code{mode="max"} before choosing one.
 #' @param start_pos integer or NULL; 1-based inclusive start of ROI (default: 1)
 #' @param end_pos integer or NULL; 1-based inclusive end of ROI (default: sequence length)
 #' @param extend logical or integer; extension of allowed window starts (default: FALSE)
@@ -222,14 +225,17 @@ gseq.comp <- function(seq) {
 #' # Find position with strand information
 #' gseq.pwm(seqs, pssm, mode = "pos", bidirect = TRUE, return_strand = TRUE)
 #'
-#' # Count matches above threshold
-#' gseq.pwm(seqs, pssm, mode = "count", score.thresh = 0.5)
+#' # Count matches above threshold. score.thresh is mandatory in "count" mode
+#' # and has no default: PWM scores are log-likelihoods, so calibrate it
+#' # against the score range of your own PSSM.
+#' range(gseq.pwm(seqs, pssm, mode = "max"))
+#' gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3)
 #'
 #' # Score only a region of interest
 #' gseq.pwm(seqs, pssm, mode = "max", start_pos = 3, end_pos = 10)
 #'
 #' # Allow matches to extend beyond ROI boundaries
-#' gseq.pwm(seqs, pssm, mode = "count", start_pos = 5, end_pos = 8, extend = TRUE)
+#' gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3, start_pos = 5, end_pos = 8, extend = TRUE)
 #'
 #' # Spatial weighting example: higher weight in the center
 #' spatial_weights <- c(0.5, 1.0, 2.0, 1.0, 0.5)
@@ -246,7 +252,7 @@ gseq.pwm <- function(seqs,
                      mode = c("lse", "max", "pos", "count"),
                      bidirect = TRUE,
                      strand = 0L,
-                     score.thresh = 0,
+                     score.thresh = NULL,
                      start_pos = NULL,
                      end_pos = NULL,
                      extend = FALSE,
@@ -262,6 +268,22 @@ gseq.pwm <- function(seqs,
                      prior = 0.01) {
     # Validate inputs
     mode <- match.arg(mode)
+
+    # 'score.thresh' decides what mode = "count" counts, and no value is right
+    # for every PSSM: a misha PWM score is a log-likelihood, so its usable
+    # range depends entirely on the matrix, the prior and the spatial weights.
+    # The old default of 0 sat above the whole range of any non-deterministic
+    # PSSM and silently counted nothing. Require it, as gseq.pwm_edits does.
+    if (mode == "count") {
+        if (is.null(score.thresh)) {
+            stop("gseq.pwm(mode = \"count\") requires a 'score.thresh' argument. PWM scores are log-likelihoods, so there is no default that suits every PSSM - pick a threshold from the score distribution of your own matrix, e.g. with mode = \"max\".", call. = FALSE)
+        }
+        score.thresh <- .coerce_score_thresh(score.thresh)
+    } else if (is.null(score.thresh)) {
+        # Ignored outside mode = "count"; keep passing the historical value
+        # down to C++ so nothing else changes.
+        score.thresh <- 0
+    }
 
     pssm <- .coerce_pssm_matrix(
         pssm,
@@ -391,7 +413,7 @@ gseq.pwm <- function(seqs,
 #'   sequences are extracted automatically via \code{gseq.extract}.
 #' @param pssm numeric matrix or data frame with columns A, C, G, T. Each row
 #'   is a motif position.
-#' @param score.thresh numeric; target PWM log-likelihood score to reach.
+#' @param score.thresh single number; target PWM log-likelihood score to reach.
 #' @param max_edits integer or NULL; maximum number of edits to search. NULL
 #'   means no cap. Default NULL.
 #' @param max_indels integer or NULL; maximum number of insertions and deletions
@@ -529,9 +551,10 @@ gseq.pwm_edits <- function(seqs,
     )
 
     # Validate parameters
-    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
-        stop("score.thresh must be a single numeric value")
-    }
+    # Same contract as the pwm.edit_distance vtracks and pwm.count: one value,
+    # numbers and character/factor spellings of numbers accepted, everything
+    # else rejected by name. See .coerce_score_thresh().
+    score.thresh <- .coerce_score_thresh(score.thresh)
     if (!is.null(max_edits)) {
         max_edits <- as.integer(max_edits)
         if (max_edits < 1) stop("max_edits must be NULL or a positive integer")

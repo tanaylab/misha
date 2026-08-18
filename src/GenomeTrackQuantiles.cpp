@@ -236,9 +236,14 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 			// buffers (lowest_vals/highest_vals) plus a single sort of the
 			// reservoir-sized samples vector inside StreamPercentiler.
 			if (calc_medians(sp, percentiles, medians, 0)){
-				Rf_warning("Data size (%llu) exceeds the limit (%llu).\n"
+				// Rf_warning() is unsafe here (see add_pending_diagnostic for why): the text
+				// is queued and .gcall() raises it once the call has returned.
+				char msg[1000];
+				snprintf(msg, sizeof(msg),
+						"Data size (%llu) exceeds the limit (%llu).\n"
 						"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 						"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)sp.stream_size(), (unsigned long long)iu.get_max_data_size());
+				add_pending_diagnostic(iu.get_env(), "warning", msg);
 			}
 		}
 
@@ -542,15 +547,26 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 						}
 					}
 
-					// only kid_lowest_vals_buf_size of all lowest values are really the lowest among all the samples
+					// Only kid_lowest_vals_buf_size of all lowest values are really the lowest
+					// among all the samples - but the kids together may have handed over fewer
+					// than that, whenever gquantile.edge.data.size exceeds what the whole stream
+					// can supply (each kid's tail buffer holds at most its own stream size).
+					// Both the partial_sort middle and the resize must therefore be clamped to
+					// what was actually gathered: an unclamped middle makes make_heap() run past
+					// the end of the vector (silently reading and reordering whatever follows
+					// within the allocation, and corrupting the heap once it leaves it), and an
+					// unclamped resize pads the tail buffer with zeroes that then sort to the
+					// front and are handed back as the low quantiles.
 					if (was_lowest_vals_buf_used) {
-						partial_sort(lowest_vals.begin(), lowest_vals.begin() + kid_lowest_vals_buf_size, lowest_vals.end(), less<double>());
-						lowest_vals.resize(kid_lowest_vals_buf_size);
+						uint64_t num_lowest_vals = min(kid_lowest_vals_buf_size, (uint64_t)lowest_vals.size());
+						partial_sort(lowest_vals.begin(), lowest_vals.begin() + num_lowest_vals, lowest_vals.end(), less<double>());
+						lowest_vals.resize(num_lowest_vals);
 					}
 
 					if (was_highest_vals_buf_used) {
-						partial_sort(highest_vals.begin(), highest_vals.begin() + kid_highest_vals_buf_size, highest_vals.end(), greater<double>());
-						highest_vals.resize(kid_highest_vals_buf_size);
+						uint64_t num_highest_vals = min(kid_highest_vals_buf_size, (uint64_t)highest_vals.size());
+						partial_sort(highest_vals.begin(), highest_vals.begin() + num_highest_vals, highest_vals.end(), greater<double>());
+						highest_vals.resize(num_highest_vals);
 					}
 
 					StreamPercentiler<double> sp;
@@ -558,7 +574,8 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 					// calculate the percentiles
 					if (calc_medians(sp, percentiles, medians, 0))
-						Rf_warning("The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
+						add_pending_diagnostic(iu.get_env(), "warning",
+								"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 								"(The limit can be controlled by gmax.data.size limit)");
 				}
 			}
@@ -820,9 +837,12 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		}
 
 		if (generate_warning){
-			Rf_warning("Data size in one or more intervals exceeds the limit (%llu).\n"
+			char msg[1000];
+			snprintf(msg, sizeof(msg),
+					"Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
+			add_pending_diagnostic(iu.get_env(), "warning", msg);
 		}
 		
 		return answer;
@@ -1159,9 +1179,12 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		}
 
 		if (generate_warning){
-			Rf_warning("Data size in one or more intervals exceeds the limit (%llu).\n"
+			char msg[1000];
+			snprintf(msg, sizeof(msg),
+					"Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
+			add_pending_diagnostic(iu.get_env(), "warning", msg);
 		}
 		
 		rreturn(answer);
@@ -1279,9 +1302,12 @@ SEXP gbins_quantiles(SEXP _track_exprs, SEXP _breaks, SEXP _include_lowest, SEXP
 		}
 
 		if (generate_warning){
-			Rf_warning("Data size in one or more intervals exceeds the limit (%llu).\n"
+			char msg[1000];
+			snprintf(msg, sizeof(msg),
+					"Data size in one or more intervals exceeds the limit (%llu).\n"
 					"The data was sampled to fit the limit and the resulted quantiles are hence approximate.\n"
 					"(The limit can be controlled by gmax.data.size limit)", (unsigned long long)iu.get_max_data_size());
+			add_pending_diagnostic(iu.get_env(), "warning", msg);
 		}
 
 		// pack the answer
