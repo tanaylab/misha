@@ -28,8 +28,8 @@
 }
 
 # Normalize a `score.thresh` to a single double, for every function that takes
-# one: pwm.count, gseq.pwm(mode = "count"), the pwm.edit_distance family and
-# pwm.n_mutations.
+# one: pwm.count, gseq.pwm(mode = "count"), the pwm.edit_distance family,
+# pwm.n_mutations and gseq.pwm_edits.
 #
 # They all compare the threshold against a PWM log-likelihood - the LSE
 # variants against a log-sum-exp of those scores, which can be positive where a
@@ -41,9 +41,9 @@
 # gseq.pwm's as.numeric() in the .Call always accepted them.
 #
 # Everything else is rejected, and the rejections matter as much as the
-# coercions. gseq.pwm(mode = "count") reads the threshold with an
-# unconditional Rf_asReal() (GseqString.cpp:631), so a vector silently
-# collapses to its first element there. The virtual-track
+# coercions. The two gseq entry points read the threshold with an
+# unconditional Rf_asReal() - GseqString.cpp:631 and GseqPwmEdits.cpp:1097 - so
+# a vector silently collapses to its first element there. The virtual-track
 # path errors instead of truncating (TrackExpressionParams.h:233 checks
 # Rf_isReal and Rf_length before reading REAL(rthresh)[0]), but out of C++ and
 # about the wrong thing. A logical would coerce to 1 or 0 - a threshold no PSSM

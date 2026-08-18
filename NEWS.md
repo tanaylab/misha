@@ -1,7 +1,7 @@
 # misha 5.11.19
 
 * **Behavior fix:** `score.thresh` is now mandatory for `pwm.count` virtual tracks and for `gseq.pwm(mode = "count")`, which also rejects a threshold vector instead of silently keeping its first element. The old default of 0 sits above the score range of any PSSM scored with a non-zero `prior`, so those calls counted nothing at all; pick a threshold from your own PSSM's range, which `pwm.max` / `gseq.pwm(mode = "max")` reports. With `prior = 0` the default was a real exact-match threshold - pass `score.thresh = 0` explicitly and your results are unchanged. `pwm`, `pwm.max` and `pwm.max.pos` neither require nor use it.
-* **Behavior fix:** the `pwm.edit_distance` family and `pwm.n_mutations` take the same `score.thresh` values as `pwm.count`: a number, an integer, or the character or factor spelling of a number that a config file or a `read.csv()` column hands you. A missing (`NA`) threshold now errors: it used to return exactly what an out-of-reach threshold returns - an all-`NaN` column - so the two were indistinguishable.
+* **Behavior fix:** the `pwm.edit_distance` family, `pwm.n_mutations` and `gseq.pwm_edits()` take the same `score.thresh` values as `pwm.count`: a number, an integer, or the character or factor spelling of a number that a config file or a `read.csv()` column hands you. A missing (`NA`) threshold now errors: it used to return exactly what an out-of-reach threshold returns - an all-`NaN` column, or no rows at all from `gseq.pwm_edits()` - so the two were indistinguishable.
 
 # misha 5.11.18
 

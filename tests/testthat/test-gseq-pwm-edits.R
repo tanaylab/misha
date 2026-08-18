@@ -855,3 +855,39 @@ test_that("gseq.pwm_edits score_after = score_before + sum(gains) for pure subst
         expect_equal(sub_rows$gain[i], log(0.97) - log(0.01), tolerance = 1e-3)
     }
 })
+
+test_that("gseq.pwm_edits takes the same score.thresh values as the rest of the pwm family", {
+    # score.thresh is the same PWM log-likelihood target the pwm.edit_distance
+    # vtracks take, so it is validated by the same helper: one value, numbers
+    # and character/factor spellings of numbers accepted, anything else
+    # rejected by name.
+    pssm <- matrix(
+        c(
+            0.9, 0.05, 0.025, 0.025,
+            0.05, 0.9, 0.025, 0.025
+        ),
+        nrow = 2, byrow = TRUE,
+        dimnames = list(NULL, c("A", "C", "G", "T"))
+    )
+
+    edits <- function(score.thresh) {
+        gseq.pwm_edits(c("AC", "TT", "GG"), pssm,
+            score.thresh = score.thresh, prior = 0, bidirect = FALSE
+        )
+    }
+
+    numeric_result <- edits(-1)
+    # AC is already above the threshold and the other two are not, so n_edits
+    # varies; an empty or all-zero result would compare equal to anything.
+    expect_gt(nrow(numeric_result), 0)
+    expect_gt(length(unique(numeric_result$n_edits)), 1)
+
+    expect_equal(edits("-1"), numeric_result)
+    expect_equal(edits(factor("-1")), numeric_result)
+    expect_equal(edits(-1L), numeric_result)
+
+    expect_error(edits(c(-1, -2)), "score.thresh must be a single value")
+    expect_error(edits(NULL), "score.thresh must be a single value, and this one is empty")
+    expect_error(edits(TRUE), "score.thresh must be a single number")
+    expect_error(edits("loose"), "score.thresh must be a single number")
+})

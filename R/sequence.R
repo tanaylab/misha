@@ -413,7 +413,7 @@ gseq.pwm <- function(seqs,
 #'   sequences are extracted automatically via \code{gseq.extract}.
 #' @param pssm numeric matrix or data frame with columns A, C, G, T. Each row
 #'   is a motif position.
-#' @param score.thresh numeric; target PWM log-likelihood score to reach.
+#' @param score.thresh single number; target PWM log-likelihood score to reach.
 #' @param max_edits integer or NULL; maximum number of edits to search. NULL
 #'   means no cap. Default NULL.
 #' @param max_indels integer or NULL; maximum number of insertions and deletions
@@ -551,9 +551,10 @@ gseq.pwm_edits <- function(seqs,
     )
 
     # Validate parameters
-    if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
-        stop("score.thresh must be a single numeric value")
-    }
+    # Same contract as the pwm.edit_distance vtracks and pwm.count: one value,
+    # numbers and character/factor spellings of numbers accepted, everything
+    # else rejected by name. See .coerce_score_thresh().
+    score.thresh <- .coerce_score_thresh(score.thresh)
     if (!is.null(max_edits)) {
         max_edits <- as.integer(max_edits)
         if (max_edits < 1) stop("max_edits must be NULL or a positive integer")
