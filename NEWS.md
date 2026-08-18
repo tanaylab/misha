@@ -1,3 +1,7 @@
+# misha 5.11.17
+
+* **Bug fix:** a virtual track whose `gvtrack.iterator()` `sshift`/`eshift` pushes the iterator interval off the chromosome now returns `NaN`, whatever the function. `pwm*`, `kmer*` and `masked*` returned `0` or `-Inf`, or a value that depended on the database format, and errored out ("start coordinate must be lesser than end coordinate") when four or more sequence virtual tracks were extracted in one call; `coverage` and `neighbor.count` returned `0`, indistinguishable from a real answer. An interval that only partly leaves the chromosome is still clamped to it, as before.
+
 # misha 5.11.15
 
 * **Bug fix:** `gintervals.import_bed()`, `gintervals.import_gff()` and `gintervals.import_vcf()` now import gzipped files, and error on a truncated or corrupt `.gz` instead of importing whatever happened to decompress.
