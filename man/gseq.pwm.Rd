@@ -37,7 +37,7 @@ gseq.pwm(
 
 \item{strand}{integer; 1=forward, -1=reverse, 0=both strands (default: 0)}
 
-\item{score.thresh}{numeric; windows scoring at or above this value are counted.
+\item{score.thresh}{single number; windows scoring at or above this value are counted.
 Required when \code{mode="count"} and ignored otherwise. PWM scores are
 log-likelihoods, so the usable range depends on the PSSM, the prior and any
 spatial weights - calibrate with \code{mode="max"} before choosing one.}

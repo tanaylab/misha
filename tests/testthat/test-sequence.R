@@ -1510,12 +1510,22 @@ test_that("gseq functions with gaps: custom gap characters", {
     # Use different gap characters
     seq <- "A_C.G-A*C"
 
-    # Default gaps: only "-" and "."
+    # Default gaps: only "-" and "." are skipped, so "_" and "*" stay in the
+    # window and no clean "AC" survives. prior = 0 makes a perfect match score
+    # exactly 0, so score.thresh = 0 is the exact-match threshold and the 0
+    # below is earned - the best window is nowhere near it.
+    expect_lt(
+        gseq.pwm(seq, pssm,
+            mode = "max", prior = 0, bidirect = FALSE, strand = 1,
+            skip_gaps = TRUE, gap_chars = c("-", ".")
+        ),
+        -10
+    )
     result_default <- gseq.pwm(seq, pssm,
-        mode = "count", score.thresh = 0, bidirect = FALSE, strand = 1,
+        mode = "count", score.thresh = 0, prior = 0, bidirect = FALSE, strand = 1,
         skip_gaps = TRUE, gap_chars = c("-", ".")
     )
-    expect_true(result_default >= 0)
+    expect_equal(result_default, 0)
 
     # Custom gaps: include "_" and "*"
     result_custom <- gseq.pwm(seq, pssm,
@@ -2112,15 +2122,26 @@ test_that("gseq.pwm(mode='count') requires score.thresh", {
     )
 })
 
-test_that("gseq.pwm(mode='count') rejects a non-scalar or non-numeric score.thresh", {
+test_that("gseq.pwm(mode='count') coerces a character score.thresh but rejects a vector", {
     seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTT")
-    expect_error(
-        gseq.pwm(seqs, gseq_count_pssm(), mode = "count", score.thresh = "-3"),
-        "score.thresh must be a single numeric value"
+    pssm <- gseq_count_pssm()
+
+    # A character threshold worked before this rule existed, because the
+    # .Call already ran it through as.numeric(); it still works.
+    expect_equal(
+        gseq.pwm(seqs, pssm, mode = "count", score.thresh = "-3"),
+        gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3)
     )
+
+    # A vector used to be truncated to its first element, silently.
     expect_error(
-        gseq.pwm(seqs, gseq_count_pssm(), mode = "count", score.thresh = c(-3, -2)),
-        "score.thresh must be a single numeric value"
+        gseq.pwm(seqs, pssm, mode = "count", score.thresh = c(-3, -2)),
+        "score.thresh must be a single value"
+    )
+
+    expect_error(
+        gseq.pwm(seqs, pssm, mode = "count", score.thresh = "loose"),
+        "score.thresh must be a single number"
     )
 })
 

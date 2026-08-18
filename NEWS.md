@@ -1,6 +1,6 @@
 # misha 5.11.19
 
-* **Behavior fix:** `score.thresh` is now mandatory for `pwm.count` virtual tracks and for `gseq.pwm(mode = "count")`. It used to default to 0, which is above the score range of any realistic PSSM, so every call that omitted it counted nothing at all. Pass a threshold taken from the score range of your own PSSM (`pwm.max` / `gseq.pwm(mode = "max")` shows it); the other `pwm.*` functions are unaffected.
+* **Behavior fix:** `score.thresh` is now mandatory for `pwm.count` virtual tracks and for `gseq.pwm(mode = "count")`, and a threshold vector is rejected rather than silently truncated to its first element. The old default of 0 sits above the score range of any PSSM scored with a non-zero `prior`, so those calls counted nothing at all; pick a threshold from your own PSSM's range, which `pwm.max` / `gseq.pwm(mode = "max")` reports. With `prior = 0` the default was a real exact-match threshold - pass `score.thresh = 0` explicitly and your results are unchanged. The other `pwm.*` functions are unaffected.
 
 # misha 5.11.18
 
