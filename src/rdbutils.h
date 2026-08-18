@@ -217,6 +217,9 @@ SEXP RSaneUnserialize(const char *fname);
 // Same as above: replaces Rf_allocVector which can fail on memory allocation and then R makes a longmp, skipping all the destructors
 SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
+// Same as above for Rf_mkChar, which allocates a CHARSXP and can fail the same way
+SEXP RSaneMkChar(const char *str);
+
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 
 // Backward-compatible shims for R < 4.5.0
@@ -291,15 +294,19 @@ static inline void add_pending_diagnostic(SEXP envir, const char *severity, cons
     if (n)
         held = rprotect_ptr(prev);
 
+    // RSaneAllocVector/RSaneMkChar rather than the plain R allocators: a failing
+    // Rf_allocVector or Rf_mkChar longjmps out of here, which is precisely the unwind
+    // this queue exists to avoid. These allocations are small, but the failure mode is
+    // the same one, and it would strike while a diagnostic is being recorded.
     SEXP queue = R_NilValue;
-    queue = rprotect_ptr(Rf_allocVector(VECSXP, n + 1));
+    queue = rprotect_ptr(RSaneAllocVector(VECSXP, n + 1));
     for (int i = 0; i < n; ++i)
         SET_VECTOR_ELT(queue, i, VECTOR_ELT(held, i));
 
     SEXP entry = R_NilValue;
-    entry = rprotect_ptr(Rf_allocVector(STRSXP, 2));
-    SET_STRING_ELT(entry, 0, Rf_mkChar(severity));
-    SET_STRING_ELT(entry, 1, Rf_mkChar(text));
+    entry = rprotect_ptr(RSaneAllocVector(STRSXP, 2));
+    SET_STRING_ELT(entry, 0, RSaneMkChar(severity));
+    SET_STRING_ELT(entry, 1, RSaneMkChar(text));
     SET_VECTOR_ELT(queue, n, entry);
 
     define_in_misha(envir, ".GPENDING.DIAGNOSTICS", queue);

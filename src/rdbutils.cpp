@@ -1133,6 +1133,29 @@ SEXP rdb::RSaneAllocVector(SEXPTYPE type, R_xlen_t len)
     return data.retv;
 }
 
+struct RSaneMkCharData {
+    const char *str;
+    SEXP        retv;
+};
+
+static void RSaneMkCharCallback(void *_data)
+{
+	RSaneMkCharData *data = (RSaneMkCharData *)_data;
+    data->retv = Rf_mkChar(data->str);
+}
+
+SEXP rdb::RSaneMkChar(const char *str)
+{
+    RSaneMkCharData data;
+
+    data.str = str;
+    data.retv = R_NilValue;
+    Rboolean ok = R_ToplevelExec(RSaneMkCharCallback, &data);
+    if (!ok)
+        verror("Allocation failed");
+    return data.retv;
+}
+
 SEXP rdb::get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing)
 {
 	SEXP colnames = Rf_getAttrib(v, R_NamesSymbol);
