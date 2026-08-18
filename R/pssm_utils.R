@@ -30,11 +30,17 @@
 # Normalize a `score.thresh` (pwm.count / gseq.pwm(mode = "count")) to a single
 # double.
 #
-# A length-1 character is coerced: thresholds routinely arrive from a config
-# file or a read.csv column, and gseq.pwm's as.numeric() in the .Call always
-# accepted them. A vector is rejected instead of silently collapsing to its
-# first element, which is the same silent-wrong-answer class the mandatory
-# threshold closes.
+# Numbers, character spellings of numbers and factors of those are accepted:
+# thresholds routinely arrive from a config file or a read.csv column, and
+# gseq.pwm's as.numeric() in the .Call always accepted them.
+#
+# Everything else is rejected, and the rejections matter as much as the
+# coercions. A vector would collapse to its first element (Rf_asReal() at
+# GseqString.cpp:631, REAL(rthresh)[0] at TrackExpressionParams.h:235, both
+# unconditional), and a logical would coerce to 1 or 0 - a threshold no PSSM
+# reaches with a non-zero prior, so it would count nothing forever. Both are
+# the silent-wrong-answer class that making this parameter mandatory exists to
+# close, so neither may pass through the coercion that closes it.
 .coerce_score_thresh <- function(score.thresh) {
     if (length(score.thresh) != 1) {
         stop(sprintf(
@@ -47,6 +53,13 @@
     # concerned; as.numeric() on it would silently return the level index.
     if (is.factor(score.thresh)) {
         score.thresh <- as.character(score.thresh)
+    }
+
+    if (!is.numeric(score.thresh) && !is.character(score.thresh)) {
+        stop(sprintf(
+            "score.thresh must be a single number, or a character spelling of one, not a %s.",
+            class(score.thresh)[1]
+        ), call. = FALSE)
     }
 
     out <- suppressWarnings(as.numeric(score.thresh))

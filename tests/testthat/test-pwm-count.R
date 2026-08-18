@@ -563,7 +563,7 @@ test_that("pwm.count requires score.thresh (params list)", {
     expect_false("count_no_thresh_params" %in% gvtrack.ls())
 })
 
-test_that("pwm.count coerces a character score.thresh but rejects a vector", {
+test_that("pwm.count coerces character/factor score.thresh, rejects vector and logical", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
@@ -571,16 +571,23 @@ test_that("pwm.count coerces a character score.thresh but rejects a vector", {
     test_interval <- gintervals(1, 200, 300)
 
     # A threshold read out of a config file or a read.csv column arrives as a
-    # character. It is coerced, and must give the same answer as the number.
+    # character, or as a factor if stringsAsFactors was left on. Both are
+    # coerced, and must give the same answer as the number.
     gvtrack.create("count_chr", NULL, "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01, score.thresh = "-5"
+    )
+    gvtrack.create("count_fct", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01, score.thresh = factor("-5")
     )
     gvtrack.create("count_num", NULL, "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01, score.thresh = -5
     )
-    res <- gextract(c("count_chr", "count_num"), test_interval, iterator = test_interval)
+    res <- gextract(c("count_chr", "count_fct", "count_num"), test_interval, iterator = test_interval)
     expect_gt(res$count_num[1], 0)
     expect_equal(res$count_chr[1], res$count_num[1], ignore_attr = TRUE)
+    # as.numeric() on a factor returns the level index, which for factor("-5")
+    # is 1 - a threshold this PSSM never reaches, i.e. a silent zero.
+    expect_equal(res$count_fct[1], res$count_num[1], ignore_attr = TRUE)
 
     # A vector would be silently truncated to its first element by the C++
     # layer, which is the failure mode this whole rule exists to close.
@@ -592,6 +599,17 @@ test_that("pwm.count coerces a character score.thresh but rejects a vector", {
     # Something that is not a number at all is still an error.
     expect_error(
         gvtrack.create("count_bad_thresh", NULL, "pwm.count", pssm = pssm, score.thresh = "loose"),
+        "score.thresh must be a single number"
+    )
+
+    # A logical coerces to 1 or 0 under as.numeric(). Both are unreachable for
+    # this PSSM, so accepting one would silently count nothing forever.
+    expect_error(
+        gvtrack.create("count_bad_thresh", NULL, "pwm.count", pssm = pssm, score.thresh = TRUE),
+        "score.thresh must be a single number"
+    )
+    expect_error(
+        gvtrack.create("count_bad_thresh", NULL, "pwm.count", pssm = pssm, score.thresh = FALSE),
         "score.thresh must be a single number"
     )
 })
