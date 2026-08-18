@@ -1,5 +1,17 @@
 create_isolated_test_db()
 
+# The PSSM these tests use, create_test_pssm() with prior = 0.01, is the 2-row AC motif, so
+# a position can only score -0.0585 (AC), -4.6737 (one of the two bases matches) or -9.2888
+# (neither). A threshold at or below -9.2888 - which is what score.thresh = -10 was - passes
+# every position, so the count saturates at the interval length and the comparisons below
+# hold whatever the counting path does: over chr1:200-300 the forward, reverse and
+# bidirectional counts were all 100 out of 100, and "bidirectional equals the union of the
+# strands" was true because all three were the ceiling.
+#
+# -5 is the only cut that separates all three score levels, and it is the one that leaves the
+# three counts distinct and off the ceiling: 70 forward, 14 reverse, 84 bidirectional.
+pwm_count_thresh <- -5
+
 test_that("pwm.count counts hits above threshold", {
     remove_all_vtracks()
 
@@ -37,7 +49,7 @@ test_that("pwm.count respects score threshold", {
     gvtrack.create("count_all", NULL,
         func = "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = FALSE,
-        prior = 0.01, score.thresh = -10
+        prior = 0.01, score.thresh = pwm_count_thresh
     )
 
     gvtrack.create("count_strict", NULL,
@@ -202,36 +214,36 @@ test_that("pwm.count bidirectional equals per-position union (LSE) of strands", 
 
     gvtrack.create("count_plus", NULL, "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = 1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = 1
     )
 
     gvtrack.create("count_minus", NULL, "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1
     )
 
     gvtrack.create("count_bidi", NULL, "pwm.count",
         pssm = pssm, bidirect = TRUE, extend = TRUE,
-        prior = 0.01, score.thresh = -10
+        prior = 0.01, score.thresh = pwm_count_thresh
     )
 
     gvtrack.create("pwm_plus", NULL, "pwm",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = 1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = 1
     )
     gvtrack.create("pwm_minus", NULL, "pwm",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1
     )
     gvtrack.create("pwm_bidi", NULL, "pwm",
         pssm = pssm, bidirect = TRUE, extend = TRUE,
-        prior = 0.01, score.thresh = -10
+        prior = 0.01, score.thresh = pwm_count_thresh
     )
     pwm_result <- gextract(c("pwm_plus", "pwm_minus", "pwm_bidi"), test_interval, iterator = 1)
-    n_pwm_plus <- sum(pwm_result$pwm_plus > -10)
-    n_pwm_minus <- sum(pwm_result$pwm_minus > -10)
+    n_pwm_plus <- sum(pwm_result$pwm_plus > pwm_count_thresh)
+    n_pwm_minus <- sum(pwm_result$pwm_minus > pwm_count_thresh)
     # pwm_bidi is already LSE-combined per position; threshold it:
-    n_pwm_bidi <- sum(pwm_result$pwm_bidi > -10)
+    n_pwm_bidi <- sum(pwm_result$pwm_bidi > pwm_count_thresh)
 
     result <- gextract(c("count_plus", "count_minus", "count_bidi"), test_interval, iterator = test_interval)
 
@@ -251,15 +263,15 @@ test_that("pwm.count: bidi equals union (LSE) and matches pwm thresholding", {
     # Per-position PWM scores on each strand and bidirectional
     gvtrack.create("pwm_plus", NULL, "pwm",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = 1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = 1
     )
     gvtrack.create("pwm_minus", NULL, "pwm",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1
     )
     gvtrack.create("pwm_bidi", NULL, "pwm",
         pssm = pssm, bidirect = TRUE, extend = TRUE,
-        prior = 0.01, score.thresh = -10
+        prior = 0.01, score.thresh = pwm_count_thresh
     )
 
     # Iterator=1 gives per-base positions to threshold against
@@ -267,22 +279,22 @@ test_that("pwm.count: bidi equals union (LSE) and matches pwm thresholding", {
         test_interval,
         iterator = 1
     )
-    n_pwm_plus <- sum(pwm_result$pwm_plus > -10, na.rm = TRUE)
-    n_pwm_minus <- sum(pwm_result$pwm_minus > -10, na.rm = TRUE)
-    n_pwm_bidi <- sum(pwm_result$pwm_bidi > -10, na.rm = TRUE)
+    n_pwm_plus <- sum(pwm_result$pwm_plus > pwm_count_thresh, na.rm = TRUE)
+    n_pwm_minus <- sum(pwm_result$pwm_minus > pwm_count_thresh, na.rm = TRUE)
+    n_pwm_bidi <- sum(pwm_result$pwm_bidi > pwm_count_thresh, na.rm = TRUE)
 
     # Strand-specific and bidirectional counts
     gvtrack.create("count_plus", NULL, "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = 1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = 1
     )
     gvtrack.create("count_minus", NULL, "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1
     )
     gvtrack.create("count_bidi", NULL, "pwm.count",
         pssm = pssm, bidirect = TRUE, extend = TRUE,
-        prior = 0.01, score.thresh = -10
+        prior = 0.01, score.thresh = pwm_count_thresh
     )
 
     result <- gextract(c("count_plus", "count_minus", "count_bidi"),
@@ -446,15 +458,15 @@ test_that("pwm.count: strand=-1 matches pwm_minus (non-spatial, sliding path)", 
     # Per-position minus-strand scores (reference)
     gvtrack.create("pwm_minus", NULL, "pwm",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1
     )
     pwm <- gextract("pwm_minus", test_interval, iterator = 1)
-    n_minus <- sum(pwm$pwm_minus > -10, na.rm = TRUE)
+    n_minus <- sum(pwm$pwm_minus > pwm_count_thresh, na.rm = TRUE)
 
     # Minus-only count (uses sliding path when non-spatial)
     gvtrack.create("count_minus", NULL, "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1
     )
     res <- gextract("count_minus", test_interval, iterator = test_interval)
 
@@ -471,15 +483,15 @@ test_that("pwm.count: strand=-1 matches pwm_minus (spatial, non-sliding path; we
     # Per-position minus-strand scores (reference)
     gvtrack.create("pwm_minus", NULL, "pwm",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1
     )
     pwm <- gextract("pwm_minus", test_interval, iterator = 1)
-    n_minus <- sum(pwm$pwm_minus > -10, na.rm = TRUE)
+    n_minus <- sum(pwm$pwm_minus > pwm_count_thresh, na.rm = TRUE)
 
     # Spatial path forced by spat_factor; weights=1 -> no effect on threshold
     gvtrack.create("count_minus_spat", NULL, "pwm.count",
         pssm = pssm, bidirect = FALSE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1,
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1,
         spat_factor = rep(1.0, 5), spat_bin = 20L
     )
     res <- gextract("count_minus_spat", test_interval, iterator = test_interval)
@@ -496,11 +508,11 @@ test_that("pwm.count: bidirect ignores strand parameter (union semantics)", {
 
     gvtrack.create("count_bidi_s1", NULL, "pwm.count",
         pssm = pssm, bidirect = TRUE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = 1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = 1
     )
     gvtrack.create("count_bidi_sneg1", NULL, "pwm.count",
         pssm = pssm, bidirect = TRUE, extend = TRUE,
-        prior = 0.01, score.thresh = -10, strand = -1
+        prior = 0.01, score.thresh = pwm_count_thresh, strand = -1
     )
 
     out <- gextract(c("count_bidi_s1", "count_bidi_sneg1"),
