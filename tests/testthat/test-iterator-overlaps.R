@@ -127,6 +127,40 @@ test_that("nesting deeper than the walk-back budget is still judged correctly", 
     expect_match(w, "single row chr1 0-40000", fixed = TRUE)
 })
 
+test_that("windows that reach back past the walk cap are marked as one run", {
+    withr::local_options(gmultitasking = FALSE)
+
+    # 300 windows of 200bp at a 1bp step: each one reaches back over 199 predecessors, well
+    # past the walk-back budget, so every query is answered by the tree. Unlike the nested
+    # container above, the reaching set here is dense - it is the whole unbroken run of
+    # predecessors - which is the case the tree reports as a single index range.
+    st <- seq(0, by = 1, length.out = 300)
+    w <- gintervals(1, st, st + 200)
+
+    expect_no_warning(res <- gextract("test.fixedbin", w, iterator = w))
+    expect_equal(nrow(res), 300)
+    expect_equal(res$start, w$start)
+    expect_equal(res$end, w$end)
+
+    # Two 50bp scope intervals clip the single block they all merge into. Every emitted row
+    # is still contained in some window, so the warning can only come from the second half of
+    # the test, and which interval it names is decided by the full reached/verbatim marking:
+    #   scope 137-187 reaches windows 0..186 and emits 0..137 verbatim,
+    #   scope 274-324 reaches windows 75..299 and emits 124..274 verbatim,
+    # so window 275 (chr1 275-475) is the first one that is reached and never emitted on its
+    # own, and the row that swallowed it is the block clipped to 274-324.
+    sc <- gintervals(1, c(137, 274), c(187, 324))
+    msg <- tryCatch(gextract("test.fixedbin", sc, iterator = w),
+        warning = function(w) conditionMessage(w)
+    )
+    expect_match(msg, "300 intervals were merged into 1", fixed = TRUE)
+    expect_match(msg, "single row chr1 274-324", fixed = TRUE)
+
+    rows <- suppressWarnings(gextract("test.fixedbin", sc, iterator = w))
+    expect_equal(rows$start, c(137, 274))
+    expect_equal(rows$end, c(187, 324))
+})
+
 test_that("an interval nested only after the scope clips it warns as well", {
     # Neither interval is nested in the input here; the scope is what makes them so, and the
     # first one is still swallowed by the merged block.

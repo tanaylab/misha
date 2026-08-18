@@ -538,15 +538,27 @@ static void index_blocks(const vector<GInterval> &intervals, const vector<GInter
 // intervals - quadratic in the size of the block, which is the shape a container interval
 // with nested peaks inside it produces.
 //
-// This tree answers the same query in time proportional to the number of intervals it
-// reports. It is built on demand: a short scan finds the answer on its own whenever the
-// reaching intervals sit near the scope interval (sliding windows, unioned peak calls), and
-// a million-interval iterator should not pay for a tree it never queries.
+// This tree answers the same query in runs of consecutive indices rather than one index at
+// a time, so its cost follows the number of runs the answer breaks into and not the number
+// of intervals it reports. That is what keeps the dense case cheap: an overlapping window
+// wider than the cap reaches back over an unbroken run of its predecessors, which is one
+// descent plus the same sequential scan the walk itself would have done, while the nested
+// container that motivated the tree reports a single interval from a block of millions.
+//
+// It is built on demand: a short scan finds the answer on its own whenever the reaching
+// intervals sit near the scope interval (sliding windows, unioned peak calls), and a
+// million-interval iterator should not pay for a tree it never queries.
 namespace {
 
-class MaxEndTree {
+// a run of consecutive interval indices, all of which answer the query
+struct IdxRange {
+	size_t lo;
+	size_t hi;
+};
+
+class EndTree {
 public:
-	MaxEndTree() : m_built(false), m_size(0) {}
+	EndTree() : m_built(false), m_size(0) {}
 
 	void build(const vector<GInterval> &intervals) {
 		if (m_built)
@@ -557,25 +569,46 @@ public:
 		while (m_size < intervals.size())
 			m_size <<= 1;
 
-		m_tree.assign(2 * m_size, numeric_limits<int64_t>::min());
-		for (size_t i = 0; i < intervals.size(); ++i)
-			m_tree[m_size + i] = intervals[i].end;
-		for (size_t i = m_size - 1; i >= 1; --i)
-			m_tree[i] = max(m_tree[2 * i], m_tree[2 * i + 1]);
+		// the two bounds of a node sit together, so testing both costs one cache line
+		Node empty = { numeric_limits<int64_t>::max(), numeric_limits<int64_t>::min() };
+		m_tree.assign(2 * m_size, empty);
+		for (size_t i = 0; i < intervals.size(); ++i) {
+			m_tree[m_size + i].min_end = intervals[i].end;
+			m_tree[m_size + i].max_end = intervals[i].end;
+		}
+		for (size_t i = m_size - 1; i >= 1; --i) {
+			m_tree[i].min_end = min(m_tree[2 * i].min_end, m_tree[2 * i + 1].min_end);
+			m_tree[i].max_end = max(m_tree[2 * i].max_end, m_tree[2 * i + 1].max_end);
+		}
 	}
 
-	// appends the indices in [lo, hi) whose interval ends after `thr`, in ascending order
-	void ends_after(size_t lo, size_t hi, int64_t thr, vector<size_t> &out) const {
+	// appends the maximal runs of consecutive indices in [lo, hi) whose interval ends after
+	// `thr`, in ascending order
+	void ends_after(size_t lo, size_t hi, int64_t thr, vector<IdxRange> &out) const {
 		if (lo < hi)
 			descend(1, 0, m_size, lo, hi, thr, out);
 	}
 
 private:
-	void descend(size_t node, size_t node_lo, size_t node_hi, size_t lo, size_t hi, int64_t thr, vector<size_t> &out) const {
-		if (node_hi <= lo || hi <= node_lo || m_tree[node] <= thr)
+	struct Node {
+		int64_t min_end;
+		int64_t max_end;
+	};
+
+	void descend(size_t node, size_t node_lo, size_t node_hi, size_t lo, size_t hi, int64_t thr, vector<IdxRange> &out) const {
+		if (node_hi <= lo || hi <= node_lo || m_tree[node].max_end <= thr)
 			return;
+		// every interval under this node answers the query, and the node is inside the queried
+		// range: report the whole run without descending to its leaves. Padding leaves are
+		// never inside the range, so their bounds cannot reach this test.
+		if (lo <= node_lo && node_hi <= hi && m_tree[node].min_end > thr) {
+			emit(node_lo, node_hi, out);
+			return;
+		}
+		// a qualifying leaf is always covered by the test above; this is only a guard against
+		// descending past the bottom of the tree
 		if (node_hi - node_lo == 1) {
-			out.push_back(node_lo);
+			emit(node_lo, node_hi, out);
 			return;
 		}
 
@@ -584,9 +617,20 @@ private:
 		descend(2 * node + 1, node_mid, node_hi, lo, hi, thr, out);
 	}
 
-	bool             m_built;
-	size_t           m_size;
-	vector<int64_t>  m_tree;
+	// the descent visits leaves left to right, so a run split across several nodes arrives as
+	// adjacent pieces and is glued back into one
+	static void emit(size_t lo, size_t hi, vector<IdxRange> &out) {
+		if (!out.empty() && out.back().hi == lo)
+			out.back().hi = hi;
+		else {
+			IdxRange range = { lo, hi };
+			out.push_back(range);
+		}
+	}
+
+	bool           m_built;
+	size_t         m_size;
+	vector<Node>   m_tree;
 };
 
 } // anonymous namespace
@@ -594,7 +638,8 @@ private:
 // How many intervals the scan is willing to walk over before it asks the tree instead.
 // Sliding windows and unioned peak calls reach back a handful of intervals - a window
 // reaches back width/step of them - and walking is cheaper than a tree descent at that
-// size, so the threshold sits well above any realistic reach.
+// size, so the threshold sits well above any realistic reach. Past it the tree answers in
+// runs, so a window that does reach back further than this is not punished for it.
 static const size_t MAX_WALKED_INTERVALS = 128;
 
 // The emitted row that swallowed intervals[iinterv], found by re-walking the scope for the
@@ -641,8 +686,8 @@ static bool find_merged_row(const vector<GInterval> &intervals, const vector<GIn
 	vector<bool> reached(intervals.size(), false);
 	vector<bool> verbatim(intervals.size(), false);
 
-	MaxEndTree tree;
-	vector<size_t> reaching;
+	EndTree tree;
+	vector<IdxRange> reaching;
 
 	for (scope->begin_iter(); !scope->isend(); scope->next()) {
 		const GInterval &scope_interv = scope->cur_interval();
@@ -676,29 +721,33 @@ static bool find_merged_row(const vector<GInterval> &intervals, const vector<GIn
 			// How far back the scan has to start to catch the intervals that begin before the
 			// scope interval and still reach into it: max_end is a prefix maximum, so the walk
 			// back stops as soon as nothing earlier can reach.
-			size_t limit = istart - block_lo > MAX_WALKED_INTERVALS ? istart - MAX_WALKED_INTERVALS : block_lo;
+			//
+			// A single interval spanning the block holds max_end high over all of it however far
+			// away the scope interval is, and the walk would then reach the start of the block for
+			// every scope interval that touches it - quadratic, and a container interval with peaks
+			// nested inside it is exactly that shape. Being a prefix maximum is also what says in
+			// advance whether that is about to happen: max_end does not decrease inside a block, so
+			// if the interval MAX_WALKED_INTERVALS back still reaches, so does everything between,
+			// and the walk is going to run at least that far. One look there replaces the walk with
+			// a tree query, which reports the same intervals in runs.
 			size_t i = istart;
 
-			while (i > limit && max_end[i - 1] > scope_interv.start)
-				--i;
-
-			// A single interval spanning the block holds max_end high over all of it however far
-			// away the scope interval is, and the walk then reaches the start of the block for
-			// every scope interval that touches it - quadratic, and a container interval with
-			// peaks nested inside it is exactly that shape. Once the walk is this long, ask the
-			// tree for the few intervals that really do reach instead.
-			if (i == limit && limit > block_lo && max_end[i - 1] > scope_interv.start) {
+			if (istart - block_lo > MAX_WALKED_INTERVALS && max_end[istart - MAX_WALKED_INTERVALS - 1] > scope_interv.start) {
 				tree.build(intervals);
 				reaching.clear();
 				tree.ends_after(block_lo, istart, scope_interv.start, reaching);
 				for (size_t k = 0; k < reaching.size(); ++k) {
-					size_t ireach = reaching[k];
-
-					reached[ireach] = true;
-					if (intervals[ireach].start <= emitted.start && intervals[ireach].end >= emitted.end)
-						verbatim[ireach] = true;
+					for (size_t ireach = reaching[k].lo; ireach < reaching[k].hi; ++ireach) {
+						reached[ireach] = true;
+						if (intervals[ireach].start <= emitted.start && intervals[ireach].end >= emitted.end)
+							verbatim[ireach] = true;
+					}
 				}
-				i = istart;
+			} else {
+				// bounded by the look above: nothing MAX_WALKED_INTERVALS back reaches, or the block
+				// does not extend that far
+				while (i > block_lo && max_end[i - 1] > scope_interv.start)
+					--i;
 			}
 
 			for (; i < block_hi && intervals[i].start < scope_interv.end; ++i) {
