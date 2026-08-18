@@ -42,8 +42,6 @@ SEXP gcreate_test_computer2d_track(SEXP _track, SEXP _prob_skip_chrom, SEXP _max
 		string dirname = create_track_dir(_envir, track);
 		IntervUtils iu(_envir);
 		char filename[FILENAME_MAX];
-		GIntervals2D all_genome_intervs2d;
-		iu.get_all_genome_intervs(all_genome_intervs2d);
 
 		Progress_reporter progress;
 		progress.init(iu.get_chromkey().get_num_chroms() * iu.get_chromkey().get_num_chroms(), 1);
