@@ -69,6 +69,11 @@ test_that("PWM sliding window works with MOTIF_COUNT mode", {
     # and the golden snapshot - were all zeros. Restored to the intended -10,
     # which is the threshold the non-sliding pwm.count tests further down
     # this file use; the golden snapshot was regenerated to match.
+    #
+    # -10 is inside this PSSM's range, not below it: pwm.max over this window runs
+    # -12.339 to -2.848, and the counts split 738 ones to 262 zeros. Nothing lower
+    # would do - -15 passes every position - and nothing much higher either: -5, -4
+    # and -3 all give the same 25 ones, and -2 gives none at all.
     gvtrack.create("pwm_count_test", "seq",
         func = "pwm.count",
         params = list(pssm = pwm, score.thresh = -10)
@@ -79,8 +84,10 @@ test_that("PWM sliding window works with MOTIF_COUNT mode", {
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_count_test)))
     expect_true(all(result$pwm_count_test >= 0))
-    # Guard against an unreachable threshold silently making this test vacuous
-    expect_true(any(result$pwm_count_test > 0))
+    # Guard against a threshold outside the PSSM's range making this test vacuous. It has
+    # to test for variation, not for a non-zero value: a threshold below the lowest
+    # achievable score passes every position, and `any(x > 0)` is happy with that.
+    expect_gt(length(unique(result$pwm_count_test)), 1)
 
     gvtrack.rm("pwm_count_test")
 })
@@ -433,6 +440,11 @@ test_that("PWM sliding window MOTIF_COUNT mode works with iterator=20 and shifts
     # NOTE: originally `threshold = -10` (not a real pwm.count parameter -
     # see the comment at the first occurrence of this pattern above);
     # restored to the intended score.thresh = -10.
+    #
+    # This PSSM is a random 6-row matrix whose best achievable score is about -5.4, so
+    # any threshold above that counts nothing: at -5 this test returns 0 for all 5000
+    # rows. -10 leaves it discriminating - 31 distinct counts over 190-220 per 220 bp
+    # window, 0.2% of them at the 220 ceiling - and -12 saturates at 220.
     gvtrack.create("pwm_count_iter20", "seq",
         func = "pwm.count",
         params = list(pssm = pssm, score.thresh = -10)
@@ -444,8 +456,9 @@ test_that("PWM sliding window MOTIF_COUNT mode works with iterator=20 and shifts
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_count_iter20)))
     expect_true(all(result$pwm_count_iter20 >= 0))
-    # Guard against an unreachable threshold silently making this test vacuous
-    expect_true(any(result$pwm_count_iter20 > 0))
+    # Guard against a threshold outside the PSSM's range making this test vacuous, in
+    # either direction - saturated at the window length as much as stuck at zero.
+    expect_gt(length(unique(result$pwm_count_iter20)), 1)
 
     gvtrack.rm("pwm_count_iter20")
 })
@@ -817,6 +830,10 @@ test_that("PWM regression: MOTIF_COUNT mode with shifts", {
     # NOTE: originally `threshold = -10` (not a real pwm.count parameter -
     # see the comment at the first occurrence of this pattern above);
     # restored to the intended score.thresh = -10.
+    #
+    # As above: this PSSM's best achievable score is about -6.2, so -5 counts nothing at
+    # all here. -10 gives 36 distinct counts over 184-220 per 220 bp window, 1.6% of them
+    # at the ceiling; -12 saturates at 220.
     gvtrack.create("pwm_count_reg", "seq",
         func = "pwm.count",
         params = list(pssm = pssm, score.thresh = -10)
@@ -825,8 +842,9 @@ test_that("PWM regression: MOTIF_COUNT mode with shifts", {
 
     result <- gextract("pwm_count_reg", gintervals(1, 1000000, 1050000), iterator = 20)
 
-    # Guard against an unreachable threshold silently making this test vacuous
-    expect_true(any(result$pwm_count_reg > 0))
+    # Guard against a threshold outside the PSSM's range making this test vacuous, in
+    # either direction - saturated at the window length as much as stuck at zero.
+    expect_gt(length(unique(result$pwm_count_reg)), 1)
     expect_regression(result, "pwm_sliding_window_count_iter20_shifts")
 })
 
