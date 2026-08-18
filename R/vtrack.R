@@ -219,9 +219,8 @@
     # other members of the family, which keep accepting it for compatibility.
     score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
 
-    if (identical(func, "pwm.count") &&
-        (!is.numeric(score.thresh) || length(score.thresh) != 1)) {
-        stop("score.thresh must be a single numeric value", call. = FALSE)
+    if (identical(func, "pwm.count")) {
+        score.thresh <- .coerce_score_thresh(score.thresh)
     }
 
     pssm <- .coerce_pssm_matrix(
@@ -771,7 +770,7 @@
 #'   NULL (sequence) \tab pwm \tab pssm, bidirect, prior, extend, spat_* \tab Log-sum-exp score of motif likelihoods across all anchors inside the iterator interval. \cr
 #'   NULL (sequence) \tab pwm.max \tab pssm, bidirect, prior, extend, spat_* \tab Maximum log-likelihood score among all anchors (per-position union across strands). \cr
 #'   NULL (sequence) \tab pwm.max.pos \tab pssm, bidirect, prior, extend, spat_* \tab 1-based position of the best-scoring anchor (signed by strand when \code{bidirect = TRUE}); coordinates are always relative to the iterator interval after any \code{gvtrack.iterator()} shifts/extensions. \cr
-#'   NULL (sequence) \tab pwm.count \tab pssm, score.thresh (required), bidirect, prior, extend, strand, spat_* \tab Count of anchors whose score exceeds \code{score.thresh} (per-position union). \cr
+#'   NULL (sequence) \tab pwm.count \tab pssm, score.thresh (required), bidirect, prior, extend, strand, spat_* \tab Count of anchors scoring >= \code{score.thresh} (per-position union). \cr
 #' }
 #'
 #' \strong{Edit distance summarizers}
@@ -819,7 +818,7 @@
 #'   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes; anchors must still start inside the iterator.
 #'   \item Neutral characters (\code{N}, \code{n}, \code{*}) contribute the mean log-probability of the corresponding PSSM column on both strands.
 #'   \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. For \code{pwm.max.pos}, strand = -1 reports the hit position at the end of the match (still relative to the forward orientation).
-#'   \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default.
+#'   \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default, and it must be a single value.
 #'     Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
 #'     PWM scores are log-likelihoods, so the usable range depends on the PSSM, the prior and any spatial
 #'     weights; calibrate with a \code{pwm} or \code{pwm.max} virtual track over the same intervals before

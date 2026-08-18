@@ -563,19 +563,36 @@ test_that("pwm.count requires score.thresh (params list)", {
     expect_false("count_no_thresh_params" %in% gvtrack.ls())
 })
 
-test_that("pwm.count rejects a non-scalar or non-numeric score.thresh", {
+test_that("pwm.count coerces a character score.thresh but rejects a vector", {
     remove_all_vtracks()
     withr::defer(remove_all_vtracks())
 
     pssm <- create_test_pssm()
+    test_interval <- gintervals(1, 200, 300)
 
-    expect_error(
-        gvtrack.create("count_bad_thresh", NULL, "pwm.count", pssm = pssm, score.thresh = "-10"),
-        "score.thresh must be a single numeric value"
+    # A threshold read out of a config file or a read.csv column arrives as a
+    # character. It is coerced, and must give the same answer as the number.
+    gvtrack.create("count_chr", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01, score.thresh = "-5"
     )
+    gvtrack.create("count_num", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, extend = TRUE, prior = 0.01, score.thresh = -5
+    )
+    res <- gextract(c("count_chr", "count_num"), test_interval, iterator = test_interval)
+    expect_gt(res$count_num[1], 0)
+    expect_equal(res$count_chr[1], res$count_num[1], ignore_attr = TRUE)
+
+    # A vector would be silently truncated to its first element by the C++
+    # layer, which is the failure mode this whole rule exists to close.
     expect_error(
         gvtrack.create("count_bad_thresh", NULL, "pwm.count", pssm = pssm, score.thresh = c(-10, -5)),
-        "score.thresh must be a single numeric value"
+        "score.thresh must be a single value"
+    )
+
+    # Something that is not a number at all is still an error.
+    expect_error(
+        gvtrack.create("count_bad_thresh", NULL, "pwm.count", pssm = pssm, score.thresh = "loose"),
+        "score.thresh must be a single number"
     )
 })
 

@@ -145,7 +145,7 @@ gseq.comp <- function(seq) {
 #' @param mode character; one of "lse", "max", "pos", or "count"
 #' @param bidirect logical; if TRUE, scans both strands (default: TRUE)
 #' @param strand integer; 1=forward, -1=reverse, 0=both strands (default: 0)
-#' @param score.thresh numeric; windows scoring at or above this value are counted.
+#' @param score.thresh single number; windows scoring at or above this value are counted.
 #'   Required when \code{mode="count"} and ignored otherwise. PWM scores are
 #'   log-likelihoods, so the usable range depends on the PSSM, the prior and any
 #'   spatial weights - calibrate with \code{mode="max"} before choosing one.
@@ -278,9 +278,7 @@ gseq.pwm <- function(seqs,
         if (is.null(score.thresh)) {
             stop("gseq.pwm(mode = \"count\") requires a 'score.thresh' argument. PWM scores are log-likelihoods, so there is no default that suits every PSSM - pick a threshold from the score distribution of your own matrix, e.g. with mode = \"max\".", call. = FALSE)
         }
-        if (!is.numeric(score.thresh) || length(score.thresh) != 1) {
-            stop("score.thresh must be a single numeric value", call. = FALSE)
-        }
+        score.thresh <- .coerce_score_thresh(score.thresh)
     } else if (is.null(score.thresh)) {
         # Ignored outside mode = "count"; keep passing the historical value
         # down to C++ so nothing else changes.
