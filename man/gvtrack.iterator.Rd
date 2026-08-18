@@ -35,6 +35,10 @@ or '0' (meaning: no conversion is made).
 
 Iterator interval's 'start' coordinate is modified by adding 'sshift'.
 Similarly 'end' coordinate is altered by adding 'eshift'.
+
+A shifted interval that runs past a chromosome boundary is clamped to it. If
+nothing is left of it - it falls entirely outside the chromosome, or the
+shifts collapse it to zero length - the virtual track returns 'NaN'.
 }
 \examples{
 \dontshow{

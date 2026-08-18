@@ -163,7 +163,7 @@ void IntervVarProcessor::process_neighbor_count(
 	const GInterval &eval_interval = var.imdf1d ? var.imdf1d->interval : interval;
 
 	if (var.imdf1d && var.imdf1d->out_of_range) {
-		var.var[idx] = 0;
+		var.var[idx] = numeric_limits<double>::quiet_NaN();
 		return;
 	}
 
@@ -247,7 +247,7 @@ void IntervVarProcessor::process_coverage(
 	const GInterval &eval_interval = var.imdf1d ? var.imdf1d->interval : interval;
 
 	if (var.imdf1d && var.imdf1d->out_of_range) {
-		var.var[idx] = 0;
+		var.var[idx] = numeric_limits<double>::quiet_NaN();
 		return;
 	}
 
