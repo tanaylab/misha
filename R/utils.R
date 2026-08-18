@@ -37,12 +37,19 @@
     # and we are the child, which is always a bug in the C layer. Die at once and hard:
     # SIGKILL runs no exit handler and removes no file, and the parent reports the child's
     # abnormal death instead of silently dropping its share of the result.
+    #
+    # pskill/SIGKILL are called unqualified, not as tools::pskill/tools::SIGKILL: a `::`
+    # reference loads the namespace on first use if it is not loaded yet, which is file I/O
+    # and R evaluation in a process already known to be in a broken state. @importFrom in
+    # misha-package.R makes R load `tools` and resolve both bindings while the *parent*
+    # loads misha - before any child exists - so the fork inherits them already resolved and
+    # this call is nothing but a lookup in misha's own imports environment.
     pid <- Sys.getpid()
     tryCatch(
         {
             res <- .Call(...)
             if (!identical(Sys.getpid(), pid)) {
-                tools::pskill(Sys.getpid(), tools::SIGKILL)
+                pskill(Sys.getpid(), SIGKILL)
             }
         },
         interrupt = function(interrupt) {
