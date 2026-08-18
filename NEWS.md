@@ -2,6 +2,7 @@
 
 * **Crash fix:** `gtrack.liftover()` of a 2D track (`rects`/`points`) into a database with more than `getOption("gmulticontig.2d.threshold", 100)` contigs - which includes hg38 with scaffolds - wrote past the end of an internal per-chromosome-pair buffer, crashing R or corrupting the track it was writing. Any 2D track produced by `gtrack.liftover()` into such a database before this release should be regenerated.
 * **Bug fix:** 2D queries over an explicitly given 2D scope (a 2D track or a 2D intervals set) returned `NULL` on a database with more than `getOption("gmulticontig.2d.threshold", 100)` contigs while `gmultitasking` was on, and the correct result with it off. Every 2D entry point that multitasks was affected, including `gextract()`, `gsummary()`, `gquantiles()`, `gdist()`, `gcor()`, `gscreen()` and `gintervals.mapply()`.
+* **Bug fix:** `gcis_decay()` returned an all-zero decay curve on a database with more than `getOption("gmulticontig.2d.threshold", 100)` contigs - and `NULL` (surfacing as "attempt to set an attribute on NULL") while `gmultitasking` was on - because it dropped every chromosome pair from its scope. Any cis-decay curve computed on such a database should be recomputed.
 
 # misha 5.11.18
 

@@ -155,3 +155,79 @@ test_that("gtrack.liftover of a 2D track is unchanged when the whole-genome 2D g
     expect_equal(as.character(out$res$chrom1), out$chroms[c(1, 1, 2)])
     expect_equal(as.character(out$res$chrom2), out$chroms[c(1, 2, 2)])
 })
+
+# ---------------------------------------------------------------------------
+# gcis_decay masks the trans chrom pairs out of its scope
+# ---------------------------------------------------------------------------
+
+# Build a database of three contigs, each carrying one contact at distance ~300
+# and one at distance ~700, plus one trans contact that the cis mask must drop.
+# `threshold` decides whether the whole-genome 2D set is deferred or materialised.
+setup_cis_decay_db <- function(tag, threshold) {
+    withr::local_options(list(gmulticontig.2d.threshold = threshold), .local_envir = parent.frame())
+
+    chroms <- paste0("chrC", tag, 1:3)
+    scratch_db(chroms)
+
+    cis <- do.call(rbind, lapply(chroms, function(nm) {
+        data.frame(
+            chrom1 = nm, start1 = c(0, 0), end1 = c(100, 100),
+            chrom2 = nm, start2 = c(300, 700), end2 = c(400, 800),
+            stringsAsFactors = FALSE
+        )
+    }))
+    trans <- data.frame(
+        chrom1 = chroms[1], start1 = 0, end1 = 100,
+        chrom2 = chroms[2], start2 = 300, end2 = 400,
+        stringsAsFactors = FALSE
+    )
+    intervs <- rbind(cis, trans)
+    gtrack.2d.create("cis2d", "cis decay test track", intervs, rep(1, nrow(intervs)))
+
+    list(
+        chroms = chroms,
+        anchors = gintervals(chroms, 0, 2000),
+        scope = gintervals.2d(
+            chroms1 = chroms, starts1 = 0, ends1 = 2000,
+            chroms2 = chroms, starts2 = 0, ends2 = 2000
+        )
+    )
+}
+
+cis_decay_counts <- function(db, scope, multitasking) {
+    res <- withr::with_options(
+        list(gmultitasking = multitasking),
+        gcis_decay("cis2d", c(0, 500, 1000), db$anchors, db$anchors, intervals = scope)
+    )
+    as.vector(res)
+}
+
+test_that("gcis_decay is correct on a deferred-2D database, with either scope kind and either multitasking setting", {
+    local_db_state()
+
+    db <- setup_cis_decay_db("A", threshold = 2)
+    expect_equal(NROW(.misha$ALLGENOME[[2]]), 0)
+
+    # dense in-memory 2D scope, and the same scope as a 2D track (a non-dense
+    # fetcher, which takes the sparse chrom-pair walk)
+    for (scope in list(db$scope, "cis2d")) {
+        for (multitasking in c(FALSE, TRUE)) {
+            # 3 cis contacts per distance bin; the trans contact must not be counted
+            expect_equal(cis_decay_counts(db, scope, multitasking), c(3, 3, 0, 0))
+        }
+    }
+})
+
+test_that("gcis_decay on a deferred-2D database agrees with a materialised whole-genome 2D grid", {
+    local_db_state()
+
+    materialised <- setup_cis_decay_db("B", threshold = 1000)
+    expect_equal(NROW(.misha$ALLGENOME[[2]]), 9)
+    reference <- cis_decay_counts(materialised, materialised$scope, FALSE)
+    expect_equal(reference, c(3, 3, 0, 0))
+
+    deferred <- setup_cis_decay_db("C", threshold = 2)
+    expect_equal(NROW(.misha$ALLGENOME[[2]]), 0)
+    expect_equal(cis_decay_counts(deferred, deferred$scope, FALSE), reference)
+    expect_equal(cis_decay_counts(deferred, "cis2d", TRUE), reference)
+})
