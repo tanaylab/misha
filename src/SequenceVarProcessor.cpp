@@ -166,6 +166,17 @@ void SequenceVarProcessor::classify_track_vars(
 	m_classification_done = true;
 }
 
+// A shifted iterator (gvtrack.iterator sshift/eshift) that fell off the chromosome
+// leaves no sequence to score: report NaN, like every other virtual track type does.
+static inline bool seq_var_out_of_range(TrackExpressionVars::Track_var *var, unsigned idx)
+{
+	if (var->seq_imdf1d && var->seq_imdf1d->out_of_range) {
+		var->var[idx] = numeric_limits<double>::quiet_NaN();
+		return true;
+	}
+	return false;
+}
+
 void SequenceVarProcessor::process_sequence_vars(
 	TrackExpressionVars::Track_vars &track_vars,
 	const GInterval &interval,
@@ -182,11 +193,17 @@ void SequenceVarProcessor::process_sequence_vars(
 		batch_process_sequence_vtracks(m_kmer_vtracks, m_pwm_vtracks, interval, idx);
 		// Process masked vtracks individually even in batch mode (simpler than batching)
 		for (TrackExpressionVars::Track_var* ivar : m_masked_vtracks) {
+			if (seq_var_out_of_range(ivar, idx))
+				continue;
+
 			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 			ivar->var[idx] = ivar->masked_counter->score_interval(seq_interval, m_iu.get_chromkey());
 		}
 		// Process edit distance vtracks individually (no batching support)
 		for (TrackExpressionVars::Track_var* ivar : m_pwm_edit_distance_vtracks) {
+			if (seq_var_out_of_range(ivar, idx))
+				continue;
+
 			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 			if (!ivar->pwm_edit_distance_scorer) {
@@ -228,6 +245,9 @@ void SequenceVarProcessor::process_sequence_vars(
 		}
 		// Process LSE edit distance vtracks individually (no batching support)
 		for (TrackExpressionVars::Track_var* ivar : m_pwm_lse_edit_distance_vtracks) {
+			if (seq_var_out_of_range(ivar, idx))
+				continue;
+
 			const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 			if (!ivar->pwm_lse_edit_distance_scorer) {
@@ -285,6 +305,8 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 
 	for (TrackExpressionVars::Track_var* var : kmer_vtracks) {
 		if (!var->kmer_counter) continue;
+		if (seq_var_out_of_range(var, idx))
+			continue;
 
 		const GInterval &base_interval = var->seq_imdf1d ? var->seq_imdf1d->interval : interval;
 		char strand = var->kmer_counter->get_strand();
@@ -379,6 +401,9 @@ void SequenceVarProcessor::batch_process_sequence_vtracks(
 	// Process PWM vtracks using score_interval
 	// The shared cache prevents redundant disk I/O
 	for (TrackExpressionVars::Track_var* var : pwm_vtracks) {
+		if (seq_var_out_of_range(var, idx))
+			continue;
+
 		const GInterval &seq_interval = var->seq_imdf1d ? var->seq_imdf1d->interval : interval;
 		var->var[idx] = var->pwm_scorer->score_interval(seq_interval, m_iu.get_chromkey());
 	}
@@ -395,6 +420,9 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 {
 	// Process PWM vtracks
 	for (TrackExpressionVars::Track_var* ivar : pwm_vtracks) {
+		if (seq_var_out_of_range(ivar, idx))
+			continue;
+
 		const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 		// Check if filter applies
@@ -446,6 +474,9 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 
 	// Process kmer vtracks
 	for (TrackExpressionVars::Track_var* ivar : kmer_vtracks) {
+		if (seq_var_out_of_range(ivar, idx))
+			continue;
+
 		const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 		if (ivar->kmer_counter) {
@@ -495,6 +526,9 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 
 	// Process masked vtracks
 	for (TrackExpressionVars::Track_var* ivar : masked_vtracks) {
+		if (seq_var_out_of_range(ivar, idx))
+			continue;
+
 		const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 		if (ivar->masked_counter) {
@@ -544,6 +578,9 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 
 	// Process PWM edit distance vtracks
 	for (TrackExpressionVars::Track_var* ivar : pwm_edit_distance_vtracks) {
+		if (seq_var_out_of_range(ivar, idx))
+			continue;
+
 		const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 		if (!ivar->pwm_edit_distance_scorer) {
@@ -590,6 +627,9 @@ void SequenceVarProcessor::process_individual_sequence_vars(
 
 	// Process LSE edit distance vtracks
 	for (TrackExpressionVars::Track_var* ivar : pwm_lse_edit_distance_vtracks) {
+		if (seq_var_out_of_range(ivar, idx))
+			continue;
+
 		const GInterval &seq_interval = ivar->seq_imdf1d ? ivar->seq_imdf1d->interval : interval;
 
 		if (!ivar->pwm_lse_edit_distance_scorer) {
