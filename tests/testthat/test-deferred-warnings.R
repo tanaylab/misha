@@ -260,3 +260,87 @@ test_that("a warning queued by a call that then errors is not raised by a later 
     expect_equal(pending_diagnostics(), character(0))
     expect_no_warning(gextract("test.fixedbin", gintervals(1, 0, 1000)))
 })
+
+# ---------------------------------------------------------------------------------
+# Nested .gcall(): gintervals.mapply evaluates FUN inside its own .Call, so a misha
+# call made from FUN nests inside a call that has already queued diagnostics of its
+# own. This is what .gcall()'s take-the-outer-queue-aside-and-put-it-back exists for.
+#
+# The inner warnings have to be collected inside FUN: FUN is evaluated through
+# R_tryEval, which runs it in a fresh top-level context, so a withCallingHandlers
+# wrapped around the outer call does not see them.
+
+zerolen_texts <- function() {
+    list(
+        outer = "2 interval(s) had start == end and were extended by 1bp on load. misha does not support zero-length intervals; if this is unintended, fix the source data.",
+        inner = "3 interval(s) had start == end and were extended by 1bp on load. misha does not support zero-length intervals; if this is unintended, fix the source data."
+    )
+}
+
+test_that("a nested .gcall raises only its own warnings, and the outer keeps its own", {
+    withr::local_options(gmultitasking = FALSE)
+    # Without the take-aside, the inner call raises the outer set's warning as well -
+    # once per interval, since the outer queue would still be there each time - and the
+    # outer call ends up raising whatever the last inner call left behind.
+    txt <- zerolen_texts()
+    n_intervals <- nrow(gintervals.load("zerolen"))
+    inner_ws <- character()
+
+    outer_ws <- zero_length_warnings(
+        gintervals.mapply(
+            function(x) {
+                withCallingHandlers(
+                    gsummary("test.fixedbin", "zerolen2"),
+                    warning = function(w) {
+                        inner_ws <<- c(inner_ws, conditionMessage(w))
+                        invokeRestart("muffleWarning")
+                    }
+                )
+                mean(x)
+            },
+            "test.fixedbin",
+            intervals = "zerolen"
+        )
+    )
+
+    # Each inner call raises its own set's warning and nothing else...
+    expect_equal(inner_ws, rep(txt$inner, n_intervals))
+    # ...and the outer call still raises its own, exactly once, after FUN has run.
+    expect_equal(outer_ws, txt$outer)
+    expect_equal(pending_diagnostics(), character(0))
+})
+
+test_that("an inner .gcall that errors drops its queue and leaves the outer one alone", {
+    withr::local_options(gmultitasking = FALSE)
+    # The inner call queues the zero-length warning while it loads the scope, then dies
+    # on the result-size limit. Its queue goes with it; the outer call's does not.
+    txt <- zerolen_texts()
+    inner_ws <- character()
+
+    outer_ws <- zero_length_warnings(
+        gintervals.mapply(
+            function(x) {
+                withCallingHandlers(
+                    try(
+                        withr::with_options(
+                            list(gmax.data.size = 1),
+                            gextract("test.fixedbin", "zerolen2")
+                        ),
+                        silent = TRUE
+                    ),
+                    warning = function(w) {
+                        inner_ws <<- c(inner_ws, conditionMessage(w))
+                        invokeRestart("muffleWarning")
+                    }
+                )
+                mean(x)
+            },
+            "test.fixedbin",
+            intervals = "zerolen"
+        )
+    )
+
+    expect_equal(inner_ws, character(0))
+    expect_equal(outer_ws, txt$outer)
+    expect_equal(pending_diagnostics(), character(0))
+})
