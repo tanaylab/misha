@@ -147,7 +147,7 @@ interval after all modifier adjustments.
   NULL (sequence) \tab pwm \tab pssm, bidirect, prior, extend, spat_* \tab Log-sum-exp score of motif likelihoods across all anchors inside the iterator interval. \cr
   NULL (sequence) \tab pwm.max \tab pssm, bidirect, prior, extend, spat_* \tab Maximum log-likelihood score among all anchors (per-position union across strands). \cr
   NULL (sequence) \tab pwm.max.pos \tab pssm, bidirect, prior, extend, spat_* \tab 1-based position of the best-scoring anchor (signed by strand when \code{bidirect = TRUE}); coordinates are always relative to the iterator interval after any \code{gvtrack.iterator()} shifts/extensions. \cr
-  NULL (sequence) \tab pwm.count \tab pssm, score.thresh, bidirect, prior, extend, strand, spat_* \tab Count of anchors whose score exceeds \code{score.thresh} (per-position union). \cr
+  NULL (sequence) \tab pwm.count \tab pssm, score.thresh (required), bidirect, prior, extend, strand, spat_* \tab Count of anchors whose score exceeds \code{score.thresh} (per-position union). \cr
 }
 
 \strong{Edit distance summarizers}
@@ -195,7 +195,11 @@ The sections below provide additional notes for motif, interval, k-mer, and mask
   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes; anchors must still start inside the iterator.
   \item Neutral characters (\code{N}, \code{n}, \code{*}) contribute the mean log-probability of the corresponding PSSM column on both strands.
   \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. For \code{pwm.max.pos}, strand = -1 reports the hit position at the end of the match (still relative to the forward orientation).
-  \item \code{score.thresh}: Threshold for \code{pwm.count}. Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
+  \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default.
+    Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
+    PWM scores are log-likelihoods, so the usable range depends on the PSSM, the prior and any spatial
+    weights; calibrate with a \code{pwm} or \code{pwm.max} virtual track over the same intervals before
+    choosing one. The other members of the family accept \code{score.thresh} but ignore it.
   \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Ties resolve to the most 5' anchor; the forward strand wins ties at the same coordinate. Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse).
 }

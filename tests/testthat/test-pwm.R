@@ -620,8 +620,12 @@ test_that("gseq.pwm accepts PSSM with extra columns (data frame)", {
     result_regular_pos <- gseq.pwm(seqs, pssm_regular, mode = "pos")
     expect_equal(result_extra_pos, result_regular_pos)
 
-    result_extra_count <- gseq.pwm(seqs, pssm_with_extras, mode = "count", score.thresh = 0)
-    result_regular_count <- gseq.pwm(seqs, pssm_regular, mode = "count", score.thresh = 0)
+    # score.thresh must land inside the score range of this PSSM. At the old
+    # value of 0 both sides were 0 for every sequence, so this comparison held
+    # no matter what the extra columns did.
+    result_extra_count <- gseq.pwm(seqs, pssm_with_extras, mode = "count", score.thresh = -3)
+    result_regular_count <- gseq.pwm(seqs, pssm_regular, mode = "count", score.thresh = -3)
+    expect_gt(length(unique(result_regular_count)), 1)
     expect_equal(result_extra_count, result_regular_count)
 })
 
@@ -774,10 +778,15 @@ test_that("virtual track pwm.count accepts PSSM with extra columns", {
 
     test_intervals <- gintervals(1, 200, 240)
 
-    gvtrack.create("vt_count_extra", NULL, func = "pwm.count", pssm = pssm_with_extras, score.thresh = 0, bidirect = TRUE)
-    gvtrack.create("vt_count_regular", NULL, func = "pwm.count", pssm = pssm_regular, score.thresh = 0, bidirect = TRUE)
+    # score.thresh = -1 sits inside this PSSM's score range over the interval
+    # (6 of the 40 windows clear it). At the old value of 0 both sides counted
+    # nothing, so this comparison held no matter what the extra columns did.
+    gvtrack.create("vt_count_extra", NULL, func = "pwm.count", pssm = pssm_with_extras, score.thresh = -1, bidirect = TRUE)
+    gvtrack.create("vt_count_regular", NULL, func = "pwm.count", pssm = pssm_regular, score.thresh = -1, bidirect = TRUE)
 
     scores <- gextract(c("vt_count_extra", "vt_count_regular"), test_intervals, iterator = test_intervals)
 
+    expect_gt(scores$vt_count_regular[1], 0)
+    expect_lt(scores$vt_count_regular[1], test_intervals$end - test_intervals$start)
     expect_equal(scores$vt_count_extra[1], scores$vt_count_regular[1])
 })

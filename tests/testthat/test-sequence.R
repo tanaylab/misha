@@ -513,15 +513,15 @@ test_that("gseq.pwm handles ROI bounds correctly", {
     #      123456789..
 
     # ROI covering AC (5-6) should find it
-    result <- gseq.pwm(seq, pssm, mode = "count", prior = 0, start_pos = 5, end_pos = 6, extend = FALSE)
+    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 5, end_pos = 6, extend = FALSE)
     expect_equal(result, 1)
 
     # ROI before AC (1-4) should not find it
-    result <- gseq.pwm(seq, pssm, mode = "count", prior = 0, start_pos = 1, end_pos = 4, extend = FALSE)
+    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 1, end_pos = 4, extend = FALSE)
     expect_equal(result, 0)
 
     # ROI after AC (7-10) should not find it
-    result <- gseq.pwm(seq, pssm, mode = "count", prior = 0, start_pos = 7, end_pos = 10, extend = FALSE)
+    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 7, end_pos = 10, extend = FALSE)
     expect_equal(result, 0)
 })
 
@@ -604,19 +604,19 @@ test_that("gseq.pwm extend parameter works correctly", {
     #      123456789..
 
     # ROI at 6-6 (just "C"), no extend: should not find AC
-    result <- gseq.pwm(seq, pssm, mode = "count", prior = 0, start_pos = 6, end_pos = 6, extend = FALSE)
+    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 6, end_pos = 6, extend = FALSE)
     expect_equal(result, 0)
 
     # ROI at 6-6, extend=TRUE (w-1=1): should find AC starting at position 5
-    result <- gseq.pwm(seq, pssm, mode = "count", prior = 0, start_pos = 6, end_pos = 6, extend = TRUE)
+    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 6, end_pos = 6, extend = TRUE)
     expect_equal(result, 1)
 
     # ROI at 6-6, extend=1 (explicit): same as extend=TRUE
-    result <- gseq.pwm(seq, pssm, mode = "count", prior = 0, start_pos = 6, end_pos = 6, extend = 1)
+    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 6, end_pos = 6, extend = 1)
     expect_equal(result, 1)
 
     # ROI at 7-7, extend=2: should find AC (start_min = 7-2 = 5)
-    result <- gseq.pwm(seq, pssm, mode = "count", prior = 0, start_pos = 7, end_pos = 7, extend = 2)
+    result <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 7, end_pos = 7, extend = 2)
     expect_equal(result, 1)
 })
 
@@ -690,7 +690,7 @@ test_that("gseq.pwm handles edge case: sequence too short", {
     result_max <- gseq.pwm(seq, pssm, mode = "max", prior = 0)
     expect_true(is.na(result_max))
 
-    result_count <- gseq.pwm(seq, pssm, mode = "count", prior = 0)
+    result_count <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0)
     expect_equal(result_count, 0)
 
     result_pos <- gseq.pwm(seq, pssm, mode = "pos", prior = 0)
@@ -708,7 +708,7 @@ test_that("gseq.pwm handles edge case: empty ROI", {
     seq <- "ACGTACGT"
 
     # start_pos > end_pos: invalid ROI
-    result_count <- gseq.pwm(seq, pssm, mode = "count", prior = 0, start_pos = 5, end_pos = 3)
+    result_count <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, start_pos = 5, end_pos = 3)
     expect_equal(result_count, 0)
 
     result_total <- gseq.pwm(seq, pssm, mode = "lse", prior = 0, start_pos = 5, end_pos = 3)
@@ -788,7 +788,7 @@ test_that("gseq.pwm vectorization works", {
 
     seqs <- c("GGACGG", "GGGGGG", "ACACAC")
 
-    result <- gseq.pwm(seqs, pssm, mode = "count", prior = 0, bidirect = FALSE, strand = 1, start_pos = 1, end_pos = 6, extend = FALSE)
+    result <- gseq.pwm(seqs, pssm, mode = "count", score.thresh = 0, prior = 0, bidirect = FALSE, strand = 1, start_pos = 1, end_pos = 6, extend = FALSE)
     expect_equal(length(result), 3)
     expect_equal(result[1], 1) # 1 AC (forward strand only)
     expect_equal(result[2], 0) # 0 AC
@@ -807,7 +807,7 @@ test_that("gseq.pwm handles vectorized start_pos and end_pos", {
 
     # Different ROIs per sequence (forward strand only)
     result <- gseq.pwm(seqs, pssm,
-        mode = "count",
+        mode = "count", score.thresh = 0,
         bidirect = FALSE, strand = 1,
         start_pos = c(1, 3), end_pos = c(4, 6), extend = FALSE,
         skip_gaps = FALSE, prior = 0
@@ -1320,7 +1320,7 @@ test_that("gseq.pwm with gaps: ROI and extend", {
     # ROI at 12-12 (where C is) with extend=TRUE should find AC
     # With extend=1, scans positions 11-13, which includes the AC window (11-12)
     result <- gseq.pwm(seq, pssm,
-        mode = "count", bidirect = FALSE, strand = 1,
+        mode = "count", score.thresh = 0, bidirect = FALSE, strand = 1,
         start_pos = 12, end_pos = 12, extend = TRUE, skip_gaps = TRUE,
         prior = 0
     )
@@ -1361,7 +1361,7 @@ test_that("gseq.pwm with gaps: all gaps / too few non-gaps", {
     result_lse <- gseq.pwm(seq_all_gaps, pssm, mode = "lse", prior = 0, skip_gaps = TRUE)
     expect_true(is.na(result_lse))
 
-    result_count <- gseq.pwm(seq_all_gaps, pssm, mode = "count", prior = 0, skip_gaps = TRUE)
+    result_count <- gseq.pwm(seq_all_gaps, pssm, mode = "count", score.thresh = 0, prior = 0, skip_gaps = TRUE)
     expect_equal(result_count, 0)
 
     # Only one non-gap base (need 2 for motif width)
@@ -1512,14 +1512,14 @@ test_that("gseq functions with gaps: custom gap characters", {
 
     # Default gaps: only "-" and "."
     result_default <- gseq.pwm(seq, pssm,
-        mode = "count", bidirect = FALSE, strand = 1,
+        mode = "count", score.thresh = 0, bidirect = FALSE, strand = 1,
         skip_gaps = TRUE, gap_chars = c("-", ".")
     )
     expect_true(result_default >= 0)
 
     # Custom gaps: include "_" and "*"
     result_custom <- gseq.pwm(seq, pssm,
-        mode = "count", bidirect = FALSE, strand = 1,
+        mode = "count", score.thresh = 0, bidirect = FALSE, strand = 1,
         skip_gaps = TRUE, gap_chars = c("-", ".", "_", "*"),
         prior = 0
     )
@@ -1536,8 +1536,8 @@ test_that("gseq functions: skip_gaps=FALSE preserves original behavior", {
     seq <- "ACGTACGT"
 
     # Results should be identical with skip_gaps=FALSE and skip_gaps=TRUE on a gap-free sequence
-    result_false <- gseq.pwm(seq, pssm, mode = "count", prior = 0, skip_gaps = FALSE)
-    result_true <- gseq.pwm(seq, pssm, mode = "count", prior = 0, skip_gaps = TRUE)
+    result_false <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, skip_gaps = FALSE)
+    result_true <- gseq.pwm(seq, pssm, mode = "count", score.thresh = 0, prior = 0, skip_gaps = TRUE)
     expect_equal(result_false, result_true)
 
     # Same for k-mer
@@ -2079,4 +2079,78 @@ test_that("gseq.kmer.dist GC content matches monomer frequencies", {
     gc_from_seq <- (nchar(gsub("[^GC]", "", seq))) / nchar(seq)
 
     expect_equal(gc_content, gc_from_seq, tolerance = 1e-10)
+})
+
+# ---------------------------------------------------------------------------
+# score.thresh is mandatory for gseq.pwm(mode = "count")
+#
+# The old default of 0 counted nothing for any PSSM that is not perfectly
+# deterministic, because a misha PWM score is a log-likelihood and is
+# therefore negative. See the matching block in test-pwm-count.R for the
+# virtual-track half of the same rule.
+# ---------------------------------------------------------------------------
+
+gseq_count_pssm <- function() {
+    pssm <- matrix(
+        c(
+            0.7, 0.1, 0.1, 0.1,
+            0.1, 0.7, 0.1, 0.1,
+            0.1, 0.1, 0.7, 0.1,
+            0.1, 0.1, 0.1, 0.7
+        ),
+        ncol = 4, byrow = TRUE
+    )
+    colnames(pssm) <- c("A", "C", "G", "T")
+    pssm
+}
+
+test_that("gseq.pwm(mode='count') requires score.thresh", {
+    seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTT")
+    expect_error(
+        gseq.pwm(seqs, gseq_count_pssm(), mode = "count"),
+        "score.thresh"
+    )
+})
+
+test_that("gseq.pwm(mode='count') rejects a non-scalar or non-numeric score.thresh", {
+    seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTT")
+    expect_error(
+        gseq.pwm(seqs, gseq_count_pssm(), mode = "count", score.thresh = "-3"),
+        "score.thresh must be a single numeric value"
+    )
+    expect_error(
+        gseq.pwm(seqs, gseq_count_pssm(), mode = "count", score.thresh = c(-3, -2)),
+        "score.thresh must be a single numeric value"
+    )
+})
+
+test_that("gseq.pwm modes other than 'count' do not need score.thresh", {
+    seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTT")
+    pssm <- gseq_count_pssm()
+
+    expect_equal(
+        gseq.pwm(seqs, pssm, mode = "max"),
+        c(-1.526844, -1.526844, -7.121198),
+        tolerance = 1e-5
+    )
+    expect_false(any(is.na(gseq.pwm(seqs, pssm, mode = "lse"))))
+    expect_equal(gseq.pwm(seqs, pssm, mode = "pos")[1], 1L)
+})
+
+test_that("gseq.pwm(mode='count') with a workable score.thresh is unchanged", {
+    seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTT")
+    pssm <- gseq_count_pssm()
+
+    # A threshold above every window's score counts nothing. The documented
+    # example used to sit here, at 0.5, and reported 0 for a perfect match.
+    expect_equal(gseq.pwm(seqs, pssm, mode = "count", score.thresh = 0.5), c(0, 0, 0))
+
+    # A threshold in the middle of the score range discriminates: the counts
+    # must vary across the three sequences, otherwise this asserts nothing.
+    counts <- gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3)
+    expect_gt(length(unique(counts)), 1)
+    expect_equal(counts, c(6, 2, 0))
+
+    # Lowering it further admits more windows in every sequence.
+    expect_equal(gseq.pwm(seqs, pssm, mode = "count", score.thresh = -8), c(6, 10, 16))
 })

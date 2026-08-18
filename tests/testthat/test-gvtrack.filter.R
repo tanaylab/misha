@@ -859,9 +859,12 @@ test_that("gvtrack.filter pwm.count function works", {
     ), nrow = 4, byrow = TRUE)
     colnames(pssm) <- c("A", "C", "G", "T")
 
+    # score.thresh = -6 sits inside this PSSM's score range: the counts vary
+    # from bin to bin. At the old value of 0 every count was 0, so the
+    # assertions below could not fail.
     gvtrack.create("test_pwm_count",
         src = NULL, func = "pwm.count",
-        params = list(pssm = pssm, score.thresh = 0)
+        params = list(pssm = pssm, score.thresh = -6)
     )
     mask <- gintervals(1, 2000, 4000)
     gvtrack.filter("test_pwm_count", filter = mask)
@@ -869,9 +872,11 @@ test_that("gvtrack.filter pwm.count function works", {
     # Extract with explicit binned iterator
     result <- gextract("test_pwm_count", gintervals(1, 1000, 6000), iterator = 50)
 
-    # Counts should be non-negative integers
+    # Counts should be non-negative integers, and must actually vary - a
+    # constant column would pass "all >= 0" whether the filter works or not.
     non_na_vals <- result$test_pwm_count[!is.na(result$test_pwm_count)]
     expect_true(all(non_na_vals >= 0))
+    expect_gt(length(unique(non_na_vals)), 1)
 
     # PWM count functions work with filters
     expect_true(nrow(result) > 0)
