@@ -63,7 +63,8 @@ public:
 		// bound a mis-columned file's junk names, and there are only so many names that can
 		// look like a chromosome. Capping them would let a chr7 that appears after 100
 		// scaffolds go unnoticed and silently downgrade the report to a message.
-		bool new_primary = is_primary_chrom_name(chrom) && m_primary_seen.insert(chrom).second;
+		bool primary = is_primary_chrom_name(chrom);
+		bool new_primary = primary && m_primary_seen.insert(chrom).second;
 
 		if (new_primary && m_primary_names.size() < (size_t)MAX_REPORTED)
 			m_primary_names.push_back(chrom);
@@ -71,12 +72,15 @@ public:
 		if (m_seen.size() >= (size_t)MAX_TRACKED) {
 			// only a name that is not already tracked is actually being dropped
 			if (m_seen.find(chrom) == m_seen.end()) {
-				m_truncated = true;
-				// ... and a primary-shaped one is not dropped at all, it is tracked above.
-				// num() has to count it, or the report reads "100+ names ... among them
-				// primary chromosome(s): chr7" with chr7 not among the 100.
-				if (new_primary)
-					++m_untracked_primary;
+				if (primary) {
+					// a primary-shaped name is not dropped at all, it is tracked above - so it
+					// must not raise the "N+" marker, which says names were left out. num()
+					// still has to count it, or the report reads "100+ names ... among them
+					// primary chromosome(s): chr7" with chr7 not among the 100.
+					if (new_primary)
+						++m_untracked_primary;
+				} else
+					m_truncated = true;
 			}
 			return;
 		}
@@ -91,7 +95,8 @@ public:
 	bool empty() const { return m_seen.empty() && m_primary_seen.empty(); }
 
 	// Number of distinct names: everything tracked, which is the first MAX_TRACKED names plus
-	// any primary-shaped name that arrived after them. truncated() says whether more were seen.
+	// any primary-shaped name that arrived after them. truncated() says whether any name was
+	// left out of that count, i.e. whether it is a lower bound.
 	uint64_t num() const { return (uint64_t)m_seen.size() + m_untracked_primary; }
 	bool truncated() const { return m_truncated; }
 
