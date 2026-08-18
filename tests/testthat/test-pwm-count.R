@@ -341,6 +341,7 @@ test_that("pwm.count rejects non-positive spatial weights", {
 
     expect_error(
         gvtrack.create("count_bad_spat", NULL, "pwm.count",
+            score.thresh = 0,
             pssm = pssm, bidirect = TRUE, extend = TRUE,
             spat_factor = c(1.0, 0.0, 1.0), spat_bin = 10L
         ),
@@ -521,4 +522,104 @@ test_that("pwm.count: bidirect ignores strand parameter (union semantics)", {
     )
 
     expect_equal(out$count_bidi_s1[1], out$count_bidi_sneg1[1], ignore_attr = TRUE)
+})
+
+# ---------------------------------------------------------------------------
+# score.thresh is mandatory for pwm.count
+#
+# pwm.count used to default score.thresh to 0. A misha PWM score is a plain
+# log-likelihood (a sum of log p over the PSSM rows), so for any PSSM that is
+# not perfectly deterministic every window scores below 0 and the default
+# counted nothing at all - silently, everywhere. There is no value that is
+# right for every PSSM, so the parameter is required, exactly as the
+# pwm.edit_distance family already requires it.
+# ---------------------------------------------------------------------------
+
+test_that("pwm.count requires score.thresh (named arguments)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    expect_error(
+        gvtrack.create("count_no_thresh", NULL, "pwm.count", pssm = pssm),
+        "score.thresh"
+    )
+    expect_false("count_no_thresh" %in% gvtrack.ls())
+})
+
+test_that("pwm.count requires score.thresh (params list)", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    expect_error(
+        gvtrack.create("count_no_thresh_params", NULL, "pwm.count",
+            params = list(pssm = pssm, bidirect = FALSE)
+        ),
+        "score.thresh"
+    )
+    expect_false("count_no_thresh_params" %in% gvtrack.ls())
+})
+
+test_that("pwm.count rejects a non-scalar or non-numeric score.thresh", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    expect_error(
+        gvtrack.create("count_bad_thresh", NULL, "pwm.count", pssm = pssm, score.thresh = "-10"),
+        "score.thresh must be a single numeric value"
+    )
+    expect_error(
+        gvtrack.create("count_bad_thresh", NULL, "pwm.count", pssm = pssm, score.thresh = c(-10, -5)),
+        "score.thresh must be a single numeric value"
+    )
+})
+
+test_that("the other pwm functions still do not need score.thresh", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+
+    expect_silent(gvtrack.create("v_pwm", NULL, "pwm", pssm = pssm))
+    expect_silent(gvtrack.create("v_pwm_max", NULL, "pwm.max", pssm = pssm))
+    expect_silent(gvtrack.create("v_pwm_max_pos", NULL, "pwm.max.pos", pssm = pssm))
+})
+
+test_that("pwm.count with a workable score.thresh is unchanged", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    pssm <- create_test_pssm()
+    test_interval <- gintervals(1, 200, 300)
+
+    # Independent expectation: count the windows whose pwm score clears the
+    # threshold, computed from the per-base pwm vtrack rather than from
+    # pwm.count itself.
+    gvtrack.create("pwm_ref", NULL, "pwm",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, strand = 1
+    )
+    per_base <- gextract("pwm_ref", test_interval, iterator = 1)
+    expected <- sum(per_base$pwm_ref >= -5, na.rm = TRUE)
+
+    # Anti-vacuity: the threshold must discriminate. A count that is 0 or that
+    # equals the window count would make the comparison below pass no matter
+    # what the counting path does - which is how both a threshold of 0 (counts
+    # nothing) and a threshold of -10 (counts everything, on this PSSM) slipped
+    # through the suite before.
+    expect_gt(expected, 0)
+    expect_lt(expected, nrow(per_base))
+
+    gvtrack.create("count_ref", NULL, "pwm.count",
+        pssm = pssm, bidirect = FALSE, extend = TRUE,
+        prior = 0.01, strand = 1, score.thresh = -5
+    )
+    got <- gextract("count_ref", test_interval, iterator = test_interval)
+
+    expect_equal(got$count_ref[1], expected, ignore_attr = TRUE)
 })

@@ -285,10 +285,12 @@ For de-novo motifs, train a PSSM from labelled sequences with `prego::regress_pw
 | `pwm`     | log-sum-exp of all window scores in the iterator interval | LSE (soft sum) |
 | `pwm.max` | the maximum window score in the iterator interval | best-window |
 | `pwm.max.pos` | the **1-based** position of the best-scoring window's first base, measured in bp from the start of the scanned region. **Sign carries strand** when `bidirect = TRUE`: `+pos` = best window is on the forward strand, `-pos` = reverse strand. With `bidirect = FALSE` the value is always positive. | argmax |
-| `pwm.count` | number of windows with score ≥ `score.thresh` | count above threshold |
+| `pwm.count` | number of windows with score ≥ `score.thresh` (**required** - see below) | count above threshold |
 | `pwm.edit_distance` | min #edits to raise (`direction = "above"`) or disrupt (`direction = "below"`) the best-window score across `score.thresh` | search over edit budget |
 | `pwm.edit_distance.lse` | same but LSE of windows, not the max | LSE-based |
 | `pwm.edit_distance.pos` / `pwm.edit_distance.lse.pos` | 1-based position of the most impactful single edit; same sign-by-strand convention as `pwm.max.pos` when `bidirect = TRUE` | argmax over edit positions |
+
+**`score.thresh` is mandatory for `pwm.count`** (and for `gseq.pwm(mode = "count")`), with no default. A PWM score is a log-likelihood, so its usable range depends entirely on the PSSM, the `prior` and any spatial weights - a threshold of 0 counts nothing for any realistic matrix, and a threshold far below the matrix's minimum counts every window. Calibrate first: run the same scan with `pwm.max` (or `gseq.pwm(mode = "max")`) over the intervals you care about, look at the score range, and pick a threshold inside it.
 
 **Edit-distance knobs.** `direction = "above"` (default) finds the minimum edits to *raise* the score across `score.thresh` - "how close is this site to becoming a hit". `direction = "below"` finds the minimum edits to *disrupt* an existing hit - "how robust is this site". `max_edits` caps the total budget (exhaustive search for `max_edits <= 2`, greedy heuristic for `max_edits >= 3`). `max_indels` allows insertions / deletions in addition to substitutions. `score.min` / `score.max` clip the per-window score range before the edit search to keep the optimization bounded. With `bidirect = TRUE`, an edit's effect is evaluated against both strands and the better orientation is kept.
 

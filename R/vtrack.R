@@ -193,6 +193,16 @@
         stop("pwm function requires a 'pssm' matrix parameter")
     }
 
+    # 'score.thresh' decides what pwm.count counts, and no value is right for
+    # every PSSM: a misha PWM score is a log-likelihood (a sum of log p over
+    # the PSSM rows), so its usable range depends entirely on the matrix, the
+    # prior and the spatial weights. The old default of 0 sat above the whole
+    # range of any non-deterministic PSSM and silently counted nothing. Require
+    # it, as the pwm.edit_distance family already does.
+    if (identical(func, "pwm.count") && is.null(dots$score.thresh)) {
+        stop("pwm.count requires a 'score.thresh' parameter. PWM scores are log-likelihoods, so there is no default that suits every PSSM - pick a threshold from the score distribution of your own matrix, e.g. with a 'pwm' or 'pwm.max' virtual track.", call. = FALSE)
+    }
+
     pssm <- dots$pssm
     bidirect <- if (!is.null(dots$bidirect)) dots$bidirect else TRUE
     prior <- if (!is.null(dots$prior)) dots$prior else 0.01
@@ -205,8 +215,14 @@
     spat_min <- dots$spat_min
     spat_max <- dots$spat_max
 
-    # Optional score threshold for pwm.count
+    # Score threshold: required for pwm.count (checked above), ignored by the
+    # other members of the family, which keep accepting it for compatibility.
     score.thresh <- if (!is.null(dots$score.thresh)) dots$score.thresh else 0
+
+    if (identical(func, "pwm.count") &&
+        (!is.numeric(score.thresh) || length(score.thresh) != 1)) {
+        stop("score.thresh must be a single numeric value", call. = FALSE)
+    }
 
     pssm <- .coerce_pssm_matrix(
         pssm,
@@ -755,7 +771,7 @@
 #'   NULL (sequence) \tab pwm \tab pssm, bidirect, prior, extend, spat_* \tab Log-sum-exp score of motif likelihoods across all anchors inside the iterator interval. \cr
 #'   NULL (sequence) \tab pwm.max \tab pssm, bidirect, prior, extend, spat_* \tab Maximum log-likelihood score among all anchors (per-position union across strands). \cr
 #'   NULL (sequence) \tab pwm.max.pos \tab pssm, bidirect, prior, extend, spat_* \tab 1-based position of the best-scoring anchor (signed by strand when \code{bidirect = TRUE}); coordinates are always relative to the iterator interval after any \code{gvtrack.iterator()} shifts/extensions. \cr
-#'   NULL (sequence) \tab pwm.count \tab pssm, score.thresh, bidirect, prior, extend, strand, spat_* \tab Count of anchors whose score exceeds \code{score.thresh} (per-position union). \cr
+#'   NULL (sequence) \tab pwm.count \tab pssm, score.thresh (required), bidirect, prior, extend, strand, spat_* \tab Count of anchors whose score exceeds \code{score.thresh} (per-position union). \cr
 #' }
 #'
 #' \strong{Edit distance summarizers}
@@ -803,7 +819,11 @@
 #'   \item \code{extend}: Extends the fetched sequence so boundary-anchored motifs retain full context (default TRUE). The END coordinate is padded by motif_length - 1 for all strand modes; anchors must still start inside the iterator.
 #'   \item Neutral characters (\code{N}, \code{n}, \code{*}) contribute the mean log-probability of the corresponding PSSM column on both strands.
 #'   \item \code{strand}: Used only when \code{bidirect = FALSE}; 1 scans the forward strand, -1 scans the reverse strand. For \code{pwm.max.pos}, strand = -1 reports the hit position at the end of the match (still relative to the forward orientation).
-#'   \item \code{score.thresh}: Threshold for \code{pwm.count}. Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
+#'   \item \code{score.thresh}: Threshold for \code{pwm.count}, and mandatory for it - there is no default.
+#'     Anchors with log-likelihood >= \code{score.thresh} are counted; only one count per genomic start.
+#'     PWM scores are log-likelihoods, so the usable range depends on the PSSM, the prior and any spatial
+#'     weights; calibrate with a \code{pwm} or \code{pwm.max} virtual track over the same intervals before
+#'     choosing one. The other members of the family accept \code{score.thresh} but ignore it.
 #'   \item Spatial weighting (\code{spat_factor}, \code{spat_bin}, \code{spat_min}, \code{spat_max}): optional position-dependent weights applied in log-space. Provide a positive numeric vector \code{spat_factor}; \code{spat_bin} (integer > 0) defines bin width; \code{spat_min}/\code{spat_max} restrict the scanning window.
 #'   \item \code{pwm.max.pos}: Positions are reported 1-based relative to the final scan window (after iterator shifts and spatial trimming). Ties resolve to the most 5' anchor; the forward strand wins ties at the same coordinate. Values are signed when \code{bidirect = TRUE} (positive for forward, negative for reverse).
 #' }

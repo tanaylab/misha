@@ -1,3 +1,7 @@
+# misha 5.11.19
+
+* **Behavior fix:** `score.thresh` is now mandatory for `pwm.count` virtual tracks and for `gseq.pwm(mode = "count")`. It used to default to 0, which is above the score range of any realistic PSSM, so every call that omitted it counted nothing at all. Pass a threshold taken from the score range of your own PSSM (`pwm.max` / `gseq.pwm(mode = "max")` shows it); the other `pwm.*` functions are unaffected.
+
 # misha 5.11.18
 
 * **Behavior fix:** passing overlapping intervals as a 1D iterator now warns that they were merged into wider blocks, naming one merged pair and the row it became. An interval nested inside another one counts as merged too: it widens no row, so it used to disappear silently. Exact duplicates stay silent - both copies come back as the same row, so no interval is missing from the output. Results are unchanged; to get one value per interval, call `gextract()` with the same intervals as its scope and map the rows back with the `intervalID` column.
