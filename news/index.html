@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.15</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.17</span>
       </span>
     </div>
 
@@ -66,6 +66,11 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.17" id="misha-51117">misha 5.11.17<a class="anchor" aria-label="anchor" href="#misha-51117"></a></h2>
+<ul><li>
+<strong>Bug fix:</strong> a virtual track whose <code><a href="../reference/gvtrack.iterator.html">gvtrack.iterator()</a></code> <code>sshift</code>/<code>eshift</code> pushes the iterator interval off the chromosome now returns <code>NaN</code>, whatever the function. <code>pwm*</code>, <code>kmer*</code> and <code>masked*</code> returned <code>0</code> or <code>-Inf</code>, or a value that depended on the database format, and errored out (“start coordinate must be lesser than end coordinate”) when four or more sequence virtual tracks were extracted in one call; <code>coverage</code> and <code>neighbor.count</code> returned <code>0</code>, indistinguishable from a real answer. An interval that only partly leaves the chromosome is still clamped to it, as before.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.15" id="misha-51115">misha 5.11.15<a class="anchor" aria-label="anchor" href="#misha-51115"></a></h2>
 <ul><li><p><strong>Bug fix:</strong> <code><a href="../reference/gintervals.import_bed.html">gintervals.import_bed()</a></code>, <code><a href="../reference/gintervals.import_gff.html">gintervals.import_gff()</a></code> and <code><a href="../reference/gintervals.import_vcf.html">gintervals.import_vcf()</a></code> now import gzipped files, and error on a truncated or corrupt <code>.gz</code> instead of importing whatever happened to decompress.</p></li>
