@@ -441,13 +441,16 @@ test_that("PWM sliding window MOTIF_COUNT mode works with iterator=20 and shifts
     # see the comment at the first occurrence of this pattern above);
     # restored to the intended score.thresh = -10.
     #
-    # This PSSM is a random 6-row matrix whose best achievable score is about -5.4, so
-    # any threshold above that counts nothing: at -5 this test returns 0 for all 5000
-    # rows. -10 leaves it discriminating - 31 distinct counts over 190-220 per 220 bp
-    # window, 0.2% of them at the 220 ceiling - and -12 saturates at 220.
+    # This PSSM is a random 6-row matrix whose best achievable score over these windows is
+    # about -5.3, so any threshold above that counts nothing: at -5 this test returns 0 for
+    # all 5000 rows. Below it the threshold has to sit far enough from both ends of the
+    # count range to discriminate: -10 counts nearly every placement (31 distinct counts
+    # over 190-220 of the 220 placements a window holds, 8 rows at the ceiling) and -12
+    # counts all 220 of them. -8 is the one that spreads the rows out: 71 distinct counts
+    # over 48-118, no row at either end.
     gvtrack.create("pwm_count_iter20", "seq",
         func = "pwm.count",
-        params = list(pssm = pssm, score.thresh = -10)
+        params = list(pssm = pssm, score.thresh = -8)
     )
     gvtrack.iterator("pwm_count_iter20", sshift = -100, eshift = 100)
 
@@ -831,12 +834,13 @@ test_that("PWM regression: MOTIF_COUNT mode with shifts", {
     # see the comment at the first occurrence of this pattern above);
     # restored to the intended score.thresh = -10.
     #
-    # As above: this PSSM's best achievable score is about -6.2, so -5 counts nothing at
-    # all here. -10 gives 36 distinct counts over 184-220 per 220 bp window, 1.6% of them
-    # at the ceiling; -12 saturates at 220.
+    # As above: this PSSM's best achievable score over these windows is about -6.2, so -5
+    # counts nothing at all here, and -10 counts nearly every placement (36 distinct counts
+    # over 184-220, 39 of the 2500 rows at the 220 ceiling). -8 spreads them out: 126
+    # distinct counts over 67-196.
     gvtrack.create("pwm_count_reg", "seq",
         func = "pwm.count",
-        params = list(pssm = pssm, score.thresh = -10)
+        params = list(pssm = pssm, score.thresh = -8)
     )
     gvtrack.iterator("pwm_count_reg", sshift = -100, eshift = 100)
 
