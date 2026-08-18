@@ -71,22 +71,102 @@ test_that("passing the intervals as the scope does not help where the scope is u
     expect_equal(itr$end, c(400, 1300))
 })
 
-test_that("known gap: an interval nested after clipping is dropped without a warning", {
-    # The check is one-sided on purpose (see TrackExpressionScanner.cpp): it fires when a
-    # row is wider than every input interval, which is what merging normally produces.
-    # An interval that ends up nested inside another one - in the input, or only after
-    # the scope clips it - disappears without widening any row, so it is still dropped
-    # silently. Pinned here so that closing the gap is a deliberate change.
+test_that("a nested interval is a merge too, and warns", {
+    # A nested input widens no row - the block equals the interval it is nested in - so the
+    # "is every row covered by an input interval" half of the test never sees it. It is the
+    # other half that catches it: the nested peak is emitted nowhere on its own.
+    # This is at least as common as partial overlap in the case the warning is for, a union
+    # of peak calls from two conditions: a broad peak in A containing a narrow one in B.
     nested <- gintervals(1, c(0, 200), c(1000, 300))
-    expect_no_warning(res <- gextract("test.fixedbin", gintervals.all(), iterator = nested))
+
+    expect_warning(res <- gextract("test.fixedbin", gintervals.all(), iterator = nested), "overlap")
     expect_equal(nrow(res), 1)
     expect_equal(res$end, 1000)
 
-    # neither interval is nested in the input here; the scope is what makes them so
+    expect_warning(itr <- giterator.intervals("test.fixedbin", nested, iterator = nested), "overlap")
+    expect_equal(nrow(itr), 1)
+
+    expect_warning(scr <- gscreen("test.fixedbin > -1e9", nested, iterator = nested), "overlap")
+    expect_equal(nrow(scr), 1)
+})
+
+test_that("the nested warning names the interval that disappeared", {
+    nested <- gintervals(1, c(0, 200), c(1000, 300))
+    w <- tryCatch(gextract("test.fixedbin", gintervals.all(), iterator = nested),
+        warning = function(w) conditionMessage(w)
+    )
+    expect_match(w, "2 intervals were merged into 1", fixed = TRUE)
+    expect_match(w, "chr1 200-300", fixed = TRUE)
+    expect_match(w, "single row chr1 0-1000", fixed = TRUE)
+})
+
+test_that("an interval nested only after the scope clips it warns as well", {
+    # Neither interval is nested in the input here; the scope is what makes them so, and the
+    # first one is still swallowed by the merged block.
     clipped <- gintervals(1, c(0, 50), c(100, 150))
-    expect_no_warning(res <- gextract("test.fixedbin", gintervals(1, 0, 100), iterator = clipped))
+    expect_warning(res <- gextract("test.fixedbin", gintervals(1, 0, 100), iterator = clipped), "overlap")
     expect_equal(nrow(res), 1)
     expect_equal(res$end, 100)
+})
+
+test_that("remaining gap: an exact duplicate under a wider scope is still silent", {
+    # Both copies are emitted verbatim, as the same single row, so no interval is missing
+    # from the output even though two went in and one came out. Pinned so that closing this
+    # last gap - which needs the opt-in strict mode, not a wider merge test - is deliberate.
+    dup <- gintervals(1, c(0, 0), c(300, 300))
+    expect_no_warning(res <- gextract("test.fixedbin", gintervals.all(), iterator = dup))
+    expect_equal(nrow(res), 1)
+    expect_equal(res$end, 300)
+})
+
+test_that("the recommended idiom stays silent for every overlap shape", {
+    # gextract(t, pk, iterator = pk) is what the warning tells the user to do, so it has to
+    # stay silent for the shapes a unioned peak call actually produces - and stay correct:
+    # one row per peak, equal to that peak, valued over that peak alone.
+    shapes <- list(
+        partial = gintervals(1, c(0, 100), c(300, 400)),
+        nested = gintervals(1, c(0, 100), c(1000, 300)),
+        duplicate = gintervals(1, c(0, 0), c(300, 300)),
+        chained = gintervals(1, c(0, 100, 200), c(200, 300, 400))
+    )
+
+    for (nm in names(shapes)) {
+        pk <- shapes[[nm]]
+        expect_no_warning(res <- gextract("test.fixedbin", pk, iterator = pk))
+        expect_equal(nrow(res), nrow(pk), info = nm)
+        expect_equal(res$start, pk$start, info = nm)
+        expect_equal(res$end, pk$end, info = nm)
+        expect_equal(res$intervalID, seq_len(nrow(pk)), info = nm)
+
+        per_peak <- vapply(seq_len(nrow(pk)), function(i) {
+            gsummary("test.fixedbin", pk[i, ])[["Mean"]]
+        }, numeric(1))
+        expect_equal(res$test.fixedbin, per_peak, tolerance = 1e-6, info = nm)
+    }
+})
+
+test_that("the merge test survives a big-set scope, which it walks twice", {
+    withr::defer(gintervals.rm("test.overlap_bigset_scope", force = TRUE))
+
+    # A scope stored as a GIntervalsBigSet1D is read off disk, so the second walk the nested
+    # case needs is a second full pass and a begin_iter() re-entry rather than a rewind of a
+    # vector. Both halves of the test have to survive that.
+    scope <- gintervals(1, c(0, 5000), c(2000, 6000))
+    withr::with_options(list(gmax.data.size = 1), {
+        gintervals.save("test.overlap_bigset_scope", scope)
+    })
+    expect_true(misha:::.gintervals.is_bigset("test.overlap_bigset_scope"))
+
+    nested <- gintervals(1, c(0, 200), c(1000, 300))
+    expect_warning(
+        res <- gextract("test.fixedbin", "test.overlap_bigset_scope", iterator = nested),
+        "overlap"
+    )
+    expect_equal(nrow(res), 1)
+    expect_equal(res$end, 1000)
+
+    disjoint <- gintervals(1, c(0, 5000), c(1000, 5500))
+    expect_no_warning(gextract("test.fixedbin", "test.overlap_bigset_scope", iterator = disjoint))
 })
 
 test_that("the warning survives gextract's track-parallel path", {

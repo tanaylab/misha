@@ -463,19 +463,28 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP rtrack_
 // the merge stays and the caller gets a warning instead.
 //
 // The merge is not always observable: the emitted rows are (block x scope)
-// intersections, so when the same intervals are also passed as the scope, every row
-// is clipped back to a single input interval and nothing is lost. Without merging
-// every emitted row would be contained in some iterator interval; the merge is
-// observable exactly when some emitted row is not. That is what is looked for here,
-// and the search stops at the first such row.
+// intersections, so when the same intervals are also passed as the scope, every input
+// interval is clipped back to itself and nothing is lost. The merge is unobservable
+// exactly when every input interval the scope reaches is itself one of the emitted
+// rows, and that is what is tested here - the search stops at the first interval for
+// which it fails.
 //
-// The test is deliberately one-sided, so that the recommended per-interval idiom
-// (the same intervals as both scope and iterator) never warns. It therefore stays
-// silent whenever an interval ends up nested in another one *after clipping to the
-// scope* - a nested or duplicated input, but also [0,100] and [50,150] under a
-// [0,100] scope, where the two rows collapse into one that is still covered.
-// Erroring on any overlap at all, under an opt-in strict mode, is the complete
-// answer to that.
+// Two shapes make it fail, and both are looked for:
+//   - an emitted row that no single input interval contains: what a partial overlap
+//     produces (chr1 0-300 and chr1 100-400 become chr1 0-400 under a wider scope).
+//   - an input interval that is never emitted as a row of its own even though the
+//     scope reaches it: what nesting produces (chr1 0-1000 and chr1 100-300 become
+//     chr1 0-1000, a row the first input *does* contain, so the test above sees
+//     nothing while the second peak has silently disappeared).
+//
+// The second test is what keeps the recommended per-interval idiom (the same
+// intervals as both scope and iterator) silent: there every input interval is clipped
+// by its own scope interval back to itself, nested inputs included.
+//
+// What still goes unreported is an exact duplicate under a wider scope: both copies
+// are emitted verbatim, as one shared row, so no interval is missing from the output
+// even though the row count dropped. Erroring on any overlap at all, under an opt-in
+// strict mode, is the complete answer to that.
 
 // intervals must be sorted
 static bool intervals_overlap(const vector<GInterval> &intervals)
@@ -504,8 +513,64 @@ static bool is_row_covered(const vector<GInterval> &intervals, const vector<int6
 	return max_end[iinterv - intervals.begin()] >= row.end;
 }
 
-// Returns the first emitted row that no single iterator interval contains, along with the
-// block it came from.
+// block_first[k] is the index of the first interval of unified[k], and block_first[n] is
+// intervals.size(). The blocks are the maximal merged runs of the sorted intervals, so the
+// intervals of a block are a contiguous range and every interval belongs to exactly one.
+static void index_blocks(const vector<GInterval> &intervals, const vector<GInterval> &unified,
+						 vector<size_t> &block_first)
+{
+	block_first.assign(unified.size() + 1, intervals.size());
+
+	size_t iinterv = 0;
+	for (size_t iblock = 0; iblock < unified.size(); ++iblock) {
+		block_first[iblock] = iinterv;
+		while (iinterv < intervals.size() && intervals[iinterv].chromid == unified[iblock].chromid &&
+			   intervals[iinterv].start < unified[iblock].end)
+			++iinterv;
+	}
+}
+
+// The first interval of unified[iblock] that can reach into the scope interval. Starts from
+// the first interval that begins at or after the scope interval and walks back over the ones
+// that begin earlier and still reach into it; max_end is a prefix maximum, so the walk stops
+// as soon as nothing earlier can reach.
+static size_t first_interval_in_scope(const vector<GInterval> &intervals, const vector<int64_t> &max_end,
+									  size_t block_lo, size_t block_hi, const GInterval &scope_interv)
+{
+	GInterval probe(scope_interv.chromid, scope_interv.start, scope_interv.start, 0);
+	size_t i = lower_bound(intervals.begin() + block_lo, intervals.begin() + block_hi, probe) - intervals.begin();
+
+	while (i > block_lo && max_end[i - 1] > scope_interv.start)
+		--i;
+	return i;
+}
+
+// The emitted row that swallowed intervals[iinterv], found by re-walking the scope for the
+// first interval that reaches it. Only ever called once, on the way to raising the warning.
+static bool find_swallowing_row(const vector<GInterval> &intervals, const vector<GInterval> &unified,
+								const vector<size_t> &block_first, GIntervalsFetcher1D *scope,
+								size_t iinterv, GInterval &row, GInterval &block)
+{
+	size_t iblock = upper_bound(block_first.begin(), block_first.end(), iinterv) - block_first.begin() - 1;
+	const GInterval &interv = intervals[iinterv];
+
+	block = unified[iblock];
+
+	for (scope->begin_iter(); !scope->isend(); scope->next()) {
+		const GInterval &scope_interv = scope->cur_interval();
+
+		if (scope_interv.chromid != interv.chromid || scope_interv.end <= interv.start || scope_interv.start >= interv.end)
+			continue;
+
+		row = GInterval(interv.chromid, max(block.start, scope_interv.start), min(block.end, scope_interv.end), 0);
+		return true;
+	}
+	return false;
+}
+
+// Returns the first emitted row that cost the caller something - either a row no single
+// iterator interval contains, or a row that swallowed an interval the scope reached and that
+// is emitted nowhere on its own - along with the block it came from.
 static bool find_merged_row(const vector<GInterval> &intervals, const vector<GInterval> &unified,
 							GIntervalsFetcher1D *scope, GInterval &row, GInterval &block)
 {
@@ -513,6 +578,16 @@ static bool find_merged_row(const vector<GInterval> &intervals, const vector<GIn
 
 	for (size_t i = 0; i < intervals.size(); ++i)
 		max_end[i] = i && intervals[i - 1].chromid == intervals[i].chromid ? max(max_end[i - 1], intervals[i].end) : intervals[i].end;
+
+	vector<size_t> block_first;
+	index_blocks(intervals, unified, block_first);
+
+	// An input interval is emitted verbatim when some scope interval clips it and its block to
+	// the same thing; the merge then cost it nothing. Both flags are decided over the whole
+	// scope, because one scope interval emitting an interval verbatim is enough even if
+	// another one swallows it - which is exactly what the recommended idiom looks like.
+	vector<bool> reached(intervals.size(), false);
+	vector<bool> verbatim(intervals.size(), false);
 
 	for (scope->begin_iter(); !scope->isend(); scope->next()) {
 		const GInterval &scope_interv = scope->cur_interval();
@@ -525,12 +600,36 @@ static bool find_merged_row(const vector<GInterval> &intervals, const vector<GIn
 		for (; iblock != unified.end() && iblock->chromid == scope_interv.chromid && iblock->start < scope_interv.end; ++iblock) {
 			GInterval emitted(scope_interv.chromid, max(iblock->start, scope_interv.start), min(iblock->end, scope_interv.end), 0);
 
-			if (emitted.start < emitted.end && !is_row_covered(intervals, max_end, emitted)) {
+			if (emitted.start >= emitted.end)
+				continue;
+
+			if (!is_row_covered(intervals, max_end, emitted)) {
 				row = emitted;
 				block = *iblock;
 				return true;
 			}
+
+			size_t block_lo = block_first[iblock - unified.begin()];
+			size_t block_hi = block_first[iblock - unified.begin() + 1];
+
+			for (size_t i = first_interval_in_scope(intervals, max_end, block_lo, block_hi, scope_interv);
+				 i < block_hi && intervals[i].start < scope_interv.end; ++i) {
+				if (intervals[i].end <= scope_interv.start)
+					continue;
+
+				reached[i] = true;
+				// intervals[i] lies inside the block, so containing the emitted row is the
+				// same as being clipped to it by this scope interval
+				if (intervals[i].start <= emitted.start && intervals[i].end >= emitted.end)
+					verbatim[i] = true;
+			}
 		}
+	}
+
+	// no row was widened, but an interval the scope reached may still have been swallowed whole
+	for (size_t i = 0; i < intervals.size(); ++i) {
+		if (reached[i] && !verbatim[i])
+			return find_swallowing_row(intervals, unified, block_first, scope, i, row, block);
 	}
 	return false;
 }
