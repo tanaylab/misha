@@ -1,6 +1,7 @@
 # misha 5.11.16
 
 * **Behavior fix:** passing overlapping intervals as a 1D iterator now warns that they were merged into wider blocks, naming one merged pair and the row it became. An interval nested inside another one counts as merged too: it widens no row, so it used to disappear silently. Exact duplicates stay silent - both copies come back as the same row, so no interval is missing from the output. Results are unchanged; to get one value per interval, call `gextract()` with the same intervals as its scope and map the rows back with the `intervalID` column.
+* **Crash fix:** `gextract()` killed a worker process - failing the call and deleting the session `tempdir()`, with any database kept there - when one interval of its iterator spanned more than 64 scope intervals, which is what a merged block of overlapping peaks typically does.
 * **Behavior fix:** `gtrack.import()` errors when none of the chromosome names in a WIG / bedGraph / tab file exist in the genome database, instead of silently creating an all-NaN track. A partial match still imports the rest and now reports the names it skipped - as a message for scaffolds/contigs, or as a warning that aborts and leaves no track behind under `options(warn = 2)` when a skipped name looks like a primary chromosome.
 
 # misha 5.11.15

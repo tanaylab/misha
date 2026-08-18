@@ -29,9 +29,21 @@
         },
         add = TRUE
     )
+    # A multitasking child process must end inside C (rexit(), i.e. a signal), and must
+    # never come back here: R would carry on running the caller's code inside the fork and
+    # then leave through R's own shutdown, whose R_CleanTempDir() deletes the session
+    # tempdir - taking with it any database that lives there (gdb.init_examples(), the
+    # isolated test databases). A pid that changed across the .Call means this call forked
+    # and we are the child, which is always a bug in the C layer. Die at once and hard:
+    # SIGKILL runs no exit handler and removes no file, and the parent reports the child's
+    # abnormal death instead of silently dropping its share of the result.
+    pid <- Sys.getpid()
     tryCatch(
         {
             res <- .Call(...)
+            if (!identical(Sys.getpid(), pid)) {
+                tools::pskill(Sys.getpid(), tools::SIGKILL)
+            }
         },
         interrupt = function(interrupt) {
             stop("Command interrupted!", call. = FALSE)
