@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.18</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.19</span>
       </span>
     </div>
 
@@ -66,6 +66,15 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.19" id="misha-51119">misha 5.11.19<a class="anchor" aria-label="anchor" href="#misha-51119"></a></h2>
+<ul><li>
+<strong>Crash fix:</strong> <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> of a 2D track (<code>rects</code>/<code>points</code>) into a database with more than <code>getOption("gmulticontig.2d.threshold", 100)</code> contigs - which includes hg38 with scaffolds - wrote past the end of an internal per-chromosome-pair buffer, crashing R or corrupting the track it was writing. Any 2D track produced by <code><a href="../reference/gtrack.liftover.html">gtrack.liftover()</a></code> into such a database before this release should be regenerated.</li>
+<li>
+<strong>Bug fix:</strong> 2D queries over an explicitly given 2D scope - a 2D track, or a 2D intervals set big enough to be stored as a big set - returned <code>NULL</code> on a database with more than <code>getOption("gmulticontig.2d.threshold", 100)</code> contigs while <code>gmultitasking</code> was on, and the correct result with it off. Every 2D entry point that multitasks was affected, including <code><a href="../reference/gextract.html">gextract()</a></code>, <code><a href="../reference/gsummary.html">gsummary()</a></code>, <code><a href="../reference/gquantiles.html">gquantiles()</a></code>, <code><a href="../reference/gdist.html">gdist()</a></code>, <code><a href="../reference/gcor.html">gcor()</a></code>, <code><a href="../reference/gscreen.html">gscreen()</a></code> and <code><a href="../reference/gintervals.mapply.html">gintervals.mapply()</a></code>.</li>
+<li>
+<strong>Bug fix:</strong> <code><a href="../reference/gcis_decay.html">gcis_decay()</a></code> returned an all-zero decay curve on a database with more than <code>getOption("gmulticontig.2d.threshold", 100)</code> contigs - and <code>NULL</code> (surfacing as “attempt to set an attribute on NULL”) while <code>gmultitasking</code> was on - because it dropped every chromosome pair from its scope. Any cis-decay curve computed on such a database should be recomputed.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.18" id="misha-51118">misha 5.11.18<a class="anchor" aria-label="anchor" href="#misha-51118"></a></h2>
 <ul><li>
