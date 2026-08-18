@@ -134,6 +134,14 @@ void rerror(const char *fmt, ...);
 
 void verror(const char *fmt, ...);
 
+// Returns true the first time it is called with a given key within one top-level
+// .Call, and always false inside a multitasking child process. Use it to run a
+// diagnostic - and emit its warning - exactly once per user-level call: the track
+// expression scanner, for instance, is built several times in the parent
+// (prepare4multitasking, is_1d_iterator, the record estimate) and once more in
+// every forked child.
+bool once_per_call(const char *key);
+
 // Use rprotect instead of PROTECT!
 SEXP rprotect(SEXP &expr);
 
@@ -247,6 +255,42 @@ static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
     tmp = rprotect_ptr(tmp);
     Rf_defineVar(Rf_install(name), tmp, misha_env);
     runprotect(2);
+}
+
+// Helper: queue a diagnostic for .gcall() to raise once the .Call has returned.
+//
+// Neither Rf_warning() nor an R-level message() can be raised from here: a caller that
+// catches either with an exiting handler (tryCatch, or options(warn = 2)) longjmps out
+// of the C++ frame, skipping ~RdbInitializer and leaving misha's PROTECT counter
+// inflated for the rest of the session.
+//
+// The queue is .misha$.GPENDING.DIAGNOSTICS: a list of length-2 character vectors,
+// c(severity, text), in the order they were produced. `severity` is "message" or
+// "warning". Appending rather than assigning one slot per severity means a second
+// diagnostic within one call cannot silently overwrite the first, and a new severity
+// costs nothing on either side of the boundary.
+static inline void add_pending_diagnostic(SEXP envir, const char *severity, const char *text) {
+    SEXP prev = find_in_misha(envir, ".GPENDING.DIAGNOSTICS");
+    int n = (prev != R_UnboundValue && TYPEOF(prev) == VECSXP) ? Rf_length(prev) : 0;
+
+    // find_in_misha does not protect its result and the allocations below can collect
+    SEXP held = R_NilValue;
+    if (n)
+        held = rprotect_ptr(prev);
+
+    SEXP queue = R_NilValue;
+    queue = rprotect_ptr(Rf_allocVector(VECSXP, n + 1));
+    for (int i = 0; i < n; ++i)
+        SET_VECTOR_ELT(queue, i, VECTOR_ELT(held, i));
+
+    SEXP entry = R_NilValue;
+    entry = rprotect_ptr(Rf_allocVector(STRSXP, 2));
+    SET_STRING_ELT(entry, 0, Rf_mkChar(severity));
+    SET_STRING_ELT(entry, 1, Rf_mkChar(text));
+    SET_VECTOR_ELT(queue, n, entry);
+
+    define_in_misha(envir, ".GPENDING.DIAGNOSTICS", queue);
+    runprotect(n ? 3 : 2);
 }
 
 

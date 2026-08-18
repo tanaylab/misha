@@ -141,29 +141,47 @@
     }
 
     # Disable the C++ multitask inside each worker — we already forked here.
+    # A warning raised inside a forked worker never reaches the user: mclapply's
+    # child exits without returning its warning list. Each worker therefore
+    # collects its warnings and hands them back with the result.
     worker <- function(idx) {
         old_mt <- options(gmultitasking = FALSE)
         on.exit(options(old_mt), add = TRUE)
-        .gcall(
-            "C_gextract", intervals, chunks[[idx]], chunks_names[[idx]],
-            iterator, band, NULL, NULL, "id", envir
+        warnings <- character(0)
+        res <- withCallingHandlers(
+            .gcall(
+                "C_gextract", intervals, chunks[[idx]], chunks_names[[idx]],
+                iterator, band, NULL, NULL, "id", envir
+            ),
+            warning = function(w) {
+                warnings <<- c(warnings, conditionMessage(w))
+                invokeRestart("muffleWarning")
+            }
         )
+        list(res = res, warnings = warnings)
     }
 
-    results <- parallel::mclapply(seq_len(n_workers), worker,
+    worker_out <- parallel::mclapply(seq_len(n_workers), worker,
         mc.cores = n_workers, mc.preschedule = FALSE
     )
 
     # Surface any worker errors.
-    errs <- vapply(results, inherits, logical(1), what = "try-error")
+    errs <- vapply(worker_out, inherits, logical(1), what = "try-error")
     if (any(errs)) {
-        first_err <- attr(results[[which(errs)[1]]], "condition")
+        first_err <- attr(worker_out[[which(errs)[1]]], "condition")
         stop(if (!is.null(first_err)) {
             conditionMessage(first_err)
         } else {
             "track-parallel gextract worker failed"
         }, call. = FALSE)
     }
+
+    # Every worker sees the same scope and iterator, so the same message comes
+    # back from each of them; raise each distinct one once.
+    for (msg in unique(unlist(lapply(worker_out, `[[`, "warnings")))) {
+        warning(msg, call. = FALSE)
+    }
+    results <- lapply(worker_out, `[[`, "res")
     nullish <- vapply(results, is.null, logical(1))
     if (all(nullish)) {
         return(NULL)

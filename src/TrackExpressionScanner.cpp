@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <sys/time.h>
 
+#include <limits>
 #include <set>
 #include <unordered_set>
 
@@ -454,6 +455,390 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP rtrack_
     return m_expr_itr;
 }
 
+//---------------------------- overlapping 1D iterator intervals --------------------------------
+//
+// A 1D intervals iterator is unified below, so overlapping intervals are folded
+// into maximal blocks and the result carries one row per block instead of one per
+// interval. The 2D branch errors out on the same condition, but erroring here would
+// break every script that iterates over sliding windows or unioned peak calls, so
+// the merge stays and the caller gets a warning instead.
+//
+// The merge is not always observable: the emitted rows are (block x scope)
+// intersections, so when the same intervals are also passed as the scope, every input
+// interval is clipped back to itself and nothing is lost. The merge is unobservable
+// exactly when every input interval the scope reaches is itself one of the emitted
+// rows, and that is what is tested here - the search stops at the first interval for
+// which it fails.
+//
+// Two shapes make it fail, and both are looked for:
+//   - an emitted row that no single input interval contains: what a partial overlap
+//     produces (chr1 0-300 and chr1 100-400 become chr1 0-400 under a wider scope).
+//   - an input interval that is never emitted as a row of its own even though the
+//     scope reaches it: what nesting produces (chr1 0-1000 and chr1 100-300 become
+//     chr1 0-1000, a row the first input *does* contain, so the test above sees
+//     nothing while the second peak has silently disappeared).
+//
+// The second test is what keeps the recommended per-interval idiom (the same
+// intervals as both scope and iterator) silent: there every input interval is clipped
+// by its own scope interval back to itself, nested inputs included.
+//
+// What still goes unreported is an exact duplicate under a wider scope: both copies
+// are emitted verbatim, as one shared row, so no interval is missing from the output
+// even though the row count dropped. Erroring on any overlap at all, under an opt-in
+// strict mode, is the complete answer to that.
+
+// intervals must be sorted
+static bool intervals_overlap(const vector<GInterval> &intervals)
+{
+	for (size_t i = 1; i < intervals.size(); ++i) {
+		if (intervals[i].chromid == intervals[i - 1].chromid && intervals[i].start < intervals[i - 1].end)
+			return true;
+	}
+	return false;
+}
+
+// max_end[i] is the maximal end coordinate among the intervals of the same chromosome up to i
+static bool is_row_covered(const vector<GInterval> &intervals, const vector<int64_t> &max_end, const GInterval &row)
+{
+	// the last interval that starts at or before the row (GInterval::operator< orders by
+	// chromosome and then by start coordinate, which is how the intervals were sorted)
+	vector<GInterval>::const_iterator iinterv = upper_bound(intervals.begin(), intervals.end(), row);
+
+	if (iinterv == intervals.begin())
+		return false;
+
+	--iinterv;
+	if (iinterv->chromid != row.chromid)
+		return false;
+
+	return max_end[iinterv - intervals.begin()] >= row.end;
+}
+
+// block_first[k] is the index of the first interval of unified[k], and block_first[n] is
+// intervals.size(). The blocks are the maximal merged runs of the sorted intervals, so the
+// intervals of a block are a contiguous range and every interval belongs to exactly one.
+static void index_blocks(const vector<GInterval> &intervals, const vector<GInterval> &unified,
+						 vector<size_t> &block_first)
+{
+	block_first.assign(unified.size() + 1, intervals.size());
+
+	size_t iinterv = 0;
+	for (size_t iblock = 0; iblock < unified.size(); ++iblock) {
+		block_first[iblock] = iinterv;
+		while (iinterv < intervals.size() && intervals[iinterv].chromid == unified[iblock].chromid &&
+			   intervals[iinterv].start < unified[iblock].end)
+			++iinterv;
+	}
+}
+
+// The intervals that start before a scope interval and still reach into it: a stabbing query
+// at the scope interval's start, which a prefix maximum cannot answer in less than the whole
+// prefix. One interval spanning a block keeps max_end high across all of it, so the scan
+// below starts at the beginning of the block and every scope interval re-walks the same
+// intervals - quadratic in the size of the block, which is the shape a container interval
+// with nested peaks inside it produces.
+//
+// This tree answers the same query in runs of consecutive indices rather than one index at
+// a time, so its cost follows the number of runs the answer breaks into and not the number
+// of intervals it reports. That is what keeps the dense case cheap: an overlapping window
+// wider than the cap reaches back over an unbroken run of its predecessors, which is one
+// descent plus the same sequential scan the walk itself would have done, while the nested
+// container that motivated the tree reports a single interval from a block of millions.
+//
+// It is built on demand: a short scan finds the answer on its own whenever the reaching
+// intervals sit near the scope interval (sliding windows, unioned peak calls), and a
+// million-interval iterator should not pay for a tree it never queries.
+namespace {
+
+// a run of consecutive interval indices, all of which answer the query
+struct IdxRange {
+	size_t lo;
+	size_t hi;
+};
+
+class EndTree {
+public:
+	EndTree() : m_built(false), m_size(0) {}
+
+	void build(const vector<GInterval> &intervals) {
+		if (m_built)
+			return;
+		m_built = true;
+
+		m_size = 1;
+		while (m_size < intervals.size())
+			m_size <<= 1;
+
+		// the two bounds of a node sit together, so testing both costs one cache line
+		Node empty = { numeric_limits<int64_t>::max(), numeric_limits<int64_t>::min() };
+		m_tree.assign(2 * m_size, empty);
+		for (size_t i = 0; i < intervals.size(); ++i) {
+			m_tree[m_size + i].min_end = intervals[i].end;
+			m_tree[m_size + i].max_end = intervals[i].end;
+		}
+		for (size_t i = m_size - 1; i >= 1; --i) {
+			m_tree[i].min_end = min(m_tree[2 * i].min_end, m_tree[2 * i + 1].min_end);
+			m_tree[i].max_end = max(m_tree[2 * i].max_end, m_tree[2 * i + 1].max_end);
+		}
+	}
+
+	// appends the maximal runs of consecutive indices in [lo, hi) whose interval ends after
+	// `thr`, in ascending order
+	void ends_after(size_t lo, size_t hi, int64_t thr, vector<IdxRange> &out) const {
+		if (lo < hi)
+			descend(1, 0, m_size, lo, hi, thr, out);
+	}
+
+private:
+	struct Node {
+		int64_t min_end;
+		int64_t max_end;
+	};
+
+	void descend(size_t node, size_t node_lo, size_t node_hi, size_t lo, size_t hi, int64_t thr, vector<IdxRange> &out) const {
+		if (node_hi <= lo || hi <= node_lo || m_tree[node].max_end <= thr)
+			return;
+		// every interval under this node answers the query, and the node is inside the queried
+		// range: report the whole run without descending to its leaves. Padding leaves are
+		// never inside the range, so their bounds cannot reach this test.
+		if (lo <= node_lo && node_hi <= hi && m_tree[node].min_end > thr) {
+			emit(node_lo, node_hi, out);
+			return;
+		}
+		// a qualifying leaf is always covered by the test above; this is only a guard against
+		// descending past the bottom of the tree
+		if (node_hi - node_lo == 1) {
+			emit(node_lo, node_hi, out);
+			return;
+		}
+
+		size_t node_mid = node_lo + (node_hi - node_lo) / 2;
+		descend(2 * node, node_lo, node_mid, lo, hi, thr, out);
+		descend(2 * node + 1, node_mid, node_hi, lo, hi, thr, out);
+	}
+
+	// the descent visits leaves left to right, so a run split across several nodes arrives as
+	// adjacent pieces and is glued back into one
+	static void emit(size_t lo, size_t hi, vector<IdxRange> &out) {
+		if (!out.empty() && out.back().hi == lo)
+			out.back().hi = hi;
+		else {
+			IdxRange range = { lo, hi };
+			out.push_back(range);
+		}
+	}
+
+	bool           m_built;
+	size_t         m_size;
+	vector<Node>   m_tree;
+};
+
+} // anonymous namespace
+
+// How many intervals the scan is willing to walk over before it asks the tree instead.
+// Sliding windows and unioned peak calls reach back a handful of intervals - a window
+// reaches back width/step of them - and walking is cheaper than a tree descent at that
+// size, so the threshold sits well above any realistic reach. Past it the tree answers in
+// runs, so a window that does reach back further than this is not punished for it.
+static const size_t MAX_WALKED_INTERVALS = 128;
+
+// The emitted row that swallowed intervals[iinterv], found by re-walking the scope for the
+// first interval that reaches it. Only ever called once, on the way to raising the warning.
+static bool find_swallowing_row(const vector<GInterval> &intervals, const vector<GInterval> &unified,
+								const vector<size_t> &block_first, GIntervalsFetcher1D *scope,
+								size_t iinterv, GInterval &row, GInterval &block)
+{
+	size_t iblock = upper_bound(block_first.begin(), block_first.end(), iinterv) - block_first.begin() - 1;
+	const GInterval &interv = intervals[iinterv];
+
+	block = unified[iblock];
+
+	for (scope->begin_iter(); !scope->isend(); scope->next()) {
+		const GInterval &scope_interv = scope->cur_interval();
+
+		if (scope_interv.chromid != interv.chromid || scope_interv.end <= interv.start || scope_interv.start >= interv.end)
+			continue;
+
+		row = GInterval(interv.chromid, max(block.start, scope_interv.start), min(block.end, scope_interv.end), 0);
+		return true;
+	}
+	return false;
+}
+
+// Returns the first emitted row that cost the caller something - either a row no single
+// iterator interval contains, or a row that swallowed an interval the scope reached and that
+// is emitted nowhere on its own - along with the block it came from.
+static bool find_merged_row(const vector<GInterval> &intervals, const vector<GInterval> &unified,
+							GIntervalsFetcher1D *scope, GInterval &row, GInterval &block)
+{
+	vector<int64_t> max_end(intervals.size());
+
+	for (size_t i = 0; i < intervals.size(); ++i)
+		max_end[i] = i && intervals[i - 1].chromid == intervals[i].chromid ? max(max_end[i - 1], intervals[i].end) : intervals[i].end;
+
+	vector<size_t> block_first;
+	index_blocks(intervals, unified, block_first);
+
+	// An input interval is emitted verbatim when some scope interval clips it and its block to
+	// the same thing; the merge then cost it nothing. Both flags are decided over the whole
+	// scope, because one scope interval emitting an interval verbatim is enough even if
+	// another one swallows it - which is exactly what the recommended idiom looks like.
+	vector<bool> reached(intervals.size(), false);
+	vector<bool> verbatim(intervals.size(), false);
+
+	EndTree tree;
+	vector<IdxRange> reaching;
+
+	for (scope->begin_iter(); !scope->isend(); scope->next()) {
+		const GInterval &scope_interv = scope->cur_interval();
+		vector<GInterval>::const_iterator iblock = lower_bound(unified.begin(), unified.end(), scope_interv);
+
+		// the preceding block might start before the scope interval and still reach into it
+		if (iblock != unified.begin() && (iblock - 1)->chromid == scope_interv.chromid && (iblock - 1)->end > scope_interv.start)
+			--iblock;
+
+		for (; iblock != unified.end() && iblock->chromid == scope_interv.chromid && iblock->start < scope_interv.end; ++iblock) {
+			GInterval emitted(scope_interv.chromid, max(iblock->start, scope_interv.start), min(iblock->end, scope_interv.end), 0);
+
+			if (emitted.start >= emitted.end)
+				continue;
+
+			if (!is_row_covered(intervals, max_end, emitted)) {
+				row = emitted;
+				block = *iblock;
+				return true;
+			}
+
+			size_t block_lo = block_first[iblock - unified.begin()];
+			size_t block_hi = block_first[iblock - unified.begin() + 1];
+
+			// the first interval of the block that begins at or after the scope interval
+			// (GInterval::operator< orders by chromosome and then by start coordinate, which is
+			// how the intervals were sorted)
+			GInterval probe(scope_interv.chromid, scope_interv.start, scope_interv.start, 0);
+			size_t istart = lower_bound(intervals.begin() + block_lo, intervals.begin() + block_hi, probe) - intervals.begin();
+
+			// How far back the scan has to start to catch the intervals that begin before the
+			// scope interval and still reach into it: max_end is a prefix maximum, so the walk
+			// back stops as soon as nothing earlier can reach.
+			//
+			// A single interval spanning the block holds max_end high over all of it however far
+			// away the scope interval is, and the walk would then reach the start of the block for
+			// every scope interval that touches it - quadratic, and a container interval with peaks
+			// nested inside it is exactly that shape. Being a prefix maximum is also what says in
+			// advance whether that is about to happen: max_end does not decrease inside a block, so
+			// if the interval MAX_WALKED_INTERVALS back still reaches, so does everything between,
+			// and the walk is going to run at least that far. One look there replaces the walk with
+			// a tree query, which reports the same intervals in runs.
+			size_t i = istart;
+
+			if (istart - block_lo > MAX_WALKED_INTERVALS && max_end[istart - MAX_WALKED_INTERVALS - 1] > scope_interv.start) {
+				tree.build(intervals);
+				reaching.clear();
+				tree.ends_after(block_lo, istart, scope_interv.start, reaching);
+				for (size_t k = 0; k < reaching.size(); ++k) {
+					for (size_t ireach = reaching[k].lo; ireach < reaching[k].hi; ++ireach) {
+						reached[ireach] = true;
+						if (intervals[ireach].start <= emitted.start && intervals[ireach].end >= emitted.end)
+							verbatim[ireach] = true;
+					}
+				}
+			} else {
+				// bounded by the look above: nothing MAX_WALKED_INTERVALS back reaches, or the block
+				// does not extend that far
+				while (i > block_lo && max_end[i - 1] > scope_interv.start)
+					--i;
+			}
+
+			for (; i < block_hi && intervals[i].start < scope_interv.end; ++i) {
+				if (intervals[i].end <= scope_interv.start)
+					continue;
+
+				reached[i] = true;
+				// intervals[i] lies inside the block, so containing the emitted row is the
+				// same as being clipped to it by this scope interval
+				if (intervals[i].start <= emitted.start && intervals[i].end >= emitted.end)
+					verbatim[i] = true;
+			}
+		}
+	}
+
+	// no row was widened, but an interval the scope reached may still have been swallowed whole
+	for (size_t i = 0; i < intervals.size(); ++i) {
+		if (reached[i] && !verbatim[i])
+			return find_swallowing_row(intervals, unified, block_first, scope, i, row, block);
+	}
+	return false;
+}
+
+// The first pair of overlapping intervals, optionally restricted to those inside `block`.
+static bool first_overlapping_pair(const vector<GInterval> &intervals, const GInterval *block,
+								   GInterval &interv1, GInterval &interv2)
+{
+	int64_t max_end = -1;
+	size_t imax_end = 0;
+	bool started = false;
+
+	for (size_t i = 0; i < intervals.size(); ++i) {
+		if (block) {
+			if (intervals[i].chromid != block->chromid || intervals[i].end <= block->start)
+				continue;
+			if (intervals[i].start >= block->end)
+				break;
+		}
+
+		bool same_chrom = started && intervals[i].chromid == intervals[imax_end].chromid;
+
+		if (same_chrom && intervals[i].start < max_end) {
+			interv1 = intervals[imax_end];
+			interv2 = intervals[i];
+			return true;
+		}
+
+		if (!same_chrom || intervals[i].end > max_end) {
+			max_end = intervals[i].end;
+			imax_end = i;
+			started = true;
+		}
+	}
+	return false;
+}
+
+static void warn_merged_iterator(const vector<GInterval> &intervals, const vector<GInterval> &unified,
+								 GIntervalsFetcher1D *scope, const IntervUtils &iu)
+{
+	GInterval row;
+	GInterval block;
+
+	if (!find_merged_row(intervals, unified, scope, row, block))
+		return;
+
+	// name the pair that produced the row; the fallback cannot normally happen, since a
+	// row is only uncovered when its block was built out of more than one interval
+	GInterval interv1;
+	GInterval interv2;
+
+	if (!first_overlapping_pair(intervals, &block, interv1, interv2) &&
+		!first_overlapping_pair(intervals, NULL, interv1, interv2))
+		return;
+
+	char msg[1000];
+
+	snprintf(msg, sizeof(msg),
+			 "Overlapping intervals were used as an iterator: %llu intervals were merged into %llu non-overlapping block%s. "
+			 "For example %s %lld-%lld and %s %lld-%lld are reported as a single row %s %lld-%lld, so the results do not "
+			 "correspond one-to-one to the iterator intervals. To get one value per interval, call gextract() with the "
+			 "same intervals as the scope (its 'intervals' argument) and map the rows back with the intervalID column.",
+			 (unsigned long long)intervals.size(), (unsigned long long)unified.size(), unified.size() == 1 ? "" : "s",
+			 iu.id2chrom(interv1.chromid).c_str(), (long long)interv1.start, (long long)interv1.end,
+			 iu.id2chrom(interv2.chromid).c_str(), (long long)interv2.start, (long long)interv2.end,
+			 iu.id2chrom(row.chromid).c_str(), (long long)row.start, (long long)row.end);
+
+	// Rf_warning() is unsafe here (see add_pending_diagnostic for why): the text is
+	// queued for .gcall() to raise once the call has returned.
+	add_pending_diagnostic(iu.get_env(), "warning", msg);
+}
+
 TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterator, const TrackExpressionVars &vars, const vector<string> &track_exprs,
 		GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, GIntervals &intervals1d, GIntervals2D &intervals2d, const DiagonalBand &band, bool call_begin)
 {
@@ -547,7 +932,23 @@ TrackExpressionIteratorBase *TrackExprScanner::create_expr_iterator(SEXP giterat
 			if (intervs_type_mask == IntervUtils::INTERVS1D) {
 				verify_1d_iter(scope1d, scope2d);
 				intervals1d.sort();
+
+				// The merge below is silent and whether it is observable depends on the scope,
+				// so the check runs once per call (see rdb::once_per_call) and only pays for
+				// the copy when the intervals really do overlap. The overlap test comes
+				// first, and deliberately so: once_per_call consumes the key, and a call
+				// whose iterator does not overlap has nothing to report - if it consumed
+				// the key anyway it would silence a nested call that does overlap (an
+				// inner gextract under gintervals.mapply's FUN, say). The linear scan is
+				// the cheap half; the expensive half is the copy on the next line.
+				vector<GInterval> orig_intervals;
+				if (scope1d && intervals_overlap(intervals1d) && once_per_call("iterator1d.overlaps"))
+					orig_intervals.assign(intervals1d.begin(), intervals1d.end());
+
 				intervals1d.unify_overlaps(false);
+
+				if (!orig_intervals.empty())
+					warn_merged_iterator(orig_intervals, intervals1d, scope1d, m_iu);
 				expr_itr = new TrackExpressionIntervals1DIterator();
 				if (call_begin) 
 					((TrackExpressionIntervals1DIterator *)expr_itr)->begin(intervals1d, *scope1d);

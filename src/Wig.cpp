@@ -12,8 +12,11 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 {
 	m_chromkey = (GenomeChromKey *)&chromkey;
 	m_ignore_unknown_chroms = ignore_unknown_chroms;
+	m_chrom_fpos.clear();
+	m_chrom_lineno.clear();
 	m_chrom_fpos.resize(chromkey.get_num_chroms(), -1);
 	m_chrom_lineno.resize(chromkey.get_num_chroms(), -1);
+	m_unknown_chroms.clear();
 
 	// read the file to determine the positions of first chrom appearences
 	int last_chromid = -1;
@@ -70,6 +73,17 @@ void Wig::init(const GenomeChromKey &chromkey, const string &filename, bool igno
 						m_bfile.file_name().c_str(), lineno - 1);
 		}
 	}
+}
+
+uint64_t Wig::get_num_matched_chroms() const
+{
+	uint64_t num_matched = 0;
+
+	for (vector<long>::const_iterator ifpos = m_chrom_fpos.begin(); ifpos != m_chrom_fpos.end(); ++ifpos) {
+		if (*ifpos != -1)
+			++num_matched;
+	}
+	return num_matched;
 }
 
 bool Wig::get_data(int chromid, GIntervals &intervals)

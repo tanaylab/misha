@@ -12,6 +12,7 @@ void GenomeArraysCsv::init(const char *filename, const GenomeChromKey &chromkey)
 	m_chroms_positions.clear();
 	m_colnames.clear();
 	m_intervals.clear();
+	m_unknown_chroms.clear();
 
 	m_chromkey = (GenomeChromKey *)&chromkey;
 
@@ -46,9 +47,23 @@ void GenomeArraysCsv::init(const char *filename, const GenomeChromKey &chromkey)
 		    int chromid = m_chromkey->chrom2id(m_fields[GInterval::CHROM]);
 			m_chroms_positions[chromid].push_back(pos);
 		} catch (TGLException &) {
-			// there might be unrecognized chromosomes, ignore them
+			// there might be unrecognized chromosomes; skip them, but remember their
+			// names so the caller can tell a mis-named file from a legitimately
+			// partial one
+			m_unknown_chroms.record(m_fields[GInterval::CHROM]);
 		}
 	}
+}
+
+uint64_t GenomeArraysCsv::get_num_matched_chroms() const
+{
+	uint64_t num_matched = 0;
+
+	for (ChromsPositions::const_iterator ipositions = m_chroms_positions.begin(); ipositions != m_chroms_positions.end(); ++ipositions) {
+		if (!ipositions->empty())
+			++num_matched;
+	}
+	return num_matched;
 }
 
 const GIntervals &GenomeArraysCsv::get_intervals(int chromid)

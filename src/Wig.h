@@ -1,10 +1,13 @@
 #ifndef WIG_H_
 #define WIG_H_
 
+#include <cstdint>
+#include <string>
 #include <vector>
 #include "BufferedFile.h"
 #include "GenomeChromKey.h"
 #include "GIntervals.h"
+#include "UnknownChroms.h"
 
 using namespace std;
 
@@ -24,6 +27,12 @@ public:
 
 	// returns true if data for chromosome exists; (float)udata of each interval contains the value
 	bool get_data(int chromid, GIntervals &intervals);
+
+	// Chromosome names that appear in the file but do not exist in the genome database.
+	const UnknownChroms &get_unknown_chroms() const { return m_unknown_chroms; }
+
+	// Number of database chromosomes for which the file contains data.
+	uint64_t get_num_matched_chroms() const;
 
 private:
 	enum { CHROM_FIELD, START_FIELD, STEP_FIELD, SPAN_FIELD, NUM_FIELDS };
@@ -72,6 +81,7 @@ private:
 	vector<int64_t> m_chrom_lineno;
 	BufferedFile    m_bfile;
 	bool            m_ignore_unknown_chroms;
+	UnknownChroms   m_unknown_chroms;
 
 	bool read_record(Rec &rec, int64_t &lineno);
 
@@ -91,8 +101,10 @@ inline int Wig::str2chromid(const char *str, int64_t lineno)
 	try {
 		return m_chromkey->chrom2id(str);
 	} catch (TGLException &e) {
-		if (m_ignore_unknown_chroms)
+		if (m_ignore_unknown_chroms) {
+			m_unknown_chroms.record(str);
 			return -1;
+		}
 		TGLError<Wig>(BAD_CHROM, "WIG file %s, line %ld: %s\n", m_bfile.file_name().c_str(), lineno, e.msg());
 	}
 	return -1;
