@@ -85,14 +85,22 @@ static uint64_t estimate_records_for_expr(
 		return 0;
 	}
 
-	// Intervals iterators: use iterator_count as the estimate.
-	// Scope intervals are non-overlapping (verify_no_overlaps enforced in gextract),
-	// and iterator intervals (TSS/peaks) are small, so each overlaps at most 1 scope interval.
-	// For the rare case where a large iterator interval spans multiple scope intervals,
-	// the direct-to-R loop has a bounds check with fallback.
+	// Intervals iterators emit one record per (scope interval, iterator interval)
+	// intersection, not one per iterator interval: a single long iterator interval
+	// (or one block that several overlapping iterator intervals merged into) covers
+	// as many scope intervals as it spans. For two sets of disjoint sorted intervals
+	// the number of intersecting pairs is at most n + m - 1 per chromosome, so
+	// iterator_count + scope_count is a true bound there and stays within a few
+	// records of iterator_count in the common case (many small peaks, few scope
+	// intervals). It is not a bound for a self-overlapping scope, which gextract
+	// allows; that case is caught at runtime by the shared-memory guard, which the
+	// parent handles by re-running the call serially.
 	if (auto *int1d_itr = dynamic_cast<TrackExpressionIntervals1DIterator *>(expr_itr)) {
 		uint64_t itr_size = int1d_itr->get_intervals() ? int1d_itr->get_intervals()->size() : 0;
-		return itr_size;
+		if (!itr_size)
+			return 0;
+		uint64_t scope_size = scope1d ? (uint64_t)scope1d->size() : 0;
+		return itr_size + scope_size;
 	}
 
 	return 0;
@@ -1408,7 +1416,8 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 							estimated_records = inflate_estimated_records(iu, base_estimated_records, max_records_factor);
 							continue;
 						}
-					return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _intervals_join, _envir);
+					if (!RdbInitializer::is_kid())   // see the outer catch: a kid must never return to R
+						return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _intervals_join, _envir);
 				}
 				throw;
 			}
@@ -1534,7 +1543,13 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		}
 	} catch (TGLException &e) {
 		string msg(e.msg());
-		if (msg.find("Result size exceeded the maximal allowed") != string::npos) {
+		// Only the parent may re-run the call serially. In a child process this is
+		// reached when the shared-memory result arena overflows (allocate_res()), and
+		// returning from here would hand control back to R inside the fork: the child
+		// would run the caller's R code and then exit through R's own shutdown, whose
+		// R_CleanTempDir() deletes the session tempdir the parent is still using.
+		// rerror() instead publishes the message to the parent, which retries.
+		if (msg.find("Result size exceeded the maximal allowed") != string::npos && !RdbInitializer::is_kid()) {
 			return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, _file, _intervals_set_out, _intervals_join, _envir);
 		}
 		rerror("%s", e.msg());

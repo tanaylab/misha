@@ -1,13 +1,84 @@
 .gcall <- function(...) {
+    # C++ cannot raise a warning or a message itself: a caller that catches either with
+    # an exiting handler (tryCatch, or options(warn = 2)) would longjmp out of the C
+    # frame and leave misha's PROTECT counter inflated. Diagnostics are appended to
+    # .misha$.GPENDING.DIAGNOSTICS - a list of c(severity, text) pairs, see
+    # rdb::add_pending_diagnostic - and raised here, in the order they were produced,
+    # once the call has returned.
+    #
+    # An outer call may have queued diagnostics of its own: gintervals.mapply runs the
+    # user's FUN, and any misha call inside it nests under it. Take the outer queue
+    # aside and put it back, so this call raises only what it produced. That has to
+    # happen on the way out of an error or an interrupt too, or the outer call loses
+    # its own diagnostics and inherits whatever the failed inner call had queued.
+    outer <- .gtake_pending_diagnostics()
+    completed <- FALSE
+    on.exit(
+        {
+            mine <- .gtake_pending_diagnostics()
+            if (length(outer)) {
+                assign(".GPENDING.DIAGNOSTICS", outer, envir = .misha)
+            }
+            # A call that did not return produced no results for a diagnostic to
+            # qualify, so its queue is dropped rather than raised - both because the
+            # error is the thing worth reporting and because a warning raised while an
+            # error unwinds would replace it under options(warn = 2).
+            if (completed) {
+                .graise_diagnostics(mine)
+            }
+        },
+        add = TRUE
+    )
+    # A multitasking child process must end inside C (rexit(), i.e. a signal), and must
+    # never come back here: R would carry on running the caller's code inside the fork and
+    # then leave through R's own shutdown, whose R_CleanTempDir() deletes the session
+    # tempdir - taking with it any database that lives there (gdb.init_examples(), the
+    # isolated test databases). A pid that changed across the .Call means this call forked
+    # and we are the child, which is always a bug in the C layer. Die at once and hard:
+    # SIGKILL runs no exit handler and removes no file, and the parent reports the child's
+    # abnormal death instead of silently dropping its share of the result.
+    #
+    # pskill/SIGKILL are called unqualified, not as tools::pskill/tools::SIGKILL: a `::`
+    # reference loads the namespace on first use if it is not loaded yet, which is file I/O
+    # and R evaluation in a process already known to be in a broken state. @importFrom in
+    # misha-package.R makes R load `tools` and resolve both bindings while the *parent*
+    # loads misha - before any child exists - so the fork inherits them already resolved and
+    # this call is nothing but a lookup in misha's own imports environment.
+    pid <- Sys.getpid()
     tryCatch(
         {
             res <- .Call(...)
+            if (!identical(Sys.getpid(), pid)) {
+                pskill(Sys.getpid(), SIGKILL)
+            }
         },
         interrupt = function(interrupt) {
             stop("Command interrupted!", call. = FALSE)
         }
     )
+    completed <- TRUE
     res
+}
+
+# Removes the diagnostics queued by the C++ layer, if any, and returns them: a list of
+# c(severity, text) character pairs, oldest first.
+.gtake_pending_diagnostics <- function() {
+    if (!exists(".GPENDING.DIAGNOSTICS", envir = .misha, inherits = FALSE)) {
+        return(list())
+    }
+    diags <- get(".GPENDING.DIAGNOSTICS", envir = .misha)
+    rm(list = ".GPENDING.DIAGNOSTICS", envir = .misha)
+    diags
+}
+
+.graise_diagnostics <- function(diags) {
+    for (diag in diags) {
+        if (identical(diag[[1]], "message")) {
+            message(diag[[2]])
+        } else {
+            warning(diag[[2]], call. = FALSE)
+        }
+    }
 }
 
 .misha_env <- function() {

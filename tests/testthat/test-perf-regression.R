@@ -278,3 +278,70 @@ test_that("many-track large-iterator gextract: track-parallel >= tile-parallel",
         succeed(msg)
     }
 })
+
+test_that("an overlapping 1D iterator does not cost more than the same intervals disjoint", {
+    skip_unless_perf()
+    withr::local_options(gmultitasking = FALSE, gmax.data.size = 1e9)
+
+    # Passing overlapping intervals as a 1D iterator runs a merge test over the whole
+    # scope. The test used to walk back over every interval of a block for every scope
+    # interval that touched it - fine while the intervals of a block sit near each other
+    # (sliding windows), quadratic once one long interval spans the block, which is what a
+    # domain with peaks nested inside it is. Measured on the lab box before the fix: 0.76s
+    # against 0.09s for the same peaks without the container, and 8.7s cold.
+    #
+    # Stated as a ratio against the disjoint control rather than an absolute budget: both
+    # sides extract the same peaks, so everything except the merge test cancels.
+    k <- 40000
+    st <- seq(0, by = 200, length.out = k)
+    peaks <- gintervals(1, st, st + 100)
+    nested <- gintervals(1, c(0, st), c(k * 200, st + 100))
+
+    t_disjoint <- time_op(gextract("test.fixedbin", peaks, iterator = peaks))
+    t_nested <- time_op(suppressWarnings(gextract("test.fixedbin", nested, iterator = nested)))
+
+    msg <- sprintf(
+        "disjoint: %.0fms, one container over %d nested peaks: %.0fms (ratio %.2fx)",
+        t_disjoint * 1000, k, t_nested * 1000, t_nested / t_disjoint
+    )
+    if (t_nested > t_disjoint * 3) {
+        fail(msg)
+    } else {
+        succeed(msg)
+    }
+})
+
+test_that("an overlapping iterator that reaches back past the walk cap costs no step", {
+    skip_unless_perf()
+    withr::local_options(gmultitasking = FALSE, gmax.data.size = 1e9)
+
+    # The merge test walks back over the intervals that reach into each scope interval, and
+    # hands the query to a tree once the walk would run past MAX_WALKED_INTERVALS (128). The
+    # first version of that hand-off reported one index at a time, which cost about two node
+    # visits per reaching interval where the walk cost one sequential read - so crossing the
+    # cap put a step in the wall clock: measured on the lab box, 150k windows at reach 200
+    # took 2.36x the same windows at reach 129, against 1.30x for the walk alone. The tree
+    # now reports runs of consecutive indices, and the same measurement gives 1.24x.
+    #
+    # Both sides are the same shape and the same row count; only the window width differs
+    # (200bp against 129bp), so the ratio is close to the extra data and nothing else. The
+    # test goes quiet rather than false-firing if MAX_WALKED_INTERVALS is ever raised above
+    # 200, which is the safe direction.
+    n <- 150000L
+    st <- seq(0, by = 1, length.out = n)
+    dense <- gintervals(1, st, st + 200) # reaches back 199 intervals: past the cap
+    subcap <- gintervals(1, st, st + 129) # reaches back 128: the deepest walk-only case
+
+    t_dense <- time_op(gextract("test.fixedbin", dense, iterator = dense))
+    t_subcap <- time_op(gextract("test.fixedbin", subcap, iterator = subcap))
+
+    msg <- sprintf(
+        "reach 129 (walk): %.0fms, reach 200 (tree): %.0fms (ratio %.2fx)",
+        t_subcap * 1000, t_dense * 1000, t_dense / t_subcap
+    )
+    if (t_dense > t_subcap * 1.8) {
+        fail(msg)
+    } else {
+        succeed(msg)
+    }
+})

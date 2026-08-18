@@ -1,3 +1,9 @@
+# misha 5.11.18
+
+* **Behavior fix:** passing overlapping intervals as a 1D iterator now warns that they were merged into wider blocks, naming one merged pair and the row it became. An interval nested inside another one counts as merged too: it widens no row, so it used to disappear silently. Exact duplicates stay silent - both copies come back as the same row, so no interval is missing from the output. Results are unchanged; to get one value per interval, call `gextract()` with the same intervals as its scope and map the rows back with the `intervalID` column.
+* **Crash fix:** `gextract()` killed a worker process - failing the call and deleting the session `tempdir()`, with any database kept there - when it produced more than 64 rows per iterator interval, which is what a merged block of overlapping peaks typically does.
+* **Behavior fix:** `gtrack.import()` errors when none of the chromosome names in a WIG / bedGraph / tab file exist in the genome database, instead of silently creating an all-NaN track. A partial match still imports the rest and now reports the names it skipped - as a message for scaffolds/contigs, or as a warning that aborts and leaves no track behind under `options(warn = 2)` when a skipped name looks like a primary chromosome.
+
 # misha 5.11.17
 
 * **Bug fix:** a virtual track whose `gvtrack.iterator()` `sshift`/`eshift` pushes the iterator interval off the chromosome now returns `NaN`, whatever the function. `pwm*`, `kmer*` and `masked*` returned `0` or `-Inf`, or a value that depended on the database format, and errored out ("start coordinate must be lesser than end coordinate") when four or more sequence virtual tracks were extracted in one call; `coverage` and `neighbor.count` returned `0`, indistinguishable from a real answer. An interval that only partly leaves the chromosome is still clamped to it, as before.
@@ -9,6 +15,7 @@
 * **Bug fix:** `gbins.quantiles()` and `gbins.summary()` no longer drop the last `bin_expr`/`breaks` pair when `expr` is passed by name, which silently turned a 2-dimensional binning into a 1-dimensional one.
 * **Behavior fix:** `gdist()`, `gbins.quantiles()` and `gbins.summary()` error when a scope (or `expr`, for the `gbins.*` functions) is given both positionally and by name; the named argument used to be discarded silently.
 * `gtrack.ls()` accepts `pattern =` like its `gintervals.ls()`/`gvtrack.ls()` siblings; as with `db`/`perl`/`fixed`, a track attribute of that name can no longer be filtered by name.
+
 # misha 5.11.14
 
 * **Database corruption fix:** creating or removing a track/interval set wrote the in-memory listing into `<groot>/.db.cache` without checking which database that listing came from. If `GROOT` and the listing had drifted apart - `gsetroot()` interrupted with Ctrl-C mid-reload, or `misha.ext::gset_genome(force = FALSE)` restoring a memoized session - one database's inventory was published into another's cache, and every subsequent session on that database saw the wrong tracks until someone ran `gdb.reload(rescan = TRUE)`. The cache is now only written when the listing provably came from that database; otherwise it is marked dirty and rescanned.

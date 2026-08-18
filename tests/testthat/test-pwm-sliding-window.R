@@ -62,17 +62,21 @@ test_that("PWM sliding window works with MOTIF_COUNT mode", {
     colnames(pwm) <- c("A", "C", "G", "T")
 
     # NOTE: this originally passed `threshold = -10`, which was never a real
-    # pwm.count parameter (the accepted key is `score.thresh`) and was
-    # silently ignored, so pwm.count actually ran with the default
-    # score.thresh = 0. Making that explicit here to keep this test's
-    # computed values - and the golden snapshot below - unchanged. Whether
-    # these tests were meant to run with score.thresh = -10 is an open
-    # question; answering it means regenerating the shared golden snapshots
-    # in /net/mraid20/export/tgdata/db/tgdb/misha_snapshot, which is out of
-    # scope here.
+    # pwm.count parameter (the accepted key is `score.thresh`), so it was
+    # silently dropped and the test ran at the default score.thresh = 0.
+    # A PWM score here is a plain log-likelihood and is therefore always
+    # negative, so score.thresh = 0 can never be reached and the counts -
+    # and the golden snapshot - were all zeros. Restored to the intended -10,
+    # which is the threshold the non-sliding pwm.count tests further down
+    # this file use; the golden snapshot was regenerated to match.
+    #
+    # -10 is inside this PSSM's range, not below it: pwm.max over this window runs
+    # -12.339 to -2.848, and the counts split 738 ones to 262 zeros. Nothing lower
+    # would do - -15 passes every position - and nothing much higher either: -5, -4
+    # and -3 all give the same 25 ones, and -2 gives none at all.
     gvtrack.create("pwm_count_test", "seq",
         func = "pwm.count",
-        params = list(pssm = pwm, score.thresh = 0)
+        params = list(pssm = pwm, score.thresh = -10)
     )
     result <- gextract("pwm_count_test", gintervals(1, 10000, 11000), iterator = 1)
     expect_regression(result, "pwm_sliding_window_test_3")
@@ -80,6 +84,10 @@ test_that("PWM sliding window works with MOTIF_COUNT mode", {
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_count_test)))
     expect_true(all(result$pwm_count_test >= 0))
+    # Guard against a threshold outside the PSSM's range making this test vacuous. It has
+    # to test for variation, not for a non-zero value: a threshold below the lowest
+    # achievable score passes every position, and `any(x > 0)` is happy with that.
+    expect_gt(length(unique(result$pwm_count_test)), 1)
 
     gvtrack.rm("pwm_count_test")
 })
@@ -430,12 +438,19 @@ test_that("PWM sliding window MOTIF_COUNT mode works with iterator=20 and shifts
     colnames(pssm) <- c("A", "C", "G", "T")
 
     # NOTE: originally `threshold = -10` (not a real pwm.count parameter -
-    # see the comment at the first occurrence of this pattern above); making
-    # the effective score.thresh = 0 default explicit to keep the golden
-    # snapshot below unchanged.
+    # see the comment at the first occurrence of this pattern above);
+    # restored to the intended score.thresh = -10.
+    #
+    # This PSSM is a random 6-row matrix whose best achievable score over these windows is
+    # about -5.3, so any threshold above that counts nothing: at -5 this test returns 0 for
+    # all 5000 rows. Below it the threshold has to sit far enough from both ends of the
+    # count range to discriminate: -10 counts nearly every placement (31 distinct counts
+    # over 190-220 of the 220 placements a window holds, 8 rows at the ceiling) and -12
+    # counts all 220 of them. -8 is the one that spreads the rows out: 71 distinct counts
+    # over 48-118, no row at either end.
     gvtrack.create("pwm_count_iter20", "seq",
         func = "pwm.count",
-        params = list(pssm = pssm, score.thresh = 0)
+        params = list(pssm = pssm, score.thresh = -8)
     )
     gvtrack.iterator("pwm_count_iter20", sshift = -100, eshift = 100)
 
@@ -444,6 +459,9 @@ test_that("PWM sliding window MOTIF_COUNT mode works with iterator=20 and shifts
     expect_true(nrow(result) > 0)
     expect_false(any(is.na(result$pwm_count_iter20)))
     expect_true(all(result$pwm_count_iter20 >= 0))
+    # Guard against a threshold outside the PSSM's range making this test vacuous, in
+    # either direction - saturated at the window length as much as stuck at zero.
+    expect_gt(length(unique(result$pwm_count_iter20)), 1)
 
     gvtrack.rm("pwm_count_iter20")
 })
@@ -813,17 +831,24 @@ test_that("PWM regression: MOTIF_COUNT mode with shifts", {
     colnames(pssm) <- c("A", "C", "G", "T")
 
     # NOTE: originally `threshold = -10` (not a real pwm.count parameter -
-    # see the comment at the first occurrence of this pattern above); making
-    # the effective score.thresh = 0 default explicit to keep the golden
-    # snapshot below unchanged.
+    # see the comment at the first occurrence of this pattern above);
+    # restored to the intended score.thresh = -10.
+    #
+    # As above: this PSSM's best achievable score over these windows is about -6.2, so -5
+    # counts nothing at all here, and -10 counts nearly every placement (36 distinct counts
+    # over 184-220, 39 of the 2500 rows at the 220 ceiling). -8 spreads them out: 126
+    # distinct counts over 67-196.
     gvtrack.create("pwm_count_reg", "seq",
         func = "pwm.count",
-        params = list(pssm = pssm, score.thresh = 0)
+        params = list(pssm = pssm, score.thresh = -8)
     )
     gvtrack.iterator("pwm_count_reg", sshift = -100, eshift = 100)
 
     result <- gextract("pwm_count_reg", gintervals(1, 1000000, 1050000), iterator = 20)
 
+    # Guard against a threshold outside the PSSM's range making this test vacuous, in
+    # either direction - saturated at the window length as much as stuck at zero.
+    expect_gt(length(unique(result$pwm_count_reg)), 1)
     expect_regression(result, "pwm_sliding_window_count_iter20_shifts")
 })
 

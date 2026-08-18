@@ -48,6 +48,17 @@ name (e.g. 'value'). Each subsequent line provides a single interval:
 Columns must be separated by tabs. Coordinates must refer to chromosomes
 existing in the current genome. Missing values can be specified as 'NaN'.
 
+Chromosome names are matched against the genome database through the
+chromosome alias chain (\code{chr1} <-> \code{1}, \code{M} <-> \code{MT},
+and \code{<groot>/chrom_aliases.tsv} if present). If the file names
+chromosomes and none of them can be matched, 'gtrack.import' fails instead of
+creating an empty track; a file with no chromosome records at all is not an
+error and still imports as an empty track. If only some of the names can be
+matched, the rest of the file is imported and the unmatched names are
+reported: a message for contigs the database does not have (unplaced
+scaffolds, patches), a warning when the unmatched name looks like a primary
+chromosome, since that suggests a naming mismatch.
+
 BED files (.bed/.bed.gz/.bed.zip) are also supported. If the BED 'score'
 column (5th column) exists and is numeric, it is used as the interval value;
 otherwise a constant value of 1 is used. For BED inputs, 'binsize' controls
