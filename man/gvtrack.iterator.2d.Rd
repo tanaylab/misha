@@ -37,6 +37,10 @@ intervals in a virtual track.
 Iterator interval's 'start1' coordinate is modified by adding 'sshift1'.
 Similarly 'end1', 'start2', 'end2' coordinates are altered by adding
 'eshift1', 'sshift2' and 'eshift2' accordingly.
+
+A shifted interval that runs past a chromosome boundary is clamped to it. If
+nothing is left of it - it falls entirely outside the chromosome, or the
+shifts collapse it to zero length - the virtual track returns 'NaN'.
 }
 \examples{
 \dontshow{
