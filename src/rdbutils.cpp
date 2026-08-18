@@ -1140,7 +1140,7 @@ struct RSaneMkCharData {
 
 static void RSaneMkCharCallback(void *_data)
 {
-	RSaneMkCharData *data = (RSaneMkCharData *)_data;
+    RSaneMkCharData *data = (RSaneMkCharData *)_data;
     data->retv = Rf_mkChar(data->str);
 }
 
