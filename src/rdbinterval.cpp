@@ -620,12 +620,31 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 				((GIntervals2D *)m_kids_intervals2d.back())->push_back(*iinterv);
 			}
 		} else {
-			set<ChromPair> chrompairs_mask;
-			GIntervals2D all_genome;
-			get_all_genome_intervs(all_genome);
+			// The chrom-pair universe must be taken from the scope itself, not from the
+			// whole-genome 2D intervals set: above gmulticontig.2d.threshold contigs that
+			// set is a deferred placeholder with no rows, so this loop never ran, no kid was
+			// planned, and every 2D caller silently returned NULL for a scope it was given
+			// explicitly. Walking the scope's own populated pairs is also what the
+			// partitioner actually needs, and it drops an O(num_chroms^2) walk.
+			// (Same idiom as GenomeTrackQuantiles.cpp "Phase 7b", including the (0,0) prime:
+			// get_next_chroms() returns the pair *after* the one it is given.)
+			vector<ChromPair> scope_chrompairs;
+			{
+				int chromid1 = 0;
+				int chromid2 = 0;
 
-			for (GIntervals2D::const_iterator iinterv = all_genome.begin(); iinterv != all_genome.end(); ++iinterv) {
-				double chrom_surface = scope2d->surface(iinterv->chromid1(), iinterv->chromid2());
+				if (scope2d->size(0, 0))
+					scope_chrompairs.push_back(ChromPair(0, 0));
+				while (scope2d->get_next_chroms(&chromid1, &chromid2)) {
+					if (scope2d->size(chromid1, chromid2))
+						scope_chrompairs.push_back(ChromPair(chromid1, chromid2));
+				}
+			}
+
+			set<ChromPair> chrompairs_mask;
+
+			for (vector<ChromPair>::const_iterator ipair = scope_chrompairs.begin(); ipair != scope_chrompairs.end(); ++ipair) {
+				double chrom_surface = scope2d->surface(ipair->chromid1, ipair->chromid2);
 
 				if (!chrom_surface) 
 					continue;
@@ -645,7 +664,7 @@ int IntervUtils::prepare4multitasking(GIntervalsFetcher1D *scope1d, GIntervalsFe
 
 				kid_surface += chrom_surface;
 				surface -= chrom_surface;
-				chrompairs_mask.insert(ChromPair(iinterv->chromid1(), iinterv->chromid2()));
+				chrompairs_mask.insert(*ipair);
 			}
 
 			if (!chrompairs_mask.empty())
