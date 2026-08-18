@@ -29,6 +29,13 @@ using namespace std;
 // reached here proves the database has no mito contig at all. That can never be
 // fixed by an alias, and hg19 / mm10 as built here have no chrM - so treating it
 // as primary would put every whole-genome bigWig back in the warning channel.
+//
+// is_primary_chrom_name below is human/mouse-shaped, and only decides which channel a
+// report goes to, never whether it is made: roman-numeral chromosomes (yeast chrI..chrXVI,
+// worm I..V) are read as scaffolds and reported as a message rather than a warning, of
+// which only chrX happens to land in the warning channel; chr0 and chr99 are read as
+// primary. Both are wrong in the harmless direction, and sharpening the heuristic per
+// genome is not worth the alias table it would need.
 
 class UnknownChroms {
 public:
@@ -40,13 +47,14 @@ public:
 	// needed when they are passed by reference, e.g. to std::min.)
 	enum { MAX_TRACKED = 100, MAX_REPORTED = 5 };
 
-	UnknownChroms() : m_truncated(false) {}
+	UnknownChroms() : m_untracked_primary(0), m_truncated(false) {}
 
 	void clear() {
 		m_names.clear();
 		m_primary_names.clear();
 		m_seen.clear();
 		m_primary_seen.clear();
+		m_untracked_primary = 0;
 		m_truncated = false;
 	}
 
@@ -55,14 +63,21 @@ public:
 		// bound a mis-columned file's junk names, and there are only so many names that can
 		// look like a chromosome. Capping them would let a chr7 that appears after 100
 		// scaffolds go unnoticed and silently downgrade the report to a message.
-		if (is_primary_chrom_name(chrom) && m_primary_seen.insert(chrom).second &&
-		    m_primary_names.size() < (size_t)MAX_REPORTED)
+		bool new_primary = is_primary_chrom_name(chrom) && m_primary_seen.insert(chrom).second;
+
+		if (new_primary && m_primary_names.size() < (size_t)MAX_REPORTED)
 			m_primary_names.push_back(chrom);
 
 		if (m_seen.size() >= (size_t)MAX_TRACKED) {
 			// only a name that is not already tracked is actually being dropped
-			if (m_seen.find(chrom) == m_seen.end())
+			if (m_seen.find(chrom) == m_seen.end()) {
 				m_truncated = true;
+				// ... and a primary-shaped one is not dropped at all, it is tracked above.
+				// num() has to count it, or the report reads "100+ names ... among them
+				// primary chromosome(s): chr7" with chr7 not among the 100.
+				if (new_primary)
+					++m_untracked_primary;
+			}
 			return;
 		}
 
@@ -75,8 +90,9 @@ public:
 
 	bool empty() const { return m_seen.empty() && m_primary_seen.empty(); }
 
-	// Number of distinct names; capped at MAX_TRACKED, in which case truncated() is true.
-	uint64_t num() const { return (uint64_t)m_seen.size(); }
+	// Number of distinct names: everything tracked, which is the first MAX_TRACKED names plus
+	// any primary-shaped name that arrived after them. truncated() says whether more were seen.
+	uint64_t num() const { return (uint64_t)m_seen.size() + m_untracked_primary; }
 	bool truncated() const { return m_truncated; }
 
 	// Up to MAX_REPORTED names, in order of appearance.
@@ -126,6 +142,7 @@ private:
 	vector<string> m_primary_names;
 	set<string>    m_seen;
 	set<string>    m_primary_seen;
+	uint64_t       m_untracked_primary;
 	bool           m_truncated;
 };
 

@@ -292,8 +292,31 @@ test_that("a primary chromosome after the tracking cap is still noticed", {
         w <- capture_warnings(gtrack.import("late_bg", "late", bg, binsize = 10))
         expect_length(w, 1)
         expect_match(w, "chr7")
-        # the junk names blew past the cap, so the count is reported as approximate
-        expect_match(w, "^100\\+ chromosome name")
+        # the junk names blew past the cap, so the count is reported as approximate - and
+        # chr7 is tracked past the cap, so it is one of the names the count covers: saying
+        # "100+ ... among them primary chromosome(s): chr7" would name a chromosome that is
+        # not among the 100.
+        expect_match(w, "^101\\+ chromosome name")
+    })
+})
+
+test_that("every primary chromosome past the cap is counted, not just tracked", {
+    local_db_state()
+    withr::with_tempdir({
+        setup_mismatch_db()
+        # 100 junk names fill the cap exactly; the three primary names that follow are all
+        # tracked without a cap, so all three have to show up in the count.
+        junk <- sprintf("READ%05d\t0\t100\t1.0", 1:100)
+        bg <- write_lines_to("late_primaries.bedgraph", c(
+            "chr1\t0\t100\t1.0", junk,
+            "chr7\t0\t100\t5.0", "chr8\t0\t100\t5.0", "chr9\t0\t100\t5.0",
+            "chr7\t200\t300\t5.0" # a repeat must not be counted twice
+        ))
+
+        w <- capture_warnings(gtrack.import("late_bgs", "lates", bg, binsize = 10))
+        expect_length(w, 1)
+        expect_match(w, "^103\\+ chromosome name")
+        expect_match(w, "chr7, chr8, chr9", fixed = TRUE)
     })
 })
 
