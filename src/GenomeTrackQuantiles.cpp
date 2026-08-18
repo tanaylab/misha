@@ -547,15 +547,26 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 						}
 					}
 
-					// only kid_lowest_vals_buf_size of all lowest values are really the lowest among all the samples
+					// Only kid_lowest_vals_buf_size of all lowest values are really the lowest
+					// among all the samples - but the kids together may have handed over fewer
+					// than that, whenever gquantile.edge.data.size exceeds what the whole stream
+					// can supply (each kid's tail buffer holds at most its own stream size).
+					// Both the partial_sort middle and the resize must therefore be clamped to
+					// what was actually gathered: an unclamped middle makes make_heap() run past
+					// the end of the vector (silently reading and reordering whatever follows
+					// within the allocation, and corrupting the heap once it leaves it), and an
+					// unclamped resize pads the tail buffer with zeroes that then sort to the
+					// front and are handed back as the low quantiles.
 					if (was_lowest_vals_buf_used) {
-						partial_sort(lowest_vals.begin(), lowest_vals.begin() + kid_lowest_vals_buf_size, lowest_vals.end(), less<double>());
-						lowest_vals.resize(kid_lowest_vals_buf_size);
+						uint64_t num_lowest_vals = min(kid_lowest_vals_buf_size, (uint64_t)lowest_vals.size());
+						partial_sort(lowest_vals.begin(), lowest_vals.begin() + num_lowest_vals, lowest_vals.end(), less<double>());
+						lowest_vals.resize(num_lowest_vals);
 					}
 
 					if (was_highest_vals_buf_used) {
-						partial_sort(highest_vals.begin(), highest_vals.begin() + kid_highest_vals_buf_size, highest_vals.end(), greater<double>());
-						highest_vals.resize(kid_highest_vals_buf_size);
+						uint64_t num_highest_vals = min(kid_highest_vals_buf_size, (uint64_t)highest_vals.size());
+						partial_sort(highest_vals.begin(), highest_vals.begin() + num_highest_vals, highest_vals.end(), greater<double>());
+						highest_vals.resize(num_highest_vals);
 					}
 
 					StreamPercentiler<double> sp;
