@@ -100,6 +100,33 @@ test_that("the nested warning names the interval that disappeared", {
     expect_match(w, "single row chr1 0-1000", fixed = TRUE)
 })
 
+test_that("nesting deeper than the walk-back budget is still judged correctly", {
+    # gmultitasking = FALSE: an iterator whose merged block spans more than one process
+    # tile crashes the forked path, on 5.11.13 as much as here, and that has nothing to do
+    # with what this test is about.
+    withr::local_options(gmultitasking = FALSE)
+
+    # One container over 200 nested peaks. Finding the intervals that reach into a given
+    # scope interval walks back over the ones that start earlier, and the container keeps
+    # the prefix maximum high across the whole block, so the walk gives up and hands the
+    # query to the max-end tree. Both answers have to survive that hand-off.
+    st <- seq(0, by = 200, length.out = 200)
+    nested <- gintervals(1, c(0, st), c(40000, st + 100))
+
+    # the recommended idiom: every interval is emitted verbatim by its own scope interval
+    expect_no_warning(res <- gextract("test.fixedbin", nested, iterator = nested))
+    expect_equal(nrow(res), nrow(nested))
+    expect_equal(res$start, nested$start)
+    expect_equal(res$end, nested$end)
+
+    # a wider scope swallows all 200 peaks into the container's row
+    w <- tryCatch(gextract("test.fixedbin", gintervals.all(), iterator = nested),
+        warning = function(w) conditionMessage(w)
+    )
+    expect_match(w, "201 intervals were merged into 1", fixed = TRUE)
+    expect_match(w, "single row chr1 0-40000", fixed = TRUE)
+})
+
 test_that("an interval nested only after the scope clips it warns as well", {
     # Neither interval is nested in the input here; the scope is what makes them so, and the
     # first one is still swallowed by the merged block.

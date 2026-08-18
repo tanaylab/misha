@@ -278,3 +278,35 @@ test_that("many-track large-iterator gextract: track-parallel >= tile-parallel",
         succeed(msg)
     }
 })
+
+test_that("an overlapping 1D iterator does not cost more than the same intervals disjoint", {
+    skip_unless_perf()
+    withr::local_options(gmultitasking = FALSE, gmax.data.size = 1e9)
+
+    # Passing overlapping intervals as a 1D iterator runs a merge test over the whole
+    # scope. The test used to walk back over every interval of a block for every scope
+    # interval that touched it - fine while the intervals of a block sit near each other
+    # (sliding windows), quadratic once one long interval spans the block, which is what a
+    # domain with peaks nested inside it is. Measured on the lab box before the fix: 0.76s
+    # against 0.09s for the same peaks without the container, and 8.7s cold.
+    #
+    # Stated as a ratio against the disjoint control rather than an absolute budget: both
+    # sides extract the same peaks, so everything except the merge test cancels.
+    k <- 40000
+    st <- seq(0, by = 200, length.out = k)
+    peaks <- gintervals(1, st, st + 100)
+    nested <- gintervals(1, c(0, st), c(k * 200, st + 100))
+
+    t_disjoint <- time_op(gextract("test.fixedbin", peaks, iterator = peaks))
+    t_nested <- time_op(suppressWarnings(gextract("test.fixedbin", nested, iterator = nested)))
+
+    msg <- sprintf(
+        "disjoint: %.0fms, one container over %d nested peaks: %.0fms (ratio %.2fx)",
+        t_disjoint * 1000, k, t_nested * 1000, t_nested / t_disjoint
+    )
+    if (t_nested > t_disjoint * 3) {
+        fail(msg)
+    } else {
+        succeed(msg)
+    }
+})
