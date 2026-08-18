@@ -59,13 +59,35 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 		unique_ptr<GIntervalsFetcher2D> initial_scope_guard(initial_scope);
 
 		set<ChromPair> chrompairs_mask;
-		GIntervals2D all_genome_intervs2d;
-		iu.get_all_genome_intervs(all_genome_intervs2d);
 
-		// exclude trans chromosomes from scope
-		for (GIntervals2D::const_iterator iinterval = all_genome_intervs2d.begin(); iinterval != all_genome_intervs2d.end(); ++iinterval) {
-			if (iinterval->chromid1() == iinterval->chromid2()) 
-				chrompairs_mask.insert(ChromPair(iinterval->chromid1(), iinterval->chromid2()));
+		// Exclude trans chrom pairs from the scope. The cis pairs come from the scope itself
+		// rather than from the whole-genome 2D intervals set: above gmulticontig.2d.threshold
+		// contigs that set is a deferred placeholder with no rows, which left this mask empty
+		// and reduced the scope to nothing - an all-zero decay curve, or NULL under
+		// multitasking, for a scope the caller passed explicitly. Masking by the scope's own
+		// cis pairs yields the identical masked copy when the whole-genome set is
+		// materialised, since a mask entry for a pair the scope does not hold selects nothing.
+		GIntervals2D *dense_scope = dynamic_cast<GIntervals2D *>(initial_scope);
+
+		if (dense_scope) {
+			// O(n) over the intervals. GIntervals2D::get_next_chroms() would walk (and
+			// build_chrom_map() would allocate) a dense (max chromid + 1)^2 space instead.
+			for (GIntervals2D::const_iterator iinterval = dense_scope->begin(); iinterval != dense_scope->end(); ++iinterval) {
+				if (iinterval->chromid1() == iinterval->chromid2())
+					chrompairs_mask.insert(ChromPair(iinterval->chromid1(), iinterval->chromid2()));
+			}
+		} else {
+			// Sparse walk over the populated pairs, primed with the (0, 0) check because
+			// get_next_chroms() returns the pair *after* the one it is given.
+			int chromid1 = 0;
+			int chromid2 = 0;
+
+			if (initial_scope->size(0, 0))
+				chrompairs_mask.insert(ChromPair(0, 0));
+			while (initial_scope->get_next_chroms(&chromid1, &chromid2)) {
+				if (chromid1 == chromid2 && initial_scope->size(chromid1, chromid2))
+					chrompairs_mask.insert(ChromPair(chromid1, chromid2));
+			}
 		}
 
 		unique_ptr<GIntervalsFetcher2D> scope(initial_scope->create_masked_copy(chrompairs_mask));
