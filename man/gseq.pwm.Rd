@@ -10,7 +10,7 @@ gseq.pwm(
   mode = c("lse", "max", "pos", "count"),
   bidirect = TRUE,
   strand = 0L,
-  score.thresh = 0,
+  score.thresh = NULL,
   start_pos = NULL,
   end_pos = NULL,
   extend = FALSE,
@@ -37,7 +37,10 @@ gseq.pwm(
 
 \item{strand}{integer; 1=forward, -1=reverse, 0=both strands (default: 0)}
 
-\item{score.thresh}{numeric; score threshold for \code{mode="count"} (default: 0)}
+\item{score.thresh}{single number; windows scoring at or above this value are counted.
+Required when \code{mode="count"} and ignored otherwise. PWM scores are
+log-likelihoods, so the usable range depends on the PSSM, the prior and any
+spatial weights - calibrate with \code{mode="max"} before choosing one.}
 
 \item{start_pos}{integer or NULL; 1-based inclusive start of ROI (default: 1)}
 
@@ -132,14 +135,17 @@ gseq.pwm(seqs, pssm, mode = "pos")
 # Find position with strand information
 gseq.pwm(seqs, pssm, mode = "pos", bidirect = TRUE, return_strand = TRUE)
 
-# Count matches above threshold
-gseq.pwm(seqs, pssm, mode = "count", score.thresh = 0.5)
+# Count matches above threshold. score.thresh is mandatory in "count" mode
+# and has no default: PWM scores are log-likelihoods, so calibrate it
+# against the score range of your own PSSM.
+range(gseq.pwm(seqs, pssm, mode = "max"))
+gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3)
 
 # Score only a region of interest
 gseq.pwm(seqs, pssm, mode = "max", start_pos = 3, end_pos = 10)
 
 # Allow matches to extend beyond ROI boundaries
-gseq.pwm(seqs, pssm, mode = "count", start_pos = 5, end_pos = 8, extend = TRUE)
+gseq.pwm(seqs, pssm, mode = "count", score.thresh = -3, start_pos = 5, end_pos = 8, extend = TRUE)
 
 # Spatial weighting example: higher weight in the center
 spatial_weights <- c(0.5, 1.0, 2.0, 1.0, 0.5)

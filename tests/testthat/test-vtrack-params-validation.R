@@ -200,3 +200,85 @@ test_that("masked.count/masked.frac extra-parameter behavior (warning) is unchan
     )
     expect_true("v_masked" %in% gvtrack.ls())
 })
+
+# ---------------------------------------------------------------------------
+# score.thresh is validated the same way across the pwm family
+#
+# pwm.count coerces score.thresh through .coerce_score_thresh(): exactly one
+# value, numbers and character/factor spellings of numbers accepted, anything
+# else rejected by name. The pwm.edit_distance family compares score.thresh
+# against the same PWM log-likelihood scale - the LSE variant against a
+# log-sum-exp of those scores, which can be positive where a single score
+# cannot, but neither the helper nor the C++ layer constrains the range - so
+# its accepted-value contract is the same one, and it shares the helper.
+#
+# Before that it used an is.numeric() guard of its own, which rejected the
+# character and factor thresholds a config file or a read.csv column produces,
+# and let an integer through to the C++ layer, which requires a double and
+# rejected it as "not numeric".
+# ---------------------------------------------------------------------------
+
+# 'thresh' must be a value at which 'func' returns something that varies over
+# the scope: a column saturated at 0, or at NA because the threshold is out of
+# reach, compares equal to anything and could not fail.
+expect_score_thresh_coerced <- function(func, thresh, iterator, scope = gintervals(1, 200, 600)) {
+    values <- function(score.thresh) {
+        remove_all_vtracks()
+        gvtrack.create("v_thresh", NULL, func, pssm = test_pssm(), score.thresh = score.thresh)
+        gextract("v_thresh", scope, iterator = iterator)$v_thresh
+    }
+
+    numeric_values <- values(thresh)
+    expect_gt(length(unique(numeric_values)), 1) # not saturated at a single value
+    expect_false(anyNA(numeric_values)) # not saturated at "unreachable"
+    expect_true(all(numeric_values >= 0))
+
+    # A threshold read out of a config file or a read.csv column arrives as a
+    # character, or as a factor if stringsAsFactors was left on; as.numeric()
+    # on a factor returns the level index (1 here), which is a different
+    # threshold and would give a different column.
+    expect_equal(values(as.character(thresh)), numeric_values)
+    expect_equal(values(factor(as.character(thresh))), numeric_values)
+    # An integer used to reach C++ as an INTSXP, which rejected it.
+    expect_equal(values(as.integer(thresh)), numeric_values)
+
+    expect_error(values(c(thresh, thresh + 1)), "score.thresh must be a single value")
+    expect_error(values(NULL), "score.thresh must be a single value, and this one is empty")
+    expect_error(values(TRUE), "score.thresh must be a single number")
+    expect_error(values("loose"), "score.thresh must be a single number")
+    expect_error(values(NA_real_), "score.thresh must be a single number")
+}
+
+test_that("pwm.edit_distance takes the same score.thresh values as pwm.count", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # -3 leaves both 0-edit and 1-edit bins in the scope.
+    expect_score_thresh_coerced("pwm.edit_distance", -3, iterator = 20)
+})
+
+test_that("pwm.n_mutations takes the same score.thresh values as pwm.count", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    # At the motif length, -5 leaves both 0-mutation and 3-mutation bins.
+    expect_score_thresh_coerced("pwm.n_mutations", -5, iterator = 3)
+})
+
+test_that("pwm.edit_distance.lse takes the same score.thresh values as pwm.count", {
+    remove_all_vtracks()
+    withr::defer(remove_all_vtracks())
+
+    expect_score_thresh_coerced("pwm.edit_distance.lse", 0, iterator = 20)
+
+    # The LSE objective sums over windows, so unlike a single PWM score it can
+    # be positive: a positive threshold is an ordinary value here, and a
+    # fractional one has to survive coercion exactly.
+    remove_all_vtracks()
+    gvtrack.create("lse_num", NULL, "pwm.edit_distance.lse", pssm = test_pssm(), score.thresh = 0.5)
+    gvtrack.create("lse_chr", NULL, "pwm.edit_distance.lse", pssm = test_pssm(), score.thresh = "0.5")
+    res <- gextract(c("lse_num", "lse_chr"), gintervals(1, 200, 600), iterator = 20)
+    expect_gt(length(unique(res$lse_num)), 1)
+    expect_true(all(res$lse_num > 0))
+    expect_equal(res$lse_chr, res$lse_num)
+})

@@ -27,7 +27,7 @@ sequences are extracted automatically via \code{gseq.extract}.}
 \item{pssm}{numeric matrix or data frame with columns A, C, G, T. Each row
 is a motif position.}
 
-\item{score.thresh}{numeric; target PWM log-likelihood score to reach.}
+\item{score.thresh}{single number; target PWM log-likelihood score to reach.}
 
 \item{max_edits}{integer or NULL; maximum number of edits to search. NULL
 means no cap. Default NULL.}
