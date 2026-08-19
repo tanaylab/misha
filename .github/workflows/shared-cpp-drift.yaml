@@ -1,0 +1,36 @@
+# misha and pymisha share their C++ scan/format/PSSM core by manual copy. This
+# checks that the copies do not drift apart unnoticed - see tools/check-shared-cpp.py.
+name: shared-cpp-drift
+
+on:
+  push:
+    paths: ['src/**', 'tools/check-shared-cpp.py', 'tools/shared-cpp-baseline.json']
+  pull_request:
+    paths: ['src/**', 'tools/check-shared-cpp.py', 'tools/shared-cpp-baseline.json']
+  workflow_dispatch:
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: misha
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tanaylab/pymisha
+          path: pymisha
+          # A private pymisha needs a PAT with read access in PYMISHA_TOKEN;
+          # without it the step below skips rather than failing the build.
+          token: ${{ secrets.PYMISHA_TOKEN || github.token }}
+        continue-on-error: true
+        id: fetch_pymisha
+
+      - name: Check shared C++ sources for drift
+        if: steps.fetch_pymisha.outcome == 'success'
+        run: python3 misha/tools/check-shared-cpp.py --misha misha --pymisha pymisha --show-diff
+
+      - name: Report skip
+        if: steps.fetch_pymisha.outcome != 'success'
+        run: echo "::warning::pymisha could not be checked out; shared-source drift was not checked."
