@@ -1,3 +1,9 @@
+# misha 5.11.20
+
+* **Performance:** calls whose scope fits in a single worker - one chromosome, one 2D chromosome pair, or any scope below `gmin.scope4process` - no longer fork a worker process to do nothing in parallel. Small interactive calls got 30-60% faster (`gextract()` over 100 intervals on one chromosome: 41 ms -> 24 ms; 52 ms -> 21 ms in a 2 GB session), and results are unchanged.
+* **Performance:** the delay each worker waits before starting no longer grows with the number of workers; the whole start-up ramp is now capped at 150 ms. On a 128-core host this took about 0.9 s off every multitasking call: a medium `gsummary()` scan went 1.36 s -> 0.55 s at 89 workers. Cold-cache scans are unaffected.
+* **Behavior:** the auto-configured `gmax.processes` is capped at 32 (was 70% of cores, unbounded). Above ~32 workers the per-worker cost outweighs the extra parallelism - on a 128-core host the old default of 89 measured up to 3x slower - and cold-NFS whole-genome scans saturate at about 32 workers too. Hosts with fewer than 46 cores are unaffected. `gmax.data.size` is unchanged.
+
 # misha 5.11.19
 
 * **Crash fix:** catching a warning from `gquantiles()`, `gintervals.quantiles()`, `gbins.quantiles()`, or from loading an intervals set that contains zero-length intervals - with `tryCatch(warning = )`, `options(warn = 2)`, or `testthat::expect_warning()` - left the session broken: later multitasking calls failed, and the overlapping-iterator warning fell silent. The warnings themselves are unchanged.
