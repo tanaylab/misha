@@ -4,7 +4,7 @@
 * **Bug fix:** `gtrack.dataset()` and `gintervals.dataset()` returned `NA` for tracks and interval sets that were already there, after the first `gtrack.create()` or `gintervals.save()` of a session.
 * **Bug fix:** `gdataset.save()` produced a dataset with an empty, unreadable track directory when given a namespaced name such as `"subdir.mytrack"`.
 * **Bug fix:** reading a track after converting it to indexed format, then pointing the session at a database rebuilt under the same path, failed with "Cannot open .../track.dat". `gsetroot()` now drops the cached track layout.
-* **Bug fix:** `gseq.pwm()` leaked an R protection slot on the first call of a session, printing "stack imbalance in '.Call'".
+* **Bug fix:** `gseq.pwm()` leaked an R protection slot on every call, printing "stack imbalance in '.Call'". The leak grew for the life of the session.
 * **Bug fix:** `gtrack.mv()`, `gtrack.copy()` and `gintervals.update()` could leave the session reading a track or interval set through the layout of whatever previously occupied that path: `gtrack.info()` reported the wrong track type, and reads failed with a bin-count mismatch or "unknown input format". All three now drop the cached layout.
 * **Bug fix:** `gdataset.save()` reported success after failing to copy a track or interval set, leaving behind a dataset whose `misha.yaml` counted files that were not on disk - and which then blocked every retry, because the function refuses a path that already exists. It now errors naming what failed, and leaves nothing behind.
 * `gintervals.save()` and the other `intervals.set.out` arguments now reject a non-string set name with a message that names the argument order, instead of failing with "the condition has length > 1".
