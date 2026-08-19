@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.15</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.19</span>
       </span>
     </div>
 
@@ -63,7 +63,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited file</h1>
-    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.15/R/track-import.R" class="external-link"><code>R/track-import.R</code></a></small>
+    <small class="dont-index">Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.19/R/track-import.R" class="external-link"><code>R/track-import.R</code></a></small>
     <div class="hidden name"><code>gtrack.import.Rd</code></div>
     </div>
 
@@ -128,6 +128,16 @@ name (e.g. 'value'). Each subsequent line provides a single interval:
 - value: numeric value (floating point allowed); exactly one value column is supported</p>
 <p>Columns must be separated by tabs. Coordinates must refer to chromosomes
 existing in the current genome. Missing values can be specified as 'NaN'.</p>
+<p>Chromosome names are matched against the genome database through the
+chromosome alias chain (<code>chr1</code> &lt;-&gt; <code>1</code>, <code>M</code> &lt;-&gt; <code>MT</code>,
+and <code>&lt;groot&gt;/chrom_aliases.tsv</code> if present). If the file names
+chromosomes and none of them can be matched, 'gtrack.import' fails instead of
+creating an empty track; a file with no chromosome records at all is not an
+error and still imports as an empty track. If only some of the names can be
+matched, the rest of the file is imported and the unmatched names are
+reported: a message for contigs the database does not have (unplaced
+scaffolds, patches), a warning when the unmatched name looks like a primary
+chromosome, since that suggests a naming mismatch.</p>
 <p>BED files (.bed/.bed.gz/.bed.zip) are also supported. If the BED 'score'
 column (5th column) exists and is numeric, it is used as the interval value;
 otherwise a constant value of 1 is used. For BED inputs, 'binsize' controls
