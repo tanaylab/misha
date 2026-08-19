@@ -1,3 +1,12 @@
+# misha 5.11.20
+
+* **Documentation:** the vignettes now execute. Every chunk that can run against the bundled examples database does, so the code on the website is code that ran. This exposed several broken examples, all fixed: the short guide's `gintervals.save()` call had its arguments reversed, its headline peak-calling step screened at a threshold no bin in the example data reaches, the Manual's band example never called `gintervals.2d.band_intersect()` despite describing its output, and both cross-database copy recipes in the database-formats vignette were wrong - one errored, the other silently turned a dense track into a sparse one 5x the size. Use `gtrack.copy(src, db = target)` to copy tracks between databases.
+* **Bug fix:** `gtrack.dataset()` and `gintervals.dataset()` returned `NA` for tracks and interval sets that were already there, after the first `gtrack.create()` or `gintervals.save()` of a session.
+* **Bug fix:** `gdataset.save()` produced a dataset with an empty, unreadable track directory when given a namespaced name such as `"subdir.mytrack"`.
+* **Bug fix:** reading a track after converting it to indexed format, then pointing the session at a database rebuilt under the same path, failed with "Cannot open .../track.dat". `gsetroot()` now drops the cached track layout.
+* **Bug fix:** `gseq.pwm()` leaked an R protection slot on the first call of a session, printing "stack imbalance in '.Call'".
+* `gintervals.save()` and the other `intervals.set.out` arguments now reject a non-string set name with a message that names the argument order, instead of failing with "the condition has length > 1".
+
 # misha 5.11.19
 
 * **Crash fix:** catching a warning from `gquantiles()`, `gintervals.quantiles()`, `gbins.quantiles()`, or from loading an intervals set that contains zero-length intervals - with `tryCatch(warning = )`, `options(warn = 2)`, or `testthat::expect_warning()` - left the session broken: later multitasking calls failed, and the overlapping-iterator warning fell silent. The warnings themselves are unchanged.
