@@ -27,7 +27,7 @@ gdb.init_examples()
 
 Genomic Database starts with a *root* (also frequently referred as *GROOT*), i.e. top directory containing certain subdirectories and files. A new database can be created using `gdb.create_genome` and `gdb.create` functions. This is the easiest way to do it, see the "Genomes" vignette for more details. One can also build a database manually by generating all the necessary components that will be described later in this document.
 
-Before the data in a Genomic Database can be accessed one must establish connection with it by calling `gdb.init` function. On launch the package connects to a Genomic Database located in `PACKAGEDIR/trackdb/test` which serves all the examples in the reference manual.
+Before the data in a Genomic Database can be accessed one must establish connection with it by calling `gdb.init` function. On launch the package connects to the bundled examples database, which `gdb.init_examples` unpacks into `tempdir()/trackdb/test` (or into `MISHA_EXAMPLES_DIR` if that environment variable is set). This is the database that serves all the examples in the reference manual and in this vignette.
 
 A valid Genomic Database should contain the following files and subdirectories:
 
@@ -49,13 +49,23 @@ The Dataset API distinguishes between:
 1. **Working Database**: Set via `gsetroot()`, this is your primary, writable database where new tracks and intervals are created.
 2. **Loaded Datasets**: Added via `gdataset.load()`, these are read-only data sources that provide additional tracks and intervals.
 
-```{r, eval=FALSE}
-# Set your working database
-gsetroot("/data/my_project")
+```{r}
+# The Dataset API needs more than one database. For this vignette the bundled
+# examples database is the working database, and a second, small database under
+# tempdir() plays the role of a shared, read-only annotation source. A dataset
+# only has to share the working database's chrom_sizes.txt.
+my_project <- .misha$GROOT
+shared_annotations <- file.path(tempdir(), "shared_annotations")
+unlink(shared_annotations, recursive = TRUE)
+dir.create(file.path(shared_annotations, "tracks"), recursive = TRUE)
+invisible(file.copy(file.path(my_project, "chrom_sizes.txt"), shared_annotations))
+gtrack.copy("dense_track", "annotation_track", db = shared_annotations)
 
-# Load additional datasets
-gdataset.load("/shared/ucsc_annotations")
-gdataset.load("/shared/encode_chipseq")
+# Set your working database
+gsetroot(my_project)
+
+# Load an additional dataset
+gdataset.load(shared_annotations)
 
 # List all sources (working db + loaded datasets)
 gdataset.ls()
@@ -74,101 +84,109 @@ gdataset.ls(dataframe = TRUE)
 
 By default, loading a dataset with tracks that already exist will error:
 
-```{r, eval=FALSE}
-# If working_db has "my_track" and dataset1 also has "my_track":
-gdataset.load("dataset1")
-# Error: Cannot load dataset 'dataset1': tracks 'my_track' already exist in working database.
-# Use force=TRUE to override (working db wins).
+```{r, error = TRUE}
+# A second dataset that also carries a track named "dense_track":
+other_dataset <- file.path(tempdir(), "other_dataset")
+unlink(other_dataset, recursive = TRUE)
+dir.create(file.path(other_dataset, "tracks"), recursive = TRUE)
+invisible(file.copy(file.path(my_project, "chrom_sizes.txt"), other_dataset))
+gtrack.copy("dense_track", db = other_dataset)
+
+gdataset.load(other_dataset)
 ```
 
 Use `force=TRUE` to allow collisions, with clear precedence rules:
 
-```{r, eval=FALSE}
+```{r}
 # Working database always wins over datasets
-gdataset.load("dataset1", force = TRUE)
-
-# For dataset-to-dataset collisions, later-loaded wins
-gdataset.load("dataset2", force = TRUE)
+# (for dataset-to-dataset collisions, later-loaded wins)
+gdataset.load(other_dataset, force = TRUE)
 
 # Check which source provides a track
-gtrack.dataset("my_track")
+gtrack.dataset("dense_track")
 
 # See all sources where a track exists (for debugging)
-gtrack.dbs("my_track")
+gtrack.dbs("dense_track")
+
+gdataset.unload(other_dataset)
 ```
 
 #### Cross-Database Track Expressions
 
 Track expressions seamlessly combine tracks from different sources:
 
-```{r, eval=FALSE}
-gsetroot("/data/my_project")
-gdataset.load("/shared/annotations")
+```{r}
+gsetroot(my_project)
+gdataset.load(shared_annotations)
 
 # Extract tracks from different sources in a single call
-result <- gextract(c("my_track", "annotation_track"), gintervals(1, 0, 10000), iterator = 100)
+result <- gextract(c("dense_track", "annotation_track"), gintervals(1, 0, 10000), iterator = 100)
+head(result)
 
 # Use track expressions across sources
-normalized <- gextract("my_track - annotation_track", gintervals(1, 0, 10000), iterator = 100)
+normalized <- gextract("dense_track - annotation_track", gintervals(1, 0, 10000), iterator = 100)
+head(normalized)
 
 # Access track attributes from any source
-gtrack.attr.get("my_track", "description")
+gtrack.attr.get("dense_track", "description")
 gtrack.attr.get("annotation_track", "description")
 ```
 
 Virtual tracks can reference source tracks from any loaded source:
 
-```{r, eval=FALSE}
+```{r}
 # Create virtual tracks from different sources
-gvtrack.create("vt_signal", "my_track", "avg")
+gvtrack.create("vt_signal", "dense_track", "avg")
 gvtrack.create("vt_annotation", "annotation_track", "avg")
 
 # Combine them in expressions
-gextract("vt_signal / vt_annotation", gintervals(1, 0, 10000))
+head(gextract("vt_signal / vt_annotation", gintervals(1, 0, 10000)))
 ```
 
 #### Querying Track and Interval Sources
 
 Use `gtrack.dataset()`, `gtrack.dbs()`, and `gintervals.dataset()` to find which source contains a track or interval set:
 
-```{r, eval=FALSE}
+```{r}
 # Single track - returns source path
-gtrack.dataset("my_track")
+gtrack.dataset("annotation_track")
 
 # All sources containing a track (useful for debugging shadowed tracks)
-gtrack.dbs("my_track")
+gtrack.dbs("dense_track")
 
 # Multiple tracks (vectorized)
-gtrack.dataset(c("track1", "track2", "track3"))
+gtrack.dataset(c("dense_track", "sparse_track", "annotation_track"))
 
 # Intervals
-gintervals.dataset("my_intervals")
-gintervals.dbs("my_intervals")
+gintervals.dataset("annotations")
+gintervals.dbs("annotations")
 ```
 
 Filter track and interval listings by source:
 
-```{r, eval=FALSE}
+```{r}
 # List tracks from a specific source only
-gtrack.ls(db = "/shared/annotations")
+gtrack.ls(db = shared_annotations)
 
 # List intervals from working database
-gintervals.ls(db = "/data/my_project")
+gintervals.ls(db = my_project)
 ```
 
 #### Creating and Sharing Datasets
 
 Use `gdataset.save()` to create a dataset from selected tracks and intervals:
 
-```{r, eval=FALSE}
-gsetroot("/data/my_project")
+```{r}
+gsetroot(my_project)
 
 # Create a dataset with selected tracks and intervals
+chipseq_dataset <- file.path(tempdir(), "my_chipseq_dataset")
+unlink(chipseq_dataset, recursive = TRUE)
 gdataset.save(
-    path = "/shared/my_chipseq_dataset",
-    description = "ChIP-seq tracks for H3K4me3 and H3K27ac",
-    tracks = gtrack.ls("chip_"), # Pattern matching
-    intervals = c("peaks_h3k4me3", "peaks_h3k27ac")
+    path = chipseq_dataset,
+    description = "ChIP-seq-like tracks",
+    tracks = gtrack.ls("dense"), # Pattern matching
+    intervals = "annotations"
 )
 
 # Options:
@@ -178,8 +196,8 @@ gdataset.save(
 
 Get information about a dataset:
 
-```{r, eval=FALSE}
-gdataset.info("/shared/my_chipseq_dataset")
+```{r}
+gdataset.info(chipseq_dataset)
 # Returns: description, author, created date, track/interval counts, genome hash
 ```
 
@@ -187,18 +205,21 @@ gdataset.info("/shared/my_chipseq_dataset")
 
 Use `gdb.create_linked()` to create a lightweight database that links to a parent database's `seq/` directory and `chrom_sizes.txt` file:
 
-```{r, eval=FALSE}
+```{r}
 # Create linked database with symlinks to parent's seq and chrom_sizes
-gdb.create_linked("~/my_db", parent = "/shared/hg38")
+my_db <- file.path(tempdir(), "my_db")
+unlink(my_db, recursive = TRUE)
+gdb.create_linked(my_db, parent = my_project)
 
 # Use as your working database
-gsetroot("~/my_db")
+gsetroot(my_db)
 
 # Load datasets from the parent
-gdataset.load("/shared/hg38")
+gdataset.load(my_project)
 
 # Create your own tracks
-gtrack.create("my_analysis", "Analysis results", "reference_track * 2")
+gtrack.create("my_analysis", "Analysis results", "dense_track * 2")
+head(gextract("my_analysis", gintervals(1, 0, 500)))
 ```
 
 This avoids duplicating large sequence files while allowing you to maintain your own tracks.
@@ -207,16 +228,15 @@ This avoids duplicating large sequence files while allowing you to maintain your
 
 Remove loaded datasets from the namespace:
 
-```{r, eval=FALSE}
+```{r, error = TRUE}
 # Unload a dataset (tracks/intervals become unavailable)
-gdataset.unload("/shared/annotations")
+gdataset.unload(my_project)
 
 # Safe to call even if not loaded (no error by default)
 gdataset.unload("/nonexistent/path")
 
 # Error if validate=TRUE and not loaded
 gdataset.unload("/nonexistent/path", validate = TRUE)
-# Error: Dataset '/nonexistent/path' is not loaded
 ```
 
 When unloading datasets that had track collisions (loaded with `force=TRUE`), shadowed tracks are restored with proper precedence: working database first, then datasets in load order.
@@ -225,24 +245,33 @@ When unloading datasets that had track collisions (loaded with `force=TRUE`), sh
 
 Use `gtrack.mv()` to rename a track or move it within the same database:
 
-```{r, eval=FALSE}
+```{r}
+gsetroot(my_project)
+gtrack.copy("dense_track", "old_name")
+
 # Rename a track
 gtrack.mv("old_name", "new_name")
 
 # Move to a different namespace (directory)
-gtrack.mv("analysis.track1", "results.track1")
+gtrack.mv("new_name", "results.new_name")
+gtrack.ls("new_name")
+gtrack.rm("results.new_name", force = TRUE)
 ```
 
 Use `gtrack.copy()` to create a copy of a track. The copy is created in the current working directory (GWD), which may be in a different database when multiple databases are connected:
 
-```{r, eval=FALSE}
+```{r}
 # Copy a track within the same database
-gtrack.copy("source_track", "copy_track")
+gtrack.copy("dense_track", "copy_track")
+gtrack.exists("copy_track")
+gtrack.rm("copy_track", force = TRUE)
 
 # Copy from a loaded dataset to the working database
-gsetroot("/data/my_project")
-gdataset.load("/shared/annotations")
+gsetroot(my_project)
+gdataset.load(shared_annotations)
 gtrack.copy("annotation_track", "my_local_copy") # Copy to working db
+gtrack.dataset("my_local_copy")
+gtrack.rm("my_local_copy", force = TRUE)
 ```
 
 Note: `gtrack.mv()` only works within the same database. To move a track between databases, use `gtrack.copy()` followed by `gtrack.rm()`.
@@ -251,27 +280,28 @@ Note: `gtrack.mv()` only works within the same database. To move a track between
 
 Virtual tracks remain global and are not tied to any specific source. They can reference tracks from any loaded source:
 
-```{r, eval=FALSE}
-gsetroot("/data/my_project")
-gdataset.load("/shared/annotations")
+```{r}
+gsetroot(my_project)
+gdataset.load(shared_annotations)
 
 # Create virtual track referencing track from working db
-gvtrack.create("vt1", "my_local_track", "avg")
+gvtrack.create("vt1", "dense_track", "avg")
 
 # Create virtual track referencing track from dataset
 gvtrack.create("vt2", "annotation_track", "max")
 
 # Use both in same expression
-gextract("vt1 + vt2", gintervals(1, 0, 10000))
+head(gextract("vt1 + vt2", gintervals(1, 0, 10000)))
 ```
 
 #### Backward Compatibility
 
 Single-database usage works exactly as before:
 
-```{r, eval=FALSE}
-gsetroot("single_database") # Works unchanged
-gdb.init("single_database") # Equivalent, also works
+```{r}
+gsetroot(my_project) # Works unchanged
+gdb.init(my_project) # Equivalent, also works
+gdataset.ls()
 ```
 
 An example of a Genomic Database file structure:
@@ -424,13 +454,16 @@ All multi-byte integers are stored in little-endian byte order.
 
 Existing per-chromosome tracks can be converted to indexed format using `gtrack.convert_to_indexed()`:
 
-```{r, eval=FALSE}
+```{r}
+gtrack.copy("dense_track", "my_track")
+
 # Convert a track to indexed format
 gtrack.convert_to_indexed("my_track")
 
 # Check track format
 info <- gtrack.info("my_track")
 print(info$format) # "indexed" or "per-chromosome"
+gtrack.rm("my_track", force = TRUE)
 ```
 
 **Supported Track Types:** Dense (fixed-bin), Sparse, and Array tracks (1D) and Rectangles and Points tracks (2D) can use indexed format. Virtual tracks and Computed 2D tracks are not supported for indexed format.
@@ -572,7 +605,14 @@ The `intervals2d.idx` file structure:
 
 **Converting to Indexed Format:**
 
-```{r, eval=FALSE}
+```{r}
+# Only big interval sets are stored per chromosome, so lower the threshold to
+# get a big set out of the small example database (the default is 1,000,000).
+options(gbig.intervals.size = 10)
+gintervals.save("my_intervals", gscreen("dense_track > 0.3"))
+gintervals.save("my_2d_intervals", gextract("rects_track", gintervals.2d.all())[, 1:6])
+options(gbig.intervals.size = 1e6)
+
 # Convert 1D interval set to indexed format
 gintervals.convert_to_indexed("my_intervals")
 
@@ -580,12 +620,15 @@ gintervals.convert_to_indexed("my_intervals")
 gintervals.2d.convert_to_indexed("my_2d_intervals")
 
 # Convert and remove old per-chromosome files
-gintervals.convert_to_indexed("my_intervals", remove.old = TRUE)
+gintervals.convert_to_indexed("my_intervals", remove.old = TRUE, force = TRUE)
+
+gintervals.rm("my_intervals", force = TRUE)
+gintervals.rm("my_2d_intervals", force = TRUE)
 ```
 
 All multi-byte integers are stored in little-endian byte order. The indexed format is fully backward compatible with all misha functions.
 
-```{r, eval=FALSE}
+```{r}
 # 'annotations' is an intervals set saved in Genomic Database
 gintervals.intersect("annotations", gintervals(2))
 ```
@@ -718,13 +761,13 @@ So far we showed that the value of a `mytrack` variable is set to be the average
 
 Virtual track is a set of rules that describe how the "source" (a real track, intervals, or a value-based track) should be proceeded, and how the iterator interval should be modified. Virtual tracks are created with `gvtrack.create` function:
 
-```{r, eval=FALSE}
+```{r}
 gvtrack.create("myvtrack", "dense_track")
 ```
 
 This call creates a new virtual track named `myvtrack`. This virtual track can be used in the track expression instead of a real track `dense_track`. In our example `myvtrack` is just an alias of `dense_track`. Yet we can go on and create a more complicated virtual track if we specify a "function", i.e. instruct the virtual track of what should be its value in track expression.
 
-```{r, eval=FALSE}
+```{r}
 gvtrack.create("myvtrack", "dense_track", "global.percentile")
 ```
 
@@ -732,7 +775,7 @@ In this example when `myvtrack` is evaluated in the track expression it will ret
 
 Virtual tracks are especially useful for Array tracks. By default if an Array track is used in a track expressions, its interval value would be the average of all non-NaN column values covered by an iterator interval. `gvtrack.array.slice` allows to select specific columns and to specify the function applied to the values of each track interval.
 
-```{r, eval=FALSE}
+```{r}
 gvtrack.create("myvtrack", "array_track", "sum")
 gvtrack.array.slice("myvtrack", c("col2", "col5"), "max")
 ```
@@ -743,7 +786,7 @@ where \( V_{i,j} \) is a value of the track in column \( j \) for interval \( I_
 
 Virtual tracks allow also to alter the iterator interval "on the fly":
 
-```{r, eval=FALSE}
+```{r}
 gvtrack.iterator("myvtrack", sshift = -100, eshift = 200)
 ```
 
@@ -751,7 +794,7 @@ In this example we expand each iterator interval by adding -100 to its `start` c
 
 Similarly, iterator modifiers can be defined for 2D intervals. Moreover, an iterator modifier can create a 1D interval from a 2D iterator interval by projecting one of its axes.
 
-```{r, eval=FALSE}
+```{r}
 gvtrack.create("myvtrack", "dense_track")
 gvtrack.iterator("myvtrack", dim = 2)
 ```
@@ -760,10 +803,10 @@ It is important to remember that iterator modifiers transform the iterator inter
 
 So far we have used a track `dense_track` as a "source" of a virtual track. We can also use intervals as a source. In this case, the value of the virtual track will be some function that takes into account the "source" intervals and the current iterator interval.
 
-```{r, eval=FALSE}
+```{r}
 gvtrack.create("myvtrack", "annotations", "distance")
 intervs <- gscreen("dense_track > 0.45")
-gextract("myvtrack", .misha$ALLGENOME, iterator = intervs)
+head(gextract("myvtrack", .misha$ALLGENOME, iterator = intervs))
 ```
 
 In this example `myvtrack` returns the minimal distance between intervals from an interval set `annotations` and the center of the current iterator interval from `intervs`.
@@ -774,7 +817,7 @@ In addition to using database tracks and interval sets as sources, virtual track
 
 To create a value-based virtual track, provide a data frame with columns `chrom`, `start`, `end`, and one numeric value column (any column name is acceptable):
 
-```{r, eval=FALSE}
+```{r}
 # Create a data frame with intervals and numeric values
 intervals_with_values <- data.frame(
     chrom = "chr1",
@@ -800,13 +843,13 @@ As described in the previous chapter virtual tracks define a set of rules of how
 
 Operations such as `gdb.init` and `gdir.cd` alter the list of available tracks and intervals sets. Since these objects are referenced by virtual tracks, these latter are always defined in the context of the current working directory in Genomic Database (not to be confused with shell's current working directory). Changing the current working directory using `gdb.init` or `gdir.cd` will also change the list of available virtual tracks.
 
-Another issue to bare in mind is that unlike regular tracks whose data is stored on disk virtual tracks are non-persistent objects in current R environment. Their definition is stored in `GVTRACKS` R variable. In particular a virtual track named "vtrack" that was created within a context of "/home/user/trackdb" Genomic Database working directory would reside in `GVTRACKS[["/home/user/trackdb"]][["vtrack"]]`. One can also use `gvtrack.info` function that provides a more convenient access to virtual track definitions.
+Another issue to bare in mind is that unlike regular tracks whose data is stored on disk virtual tracks are non-persistent objects in current R environment. Their definition is stored in the `GVTRACKS` variable inside the package's `.misha` environment (since misha 4.2.0 the package no longer creates these variables in the global environment). In particular a virtual track named "vtrack" that was created within a context of "/home/user/trackdb" Genomic Database working directory would reside in `.misha$GVTRACKS[["/home/user/trackdb"]][["vtrack"]]`. One can also use `gvtrack.info` function that provides a more convenient access to virtual track definitions.
 
 As the virtual tracks are stored in an R variable their behavior hence complies with the rules of other R variables: a virtual track defined by one user will not be seen by another one, virtual tracks might disappear once R is relaunched, etc.
 
-To preserve the definition of virtual tracks between the sessions one would need to save `GVTRACKS` variable on disk. The serialization of `GVTRACKS` is under user's responsibility. The standard suit of functions for saving / loading R variables can be used for that purpose.
+To preserve the definition of virtual tracks between the sessions one would need to save `.misha$GVTRACKS` on disk. The serialization is under user's responsibility. The standard suit of functions for saving / loading R variables can be used for that purpose.
 
-Note that if `GVTRACKS` is loaded from a file or changed manually by a user the *auto-completion* list (in case it is turned on) might need to be refreshed by calling `gdb.reload`.
+Note that if `.misha$GVTRACKS` is loaded from a file or changed manually by a user the *auto-completion* list (in case it is turned on) might need to be refreshed by calling `gdb.reload`.
 
 ### Track Expression Evaluation under Optimization
 
@@ -814,8 +857,10 @@ Previously we described how a track expression `"mytrack * 3"` (where `mytrack` 
 
 The size of the vector is controlled via `gbuf.size` option. By default it equals to 1000. Altering this value (for instance setting it to 1) might significantly affect the run-time of various functions in the library. If you still wish to force the functions to define scalars rather than vectors, set `gbuf.size` to 1:
 
-```{r, eval = FALSE}
+```{r}
 options(gbuf.size = 1)
+getOption("gbuf.size")
+options(gbuf.size = 1000) # back to the default for the rest of this vignette
 ```
 
 One might wonder why should we care about the fact that `mytrack` is not a scalar but rather a vector? Indeed in many cases it does not really matter. For example `mytrack * 3` expression produces exactly the same results regardless whether `mytrack` is defined internally as a vector or as a scalar. This is due to the fact that the expression `V * 3` (`V` stands for a vector) results in each value of `V` being multiplied by 3.
@@ -857,7 +902,7 @@ Most of the functions that accept track expressions have an additional parameter
 
 Many functions that accept a track expressions and iterator policy accept an additional set of intervals that limit the scope of a function. This scope also limits the iterator intervals. For instance:
 
-```{r, eval=FALSE}
+```{r}
 gextract("dense_track", gintervals(2, 340, 520))
 ```
 
@@ -882,19 +927,20 @@ If the intersection between the 2D iterator interval and the band is non-empty a
 
 The `gintervals.2d.band_intersect` function can help one better understand the concept:
 
-```{r, eval=FALSE}
+```{r}
 intervs <- gintervals.2d(1, 200, 800, 1, 100, 1000)
 intervs <- rbind(intervs, gintervals.2d(1, 900, 950, 1, 0, 200))
 intervs <- rbind(intervs, gintervals.2d(1, 0, 100, 1, 0, 400))
 intervs <- rbind(intervs, gintervals.2d(1, 900, 950, 2, 0, 200))
 intervs
+gintervals.2d.band_intersect(intervs, band = c(500, 1000))
 ```
 
 `gintervals.2d.band_intersect` intersects the intervals with the band and returns the intervals shrunk to the minimal rectangle. As you can see we have four different intervals. The first one `(chr1, 200, 800, chr1, 100, 1000)` intersects the band and after shrinking to the minimal rectangle it becomes `(chr1, 600, 800, chr1, 100, 300)`. The second interval lies entirely within the band and hence is returned without any change. The third interval lies entirely outside of the band, and hence is eliminated from the result. The last interval is coming from two different chromosomes and therefore is also filtered out.
 
 As said band filters out and alters 2D iterator intervals. Yet it also affects the result of 2D tracks. Let's look at the following example:
 
-```{r, eval=FALSE}
+```{r}
 intervs <- gintervals.2d(1, c(100, 400), c(300, 490), 1, c(120, 180), c(200, 500))
 gtrack.2d.create("test2d", "test 2D track", intervs, c(10, 20))
 gextract("test2d", .misha$ALLGENOME)
@@ -914,12 +960,14 @@ We added a band then. `gintervals.2d.band_intersect` shows the minimal rectangle
 
 Various functions in the library such as `gsample` make use of pseudo-random number generator. Each time the function is invoked a unique series of random numbers is issued. Hence two identical calls might produce different results. To guarantee reproducible results call `set.seed` before invoking the function.
 
-```{r, eval=FALSE}
+```{r}
 set.seed(60427)
 r1 <- gsample("dense_track", 10)
 r2 <- gsample("dense_track", 10) # r2 differs from r1
 set.seed(60427)
 r3 <- gsample("dense_track", 10) # r3 == r1
+identical(r1, r2)
+identical(r1, r3)
 ```
 
 
