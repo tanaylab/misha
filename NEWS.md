@@ -5,6 +5,7 @@
 * **Bug fix:** `gdataset.save()` produced a dataset with an empty, unreadable track directory when given a namespaced name such as `"subdir.mytrack"`.
 * **Bug fix:** reading a track after converting it to indexed format, then pointing the session at a database rebuilt under the same path, failed with "Cannot open .../track.dat". `gsetroot()` now drops the cached track layout.
 * **Bug fix:** `gseq.pwm()` leaked an R protection slot on the first call of a session, printing "stack imbalance in '.Call'".
+* **Bug fix:** `gtrack.mv()`, `gtrack.copy()` and `gintervals.update()` could leave the session reading a track or interval set through the layout of whatever previously occupied that path: `gtrack.info()` reported the wrong track type, and reads failed with a bin-count mismatch or "unknown input format". All three now drop the cached layout.
 * `gintervals.save()` and the other `intervals.set.out` arguments now reject a non-string set name with a message that names the argument order, instead of failing with "the condition has length > 1".
 
 # misha 5.11.19
