@@ -277,6 +277,8 @@ SEXP C_gquantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator
 
 SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_policy, SEXP _band, SEXP _envir)
 {
+	bool single_shard = false;
+
 	try {
 		RdbInitializer rdb_init;
 
@@ -311,6 +313,9 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 		vector<double> medians(percentiles.size(), numeric_limits<float>::quiet_NaN());
 
 		int num_kids = iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band);
+
+		if (num_kids == 1)
+			throw rdb::SingleShard();
 
 		if (num_kids) {
 			uint64_t kid_rnd_sampling_buf_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
@@ -601,11 +606,22 @@ SEXP gquantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 		runprotect(2);
 		rreturn(answer);
+	} catch (rdb::SingleShard &) {
+		// the serial entry point below re-queues whatever it warrants
+		clear_pending_diagnostics(_envir);
+		single_shard = true;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
         rerror("Out of memory");
     }
+	// The scope fits in a single shard: forking one kid would buy no parallelism, only a
+	// fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+	// very path gmultitasking = FALSE takes. This must happen out here, after the try
+	// block has destroyed our RdbInitializer (see rdb::SingleShard).
+	if (single_shard)
+		return C_gquantiles(_intervals, _expr, _percentiles, _iterator_policy, _band, _envir);
+
 	rreturn(R_NilValue);
 }
 
@@ -856,6 +872,8 @@ SEXP gintervals_quantiles(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _
 
 SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentiles, SEXP _iterator_policy, SEXP _band, SEXP _intervals_set_out, SEXP _envir)
 {
+	bool single_shard = false;
+
 	try {
 		RdbInitializer rdb_init;
 
@@ -906,6 +924,9 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 
 		if (!(num_kids = iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band)))
 			rreturn(R_NilValue);
+
+		if (num_kids == 1)
+			throw rdb::SingleShard();
 
 		uint64_t kid_rnd_sampling_buf_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
 		uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
@@ -1188,11 +1209,22 @@ SEXP gintervals_quantiles_multitask(SEXP _intervals, SEXP _expr, SEXP _percentil
 		}
 		
 		rreturn(answer);
+	} catch (rdb::SingleShard &) {
+		// the serial entry point below re-queues whatever it warrants
+		clear_pending_diagnostics(_envir);
+		single_shard = true;
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
         rerror("Out of memory");
     }
+	// The scope fits in a single shard: forking one kid would buy no parallelism, only a
+	// fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+	// very path gmultitasking = FALSE takes. This must happen out here, after the try
+	// block has destroyed our RdbInitializer (see rdb::SingleShard).
+	if (single_shard)
+		return gintervals_quantiles(_intervals, _expr, _percentiles, _iterator_policy, _band, _intervals_set_out, _envir);
+
 	rreturn(R_NilValue);
 }
 

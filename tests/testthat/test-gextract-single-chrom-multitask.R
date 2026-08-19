@@ -91,7 +91,12 @@ test_that("single-chrom fixed-bin intervals.set.out matches serial output", {
 test_that("small multi-chrom extraction still enters multitask path when enabled", {
     skip_if(parallel::detectCores() < 2L, "Multitasking test needs at least 2 cores")
 
-    intervals <- gintervals(c(1, 2), 0, 1000)
+    # The scope has to be big enough for the partitioner to plan at least two shards
+    # (the range splitter's floor is 500 kbp per shard). A scope that fits in one shard
+    # deliberately runs in-process now - forking a single kid is pure overhead - so it
+    # would not print parent_gather_ms and would tell us nothing about the estimate-based
+    # auto-disable this test is guarding against.
+    intervals <- gintervals(c(1, 2), 0, 1000000)
 
     withr::local_options(list(
         gmax.processes = 8L,

@@ -395,6 +395,8 @@ SEXP gtrackcor(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_policy, SEXP _
 
 SEXP gtrackcor_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _envir)
 {
+    bool single_shard = false;
+
     try {
         RdbInitializer rdb_init;
 
@@ -414,8 +416,13 @@ SEXP gtrackcor_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_poli
         intervals2d->verify_no_overlaps(iu.get_chromkey());
 
         bool allow_range_split = !Rf_isNull(_iterator_policy);
-        if (!iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_range_split))
+        int num_kids = iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_range_split);
+
+        if (!num_kids)
             rreturn(R_NilValue);
+
+        if (num_kids == 1)
+            throw rdb::SingleShard();
 
         if (iu.distribute_task(num_pairs * sizeof(CorSummary), 0)) { // child process
             CorSummary *summaries = (CorSummary *)allocate_res(0);
@@ -443,11 +450,22 @@ SEXP gtrackcor_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_poli
 
             rreturn(build_result_matrix(summaries));
         }
+    } catch (rdb::SingleShard &) {
+        // the serial entry point below re-queues whatever it warrants
+        clear_pending_diagnostics(_envir);
+        single_shard = true;
     } catch (TGLException &e) {
         rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
         rerror("Out of memory");
     }
+
+    // The scope fits in a single shard: forking one kid would buy no parallelism, only a
+    // fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+    // very path gmultitasking = FALSE takes. This must happen out here, after the try
+    // block has destroyed our RdbInitializer (see rdb::SingleShard).
+    if (single_shard)
+        return gtrackcor(_track_exprs, _intervals, _iterator_policy, _band, _envir);
 
     rreturn(R_NilValue);
 }
@@ -537,6 +555,8 @@ SEXP gtrackcor_spearman_exact(SEXP _track_exprs, SEXP _intervals, SEXP _iterator
 
 SEXP gtrackcor_spearman_exact_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _envir)
 {
+    bool single_shard = false;
+
     try {
         RdbInitializer rdb_init;
 
@@ -555,8 +575,13 @@ SEXP gtrackcor_spearman_exact_multitask(SEXP _track_exprs, SEXP _intervals, SEXP
         intervals2d->sort();
         intervals2d->verify_no_overlaps(iu.get_chromkey());
 
-        if (!iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band))
+        int num_kids = iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band);
+
+        if (!num_kids)
             rreturn(R_NilValue);
+
+        if (num_kids == 1)
+            throw rdb::SingleShard();
 
         // For exact Spearman with multitasking, children collect pairs and send to parent
         // Parent merges all pairs and computes final correlation
@@ -661,11 +686,22 @@ SEXP gtrackcor_spearman_exact_multitask(SEXP _track_exprs, SEXP _intervals, SEXP
 
             rreturn(build_spearman_result_matrix(total_bins, num_nan_bins, cors));
         }
+    } catch (rdb::SingleShard &) {
+        // the serial entry point below re-queues whatever it warrants
+        clear_pending_diagnostics(_envir);
+        single_shard = true;
     } catch (TGLException &e) {
         rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
         rerror("Out of memory");
     }
+
+    // The scope fits in a single shard: forking one kid would buy no parallelism, only a
+    // fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+    // very path gmultitasking = FALSE takes. This must happen out here, after the try
+    // block has destroyed our RdbInitializer (see rdb::SingleShard).
+    if (single_shard)
+        return gtrackcor_spearman_exact(_track_exprs, _intervals, _iterator_policy, _band, _envir);
 
     rreturn(R_NilValue);
 }
@@ -774,6 +810,8 @@ SEXP gtrackcor_spearman(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_polic
 
 SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _envir)
 {
+    bool single_shard = false;
+
     try {
         RdbInitializer rdb_init;
 
@@ -795,6 +833,9 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
         int num_kids = iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band);
         if (!num_kids)
             rreturn(R_NilValue);
+
+        if (num_kids == 1)
+            throw rdb::SingleShard();
 
         uint64_t sample_size = (uint64_t)ceil(iu.get_max_data_size() / (double)num_kids);
         uint64_t estimated_bins = iu.estimate_num_bins(_iterator_policy, intervals1d, intervals2d);
@@ -1008,11 +1049,22 @@ SEXP gtrackcor_spearman_multitask(SEXP _track_exprs, SEXP _intervals, SEXP _iter
 
             rreturn(build_spearman_result_matrix(total_bins, num_nan_bins, cors));
         }
+    } catch (rdb::SingleShard &) {
+        // the serial entry point below re-queues whatever it warrants
+        clear_pending_diagnostics(_envir);
+        single_shard = true;
     } catch (TGLException &e) {
         rerror("%s", e.msg());
     } catch (const bad_alloc &e) {
         rerror("Out of memory");
     }
+
+    // The scope fits in a single shard: forking one kid would buy no parallelism, only a
+    // fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+    // very path gmultitasking = FALSE takes. This must happen out here, after the try
+    // block has destroyed our RdbInitializer (see rdb::SingleShard).
+    if (single_shard)
+        return gtrackcor_spearman(_track_exprs, _intervals, _iterator_policy, _band, _envir);
 
     rreturn(R_NilValue);
 }
