@@ -65,6 +65,13 @@ test_that("every vignette knits without error", {
 test_that("the runnable vignettes really do evaluate their chunks", {
     # Guards the other direction: a regression that re-disables evaluation
     # would leave the knit test above passing on an empty document.
+    #
+    # Two spellings have to be caught, not one. `eval = FALSE` on a chunk
+    # header is the obvious one; `eval = F` is the same thing, and a single
+    # knitr::opts_chunk$set(eval = FALSE) in the include = FALSE setup chunk
+    # switches the whole document off at once - the version that matters,
+    # since it leaves every visible chunk header looking live.
+    off <- "(FALSE|F)\\b"
     vignettes <- vignette_sources()
     skip_if(!length(vignettes), "vignette sources are not available here")
 
@@ -72,9 +79,23 @@ test_that("the runnable vignettes really do evaluate their chunks", {
     for (name in runnable) {
         f <- vignettes[basename(vignettes) == name]
         skip_if(!length(f), paste(name, "not found"))
-        headers <- grep("^```\\{r", readLines(f[1]), value = TRUE)
+        lines <- readLines(f[1])
+
+        # A document-wide eval switch anywhere in the file disables every
+        # chunk regardless of what the individual headers say.
+        body <- paste(lines, collapse = "\n")
+        global_off <- grepl(
+            paste0("opts_chunk\\$set\\((?:[^()]|\\([^()]*\\))*eval\\s*=\\s*", off),
+            body,
+            perl = TRUE
+        )
+        expect_false(global_off,
+            info = sprintf("%s turns evaluation off document-wide via opts_chunk$set()", name)
+        )
+
+        headers <- grep("^```\\{r", lines, value = TRUE)
         headers <- headers[!grepl("include\\s*=\\s*FALSE", headers)]
-        disabled <- grepl("eval\\s*=\\s*FALSE", headers)
+        disabled <- grepl(paste0("eval\\s*=\\s*", off), headers)
         expect_gt(sum(!disabled), 0)
         # Database-Formats keeps four chunks off (FASTA input, a multi-GB
         # download, and two destructive shell commands); the other two must be

@@ -275,3 +275,54 @@ test_that("gseq.pwm small workloads stay sequential and avoid fork overhead", {
     expect_true(time_seq["elapsed"] >= 0)
     expect_true(time_threshold["elapsed"] >= 0)
 })
+
+# C_gseq_pwm_multitask used to construct rdb::IntervUtils - which pins
+# ALLGENOME on misha's tracked PROTECT stack - without an RdbInitializer to
+# unwind it, so every call leaked one R protection slot. The leak is
+# unbounded: N calls leave N slots on R's pointer-protection stack.
+#
+# R reports it with "stack imbalance in '<construct>', <before> then <after>"
+# via REprintf, which is not an R condition (expect_warning cannot see it) but
+# is captured by sink(type = "message").
+capture_r_messages <- function(expr) {
+    tf <- tempfile()
+    con <- file(tf, "wt")
+    sink(con, type = "message")
+    on.exit(
+        {
+            sink(type = "message")
+            close(con)
+        },
+        add = TRUE
+    )
+    force(expr)
+    sink(type = "message")
+    close(con)
+    on.exit(NULL)
+    readLines(tf, warn = FALSE)
+}
+
+test_that("gseq.pwm does not leak a PROTECT slot per call", {
+    withr::local_options(list(
+        gmultitasking = TRUE,
+        gmin.seqs.work4process = 1e12 # stay sequential, but still enter the multitask entry point
+    ))
+    pssm <- create_test_pssm()
+    seqs <- replicate(40, paste(sample(c("A", "C", "G", "T"), 30, replace = TRUE), collapse = ""))
+
+    # The enclosing `for` reports the accumulated imbalance when it returns,
+    # so a per-call leak shows up here even though R stops reporting the
+    # individual .Call after the first one.
+    msgs <- capture_r_messages({
+        for (i in 1:10) {
+            invisible(gseq.pwm(seqs, pssm, mode = "max", bidirect = FALSE))
+        }
+    })
+
+    expect_false(any(grepl("stack imbalance", msgs, fixed = TRUE)),
+        label = paste0(
+            "gseq.pwm left R's protection stack unbalanced: ",
+            paste(grep("stack imbalance", msgs, value = TRUE), collapse = " | ")
+        )
+    )
+})
