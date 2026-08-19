@@ -16,6 +16,7 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(misha)
+gdb.init_examples()
 ```
 
 # Overview
@@ -76,6 +77,7 @@ The per-chromosome format uses separate files:
 By default, new databases use the indexed format:
 
 ```{r, eval = FALSE}
+# eval = FALSE: needs a genome FASTA on disk, or a multi-GB download from UCSC.
 # Create database from FASTA file
 gdb.create("mydb", "/path/to/genome.fa")
 
@@ -88,6 +90,7 @@ gdb.create_genome("hg38", path = "/path/to/install")
 To create a database in legacy format (for compatibility with older misha):
 
 ```{r, eval = FALSE}
+# eval = FALSE: same as above, gdb.create() needs a genome FASTA.
 # Set option before creating database
 options(gmulticontig.indexed_format = FALSE)
 gdb.create("mydb", "/path/to/genome.fa")
@@ -97,30 +100,16 @@ gdb.create("mydb", "/path/to/genome.fa")
 
 Use `gdb.info()` to check your database format:
 
-```{r, eval = FALSE}
-gsetroot("/path/to/mydb")
+```{r}
+gdb.init_examples() # the bundled examples database
 info <- gdb.info()
 print(info$format) # "indexed" or "per-chromosome"
 ```
 
-Example output:
+The full record:
 
-```{r, eval = FALSE}
-info <- gdb.info()
-# $path
-# [1] "/path/to/mydb"
-#
-# $is_db
-# [1] TRUE
-#
-# $format
-# [1] "indexed"
-#
-# $num_chromosomes
-# [1] 24
-#
-# $genome_size
-# [1] 3095693983
+```{r}
+gdb.info()
 ```
 
 # Converting Databases
@@ -129,9 +118,9 @@ info <- gdb.info()
 
 Convert all tracks and sequences to indexed format:
 
-```{r, eval = FALSE}
-gsetroot("/path/to/mydb")
+```{r}
 gdb.convert_to_indexed()
+gdb.info()$format
 ```
 
 This will:
@@ -144,19 +133,28 @@ This will:
 
 Convert specific tracks while keeping others in legacy format:
 
-```{r, eval = FALSE}
+```{r}
+gdb.init_examples() # start again from a per-chromosome database
+
 # 1D tracks
-gtrack.convert_to_indexed("mytrack")
+gtrack.convert_to_indexed("dense_track")
 
 # 2D tracks (rectangles and points)
-gtrack.2d.convert_to_indexed("my2dtrack")
+gtrack.2d.convert_to_indexed("rects_track")
 ```
 
 ## Convert Intervals
 
 Convert interval sets to indexed format:
 
-```{r, eval = FALSE}
+```{r}
+# Only "big" interval sets are stored per chromosome, so lower the threshold
+# to get big sets out of the small example database (default: 1,000,000).
+options(gbig.intervals.size = 10)
+gintervals.save("myintervals", gscreen("dense_track > 0.3"))
+gintervals.save("my2dintervals", gextract("rects_track", gintervals.2d.all())[, 1:6])
+options(gbig.intervals.size = 1e6)
+
 # 1D intervals
 gintervals.convert_to_indexed("myintervals")
 
@@ -188,39 +186,41 @@ gintervals.2d.convert_to_indexed("my2dintervals")
 **Step 1: Backup (optional but recommended)**
 
 ```{r, eval = FALSE}
+# eval = FALSE: copies a whole database outside the vignette's temp directory.
 # Create backup of important database
 system("cp -r /path/to/mydb /path/to/mydb.backup")
 ```
 
 **Step 2: Check current format**
 
-```{r, eval = FALSE}
-gsetroot("/path/to/mydb")
+```{r}
+gdb.init_examples()
 info <- gdb.info()
 print(paste("Current format:", info$format))
 ```
 
 **Step 3: Convert**
 
-```{r, eval = FALSE}
+```{r}
 gdb.convert_to_indexed()
 ```
 
 **Step 4: Verify**
 
-```{r, eval = FALSE}
+```{r}
 # Check format changed
 info <- gdb.info()
 print(paste("New format:", info$format))
 
 # Test a few operations
-result <- gextract("mytrack", gintervals(1, 0, 1000))
+result <- gextract("dense_track", gintervals(1, 0, 1000))
 print(head(result))
 ```
 
 **Step 5: Remove backup (after validation)**
 
 ```{r, eval = FALSE}
+# eval = FALSE: deletes a directory, and there is nothing here to delete.
 # After thorough testing
 system("rm -rf /path/to/mydb.backup")
 ```
@@ -229,40 +229,59 @@ system("rm -rf /path/to/mydb.backup")
 
 You can freely copy tracks between databases with different formats.
 
-## Method 1: Export and Import
+## Use `gtrack.copy()`
 
-```{r, eval = FALSE}
-# Export from source database
-gsetroot("/path/to/source_db")
-gextract("mytrack", gintervals.all(),
-    iterator = "mytrack",
-    file = "/tmp/mytrack.txt"
-)
+`gtrack.copy(src, db = target_db)` is the idiom. It reads the source track
+directly, reconciles per-chromosome vs. indexed storage and any difference in
+the two databases' chromosome sets, and preserves the track's type. `src` may
+be a character vector, so a batch copy is a single call.
 
-# Import to target database (format auto-detected)
-gsetroot("/path/to/target_db")
-gtrack.import("mytrack", "Copied track", "/tmp/mytrack.txt", binsize = 0)
-# Automatically converted to target database format!
+```{r}
+gdb.init_examples()
+source_db <- .misha$GROOT
+
+# A second database to copy into
+target_db <- file.path(tempdir(), "target_db")
+unlink(target_db, recursive = TRUE)
+gdb.create_linked(target_db, parent = source_db)
+
+# One track, or many
+gtrack.copy("dense_track", db = target_db)
+gtrack.copy(c("sparse_track", "array_track"), db = target_db)
+
+gsetroot(target_db)
+gtrack.ls()
+gtrack.info("dense_track")[c("type", "size.in.bytes")]
 ```
 
-## Method 2: Batch Copy
+The destination does not have to be in the same format: converting it
+afterwards leaves the tracks readable.
 
-```{r, eval = FALSE}
-# Copy multiple tracks
-tracks <- c("track1", "track2", "track3")
+```{r}
+gdb.convert_to_indexed()
+gdb.info()$format
+head(gextract("dense_track", gintervals(1, 0, 300)))
+```
 
-for (track in tracks) {
-    # Export
-    gsetroot("/path/to/source_db")
-    file_path <- sprintf("/tmp/%s.txt", track)
-    gextract(track, gintervals.all(), iterator = track, file = file_path)
+## Round-tripping through a text file
 
-    # Import
-    gsetroot("/path/to/target_db")
-    info <- gtrack.info(track) # Get description
-    gtrack.import(track, info$description, file_path, binsize = 0)
-    unlink(file_path)
-}
+Exporting with `gextract(..., file = ...)` and re-importing with
+`gtrack.import()` also works, but it is lossy: `binsize = 0` builds a
+**sparse** track, so a dense source track comes back sparse and about 5x
+larger (20 bytes per value against 4 bytes per bin). Reach for it only when
+the destination is not a misha database, or when you actually want a
+different track type.
+
+```{r}
+gsetroot(source_db)
+exported <- file.path(tempdir(), "dense_track.txt")
+gextract("dense_track", gintervals.all(), iterator = "dense_track", file = exported)
+
+gsetroot(target_db)
+gtrack.import("dense_track_roundtrip", "Round-tripped", exported, binsize = 0)
+gtrack.info("dense_track")[c("type", "size.in.bytes")]
+gtrack.info("dense_track_roundtrip")[c("type", "size.in.bytes")]
+gtrack.rm("dense_track_roundtrip", force = TRUE)
 ```
 
 # Performance Comparison
@@ -302,13 +321,15 @@ Based on comprehensive benchmarks comparing indexed vs legacy formats:
 
 ## Example: Mixed Environment
 
-```{r, eval = FALSE}
+```{r}
 # Work with both formats in same session
-gsetroot("/path/to/legacy_db")
-data1 <- gextract("track1", gintervals(1, 0, 1000))
+gsetroot(source_db) # per-chromosome
+data1 <- gextract("dense_track", gintervals(1, 0, 1000))
+head(data1)
 
-gsetroot("/path/to/indexed_db")
-data2 <- gextract("track2", gintervals(1, 0, 1000))
+gsetroot(target_db) # indexed
+data2 <- gextract("dense_track", gintervals(1, 0, 1000))
+head(data2)
 ```
 
 # Troubleshooting
@@ -319,7 +340,8 @@ This occurs with many-contig genomes in legacy format:
 
 **Solution:** Convert to indexed format
 
-```{r, eval = FALSE}
+```{r}
+gdb.init_examples()
 gdb.convert_to_indexed()
 ```
 
@@ -329,7 +351,7 @@ After manually copying track directories:
 
 **Solution:** Reload database
 
-```{r, eval = FALSE}
+```{r}
 gdb.reload()
 ```
 
@@ -339,10 +361,11 @@ Conversion needs 2x track size temporarily:
 
 **Solution:** Free disk space or convert tracks individually
 
-```{r, eval = FALSE}
+```{r}
 # Convert one track at a time
-gtrack.convert_to_indexed("track1")
-gtrack.convert_to_indexed("track2")
+gdb.init_examples()
+gtrack.convert_to_indexed("dense_track")
+gtrack.convert_to_indexed("sparse_track")
 # etc.
 ```
 
