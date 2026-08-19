@@ -936,9 +936,24 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
             total_work *= 2;
         }
 
-        // Get threshold from options
-        rdb::IntervUtils iu(_envir);
-        uint64_t min_work = iu.get_min_seqs_work4process();
+        // Read the multitasking options. IntervUtils pins ALLGENOME and the
+        // chrom key on misha's tracked PROTECT stack, which is unwound by
+        // RdbInitializer's destructor - so it needs one on the stack, and it
+        // has to go out of scope before we return or fork. Without it the
+        // first call in a session leaked a PROTECT slot and R printed
+        // "stack imbalance in '.Call'".
+        uint64_t min_work;
+        int max_processes;
+        {
+            RdbInitializer rdb_init;
+            rdb::IntervUtils iu(_envir);
+            min_work = iu.get_min_seqs_work4process();
+            int num_cores = std::max(1, (int)sysconf(_SC_NPROCESSORS_ONLN));
+            max_processes = std::min(
+                (int)iu.get_max_processes2core() * num_cores,
+                (int)iu.get_max_processes()
+            );
+        }
 
         // If workload is below threshold, use sequential version
         if (total_work < min_work) {
@@ -948,12 +963,6 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
                             r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy);
         }
 
-        // Get number of processes
-        int num_cores = std::max(1, (int)sysconf(_SC_NPROCESSORS_ONLN));
-        int max_processes = std::min(
-            (int)iu.get_max_processes2core() * num_cores,
-            (int)iu.get_max_processes()
-        );
         int num_processes = std::min(max_processes, n_seqs);
 
         if (num_processes <= 1) {
