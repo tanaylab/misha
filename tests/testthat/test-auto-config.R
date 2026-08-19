@@ -106,14 +106,17 @@ test_that("package initializes with correct auto-configuration", {
     expect_true(total_usage <= budget * 1.01) # Allow 1% tolerance for rounding
 })
 
-test_that("gmax.processes is 70% of cores", {
+test_that("gmax.processes is 70% of cores, capped at 32", {
     # We can't change the actual core count, but we can test the logic
-    # by checking the current setting matches expected behavior
+    # by checking the current setting matches expected behavior.
+    # The cap exists because past ~32 workers the per-worker fork + shared memory
+    # + merge cost outweighs the extra parallelism; it only binds above 46 cores.
     num_cores <- parallel::detectCores(logical = TRUE)
-    expected_procs <- as.integer(num_cores * 0.7)
+    expected_procs <- max(1L, min(32L, as.integer(num_cores * 0.7)))
 
     actual_procs <- getOption("gmax.processes")
     expect_equal(actual_procs, expected_procs)
+    expect_lte(actual_procs, 32L)
 })
 
 test_that("gmax.data.size is within reasonable range", {
