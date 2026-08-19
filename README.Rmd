@@ -42,7 +42,23 @@ And the development version from GitHub with:
 remotes::install_github("tanaylab/misha")
 ```
 
+## Quick start
+
+The package ships a small example database, so there is nothing to download before the first query:
+
+```{r}
+library(misha)
+gdb.init_examples() # a tiny example genome, unpacked into tempdir()
+gtrack.ls() # what is in it
+gextract("dense_track", gintervals(1, 0, 500), iterator = 100) # signal in 100 bp bins
+head(gscreen("dense_track > 0.2", gintervals(1, 0, 50000), iterator = 100)) # bins above a threshold
+```
+
+Every misha analysis is that shape: a **scope** (where to look), an **iterator** (in what chunks), and a **track expression** evaluated over it.
+
 ## Usage
+
+Start with the [Misha Basics](https://tanaylab.github.io/misha/articles/Misha-Basics.html) short guide.
 
 See the [Genomes](https://tanaylab.github.io/misha/articles/Genomes.html) vignette for instructions on how to create a misha database for common genomes.
 

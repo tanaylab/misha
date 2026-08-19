@@ -36,7 +36,43 @@ And the development version from GitHub with:
 remotes::install_github("tanaylab/misha")
 ```
 
+## Quick start
+
+The package ships a small example database, so there is nothing to
+download before the first query:
+
+``` r
+library(misha)
+gdb.init_examples() # a tiny example genome, unpacked into tempdir()
+gtrack.ls() # what is in it
+#> [1] "array_track"         "dense_track"         "rects_track"        
+#> [4] "sparse_track"        "subdir.dense_track2"
+gextract("dense_track", gintervals(1, 0, 500), iterator = 100) # signal in 100 bp bins
+#>   chrom start end dense_track intervalID
+#> 1  chr1     0 100   0.1688889          1
+#> 2  chr1   100 200   0.1700000          1
+#> 3  chr1   200 300   0.1800000          1
+#> 4  chr1   300 400   0.1600000          1
+#> 5  chr1   400 500   0.1100000          1
+head(gscreen("dense_track > 0.2", gintervals(1, 0, 50000), iterator = 100)) # bins above a threshold
+#>   chrom start   end
+#> 1  chr1 17200 17300
+#> 2  chr1 20000 20100
+#> 3  chr1 23300 23400
+#> 4  chr1 26200 26300
+#> 5  chr1 32600 32800
+#> 6  chr1 32900 33000
+```
+
+Every misha analysis is that shape: a **scope** (where to look), an
+**iterator** (in what chunks), and a **track expression** evaluated over
+it.
+
 ## Usage
+
+Start with the [Misha
+Basics](https://tanaylab.github.io/misha/articles/Misha-Basics.html)
+short guide.
 
 See the
 [Genomes](https://tanaylab.github.io/misha/articles/Genomes.html)
@@ -50,35 +86,30 @@ usage details.
 ### Using misha with an LLM agent
 
 **Drop-in prompt (no clone needed).** Paste the block below into your
-agent at the start of a misha task. It points the agent at the raw
-files on GitHub, so it works without a local checkout:
+agent at the start of a misha task. It points the agent at the raw files
+on GitHub, so it works without a local checkout:
 
-````
-Before writing any misha code, fetch and read:
+    Before writing any misha code, fetch and read:
 
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-core.md  (mandatory: concepts + everyday recipes)
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-anti-patterns.md  (silent footguns; cross-referenced from core)
-- https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-advanced.md  (consult on demand: 2D / Hi-C, PWM, import/export, new genomes)
+    - https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-core.md  (mandatory: concepts + everyday recipes)
+    - https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-anti-patterns.md  (silent footguns; cross-referenced from core)
+    - https://raw.githubusercontent.com/tanaylab/misha/master/agent-guides/misha-advanced.md  (consult on demand: 2D / Hi-C, PWM, import/export, new genomes)
 
-Follow the conventions in those files. When you hit a recipe with an
-"Avoid:" block, treat it as a hard rule.
-````
+    Follow the conventions in those files. When you hit a recipe with an "Avoid:" block, treat it as a hard rule.
 
 For agents (Claude Code, Copilot, Cursor, etc.) writing misha analysis
 code in a downstream project, point them at the maintained agent guides
 in this repo:
 
-- [`agent-guides/misha-core.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-core.md)
-  - concepts, bootstrap, and the everyday recipes (intervals,
-  annotation, distance, extract, vtracks, gscreen, gdist,
-  gtrack.create). Start here.
-- [`agent-guides/misha-advanced.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-advanced.md)
-  - 2D / Hi-C pile-ups, insulation, sequence and PWM tracks, bulk
+- [`agent-guides/misha-core.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-core.md) -
+  concepts, bootstrap, and the everyday recipes (intervals, annotation,
+  distance, extract, vtracks, gscreen, gdist, gtrack.create). Start
+  here.
+- [`agent-guides/misha-advanced.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-advanced.md) -
+  2D / Hi-C pile-ups, insulation, sequence and PWM tracks, bulk
   import/export, new genomes and cross-species.
-- [`agent-guides/misha-anti-patterns.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-anti-patterns.md)
-  - silent footguns referenced inline from the above.
-- [`agent-guides/skills/`](https://github.com/tanaylab/misha/tree/master/agent-guides/skills)
-  - deep playbooks for specific tasks. Currently: [`importing-tracks`](https://github.com/tanaylab/misha/blob/master/agent-guides/skills/importing-tracks/SKILL.md) (format chooser across all `gtrack.*import*` variants + pre/post-import validation). Load when the task specifically calls for one of these.
+- [`agent-guides/misha-anti-patterns.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-anti-patterns.md) -
+  silent footguns referenced inline from the above.
 
 The core guide is ~4k words and targets a system-prompt-sized context.
 For Claude Code-style setups, dropping `misha-core.md` (or all three)
