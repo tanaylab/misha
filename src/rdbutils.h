@@ -423,6 +423,7 @@ private:
 
 	// all delays are in milliseconds
 	static const int64_t        LAUNCH_DELAY;
+	static const int64_t        MAX_LAUNCH_STAGGER;
 	static const int64_t        MEM_SYNC_DELAY;
 	static const int64_t        REPORT_INTERVAL_DELAY;
 
@@ -437,6 +438,7 @@ private:
 	static sem_t               *s_alloc_suspend_sem;
 
 	static int                  s_kid_index;
+	static unsigned             s_num_planned_kids;
 	static vector<LiveStat>     s_running_pids;
 	static Shm                 *s_shm;
 
