@@ -290,36 +290,42 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
         file.symlink(file.path(groot, "seq"), file.path(path, "seq"))
     }
 
-    # Copy/link tracks
+    # Copy/link tracks. A track name is dotted ("subdir.mytrack") but lives at
+    # tracks/subdir/mytrack.track on disk, so the name has to be translated to
+    # a path - and the destination sub-directory has to exist before the copy.
     if (!is.null(tracks)) {
         for (track in tracks) {
             source_db <- gtrack_dataset[[track]]
-            source_path <- file.path(source_db, "tracks", paste0(track, ".track"))
-            dest_path <- file.path(path, "tracks", paste0(track, ".track"))
+            rel_path <- paste0(gsub("\\.", "/", track), ".track")
+            source_path <- file.path(source_db, "tracks", rel_path)
+            dest_path <- file.path(path, "tracks", rel_path)
+            dir.create(dirname(dest_path), recursive = TRUE, showWarnings = FALSE)
 
             if (symlinks) {
                 file.symlink(source_path, dest_path)
             } else {
-                file.copy(source_path, file.path(path, "tracks"), recursive = TRUE)
+                file.copy(source_path, dirname(dest_path), recursive = TRUE)
             }
         }
     }
 
-    # Copy/link intervals
+    # Copy/link intervals (same name-to-path translation as for tracks)
     if (!is.null(intervals)) {
         for (interval in intervals) {
             source_db <- gintervals_dataset[[interval]]
             # Intervals can be files or directories
-            source_file <- file.path(source_db, "tracks", paste0(interval, ".interv"))
+            rel_path <- paste0(gsub("\\.", "/", interval), ".interv")
+            source_file <- file.path(source_db, "tracks", rel_path)
             source_dir <- source_file # Same path - could be file or dir
 
             if (file.exists(source_file) || dir.exists(source_dir)) {
-                dest_path <- file.path(path, "tracks", paste0(interval, ".interv"))
+                dest_path <- file.path(path, "tracks", rel_path)
+                dir.create(dirname(dest_path), recursive = TRUE, showWarnings = FALSE)
 
                 if (symlinks) {
                     file.symlink(source_file, dest_path)
                 } else {
-                    file.copy(source_file, file.path(path, "tracks"), recursive = TRUE)
+                    file.copy(source_file, dirname(dest_path), recursive = TRUE)
                 }
             }
         }
