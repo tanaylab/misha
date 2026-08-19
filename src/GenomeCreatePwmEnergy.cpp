@@ -201,10 +201,16 @@ SEXP gcreate_pwm_energy_multitask(SEXP _track, SEXP _pssmset, SEXP _pssmid, SEXP
 
 		string dirname = create_track_dir(_envir, track);
 
-		if (!iu.prepare4multitasking(&scope, NULL))
+		int num_kids = iu.prepare4multitasking(&scope, NULL);
+
+		if (!num_kids)
 			rreturn(R_NilValue);
 
-		if (iu.distribute_task(0, 0)) { // child process
+		// A single shard: forking one kid buys no parallelism, so run the shard here. In the
+		// parent the kid index is 0, so get_kid_intervals1d() hands back shard 0 = the whole
+		// scope. (This entry point cannot delegate to gcreate_pwm_energy(): create_track_dir()
+		// has already run and would fail on the second mkdir.)
+		if (num_kids == 1 || iu.distribute_task(0, 0)) { // worker process
 			GIntervals *kid_intervals1d = (GIntervals *)iu.get_kid_intervals1d();
 			GenomeTrackFixedBin fixed_bin_track;
 			GenomeTrackSparse sparse_track;

@@ -187,8 +187,17 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 
 		bool is_1d_iterator = iu.is_1d_iterator(_track_exprs, intervals1d, intervals2d, _iterator_policy);
 
-		if (iu.get_multitasking() && !iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band))
-			rreturn(R_NilValue);
+		int num_kids = 0;
+
+		if (iu.get_multitasking()) {
+			num_kids = iu.prepare4multitasking(_track_exprs, intervals1d, intervals2d, _iterator_policy, _band);
+			if (!num_kids)
+				rreturn(R_NilValue);
+		}
+
+		// num_kids == 1 means the whole scope went to one kid: forking it buys no parallelism,
+		// so take the serial branch below instead.
+		bool multitask = num_kids > 1;
 
 		if (!intervset_out.empty()) {
 			if (is_1d_iterator)
@@ -201,7 +210,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 			}
 		}
 
-		if (iu.get_multitasking()) {
+		if (multitask) {
 			if (!intervset_out.empty()) {
 				if (iu.distribute_task(is_1d_iterator ?
 									   sizeof(GIntervalsBigSet1D::ChromStat) * chromstats1d.size() :

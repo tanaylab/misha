@@ -260,7 +260,10 @@ static inline void define_in_misha(SEXP envir, const char *name, SEXP value) {
     SEXP tmp = value;
     tmp = rprotect_ptr(tmp);
     Rf_defineVar(Rf_install(name), tmp, misha_env);
-    runprotect(2);
+    // rprotect_ptr() is a no-op on R_NilValue, so unprotect only what was actually
+    // protected: defining a NULL value used to unprotect one frame too many, which
+    // trips "Number of calls to unprotect exceeds the number of calls to protect".
+    runprotect((misha_env != R_NilValue) + (tmp != R_NilValue));
 }
 
 // Helper: queue a diagnostic for .gcall() to raise once the .Call has returned.
@@ -313,6 +316,14 @@ static inline void add_pending_diagnostic(SEXP envir, const char *severity, cons
     runprotect(n ? 3 : 2);
 }
 
+// Drops whatever add_pending_diagnostic() queued so far in this .Call. Used by the
+// single-shard fallback (see rdb::SingleShard): the serial entry point re-runs the call
+// from scratch and re-queues every diagnostic it warrants, so anything the multitasking
+// entry point queued on its way to the fallback decision would otherwise be raised twice.
+static inline void clear_pending_diagnostics(SEXP envir) {
+    define_in_misha(envir, ".GPENDING.DIAGNOSTICS", R_NilValue);
+}
+
 
 void prepare4multitasking(uint64_t res_const_size, uint64_t res_var_size, uint64_t max_res_size, uint64_t max_mem_usage, unsigned num_planned_kids);
 
@@ -359,6 +370,20 @@ template<typename T> void unpack_data(void *&ptr, T &data, uint64_t n) {
 
 #define MAX_KIDS 1000
 #define rreturn(retv) { if (RdbInitializer::is_kid()) rexit(); return(retv); }
+
+namespace rdb {
+
+// Thrown by a multitasking entry point when prepare4multitasking() planned a single shard,
+// i.e. when forking one kid would buy no parallelism. Catching it OUTSIDE the try block that
+// owns the RdbInitializer is what makes the fallback safe: the throw unwinds that frame, so
+// the RdbInitializer is destroyed before the serial entry point (with its own RdbInitializer)
+// runs. Calling the serial entry point while the multitasking one still holds an
+// RdbInitializer is not an option - an error inside it reaches R through Rf_error, whose
+// longjmp skips the outer destructor and leaves s_ref_count stuck above zero. Every later
+// multitasking call in that session then reuses stale shared memory and a stale kid index.
+struct SingleShard {};
+
+}
 
 void rexit();
 

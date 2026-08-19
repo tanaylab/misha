@@ -379,10 +379,16 @@ SEXP gtrackcreate_multitask(SEXP track, SEXP expr, SEXP _iterator_policy, SEXP _
 			}
 		}
 
-		if (!iu.prepare4multitasking(expr, &all_genome_intervs1d, &all_genome_intervs2d, _iterator_policy, _band))
+		int num_kids = iu.prepare4multitasking(expr, &all_genome_intervs1d, &all_genome_intervs2d, _iterator_policy, _band);
+
+		if (!num_kids)
 			rreturn(R_NilValue);
 
-		if (iu.distribute_task(0, 0)) {  // child process
+		// A single shard: forking one kid buys no parallelism, so run the shard here. In the
+		// parent the kid index is 0, so get_kid_intervals*() hand back shard 0 = the whole
+		// scope. (This entry point cannot delegate to gtrackcreate(): create_track_dir() has
+		// already run and would fail on the second mkdir.)
+		if (num_kids == 1 || iu.distribute_task(0, 0)) {  // worker process
 			TrackExprScanner scanner(iu);
 
 			scanner.begin(expr, iu.get_kid_intervals1d(), iu.get_kid_intervals2d(), _iterator_policy, _band);
