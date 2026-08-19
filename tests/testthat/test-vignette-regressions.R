@@ -80,3 +80,18 @@ test_that("gdataset.save() handles namespaced track and interval names", {
     )
     gdataset.unload(ds)
 })
+
+test_that("re-initialising a database drops the stale track-format cache", {
+    # The C++ track-index cache is keyed by absolute track directory. Reading a
+    # track after converting it to indexed format cached "this directory is
+    # indexed"; gdb.init_examples() then re-extracted a per-chromosome database
+    # over the same paths and the next read still tried to open track.dat.
+    gdb.init_examples()
+    gtrack.convert_to_indexed("dense_track")
+    expect_equal(gtrack.info("dense_track")$format, "indexed")
+    expect_equal(nrow(gextract("dense_track", gintervals(1, 0, 300))), 6)
+
+    gdb.init_examples()
+    expect_equal(gtrack.info("dense_track")$format, "per-chromosome")
+    expect_equal(nrow(gextract("dense_track", gintervals(1, 0, 300))), 6)
+})
