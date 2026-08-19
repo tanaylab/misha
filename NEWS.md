@@ -1,6 +1,7 @@
 # misha 5.11.20
 
 * Documentation: the query functions' man pages now carry a shared "NaN values" section stating what each one does with a bin the track has no data for - `gextract()` keeps it, `gsummary()` counts it, `gdist()`/`gquantiles()`/`gscreen()` drop it, and `gsegment()` spans it.
+* `gtrack.export()` to bigWig now names the conda package to install when the UCSC converter is missing, and `bedGraphToBigWig` is declared in SystemRequirements alongside `samtools`. UCSC's prebuilt binaries need glibc 2.34 or newer, so on older distributions the conda build is the one that works.
 * Documentation: `gextract()`'s extra column is named `intervalID`, not `columnID`; and `gsample()`/`gquantiles()` say to use `set.seed()` for a reproducible sample, replacing a reference to the `grnd.seed` option, which no longer exists.
 
 # misha 5.11.19
