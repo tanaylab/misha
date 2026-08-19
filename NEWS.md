@@ -1,3 +1,8 @@
+# misha 5.11.20
+
+* Documentation: the query functions' man pages now carry a shared "NaN values" section stating what each one does with a bin the track has no data for - `gextract()` keeps it, `gsummary()` counts it, `gdist()`/`gquantiles()`/`gscreen()` drop it, and `gsegment()` spans it.
+* Documentation: `gextract()`'s extra column is named `intervalID`, not `columnID`; and `gsample()`/`gquantiles()` say to use `set.seed()` for a reproducible sample, replacing a reference to the `grnd.seed` option, which no longer exists.
+
 # misha 5.11.19
 
 * **Crash fix:** catching a warning from `gquantiles()`, `gintervals.quantiles()`, `gbins.quantiles()`, or from loading an intervals set that contains zero-length intervals - with `tryCatch(warning = )`, `options(warn = 2)`, or `testthat::expect_warning()` - left the session broken: later multitasking calls failed, and the overlapping-iterator warning fell silent. The warnings themselves are unchanged.

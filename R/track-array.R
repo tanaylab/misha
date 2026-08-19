@@ -179,7 +179,7 @@
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
 #' @return If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
-#' additional columns for 'Array' track column values and 'columnID'.
+#' additional columns for 'Array' track column values and 'intervalID'.
 #' @seealso \code{\link{gextract}}, \code{\link{gtrack.array.get_colnames}},
 #' \code{\link{gtrack.array.import}}
 #' @keywords ~extract ~array
