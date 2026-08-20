@@ -9,8 +9,6 @@
 #include <cmath>
 #include <limits>
 #include <climits>
-#include <sys/mman.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <R.h>
@@ -604,10 +602,10 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
     try {
         // Validate and extract inputs
         if (!Rf_isString(r_seqs)) {
-            Rf_error("seqs must be a character vector");
+            rdb::verror("seqs must be a character vector");
         }
         if (!Rf_isMatrix(r_pssm) || !Rf_isReal(r_pssm)) {
-            Rf_error("pssm must be a numeric matrix");
+            rdb::verror("pssm must be a numeric matrix");
         }
 
         int n_seqs = Rf_length(r_seqs);
@@ -676,7 +674,7 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             } else if (policy == "na") {
                 neutral_policy = NEUTRAL_POLICY_NA;
             } else {
-                Rf_error("Unknown neutral_chars_policy value: %s", policy.c_str());
+                rdb::verror("Unknown neutral_chars_policy value: %s", policy.c_str());
             }
         }
         core.neutral_policy = neutral_policy;
@@ -793,10 +791,15 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
             return r_result;
         }
         
+    } catch (TGLException &e) {
+        // rerror(), not Rf_error(): inside a multitasking child an Rf_error() longjmps
+        // back into R and the child escapes into the caller's session. rerror() hands
+        // the message to the parent through shared memory and exits the child.
+        rdb::rerror("%s", e.msg());
     } catch (std::exception& e) {
-        Rf_error("Error in C_gseq_pwm: %s", e.what());
+        rdb::rerror("Error in C_gseq_pwm: %s", e.what());
     } catch (...) {
-        Rf_error("Unknown error in C_gseq_pwm");
+        rdb::rerror("Unknown error in C_gseq_pwm");
     }
     return R_NilValue;
 }
@@ -903,12 +906,17 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
                           SEXP r_skip_gaps, SEXP r_gap_chars, SEXP r_prior,
                           SEXP r_neutral_chars, SEXP r_neutral_policy, SEXP _envir) {
     try {
+        // Every misha entry point needs this: it owns the PROTECT counter that
+        // IntervUtils' constructor pins ALLGENOME on, the child processes launched
+        // below, and the signal handlers that make Ctrl-C work.
+        RdbInitializer rdb_init;
+
         // Basic validation
         if (!Rf_isString(r_seqs)) {
-            Rf_error("seqs must be a character vector");
+            rdb::verror("seqs must be a character vector");
         }
         if (!Rf_isMatrix(r_pssm) || !Rf_isReal(r_pssm)) {
-            Rf_error("pssm must be a numeric matrix");
+            rdb::verror("pssm must be a numeric matrix");
         }
 
         int n_seqs = Rf_length(r_seqs);
@@ -954,7 +962,7 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
             (int)iu.get_max_processes2core() * num_cores,
             (int)iu.get_max_processes()
         );
-        int num_processes = std::min(max_processes, n_seqs);
+        int num_processes = std::min(std::min(max_processes, n_seqs), (int)MAX_KIDS);
 
         if (num_processes <= 1) {
             // Not enough work to parallelize
@@ -969,174 +977,121 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
         bool return_strand = Rf_asLogical(r_return_strand);
         bool is_pos_mode = (mode == "pos");
 
-        // Create shared memory for results
-        size_t result_size;
-        if (is_pos_mode && return_strand) {
-            result_size = n_seqs * 2 * sizeof(int);  // pos + strand
-        } else if (is_pos_mode) {
-            result_size = n_seqs * sizeof(int);
-        } else {
-            result_size = n_seqs * sizeof(double);
-        }
+        // One record per sequence: a position, a position plus a strand, or a score.
+        uint64_t rec_size = is_pos_mode ?
+            (return_strand ? 2 * sizeof(int) : sizeof(int)) : sizeof(double);
 
-        void* shared_mem = mmap(NULL, result_size, PROT_READ | PROT_WRITE,
-                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-        if (shared_mem == MAP_FAILED) {
-            Rf_error("Failed to allocate shared memory");
-        }
-
-        // Fork child processes
-        std::vector<pid_t> children;
         int chunk_size = (n_seqs + num_processes - 1) / num_processes;
+        num_processes = (n_seqs + chunk_size - 1) / chunk_size;  // chunking may need fewer kids
+        uint64_t kid_res_size = (uint64_t)chunk_size * rec_size;
+
+        // Fixed slab per kid (res_var_size = 0): the result is one record per input
+        // sequence, so its size is known before the fork, and misha's per-record data
+        // limit has nothing to guard - R is already holding every input sequence.
+        rdb::prepare4multitasking(kid_res_size, 0, kid_res_size * num_processes,
+                                  iu.get_max_mem_usage(), num_processes);
 
         for (int proc_id = 0; proc_id < num_processes; ++proc_id) {
-            int start_idx = proc_id * chunk_size;
-            int end_idx = std::min(start_idx + chunk_size, n_seqs);
+            if (!rdb::launch_process()) {  // child process: score our chunk into shared memory
+                int start_idx = proc_id * chunk_size;
+                int end_idx = std::min(start_idx + chunk_size, n_seqs);
+                int chunk_len = end_idx - start_idx;
 
-            if (start_idx >= n_seqs) break;
-
-            pid_t pid = fork();
-
-            if (pid < 0) {
-                // Fork failed - kill existing children and error
-                for (pid_t child : children) {
-                    kill(child, SIGKILL);
+                SEXP r_seqs_chunk = PROTECT(Rf_allocVector(STRSXP, chunk_len));
+                for (int i = start_idx; i < end_idx; ++i) {
+                    SET_STRING_ELT(r_seqs_chunk, i - start_idx, STRING_ELT(r_seqs, i));
                 }
-                munmap(shared_mem, result_size);
-                Rf_error("Failed to fork process");
-            }
 
-            if (pid == 0) {
-                // Child process: process chunk and write to shared memory
-                try {
-                    // Create subset of sequences for this chunk
-                    SEXP r_seqs_chunk = PROTECT(Rf_allocVector(STRSXP, end_idx - start_idx));
+                // Create corresponding ROI subsets if needed
+                SEXP r_roi_start_chunk = R_NilValue;
+                SEXP r_roi_end_chunk = R_NilValue;
+
+                if (!Rf_isNull(r_roi_start) && Rf_length(r_roi_start) > 1) {
+                    r_roi_start_chunk = PROTECT(Rf_allocVector(INTSXP, chunk_len));
                     for (int i = start_idx; i < end_idx; ++i) {
-                        SET_STRING_ELT(r_seqs_chunk, i - start_idx, STRING_ELT(r_seqs, i));
+                        INTEGER(r_roi_start_chunk)[i - start_idx] =
+                            INTEGER(r_roi_start)[i % Rf_length(r_roi_start)];
                     }
-
-                    // Create corresponding ROI subsets if needed
-                    SEXP r_roi_start_chunk = R_NilValue;
-                    SEXP r_roi_end_chunk = R_NilValue;
-
-                    if (!Rf_isNull(r_roi_start) && Rf_length(r_roi_start) > 1) {
-                        r_roi_start_chunk = PROTECT(Rf_allocVector(INTSXP, end_idx - start_idx));
-                        for (int i = start_idx; i < end_idx; ++i) {
-                            INTEGER(r_roi_start_chunk)[i - start_idx] =
-                                INTEGER(r_roi_start)[i % Rf_length(r_roi_start)];
-                        }
-                    } else {
-                        r_roi_start_chunk = PROTECT(r_roi_start);
-                    }
-
-                    if (!Rf_isNull(r_roi_end) && Rf_length(r_roi_end) > 1) {
-                        r_roi_end_chunk = PROTECT(Rf_allocVector(INTSXP, end_idx - start_idx));
-                        for (int i = start_idx; i < end_idx; ++i) {
-                            INTEGER(r_roi_end_chunk)[i - start_idx] =
-                                INTEGER(r_roi_end)[i % Rf_length(r_roi_end)];
-                        }
-                    } else {
-                        r_roi_end_chunk = PROTECT(r_roi_end);
-                    }
-
-                    // Call sequential version on chunk
-                    SEXP chunk_result = C_gseq_pwm(
-                        r_seqs_chunk, r_pssm, r_mode, r_bidirect, r_strand_mode,
-                        r_score_thresh, r_roi_start_chunk, r_roi_end_chunk, r_extend,
-                        r_spat_params, r_return_strand, r_skip_gaps,
-                        r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy
-                    );
-
-                    // Write results to shared memory
-                    if (is_pos_mode && return_strand) {
-                        int* pos_mem = (int*)shared_mem;
-                        int* strand_mem = pos_mem + n_seqs;
-                        SEXP pos_vec = VECTOR_ELT(chunk_result, 0);
-                        SEXP strand_vec = VECTOR_ELT(chunk_result, 1);
-                        for (int i = 0; i < end_idx - start_idx; ++i) {
-                            pos_mem[start_idx + i] = INTEGER(pos_vec)[i];
-                            strand_mem[start_idx + i] = INTEGER(strand_vec)[i];
-                        }
-                    } else if (is_pos_mode) {
-                        int* mem = (int*)shared_mem;
-                        for (int i = 0; i < end_idx - start_idx; ++i) {
-                            mem[start_idx + i] = INTEGER(chunk_result)[i];
-                        }
-                    } else {
-                        double* mem = (double*)shared_mem;
-                        for (int i = 0; i < end_idx - start_idx; ++i) {
-                            mem[start_idx + i] = REAL(chunk_result)[i];
-                        }
-                    }
-
-                    UNPROTECT(3);  // seqs_chunk, roi_start_chunk, roi_end_chunk
-                    // Use signal-based exit to avoid CRAN issues with _exit()
-                    // (similar to rexit() but without RdbInitializer dependency).
-                    // Reset SIGTERM to SIG_DFL first — R's handler would just
-                    // set a flag and the child would continue executing R code.
-                    {
-                        struct sigaction sa;
-                        sa.sa_handler = SIG_DFL;
-                        sigemptyset(&sa.sa_mask);
-                        sa.sa_flags = 0;
-                        sigaction(MISHA_EXIT_SIG, &sa, NULL);
-                    }
-                    kill(getpid(), MISHA_EXIT_SIG);
-
-                } catch (...) {
-                    // Use signal-based exit for error case as well
-                    struct sigaction sa;
-                    sa.sa_handler = SIG_DFL;
-                    sigemptyset(&sa.sa_mask);
-                    sa.sa_flags = 0;
-                    sigaction(MISHA_EXIT_SIG, &sa, NULL);
-                    kill(getpid(), MISHA_EXIT_SIG);
+                } else {
+                    r_roi_start_chunk = PROTECT(r_roi_start);
                 }
-            } else {
-                // Parent process: record child PID
-                children.push_back(pid);
+
+                if (!Rf_isNull(r_roi_end) && Rf_length(r_roi_end) > 1) {
+                    r_roi_end_chunk = PROTECT(Rf_allocVector(INTSXP, chunk_len));
+                    for (int i = start_idx; i < end_idx; ++i) {
+                        INTEGER(r_roi_end_chunk)[i - start_idx] =
+                            INTEGER(r_roi_end)[i % Rf_length(r_roi_end)];
+                    }
+                } else {
+                    r_roi_end_chunk = PROTECT(r_roi_end);
+                }
+
+                // Call sequential version on chunk
+                SEXP chunk_result = C_gseq_pwm(
+                    r_seqs_chunk, r_pssm, r_mode, r_bidirect, r_strand_mode,
+                    r_score_thresh, r_roi_start_chunk, r_roi_end_chunk, r_extend,
+                    r_spat_params, r_return_strand, r_skip_gaps,
+                    r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy
+                );
+
+                void *res = rdb::allocate_res(0);
+
+                if (is_pos_mode && return_strand) {
+                    int *pos_mem = (int *)res;
+                    int *strand_mem = pos_mem + chunk_len;
+                    memcpy(pos_mem, INTEGER(VECTOR_ELT(chunk_result, 0)), chunk_len * sizeof(int));
+                    memcpy(strand_mem, INTEGER(VECTOR_ELT(chunk_result, 1)), chunk_len * sizeof(int));
+                } else if (is_pos_mode) {
+                    memcpy(res, INTEGER(chunk_result), chunk_len * sizeof(int));
+                } else {
+                    memcpy(res, REAL(chunk_result), chunk_len * sizeof(double));
+                }
+
+                UNPROTECT(3);  // seqs_chunk, roi_start_chunk, roi_end_chunk
+                rexit();
             }
         }
 
-        // Parent: wait for all children
-        bool all_success = true;
-        for (pid_t child : children) {
-            int status;
-            waitpid(child, &status, 0);
-            // Child processes use rexit() which sends MISHA_EXIT_SIG (SIGTERM)
-            // Check for both normal exit with status 0 and signal termination with MISHA_EXIT_SIG
-            if (WIFEXITED(status)) {
-                if (WEXITSTATUS(status) != 0) {
-                    all_success = false;
-                }
-            } else if (WIFSIGNALED(status)) {
-                if (WTERMSIG(status) != MISHA_EXIT_SIG) {
-                    all_success = false;
-                }
-            } else {
-                all_success = false;
-            }
-        }
+        rdb::wait_for_kids(iu);
 
-        if (!all_success) {
-            munmap(shared_mem, result_size);
-            Rf_error("One or more child processes failed");
-        }
+        if (rdb::get_num_kids() != num_processes)
+            rdb::verror("Got results from %d child processes out of %d",
+                        rdb::get_num_kids(), num_processes);
 
-        // Assemble final result from shared memory
+        // Assemble final result from the kids' slabs
         SEXP result;
-        if (is_pos_mode && return_strand) {
-            SEXP r_pos = PROTECT(Rf_allocVector(INTSXP, n_seqs));
-            SEXP r_strand_out = PROTECT(Rf_allocVector(INTSXP, n_seqs));
+        SEXP r_pos = R_NilValue;
+        SEXP r_strand_out = R_NilValue;
+        SEXP r_result = R_NilValue;
+        int num_protected = 1;
 
-            int* pos_mem = (int*)shared_mem;
-            int* strand_mem = pos_mem + n_seqs;
-
-            for (int i = 0; i < n_seqs; ++i) {
-                INTEGER(r_pos)[i] = pos_mem[i];
-                INTEGER(r_strand_out)[i] = strand_mem[i];
+        if (is_pos_mode) {
+            PROTECT(r_pos = Rf_allocVector(INTSXP, n_seqs));
+            if (return_strand) {
+                PROTECT(r_strand_out = Rf_allocVector(INTSXP, n_seqs));
+                num_protected = 2;
             }
+        } else {
+            PROTECT(r_result = Rf_allocVector(REALSXP, n_seqs));
+        }
 
+        for (int ikid = 0; ikid < num_processes; ++ikid) {
+            const void *res = rdb::get_kid_res(ikid);
+            int start_idx = ikid * chunk_size;
+            int chunk_len = std::min(start_idx + chunk_size, n_seqs) - start_idx;
+
+            if (is_pos_mode && return_strand) {
+                const int *pos_mem = (const int *)res;
+                memcpy(INTEGER(r_pos) + start_idx, pos_mem, chunk_len * sizeof(int));
+                memcpy(INTEGER(r_strand_out) + start_idx, pos_mem + chunk_len, chunk_len * sizeof(int));
+            } else if (is_pos_mode) {
+                memcpy(INTEGER(r_pos) + start_idx, res, chunk_len * sizeof(int));
+            } else {
+                memcpy(REAL(r_result) + start_idx, res, chunk_len * sizeof(double));
+            }
+        }
+
+        if (is_pos_mode && return_strand) {
             SEXP df = PROTECT(Rf_allocVector(VECSXP, 2));
             SET_VECTOR_ELT(df, 0, r_pos);
             SET_VECTOR_ELT(df, 1, r_strand_out);
@@ -1147,34 +1102,20 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
             Rf_setAttrib(df, R_NamesSymbol, names);
 
             result = df;
-            UNPROTECT(4);
-        } else if (is_pos_mode) {
-            SEXP r_pos = PROTECT(Rf_allocVector(INTSXP, n_seqs));
-            int* mem = (int*)shared_mem;
-            for (int i = 0; i < n_seqs; ++i) {
-                INTEGER(r_pos)[i] = mem[i];
-            }
-            result = r_pos;
-            UNPROTECT(1);
+            UNPROTECT(2 + num_protected);
         } else {
-            SEXP r_result = PROTECT(Rf_allocVector(REALSXP, n_seqs));
-            double* mem = (double*)shared_mem;
-            for (int i = 0; i < n_seqs; ++i) {
-                REAL(r_result)[i] = mem[i];
-            }
-            result = r_result;
-            UNPROTECT(1);
+            result = is_pos_mode ? r_pos : r_result;
+            UNPROTECT(num_protected);
         }
-
-        // Clean up shared memory
-        munmap(shared_mem, result_size);
 
         return result;
 
+    } catch (TGLException &e) {
+        rdb::rerror("%s", e.msg());
     } catch (std::exception& e) {
-        Rf_error("Error in C_gseq_pwm_multitask: %s", e.what());
+        rdb::rerror("Error in C_gseq_pwm_multitask: %s", e.what());
     } catch (...) {
-        Rf_error("Unknown error in C_gseq_pwm_multitask");
+        rdb::rerror("Unknown error in C_gseq_pwm_multitask");
     }
     return R_NilValue;
 }
