@@ -1,3 +1,8 @@
+# misha 5.11.20
+
+* **Crash fix:** `gseq.pwm()` leaked one R protection-stack slot per call, printing "Warning: stack imbalance in '<-'" every time and killing a loop of ~50000 calls with "protect(): protection stack overflow". Results were never affected.
+* **Bug fix:** `gseq.pwm()` running on several processes now reports a child process's error - it used to return whatever the child left in shared memory - and, like the rest of misha, honours Ctrl-C and `gmax.mem.usage` while the children work.
+
 # misha 5.11.19
 
 * **Crash fix:** catching a warning from `gquantiles()`, `gintervals.quantiles()`, `gbins.quantiles()`, or from loading an intervals set that contains zero-length intervals - with `tryCatch(warning = )`, `options(warn = 2)`, or `testthat::expect_warning()` - left the session broken: later multitasking calls failed, and the overlapping-iterator warning fell silent. The warnings themselves are unchanged.
