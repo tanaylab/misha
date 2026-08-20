@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">misha</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.19</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">5.11.20</span>
       </span>
     </div>
 
@@ -63,9 +63,16 @@
   <div class="col-md-9 contents">
     <div class="page-header">
       <h1 data-toc-skip>Changelog <small></small></h1>
-      <small>Source: <a href="https://github.com/tanaylab/misha/blob/v5.11.19/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="page-header" data-toc-text="5.11.20" id="misha-51120">misha 5.11.20<a class="anchor" aria-label="anchor" href="#misha-51120"></a></h2>
+<ul><li>
+<strong>Crash fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> leaked one R protection-stack slot per call, printing “Warning: stack imbalance in ‘&lt;-’” every time and killing a loop of ~50000 calls with “protect(): protection stack overflow”. Results were never affected.</li>
+<li>
+<strong>Bug fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> running on several processes now reports a child process’s error - it used to return whatever the child left in shared memory - and, like the rest of misha, honours Ctrl-C and <code>gmax.mem.usage</code> while the children work.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="page-header" data-toc-text="5.11.19" id="misha-51119">misha 5.11.19<a class="anchor" aria-label="anchor" href="#misha-51119"></a></h2>
 <ul><li>
