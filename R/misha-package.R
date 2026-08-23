@@ -36,7 +36,13 @@
 #' is unlimited. \cr gtrack.num.chunks \tab 0 \tab Maximal number of 2D track
 #' chunks simultaneously stored \cr \tab \tab in memory. \cr gmultitasking \tab
 #' TRUE \tab Enable/disable automatic parallelization. Some functions \cr \tab
-#' \tab may choose single-threaded mode for very small workloads. \cr }
+#' \tab may choose single-threaded mode for very small workloads. \cr
+#' gpermissions.umask \tab "0007" \tab umask applied around misha's own writes \cr
+#' \tab \tab into a database: 660 files, 770 directories - group-writable, \cr
+#' \tab \tab no world access - matching what the C++ layer enforces. Set to \cr
+#' \tab \tab "0002" for the world-readable 664/775 that misha produced before \cr
+#' \tab \tab 5.11.21, or to NULL to leave the process umask untouched. The \cr
+#' \tab \tab umask is restored as soon as the write returns. \cr }
 #'
 #' More information about the options can be found in 'User manual' of the
 #' package.

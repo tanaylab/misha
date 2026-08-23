@@ -386,8 +386,10 @@ gdb.create_linked <- function(path, parent) {
     }
 
     # Create user database structure
-    dir.create(path, recursive = TRUE, showWarnings = FALSE)
-    dir.create(file.path(path, "tracks"), showWarnings = FALSE)
+    .gwith_umask({
+        dir.create(path, recursive = TRUE, showWarnings = FALSE)
+        dir.create(file.path(path, "tracks"), showWarnings = FALSE)
+    })
 
     # Create symlinks to parent database
     chrom_link <- file.path(path, "chrom_sizes.txt")

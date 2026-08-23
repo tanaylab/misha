@@ -84,17 +84,16 @@
         return(invisible())
     }
 
-    old_umask <- Sys.umask("002")
-    on.exit(Sys.umask(old_umask), add = TRUE)
-
-    con <- file(path, "wb")
-    on.exit(close(con), add = TRUE)
-    for (nm in names(attrs)) {
-        writeBin(charToRaw(nm), con)
-        writeBin(as.raw(0L), con)
-        writeBin(charToRaw(as.character(attrs[nm])), con)
-        writeBin(as.raw(0L), con)
-    }
+    .gwith_umask({
+        con <- file(path, "wb")
+        on.exit(close(con), add = TRUE)
+        for (nm in names(attrs)) {
+            writeBin(charToRaw(nm), con)
+            writeBin(as.raw(0L), con)
+            writeBin(charToRaw(as.character(attrs[nm])), con)
+            writeBin(as.raw(0L), con)
+        }
+    })
     invisible()
 }
 
