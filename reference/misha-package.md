@@ -24,7 +24,7 @@ function to alter the value of the options.
 |  |  | Note: Independent of gmax.data.size (different purposes). |
 | gmax.mem.usage | 10000000 | Maximal memory consumption of all child |
 |  |  | processes in KB before the limiting algorithm is invoked. |
-| gmax.processes | AUTO | Auto-configured to 70% of CPU cores. |
+| gmax.processes | AUTO | Auto-configured to min(32, 70% of CPU cores). |
 |  |  | Maximal number of processes for multitasking. |
 | gmax.processes2core | 2 | Maximal number of processes per CPU core for multitasking |
 | gseq.extract.probe.usec | 100 | gseq.extract times its first reads |
