@@ -1,6 +1,7 @@
 # misha 5.11.21
 
 * **Bug fix:** every track-expression scan evaluated the expression once over an uninitialised buffer before reading any data, to learn whether it returns a vector. The result was discarded, but an expression that errors or warns on particular values could fail for reasons unrelated to the user's data, and the outcome was not reproducible. The probe now sees `NaN`, which every track expression already handles.
+* **Bug fix:** writing a 2D track put four uninitialised bytes of process memory into every record, so the same input produced byte-different track files and those bytes travelled with any track that was copied or shared. Values read back were never affected, and the on-disk layout is unchanged.
 
 # misha 5.11.20
 
