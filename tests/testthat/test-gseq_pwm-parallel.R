@@ -336,3 +336,54 @@ test_that("a failing child process reports the real error", {
         "column names"
     )
 })
+
+test_that("gseq.pwm multitask single-shard fallback does not leak its RdbInitializer", {
+    # The multitasking entry point falls back to the serial one whenever forking
+    # would buy no parallelism. That fallback has to run AFTER the RdbInitializer
+    # is destroyed: the serial entry point reports errors through rdb::rerror,
+    # whose Rf_errorcall longjmps straight back to R and would skip the
+    # destructor, leaving s_ref_count stuck above zero for the rest of the
+    # session (misha's SIGINT/SIGCHLD handlers stay installed, shared memory and
+    # file descriptors are never released).
+    #
+    # s_ref_count is not visible from R, so probe it through a side effect of the
+    # same "!s_ref_count" guard: the once-per-call key set is only cleared by the
+    # outermost RdbInitializer. If the counter is stuck, misha's once-per-call
+    # diagnostics go silent forever - here, the overlapping-iterator warning.
+    skip_if_not("test.sparse" %in% gtrack.ls())
+
+    ovl <- gintervals("chr1", c(1e6, 1.4e6), c(1.5e6, 1.8e6))
+    scope <- gintervals("chr1", 1e6, 2e6)
+
+    count_warnings <- function() {
+        n <- 0
+        withCallingHandlers(
+            gextract("test.sparse", intervals = scope, iterator = ovl),
+            warning = function(w) {
+                n <<- n + 1
+                invokeRestart("muffleWarning")
+            }
+        )
+        n
+    }
+
+    expect_equal(count_warnings(), 1)
+
+    # Force the single-shard fallback (tiny workload) and make the serial entry
+    # point fail inside it. neutral_chars_policy is match.arg()ed by gseq.pwm(),
+    # so the C++ check is reached through a direct .Call.
+    pssm <- create_test_pssm()
+    expect_error(
+        .Call(
+            "C_gseq_pwm_multitask",
+            c("ACGTACGTAC", "TTTTACGTAA"), pssm, "max", TRUE, 0L, 0,
+            NULL, NULL, FALSE, list(NULL, 1L, NULL, NULL), FALSE,
+            TRUE, c("-", "."), 0.01, c("N"), "BOGUS_POLICY", .misha_env()
+        ),
+        "Unknown neutral_chars_policy"
+    )
+
+    # Before the fix this returned 0: the destructor was skipped and every later
+    # misha call in the session lost its once-per-call diagnostics.
+    expect_equal(count_warnings(), 1)
+})
