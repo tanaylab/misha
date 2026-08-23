@@ -56,7 +56,7 @@ make_indexed_track_with_empty_trailing_chrom <- function(root, binsize = 20L,
 
     misha:::.gcall(
         "gtrack_pack_per_chrom_to_indexed",
-        trackdir, c("chr1", "chr2"), "dense", misha:::.misha_env()
+        trackdir, c("chr1", "chr2"), "dense"
     )
     expect_true(file.exists(file.path(trackdir, "track.dat")))
     expect_true(file.exists(file.path(trackdir, "track.idx")))
