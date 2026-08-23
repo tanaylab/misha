@@ -1127,6 +1127,8 @@ SEXP C_gextract(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_pol
 
 SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iterator_policy, SEXP _band, SEXP _file, SEXP _intervals_set_out, SEXP _intervals_join, SEXP _envir)
 {
+	bool single_shard = false;
+
 	try {
 		RdbInitializer rdb_init;
 		const bool profile = is_gextract_profile_enabled();
@@ -1270,8 +1272,13 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 		// We intentionally rely on prepare4multitasking() + runtime allocation guards,
 		// because estimate-based auto-disabling previously regressed gextract throughput.
 		bool allow_multichrom_1d_range_split = allow_multichrom_range_split_for_gextract(_iterator_policy, intervset_out);
-		if (!iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_multichrom_1d_range_split))
+		int num_kids = iu.prepare4multitasking(_exprs, intervals1d, intervals2d, _iterator_policy, _band, allow_multichrom_1d_range_split);
+
+		if (!num_kids)
 			rreturn(R_NilValue);
+
+		if (num_kids == 1)
+			throw rdb::SingleShard();
 
 		bool is_1d_iterator = iu.is_1d_iterator(_exprs, intervals1d, intervals2d, _iterator_policy);
 		// Estimate number of records to cap shared-memory allocation size
@@ -1541,6 +1548,10 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 			}
             rreturn(transform_intervals_join(answer, _intervals, join_mode, iu));
 		}
+	} catch (rdb::SingleShard &) {
+		// the serial entry point below re-queues whatever it warrants
+		clear_pending_diagnostics(_envir);
+		single_shard = true;
 	} catch (TGLException &e) {
 		string msg(e.msg());
 		// Only the parent may re-run the call serially. In a child process this is
@@ -1556,6 +1567,13 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 	} catch (const bad_alloc &e) {
 		rerror("Out of memory");
 	}
+	// The scope fits in a single shard: forking one kid would buy no parallelism, only a
+	// fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+	// very path gmultitasking = FALSE takes. This must happen out here, after the try
+	// block has destroyed our RdbInitializer (see rdb::SingleShard).
+	if (single_shard)
+		return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, _file, _intervals_set_out, _intervals_join, _envir);
+
 	rreturn(R_NilValue);
 }
 
