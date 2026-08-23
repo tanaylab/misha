@@ -336,3 +336,42 @@ test_that("import with testattr1 in readonly attributes", {
     r1$testattr1 <- c("value1", "value2")
     expect_error(gtrack.attr.import(r1))
 })
+
+test_that("import with remove.others = TRUE covers every track when read-only attrs are set", {
+    # Regression test: a stray runprotect(2) inside the per-track loop of
+    # gset_tracks_attrs released rattr_names/rtracknames after the first track, so the
+    # second track tripped misha's unprotect guard ("Number of calls to unprotect
+    # exceeds the number of calls to protect"). That error longjmp'd out of the
+    # RdbInitializer scope, leaving s_ref_count stuck above zero for the rest of the
+    # session, and the import itself was applied to the first track only.
+    # Needs >= 2 tracks, remove.others = TRUE and a non-empty read-only attribute list.
+    gdb.set_readonly_attrs(c("created.by", "created.date", "created.user"))
+
+    tracks <- paste0("temp.tmptrack", 1:3, "_", sample(1:1e9, 1))
+    for (tn in tracks) {
+        gtrack.rm(tn, force = TRUE)
+        withr::defer(gtrack.rm(tn, force = TRUE))
+        gtrack.create_sparse(tn, "to be removed", gintervals(c(1, 2)), 1:2)
+    }
+
+    tbl <- data.frame(regr_attr = c("v1", "v2", "v3"), stringsAsFactors = FALSE)
+    rownames(tbl) <- tracks
+
+    expect_no_error(gtrack.attr.import(tbl, remove.others = TRUE))
+
+    # every track got the new attribute, not just the first one
+    expect_equal(sapply(tracks, function(tn) gtrack.attr.get(tn, "regr_attr")),
+        c("v1", "v2", "v3"),
+        ignore_attr = TRUE
+    )
+    # remove.others dropped the non-read-only attributes of every track
+    expect_equal(sapply(tracks, function(tn) gtrack.attr.get(tn, "description")),
+        c("", "", ""),
+        ignore_attr = TRUE
+    )
+    # read-only attributes survived
+    expect_true(all(nchar(sapply(tracks, function(tn) gtrack.attr.get(tn, "created.by"))) > 0))
+
+    # the session is still usable: repeating the import must not fail either
+    expect_no_error(gtrack.attr.import(tbl, remove.others = TRUE))
+})
