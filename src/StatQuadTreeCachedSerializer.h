@@ -330,7 +330,10 @@ void StatQuadTreeCachedSerializer<T, Size>::set_subarenas(int i1, int j1, int i2
 template <class T, class Size>
 int64_t StatQuadTreeCachedSerializer<T, Size>::serialize_top_tree(int i1, int j1, int i2, int j2, int64_t x1, int64_t y1, int64_t x2, int64_t y2, typename StatQuadTreeCached<T, Size>::Stat &stat)
 {
-	typename StatQuadTreeCached<T, Size>::Node node;
+	// Value-initialised: the node is written to the track file verbatim, and its members do not cover
+	// the whole structure (Node is 104 bytes long and starts with a 1-byte "is_leaf" followed by 7 bytes
+	// of padding). Without this the padding would carry whatever was on the stack.
+	typename StatQuadTreeCached<T, Size>::Node node{};
 
 	node.is_leaf = false;
 	node.arena = Rectangle(x1, y1, x2, y2);

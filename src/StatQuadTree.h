@@ -9,6 +9,7 @@
 #define QUADTREE_H_
 
 #include <cstdint>
+#include <cstring>
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
@@ -34,9 +35,24 @@ template<typename T>
 struct Rectangle_val : public Rectangle {
 	T v;
 
-	Rectangle_val() {}
-	Rectangle_val(int64_t _x1, int64_t _y1, int64_t _x2, int64_t _y2, const T &_v = T()) : Rectangle(_x1, _y1, _x2, _y2), v(_v) {}
-	Rectangle_val(const Rectangle &rect, const T &_v = T()) : Rectangle(rect), v(_v) {}
+	// The quad-tree serializer writes these objects to disk verbatim (see StatQuadTreeCached::serialize_subtree),
+	// so every byte of the object representation must be defined - including the tail padding that the compiler
+	// leaves after "v" whenever sizeof(T) is not a multiple of the structure's alignment (Rectangle_val<float>:
+	// 36 bytes of members, 40 bytes long). Neither the member initialiser lists below nor the compiler-generated
+	// copy constructor touch those bytes, so each constructor defines them explicitly. Clearing the padding of
+	// "*this" (rather than of the source) is what makes copies safe too: an object whose padding is undefined can
+	// never be produced, no matter how it was created.
+	// The cost is one store for the padded instantiations and nothing at all for the unpadded ones (memset of
+	// zero bytes), so the object creation path is not affected.
+	Rectangle_val() { clear_padding(); }
+	Rectangle_val(const Rectangle_val &o) : Rectangle(o), v(o.v) { clear_padding(); }
+	Rectangle_val(int64_t _x1, int64_t _y1, int64_t _x2, int64_t _y2, const T &_v = T()) : Rectangle(_x1, _y1, _x2, _y2), v(_v) { clear_padding(); }
+	Rectangle_val(const Rectangle &rect, const T &_v = T()) : Rectangle(rect), v(_v) { clear_padding(); }
+
+	Rectangle_val &operator=(const Rectangle_val &o) = default;
+
+	// "v" is the last member, so everything between its end and the end of the structure is padding.
+	void clear_padding() { char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end); }
 
 	double val(const Rectangle &, void *) const { return v; }
 	double val(const Rectangle &, const DiagonalBand &, void *) const { return v; }
@@ -55,9 +71,16 @@ template<typename T>
 struct Point_val : public Point {
 	T v;
 
-	Point_val() {}
-	Point_val(int64_t _x, int64_t _y, const T &_v = T()) : Point(_x, _y), v(_v) {}
-	Point_val(const Point &point, const T &_v = T()) : Point(point), v(_v) {}
+	// Same as Rectangle_val: the padding after "v" is serialized to disk, so it must be defined.
+	// (Point_val<float>: 20 bytes of members, 24 bytes long.)
+	Point_val() { clear_padding(); }
+	Point_val(const Point_val &o) : Point(o), v(o.v) { clear_padding(); }
+	Point_val(int64_t _x, int64_t _y, const T &_v = T()) : Point(_x, _y), v(_v) { clear_padding(); }
+	Point_val(const Point &point, const T &_v = T()) : Point(point), v(_v) { clear_padding(); }
+
+	Point_val &operator=(const Point_val &o) = default;
+
+	void clear_padding() { char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end); }
 
 	double val(const Rectangle &, void *) const { return v; }
 	double val(const Rectangle &, const DiagonalBand &, void *) const { return v; }

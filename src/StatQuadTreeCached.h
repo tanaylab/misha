@@ -595,6 +595,11 @@ int64_t StatQuadTreeCached<T, Size>::serialize_subtree(BufferedFile &file, const
 			// Therefore writing each of the structure members separately might not give the same result as writing the whole structure as a bulk.
 			// If this happens get_objs() will incorrectly make the casting to Obj *, and which might result in memory corruption.
 			// Therefore we create an instance of Obj, fill its members and write the structure as a bulk.
+			//
+			// Since the structure is written as a bulk, its padding ends up in the file as well and must therefore
+			// be defined. T takes care of the padding that follows its own value member (see Rectangle_val in
+			// StatQuadTree.h); the assertion below verifies that placing "id" in front of T does not add any more.
+			static_assert(sizeof(Obj) == sizeof(Size) + sizeof(T), "Obj must not introduce padding of its own");
 			Obj obj(id, qtree.m_objs[obj_ptr]);
 			file.write(&obj, sizeof(obj));
 		}
