@@ -1,0 +1,302 @@
+{
+  "BinFinder.cpp": {
+    "identical": true,
+    "misha": "122ae8addcac725a",
+    "pymisha": "122ae8addcac725a"
+  },
+  "BinFinder.h": {
+    "identical": true,
+    "misha": "0b0797d738f6ef3d",
+    "pymisha": "0b0797d738f6ef3d"
+  },
+  "BinsManager.h": {
+    "identical": false,
+    "misha": "fd34c3c752e96174",
+    "pymisha": "3467d6e82ccd6739"
+  },
+  "BufferedFile.cpp": {
+    "identical": false,
+    "misha": "a47458090791a70b",
+    "pymisha": "8448f4a3a5f09262"
+  },
+  "BufferedFile.h": {
+    "identical": false,
+    "misha": "6f8386203ee67d3d",
+    "pymisha": "64a5dee828740bfd"
+  },
+  "CRC64.h": {
+    "identical": true,
+    "misha": "e476cbf03685bdd0",
+    "pymisha": "e476cbf03685bdd0"
+  },
+  "DnaPSSM.cpp": {
+    "identical": false,
+    "misha": "76a422a2d5d62de1",
+    "pymisha": "c57affae802c80bd"
+  },
+  "DnaPSSM.h": {
+    "identical": false,
+    "misha": "642824504b146294",
+    "pymisha": "838ec7b773c3c465"
+  },
+  "GInterval.cpp": {
+    "identical": false,
+    "misha": "ffb57b4b99c78729",
+    "pymisha": "9b04fed020178ecb"
+  },
+  "GInterval.h": {
+    "identical": false,
+    "misha": "31230c99fa8aa72a",
+    "pymisha": "a5ab8673225ab150"
+  },
+  "GInterval2D.h": {
+    "identical": false,
+    "misha": "de13d1d3be817fab",
+    "pymisha": "26772a2b3abc9376"
+  },
+  "GenomeChromKey.h": {
+    "identical": true,
+    "misha": "f3db1bf88ed70aa4",
+    "pymisha": "f3db1bf88ed70aa4"
+  },
+  "GenomeIndex.cpp": {
+    "identical": true,
+    "misha": "c09331ceb9bab4b0",
+    "pymisha": "c09331ceb9bab4b0"
+  },
+  "GenomeIndex.h": {
+    "identical": true,
+    "misha": "7393769f266e12af",
+    "pymisha": "7393769f266e12af"
+  },
+  "GenomeSeqFetch.cpp": {
+    "identical": false,
+    "misha": "c43a6ee99dc9b209",
+    "pymisha": "29f5aae695c5aafa"
+  },
+  "GenomeSeqFetch.h": {
+    "identical": false,
+    "misha": "dc8dd8f09b19e925",
+    "pymisha": "26f21a74398b6a4d"
+  },
+  "GenomeSeqScorer.cpp": {
+    "identical": true,
+    "misha": "20ab2af86e4e1f5a",
+    "pymisha": "20ab2af86e4e1f5a"
+  },
+  "GenomeSeqScorer.h": {
+    "identical": false,
+    "misha": "833f9acc9daa1c26",
+    "pymisha": "9919ed51a3cdd4d6"
+  },
+  "GenomeTrack.cpp": {
+    "identical": false,
+    "misha": "1a61f79d471e7222",
+    "pymisha": "d312ada5df574193"
+  },
+  "GenomeTrack.h": {
+    "identical": false,
+    "misha": "ab20d589af65ed3a",
+    "pymisha": "e24ccec4f5043d33"
+  },
+  "GenomeTrack1D.h": {
+    "identical": false,
+    "misha": "de07199c6d1a7275",
+    "pymisha": "20316cc996a5e4ab"
+  },
+  "GenomeTrackFixedBin.cpp": {
+    "identical": false,
+    "misha": "3469cf82e4d809f9",
+    "pymisha": "087f37ebf7c46007"
+  },
+  "GenomeTrackFixedBin.h": {
+    "identical": false,
+    "misha": "21efa4c299a87e14",
+    "pymisha": "c594accfebff68f8"
+  },
+  "GenomeTrackSparse.cpp": {
+    "identical": false,
+    "misha": "3844e0562b784467",
+    "pymisha": "172be69d6248752d"
+  },
+  "GenomeTrackSparse.h": {
+    "identical": false,
+    "misha": "7d1193c2f65cf9c4",
+    "pymisha": "ccc0ad188edf331c"
+  },
+  "GenomeUtils.cpp": {
+    "identical": true,
+    "misha": "c8b0d1113e0f6a55",
+    "pymisha": "c8b0d1113e0f6a55"
+  },
+  "GenomeUtils.h": {
+    "identical": true,
+    "misha": "b1957fb22332ea2d",
+    "pymisha": "b1957fb22332ea2d"
+  },
+  "HashFunc.h": {
+    "identical": true,
+    "misha": "2daafe4c0e61a4d8",
+    "pymisha": "2daafe4c0e61a4d8"
+  },
+  "IncrementalWilcox.cpp": {
+    "identical": true,
+    "misha": "72c3dd820b7923a3",
+    "pymisha": "72c3dd820b7923a3"
+  },
+  "IncrementalWilcox.h": {
+    "identical": true,
+    "misha": "fbf5b7ee4b67758d",
+    "pymisha": "fbf5b7ee4b67758d"
+  },
+  "KmerCounter.cpp": {
+    "identical": false,
+    "misha": "226f53b85a6aa3c2",
+    "pymisha": "3b8470a0083d31d7"
+  },
+  "KmerCounter.h": {
+    "identical": false,
+    "misha": "4e33046f72154a8c",
+    "pymisha": "c61f5552fc7f4b79"
+  },
+  "MaskUtils.h": {
+    "identical": true,
+    "misha": "afc4b60501747976",
+    "pymisha": "afc4b60501747976"
+  },
+  "MaskedBpCounter.cpp": {
+    "identical": true,
+    "misha": "a933bf958b8116d1",
+    "pymisha": "a933bf958b8116d1"
+  },
+  "MaskedBpCounter.h": {
+    "identical": true,
+    "misha": "bc285b43a96e413f",
+    "pymisha": "bc285b43a96e413f"
+  },
+  "MmapFile.h": {
+    "identical": true,
+    "misha": "adca921a2f225b60",
+    "pymisha": "adca921a2f225b60"
+  },
+  "PWMEditDistanceScorer.cpp": {
+    "identical": false,
+    "misha": "3229ed62dde9a386",
+    "pymisha": "0b01313cce750e5c"
+  },
+  "PWMEditDistanceScorer.h": {
+    "identical": false,
+    "misha": "76494c4309f4ec48",
+    "pymisha": "6c61a2e7df11ea65"
+  },
+  "PWMLseEditDistanceScorer.cpp": {
+    "identical": true,
+    "misha": "259d2eed913ff819",
+    "pymisha": "259d2eed913ff819"
+  },
+  "PWMLseEditDistanceScorer.h": {
+    "identical": true,
+    "misha": "416633338e08524c",
+    "pymisha": "416633338e08524c"
+  },
+  "PWMScorer.cpp": {
+    "identical": false,
+    "misha": "4d077ea1f6b92aff",
+    "pymisha": "7b2f7f55d27d8b7b"
+  },
+  "PWMScorer.h": {
+    "identical": false,
+    "misha": "0bb1f52e7f02db94",
+    "pymisha": "35db31ca817dfbee"
+  },
+  "RaList.h": {
+    "identical": true,
+    "misha": "eb760180486638aa",
+    "pymisha": "eb760180486638aa"
+  },
+  "Random.h": {
+    "identical": false,
+    "misha": "194022c733a5709c",
+    "pymisha": "1d47264d1ee3aebe"
+  },
+  "RandomShuffle.h": {
+    "identical": true,
+    "misha": "3c73f10710b6e3eb",
+    "pymisha": "3c73f10710b6e3eb"
+  },
+  "Segment.h": {
+    "identical": true,
+    "misha": "f23efc0d4c08689a",
+    "pymisha": "f23efc0d4c08689a"
+  },
+  "SegmentFinder.h": {
+    "identical": true,
+    "misha": "2d44a78d954e45a8",
+    "pymisha": "2d44a78d954e45a8"
+  },
+  "StratifiedMarkovModel.cpp": {
+    "identical": false,
+    "misha": "ba424e0911733c12",
+    "pymisha": "67522c8230befcb5"
+  },
+  "StratifiedMarkovModel.h": {
+    "identical": false,
+    "misha": "51c6e9fa9bba4e11",
+    "pymisha": "5b385b8ede07fc9b"
+  },
+  "StreamPercentiler.h": {
+    "identical": false,
+    "misha": "195b021e7a534596",
+    "pymisha": "1d683cc327c04f4a"
+  },
+  "StreamSampler.h": {
+    "identical": true,
+    "misha": "7591792b23a830c9",
+    "pymisha": "7591792b23a830c9"
+  },
+  "TGLException.cpp": {
+    "identical": true,
+    "misha": "cfd8e4ec1f60e24e",
+    "pymisha": "cfd8e4ec1f60e24e"
+  },
+  "TGLException.h": {
+    "identical": true,
+    "misha": "e4a1fddf699f620d",
+    "pymisha": "e4a1fddf699f620d"
+  },
+  "TrackIndex.cpp": {
+    "identical": false,
+    "misha": "53306b423b24424a",
+    "pymisha": "af046e956e6908bb"
+  },
+  "TrackIndex.h": {
+    "identical": false,
+    "misha": "f9ebfcc04d48e927",
+    "pymisha": "be617b58aeeba092"
+  },
+  "TrackIndex2D.cpp": {
+    "identical": false,
+    "misha": "c0aa32cdfe20a0ae",
+    "pymisha": "692e88ffa48a48e6"
+  },
+  "TrackIndex2D.h": {
+    "identical": false,
+    "misha": "5c6d5a86bb4edeed",
+    "pymisha": "df2556b472dc8278"
+  },
+  "config.h": {
+    "identical": true,
+    "misha": "f8a350b6f48635f9",
+    "pymisha": "f8a350b6f48635f9"
+  },
+  "port.h": {
+    "identical": true,
+    "misha": "d748800eefecae1d",
+    "pymisha": "d748800eefecae1d"
+  },
+  "util.h": {
+    "identical": false,
+    "misha": "ed411595ce71c5fc",
+    "pymisha": "e731f379d91f721d"
+  }
+}
