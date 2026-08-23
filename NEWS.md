@@ -1,3 +1,7 @@
+# misha 5.11.22
+
+* misha's C routines are now registered with R, so a call made with the wrong number of arguments is reported instead of silently running.
+
 # misha 5.11.21
 
 * `gtrack.attr.import(remove.others = TRUE)` no longer fails partway - leaving attributes applied to only the first track - when read-only attributes are set and several tracks are listed.

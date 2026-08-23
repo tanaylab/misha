@@ -36,7 +36,7 @@ test_that("indexed dense track with empty leading chrom reports correct bin_size
     # Pack with both chroms in the dest chrom order; chr1 will get length=0.
     misha:::.gcall(
         "gtrack_pack_per_chrom_to_indexed",
-        trackdir, c("chr1", "chr2"), "dense", misha:::.misha_env()
+        trackdir, c("chr1", "chr2"), "dense"
     )
     expect_true(file.exists(file.path(trackdir, "track.dat")))
     expect_true(file.exists(file.path(trackdir, "track.idx")))

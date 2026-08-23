@@ -3,6 +3,7 @@
 #endif
 #include <R.h>
 #include <R_ext/Rdynload.h>
+#include <R_ext/Visibility.h>
 #include <Rinternals.h>
 #include <stdlib.h>  // for NULL
 
@@ -54,6 +55,7 @@ extern "C" {
     extern SEXP gseqimport(SEXP, SEXP, SEXP);
     extern SEXP gseq_multifasta_import(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gseqread(SEXP, SEXP);
+    extern SEXP gseq_validate_index(SEXP, SEXP);
     extern SEXP gset_tracks_attrs(SEXP, SEXP, SEXP, SEXP);
     extern SEXP gsmooth(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP gtrack_2d_import(SEXP, SEXP, SEXP);
@@ -103,6 +105,8 @@ extern "C" {
     extern SEXP gtracksummary_multitask(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gwilcox(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);    
     extern SEXP C_revcomp(SEXP);
+    extern SEXP C_rev(SEXP);
+    extern SEXP C_comp(SEXP);
     extern SEXP C_grandom_genome(SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_pwm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_gseq_pwm_multitask(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -116,6 +120,8 @@ extern "C" {
     extern SEXP C_gseq_kmer_dist(SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_ggenome_implant(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
     extern SEXP C_intervals_coord_strings(SEXP, SEXP, SEXP);
+    extern SEXP C_register_filter(SEXP, SEXP, SEXP);
+    extern SEXP C_get_filter_info(SEXP);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -166,6 +172,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"gseqimport", (DL_FUNC)&gseqimport, 3},
     {"gseq_multifasta_import", (DL_FUNC)&gseq_multifasta_import, 5},
     {"gseqread", (DL_FUNC)&gseqread, 2},
+    {"gseq_validate_index", (DL_FUNC)&gseq_validate_index, 2},
     {"gset_tracks_attrs", (DL_FUNC)&gset_tracks_attrs, 4},
     {"gsmooth", (DL_FUNC)&gsmooth, 8},
     {"gtrack_2d_import", (DL_FUNC)&gtrack_2d_import, 3},
@@ -215,6 +222,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"gtracksummary_multitask", (DL_FUNC)&gtracksummary_multitask, 5},
     {"C_gwilcox", (DL_FUNC)&C_gwilcox, 10},    
     {"C_revcomp", (DL_FUNC)&C_revcomp, 1},
+    {"C_rev", (DL_FUNC)&C_rev, 1},
+    {"C_comp", (DL_FUNC)&C_comp, 1},
     {"C_grandom_genome", (DL_FUNC)&C_grandom_genome, 5},
     {"C_gseq_pwm", (DL_FUNC)&C_gseq_pwm, 16},
     {"C_gseq_pwm_multitask", (DL_FUNC)&C_gseq_pwm_multitask, 17},
@@ -227,11 +236,19 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_gseq_kmer_dist", (DL_FUNC)&C_gseq_kmer_dist, 4},
     {"C_ggenome_implant", (DL_FUNC)&C_ggenome_implant, 7},
     {"C_intervals_coord_strings", (DL_FUNC)&C_intervals_coord_strings, 3},
+    {"C_register_filter", (DL_FUNC)&C_register_filter, 3},
+    {"C_get_filter_info", (DL_FUNC)&C_get_filter_info, 1},
     {NULL, NULL, 0}
 };
 
-void R_init_misha(DllInfo *dll)
+// R looks up the initialiser by the literal name "R_init_misha", so the definition
+// must have C linkage - a C++-mangled one is never found and registration silently
+// never happens.
+extern "C" void attribute_visible R_init_misha(DllInfo *dll)
 {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
+    // Symbols stay reachable by name (.Call("gextract", ...)); only the arity check and
+    // the restriction to the table above are switched on. R_forceSymbols() is
+    // deliberately not set: every call site in R/ names its routine with a string.
     R_useDynamicSymbols(dll, FALSE);
 }
