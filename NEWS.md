@@ -1,3 +1,7 @@
+# misha 5.11.21
+
+* **Bug fix:** every track-expression scan evaluated the expression once over an uninitialised buffer before reading any data, to learn whether it returns a vector. The result was discarded, but an expression that errors or warns on particular values could fail for reasons unrelated to the user's data, and the outcome was not reproducible. The probe now sees `NaN`, which every track expression already handles.
+
 # misha 5.11.20
 
 * **Crash fix:** `gseq.pwm()` leaked one R protection-stack slot per call, printing "Warning: stack imbalance in '<-'" every time and killing a loop of ~50000 calls with "protect(): protection stack overflow". Results were never affected.
