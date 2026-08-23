@@ -234,6 +234,12 @@
             }
         }
 
+        # Seed the map from the current track list before touching it. Starting
+        # from character(0) when the map has never been built (it is only built
+        # lazily by the dataset API) drops every pre-existing track, so a single
+        # gtrack.create() would leave gtrack.dataset() returning NA for all the
+        # tracks that were already there.
+        .gdb.ensure_dataset_maps()
         track_db <- get("GTRACK_DATASET", envir = .misha)
         if (is.null(track_db)) {
             track_db <- character(0)
@@ -357,6 +363,9 @@
             db <- get("GROOT", envir = .misha)
         }
 
+        # See .gdb.add_track(): seed the map so saving one intervals set does
+        # not erase every other set from GINTERVALS_DATASET.
+        .gdb.ensure_dataset_maps()
         intervals_db <- get("GINTERVALS_DATASET", envir = .misha)
         if (is.null(intervals_db)) {
             intervals_db <- character(0)

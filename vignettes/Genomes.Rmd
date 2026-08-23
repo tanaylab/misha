@@ -8,6 +8,12 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
+# Every code chunk in this vignette is eval = FALSE on purpose, and none of
+# them can be turned on: they either download a multi-GB genome assembly from
+# UCSC (gdb.create, gdb.create_genome, gdb.build_genome, gdb.install_intervals)
+# or fetch/point at an external binary (gtfToGenePred, gff3ToGenePred). None of
+# that is possible during a package build or on CRAN. Everything here is
+# verified by the test suite instead - see tests/testthat/test-genome-build-*.R.
 knitr::opts_chunk$set(
     collapse = TRUE,
     comment = "#>"
