@@ -32,7 +32,7 @@
     gtrack.num.chunks = 0, # Number of chunks (0 = auto)
 
     # Parallelization
-    gmax.processes = NULL, # Auto-calculated: 70% of cores
+    gmax.processes = NULL, # Auto-calculated: min(32, 70% of cores)
     gmax.processes2core = 2, # Max processes per core
     gmin.scope4process = 10000, # Min genomic scope per parallel process
     gmultitasking = TRUE, # Enable/disable multitasking

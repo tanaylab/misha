@@ -401,7 +401,14 @@ public:
 
 	bool track_exists(const char *track_name);
 
-	// returns the number of parallel processes that would be open by distribute_task or 0 if scope is empty
+	// Returns the number of parallel processes that would be opened by distribute_task, or 0 if
+	// the scope is empty.
+	//
+	// A return value of 1 means the whole scope landed in a single shard: distribute_task would
+	// fork exactly one kid, which is pure overhead (fork + shared memory + wait, no parallelism).
+	// Callers should treat 1 as "run the scope in this process" -- see the call sites for the two
+	// shapes this takes. Do NOT fold that test in here by returning 0: the chromosome-path callers
+	// read 0 as "empty scope" and would start returning NULL for single-chromosome scopes.
 	int prepare4multitasking(SEXP track_exprs, GIntervalsFetcher1D *scope1d, GIntervalsFetcher2D *scope2d, SEXP iterator_policy, SEXP band = R_NilValue,
 							 bool allow_multichrom_1d_range_split = false);
 

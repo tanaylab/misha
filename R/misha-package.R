@@ -19,7 +19,7 @@
 #' Note: Independent of gmax.data.size (different purposes). \cr gmax.mem.usage
 #' \tab 10000000 \tab Maximal memory consumption of all child \cr \tab \tab
 #' processes in KB before the limiting algorithm is invoked. \cr
-#' gmax.processes \tab AUTO \tab Auto-configured to 70\% of CPU cores. \cr \tab
+#' gmax.processes \tab AUTO \tab Auto-configured to min(32, 70\% of CPU cores). \cr \tab
 #' \tab Maximal number of processes for multitasking. \cr gmax.processes2core
 #' \tab 2 \tab Maximal number of processes per CPU core for multitasking \cr
 #' gseq.extract.probe.usec \tab 100 \tab gseq.extract times its first reads \cr

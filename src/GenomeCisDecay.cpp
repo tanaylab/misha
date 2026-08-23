@@ -94,10 +94,17 @@ SEXP C_gcis_decay(SEXP _expr, SEXP _breaks, SEXP _src_intervals, SEXP _domain_in
 		scope->sort();
 		scope->verify_no_overlaps(iu.get_chromkey());
 
-		if (iu.get_multitasking()) {
-			if (!iu.prepare4multitasking(_expr, NULL, scope.get(), _iterator_policy))
-				rreturn(R_NilValue);
+		int num_kids = 0;
 
+		if (iu.get_multitasking()) {
+			num_kids = iu.prepare4multitasking(_expr, NULL, scope.get(), _iterator_policy);
+			if (!num_kids)
+				rreturn(R_NilValue);
+		}
+
+		// num_kids == 1 means the whole scope went to one kid: forking it buys no parallelism,
+		// so take the serial branch below instead.
+		if (num_kids > 1) {
 			if (iu.distribute_task(2 * bin_finder.get_numbins() * sizeof(uint64_t), 0)) { // child process
 				uint64_t *distribution = (uint64_t *)allocate_res(0);
 				uint64_t *intra_domain_dist = distribution;

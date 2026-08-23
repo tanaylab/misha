@@ -18,8 +18,15 @@
 
     # Set gmax.processes based on cores:
     # - Use 70% of cores for parallelism while leaving headroom for system
+    # - Cap at 32. Past that the fork + shared-memory + result-merge cost per worker
+    #   outweighs the extra parallelism: on a 128-core host, 70% of cores (89 workers)
+    #   measured slower than 32 on every workload tried, and up to 3x slower on
+    #   medium-sized scans. Cold-NFS whole-genome scans, where multitasking helps most,
+    #   saturate at ~32 workers too. The cap only binds above 46 cores, so smaller hosts
+    #   keep the 70% rule unchanged. Raise the option by hand for workloads that scale
+    #   further.
     # - Floor at 1 so single-core / undetectable-core hosts don't get 0.
-    options(gmax.processes = max(1L, as.integer(num_cores * 0.7)))
+    options(gmax.processes = max(1L, min(32L, as.integer(num_cores * 0.7))))
     options(gmax.processes2core = 2)
 
     # Auto-configure gmax.data.size based on system memory and cores
