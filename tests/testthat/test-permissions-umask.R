@@ -216,6 +216,14 @@ test_that("the process umask is restored when a write errors inside the scope", 
 })
 
 test_that("the process umask is restored when a wrapped expression is interrupted", {
+    # Raising a real SIGINT is only meaningful in a process whose interrupt
+    # handling is R's own. testthat's parallel runner executes each file in a
+    # callr subprocess that installs its own, so the signal does not surface as
+    # an R interrupt condition there and this test fails for a reason that has
+    # nothing to do with the umask. It passes serially; do not "fix" it by
+    # weakening the assertions.
+    skip_if(testthat::is_parallel(), "sends a real SIGINT; meaningless in a parallel worker")
+
     local_umask("0022")
     before <- as.character(Sys.umask(NA))
     inside <- NA_character_
