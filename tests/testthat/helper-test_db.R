@@ -60,15 +60,23 @@ shared_test_db_path <- function(indexed = getOption("gmulticontig.indexed_format
     if (!dir.create(dst, recursive = TRUE, showWarnings = FALSE) && !dir.exists(dst)) {
         stop(sprintf("test db overlay: cannot create %s", dst), call. = FALSE)
     }
-    # all.files = FALSE on purpose: the only hidden entries at this level are
-    # `.trash.*` siblings left by .gdb.trash()'s async unlink, which misha's
-    # scanner ignores and which there is no reason to carry into an overlay.
-    entries <- setdiff(list.files(src), skip)
+    # Hidden entries matter (a big interval set is unloadable without its
+    # `.meta`), except `.trash.*` siblings - those are the debris .gdb.trash()'s
+    # async unlink left behind, which misha's scanner ignores anyway.
+    entries <- setdiff(list.files(src, all.files = TRUE, no.. = TRUE), skip)
+    entries <- entries[!startsWith(entries, ".trash.")]
     if (!length(entries)) {
         return(invisible(0L))
     }
     paths <- file.path(src, entries)
-    descend <- dir.exists(paths) & !grepl(".", entries, fixed = TRUE)
+    # Namespace directories, plus interval-set directories: those are only a
+    # couple of dozen chromosome files each, and gintervals.convert_to_indexed()
+    # writes an index into an existing set in place - through the symlink, into
+    # lab data, if the set were linked rather than mirrored. Track directories
+    # stay symlinked; they hold the 106k files, and nothing in the suite
+    # rewrites a fixture track in place.
+    descend <- dir.exists(paths) &
+        (!grepl(".", entries, fixed = TRUE) | grepl("\\.interv$", entries))
 
     n <- 0L
     if (any(!descend)) {
@@ -127,11 +135,16 @@ build_test_db_overlay <- function(path, source_db = shared_test_db_path(), top_l
     # and export fixtures, the vtracks file): link it.
     to_link <- setdiff(entries, to_copy)
 
-    if (length(to_copy) && !all(file.copy(file.path(source_db, to_copy), file.path(path, to_copy)))) {
-        stop(sprintf(
-            "build_test_db_overlay(): failed to copy %s into %s (out of space?)",
-            paste(to_copy, collapse = ", "), path
-        ), call. = FALSE)
+    if (length(to_copy)) {
+        if (!all(file.copy(file.path(source_db, to_copy), file.path(path, to_copy)))) {
+            stop(sprintf(
+                "build_test_db_overlay(): failed to copy %s into %s (out of space?)",
+                paste(to_copy, collapse = ", "), path
+            ), call. = FALSE)
+        }
+        # file.copy preserves the mode, and the indexed database ships
+        # chrom_sizes.txt read-only. The overlay's copy has to be writable.
+        Sys.chmod(file.path(path, to_copy), "0644", use_umask = FALSE)
     }
     if (length(to_link) && !all(file.symlink(file.path(source_db, to_link), file.path(path, to_link)))) {
         stop(sprintf("build_test_db_overlay(): failed to link %s into %s", paste(to_link, collapse = ", "), path),
