@@ -36,3 +36,4 @@
 ^tests/testthat/fixtures/tiny-hub-groot/\.db\.cache$
 ^tests/testthat/fixtures/tiny-hub-groot/\.ro_attributes$
 ^\.worktrees$
+^\.superpowers$
