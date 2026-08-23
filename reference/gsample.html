@@ -82,8 +82,8 @@ implicitly based on track expression.</p></dd>
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>This function returns a sample of the specified size from the values of
 track expression. If 'n' is less than the total number of values, the data
-is randomly sampled. The seed of the pseudo-random generator can be
-controlled through 'grnd.seed' option.</p>
+is randomly sampled. Call <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> before this function to make
+the sample reproducible.</p>
 <p>If 'n' is higher than the total number of values, all values are returned
 (yet reshuffled).</p>
     </div>

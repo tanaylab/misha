@@ -62,7 +62,7 @@ glookup(
 ## Value
 
 If 'intervals.set.out' is 'NULL' a set of intervals with additional
-'value' and 'columnID' columns.
+'value' and 'intervalID' columns.
 
 ## Details
 
@@ -94,7 +94,7 @@ The order inside the result might not be the same as the order of
 intervals. Use 'intervalID' column to refer to the index of the original
 interval from the supplied 'intervals'.
 
-If 'intervals.set.out' is not 'NULL' the result (without 'columnID'
+If 'intervals.set.out' is not 'NULL' the result (without 'intervalID'
 column) is saved as an intervals set. Use this parameter if the result
 size exceeds the limits of the physical memory.
 

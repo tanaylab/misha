@@ -67,6 +67,29 @@
   and the other `intervals.set.out` arguments now reject a non-string
   set name with a message that names the argument order, instead of
   failing with “the condition has length \> 1”.
+- Documentation: the query functions’ man pages now carry a shared “NaN
+  values” section stating what each one does with a bin the track has no
+  data for -
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  keeps it,
+  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md)
+  counts it,
+  [`gdist()`](https://tanaylab.github.io/misha/reference/gdist.md)/[`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)/[`gscreen()`](https://tanaylab.github.io/misha/reference/gscreen.md)
+  drop it, and
+  [`gsegment()`](https://tanaylab.github.io/misha/reference/gsegment.md)
+  spans it.
+- `gtrack.export()` to bigWig now names the conda package to install
+  when the UCSC converter is missing, and `bedGraphToBigWig` is declared
+  in SystemRequirements alongside `samtools`. UCSC’s prebuilt binaries
+  need glibc 2.34 or newer, so on older distributions the conda build is
+  the one that works.
+- Documentation:
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)’s
+  extra column is named `intervalID`, not `columnID`; and
+  [`gsample()`](https://tanaylab.github.io/misha/reference/gsample.md)/[`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)
+  say to use [`set.seed()`](https://rdrr.io/r/base/Random.html) for a
+  reproducible sample, replacing a reference to the `grnd.seed` option,
+  which no longer exists.
 
 ## misha 5.11.19
 

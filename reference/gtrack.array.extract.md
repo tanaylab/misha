@@ -40,7 +40,7 @@ gtrack.array.extract(
 ## Value
 
 If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
-additional columns for 'Array' track column values and 'columnID'.
+additional columns for 'Array' track column values and 'intervalID'.
 
 ## Details
 

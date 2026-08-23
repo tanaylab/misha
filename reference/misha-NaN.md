@@ -1,41 +1,9 @@
-# Calculates summary statistics of track expression
+# How misha treats NaN values
 
-Calculates summary statistics of track expression.
-
-## Usage
-
-``` r
-gsummary(expr = NULL, intervals = NULL, iterator = NULL, band = NULL)
-```
-
-## Arguments
-
-- expr:
-
-  track expression
-
-- intervals:
-
-  genomic scope for which the function is applied
-
-- iterator:
-
-  track expression iterator. If 'NULL' iterator is determined implicitly
-  based on track expression.
-
-- band:
-
-  track expression band. If 'NULL' no band is used.
-
-## Value
-
-An array that represents summary statistics.
-
-## Details
-
-This function returns summary statistics of a track expression: total
-number of bins, total number of bins whose value is NaN, min, max, sum,
-mean and standard deviation of the values.
+Genomic tracks are sparse: a bin with no underlying data evaluates to
+`NaN`, not to zero. The query functions do not all treat those bins the
+same way, and the difference changes the answer rather than just the row
+count.
 
 ## NaN values
 
@@ -47,9 +15,10 @@ function:
   **keeps** `NaN` rows, so the result has one row per iterator interval
   whether or not the track covered it.
 
-- `gsummary` **counts** them and reports the count as the "NaN
-  intervals" element, while the statistics themselves are computed over
-  the non-`NaN` values only.
+- [`gsummary`](https://tanaylab.github.io/misha/reference/gsummary.md)
+  **counts** them and reports the count as the "NaN intervals" element,
+  while the statistics themselves are computed over the non-`NaN` values
+  only.
 
 - [`gdist`](https://tanaylab.github.io/misha/reference/gdist.md),
   [`gquantiles`](https://tanaylab.github.io/misha/reference/gquantiles.md)
@@ -75,20 +44,3 @@ collapsing them with `ifelse(is.na(x), 0, x)` turns "no data here" into
 a measured value of zero. Where that is genuinely what you want, note
 that it also changes every mean, quantile and distribution computed
 downstream.
-
-## See also
-
-[`gintervals.summary`](https://tanaylab.github.io/misha/reference/gintervals.summary.md),
-[`gbins.summary`](https://tanaylab.github.io/misha/reference/gbins.summary.md)
-
-## Examples
-
-``` r
-
-gdb.init_examples()
-gsummary("rects_track")
-#> Total intervals   NaN intervals             Min             Max             Sum 
-#>         1600.00            0.00            3.00       141495.00     85801800.00 
-#>            Mean         Std dev 
-#>        53626.12        39867.94 
-```

@@ -109,6 +109,36 @@ set. Use this parameter if the result size exceeds the limits of the
 physical memory.</p>
     </div>
     <div class="section level2">
+    <h2 id="nan-values">NaN values<a class="anchor" aria-label="anchor" href="#nan-values"></a></h2>
+
+
+
+<p>A track expression evaluates to <code>NaN</code> wherever the iterator produces a bin
+the track has no data for. What happens next depends on the function:</p>
+<ul><li><p><code><a href="gextract.html">gextract</a></code> <strong>keeps</strong> <code>NaN</code> rows, so the result has one
+    row per iterator interval whether or not the track covered it.</p></li>
+<li><p><code><a href="gsummary.html">gsummary</a></code> <strong>counts</strong> them and reports the count as the
+    "NaN intervals" element, while the statistics themselves are computed
+    over the non-<code>NaN</code> values only.</p></li>
+<li><p><code><a href="gdist.html">gdist</a></code>, <code><a href="gquantiles.html">gquantiles</a></code> and
+    <code><a href="gscreen.html">gscreen</a></code> <strong>drop</strong> them: <code>NaN</code> bins are not counted into any
+    distribution bin, do not contribute to a percentile, and never satisfy a
+    screening condition - including a condition that would be true of every
+    real value.</p></li>
+<li><p><code>gsegment</code> <strong>spans</strong> them: a <code>NaN</code> bin contributes no
+    evidence to the test that places a boundary, but it still falls inside
+    whichever segment surrounds it, so the returned segments tile the scope
+    continuously rather than skipping the gaps.</p></li>
+</ul><p>So on 20 bins of which 7 are <code>NaN</code>, <code>gextract</code> returns 20 rows,
+<code>gsummary</code> reports 20 total and 7 <code>NaN</code>, and <code>gdist</code> counts 13; and on a
+300 kb scope where 120 of 300 bins are <code>NaN</code>, <code>gsegment</code> still returns
+segments covering the full 300 kb.</p>
+<p>The practical consequence is that <code>NaN</code> and zero are different, and
+collapsing them with <code>ifelse(is.na(x), 0, x)</code> turns "no data here" into a
+measured value of zero. Where that is genuinely what you want, note that it
+also changes every mean, quantile and distribution computed downstream.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="gscreen.html">gscreen</a></code>, <code><a href="gwilcox.html">gwilcox</a></code></p></div>
     </div>
