@@ -358,11 +358,20 @@ SEXP gsmooth(SEXP _track, SEXP _expr, SEXP _winsize, SEXP _weight_thr, SEXP _smo
 		GIntervals all_genome_intervs;
 		iu.get_all_genome_intervs(all_genome_intervs);
 
-		if (iu.get_multitasking() && !iu.prepare4multitasking(_expr, &all_genome_intervs, NULL, _iterator_policy))
-			rreturn(R_NilValue);
+		int num_kids = 0;
 
-		if (!iu.get_multitasking() || iu.distribute_task(0, 0)) {  // child process
-			GIntervalsFetcher1D &scanner_intervals1d = iu.get_multitasking() ? *iu.get_kid_intervals1d() : all_genome_intervs;
+		if (iu.get_multitasking()) {
+			num_kids = iu.prepare4multitasking(_expr, &all_genome_intervs, NULL, _iterator_policy);
+			if (!num_kids)
+				rreturn(R_NilValue);
+		}
+
+		// A single shard is the whole scope, so forking one kid buys no parallelism and
+		// only costs a fork plus a wait: run it in this process instead.
+		bool multitask = num_kids > 1;
+
+		if (!multitask || iu.distribute_task(0, 0)) {  // worker process
+			GIntervalsFetcher1D &scanner_intervals1d = multitask ? *iu.get_kid_intervals1d() : all_genome_intervs;
 			Smoother *smoother = NULL;
 
 			// Constructed AFTER the fork: TrackExprScanner opens the genome sequence eagerly on an

@@ -38,8 +38,15 @@ calculate_optimal_gmax_data_size <- function(sys_mem) {
         num_cores <- 1
     }
 
-    # Estimate max processes that will be used
-    # Auto-configured to 70% of cores
+    # Estimate max processes that will be used.
+    #
+    # Deliberately NOT getOption("gmax.processes"): this stays at the uncapped 70%
+    # of cores even though .onLoad now caps gmax.processes at 32. Reading the capped
+    # value here would raise gmax.data.size on high-core hosts and change which calls
+    # start sub-sampling, which is a separate decision. Keeping the old divisor leaves
+    # gmax.data.size byte-for-byte what it was and makes the memory budget
+    # (gmax.processes * gmax.data.size <= 70% of RAM) strictly more conservative,
+    # since the real process count is now lower.
     estimated_processes <- as.integer(num_cores * 0.7)
     if (estimated_processes < 1) {
         estimated_processes <- 1

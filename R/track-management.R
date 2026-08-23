@@ -410,6 +410,14 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
     # Clean up empty parent directories from source
     .cleanup_empty_dirs(dirname(src_dir))
 
+    # The on-disk contents of both directories changed: src_dir no longer
+    # exists, dest_dir now holds a possibly differently-formatted track.
+    # Drop the process-static index-cache entries keyed by those paths so
+    # readers don't route through the previous occupant's layout (a stale
+    # entry makes gtrack.info() report the old track's type and gextract
+    # open the wrong files).
+    .gdb.invalidate_dir_cache(c(src_dir, dest_dir))
+
     # Update cache
     .gdb.rm_track(srcname)
     .gdb.add_track(destname, src_db)
@@ -794,9 +802,13 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     for (item in contents) {
         if (!file.copy(item, dest_dir, recursive = TRUE, copy.mode = TRUE)) {
             unlink(dest_dir, recursive = TRUE)
+            .gdb.invalidate_dir_cache(dest_dir)
             stop(sprintf("Failed to copy %s into %s", item, dest_dir), call. = FALSE)
         }
     }
+    # dest_dir's layout is whatever we just copied in; a cache entry left
+    # over from a previous track at this path would misroute reads.
+    .gdb.invalidate_dir_cache(dest_dir)
 }
 
 # Given a per-chrom filename and the destination's chrom list, return the

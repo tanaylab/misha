@@ -105,6 +105,12 @@
                 file.rename(tmpfilename, path)
             }
             unlink(tmpfilename, recursive = TRUE)
+            # Whatever lives at `path` now (a flat file on success, the
+            # restored big set on failure) is not what a cached per-set
+            # index describes. Drop it. Invalidate both the GWD-derived
+            # path used above and the canonical, dataset-aware key that
+            # the C++ readers build.
+            .gdb.invalidate_dir_cache(unique(c(path, .intervals_dir(intervals.set))))
         }
     )
 }
@@ -142,6 +148,10 @@
                 assign("GINTERVS", gintervs, envir = .misha)
             }
             unlink(tmpfilename, recursive = TRUE)
+            # A freshly written big set (indexed or per-chromosome) now sits
+            # at `path`; any index cached from a previous incarnation of this
+            # set describes different offsets. Drop it.
+            .gdb.invalidate_dir_cache(unique(c(path, .intervals_dir(intervals.set))))
         }
     )
 }

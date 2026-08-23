@@ -84,6 +84,14 @@ const string rdb::TRACK_FILE_EXT = ".track";
 const string rdb::INTERV_FILE_EXT = ".interv";
 
 const int64_t        RdbInitializer::LAUNCH_DELAY = 10; // in msec
+// Upper bound (in msec) on the delay the LAST kid waits before starting work.
+// LAUNCH_DELAY * (num_planned_kids - 1) used to be paid in full, which is O(N) in
+// the fleet size: 89 kids meant the last one slept ~0.9 sec doing nothing. The
+// stagger is spread over this budget instead, so its shape is preserved (kids
+// still come up one after another rather than all at once) while its total cost
+// stops growing with the number of kids. 150 msec == the old cost at 16 kids,
+// i.e. the default fleet size is unaffected.
+const int64_t        RdbInitializer::MAX_LAUNCH_STAGGER = 150; // in msec
 const int64_t        RdbInitializer::MEM_SYNC_DELAY = 100;
 const int64_t        RdbInitializer::REPORT_INTERVAL_DELAY = 3000;
 uint64_t               RdbInitializer::s_shm_size;
@@ -96,6 +104,7 @@ pid_t                RdbInitializer::s_parent_pid = 0;
 sem_t               *RdbInitializer::s_shm_sem = SEM_FAILED;
 sem_t               *RdbInitializer::s_alloc_suspend_sem = SEM_FAILED;
 int                  RdbInitializer::s_kid_index;
+unsigned             RdbInitializer::s_num_planned_kids = 0;
 vector<RdbInitializer::LiveStat>     RdbInitializer::s_running_pids;
 // Keys already used by rdb::once_per_call() during the current top-level .Call.
 // Cleared by the outermost RdbInitializer.
@@ -126,6 +135,7 @@ RdbInitializer::RdbInitializer()
 		s_alloc_suspend_sem = SEM_FAILED;
 		s_shm = (Shm *)MAP_FAILED;
 		s_kid_index = 0;
+		s_num_planned_kids = 0;
 		s_running_pids.clear();
 		s_once_per_call_keys.clear();
 
@@ -246,6 +256,8 @@ void RdbInitializer::prepare4multitasking(uint64_t res_const_size, uint64_t res_
 	if (num_planned_kids > MAX_KIDS) 
 		verror("Too many child processes");
 
+	s_num_planned_kids = num_planned_kids;
+
 	if (s_shm_sem == SEM_FAILED) {
 		sem_unlink(get_shm_sem_name().c_str()); // remove a semaphore if it was somehow not cleaned from the previous invocation of the lib
 		if ((s_shm_sem = sem_open(get_shm_sem_name().c_str(), O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED)
@@ -364,12 +376,33 @@ pid_t RdbInitializer::launch_process()
 		s_shm->mem_usage[s_kid_index] += delta_mem_usage;
 		s_shm->total_mem_usage += delta_mem_usage;
 
-		// set delay for child execution to prevent high initial bulk allocations
-		struct timespec req;
-		rdb::set_rel_timeout(LAUNCH_DELAY, req);
-		for (int i = 0; i < s_kid_index; ++i) {
+		// Stagger the kids' start so they don't all hit cold storage and bulk-allocate
+		// at the same instant. Kid k waits (k / (N-1)) of MAX_LAUNCH_STAGGER, so the ramp
+		// keeps its shape but the total never exceeds MAX_LAUNCH_STAGGER regardless of
+		// the fleet size. Below MAX_LAUNCH_STAGGER / LAUNCH_DELAY kids this is exactly the
+		// old LAUNCH_DELAY-per-preceding-kid behaviour.
+		int64_t stagger_msec = LAUNCH_DELAY * (int64_t)s_kid_index;
+
+		if (s_num_planned_kids > 1) {
+			int64_t full_stagger = LAUNCH_DELAY * (int64_t)(s_num_planned_kids - 1);
+
+			if (full_stagger > MAX_LAUNCH_STAGGER)
+				stagger_msec = (MAX_LAUNCH_STAGGER * (int64_t)s_kid_index) / (int64_t)(s_num_planned_kids - 1);
+		}
+
+		// s_kid_index keeps counting across successive distribute_task() calls inside one
+		// .Call, so clamp rather than trust the ratio.
+		stagger_msec = min(stagger_msec, MAX_LAUNCH_STAGGER);
+
+		// sleep in slices so that Ctrl-C stays responsive
+		while (stagger_msec > 0) {
+			int64_t slice = min(stagger_msec, LAUNCH_DELAY);
+			struct timespec req;
+
+			rdb::set_rel_timeout(slice, req);
 			nanosleep(&req, NULL);
 			check_interrupt();
+			stagger_msec -= slice;
 		}
 	}
 

@@ -218,3 +218,128 @@ test_that("explicit cache invalidation is exposed and idempotent", {
     expect_silent(misha:::.gdb.invalidate_dir_cache("/no/such/dir"))
     expect_silent(misha:::.gdb.invalidate_dir_cache(c(tempdir(), tempdir())))
 })
+
+# --- Mutation points other than rm/create ------------------------------------
+#
+# Any R-level operation that replaces the contents of a track or interval-set
+# directory has to drop the cached index keyed by that path. The tests below
+# each reproduce a confirmed wrong answer that appears when the corresponding
+# .gdb.invalidate_dir_cache() call is removed.
+
+test_that("gtrack.mv invalidates the cache of both source and destination", {
+    local_db_state()
+    test_db <- build_indexed_test_db()
+    withr::defer(unlink(test_db, recursive = TRUE))
+    gsetroot(test_db)
+
+    ivs <- make_sparse_data(n = 190L)
+    vals <- seq_len(nrow(ivs)) * 1.0
+    gtrack.create_dense("mv_dense", "d", ivs, vals, binsize = 200L, defval = NaN)
+    gtrack.create_sparse("mv_sparse", "s", ivs, vals)
+
+    expect_equal(gtrack.info("mv_dense")$type, "dense")
+    expect_equal(gtrack.info("mv_sparse")$type, "sparse")
+
+    # Move the sparse track onto the name (and directory) the dense track
+    # occupied. Without invalidation the cached index from "mv_dense" is
+    # reused for the new occupant of that path: gtrack.info() answers
+    # "dense" and gextract() errors with a bin-count mismatch.
+    gtrack.mv("mv_dense", "mv_moved")
+    gtrack.mv("mv_sparse", "mv_dense")
+
+    expect_equal(gtrack.info("mv_dense")$type, "sparse")
+    expect_equal(gtrack.info("mv_moved")$type, "dense")
+    ext <- gextract("mv_dense",
+        intervals = data.frame(chrom = "chr1", start = 0L, end = 5000L),
+        iterator = 200L
+    )
+    expect_true(nrow(ext) > 0L)
+})
+
+test_that("gintervals.update big->small->big invalidates the bigset index", {
+    local_db_state()
+    test_db <- build_indexed_test_db()
+    withr::defer(unlink(test_db, recursive = TRUE))
+    gsetroot(test_db)
+
+    withr::local_options(
+        gmulticontig.indexed_format = TRUE,
+        gmultitasking = FALSE
+    )
+
+    mk <- function(chrom, n, off = 0L, w = 20L, step = 100L) {
+        s <- as.integer(off + step * seq_len(n) - step)
+        gintervals(chrom, s, s + w)
+    }
+
+    # A gradient track so a summary over the set depends on which intervals
+    # the C++ iterator actually visits.
+    grad_ivs <- rbind(
+        mk("chr1", 190L, step = 100L, w = 90L),
+        mk("chr2", 140L, step = 100L, w = 90L)
+    )
+    gtrack.create_dense("bigset_grad", "g", grad_ivs,
+        seq_len(nrow(grad_ivs)) * 1.0,
+        binsize = 100L, defval = NaN
+    )
+
+    # Force the set to be a big set that is too large to load into R, so
+    # reads go through GIntervalsBigSet1D (the class that caches the index)
+    # rather than the fresh-load path used for small sets.
+    withr::local_options(gbig.intervals.size = 50, gmax.data.size = 20)
+
+    gintervals.save("bigset_upd", rbind(mk("chr1", 60L), mk("chr2", 15L)))
+    expect_true(misha:::.gintervals.is_indexed_bigset("bigset_upd"))
+    first <- gsummary("bigset_grad", intervals = "bigset_upd", iterator = "bigset_upd")
+    expect_equal(as.numeric(first[1]), 75)
+
+    # Shrink below the big-set threshold: .gintervals.big2small replaces the
+    # directory with a flat file.
+    gintervals.update("bigset_upd", NULL, chrom = "chr1")
+    expect_false(misha:::.gintervals.is_bigset("bigset_upd"))
+
+    # Grow back above the threshold: .gintervals.small2big writes a *new*
+    # indexed big set at the same path, with different offsets. Without
+    # invalidation the first read below fails with "unknown input format"
+    # because the stale index seeks to lifecycle-1 offsets in the new
+    # intervals.dat.
+    gintervals.update("bigset_upd", mk("chr1", 80L, off = 5000L, w = 33L), chrom = "chr1")
+    expect_true(misha:::.gintervals.is_indexed_bigset("bigset_upd"))
+
+    second <- gsummary("bigset_grad", intervals = "bigset_upd", iterator = "bigset_upd")
+    expect_equal(as.numeric(second[1]), 95)
+})
+
+test_that("gtrack.copy invalidates the destination's cached index", {
+    local_db_state()
+    test_db <- build_indexed_test_db()
+    withr::defer(unlink(test_db, recursive = TRUE))
+    gsetroot(test_db)
+
+    ivs <- make_sparse_data(n = 190L)
+    vals <- seq_len(nrow(ivs)) * 1.0
+    gtrack.create_dense("cp_dense", "d", ivs, vals, binsize = 200L, defval = NaN)
+    gtrack.create_sparse("cp_sparse", "s", ivs, vals)
+
+    # Read the dense track so its index is cached.
+    expect_true(nrow(gextract("cp_dense",
+        intervals = data.frame(chrom = "chr1", start = 0L, end = 5000L),
+        iterator = 200L
+    )) > 0L)
+
+    # Another process (a sibling R session, a shell rm -rf) removes the track
+    # directory. This session's cache still holds the entry for that path.
+    dense_dir <- misha:::.track_dir("cp_dense")
+    system(sprintf("rm -rf %s", shQuote(dense_dir)))
+    expect_false(dir.exists(dense_dir))
+
+    # Copying a differently-shaped track onto the same path must not be read
+    # through the stale entry.
+    gtrack.copy("cp_sparse", "cp_dense", overwrite = TRUE)
+    expect_equal(gtrack.info("cp_dense")$type, "sparse")
+    ext <- gextract("cp_dense",
+        intervals = data.frame(chrom = "chr1", start = 0L, end = 5000L),
+        iterator = 200L
+    )
+    expect_true(nrow(ext) > 0L)
+})
