@@ -31,7 +31,7 @@
 #' Use 'intervalID' column to refer to the index of the original interval from
 #' the supplied 'intervals'.
 #'
-#' If 'intervals.set.out' is not 'NULL' the result (without 'columnID' column)
+#' If 'intervals.set.out' is not 'NULL' the result (without 'intervalID' column)
 #' is saved as an intervals set. Use this parameter if the result size exceeds
 #' the limits of the physical memory.
 #'
@@ -51,7 +51,7 @@
 #' @param intervals.set.out intervals set name where the function result is
 #' optionally outputted
 #' @return If 'intervals.set.out' is 'NULL' a set of intervals with additional
-#' 'value' and 'columnID' columns.
+#' 'value' and 'intervalID' columns.
 #' @seealso \code{\link{gtrack.lookup}}, \code{\link{gextract}},
 #' \code{\link{gpartition}}, \code{\link{gdist}}
 #' @keywords ~lookup ~extract
@@ -138,8 +138,8 @@ glookup <- function(lookup_table = NULL, ..., intervals = NULL, include.lowest =
 #'
 #' This function returns a sample of the specified size from the values of
 #' track expression. If 'n' is less than the total number of values, the data
-#' is randomly sampled. The seed of the pseudo-random generator can be
-#' controlled through 'grnd.seed' option.
+#' is randomly sampled. Call \code{set.seed()} before this function to make
+#' the sample reproducible.
 #'
 #' If 'n' is higher than the total number of values, all values are returned
 #' (yet reshuffled).
@@ -212,6 +212,7 @@ gsample <- function(expr = NULL, n = NULL, intervals = NULL, iterator = NULL, ba
 #'     iterator = "dense_track"
 #' )
 #'
+#' @inheritSection misha-NaN NaN values
 #' @export gscreen
 gscreen <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr))) {
