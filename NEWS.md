@@ -1,3 +1,7 @@
+# misha 5.11.21
+
+* Fixed `gseq.pwm()` with `gmultitasking = TRUE`: an error raised on the non-parallel fallback path left misha's signal handlers, shared memory and file descriptors uncleaned for the rest of the R session, and silenced its once-per-call warnings.
+
 # misha 5.11.20
 
 * **Crash fix:** `gseq.pwm()` leaked one R protection-stack slot per call, printing "Warning: stack imbalance in '<-'" every time and killing a loop of ~50000 calls with "protect(): protection stack overflow". Results were never affected.
