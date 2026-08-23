@@ -1246,3 +1246,101 @@ test_that("gintervals.load() with chrom filter works for dataset intervals", {
         expect_equal(as.character(loaded$chrom[1]), "chr1")
     })
 })
+
+# ==============================================================================
+# gdataset.save() failure paths
+#
+# file.copy()/file.symlink() report failure by returning FALSE and at most a
+# warning. Unchecked, gdataset.save() returned success after copying nothing
+# and wrote a misha.yaml claiming a track_count the directory could not back
+# up - and the half-built directory then blocked every retry, because the
+# function refuses a path that already exists.
+# ==============================================================================
+
+test_that("gdataset.save() errors and cleans up when a track's data is missing", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("track1", "t1", intervs, 1)
+
+        # The track stays registered, but its data disappears (another
+        # session removed it, a shell rm -rf, a broken NFS mount).
+        track_dir <- misha:::.track_dir("track1")
+        unlink(track_dir, recursive = TRUE)
+
+        expect_error(
+            gdataset.save(path = "ds", description = "Test", tracks = "track1"),
+            "gdataset\\.save: track track1 is registered in .* but its data is missing"
+        )
+        # Nothing left behind: no directory, so in particular no misha.yaml
+        # advertising a track that is not there.
+        expect_false(dir.exists("ds"))
+        expect_false(file.exists(file.path("ds", "misha.yaml")))
+    })
+})
+
+test_that("gdataset.save() failure leaves the path free for a retry", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("track1", "t1", intervs, 1)
+
+        track_dir <- misha:::.track_dir("track1")
+        stash <- file.path(tempdir(), "stashed.track")
+        expect_true(file.rename(track_dir, stash))
+        expect_error(gdataset.save(path = "ds", description = "Test", tracks = "track1"))
+
+        # Put the data back and retry at the same path.
+        expect_true(file.rename(stash, track_dir))
+        expect_silent(gdataset.save(path = "ds", description = "Test", tracks = "track1"))
+        expect_true(dir.exists("ds/tracks/track1.track"))
+        expect_equal(yaml::read_yaml("ds/misha.yaml")$track_count, 1)
+    })
+})
+
+test_that("gdataset.save() cleanup removes symlinks, not their targets", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        intervs <- gintervals(1, 0, 1000)
+        gtrack.create_sparse("track1", "t1", intervs, 1)
+        gtrack.create_sparse("track2", "t2", intervs, 2)
+
+        seq_dir <- file.path(normalizePath("working_db"), "seq")
+        seq_before <- sort(list.files(seq_dir))
+        track2_dir <- misha:::.track_dir("track2")
+        track2_before <- sort(list.files(track2_dir))
+
+        # track1's data is gone; the seq/ and track2 symlinks have already
+        # been planted into the dataset directory when the failure hits.
+        unlink(misha:::.track_dir("track1"), recursive = TRUE)
+        expect_error(
+            gdataset.save(
+                path = "ds", description = "Test",
+                tracks = c("track2", "track1"), symlinks = TRUE
+            )
+        )
+        expect_false(dir.exists("ds"))
+        # The working database must be untouched by the cleanup.
+        expect_equal(sort(list.files(seq_dir)), seq_before)
+        expect_equal(sort(list.files(track2_dir)), track2_before)
+    })
+})
+
+test_that("gdataset.save() errors when an interval set's data is missing", {
+    withr::with_tempdir({
+        create_test_db("working_db")
+        gsetroot("working_db")
+        gintervals.save("ivs1", gintervals(1, 0, 1000))
+
+        unlink(misha:::.intervals_dir("ivs1"), recursive = TRUE)
+
+        expect_error(
+            gdataset.save(path = "ds", description = "Test", intervals = "ivs1"),
+            "gdataset\\.save: interval set ivs1 is registered in .* but its data is missing"
+        )
+        expect_false(dir.exists("ds"))
+    })
+})

@@ -58,6 +58,10 @@ gtrack.convert <- function(src.track = NULL, tgt.track = NULL) {
                 if (is.null(substitute(tgt.track))) {
                     unlink(src.dirname, recursive = TRUE)
                     file.rename(tgt.dirname, src.dirname)
+                    # In-place convert: the converted data was just moved
+                    # onto the source path and tgt.dirname is gone. Both
+                    # cache keys now describe the wrong layout.
+                    .gdb.invalidate_dir_cache(c(src.dirname, tgt.dirname))
                 }
             } else {
                 msg <- sprintf("Failed to copy some or all track supplementary data from %s to %s", src.dirname, tgt.dirname)

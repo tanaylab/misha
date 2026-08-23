@@ -204,6 +204,7 @@ liftover
 loadall
 logN
 logics
+lossy
 lse
 magrittr
 makepvals

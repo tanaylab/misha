@@ -105,6 +105,14 @@ gsetroot <- function(groot = NULL, dir = NULL, rescan = FALSE) {
         stop("chrom_sizes.txt file does not contain any chromosomes", call. = FALSE)
     }
 
+    # Drop the process-static index caches. They are keyed by absolute track /
+    # interval-set directory, so pointing the session at a database whose
+    # contents changed under the same paths (a rebuilt db, gdb.init_examples()
+    # re-extracting the tarball, an external conversion) would otherwise keep
+    # routing reads through the previous layout - e.g. opening a track.dat on
+    # what is now a per-chromosome track.
+    .gdb.clear_all_dir_caches()
+
     # Clear all state
     assign("ALLGENOME", NULL, envir = .misha)
     assign("GROOT", NULL, envir = .misha)

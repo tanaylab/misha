@@ -2,6 +2,13 @@
 
 * **Crash fix:** `gseq.pwm()` leaked one R protection-stack slot per call, printing "Warning: stack imbalance in '<-'" every time and killing a loop of ~50000 calls with "protect(): protection stack overflow". Results were never affected.
 * **Bug fix:** `gseq.pwm()` running on several processes now reports a child process's error - it used to return whatever the child left in shared memory - and, like the rest of misha, honours Ctrl-C and `gmax.mem.usage` while the children work.
+* **Documentation:** the vignettes now execute. Every chunk that can run against the bundled examples database does, so the code on the website is code that ran. This exposed several broken examples, all fixed: the short guide's `gintervals.save()` call had its arguments reversed, its headline peak-calling step screened at a threshold no bin in the example data reaches, the Manual's band example never called `gintervals.2d.band_intersect()` despite describing its output, and both cross-database copy recipes in the database-formats vignette were wrong - one errored, the other silently turned a dense track into a sparse one 5x the size. Use `gtrack.copy(src, db = target)` to copy tracks between databases.
+* **Bug fix:** `gtrack.dataset()` and `gintervals.dataset()` returned `NA` for tracks and interval sets that were already there, after the first `gtrack.create()` or `gintervals.save()` of a session.
+* **Bug fix:** `gdataset.save()` produced a dataset with an empty, unreadable track directory when given a namespaced name such as `"subdir.mytrack"`.
+* **Bug fix:** reading a track after converting it to indexed format, then pointing the session at a database rebuilt under the same path, failed with "Cannot open .../track.dat". `gsetroot()` now drops the cached track layout.
+* **Bug fix:** `gtrack.mv()`, `gtrack.copy()` and `gintervals.update()` could leave the session reading a track or interval set through the layout of whatever previously occupied that path: `gtrack.info()` reported the wrong track type, and reads failed with a bin-count mismatch or "unknown input format". All three now drop the cached layout.
+* **Bug fix:** `gdataset.save()` reported success after failing to copy a track or interval set, leaving behind a dataset whose `misha.yaml` counted files that were not on disk - and which then blocked every retry, because the function refuses a path that already exists. It now errors naming what failed, and leaves nothing behind.
+* `gintervals.save()` and the other `intervals.set.out` arguments now reject a non-string set name with a message that names the argument order, instead of failing with "the condition has length > 1".
 
 # misha 5.11.19
 
