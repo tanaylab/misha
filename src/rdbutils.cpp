@@ -1127,7 +1127,12 @@ SEXP rdb::RSaneUnserialize(FILE *fp)
 		// and there's no way to prevent it without heavy hacking. On the other hand we want to abort the execution on error.
 		// Solution: write a different error message. :)
 		verror("Execution aborted");
-	runprotect(1);
+	// rprotect() is a no-op on R_NilValue, so a file holding a serialized NULL
+	// pushes nothing; an unconditional runprotect(1) would then pop - and leave
+	// exposed to the GC - whatever the caller had protected last. Same asymmetry
+	// that define_in_misha() had to fix.
+	if (data.retv != R_NilValue)
+		runprotect(1);
 	return data.retv;
 }
 

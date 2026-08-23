@@ -6,6 +6,7 @@
 * New option `gpermissions.umask` (default `"0007"`) controls it: files come out 660 and directories 770 - group-writable, no world access - matching what misha's C++ layer already enforced on track data. On hosts whose default umask is 022 this drops world-read from newly created databases, interval sets, `.db.cache` and dataset directories, which used to be 664/775. Set `options(gpermissions.umask = "0002")` for the old permissions, or `NULL` to have misha respect your own umask.
 * **Bug fix:** `gtrack.attr.import(..., remove.others = TRUE)` failed with "Number of calls to unprotect exceeds the number of calls to protect" once read-only attributes were set (`gdb.set_readonly_attrs()`) and more than one track was listed. Only the first track was updated, and the session was left in a corrupt state that could crash a later call.
 * Fixed `gseq.pwm()` with `gmultitasking = TRUE`: an error raised on the non-parallel fallback path left misha's signal handlers, shared memory and file descriptors uncleaned for the rest of the R session, and silenced its once-per-call warnings.
+* **Bug fix:** reading a corrupt interval set or meta file that holds a serialized `NULL` left one of misha's own R objects unprotected for the rest of the call, exposing it to garbage collection.
 
 # misha 5.11.20
 
