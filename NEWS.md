@@ -1,12 +1,12 @@
 # misha 5.11.21
 
-* **Bug fix:** every track-expression scan evaluated the expression once over an uninitialised buffer before reading any data, to learn whether it returns a vector. The result was discarded, but an expression that errors or warns on particular values could fail for reasons unrelated to the user's data, and the outcome was not reproducible. The probe now sees `NaN`, which every track expression already handles.
-* **Bug fix:** writing a 2D track put four uninitialised bytes of process memory into every record, so the same input produced byte-different track files and those bytes travelled with any track that was copied or shared. Values read back were never affected, and the on-disk layout is unchanged.
-* **Behaviour change:** misha no longer changes the umask of your R session. Loading the package used to set `Sys.umask("0002")` permanently, which silently changed the permissions of every file the session wrote, misha's or not. The umask is now applied only around misha's own writes into a database and restored immediately afterwards.
-* New option `gpermissions.umask` (default `"0007"`) controls it: files come out 660 and directories 770 - group-writable, no world access - matching what misha's C++ layer already enforced on track data. On hosts whose default umask is 022 this drops world-read from newly created databases, interval sets, `.db.cache` and dataset directories, which used to be 664/775. Set `options(gpermissions.umask = "0002")` for the old permissions, or `NULL` to have misha respect your own umask.
-* **Bug fix:** `gtrack.attr.import(..., remove.others = TRUE)` failed with "Number of calls to unprotect exceeds the number of calls to protect" once read-only attributes were set (`gdb.set_readonly_attrs()`) and more than one track was listed. Only the first track was updated, and the session was left in a corrupt state that could crash a later call.
-* Fixed `gseq.pwm()` with `gmultitasking = TRUE`: an error raised on the non-parallel fallback path left misha's signal handlers, shared memory and file descriptors uncleaned for the rest of the R session, and silenced its once-per-call warnings.
-* **Bug fix:** reading a corrupt interval set or meta file that holds a serialized `NULL` left one of misha's own R objects unprotected for the rest of the call, exposing it to garbage collection.
+* `gtrack.attr.import(remove.others = TRUE)` no longer fails partway - leaving attributes applied to only the first track - when read-only attributes are set and several tracks are listed.
+* Writing a 2D track no longer puts uninitialised bytes into each record, so the same input now produces identical files. Values read back were never affected.
+* Track expressions are no longer evaluated once over uninitialised memory before each scan. Results were unaffected, but an expression could fail for reasons unrelated to your data.
+* `gseq.pwm()` no longer leaves the session uncleaned when an error occurs on its non-parallel fallback path.
+* Reading a corrupt interval set no longer leaves one of misha's own R objects exposed to garbage collection.
+* **Behaviour change:** misha no longer changes your R session's umask. It is applied only around misha's own writes and restored immediately afterwards.
+* New option `gpermissions.umask` (default `"0007"`): misha writes files as 660 and directories as 770. Set `"0002"` for the previous permissions, or `NULL` to follow your own umask.
 
 # misha 5.11.20
 
