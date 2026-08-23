@@ -118,6 +118,46 @@
     }
 }
 
+# Runs `expr` with misha's file-creation umask in force and restores the
+# process umask afterwards.
+#
+# Why misha needs one at all: a genomic database is shared between the members
+# of a group, so every file and directory misha creates in it has to stay
+# group-writable. On a host with the common umask 022 default a database
+# created without this would come out 644/755 and no collaborator could add a
+# track to it.
+#
+# The default, "0007", produces 660 files and 770 directories - group rwx, no
+# world access - which is what misha's C++ layer already sets around every
+# write (RdbInitializer, src/rdbutils.cpp) and what the real shared databases
+# look like on disk. Set options(gpermissions.umask = NULL) to leave the
+# process umask alone, or e.g. "0002" for the world-readable 664/775 that
+# misha produced before 5.11.21.
+#
+# The umask is process-global state, so it is held for the shortest possible
+# span and restored by on.exit(), which runs on a normal return, on an error
+# and on an interrupt alike. Never set it anywhere that outlives a call - it
+# used to be set once in .onLoad() and never restored, which silently changed
+# the permissions of everything the R session wrote, misha or not.
+#
+# getOption() is deliberate here: .ggetOption() falls back to .misha_defaults
+# when the option reads back NULL, and R *removes* an option that is set to
+# NULL, so .ggetOption() cannot tell "unset" from "explicitly turned off".
+# .onLoad() seeds the live option from .misha_defaults instead.
+.gwith_umask <- function(expr) {
+    um <- getOption("gpermissions.umask")
+    if (!is.null(um)) {
+        old <- tryCatch(Sys.umask(um), error = function(e) {
+            stop(sprintf(
+                "Invalid gpermissions.umask option (%s): %s",
+                paste(format(um), collapse = " "), conditionMessage(e)
+            ), call. = FALSE)
+        })
+        on.exit(Sys.umask(old), add = TRUE)
+    }
+    expr
+}
+
 .gexpr2str <- function(x) {
     if (.ggetOption(".ginteractive", FALSE)) {
         if (is.null(substitute(x))) {
@@ -221,7 +261,7 @@ gwget <- function(url = NULL, path = NULL) {
     if (is.null(path)) {
         .gcheckroot()
         path <- paste(get("GROOT", envir = .misha), "/downloads", sep = "")
-        dir.create(path, showWarnings = FALSE, recursive = TRUE, mode = "0777")
+        .gwith_umask(dir.create(path, showWarnings = FALSE, recursive = TRUE, mode = "0777"))
     }
 
     if (!length(grep("^ftp\\:\\/\\/(\\w+(\\.\\w+)+)\\/(.+)", url, perl = TRUE))) {
@@ -325,7 +365,7 @@ gcluster.run <- function(..., opt.flags = "", max.jobs = 400, debug = FALSE, R =
     tryCatch(
         {
             tmp.dirname <- tempfile(pattern = "", tmpdir = control_dir)
-            if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+            if (!.gwith_umask(dir.create(tmp.dirname, recursive = TRUE, mode = "0777"))) {
                 stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
             }
 

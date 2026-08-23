@@ -36,5 +36,12 @@
     gmax.processes2core = 2, # Max processes per core
     gmin.scope4process = 10000, # Min genomic scope per parallel process
     gmultitasking = TRUE, # Enable/disable multitasking
-    gseq.extract.probe.usec = 100 # gseq.extract: measured us/interval above which it distributes
+    gseq.extract.probe.usec = 100, # gseq.extract: measured us/interval above which it distributes
+
+    # File permissions
+    # umask applied around misha's own writes into a database. "0007" gives
+    # group-writable, world-inaccessible files (660) and directories (770),
+    # matching what the C++ layer sets around every write. NULL leaves the
+    # process umask untouched.
+    gpermissions.umask = "0007"
 )

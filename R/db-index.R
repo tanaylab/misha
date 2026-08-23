@@ -492,9 +492,9 @@ gdb.convert_to_indexed <- function(groot = NULL, remove_old_files = FALSE, force
                 stringsAsFactors = FALSE
             )
 
-            write.table(updated_chrom_sizes, chrom_sizes_path,
+            .gwith_umask(write.table(updated_chrom_sizes, chrom_sizes_path,
                 quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE
-            )
+            ))
 
             # Validate if requested
             if (validate) {
