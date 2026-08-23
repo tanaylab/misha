@@ -84,13 +84,11 @@ test_that("budget constraint holds for various system configurations", {
 })
 
 test_that("parallel execution respects buffer size on real database", {
-    skip_if_not(
-        dir.exists("/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/misha_test_db_indexed/"),
-        "Real test database not available"
-    )
+    indexed_db <- test_db_root(shared_test_db_path(indexed = TRUE))
+    skip_if(is.null(indexed_db), "Real test database not available")
 
-    # Load real database
-    gdb.init("/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/misha_test_db_indexed/")
+    # Load real database (through this process's overlay of it)
+    gdb.init(indexed_db)
 
     tracks <- gtrack.ls()
     skip_if(length(tracks) == 0, "No tracks in database")

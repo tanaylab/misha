@@ -330,4 +330,4 @@ test_that("indexed dense track works correctly across many chromosomes", {
 })
 
 # Restore the test database after all integration tests
-suppressMessages(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+reset_test_db_root()
