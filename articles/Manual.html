@@ -159,13 +159,13 @@ provide additional tracks and intervals.</li>
 <span></span>
 <span><span class="co"># List all sources (working db + loaded datasets)</span></span>
 <span><span class="fu"><a href="../reference/gdataset.ls.html">gdataset.ls</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpeFP9x4/trackdb/test"       "/tmp/RtmpeFP9x4/shared_annotations"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/Rtmpe0xLAO/trackdb/test"       "/tmp/Rtmpe0xLAO/shared_annotations"</span></span>
 <span></span>
 <span><span class="co"># Get detailed information</span></span>
 <span><span class="fu"><a href="../reference/gdataset.ls.html">gdataset.ls</a></span><span class="op">(</span>dataframe <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                                 path tracks_total tracks_visible</span></span>
-<span><span class="co">#&gt; 1       /tmp/RtmpeFP9x4/trackdb/test            5              5</span></span>
-<span><span class="co">#&gt; 2 /tmp/RtmpeFP9x4/shared_annotations            1              1</span></span>
+<span><span class="co">#&gt; 1       /tmp/Rtmpe0xLAO/trackdb/test            5              5</span></span>
+<span><span class="co">#&gt; 2 /tmp/Rtmpe0xLAO/shared_annotations            1              1</span></span>
 <span><span class="co">#&gt;   intervals_total intervals_visible has_metadata writable</span></span>
 <span><span class="co">#&gt; 1               1                 1        FALSE     TRUE</span></span>
 <span><span class="co">#&gt; 2               0                 0        FALSE    FALSE</span></span></code></pre></div>
@@ -190,8 +190,8 @@ error:</p>
 <span></span>
 <span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="va">other_dataset</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;">:</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Cannot load dataset '/tmp/RtmpeFP9x4/other_dataset':</span></span>
-<span><span class="co">#&gt;   - tracks 'dense_track' already exist in working database '/tmp/RtmpeFP9x4/trackdb/test'</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Cannot load dataset '/tmp/Rtmpe0xLAO/other_dataset':</span></span>
+<span><span class="co">#&gt;   - tracks 'dense_track' already exist in working database '/tmp/Rtmpe0xLAO/trackdb/test'</span></span>
 <span><span class="co">#&gt; Use force=TRUE to override.</span></span></code></pre></div>
 <p>Use <code>force=TRUE</code> to allow collisions, with clear
 precedence rules:</p>
@@ -202,12 +202,12 @@ precedence rules:</p>
 <span></span>
 <span><span class="co"># Check which source provides a track</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="st">"dense_track"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpeFP9x4/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/Rtmpe0xLAO/trackdb/test"</span></span>
 <span></span>
 <span><span class="co"># See all sources where a track exists (for debugging)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dbs.html">gtrack.dbs</a></span><span class="op">(</span><span class="st">"dense_track"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                     dense_track                     dense_track </span></span>
-<span><span class="co">#&gt;  "/tmp/RtmpeFP9x4/trackdb/test" "/tmp/RtmpeFP9x4/other_dataset"</span></span>
+<span><span class="co">#&gt;  "/tmp/Rtmpe0xLAO/trackdb/test" "/tmp/Rtmpe0xLAO/other_dataset"</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/gdataset.unload.html">gdataset.unload</a></span><span class="op">(</span><span class="va">other_dataset</span><span class="op">)</span></span></code></pre></div>
 </div>
@@ -273,24 +273,24 @@ or interval set:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Single track - returns source path</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="st">"annotation_track"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpeFP9x4/shared_annotations"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/Rtmpe0xLAO/shared_annotations"</span></span>
 <span></span>
 <span><span class="co"># All sources containing a track (useful for debugging shadowed tracks)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dbs.html">gtrack.dbs</a></span><span class="op">(</span><span class="st">"dense_track"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                    dense_track </span></span>
-<span><span class="co">#&gt; "/tmp/RtmpeFP9x4/trackdb/test"</span></span>
+<span><span class="co">#&gt; "/tmp/Rtmpe0xLAO/trackdb/test"</span></span>
 <span></span>
 <span><span class="co"># Multiple tracks (vectorized)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"dense_track"</span>, <span class="st">"sparse_track"</span>, <span class="st">"annotation_track"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpeFP9x4/trackdb/test"       "/tmp/RtmpeFP9x4/trackdb/test"      </span></span>
-<span><span class="co">#&gt; [3] "/tmp/RtmpeFP9x4/shared_annotations"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/Rtmpe0xLAO/trackdb/test"       "/tmp/Rtmpe0xLAO/trackdb/test"      </span></span>
+<span><span class="co">#&gt; [3] "/tmp/Rtmpe0xLAO/shared_annotations"</span></span>
 <span></span>
 <span><span class="co"># Intervals</span></span>
 <span><span class="fu"><a href="../reference/gintervals.dataset.html">gintervals.dataset</a></span><span class="op">(</span><span class="st">"annotations"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpeFP9x4/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/Rtmpe0xLAO/trackdb/test"</span></span>
 <span><span class="fu"><a href="../reference/gintervals.dbs.html">gintervals.dbs</a></span><span class="op">(</span><span class="st">"annotations"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                    annotations </span></span>
-<span><span class="co">#&gt; "/tmp/RtmpeFP9x4/trackdb/test"</span></span></code></pre></div>
+<span><span class="co">#&gt; "/tmp/Rtmpe0xLAO/trackdb/test"</span></span></code></pre></div>
 <p>Filter track and interval listings by source:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># List tracks from a specific source only</span></span>
@@ -332,10 +332,10 @@ tracks and intervals:</p>
 <span><span class="co">#&gt; [1] "runner"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $created</span></span>
-<span><span class="co">#&gt; [1] "2026-08-23T06:38:24Z"</span></span>
+<span><span class="co">#&gt; [1] "2026-08-23T07:26:25Z"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $original_db</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpeFP9x4/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/Rtmpe0xLAO/trackdb/test"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $misha_version</span></span>
 <span><span class="co">#&gt; [1] "5.11.20"</span></span>
@@ -364,7 +364,7 @@ that links to a parent database’s <code>seq/</code> directory and
 <span><span class="va">my_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"my_db"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">my_db</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gdb.create_linked.html">gdb.create_linked</a></span><span class="op">(</span><span class="va">my_db</span>, parent <span class="op">=</span> <span class="va">my_project</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Created linked database at /tmp/RtmpeFP9x4/my_db (linked to /tmp/RtmpeFP9x4/trackdb/test)</span></span>
+<span><span class="co">#&gt; Created linked database at /tmp/Rtmpe0xLAO/my_db (linked to /tmp/Rtmpe0xLAO/trackdb/test)</span></span>
 <span></span>
 <span><span class="co"># Use as your working database</span></span>
 <span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="va">my_db</span><span class="op">)</span></span>
@@ -436,7 +436,7 @@ different database when multiple databases are connected:</p>
 <span><span class="fu"><a href="../reference/gdataset.load.html">gdataset.load</a></span><span class="op">(</span><span class="va">shared_annotations</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gtrack.copy.html">gtrack.copy</a></span><span class="op">(</span><span class="st">"annotation_track"</span>, <span class="st">"my_local_copy"</span><span class="op">)</span> <span class="co"># Copy to working db</span></span>
 <span><span class="fu"><a href="../reference/gtrack.dataset.html">gtrack.dataset</a></span><span class="op">(</span><span class="st">"my_local_copy"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpeFP9x4/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/Rtmpe0xLAO/trackdb/test"</span></span>
 <span><span class="fu"><a href="../reference/gtrack.rm.html">gtrack.rm</a></span><span class="op">(</span><span class="st">"my_local_copy"</span>, force <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <p>Note: <code><a href="../reference/gtrack.mv.html">gtrack.mv()</a></code> only works within the same database.
 To move a track between databases, use <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code>
@@ -475,7 +475,7 @@ They can reference tracks from any loaded source:</p>
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.init.html">gsetroot</a></span><span class="op">(</span><span class="va">my_project</span><span class="op">)</span> <span class="co"># Works unchanged</span></span>
 <span><span class="fu"><a href="../reference/gdb.init.html">gdb.init</a></span><span class="op">(</span><span class="va">my_project</span><span class="op">)</span> <span class="co"># Equivalent, also works</span></span>
 <span><span class="fu"><a href="../reference/gdataset.ls.html">gdataset.ls</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpeFP9x4/trackdb/test"</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "/tmp/Rtmpe0xLAO/trackdb/test"</span></span></code></pre></div>
 <p>An example of a Genomic Database file structure:</p>
 <pre><code>hg38/              &lt;- Genomic Database root directory
    chrom_sizes.txt
