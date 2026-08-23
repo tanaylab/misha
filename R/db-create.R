@@ -400,7 +400,7 @@ gdb.init_examples <- function(dir = NULL) {
         env <- Sys.getenv("MISHA_EXAMPLES_DIR", unset = "")
         dir <- if (nzchar(env)) env else tempdir()
     }
-    if (!dir.exists(dir)) .gwith_umask(dir.create(dir, recursive = TRUE, mode = "0777"))
+    if (!dir.exists(dir)) .gwith_umask(dir.create(dir, recursive = TRUE, mode = "0755"))
     test_path <- file.path(dir, "trackdb/test")
     unlink(test_path, recursive = TRUE)
     .gwith_umask(utils::untar(system.file("testdb.tar.gz", package = "misha"), exdir = dir))
