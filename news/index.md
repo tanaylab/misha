@@ -1,121 +1,73 @@
 # Changelog
 
+## misha 5.11.21
+
+- `gtrack.attr.import(remove.others = TRUE)` no longer fails partway -
+  leaving attributes applied to only the first track - when read-only
+  attributes are set and several tracks are listed.
+- Writing a 2D track no longer puts uninitialised bytes into each
+  record, so the same input now produces identical files. Values read
+  back were never affected.
+- Track expressions are no longer evaluated once over uninitialised
+  memory before each scan. Results were unaffected, but an expression
+  could fail for reasons unrelated to your data.
+- [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  no longer leaves the session uncleaned when an error occurs on its
+  non-parallel fallback path.
+- Reading a corrupt interval set no longer leaves one of misha’s own R
+  objects exposed to garbage collection.
+- **Behaviour change:** misha no longer changes your R session’s umask.
+  It is applied only around misha’s own writes and restored immediately
+  afterwards.
+- New option `gpermissions.umask` (default `"0007"`): misha writes files
+  as 660 and directories as 770. Set `"0002"` for the previous
+  permissions, or `NULL` to follow your own umask.
+
 ## misha 5.11.20
 
-- **Crash fix:**
-  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
-  leaked one R protection-stack slot per call, printing “Warning: stack
-  imbalance in ‘\<-’” every time and killing a loop of ~50000 calls with
-  “protect(): protection stack overflow”. Results were never affected.
-- **Bug fix:**
-  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
-  running on several processes now reports a child process’s error - it
-  used to return whatever the child left in shared memory - and, like
-  the rest of misha, honours Ctrl-C and `gmax.mem.usage` while the
-  children work.
-- **Documentation:** the vignettes now execute. Every chunk that can run
-  against the bundled examples database does, so the code on the website
-  is code that ran. This exposed several broken examples, all fixed: the
-  short guide’s
-  [`gintervals.save()`](https://tanaylab.github.io/misha/reference/gintervals.save.md)
-  call had its arguments reversed, its headline peak-calling step
-  screened at a threshold no bin in the example data reaches, the
-  Manual’s band example never called
-  [`gintervals.2d.band_intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.band_intersect.md)
-  despite describing its output, and both cross-database copy recipes in
-  the database-formats vignette were wrong - one errored, the other
-  silently turned a dense track into a sparse one 5x the size. Use
-  `gtrack.copy(src, db = target)` to copy tracks between databases.
-- **Bug fix:**
-  [`gtrack.dataset()`](https://tanaylab.github.io/misha/reference/gtrack.dataset.md)
-  and
-  [`gintervals.dataset()`](https://tanaylab.github.io/misha/reference/gintervals.dataset.md)
-  returned `NA` for tracks and interval sets that were already there,
-  after the first
-  [`gtrack.create()`](https://tanaylab.github.io/misha/reference/gtrack.create.md)
-  or
-  [`gintervals.save()`](https://tanaylab.github.io/misha/reference/gintervals.save.md)
-  of a session.
-- **Bug fix:**
-  [`gdataset.save()`](https://tanaylab.github.io/misha/reference/gdataset.save.md)
-  produced a dataset with an empty, unreadable track directory when
-  given a namespaced name such as `"subdir.mytrack"`.
-- **Bug fix:** reading a track after converting it to indexed format,
-  then pointing the session at a database rebuilt under the same path,
-  failed with “Cannot open …/track.dat”.
-  [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
-  now drops the cached track layout.
-- **Bug fix:**
+- [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  no longer leaks an R protection-stack slot on every call, and when it
+  runs on several processes it reports a worker’s error instead of
+  returning whatever the worker left behind.
+- Reading a track after its database was rebuilt, or a track renamed,
+  under the same path no longer fails with “Cannot open … track.dat”.
+  Affects
   [`gtrack.mv()`](https://tanaylab.github.io/misha/reference/gtrack.mv.md),
   [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
   and
   [`gintervals.update()`](https://tanaylab.github.io/misha/reference/gintervals.update.md)
-  could leave the session reading a track or interval set through the
-  layout of whatever previously occupied that path:
-  [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
-  reported the wrong track type, and reads failed with a bin-count
-  mismatch or “unknown input format”. All three now drop the cached
-  layout.
-- **Bug fix:**
-  [`gdataset.save()`](https://tanaylab.github.io/misha/reference/gdataset.save.md)
-  reported success after failing to copy a track or interval set,
-  leaving behind a dataset whose `misha.yaml` counted files that were
-  not on disk - and which then blocked every retry, because the function
-  refuses a path that already exists. It now errors naming what failed,
-  and leaves nothing behind.
-- [`gintervals.save()`](https://tanaylab.github.io/misha/reference/gintervals.save.md)
-  and the other `intervals.set.out` arguments now reject a non-string
-  set name with a message that names the argument order, instead of
-  failing with “the condition has length \> 1”.
-- Documentation: the query functions’ man pages now carry a shared “NaN
-  values” section stating what each one does with a bin the track has no
-  data for -
-  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
-  keeps it,
-  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md)
-  counts it,
-  [`gdist()`](https://tanaylab.github.io/misha/reference/gdist.md)/[`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)/[`gscreen()`](https://tanaylab.github.io/misha/reference/gscreen.md)
-  drop it, and
-  [`gsegment()`](https://tanaylab.github.io/misha/reference/gsegment.md)
-  spans it.
-- `gtrack.export()` to bigWig now names the conda package to install
-  when the UCSC converter is missing, and `bedGraphToBigWig` is declared
-  in SystemRequirements alongside `samtools`. UCSC’s prebuilt binaries
-  need glibc 2.34 or newer, so on older distributions the conda build is
-  the one that works.
-- Documentation:
+  as well as
+  [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md).
+- [`gdataset.save()`](https://tanaylab.github.io/misha/reference/gdataset.save.md)
+  errors instead of reporting success when a copy fails, and no longer
+  mishandles namespaced names such as `"subdir.mytrack"`.
+- [`gtrack.dataset()`](https://tanaylab.github.io/misha/reference/gtrack.dataset.md)
+  and
+  [`gintervals.dataset()`](https://tanaylab.github.io/misha/reference/gintervals.dataset.md)
+  no longer return `NA` for tracks and interval sets that already
+  existed.
+- `intervals.set.out` arguments reject a non-string set name with a
+  message naming the argument order.
+- **Performance:** a scope that fits in one worker now runs in-process
+  instead of forking a single child, and the worker start-up ramp is
+  capped at 150 ms instead of growing with the fleet.
+- **Behavior:** `gmax.processes` now auto-configures to at most 32
+  workers. Raise it by hand for very large scans; hosts with fewer than
+  46 cores are unaffected.
+- The vignettes are now executed when the package is built, and the
+  broken examples that exposed are fixed - including a reversed
+  [`gintervals.save()`](https://tanaylab.github.io/misha/reference/gintervals.save.md)
+  call and both cross-database copy recipes. Use
+  `gtrack.copy(src, db = target)` to copy tracks between databases.
+- `gtrack.export()` names an installable converter when
+  `bedGraphToBigWig` is missing.
+- Documentation: the query functions now document what each does with a
+  `NaN` bin;
   [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)’s
-  extra column is named `intervalID`, not `columnID`; and
+  extra column is `intervalID`, not `columnID`; and
   [`gsample()`](https://tanaylab.github.io/misha/reference/gsample.md)/[`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)
-  say to use [`set.seed()`](https://rdrr.io/r/base/Random.html) for a
-  reproducible sample, replacing a reference to the `grnd.seed` option,
-  which no longer exists.
-- **Performance:** calls whose scope fits in a single worker - one
-  chromosome, one 2D chromosome pair, or any scope below
-  `gmin.scope4process` - no longer fork a worker process to do nothing
-  in parallel. Small interactive calls got 30-60% faster
-  ([`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
-  over 100 intervals on one chromosome: 41 ms -\> 24 ms; 52 ms -\> 21 ms
-  in a 2 GB session), and results are unchanged.
-- **Performance:** the delay each worker waits before starting no longer
-  grows with the number of workers; the whole start-up ramp is now
-  capped at 150 ms. On a 128-core host this took about 0.9 s off every
-  multitasking call: a medium
-  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md)
-  scan went 1.36 s -\> 0.55 s at 89 workers. Cold-cache scans are
-  unaffected.
-- **Behavior:** the auto-configured `gmax.processes` is capped at 32
-  (was 70% of cores, unbounded). Past roughly 32 workers the per-worker
-  cost - fork, shared-memory segment, result merge - stops paying for
-  itself. Measured on an idle 128-core host against hg38, comparing the
-  old default of 89 workers with 32: a two-chromosome
-  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md)
-  at `iterator = 100` went 0.555 s to 0.419 s, and a whole-genome scan
-  at `iterator = 200` 0.736 s to 0.750 s. Heavier scans still improve
-  slightly beyond 32 - the same two-chromosome scan at `iterator = 10`
-  is 1.31 s at 32 workers against 1.05 s at 89 - so raise
-  `gmax.processes` by hand if that is your workload. Hosts with fewer
-  than 46 cores are unaffected, and `gmax.data.size` is unchanged.
+  point at [`set.seed()`](https://rdrr.io/r/base/Random.html) rather
+  than the long-removed `grnd.seed` option.
 
 ## misha 5.11.19
 

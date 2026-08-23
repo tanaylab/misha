@@ -42,6 +42,12 @@ function to alter the value of the options.
 |  |  | in memory. |
 | gmultitasking | TRUE | Enable/disable automatic parallelization. Some functions |
 |  |  | may choose single-threaded mode for very small workloads. |
+| gpermissions.umask | "0007" | umask applied around misha's own writes |
+|  |  | into a database: 660 files, 770 directories - group-writable, |
+|  |  | no world access - matching what the C++ layer enforces. Set to |
+|  |  | "0002" for the world-readable 664/775 that misha produced before |
+|  |  | 5.11.21, or to NULL to leave the process umask untouched. The |
+|  |  | umask is restored as soon as the write returns. |
 
 More information about the options can be found in 'User manual' of the
 package.

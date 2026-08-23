@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.20</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.21</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,35 +40,37 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.11.21" id="misha-51121">misha 5.11.21<a class="anchor" aria-label="anchor" href="#misha-51121"></a></h2>
+<ul><li>
+<code>gtrack.attr.import(remove.others = TRUE)</code> no longer fails partway - leaving attributes applied to only the first track - when read-only attributes are set and several tracks are listed.</li>
+<li>Writing a 2D track no longer puts uninitialised bytes into each record, so the same input now produces identical files. Values read back were never affected.</li>
+<li>Track expressions are no longer evaluated once over uninitialised memory before each scan. Results were unaffected, but an expression could fail for reasons unrelated to your data.</li>
+<li>
+<code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> no longer leaves the session uncleaned when an error occurs on its non-parallel fallback path.</li>
+<li>Reading a corrupt interval set no longer leaves one of misha’s own R objects exposed to garbage collection.</li>
+<li>
+<strong>Behaviour change:</strong> misha no longer changes your R session’s umask. It is applied only around misha’s own writes and restored immediately afterwards.</li>
+<li>New option <code>gpermissions.umask</code> (default <code>"0007"</code>): misha writes files as 660 and directories as 770. Set <code>"0002"</code> for the previous permissions, or <code>NULL</code> to follow your own umask.</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.11.20" id="misha-51120">misha 5.11.20<a class="anchor" aria-label="anchor" href="#misha-51120"></a></h2>
 <ul><li>
-<strong>Crash fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> leaked one R protection-stack slot per call, printing “Warning: stack imbalance in ‘&lt;-’” every time and killing a loop of ~50000 calls with “protect(): protection stack overflow”. Results were never affected.</li>
+<code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> no longer leaks an R protection-stack slot on every call, and when it runs on several processes it reports a worker’s error instead of returning whatever the worker left behind.</li>
+<li>Reading a track after its database was rebuilt, or a track renamed, under the same path no longer fails with “Cannot open … track.dat”. Affects <code><a href="../reference/gtrack.mv.html">gtrack.mv()</a></code>, <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> and <code><a href="../reference/gintervals.update.html">gintervals.update()</a></code> as well as <code><a href="../reference/gdb.init.html">gsetroot()</a></code>.</li>
 <li>
-<strong>Bug fix:</strong> <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code> running on several processes now reports a child process’s error - it used to return whatever the child left in shared memory - and, like the rest of misha, honours Ctrl-C and <code>gmax.mem.usage</code> while the children work.</li>
+<code><a href="../reference/gdataset.save.html">gdataset.save()</a></code> errors instead of reporting success when a copy fails, and no longer mishandles namespaced names such as <code>"subdir.mytrack"</code>.</li>
 <li>
-<strong>Documentation:</strong> the vignettes now execute. Every chunk that can run against the bundled examples database does, so the code on the website is code that ran. This exposed several broken examples, all fixed: the short guide’s <code><a href="../reference/gintervals.save.html">gintervals.save()</a></code> call had its arguments reversed, its headline peak-calling step screened at a threshold no bin in the example data reaches, the Manual’s band example never called <code><a href="../reference/gintervals.2d.band_intersect.html">gintervals.2d.band_intersect()</a></code> despite describing its output, and both cross-database copy recipes in the database-formats vignette were wrong - one errored, the other silently turned a dense track into a sparse one 5x the size. Use <code>gtrack.copy(src, db = target)</code> to copy tracks between databases.</li>
+<code><a href="../reference/gtrack.dataset.html">gtrack.dataset()</a></code> and <code><a href="../reference/gintervals.dataset.html">gintervals.dataset()</a></code> no longer return <code>NA</code> for tracks and interval sets that already existed.</li>
 <li>
-<strong>Bug fix:</strong> <code><a href="../reference/gtrack.dataset.html">gtrack.dataset()</a></code> and <code><a href="../reference/gintervals.dataset.html">gintervals.dataset()</a></code> returned <code>NA</code> for tracks and interval sets that were already there, after the first <code><a href="../reference/gtrack.create.html">gtrack.create()</a></code> or <code><a href="../reference/gintervals.save.html">gintervals.save()</a></code> of a session.</li>
+<code>intervals.set.out</code> arguments reject a non-string set name with a message naming the argument order.</li>
 <li>
-<strong>Bug fix:</strong> <code><a href="../reference/gdataset.save.html">gdataset.save()</a></code> produced a dataset with an empty, unreadable track directory when given a namespaced name such as <code>"subdir.mytrack"</code>.</li>
+<strong>Performance:</strong> a scope that fits in one worker now runs in-process instead of forking a single child, and the worker start-up ramp is capped at 150 ms instead of growing with the fleet.</li>
 <li>
-<strong>Bug fix:</strong> reading a track after converting it to indexed format, then pointing the session at a database rebuilt under the same path, failed with “Cannot open …/track.dat”. <code><a href="../reference/gdb.init.html">gsetroot()</a></code> now drops the cached track layout.</li>
+<strong>Behavior:</strong> <code>gmax.processes</code> now auto-configures to at most 32 workers. Raise it by hand for very large scans; hosts with fewer than 46 cores are unaffected.</li>
+<li>The vignettes are now executed when the package is built, and the broken examples that exposed are fixed - including a reversed <code><a href="../reference/gintervals.save.html">gintervals.save()</a></code> call and both cross-database copy recipes. Use <code>gtrack.copy(src, db = target)</code> to copy tracks between databases.</li>
 <li>
-<strong>Bug fix:</strong> <code><a href="../reference/gtrack.mv.html">gtrack.mv()</a></code>, <code><a href="../reference/gtrack.copy.html">gtrack.copy()</a></code> and <code><a href="../reference/gintervals.update.html">gintervals.update()</a></code> could leave the session reading a track or interval set through the layout of whatever previously occupied that path: <code><a href="../reference/gtrack.info.html">gtrack.info()</a></code> reported the wrong track type, and reads failed with a bin-count mismatch or “unknown input format”. All three now drop the cached layout.</li>
-<li>
-<strong>Bug fix:</strong> <code><a href="../reference/gdataset.save.html">gdataset.save()</a></code> reported success after failing to copy a track or interval set, leaving behind a dataset whose <code>misha.yaml</code> counted files that were not on disk - and which then blocked every retry, because the function refuses a path that already exists. It now errors naming what failed, and leaves nothing behind.</li>
-<li>
-<code><a href="../reference/gintervals.save.html">gintervals.save()</a></code> and the other <code>intervals.set.out</code> arguments now reject a non-string set name with a message that names the argument order, instead of failing with “the condition has length &gt; 1”.</li>
-<li>Documentation: the query functions’ man pages now carry a shared “NaN values” section stating what each one does with a bin the track has no data for - <code><a href="../reference/gextract.html">gextract()</a></code> keeps it, <code><a href="../reference/gsummary.html">gsummary()</a></code> counts it, <code><a href="../reference/gdist.html">gdist()</a></code>/<code><a href="../reference/gquantiles.html">gquantiles()</a></code>/<code><a href="../reference/gscreen.html">gscreen()</a></code> drop it, and <code><a href="../reference/gsegment.html">gsegment()</a></code> spans it.</li>
-<li>
-<code>gtrack.export()</code> to bigWig now names the conda package to install when the UCSC converter is missing, and <code>bedGraphToBigWig</code> is declared in SystemRequirements alongside <code>samtools</code>. UCSC’s prebuilt binaries need glibc 2.34 or newer, so on older distributions the conda build is the one that works.</li>
-<li>Documentation: <code><a href="../reference/gextract.html">gextract()</a></code>’s extra column is named <code>intervalID</code>, not <code>columnID</code>; and <code><a href="../reference/gsample.html">gsample()</a></code>/<code><a href="../reference/gquantiles.html">gquantiles()</a></code> say to use <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> for a reproducible sample, replacing a reference to the <code>grnd.seed</code> option, which no longer exists.</li>
-<li>
-<strong>Performance:</strong> calls whose scope fits in a single worker - one chromosome, one 2D chromosome pair, or any scope below <code>gmin.scope4process</code> - no longer fork a worker process to do nothing in parallel. Small interactive calls got 30-60% faster (<code><a href="../reference/gextract.html">gextract()</a></code> over 100 intervals on one chromosome: 41 ms -&gt; 24 ms; 52 ms -&gt; 21 ms in a 2 GB session), and results are unchanged.</li>
-<li>
-<strong>Performance:</strong> the delay each worker waits before starting no longer grows with the number of workers; the whole start-up ramp is now capped at 150 ms. On a 128-core host this took about 0.9 s off every multitasking call: a medium <code><a href="../reference/gsummary.html">gsummary()</a></code> scan went 1.36 s -&gt; 0.55 s at 89 workers. Cold-cache scans are unaffected.</li>
-<li>
-<strong>Behavior:</strong> the auto-configured <code>gmax.processes</code> is capped at 32 (was 70% of cores, unbounded). Past roughly 32 workers the per-worker cost - fork, shared-memory segment, result merge - stops paying for itself. Measured on an idle 128-core host against hg38, comparing the old default of 89 workers with 32: a two-chromosome <code><a href="../reference/gsummary.html">gsummary()</a></code> at <code>iterator = 100</code> went 0.555 s to 0.419 s, and a whole-genome scan at <code>iterator = 200</code> 0.736 s to 0.750 s. Heavier scans still improve slightly beyond 32 - the same two-chromosome scan at <code>iterator = 10</code> is 1.31 s at 32 workers against 1.05 s at 89 - so raise <code>gmax.processes</code> by hand if that is your workload. Hosts with fewer than 46 cores are unaffected, and <code>gmax.data.size</code> is unchanged.</li>
+<code>gtrack.export()</code> names an installable converter when <code>bedGraphToBigWig</code> is missing.</li>
+<li>Documentation: the query functions now document what each does with a <code>NaN</code> bin; <code><a href="../reference/gextract.html">gextract()</a></code>’s extra column is <code>intervalID</code>, not <code>columnID</code>; and <code><a href="../reference/gsample.html">gsample()</a></code>/<code><a href="../reference/gquantiles.html">gquantiles()</a></code> point at <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> rather than the long-removed <code>grnd.seed</code> option.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.11.19" id="misha-51119">misha 5.11.19<a class="anchor" aria-label="anchor" href="#misha-51119"></a></h2>

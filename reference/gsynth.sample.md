@@ -205,5 +205,5 @@ gsynth.sample(model, synthetic_genome_file,
 #> Warning: 16 sparse bins (with < 1000 observations) will be used during sampling.
 #> These bins will use uniform base distribution. Consider using bin_merge to merge them.
 #> Sampling synthetic genome...
-#> Synthetic genome written to: /tmp/RtmpdVEX62/synthetic_genome.fa
+#> Synthetic genome written to: /tmp/RtmpigTFOh/synthetic_genome.fa
 ```

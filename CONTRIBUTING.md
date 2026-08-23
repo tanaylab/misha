@@ -43,9 +43,20 @@ Sys.setenv(TESTTHAT_PARALLEL = "TRUE")
 devtools::test()
 ```
 
-A parallel run gives each test file its own copy of the test database
-under [`tempdir()`](https://rdrr.io/r/base/tempfile.html), so point
-`TMPDIR` at a filesystem with several GB free before starting R:
+**Only one test suite may run at a time.** The 14 test files that call
+`load_test_db()` open the lab’s shared database on NFS in place - they
+do not get a private copy - and each one deletes and recreates
+`tracks/temp` inside it. Two concurrent runs corrupt each other,
+whatever their `TMPDIR`s: two worktrees, two people, or a local run
+alongside CI. The symptom is failures that move between files from run
+to run, most often in tests that enumerate a database’s contents
+(`gintervals.ls`, `gtrack.ls`). Comparing a branch against master means
+running them one after the other. Tests that need real isolation use
+`create_isolated_test_db()`, which does copy.
+
+Tests that do copy a database put it under
+[`tempdir()`](https://rdrr.io/r/base/tempfile.html), so point `TMPDIR`
+at a filesystem with several GB free before starting R:
 
 ``` sh
 TMPDIR=/path/with/space R -e 'Sys.setenv(TESTTHAT_PARALLEL="TRUE"); devtools::test()'

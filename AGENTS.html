@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.20</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.21</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -68,6 +68,7 @@
 <p>R -e ‘devtools::test(filter = “name_of_test_file_without_extension”)’</p>
 <p>To run a specific test in a file do (e.g.):</p>
 <p>R -e “testthat::test_file(‘tests/testthat/test-pwm-sliding-window.R’, desc = ‘PWM sliding window MAX_POS mode works with iterator=20 and shifts’)”</p>
+<p>Only ONE suite may run at a time: the tests share a single database on NFS (<code>tests/testthat/helper-test_db.R</code>), so two concurrent runs corrupt each other and separate TMPDIRs do not help. Failures that move between files from run to run are that, not flaky tests. Re-run anything not green serially before believing it.</p>
 <p>To run all tests in parallel (preferred - serial mode is dramatically slower):</p>
 <p>R -e ‘Sys.setenv(TESTTHAT_PARALLEL = “TRUE”); devtools::test()’</p>
 <p>To check the package:</p>
