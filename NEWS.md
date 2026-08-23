@@ -1,3 +1,7 @@
+# misha 5.11.21
+
+* **Bug fix:** `gtrack.attr.import(..., remove.others = TRUE)` failed with "Number of calls to unprotect exceeds the number of calls to protect" once read-only attributes were set (`gdb.set_readonly_attrs()`) and more than one track was listed. Only the first track was updated, and the session was left in a corrupt state that could crash a later call.
+
 # misha 5.11.20
 
 * **Crash fix:** `gseq.pwm()` leaked one R protection-stack slot per call, printing "Warning: stack imbalance in '<-'" every time and killing a loop of ~50000 calls with "protect(): protection stack overflow". Results were never affected.
