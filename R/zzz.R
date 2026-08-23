@@ -5,10 +5,23 @@
 .misha <- new.env(parent = emptyenv())
 
 .onLoad <- function(lib, pkg) {
-    Sys.umask("0002")
+    # NOTE: do not set the process umask here. misha used to call
+    # Sys.umask("0002") at load time, which changed the umask of the whole R
+    # session - every package, for the rest of the session - and never
+    # restored it. The permissions misha needs for its own writes are applied
+    # scoped instead, by .gwith_umask() around the write itself; see the
+    # gpermissions.umask option.
 
     options(.ginteractive = FALSE)
     options(.gautocompletion = FALSE)
+
+    # umask applied around misha's own writes into a database - see
+    # .gwith_umask(). It is a live option rather than a .ggetOption() fallback
+    # because options(gpermissions.umask = NULL) *removes* the option in R, so
+    # an unset option and an explicit NULL are indistinguishable; only a live
+    # option lets NULL mean "leave the process umask alone". Set it after
+    # library(misha), not in .Rprofile: this line runs at load time.
+    options(gpermissions.umask = .misha_defaults$gpermissions.umask)
 
     # Auto-configure process limits based on number of cores
     num_cores <- parallel::detectCores(logical = TRUE)

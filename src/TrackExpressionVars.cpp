@@ -1,5 +1,7 @@
 #include <cstdint>
 #include <cmath>
+#include <algorithm>
+#include <limits>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <unordered_set>
@@ -1826,20 +1828,38 @@ void TrackExpressionVars::init(const TrackExpressionIteratorBase &expr_itr)
 	}
 }
 
+// Rf_allocVector does not initialise a REALSXP, and TrackExprScanner::begin
+// evaluates every track expression against these buffers before any data has
+// been written into them, purely to learn whether the expression returns a
+// vector of the requested length. Left as-is that probe runs the user's
+// expression over uninitialised memory: valgrind reports it, the outcome is
+// not reproducible, and an expression that errors or warns on particular
+// values can fail for reasons that have nothing to do with the user's data.
+// NaN is misha's "no data" value, so the probe sees something every track
+// expression already has to cope with.
+static void init_eval_buf(SEXP rvar, unsigned size)
+{
+	double *v = REAL(rvar);
+	std::fill(v, v + size, numeric_limits<double>::quiet_NaN());
+}
+
 void TrackExpressionVars::define_r_vars(unsigned size)
 {
 	for (Track_vars::iterator ivar = m_track_vars.begin(); ivar != m_track_vars.end(); ivar++) {
 		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
+		init_eval_buf(ivar->rvar, size);
 		Rf_defineVar(Rf_install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
 		ivar->var = REAL(ivar->rvar);
 	}
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ivar++) {
 		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
+		init_eval_buf(ivar->rvar, size);
 		Rf_defineVar(Rf_install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
 		ivar->var = REAL(ivar->rvar);
 	}
 	for (Value_vars::iterator ivar = m_value_vars.begin(); ivar != m_value_vars.end(); ivar++) {
 		rprotect(ivar->rvar = RSaneAllocVector(REALSXP, size));
+		init_eval_buf(ivar->rvar, size);
 		Rf_defineVar(Rf_install(ivar->var_name.c_str()), ivar->rvar, m_iu.get_env());
 		ivar->var = REAL(ivar->rvar);
 	}

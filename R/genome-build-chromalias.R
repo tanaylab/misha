@@ -715,7 +715,7 @@
         ), call. = FALSE)
     }
     out <- rbind(existing, do.call(rbind, new_rows))
-    utils::write.table(out, out_path, sep = "\t", quote = FALSE, row.names = FALSE)
+    .gwith_umask(utils::write.table(out, out_path, sep = "\t", quote = FALSE, row.names = FALSE))
     invisible(out_path)
 }
 

@@ -9,6 +9,7 @@
 #define GENOMETRACKCOMPUTED_H_
 
 #include <cstdint>
+#include <cstring>
 #include <stdio.h>
 
 #include "GenomeTrack2D.h"
@@ -27,9 +28,16 @@ template<typename T>
 struct Computed_val : public Rectangle {
 	T v;
 
-	Computed_val() {}
-	Computed_val(int64_t _x1, int64_t _y1, int64_t _x2, int64_t _y2, const T &_v = T()) : Rectangle(_x1, _y1, _x2, _y2), v(_v) {}
-	Computed_val(const Rectangle &rect, const T &_v = T()) : Rectangle(rect), v(_v) {}
+	// Same as Rectangle_val (see StatQuadTree.h): the tail padding after "v" is written to disk verbatim
+	// by the quad-tree serializer, so every constructor defines it.
+	Computed_val() { clear_padding(); }
+	Computed_val(const Computed_val &o) : Rectangle(o), v(o.v) { clear_padding(); }
+	Computed_val(int64_t _x1, int64_t _y1, int64_t _x2, int64_t _y2, const T &_v = T()) : Rectangle(_x1, _y1, _x2, _y2), v(_v) { clear_padding(); }
+	Computed_val(const Rectangle &rect, const T &_v = T()) : Rectangle(rect), v(_v) { clear_padding(); }
+
+	Computed_val &operator=(const Computed_val &o) = default;
+
+	void clear_padding() { char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end); }
 
 	double val(const Rectangle &rect, void* uptr) const {
         if (x1 == rect.x1 && x2 == rect.x2 && y1 == rect.y1 && y2 == rect.y2)

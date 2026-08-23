@@ -26,6 +26,24 @@ create_test_db <- function(path, chrom_sizes = data.frame(chrom = c("chr1", "chr
     invisible(path)
 }
 
+#' Point the session at the SHARED test database
+#'
+#' NOTE: this is not a copy. `gsetroot()` below opens the lab database in
+#' place, and this function then deletes and recreates `tracks/temp` inside
+#' it. 14 test files call this helper, so they all share one database on NFS.
+#'
+#' Consequence: **only one test suite may run at a time.** Two concurrent runs
+#' - two agents, two worktrees, two people, or a local run alongside CI -
+#' corrupt each other, and separate `TMPDIR`s do NOT prevent it. The symptom is
+#' failures that move between files from run to run, most often in tests that
+#' enumerate what a database contains (`gintervals.ls`, `gtrack.ls`) because
+#' another run is creating and removing sets underneath them. Demonstrated
+#' 2026-08-23: master and a branch run concurrently produced four identical
+#' failures; run alone, each failed somewhere else entirely.
+#'
+#' If you are comparing a branch against master, run them one after the other,
+#' and re-run anything not green serially before believing it. Tests needing
+#' true isolation should use `create_isolated_test_db()`, which does copy.
 load_test_db <- function() {
     db_path <- if (getOption("gmulticontig.indexed_format", FALSE)) {
         "/net/mraid20/ifs/wisdom/tanay_lab/tgdata/db/tgdb/misha_test_db_indexed/"

@@ -905,6 +905,8 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
                           SEXP r_spat_params, SEXP r_return_strand,
                           SEXP r_skip_gaps, SEXP r_gap_chars, SEXP r_prior,
                           SEXP r_neutral_chars, SEXP r_neutral_policy, SEXP _envir) {
+    bool single_shard = false;
+
     try {
         // Every misha entry point needs this: it owns the PROTECT counter that
         // IntervUtils' constructor pins ALLGENOME on, the child processes launched
@@ -948,13 +950,11 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
         rdb::IntervUtils iu(_envir);
         uint64_t min_work = iu.get_min_seqs_work4process();
 
-        // If workload is below threshold, use sequential version
-        if (total_work < min_work) {
-            return C_gseq_pwm(r_seqs, r_pssm, r_mode, r_bidirect, r_strand_mode,
-                            r_score_thresh, r_roi_start, r_roi_end, r_extend,
-                            r_spat_params, r_return_strand, r_skip_gaps,
-                            r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy);
-        }
+        // If workload is below threshold, use sequential version (see the
+        // rdb::SingleShard handler below - the serial entry point must not run
+        // while our RdbInitializer is still alive).
+        if (total_work < min_work)
+            throw rdb::SingleShard();
 
         // Get number of processes
         int num_cores = std::max(1, (int)sysconf(_SC_NPROCESSORS_ONLN));
@@ -964,13 +964,9 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
         );
         int num_processes = std::min(std::min(max_processes, n_seqs), (int)MAX_KIDS);
 
-        if (num_processes <= 1) {
-            // Not enough work to parallelize
-            return C_gseq_pwm(r_seqs, r_pssm, r_mode, r_bidirect, r_strand_mode,
-                            r_score_thresh, r_roi_start, r_roi_end, r_extend,
-                            r_spat_params, r_return_strand, r_skip_gaps,
-                            r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy);
-        }
+        // Not enough work to parallelize
+        if (num_processes <= 1)
+            throw rdb::SingleShard();
 
         // Determine result types
         std::string mode = CHAR(STRING_ELT(r_mode, 0));
@@ -1110,6 +1106,8 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
 
         return result;
 
+    } catch (rdb::SingleShard &) {
+        single_shard = true;
     } catch (TGLException &e) {
         rdb::rerror("%s", e.msg());
     } catch (std::exception& e) {
@@ -1117,6 +1115,20 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
     } catch (...) {
         rdb::rerror("Unknown error in C_gseq_pwm_multitask");
     }
+
+    // Forking would buy no parallelism, so run the serial entry point - the very path
+    // gmultitasking = FALSE takes. It must happen out here, after the try block has
+    // destroyed our RdbInitializer: C_gseq_pwm reports errors through rdb::rerror,
+    // whose Rf_errorcall longjmps straight back to R. Called from inside the try block
+    // that longjmp would skip ~RdbInitializer, leaving s_ref_count stuck above zero -
+    // misha's SIGINT/SIGCHLD handlers then stay installed and the shared memory and
+    // file descriptors of the session are never released (see rdb::SingleShard).
+    if (single_shard)
+        return C_gseq_pwm(r_seqs, r_pssm, r_mode, r_bidirect, r_strand_mode,
+                          r_score_thresh, r_roi_start, r_roi_end, r_extend,
+                          r_spat_params, r_return_strand, r_skip_gaps,
+                          r_gap_chars, r_prior, r_neutral_chars, r_neutral_policy);
+
     return R_NilValue;
 }
 

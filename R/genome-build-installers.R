@@ -44,7 +44,7 @@
         rel_dir <- do.call(file.path, as.list(parts[-length(parts)]))
         abs_dir <- file.path(get("GROOT", envir = .misha), "tracks", rel_dir)
         if (!dir.exists(abs_dir)) {
-            dir.create(abs_dir, recursive = TRUE, mode = "0755")
+            .gwith_umask(dir.create(abs_dir, recursive = TRUE, mode = "0755"))
         }
     }
     gintervals.save(name, df)
@@ -252,7 +252,7 @@
         if (length(parts) > 1L) {
             rel_dir <- do.call(file.path, as.list(parts[-length(parts)]))
             abs_dir <- file.path(get("GROOT", envir = .misha), "tracks", rel_dir)
-            if (!dir.exists(abs_dir)) dir.create(abs_dir, recursive = TRUE, mode = "0755")
+            if (!dir.exists(abs_dir)) .gwith_umask(dir.create(abs_dir, recursive = TRUE, mode = "0755"))
         }
         if (gintervals.exists(full_name)) {
             if (!overwrite) {

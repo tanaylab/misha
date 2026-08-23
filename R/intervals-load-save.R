@@ -44,7 +44,7 @@
             {
                 # if any of the source intervals sets is big then create the output intervals set big too
                 if (!is.null(intervals.set.out)) {
-                    dir.create(fullpath, recursive = TRUE, mode = "0777")
+                    .gwith_umask(dir.create(fullpath, recursive = TRUE, mode = "0777"))
 
                     # Initialize indexed format writing if enabled
                     if (use_indexed_format) {
@@ -628,9 +628,11 @@
         }
     }
 
-    f <- file(filename, "wb")
-    serialize(intervs, f)
-    close(f)
+    .gwith_umask({
+        f <- file(filename, "wb")
+        serialize(intervs, f)
+        close(f)
+    })
     nrow(intervs)
 }
 

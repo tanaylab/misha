@@ -28,15 +28,17 @@
     # if vars directory does not exist, create it
     trackdir <- .track_dir(trackname)
     dirname <- paste(trackdir, "vars", sep = "/")
-    if (!file.exists(dirname)) {
-        dir.create(dirname, mode = "0777")
-    }
+    .gwith_umask({
+        if (!file.exists(dirname)) {
+            dir.create(dirname, mode = "0777")
+        }
 
-    # save the variable
-    filename <- paste(dirname, varname, sep = "/")
-    f <- file(filename, "wb")
-    serialize(value, f)
-    close(f)
+        # save the variable
+        filename <- paste(dirname, varname, sep = "/")
+        f <- file(filename, "wb")
+        serialize(value, f)
+        close(f)
+    })
 }
 
 

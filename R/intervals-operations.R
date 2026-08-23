@@ -900,7 +900,7 @@ gintervals.import_genes <- function(genes.file = NULL, annots.file = NULL, annot
     }
 
     tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/downloads", sep = ""))
-    if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+    if (!.gwith_umask(dir.create(tmp.dirname, recursive = TRUE, mode = "0777"))) {
         stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
     }
 

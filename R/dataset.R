@@ -299,7 +299,8 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
         invisible(TRUE)
     }
     make_dir <- function(dir) {
-        if (!dir.exists(dir) && !dir.create(dir, recursive = TRUE, showWarnings = FALSE) &&
+        if (!dir.exists(dir) &&
+            !.gwith_umask(dir.create(dir, recursive = TRUE, showWarnings = FALSE)) &&
             !dir.exists(dir)) {
             stop(sprintf("gdataset.save: failed to create directory %s", dir), call. = FALSE)
         }
@@ -312,7 +313,7 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
 
     # Copy chrom_sizes.txt
     checked(
-        file.copy(file.path(groot, "chrom_sizes.txt"), file.path(path, "chrom_sizes.txt")),
+        .gwith_umask(file.copy(file.path(groot, "chrom_sizes.txt"), file.path(path, "chrom_sizes.txt"))),
         sprintf("copy %s to %s", file.path(groot, "chrom_sizes.txt"), path)
     )
 
@@ -325,7 +326,7 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
         seq_files <- list.files(file.path(groot, "seq"), full.names = TRUE)
         if (length(seq_files)) {
             checked(
-                file.copy(seq_files, seq_dest, recursive = TRUE),
+                .gwith_umask(file.copy(seq_files, seq_dest, recursive = TRUE)),
                 sprintf("copy %s into %s", file.path(groot, "seq"), seq_dest)
             )
         }
@@ -360,7 +361,7 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
                 )
             } else {
                 checked(
-                    file.copy(source_path, dirname(dest_path), recursive = TRUE),
+                    .gwith_umask(file.copy(source_path, dirname(dest_path), recursive = TRUE)),
                     sprintf("copy track %s from %s to %s", track, source_path, dirname(dest_path))
                 )
             }
@@ -391,7 +392,7 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
                 )
             } else {
                 checked(
-                    file.copy(source_file, dirname(dest_path), recursive = TRUE),
+                    .gwith_umask(file.copy(source_file, dirname(dest_path), recursive = TRUE)),
                     sprintf("copy interval set %s from %s to %s", interval, source_file, dirname(dest_path))
                 )
             }
@@ -410,7 +411,7 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
         genome = as.character(tools::md5sum(file.path(groot, "chrom_sizes.txt")))
     )
 
-    yaml::write_yaml(yaml_data, file.path(path, "misha.yaml"))
+    .gwith_umask(yaml::write_yaml(yaml_data, file.path(path, "misha.yaml")))
     if (!file.exists(file.path(path, "misha.yaml"))) {
         stop(sprintf("gdataset.save: failed to write %s", file.path(path, "misha.yaml")), call. = FALSE)
     }
@@ -689,7 +690,7 @@ gdataset.example_path <- function() {
     # Write cache for future use (silently fail if no write permission)
     try(
         {
-            f <- file(cache_path, "wb")
+            f <- .gwith_umask(file(cache_path, "wb"))
             serialize(list(tracks, intervals), f)
             close(f)
             .gdb.cache_clear_dirty(db)

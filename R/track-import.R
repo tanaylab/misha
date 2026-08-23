@@ -208,7 +208,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 message("Unzipping...\n")
                 report.progress <- TRUE
                 tmp.dirname <- tempfile()
-                if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+                if (!.gwith_umask(dir.create(tmp.dirname, recursive = TRUE, mode = "0777"))) {
                     stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
                 }
 
@@ -232,7 +232,7 @@ gtrack.import <- function(track = NULL, description = NULL, file = NULL, binsize
                 report.progress <- TRUE
                 if (tmp.dirname == "") {
                     tmp.dirname <- tempfile()
-                    if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+                    if (!.gwith_umask(dir.create(tmp.dirname, recursive = TRUE, mode = "0777"))) {
                         stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
                     }
                 }
@@ -518,7 +518,7 @@ gtrack.import_set <- function(description = NULL, path = NULL, binsize = NULL, t
     tryCatch(
         {
             tmp.dirname <- tempfile(pattern = "", tmpdir = paste(get("GROOT", envir = .misha), "/downloads", sep = ""))
-            if (!dir.create(tmp.dirname, recursive = TRUE, mode = "0777")) {
+            if (!.gwith_umask(dir.create(tmp.dirname, recursive = TRUE, mode = "0777"))) {
                 stop(sprintf("Failed to create a directory %s", tmp.dirname), call. = FALSE)
             }
             protocol <- "ftp://"
