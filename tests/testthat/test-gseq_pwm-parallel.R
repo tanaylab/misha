@@ -276,53 +276,63 @@ test_that("gseq.pwm small workloads stay sequential and avoid fork overhead", {
     expect_true(time_threshold["elapsed"] >= 0)
 })
 
-# C_gseq_pwm_multitask used to construct rdb::IntervUtils - which pins
-# ALLGENOME on misha's tracked PROTECT stack - without an RdbInitializer to
-# unwind it, so every call leaked one R protection slot. The leak is
-# unbounded: N calls leave N slots on R's pointer-protection stack.
-#
-# R reports it with "stack imbalance in '<construct>', <before> then <after>"
-# via REprintf, which is not an R condition (expect_warning cannot see it) but
-# is captured by sink(type = "message").
-capture_r_messages <- function(expr) {
-    tf <- tempfile()
-    con <- file(tf, "wt")
-    sink(con, type = "message")
-    on.exit(
-        {
-            sink(type = "message")
-            close(con)
-        },
-        add = TRUE
-    )
-    force(expr)
-    sink(type = "message")
-    close(con)
-    on.exit(NULL)
-    readLines(tf, warn = FALSE)
-}
+test_that("gseq.pwm does not leak protection stack slots", {
+    withr::local_options(list(gmultitasking = TRUE))
 
-test_that("gseq.pwm does not leak a PROTECT slot per call", {
+    pssm <- create_test_pssm()
+    seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTTT")
+
+    # The multitasking entry used to pin ALLGENOME on misha's PROTECT stack with no
+    # RdbInitializer to release it: one slot leaked per call, R printed "stack
+    # imbalance in '<-'", and a loop died with "protect(): protection stack overflow"
+    # past R's default 50000 slots.
+    loop <- function(n) {
+        for (i in seq_len(n)) x <- gseq.pwm(seqs, pssm, mode = "max")
+        TRUE
+    }
+    expect_true(loop(60000))
+})
+
+test_that("gseq.pwm multitask matches sequential for pos+strand and per-sequence ROIs", {
+    pssm <- create_test_pssm()
+    # a sequence count that divides evenly into no plausible number of processes
+    seqs <- replicate(997, paste(sample(c("A", "C", "G", "T"), 200, replace = TRUE), collapse = ""))
+    start_pos <- sample(1:50, 997, replace = TRUE)
+    end_pos <- sample(150:200, 997, replace = TRUE)
+
+    withr::local_options(list(gmultitasking = FALSE))
+    seq_pos <- gseq.pwm(seqs, pssm, mode = "pos", bidirect = TRUE, return_strand = TRUE)
+    seq_roi <- gseq.pwm(seqs, pssm, mode = "max", start_pos = start_pos, end_pos = end_pos)
+
     withr::local_options(list(
         gmultitasking = TRUE,
-        gmin.seqs.work4process = 1e12 # stay sequential, but still enter the multitask entry point
+        gmax.processes = 4,
+        gmin.seqs.work4process = 100
     ))
+    expect_equal(gseq.pwm(seqs, pssm, mode = "pos", bidirect = TRUE, return_strand = TRUE), seq_pos)
+    expect_equal(gseq.pwm(seqs, pssm, mode = "max", start_pos = start_pos, end_pos = end_pos), seq_roi)
+})
+
+test_that("a failing child process reports the real error", {
+    withr::local_options(list(
+        gmultitasking = TRUE,
+        gmax.processes = 4,
+        gmin.seqs.work4process = 100
+    ))
+
+    # gseq.pwm() rejects a PSSM without column names before it reaches C, so go straight
+    # to the entry point: the failure has to happen in the children. An Rf_error() there
+    # would longjmp back into R and let the child escape into this session.
     pssm <- create_test_pssm()
-    seqs <- replicate(40, paste(sample(c("A", "C", "G", "T"), 30, replace = TRUE), collapse = ""))
+    dimnames(pssm) <- NULL
+    seqs <- replicate(500, paste(sample(c("A", "C", "G", "T"), 200, replace = TRUE), collapse = ""))
 
-    # The enclosing `for` reports the accumulated imbalance when it returns,
-    # so a per-call leak shows up here even though R stops reporting the
-    # individual .Call after the first one.
-    msgs <- capture_r_messages({
-        for (i in 1:10) {
-            invisible(gseq.pwm(seqs, pssm, mode = "max", bidirect = FALSE))
-        }
-    })
-
-    expect_false(any(grepl("stack imbalance", msgs, fixed = TRUE)),
-        label = paste0(
-            "gseq.pwm left R's protection stack unbalanced: ",
-            paste(grep("stack imbalance", msgs, value = TRUE), collapse = " | ")
-        )
+    expect_error(
+        .Call(
+            "C_gseq_pwm_multitask", seqs, pssm, "max", TRUE, 0L, 0, NULL, NULL, FALSE,
+            list(NULL, 1L, NULL, NULL), FALSE, FALSE, character(0), 0.01,
+            character(0), "average", misha:::.misha_env()
+        ),
+        "column names"
     )
 })
