@@ -35,6 +35,7 @@
 #' gdb.init_examples()
 #' gsegment("dense_track", 5000, 0.0001)
 #'
+#' @inheritSection misha-NaN NaN values
 #' @export gsegment
 gsegment <- function(expr = NULL, minsegment = NULL, maxpval = 0.05, onetailed = TRUE, intervals = NULL, iterator = NULL, intervals.set.out = NULL) {
     if (is.null(substitute(expr)) || is.null(minsegment)) {

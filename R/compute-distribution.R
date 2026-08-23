@@ -148,6 +148,7 @@ gcis_decay <- function(expr = NULL, breaks = NULL, src = NULL, domain = NULL, in
 #'     iterator = 100
 #' )
 #'
+#' @inheritSection misha-NaN NaN values
 #' @export gdist
 gdist <- function(..., intervals = NULL, include.lowest = FALSE, iterator = NULL, band = NULL, dataframe = FALSE, names = NULL) {
     args <- as.list(substitute(list(...)))[-1L]
