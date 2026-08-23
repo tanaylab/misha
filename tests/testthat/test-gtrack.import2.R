@@ -80,6 +80,13 @@ test_that("import BED as dense track with binsize", {
     gtrack.rm("test.bedtrack.dense", force = TRUE)
     withr::defer(gtrack.rm("test.bedtrack.dense", force = TRUE))
 
+    # "test.bedtrack.dense" is a namespaced name, so tracks/test/bedtrack must
+    # exist as a directory before the import. misha does not create parent
+    # namespaces implicitly. This test used to pass only because some earlier
+    # run had left that directory behind in the shared database.
+    gdir.create("test/bedtrack", showWarnings = FALSE)
+    withr::defer(gdir.rm("test/bedtrack", recursive = TRUE, force = TRUE))
+
     bed_file <- tempfile(fileext = ".bed")
     writeLines(c(
         "chr1\t0\t10\tseg1\t2",
