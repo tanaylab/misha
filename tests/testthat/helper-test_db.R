@@ -50,9 +50,10 @@ shared_test_db_path <- function(indexed = getOption("gmulticontig.indexed_format
 # `.track` / `.interv`. The scan runs with FTS_LOGICAL, so it follows symlinks.
 #
 # So an overlay only has to mirror the namespace directories - a handful of
-# them - and symlink the leaves. It reads exactly like the shared database,
-# costs ~0.1 s and ~700 KB of symlinks, and every write a test makes lands in
-# the overlay instead of in lab data.
+# them, plus the interval-set directories (see .mirror_db_dir) - and symlink
+# the leaves. It reads exactly like the shared database, costs a few tenths of
+# a second and about a megabyte of symlinks, and every write a test makes lands
+# in the overlay instead of in lab data.
 
 # Recursively mirror `src` into `dst`: directories misha would descend into
 # become real (writable) directories, everything else becomes a symlink.
