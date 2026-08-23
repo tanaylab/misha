@@ -271,56 +271,129 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
     .gdb.validate_resources(tracks, names(gtrack_dataset), "Track")
     .gdb.validate_resources(intervals, names(gintervals_dataset), "Interval set")
 
+    # Everything below this point writes into `path`. Until the function
+    # returns normally the directory is unfinished, so any failure (a copy
+    # that could not be made, an interrupt) removes it: a half-built dataset
+    # must never be left behind claiming to be complete, and must never block
+    # a retry - the function refuses a `path` that already exists.
+    #
+    # unlink() uses lstat, so the symlinks planted below are removed as links;
+    # the source database they point at is untouched.
+    completed <- FALSE
+    on.exit(
+        {
+            if (!completed) {
+                unlink(path, recursive = TRUE, force = TRUE)
+            }
+        },
+        add = TRUE
+    )
+
+    # file.copy()/file.symlink() signal failure by returning FALSE and at most
+    # a warning. Left unchecked, a missing source track produced a dataset
+    # directory with no track in it and a misha.yaml claiming track_count: 1.
+    checked <- function(ok, what) {
+        if (!length(ok) || anyNA(ok) || !all(ok)) {
+            stop(sprintf("gdataset.save: failed to %s", what), call. = FALSE)
+        }
+        invisible(TRUE)
+    }
+    make_dir <- function(dir) {
+        if (!dir.exists(dir) && !dir.create(dir, recursive = TRUE, showWarnings = FALSE) &&
+            !dir.exists(dir)) {
+            stop(sprintf("gdataset.save: failed to create directory %s", dir), call. = FALSE)
+        }
+        invisible(TRUE)
+    }
+
     # Create directory structure
-    dir.create(path, recursive = TRUE)
-    dir.create(file.path(path, "tracks"), recursive = TRUE)
+    make_dir(path)
+    make_dir(file.path(path, "tracks"))
 
     # Copy chrom_sizes.txt
-    file.copy(file.path(groot, "chrom_sizes.txt"), file.path(path, "chrom_sizes.txt"))
+    checked(
+        file.copy(file.path(groot, "chrom_sizes.txt"), file.path(path, "chrom_sizes.txt")),
+        sprintf("copy %s to %s", file.path(groot, "chrom_sizes.txt"), path)
+    )
 
     # Handle seq/ directory
     if (copy_seq) {
         # Copy the seq directory contents directly into path/seq
         # Note: file.copy with recursive=TRUE copies the contents into an existing directory
         seq_dest <- file.path(path, "seq")
-        dir.create(seq_dest, showWarnings = FALSE)
+        make_dir(seq_dest)
         seq_files <- list.files(file.path(groot, "seq"), full.names = TRUE)
-        file.copy(seq_files, seq_dest, recursive = TRUE)
+        if (length(seq_files)) {
+            checked(
+                file.copy(seq_files, seq_dest, recursive = TRUE),
+                sprintf("copy %s into %s", file.path(groot, "seq"), seq_dest)
+            )
+        }
     } else {
-        file.symlink(file.path(groot, "seq"), file.path(path, "seq"))
+        checked(
+            file.symlink(file.path(groot, "seq"), file.path(path, "seq")),
+            sprintf("symlink %s to %s", file.path(groot, "seq"), file.path(path, "seq"))
+        )
     }
 
-    # Copy/link tracks
+    # Copy/link tracks. A track name is dotted ("subdir.mytrack") but lives at
+    # tracks/subdir/mytrack.track on disk, so the name has to be translated to
+    # a path - and the destination sub-directory has to exist before the copy.
     if (!is.null(tracks)) {
         for (track in tracks) {
             source_db <- gtrack_dataset[[track]]
-            source_path <- file.path(source_db, "tracks", paste0(track, ".track"))
-            dest_path <- file.path(path, "tracks", paste0(track, ".track"))
+            rel_path <- paste0(gsub("\\.", "/", track), ".track")
+            source_path <- file.path(source_db, "tracks", rel_path)
+            dest_path <- file.path(path, "tracks", rel_path)
+            if (!file.exists(source_path)) {
+                stop(sprintf(
+                    "gdataset.save: track %s is registered in %s but its data is missing at %s",
+                    track, source_db, source_path
+                ), call. = FALSE)
+            }
+            make_dir(dirname(dest_path))
 
             if (symlinks) {
-                file.symlink(source_path, dest_path)
+                checked(
+                    file.symlink(source_path, dest_path),
+                    sprintf("symlink track %s (%s -> %s)", track, source_path, dest_path)
+                )
             } else {
-                file.copy(source_path, file.path(path, "tracks"), recursive = TRUE)
+                checked(
+                    file.copy(source_path, dirname(dest_path), recursive = TRUE),
+                    sprintf("copy track %s from %s to %s", track, source_path, dirname(dest_path))
+                )
             }
         }
     }
 
-    # Copy/link intervals
+    # Copy/link intervals (same name-to-path translation as for tracks)
     if (!is.null(intervals)) {
         for (interval in intervals) {
             source_db <- gintervals_dataset[[interval]]
             # Intervals can be files or directories
-            source_file <- file.path(source_db, "tracks", paste0(interval, ".interv"))
-            source_dir <- source_file # Same path - could be file or dir
+            rel_path <- paste0(gsub("\\.", "/", interval), ".interv")
+            source_file <- file.path(source_db, "tracks", rel_path)
 
-            if (file.exists(source_file) || dir.exists(source_dir)) {
-                dest_path <- file.path(path, "tracks", paste0(interval, ".interv"))
+            if (!file.exists(source_file)) {
+                stop(sprintf(
+                    "gdataset.save: interval set %s is registered in %s but its data is missing at %s",
+                    interval, source_db, source_file
+                ), call. = FALSE)
+            }
+            dest_path <- file.path(path, "tracks", rel_path)
+            make_dir(dirname(dest_path))
 
-                if (symlinks) {
-                    file.symlink(source_file, dest_path)
-                } else {
-                    file.copy(source_file, file.path(path, "tracks"), recursive = TRUE)
-                }
+            if (symlinks) {
+                checked(
+                    file.symlink(source_file, dest_path),
+                    sprintf("symlink interval set %s (%s -> %s)", interval, source_file, dest_path)
+                )
+            } else {
+                checked(
+                    file.copy(source_file, dirname(dest_path), recursive = TRUE),
+                    sprintf("copy interval set %s from %s to %s", interval, source_file, dirname(dest_path))
+                )
             }
         }
     }
@@ -338,7 +411,11 @@ gdataset.save <- function(path, description, tracks = NULL, intervals = NULL,
     )
 
     yaml::write_yaml(yaml_data, file.path(path, "misha.yaml"))
+    if (!file.exists(file.path(path, "misha.yaml"))) {
+        stop(sprintf("gdataset.save: failed to write %s", file.path(path, "misha.yaml")), call. = FALSE)
+    }
 
+    completed <- TRUE
     invisible(path)
 }
 

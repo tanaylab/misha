@@ -42,7 +42,23 @@ And the development version from GitHub with:
 remotes::install_github("tanaylab/misha")
 ```
 
+## Quick start
+
+The package ships a small example database, so there is nothing to download before the first query:
+
+```{r}
+library(misha)
+gdb.init_examples() # a tiny example genome, unpacked into tempdir()
+gtrack.ls() # what is in it
+gextract("dense_track", gintervals(1, 0, 500), iterator = 100) # signal in 100 bp bins
+head(gscreen("dense_track > 0.2", gintervals(1, 0, 50000), iterator = 100)) # bins above a threshold
+```
+
+Every misha analysis is that shape: a **scope** (where to look), an **iterator** (in what chunks), and a **track expression** evaluated over it.
+
 ## Usage
+
+Start with the [Misha Basics](https://tanaylab.github.io/misha/articles/Misha-Basics.html) short guide.
 
 See the [Genomes](https://tanaylab.github.io/misha/articles/Genomes.html) vignette for instructions on how to create a misha database for common genomes.
 
@@ -67,6 +83,7 @@ For agents (Claude Code, Copilot, Cursor, etc.) writing misha analysis code in a
 - [`agent-guides/misha-core.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-core.md) - concepts, bootstrap, and the everyday recipes (intervals, annotation, distance, extract, vtracks, gscreen, gdist, gtrack.create). Start here.
 - [`agent-guides/misha-advanced.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-advanced.md) - 2D / Hi-C pile-ups, insulation, sequence and PWM tracks, bulk import/export, new genomes and cross-species.
 - [`agent-guides/misha-anti-patterns.md`](https://github.com/tanaylab/misha/blob/master/agent-guides/misha-anti-patterns.md) - silent footguns referenced inline from the above.
+- [`agent-guides/skills/`](https://github.com/tanaylab/misha/tree/master/agent-guides/skills) - deep playbooks for specific tasks. Currently: [`importing-tracks`](https://github.com/tanaylab/misha/blob/master/agent-guides/skills/importing-tracks/SKILL.md) (format chooser across all `gtrack.*import*` variants + pre/post-import validation). Load when the task specifically calls for one of these.
 
 The core guide is ~4k words and targets a system-prompt-sized context. For Claude Code-style setups, dropping `misha-core.md` (or all three) into the project's `CLAUDE.md` / `AGENTS.md` is the intended use.
 
