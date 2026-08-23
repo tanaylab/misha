@@ -1,0 +1,96 @@
+# Creates one or more tracks from multiple WIG / BigWig / BedGraph / tab-delimited files on disk or FTP
+
+Creates one or more tracks from WIG / BigWig / BedGraph / tab-delimited
+files on disk or FTP.
+
+## Usage
+
+``` r
+gtrack.import_set(
+  description = NULL,
+  path = NULL,
+  binsize = NULL,
+  track.prefix = NULL,
+  defval = NaN
+)
+```
+
+## Arguments
+
+- description:
+
+  a character string description
+
+- path:
+
+  file path or URL (may contain wildcards)
+
+- binsize:
+
+  bin size of the newly created 'Dense' track or '0' for a 'Sparse'
+  track
+
+- track.prefix:
+
+  prefix for a track name
+
+- defval:
+
+  default track value
+
+## Value
+
+Names of files that were successfully imported and those that failed.
+
+## Details
+
+This function is similar to 'gtrack.import' however unlike the latter it
+can create multiple tracks. Additionally the files can be fetched from
+an FTP server.
+
+The files are expected to be in WIG / BigWig / BedGraph / tab-delimited
+formats. One can learn about the format of the tab-delimited file by
+running 'gextract' function with a 'file' parameter set to the name of
+the file. Zipped files are supported (file name must have '.gz' or
+'.zip' suffix).
+
+Files are specified by 'path' argument. 'path' can be also a URL of an
+FTP server in the form of 'ftp://\[address\]/\[files\]'. If 'path' is a
+URL, the files are first downloaded from FTP server to a temporary
+directory and then imported to tracks. The temporary directory is
+created at 'GROOT/downloads'.
+
+Regardless whether 'path' is file path or to a URL, it can contain
+wildcards. Hence multiple files can be imported (and downloaded) at
+once.
+
+If 'binsize' is 0 the resulted tracks are created in 'Sparse' format.
+Otherwise the 'Dense' format is chosen with a bin size equal to
+'binsize'. The values that were not defined in input file file are
+substituted by 'defval' value.
+
+The name of a each created track is of '\[track.prefix\]\[filename\]'
+form, where 'filename' is the name of the WIG file. For example, if
+'track.prefix' equals to "wigs."" and an input file name is 'mydata', a
+track named 'wigs.mydata' is created. If 'track.prefix' is 'NULL' no
+prefix is appended to the name of the created track.
+
+Existing tracks are not overwritten and no new directories are
+automatically created.
+
+'description' is added to the created tracks as an attribute.
+
+'gtrack.import_set' does not stop if an error occurs while importing a
+file. It rather continues importing the rest of the files.
+
+'gtrack.import_set' returns the names of the files that were
+successfully imported and those that failed.
+
+## See also
+
+[`gtrack.import`](https://tanaylab.github.io/misha/reference/gtrack.import.md),
+[`gwget`](https://tanaylab.github.io/misha/reference/gwget.md),
+[`gtrack.rm`](https://tanaylab.github.io/misha/reference/gtrack.rm.md),
+[`gtrack.info`](https://tanaylab.github.io/misha/reference/gtrack.info.md),
+[`gdir.create`](https://tanaylab.github.io/misha/reference/gdir.create.md),
+[`gextract`](https://tanaylab.github.io/misha/reference/gextract.md)

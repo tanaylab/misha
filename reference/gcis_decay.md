@@ -1,0 +1,133 @@
+# Calculates distribution of contact distances
+
+Calculates distribution of contact distances.
+
+## Usage
+
+``` r
+gcis_decay(
+  expr = NULL,
+  breaks = NULL,
+  src = NULL,
+  domain = NULL,
+  intervals = NULL,
+  include.lowest = FALSE,
+  iterator = NULL,
+  band = NULL
+)
+```
+
+## Arguments
+
+- expr:
+
+  track expression
+
+- breaks:
+
+  breaks that determine the bin
+
+- src:
+
+  source intervals
+
+- domain:
+
+  domain intervals
+
+- intervals:
+
+  genomic scope for which the function is applied
+
+- include.lowest:
+
+  if 'TRUE', the lowest value of the range determined by breaks is
+  included
+
+- iterator:
+
+  2D track expression iterator. If 'NULL' iterator is determined
+  implicitly based on track expressions.
+
+- band:
+
+  track expression band. If 'NULL' no band is used.
+
+## Value
+
+2-dimensional vector representing the distribution of contact distances
+for inter and intra domains.
+
+## Details
+
+A 2D iterator interval '(chrom1, start1, end1, chrom2, start2, end2)' is
+said to represent a contact between two 1D intervals I1 and I2:
+'(chrom1, start1, end1)' and '(chrom2, start2, end2)'.
+
+For contacts where 'chrom1' equals to 'chrom2' and I1 is within source
+intervals the function calculates the distribution of distances between
+I1 and I2. The distribution is calculated separately for intra-domain
+and inter-domain contacts.
+
+An interval is within source intervals if the unification of all source
+intervals fully overlaps it. 'src' intervals are allowed to contain
+overlapping intervals.
+
+Two intervals I1 and I2 are within the same domain (intra-domain
+contact) if among the domain intervals exists an interval that fully
+overlaps both I1 and I2. Otherwise the contact is considered to be
+inter-domain. 'domain' must contain only non-overlapping intervals.
+
+The distance between I1 and I2 is the absolute distance between the
+centers of these intervals, i.e.: '\|(start1 + end1 - start2 - end2) /
+2\|'.
+
+The range of distances for which the distribution is calculated is
+defined by 'breaks' argument. For example: 'breaks=c(x1, x2, x3, x4)'
+represents three different intervals (bins): (x1, x2\], (x2, x3\], (x3,
+x4\].
+
+If 'include.lowest' is 'TRUE' the the lowest value will be included in
+the first interval, i.e. in \[x1, x2\]
+
+## See also
+
+[`gdist`](https://tanaylab.github.io/misha/reference/gdist.md),
+[`gtrack.2d.import_contacts`](https://tanaylab.github.io/misha/reference/gtrack.2d.import_contacts.md)
+
+## Examples
+
+``` r
+
+gdb.init_examples()
+
+src <- rbind(
+    gintervals(1, 10, 100),
+    gintervals(1, 200, 300),
+    gintervals(1, 400, 500),
+    gintervals(1, 600, 700),
+    gintervals(1, 7000, 9100),
+    gintervals(1, 9000, 18000),
+    gintervals(1, 30000, 31000),
+    gintervals(2, 1130, 15000)
+)
+
+domain <- rbind(
+    gintervals(1, 0, 483000),
+    gintervals(2, 0, 300000)
+)
+
+gcis_decay("rects_track", 50000 * (1:10), src, domain)
+#>                 intra inter
+#> (50000,100000]      0     0
+#> (100000,150000]     0     0
+#> (150000,200000]     1     0
+#> (200000,250000]     0     0
+#> (250000,300000]     0     0
+#> (300000,350000]     0     0
+#> (350000,400000]     0     0
+#> (400000,450000]     0     0
+#> (450000,500000]     0     0
+#> attr(,"breaks")
+#>  [1]  50000 100000 150000 200000 250000 300000 350000 400000 450000 500000
+```

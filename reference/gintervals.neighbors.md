@@ -1,0 +1,242 @@
+# Finds neighbors between two sets of intervals
+
+For each interval in 'intervals1', finds the closest intervals from
+'intervals2'. Distance directionality can be determined by either the
+strand of the target intervals (intervals2, default) or the query
+intervals (intervals1). When no strand column is present, all intervals
+are treated as positive strand (strand = 1).
+
+## Usage
+
+``` r
+gintervals.neighbors(
+  intervals1 = NULL,
+  intervals2 = NULL,
+  maxneighbors = 1,
+  mindist = -1e+09,
+  maxdist = 1e+09,
+  mindist1 = -1e+09,
+  maxdist1 = 1e+09,
+  mindist2 = -1e+09,
+  maxdist2 = 1e+09,
+  na.if.notfound = FALSE,
+  use_intervals1_strand = FALSE,
+  warn.ignored.strand = TRUE,
+  intervals.set.out = NULL
+)
+```
+
+## Arguments
+
+- intervals1, intervals2:
+
+  intervals
+
+- maxneighbors:
+
+  maximal number of neighbors
+
+- mindist, maxdist:
+
+  distance range for 1D intervals
+
+- mindist1, maxdist1, mindist2, maxdist2:
+
+  distance range for 2D intervals
+
+- na.if.notfound:
+
+  if 'TRUE' return 'NA' interval if no matching neighbors were found,
+  otherwise omit the interval in the answer
+
+- use_intervals1_strand:
+
+  if 'TRUE' use intervals1 strand column for distance directionality
+  instead of intervals2 strand. If intervals1 has no strand column, all
+  intervals are treated as positive strand (strand = 1). Invalid strand
+  values (not -1 or 1) will cause an error.
+
+- warn.ignored.strand:
+
+  if 'TRUE' (default) show warning when 'intervals1' contains a strand
+  column that will be ignored for distance calculation
+
+- intervals.set.out:
+
+  intervals set name where the function result is optionally outputted
+
+## Value
+
+If 'intervals.set.out' is 'NULL' a data frame containing the pairs of
+intervals from 'intervals1', intervals from 'intervals2' and an
+additional column named 'dist' ('dist1' and 'dist2' for 2D intervals)
+representing the distance between the corresponding intervals. The
+intervals from intervals2 would be changed to 'chrom1', 'start1', and
+'end1' and for 2D intervals chrom11, start11, end11 and chrom22,
+start22, end22. If 'na.if.notfound' is 'TRUE', the data frame contains
+all the intervals from 'intervals1' including those for which no
+matching neighbor was found. For the latter intervals an 'NA'
+neighboring interval is stated. If 'na.if.notfound' is 'FALSE', the data
+frame contains only intervals from 'intervals1' for which matching
+neighbor(s) was found.
+
+## Details
+
+This function finds for each interval in 'intervals1' the closest
+'maxneighbors' intervals from 'intervals2'.
+
+For 1D intervals the distance must fall in the range of \['mindist',
+'maxdist'\].
+
+Distance is defined as the number of base pairs between the the last
+base pair of the query interval and the first base pair of the target
+interval.
+
+\*\*Strand handling:\*\* By default, distance directionality is
+determined by the 'strand' column in 'intervals2' (if present). If
+'use_intervals1_strand' is TRUE, distance directionality is instead
+determined by the 'strand' column in 'intervals1'. This is particularly
+useful for TSS analysis where you want upstream/downstream distances
+relative to gene direction.
+
+\*\*Distance calculation modes:\*\*
+
+- \*\*use_intervals1_strand = FALSE (default):\*\* Uses intervals2
+  strand for directionality
+
+- \*\*use_intervals1_strand = TRUE:\*\* Uses intervals1 strand for
+  directionality
+
+\*\*Important:\*\* When 'use_intervals1_strand = TRUE', distance signs
+are interpreted as:
+
+- \*\*+ strand queries:\*\* Negative distances = upstream, Positive
+  distances = downstream
+
+- \*\*- strand queries:\*\* Negative distances = downstream, Positive
+  distances = upstream
+
+For 2D intervals two distances are calculated and returned for each
+axis. The distances must fall in the range of \['mindist1', 'maxdist1'\]
+for axis 1 and \['mindist2', 'maxdist2'\] for axis 2. For selecting the
+closest 'maxneighbors' intervals Manhattan distance is used (i.e.
+dist1+dist2).
+
+\*\*Note:\*\* 'use_intervals1_strand' is not yet supported for 2D
+intervals.
+
+The names of the returned columns are made unique using
+`make.unique(colnames(df), sep = "")`, assuming 'df' is the result.
+
+If 'intervals.set.out' is not 'NULL' the result is saved as an intervals
+set. Use this parameter if the result size exceeds the limits of the
+physical memory.
+
+## See also
+
+[`gintervals`](https://tanaylab.github.io/misha/reference/gintervals.md),
+[`gintervals.neighbors.upstream`](https://tanaylab.github.io/misha/reference/directional-neighbors.md),
+[`gintervals.neighbors.downstream`](https://tanaylab.github.io/misha/reference/directional-neighbors.md)
+
+## Examples
+
+``` r
+
+gdb.init_examples()
+
+# Basic intervals
+intervs1 <- giterator.intervals("dense_track",
+    gintervals(1, 0, 4000),
+    iterator = 233
+)
+intervs2 <- giterator.intervals(
+    "sparse_track",
+    gintervals(1, 0, 2000)
+)
+
+# Original behavior - no strand considerations
+gintervals.neighbors(intervs1, intervs2, 10,
+    mindist = -300,
+    maxdist = 500
+)
+#>    chrom start  end chrom1 start1 end1 dist
+#> 1   chr1     0  233   chr1      0   50    0
+#> 2   chr1     0  233   chr1    100  150    0
+#> 3   chr1     0  233   chr1    250  300   17
+#> 4   chr1   233  466   chr1    250  300    0
+#> 5   chr1   233  466   chr1    100  150   83
+#> 6   chr1   233  466   chr1      0   50  183
+#> 7   chr1   466  699   chr1    250  300  166
+#> 8   chr1   466  699   chr1    100  150  316
+#> 9   chr1   466  699   chr1      0   50  416
+#> 10  chr1   699  932   chr1    250  300  399
+#> 11  chr1   699  932   chr1   1400 1450  468
+#> 12  chr1   932 1165   chr1   1400 1450  235
+#> 13  chr1  1165 1398   chr1   1400 1450    2
+#> 14  chr1  1398 1631   chr1   1400 1450    0
+#> 15  chr1  1631 1864   chr1   1400 1450  181
+#> 16  chr1  1864 2097   chr1   1400 1450  414
+
+# Add strand to intervals2 - affects distance directionality (original behavior)
+intervs2$strand <- c(1, 1, -1, 1)
+gintervals.neighbors(intervs1, intervs2, 10,
+    mindist = -300,
+    maxdist = 500
+)
+#>    chrom start  end chrom1 start1 end1 strand dist
+#> 1   chr1     0  233   chr1      0   50      1    0
+#> 2   chr1     0  233   chr1    100  150      1    0
+#> 3   chr1     0  233   chr1    250  300     -1   17
+#> 4   chr1   233  466   chr1    250  300     -1    0
+#> 5   chr1   233  466   chr1    100  150      1   83
+#> 6   chr1   233  466   chr1      0   50      1  183
+#> 7   chr1   466  699   chr1    250  300     -1 -166
+#> 8   chr1   466  699   chr1    100  150      1  316
+#> 9   chr1   466  699   chr1      0   50      1  416
+#> 10  chr1   932 1165   chr1   1400 1450      1 -235
+#> 11  chr1  1165 1398   chr1   1400 1450      1   -2
+#> 12  chr1  1398 1631   chr1   1400 1450      1    0
+#> 13  chr1  1631 1864   chr1   1400 1450      1  181
+#> 14  chr1  1864 2097   chr1   1400 1450      1  414
+
+# TSS analysis example - use intervals1 (TSS) strand for directionality
+tss <- data.frame(
+    chrom = c("chr1", "chr1", "chr1"),
+    start = c(1000, 2000, 3000),
+    end = c(1001, 2001, 3001),
+    strand = c(1, -1, 1), # +, -, +
+    gene = c("GeneA", "GeneB", "GeneC")
+)
+
+features <- data.frame(
+    chrom = "chr1",
+    start = c(500, 800, 1200, 1800, 2200, 2800, 3200),
+    end = c(600, 900, 1300, 1900, 2300, 2900, 3300),
+    feature_id = paste0("F", 1:7)
+)
+
+# Use TSS strand for distance directionality
+result <- gintervals.neighbors(tss, features,
+    maxneighbors = 2,
+    mindist = -1000, maxdist = 1000,
+    use_intervals1_strand = TRUE
+)
+
+# Convenience functions for common TSS analysis
+# Find upstream neighbors (negative distances for + strand genes)
+upstream <- gintervals.neighbors.upstream(tss, features,
+    maxneighbors = 2, maxdist = 1000
+)
+
+# Find downstream neighbors (positive distances for + strand genes)
+downstream <- gintervals.neighbors.downstream(tss, features,
+    maxneighbors = 2, maxdist = 1000
+)
+
+# Find both directions
+both_directions <- gintervals.neighbors.directional(tss, features,
+    maxneighbors_upstream = 1,
+    maxneighbors_downstream = 1,
+    maxdist = 1000
+)
+```

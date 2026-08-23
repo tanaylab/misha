@@ -1,0 +1,135 @@
+# Returns values from a lookup table based on track expression
+
+Evaluates track expression and translates the values into bin indices
+that are used in turn to retrieve and return values from a lookup table.
+
+## Usage
+
+``` r
+glookup(
+  lookup_table = NULL,
+  ...,
+  intervals = NULL,
+  include.lowest = FALSE,
+  force.binning = TRUE,
+  iterator = NULL,
+  band = NULL,
+  intervals.set.out = NULL
+)
+```
+
+## Arguments
+
+- lookup_table:
+
+  a multi-dimensional array containing the values that are returned by
+  the function
+
+- ...:
+
+  pairs of 'expr', 'breaks' where 'expr' is a track expression and the
+  breaks determine the bin
+
+- intervals:
+
+  genomic scope for which the function is applied
+
+- include.lowest:
+
+  if 'TRUE', the lowest value of the range determined by breaks is
+  included
+
+- force.binning:
+
+  if 'TRUE', the values smaller than the minimal break will be
+  translated to index 1, and the values that exceed the maximal break
+  will be translated to index N-1 where N is the number of breaks. If
+  'FALSE' the out-of-range values will produce NaN values.
+
+- iterator:
+
+  track expression iterator. If 'NULL' iterator is determined implicitly
+  based on track expressions.
+
+- band:
+
+  track expression band. If 'NULL' no band is used.
+
+- intervals.set.out:
+
+  intervals set name where the function result is optionally outputted
+
+## Value
+
+If 'intervals.set.out' is 'NULL' a set of intervals with additional
+'value' and 'columnID' columns.
+
+## Details
+
+This function evaluates the track expression for all iterator intervals
+and translates this value into an index based on the breaks. This index
+is then used to address the lookup table and return the according value.
+More than one 'expr'-'breaks' pair can be used. In that case
+'lookup_table' is addressed in a multidimensional manner, i.e.
+'lookup_table\[i1, i2, ...\]'.
+
+The range of bins is determined by 'breaks' argument. For example:
+'breaks = c(x1, x2, x3, x4)' represents three different intervals
+(bins): (x1, x2\], (x2, x3\], (x3, x4\].
+
+If 'include.lowest' is 'TRUE' then the lowest value is included in the
+first interval, i.e. in \[x1, x2\].
+
+'force.binning' parameter controls what should be done when the value of
+'expr' exceeds the range determined by 'breaks'. If 'force.binning' is
+'TRUE' then values smaller than the minimal break will be translated to
+index 1, and the values exceeding the maximal break will be translated
+to index 'M-1' where 'M' is the number of breaks. If 'force.binning' is
+'FALSE' the out-of-range values will produce 'NaN' values.
+
+Regardless of 'force.binning' value if the value of 'expr' is 'NaN' then
+result is 'NaN' too.
+
+The order inside the result might not be the same as the order of
+intervals. Use 'intervalID' column to refer to the index of the original
+interval from the supplied 'intervals'.
+
+If 'intervals.set.out' is not 'NULL' the result (without 'columnID'
+column) is saved as an intervals set. Use this parameter if the result
+size exceeds the limits of the physical memory.
+
+## See also
+
+[`gtrack.lookup`](https://tanaylab.github.io/misha/reference/gtrack.lookup.md),
+[`gextract`](https://tanaylab.github.io/misha/reference/gextract.md),
+[`gpartition`](https://tanaylab.github.io/misha/reference/gpartition.md),
+[`gdist`](https://tanaylab.github.io/misha/reference/gdist.md)
+
+## Examples
+
+``` r
+
+gdb.init_examples()
+
+## one-dimensional lookup table
+breaks1 <- seq(0.1, 0.2, length.out = 6)
+glookup(1:5, "dense_track", breaks1, gintervals(1, 0, 200))
+#>   chrom start end value intervalID
+#> 1  chr1     0  50     4          1
+#> 2  chr1    50 100     3          1
+#> 3  chr1   100 150     5          1
+#> 4  chr1   150 200     3          1
+
+## two-dimensional lookup table
+t <- array(1:15, dim = c(5, 3))
+breaks2 <- seq(0.31, 0.37, length.out = 4)
+glookup(
+    t, "dense_track", breaks1, "2 * dense_track", breaks2,
+    gintervals(1, 0, 200)
+)
+#>   chrom start end value intervalID
+#> 1  chr1     0  50    14          1
+#> 2  chr1    50 100     3          1
+#> 3  chr1   100 150    15          1
+#> 4  chr1   150 200     3          1
+```

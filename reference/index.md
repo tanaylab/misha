@@ -1,0 +1,424 @@
+# Package index
+
+## Track functions
+
+Functions to manipulate and create tracks
+
+- [`gtrack.2d.create()`](https://tanaylab.github.io/misha/reference/gtrack.2d.create.md)
+  : Creates a 'Rectangles' track from intervals and values
+- [`gtrack.2d.import()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import.md)
+  : Creates a 2D track from tab-delimited file
+- [`gtrack.2d.import_contacts()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import_contacts.md)
+  : Creates a track from a file of inter-genomic contacts
+- [`gtrack.array.extract()`](https://tanaylab.github.io/misha/reference/gtrack.array.extract.md)
+  : Returns values from 'Array' track
+- [`gtrack.array.get_colnames()`](https://tanaylab.github.io/misha/reference/gtrack.array.get_colnames.md)
+  : Returns column names of array track
+- [`gtrack.array.import()`](https://tanaylab.github.io/misha/reference/gtrack.array.import.md)
+  : Creates an array track from array tracks or files
+- [`gtrack.array.set_colnames()`](https://tanaylab.github.io/misha/reference/gtrack.array.set_colnames.md)
+  : Sets column names of array track
+- [`gtrack.attr.export()`](https://tanaylab.github.io/misha/reference/gtrack.attr.export.md)
+  : Returns track attributes values
+- [`gtrack.attr.get()`](https://tanaylab.github.io/misha/reference/gtrack.attr.get.md)
+  : Returns value of a track attribute
+- [`gtrack.attr.import()`](https://tanaylab.github.io/misha/reference/gtrack.attr.import.md)
+  : Imports track attributes values
+- [`gtrack.attr.set()`](https://tanaylab.github.io/misha/reference/gtrack.attr.set.md)
+  : Assigns value to a track attribute
+- [`gtrack.convert()`](https://tanaylab.github.io/misha/reference/gtrack.convert.md)
+  : Converts a track to the most current format
+- [`gtrack.create()`](https://tanaylab.github.io/misha/reference/gtrack.create.md)
+  : Creates a track from a track expression
+- [`gtrack.create_pwm_energy()`](https://tanaylab.github.io/misha/reference/gtrack.create_pwm_energy.md)
+  : Creates a new track from PSSM energy function
+- [`gtrack.create_sparse()`](https://tanaylab.github.io/misha/reference/gtrack.create_sparse.md)
+  : Creates a 'Sparse' track from intervals and values
+- [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md)
+  : Creates a 'Dense' track from intervals and values
+- [`gtrack.create_dirs()`](https://tanaylab.github.io/misha/reference/gtrack.create_dirs.md)
+  : Create directories needed for track creation
+- [`gtrack.dbs()`](https://tanaylab.github.io/misha/reference/gtrack.dbs.md)
+  : Returns the database paths that contain track(s)
+- [`gtrack.dataset()`](https://tanaylab.github.io/misha/reference/gtrack.dataset.md)
+  : Returns the database/dataset path for a track
+- [`gtrack.exists()`](https://tanaylab.github.io/misha/reference/gtrack.exists.md)
+  : Tests for a track existence
+- [`gtrack.import()`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+  : Creates a track from WIG / BigWig / BedGraph / BED / tab-delimited
+  file
+- [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  : Creates a track from a file of mapped sequences
+- [`gtrack.import_set()`](https://tanaylab.github.io/misha/reference/gtrack.import_set.md)
+  : Creates one or more tracks from multiple WIG / BigWig / BedGraph /
+  tab-delimited files on disk or FTP
+- [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
+  : Returns information about a track
+- [`gtrack.path()`](https://tanaylab.github.io/misha/reference/gtrack.path.md)
+  : Returns the path on disk of a track
+- [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  : Imports a track from another assembly
+- [`gtrack.lookup()`](https://tanaylab.github.io/misha/reference/gtrack.lookup.md)
+  : Creates a new track from a lookup table based on track expression
+- [`gtrack.ls()`](https://tanaylab.github.io/misha/reference/gtrack.ls.md)
+  : Returns a list of track names
+- [`gtrack.modify()`](https://tanaylab.github.io/misha/reference/gtrack.modify.md)
+  : Modifies track contents
+- [`gtrack.mv()`](https://tanaylab.github.io/misha/reference/gtrack.mv.md)
+  : Renames or moves a track
+- [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  : Copies one or more tracks
+- [`gtrack.rm()`](https://tanaylab.github.io/misha/reference/gtrack.rm.md)
+  : Deletes a track
+- [`gtrack.smooth()`](https://tanaylab.github.io/misha/reference/gtrack.smooth.md)
+  : Creates a new track from smoothed values of track expression
+- [`gtrack.var.get()`](https://tanaylab.github.io/misha/reference/gtrack.var.get.md)
+  : Returns value of a track variable
+- [`gtrack.var.ls()`](https://tanaylab.github.io/misha/reference/gtrack.var.ls.md)
+  : Returns a list of track variables for a track
+- [`gtrack.var.rm()`](https://tanaylab.github.io/misha/reference/gtrack.var.rm.md)
+  : Deletes a track variable
+- [`gtrack.var.set()`](https://tanaylab.github.io/misha/reference/gtrack.var.set.md)
+  : Assigns value to a track variable
+- [`gtrack.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.convert_to_indexed.md)
+  : Convert a track to indexed format
+- [`gtrack.2d.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.2d.convert_to_indexed.md)
+  : Convert 2D track to indexed format
+
+## Virtual track functions
+
+Functions to manipulate and create virtual tracks
+
+- [`gvtrack.array.slice()`](https://tanaylab.github.io/misha/reference/gvtrack.array.slice.md)
+  : Defines rules for a single value calculation of a virtual 'Array'
+  track
+- [`gvtrack.create()`](https://tanaylab.github.io/misha/reference/gvtrack.create.md)
+  : Creates a new virtual track
+- [`gvtrack.info()`](https://tanaylab.github.io/misha/reference/gvtrack.info.md)
+  : Returns the definition of a virtual track
+- [`gvtrack.iterator()`](https://tanaylab.github.io/misha/reference/gvtrack.iterator.md)
+  : Defines modification rules for a one-dimensional iterator in a
+  virtual track
+- [`gvtrack.iterator.2d()`](https://tanaylab.github.io/misha/reference/gvtrack.iterator.2d.md)
+  : Defines modification rules for a two-dimensional iterator in a
+  virtual track
+- [`gvtrack.ls()`](https://tanaylab.github.io/misha/reference/gvtrack.ls.md)
+  : Returns a list of virtual track names
+- [`gvtrack.rm()`](https://tanaylab.github.io/misha/reference/gvtrack.rm.md)
+  : Deletes a virtual track
+- [`gvtrack.clear()`](https://tanaylab.github.io/misha/reference/gvtrack.clear.md)
+  : Deletes all virtual tracks
+- [`gvtrack.filter()`](https://tanaylab.github.io/misha/reference/gvtrack.filter.md)
+  : Attach or clear a genomic mask filter on a virtual track
+
+## Intervals functions
+
+Functions to manipulate and create intervals
+
+- [`gintervals()`](https://tanaylab.github.io/misha/reference/gintervals.md)
+  : Creates a set of 1D intervals
+- [`gintervals.2d()`](https://tanaylab.github.io/misha/reference/gintervals.2d.md)
+  : Creates a set of 2D intervals
+- [`gintervals.2d.all()`](https://tanaylab.github.io/misha/reference/gintervals.2d.all.md)
+  : Returns 2D intervals that cover the whole genome
+- [`gintervals.2d.band_intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.band_intersect.md)
+  : Intersects two-dimensional intervals with a band
+- [`gintervals.2d.intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.intersect.md)
+  : Intersects two sets of 2D intervals
+- [`gintervals.2d.union()`](https://tanaylab.github.io/misha/reference/gintervals.2d.union.md)
+  : Unites two sets of 2D intervals
+- [`gintervals.all()`](https://tanaylab.github.io/misha/reference/gintervals.all.md)
+  : Returns 1D intervals that cover the whole genome
+- [`gintervals.attr.export()`](https://tanaylab.github.io/misha/reference/gintervals.attr.export.md)
+  : Returns interval set attributes values
+- [`gintervals.attr.get()`](https://tanaylab.github.io/misha/reference/gintervals.attr.get.md)
+  : Returns value of an interval set attribute
+- [`gintervals.attr.import()`](https://tanaylab.github.io/misha/reference/gintervals.attr.import.md)
+  : Imports interval set attributes values
+- [`gintervals.attr.set()`](https://tanaylab.github.io/misha/reference/gintervals.attr.set.md)
+  : Assigns value to an interval set attribute
+- [`gintervals.canonic()`](https://tanaylab.github.io/misha/reference/gintervals.canonic.md)
+  : Converts intervals to canonic form
+- [`gintervals.mark_overlaps()`](https://tanaylab.github.io/misha/reference/gintervals.mark_overlaps.md)
+  : Mark overlapping intervals with a group ID
+- [`gintervals.chrom_sizes()`](https://tanaylab.github.io/misha/reference/gintervals.chrom_sizes.md)
+  : Returns number of intervals per chromosome
+- [`gintervals.covered_bp()`](https://tanaylab.github.io/misha/reference/gintervals.covered_bp.md)
+  : Calculate total base pairs covered by intervals
+- [`gintervals.coverage_fraction()`](https://tanaylab.github.io/misha/reference/gintervals.coverage_fraction.md)
+  : Calculate fraction of genomic space covered by intervals
+- [`gintervals.dataset()`](https://tanaylab.github.io/misha/reference/gintervals.dataset.md)
+  : Returns the database/dataset path for interval sets
+- [`gintervals.dbs()`](https://tanaylab.github.io/misha/reference/gintervals.dbs.md)
+  : Returns all database paths containing an interval set
+- [`gintervals.diff()`](https://tanaylab.github.io/misha/reference/gintervals.diff.md)
+  : Calculates difference of two intervals sets
+- [`gintervals.exists()`](https://tanaylab.github.io/misha/reference/gintervals.exists.md)
+  : Tests for a named intervals set existence
+- [`gintervals.force_range()`](https://tanaylab.github.io/misha/reference/gintervals.force_range.md)
+  : Limits intervals to chromosomal range
+- [`gintervals.from_mat()`](https://tanaylab.github.io/misha/reference/gintervals.from_mat.md)
+  : Convert an interval-indexed matrix back to an intervals + values
+  data.frame
+- [`gintervals.from_strings()`](https://tanaylab.github.io/misha/reference/gintervals.from_strings.md)
+  : Creates 1D intervals from coordinate strings
+- [`gintervals.normalize()`](https://tanaylab.github.io/misha/reference/gintervals.normalize.md)
+  : Normalize intervals to fixed or variable sizes
+- [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
+  : Annotates 1D intervals using nearest neighbors
+- [`gintervals.import_genes()`](https://tanaylab.github.io/misha/reference/gintervals.import_genes.md)
+  : Imports genes and annotations from files
+- [`gintervals.import_bed()`](https://tanaylab.github.io/misha/reference/gintervals.import_bed.md)
+  : Import intervals from a BED file
+- [`gintervals.import_gff()`](https://tanaylab.github.io/misha/reference/gintervals.import_gff.md)
+  : Import intervals from a GFF/GTF file
+- [`gintervals.import_vcf()`](https://tanaylab.github.io/misha/reference/gintervals.import_vcf.md)
+  : Import intervals from a VCF file
+- [`gintervals.intersect()`](https://tanaylab.github.io/misha/reference/gintervals.intersect.md)
+  : Calculates an intersection of two sets of intervals
+- [`gintervals.is.bigset()`](https://tanaylab.github.io/misha/reference/gintervals.is.bigset.md)
+  : Tests for big intervals set
+- [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  : Converts intervals from another assembly
+- [`gintervals.load()`](https://tanaylab.github.io/misha/reference/gintervals.load.md)
+  : Loads a named intervals set
+- [`gintervals.load_chain()`](https://tanaylab.github.io/misha/reference/gintervals.load_chain.md)
+  : Loads assembly conversion table from a chain file
+- [`gintervals.as_chain()`](https://tanaylab.github.io/misha/reference/gintervals.as_chain.md)
+  : Transforms existing intervals to a chain format
+- [`gintervals.path()`](https://tanaylab.github.io/misha/reference/gintervals.path.md)
+  : Returns the path on disk of an interval set
+- [`gintervals.ls()`](https://tanaylab.github.io/misha/reference/gintervals.ls.md)
+  : Returns a list of named intervals sets
+- [`gintervals.mapply()`](https://tanaylab.github.io/misha/reference/gintervals.mapply.md)
+  : Applies a function to values of track expressions
+- [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md)
+  : Finds neighbors between two sets of intervals
+- [`gintervals.neighbors.upstream()`](https://tanaylab.github.io/misha/reference/directional-neighbors.md)
+  [`gintervals.neighbors.downstream()`](https://tanaylab.github.io/misha/reference/directional-neighbors.md)
+  [`gintervals.neighbors.directional()`](https://tanaylab.github.io/misha/reference/directional-neighbors.md)
+  : Directional neighbor finding functions
+- [`gintervals.quantiles()`](https://tanaylab.github.io/misha/reference/gintervals.quantiles.md)
+  : Calculates quantiles of a track expression for intervals
+- [`gintervals.random()`](https://tanaylab.github.io/misha/reference/gintervals.random.md)
+  : Generate random genome intervals
+- [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
+  : Combines several sets of intervals
+- [`gintervals.rm()`](https://tanaylab.github.io/misha/reference/gintervals.rm.md)
+  : Deletes a named intervals set
+- [`gintervals.save()`](https://tanaylab.github.io/misha/reference/gintervals.save.md)
+  : Creates a named intervals set
+- [`gintervals.summary()`](https://tanaylab.github.io/misha/reference/gintervals.summary.md)
+  : Calculates summary statistics of track expression for intervals
+- [`gintervals.to_mat()`](https://tanaylab.github.io/misha/reference/gintervals.to_mat.md)
+  : Convert intervals + values data.frame to an interval-indexed matrix
+- [`gintervals.union()`](https://tanaylab.github.io/misha/reference/gintervals.union.md)
+  : Calculates a union of two sets of intervals
+- [`gintervals.update()`](https://tanaylab.github.io/misha/reference/gintervals.update.md)
+  : Updates a named intervals set
+- [`gintervals.2d.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gintervals.2d.convert_to_indexed.md)
+  : Convert 2D interval set to indexed format
+- [`gintervals.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gintervals.convert_to_indexed.md)
+  : Convert 1D interval set to indexed format
+- [`giterator.cartesian_grid()`](https://tanaylab.github.io/misha/reference/giterator.cartesian_grid.md)
+  : Creates a cartesian-grid iterator
+- [`giterator.intervals()`](https://tanaylab.github.io/misha/reference/giterator.intervals.md)
+  : Returns iterator intervals
+
+## Data manipulation functions
+
+Data manipulation functions
+
+- [`gdist()`](https://tanaylab.github.io/misha/reference/gdist.md) :
+  Calculates distribution of track expressions
+- [`gbins.quantiles()`](https://tanaylab.github.io/misha/reference/gbins.quantiles.md)
+  : Calculates quantiles of a track expression for bins
+- [`gbins.summary()`](https://tanaylab.github.io/misha/reference/gbins.summary.md)
+  : Calculates summary statistics of a track expression for bins
+- [`gcor()`](https://tanaylab.github.io/misha/reference/gcor.md) :
+  Calculates correlation between track expressions
+- [`gcis_decay()`](https://tanaylab.github.io/misha/reference/gcis_decay.md)
+  : Calculates distribution of contact distances
+- [`gcompute_strands_autocorr()`](https://tanaylab.github.io/misha/reference/gcompute_strands_autocorr.md)
+  : Computes auto-correlation between the strands for a file of mapped
+  sequences
+- [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  : Returns evaluated track expression
+- [`glookup()`](https://tanaylab.github.io/misha/reference/glookup.md) :
+  Returns values from a lookup table based on track expression
+- [`gpartition()`](https://tanaylab.github.io/misha/reference/gpartition.md)
+  : Partitions the values of track expression
+- [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)
+  : Calculates quantiles of a track expression
+- [`gsample()`](https://tanaylab.github.io/misha/reference/gsample.md) :
+  Returns samples from the values of track expression
+- [`gscreen()`](https://tanaylab.github.io/misha/reference/gscreen.md) :
+  Finds intervals that match track expression
+- [`gsegment()`](https://tanaylab.github.io/misha/reference/gsegment.md)
+  : Divides track expression into segments
+- [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md)
+  : Calculates summary statistics of track expression
+
+## Sequence functions
+
+Sequence functions
+
+- [`gseq.extract()`](https://tanaylab.github.io/misha/reference/gseq.extract.md)
+  : Returns DNA sequences
+- [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  : Score DNA sequences with a PWM over a region of interest
+- [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
+  : Show optimal edits to reach a PWM score threshold
+- [`gseq.kmer()`](https://tanaylab.github.io/misha/reference/gseq.kmer.md)
+  : Score DNA sequences with a k-mer over a region of interest
+- [`gseq.kmer.dist()`](https://tanaylab.github.io/misha/reference/gseq.kmer.dist.md)
+  : Compute k-mer distribution in genomic intervals
+- [`gseq.revcomp()`](https://tanaylab.github.io/misha/reference/gseq.revcomp.md)
+  : Get reverse complement of DNA sequence
+- [`grevcomp()`](https://tanaylab.github.io/misha/reference/grevcomp.md)
+  : Get reverse complement of DNA sequence
+- [`gseq.rev()`](https://tanaylab.github.io/misha/reference/gseq.rev.md)
+  : Reverse DNA sequence
+- [`gseq.comp()`](https://tanaylab.github.io/misha/reference/gseq.comp.md)
+  : Complement DNA sequence
+
+## Track export
+
+Functions to export tracks to standard genomic file formats
+
+- [`gtrack.export_bedgraph()`](https://tanaylab.github.io/misha/reference/gtrack.export_bedgraph.md)
+  : Export a track to bedGraph format
+- [`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
+  : Export a track to BigWig format
+
+## Motif import
+
+Functions to import motifs from standard motif format files
+
+- [`gseq.read_meme()`](https://tanaylab.github.io/misha/reference/gseq.read_meme.md)
+  : Read motifs from a MEME minimal motif format file
+- [`gseq.read_jaspar()`](https://tanaylab.github.io/misha/reference/gseq.read_jaspar.md)
+  : Read motifs from a JASPAR PFM format file
+- [`gseq.read_homer()`](https://tanaylab.github.io/misha/reference/gseq.read_homer.md)
+  : Read motifs from a HOMER motif format file
+
+## Synthetic genome functions
+
+Generate synthetic genomes using stratified Markov models
+
+- [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md)
+  : Train a stratified Markov model from genome sequences
+- [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+  : Sample a synthetic genome from a trained Markov model
+- [`gsynth.score()`](https://tanaylab.github.io/misha/reference/gsynth.score.md)
+  : Score the genome under a trained gsynth model
+- [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
+  : Generate random genome sequences
+- [`gsynth.replace_kmer()`](https://tanaylab.github.io/misha/reference/gsynth.replace_kmer.md)
+  : Iteratively replace a k-mer in the genome
+- [`gsynth.save()`](https://tanaylab.github.io/misha/reference/gsynth.save.md)
+  : Save a gsynth.model to disk in .gsm format
+- [`gsynth.load()`](https://tanaylab.github.io/misha/reference/gsynth.load.md)
+  : Load a gsynth.model from disk
+- [`gsynth.convert()`](https://tanaylab.github.io/misha/reference/gsynth.convert.md)
+  : Convert a legacy RDS gsynth model to .gsm format
+- [`gsynth.bin_map()`](https://tanaylab.github.io/misha/reference/gsynth.bin_map.md)
+  : Create a bin mapping from value-based merge specifications
+- [`gsynth.cell_merge()`](https://tanaylab.github.io/misha/reference/gsynth.cell_merge.md)
+  : Resolve a cell-level merge specification into flat bin indices
+- [`gsynth.forbid_kmer()`](https://tanaylab.github.io/misha/reference/gsynth.forbid_kmer.md)
+  : Forbid a k-mer pattern in a trained gsynth model
+- [`print(`*`<gsynth.model>`*`)`](https://tanaylab.github.io/misha/reference/print.gsynth.model.md)
+  : Print summary of a gsynth.model
+
+## Genome editing functions
+
+Replace intervals in a reference genome with donor sequences
+
+- [`ggenome.implant()`](https://tanaylab.github.io/misha/reference/ggenome.implant.md)
+  : Implant donor sequences into a reference genome
+- [`ggenome.transplant()`](https://tanaylab.github.io/misha/reference/ggenome.transplant.md)
+  : Transplant sequences from one genome into another
+
+## Database functions
+
+Database functions
+
+- [`gdb.build_genome()`](https://tanaylab.github.io/misha/reference/gdb.build_genome.md)
+  : Build a misha genome database from a name
+- [`gdb.create()`](https://tanaylab.github.io/misha/reference/gdb.create.md)
+  : Creates a new Genomic Database
+- [`gdb.create_genome()`](https://tanaylab.github.io/misha/reference/gdb.create_genome.md)
+  : Create and Load a Genome Database
+- [`gdb.create_linked()`](https://tanaylab.github.io/misha/reference/gdb.create_linked.md)
+  : Create a linked database with symlinks to a parent database
+- [`gdb.genome_info()`](https://tanaylab.github.io/misha/reference/gdb.genome_info.md)
+  : Inspect a resolved genome recipe without building
+- [`gdb.get_readonly_attrs()`](https://tanaylab.github.io/misha/reference/gdb.get_readonly_attrs.md)
+  : Returns a list of read-only track attributes
+- [`gdb.info()`](https://tanaylab.github.io/misha/reference/gdb.info.md)
+  : Get Database Information
+- [`gdb.init()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+  [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+  : Initializes connection with Genomic Database
+- [`gdb.init_examples()`](https://tanaylab.github.io/misha/reference/gdb.init_examples.md)
+  : Initialise the example Genomic Database
+- [`gdb.install_gff3_converter()`](https://tanaylab.github.io/misha/reference/gdb.install_gff3_converter.md)
+  : Pre-install UCSC's gff3ToGenePred binary
+- [`gdb.install_gtf_converter()`](https://tanaylab.github.io/misha/reference/gdb.install_gtf_converter.md)
+  : Pre-install UCSC's gtfToGenePred binary
+- [`gdb.install_intervals()`](https://tanaylab.github.io/misha/reference/gdb.install_intervals.md)
+  : Install interval sets onto an existing groot
+- [`gdb.list_genomes()`](https://tanaylab.github.io/misha/reference/gdb.list_genomes.md)
+  : List resolvable genome names
+- [`gdb.mark_cache_dirty()`](https://tanaylab.github.io/misha/reference/gdb.mark_cache_dirty.md)
+  : Mark cached track list as dirty
+- [`gdb.reload()`](https://tanaylab.github.io/misha/reference/gdb.reload.md)
+  : Reloads database from the disk
+- [`gdb.set_readonly_attrs()`](https://tanaylab.github.io/misha/reference/gdb.set_readonly_attrs.md)
+  : Sets read-only track attributes
+- [`gdb.unload()`](https://tanaylab.github.io/misha/reference/gdb.unload.md)
+  : Unloads the genome database
+- [`gdb.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gdb.convert_to_indexed.md)
+  : Change Database to Indexed Genome Format
+- [`gdb.export_fasta()`](https://tanaylab.github.io/misha/reference/gdb.export_fasta.md)
+  : Export a database genome as FASTA
+- [`gdir.cd()`](https://tanaylab.github.io/misha/reference/gdir.cd.md) :
+  Changes current working directory in Genomic Database
+- [`gdir.create()`](https://tanaylab.github.io/misha/reference/gdir.create.md)
+  : Creates a new directory in Genomic Database
+- [`gdir.cwd()`](https://tanaylab.github.io/misha/reference/gdir.cwd.md)
+  : Returns the current working directory in Genomic Database
+- [`gdir.rm()`](https://tanaylab.github.io/misha/reference/gdir.rm.md) :
+  Deletes a directory from Genomic Database
+
+## Dataset functions
+
+Functions for managing datasets (multiple data sources)
+
+- [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md)
+  : Load a dataset into the namespace
+- [`gdataset.unload()`](https://tanaylab.github.io/misha/reference/gdataset.unload.md)
+  : Unload a dataset from the namespace
+- [`gdataset.save()`](https://tanaylab.github.io/misha/reference/gdataset.save.md)
+  : Save a dataset
+- [`gdataset.ls()`](https://tanaylab.github.io/misha/reference/gdataset.ls.md)
+  : List working database and loaded datasets
+- [`gdataset.info()`](https://tanaylab.github.io/misha/reference/gdataset.info.md)
+  : Get dataset information
+- [`gdataset.example_path()`](https://tanaylab.github.io/misha/reference/gdataset.example_path.md)
+  : Create an example dataset on the fly
+
+## Other functions
+
+Other
+
+- [`misha-package`](https://tanaylab.github.io/misha/reference/misha-package.md)
+  [`misha`](https://tanaylab.github.io/misha/reference/misha-package.md)
+  : Toolkit for analysis of genomic data
+- [`gcluster.run()`](https://tanaylab.github.io/misha/reference/gcluster.run.md)
+  : Runs R commands on a cluster
+- [`gwget()`](https://tanaylab.github.io/misha/reference/gwget.md) :
+  Downloads files from FTP server
+- [`gwilcox()`](https://tanaylab.github.io/misha/reference/gwilcox.md) :
+  Calculates Wilcoxon test on sliding windows over track expression

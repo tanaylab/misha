@@ -1,0 +1,199 @@
+# Genomes
+
+``` r
+
+library(misha)
+```
+
+## Create a `misha` database from UCSC
+
+The easiest way to create a `misha` database is to use the
+`gdb.create_genome` function:
+
+``` r
+
+gdb.create_genome("hg19") # creates a database for the hg19 genome
+gdb.create_genome("hg38") # creates a database for the hg38 genome
+gdb.create_genome("mm10") # creates a database for the mm10 genome
+gdb.create_genome("mm9") # creates a database for the mm9 genome
+gdb.create_genome("mm39") # creates a database for the mm39 genome
+```
+
+However, if you need to create a database for a genome that is not
+supported by `gdb.create_genome`, or if you want to make sure that the
+database is created from the latest version of the genome in ucsc, you
+can create it manually using the commands below.
+
+### hg19
+
+In order to create a misha database for *hg19* genome, run the following
+commands (assuming *“hg19”* is your new data base path):
+
+``` r
+
+ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19"
+gdb.create(
+    "hg19",
+    paste(ftp, "chromosomes", paste0("chr", c(1:22, "X", "Y", "M"), ".fa.gz"), sep = "/"),
+    paste(ftp, "database/knownGene.txt.gz", sep = "/"),
+    paste(ftp, "database/kgXref.txt.gz", sep = "/"),
+    c(
+        "kgID", "mRNA", "spID", "spDisplayID", "geneSymbol",
+        "refseq", "protAcc", "description", "rfamAcc",
+        "tRnaName"
+    )
+)
+gdb.init("hg19")
+```
+
+### hg38
+
+In order to create a misha database for *hg38* genome, run the following
+commands (assuming *“hg38”* is your new data base path):
+
+``` r
+
+ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/hg38"
+gdb.create(
+    "hg38",
+    paste(ftp, "chromosomes", paste0("chr", c(1:22, "X", "Y", "M"), ".fa.gz"), sep = "/"),
+    paste(ftp, "database/knownGene.txt.gz", sep = "/"),
+    paste(ftp, "database/kgXref.txt.gz", sep = "/"),
+    c(
+        "kgID", "mRNA", "spID", "spDisplayID", "geneSymbol",
+        "refseq", "protAcc", "description", "rfamAcc",
+        "tRnaName"
+    )
+)
+gdb.init("hg38")
+```
+
+### mm9
+
+In order to create a misha database for *mm9* genome, run the following
+commands (assuming *“mm9”* is your new data base path):
+
+``` r
+
+ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm9"
+gdb.create(
+    "mm9",
+    paste(ftp, "chromosomes", paste0("chr", c(1:19, "X", "Y", "M"), ".fa.gz"), sep = "/"),
+    paste(ftp, "database/knownGene.txt.gz", sep = "/"),
+    paste(ftp, "database/kgXref.txt.gz", sep = "/"),
+    c(
+        "kgID", "mRNA", "spID", "spDisplayID", "geneSymbol",
+        "refseq", "protAcc", "description"
+    )
+)
+gdb.init("mm9")
+```
+
+### mm10
+
+In order to create a misha database for *mm10* genome, run the following
+commands (assuming *“mm10”* is your new data base path):
+
+``` r
+
+ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
+gdb.create(
+    "mm10",
+    paste(ftp, "chromosomes", paste0("chr", c(1:19, "X", "Y", "M"), ".fa.gz"), sep = "/"),
+    paste(ftp, "database/knownGene.txt.gz", sep = "/"),
+    paste(ftp, "database/kgXref.txt.gz", sep = "/"),
+    c(
+        "kgID", "mRNA", "spID", "spDisplayID", "geneSymbol",
+        "refseq", "protAcc", "description", "rfamAcc",
+        "tRnaName"
+    )
+)
+gdb.init("mm10")
+```
+
+### mm39
+
+In order to create a misha database for *mm39* genome, run the following
+commands (assuming *“mm39”* is your new data base path):
+
+``` r
+
+ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm39"
+gdb.create(
+    "mm39",
+    paste(ftp, "chromosomes", paste0("chr", c(1:19, "X", "Y", "M"), ".fa.gz"), sep = "/"),
+    paste(ftp, "database/knownGene.txt.gz", sep = "/"),
+    paste(ftp, "database/kgXref.txt.gz", sep = "/"),
+    c(
+        "kgID", "mRNA", "spID", "spDisplayID", "geneSymbol",
+        "refseq", "protAcc", "description", "rfamAcc",
+        "tRnaName"
+    )
+)
+gdb.init("mm39")
+```
+
+### Building from UCSC mammal hubs (Zoonomia)
+
+UCSC mammal hubs host 224 of the 241 Cactus / Zoonomia mammalian genomes
+under a uniform per-species directory layout, including chromAlias,
+repeat masker output, and one or more GTFs per species. Build a misha
+groot from a hub assembly with:
+
+``` r
+
+# One-shot. Default sets = c("genes", "rmsk", "cgi", "cytoband"); cytoband and
+# (often) cgi are skipped with a warning since hubs don't ship them.
+gdb.build_genome("GCA_004023825.1",
+    path   = "/genomes/arctic_fox",
+    prefix = "intervs.global."
+)
+```
+
+If you already have a private FASTA build for the same accession (or a
+HAL- derived assembly) and just want to layer canonical annotations on
+it:
+
+``` r
+
+gdb.install_intervals(
+    groot  = "/genomes/my_private_assembly",
+    source = list(source = "ucsc-hub", accession = "GCA_004023825.1"),
+    sets   = c("genes", "rmsk"),
+    prefix = "intervs.global."
+)
+```
+
+If your groot was built with a different chromosome-naming scheme than
+the hub uses (for example, Cactus-derived names), the hub’s
+`chromAlias.txt` is consulted to translate annotation chroms into the
+groot’s canonical names — strictly. The chosen alias column must contain
+*every* groot chrom and *every* distinct chrom in the source file;
+otherwise the install errors with a diagnostic per-column overlap table.
+
+To convert hub GTFs the install needs UCSC’s `gtfToGenePred` binary (and
+`gff3ToGenePred` for NCBI Datasets sources). On the first call the
+package prompts for consent to download UCSC’s prebuilt binaries (~5 MB
+each). To pre-install in non-interactive contexts:
+
+``` r
+
+gdb.install_gff3_converter()
+gdb.install_gtf_converter()
+```
+
+The prebuilt binaries require glibc ≥ 2.34. On older systems
+(e.g. CentOS 8) the download will succeed but the binary won’t run.
+Workaround:
+
+``` sh
+conda install -c bioconda ucsc-gff3togenepred ucsc-gtftogenepred
+```
+
+Then point misha at the env’s binaries:
+
+``` r
+
+Sys.setenv(MISHA_GFF3_TO_GENEPRED = "/path/to/env/bin/gff3ToGenePred")
+Sys.setenv(MISHA_GTF_TO_GENEPRED = "/path/to/env/bin/gtfToGenePred")
+```

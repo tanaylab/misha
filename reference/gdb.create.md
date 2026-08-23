@@ -1,0 +1,119 @@
+# Creates a new Genomic Database
+
+Creates a new Genomic Database.
+
+## Usage
+
+``` r
+gdb.create(
+  groot = NULL,
+  fasta = NULL,
+  genes.file = NULL,
+  annots.file = NULL,
+  annots.names = NULL,
+  format = NULL,
+  verbose = FALSE
+)
+```
+
+## Arguments
+
+- groot:
+
+  path to newly created database
+
+- fasta:
+
+  an array of names or URLs of FASTA files. Can contain wildcards for
+  multiple files
+
+- genes.file:
+
+  name or URL of file that contains genes. If 'NULL' no genes are
+  imported
+
+- annots.file:
+
+  name of URL file that contains annotations. If 'NULL' no annotations
+  are imported
+
+- annots.names:
+
+  annotations names
+
+- format:
+
+  database format: "indexed" (default, single genome.seq + genome.idx)
+  or "per-chromosome" (separate .seq file per contig). If NULL, uses the
+  value from `getOption("gmulticontig.indexed_format", TRUE)`
+
+- verbose:
+
+  if TRUE, prints verbose messages
+
+## Value
+
+None.
+
+## Details
+
+This function creates a new Genomic Database at the location specified
+by 'groot'. FASTA files are converted to 'Seq' format and appropriate
+'chrom_sizes.txt' file is generated (see "User Manual" for more
+details).
+
+Two database formats are supported:
+
+- **indexed**: Single genome.seq + genome.idx (default). Recommended for
+  genomes with many contigs. Provides better performance and
+  scalability.
+
+- **per-chromosome**: Separate .seq file per contig.
+
+If 'genes.file' is not 'NULL' four sets of intervals are created in the
+database: `tss`, `exons`, `utr3` and `utr5`. See
+[gintervals.import_genes](https://tanaylab.github.io/misha/reference/gintervals.import_genes.md)
+for more details about importing genes intervals.
+
+'fasta', 'genes.file' and 'annots.file' can be either a file path or URL
+in a form of 'ftp://\[address\]/\[file\]'. 'fasta' can also contain
+wildcards to indicate multiple files. Files that these arguments point
+to can be zipped or unzipped.
+
+See the 'Genomes' vignette for details on how to create a database from
+common genome sources.
+
+## See also
+
+[`gdb.init`](https://tanaylab.github.io/misha/reference/gdb.init.md),
+[`gdb.reload`](https://tanaylab.github.io/misha/reference/gdb.reload.md),
+[`gintervals.import_genes`](https://tanaylab.github.io/misha/reference/gintervals.import_genes.md)
+
+## Examples
+
+``` r
+# \donttest{
+# ftp <- "ftp://hgdownload.soe.ucsc.edu/goldenPath/mm10"
+# mm10_dir <- file.path(tempdir(), "mm10")
+# # only a single chromosome is loaded in this example
+# # see "Genomes" vignette how to download all of them and how
+# # to download other genomes
+# gdb.create(
+#     mm10_dir,
+#     paste(ftp, "chromosomes", paste0(
+#         "chr", c("X"),
+#         ".fa.gz"
+#     ), sep = "/"),
+#     paste(ftp, "database/knownGene.txt.gz", sep = "/"),
+#     paste(ftp, "database/kgXref.txt.gz", sep = "/"),
+#     c(
+#         "kgID", "mRNA", "spID", "spDisplayID", "geneSymbol",
+#         "refseq", "protAcc", "description", "rfamAcc",
+#         "tRnaName"
+#     )
+# )
+# gdb.init(mm10_dir)
+# gintervals.ls()
+# gintervals.all()
+# }
+```

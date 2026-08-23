@@ -1,0 +1,1638 @@
+# Manual
+
+``` r
+
+library(misha)
+gdb.init_examples()
+```
+
+## Package ‘misha’ - User Manual
+
+**misha** package is intended to help users to efficiently analyze
+genomic data achieved from various experiments. The data must be stored
+in *Genomic Database* in certain format that is described later in this
+document. In addition the document describes fundamental concepts of the
+package such as *track expression*, *iterators*, etc.
+
+### Genomic Database
+
+Genomic Database starts with a *root* (also frequently referred as
+*GROOT*), i.e. top directory containing certain subdirectories and
+files. A new database can be created using `gdb.create_genome` and
+`gdb.create` functions. This is the easiest way to do it, see the
+“Genomes” vignette for more details. One can also build a database
+manually by generating all the necessary components that will be
+described later in this document.
+
+Before the data in a Genomic Database can be accessed one must establish
+connection with it by calling `gdb.init` function. On launch the package
+connects to the bundled examples database, which `gdb.init_examples`
+unpacks into `tempdir()/trackdb/test` (or into `MISHA_EXAMPLES_DIR` if
+that environment variable is set). This is the database that serves all
+the examples in the reference manual and in this vignette.
+
+A valid Genomic Database should contain the following files and
+subdirectories:
+
+- `chrom_sizes.txt`: is a file containing the list of chromosomes and
+  their sizes.
+- `tracks`: is a directory that servers as a repository for all *tracks*
+  and *interval sets*. May contain other subdirectories.
+- `pssms`: is a directory containing PSSM sets (PSSM data and PSSM key
+  files).
+- `seq`: is a directory containing full genomic sequences.
+
+`pssms` and `seq` directories are optional and are required only by a
+subset of functions in the package.
+
+#### Dataset API
+
+The `misha` package supports working with multiple data sources through
+the Dataset API. This is useful when you want to combine a shared
+read-only reference database with a user-specific database for custom
+tracks, or when working with multiple data sources that share the same
+genome.
+
+##### Working Database vs Datasets
+
+The Dataset API distinguishes between:
+
+1.  **Working Database**: Set via
+    [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md),
+    this is your primary, writable database where new tracks and
+    intervals are created.
+2.  **Loaded Datasets**: Added via
+    [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md),
+    these are read-only data sources that provide additional tracks and
+    intervals.
+
+``` r
+
+# The Dataset API needs more than one database. For this vignette the bundled
+# examples database is the working database, and a second, small database under
+# tempdir() plays the role of a shared, read-only annotation source. A dataset
+# only has to share the working database's chrom_sizes.txt.
+my_project <- .misha$GROOT
+shared_annotations <- file.path(tempdir(), "shared_annotations")
+unlink(shared_annotations, recursive = TRUE)
+dir.create(file.path(shared_annotations, "tracks"), recursive = TRUE)
+invisible(file.copy(file.path(my_project, "chrom_sizes.txt"), shared_annotations))
+gtrack.copy("dense_track", "annotation_track", db = shared_annotations)
+
+# Set your working database
+gsetroot(my_project)
+
+# Load an additional dataset
+gdataset.load(shared_annotations)
+
+# List all sources (working db + loaded datasets)
+gdataset.ls()
+#> [1] "/tmp/RtmptX5vqb/trackdb/test"       "/tmp/RtmptX5vqb/shared_annotations"
+
+# Get detailed information
+gdataset.ls(dataframe = TRUE)
+#>                                 path tracks_total tracks_visible
+#> 1       /tmp/RtmptX5vqb/trackdb/test            5              5
+#> 2 /tmp/RtmptX5vqb/shared_annotations            1              1
+#>   intervals_total intervals_visible has_metadata writable
+#> 1               1                 1        FALSE     TRUE
+#> 2               0                 0        FALSE    FALSE
+```
+
+**Key Points:** - All sources must have identical `chrom_sizes.txt`
+files (same genome assembly) - The working database is used for `seq/`
+and `chrom_sizes.txt` access - Tracks and intervals are aggregated from
+all sources - New tracks are created in the working database only
+
+##### Track Resolution and Collision Handling
+
+By default, loading a dataset with tracks that already exist will error:
+
+``` r
+
+# A second dataset that also carries a track named "dense_track":
+other_dataset <- file.path(tempdir(), "other_dataset")
+unlink(other_dataset, recursive = TRUE)
+dir.create(file.path(other_dataset, "tracks"), recursive = TRUE)
+invisible(file.copy(file.path(my_project, "chrom_sizes.txt"), other_dataset))
+gtrack.copy("dense_track", db = other_dataset)
+
+gdataset.load(other_dataset)
+#> Error:
+#> ! Cannot load dataset '/tmp/RtmptX5vqb/other_dataset':
+#>   - tracks 'dense_track' already exist in working database '/tmp/RtmptX5vqb/trackdb/test'
+#> Use force=TRUE to override.
+```
+
+Use `force=TRUE` to allow collisions, with clear precedence rules:
+
+``` r
+
+# Working database always wins over datasets
+# (for dataset-to-dataset collisions, later-loaded wins)
+gdataset.load(other_dataset, force = TRUE)
+
+# Check which source provides a track
+gtrack.dataset("dense_track")
+#> [1] "/tmp/RtmptX5vqb/trackdb/test"
+
+# See all sources where a track exists (for debugging)
+gtrack.dbs("dense_track")
+#>                     dense_track                     dense_track 
+#>  "/tmp/RtmptX5vqb/trackdb/test" "/tmp/RtmptX5vqb/other_dataset"
+
+gdataset.unload(other_dataset)
+```
+
+##### Cross-Database Track Expressions
+
+Track expressions seamlessly combine tracks from different sources:
+
+``` r
+
+gsetroot(my_project)
+gdataset.load(shared_annotations)
+
+# Extract tracks from different sources in a single call
+result <- gextract(c("dense_track", "annotation_track"), gintervals(1, 0, 10000), iterator = 100)
+head(result)
+#>   chrom start end dense_track annotation_track intervalID
+#> 1  chr1     0 100   0.1688889        0.1688889          1
+#> 2  chr1   100 200   0.1700000        0.1700000          1
+#> 3  chr1   200 300   0.1800000        0.1800000          1
+#> 4  chr1   300 400   0.1600000        0.1600000          1
+#> 5  chr1   400 500   0.1100000        0.1100000          1
+#> 6  chr1   500 600   0.0400000        0.0400000          1
+
+# Use track expressions across sources
+normalized <- gextract("dense_track - annotation_track", gintervals(1, 0, 10000), iterator = 100)
+head(normalized)
+#>   chrom start end dense_track - annotation_track intervalID
+#> 1  chr1     0 100                              0          1
+#> 2  chr1   100 200                              0          1
+#> 3  chr1   200 300                              0          1
+#> 4  chr1   300 400                              0          1
+#> 5  chr1   400 500                              0          1
+#> 6  chr1   500 600                              0          1
+
+# Access track attributes from any source
+gtrack.attr.get("dense_track", "description")
+#> [1] ""
+gtrack.attr.get("annotation_track", "description")
+#> [1] ""
+```
+
+Virtual tracks can reference source tracks from any loaded source:
+
+``` r
+
+# Create virtual tracks from different sources
+gvtrack.create("vt_signal", "dense_track", "avg")
+gvtrack.create("vt_annotation", "annotation_track", "avg")
+
+# Combine them in expressions
+head(gextract("vt_signal / vt_annotation", gintervals(1, 0, 10000)))
+#>   chrom start end vt_signal / vt_annotation intervalID
+#> 1  chr1     0  50                         1          1
+#> 2  chr1    50 100                         1          1
+#> 3  chr1   100 150                         1          1
+#> 4  chr1   150 200                         1          1
+#> 5  chr1   200 250                         1          1
+#> 6  chr1   250 300                         1          1
+```
+
+##### Querying Track and Interval Sources
+
+Use
+[`gtrack.dataset()`](https://tanaylab.github.io/misha/reference/gtrack.dataset.md),
+[`gtrack.dbs()`](https://tanaylab.github.io/misha/reference/gtrack.dbs.md),
+and
+[`gintervals.dataset()`](https://tanaylab.github.io/misha/reference/gintervals.dataset.md)
+to find which source contains a track or interval set:
+
+``` r
+
+# Single track - returns source path
+gtrack.dataset("annotation_track")
+#> [1] "/tmp/RtmptX5vqb/shared_annotations"
+
+# All sources containing a track (useful for debugging shadowed tracks)
+gtrack.dbs("dense_track")
+#>                    dense_track 
+#> "/tmp/RtmptX5vqb/trackdb/test"
+
+# Multiple tracks (vectorized)
+gtrack.dataset(c("dense_track", "sparse_track", "annotation_track"))
+#> [1] "/tmp/RtmptX5vqb/trackdb/test"       "/tmp/RtmptX5vqb/trackdb/test"      
+#> [3] "/tmp/RtmptX5vqb/shared_annotations"
+
+# Intervals
+gintervals.dataset("annotations")
+#> [1] "/tmp/RtmptX5vqb/trackdb/test"
+gintervals.dbs("annotations")
+#>                    annotations 
+#> "/tmp/RtmptX5vqb/trackdb/test"
+```
+
+Filter track and interval listings by source:
+
+``` r
+
+# List tracks from a specific source only
+gtrack.ls(db = shared_annotations)
+#> [1] "annotation_track"
+
+# List intervals from working database
+gintervals.ls(db = my_project)
+#> [1] "annotations"
+```
+
+##### Creating and Sharing Datasets
+
+Use
+[`gdataset.save()`](https://tanaylab.github.io/misha/reference/gdataset.save.md)
+to create a dataset from selected tracks and intervals:
+
+``` r
+
+gsetroot(my_project)
+
+# Create a dataset with selected tracks and intervals
+chipseq_dataset <- file.path(tempdir(), "my_chipseq_dataset")
+unlink(chipseq_dataset, recursive = TRUE)
+gdataset.save(
+    path = chipseq_dataset,
+    description = "ChIP-seq-like tracks",
+    tracks = gtrack.ls("dense"), # Pattern matching
+    intervals = "annotations"
+)
+
+# Options:
+# - symlinks = TRUE: Create symlinks instead of copying (saves space)
+# - copy_seq = TRUE: Copy seq/ directory instead of symlinking
+```
+
+Get information about a dataset:
+
+``` r
+
+gdataset.info(chipseq_dataset)
+#> $description
+#> [1] "ChIP-seq-like tracks"
+#> 
+#> $author
+#> [1] "runner"
+#> 
+#> $created
+#> [1] "2026-08-23T06:13:54Z"
+#> 
+#> $original_db
+#> [1] "/tmp/RtmptX5vqb/trackdb/test"
+#> 
+#> $misha_version
+#> [1] "5.11.20"
+#> 
+#> $track_count
+#> [1] 2
+#> 
+#> $interval_count
+#> [1] 1
+#> 
+#> $genome
+#> [1] "a2f87ab337da0fdc0a930472e56f4587"
+#> 
+#> $is_loaded
+#> [1] FALSE
+# Returns: description, author, created date, track/interval counts, genome hash
+```
+
+##### Creating a Linked Database
+
+Use
+[`gdb.create_linked()`](https://tanaylab.github.io/misha/reference/gdb.create_linked.md)
+to create a lightweight database that links to a parent database’s
+`seq/` directory and `chrom_sizes.txt` file:
+
+``` r
+
+# Create linked database with symlinks to parent's seq and chrom_sizes
+my_db <- file.path(tempdir(), "my_db")
+unlink(my_db, recursive = TRUE)
+gdb.create_linked(my_db, parent = my_project)
+#> Created linked database at /tmp/RtmptX5vqb/my_db (linked to /tmp/RtmptX5vqb/trackdb/test)
+
+# Use as your working database
+gsetroot(my_db)
+
+# Load datasets from the parent
+gdataset.load(my_project)
+
+# Create your own tracks
+gtrack.create("my_analysis", "Analysis results", "dense_track * 2")
+head(gextract("my_analysis", gintervals(1, 0, 500)))
+#>   chrom start end my_analysis intervalID
+#> 1  chr1     0  50   0.3555556          1
+#> 2  chr1    50 100   0.3200000          1
+#> 3  chr1   100 150   0.3600000          1
+#> 4  chr1   150 200   0.3200000          1
+#> 5  chr1   200 250   0.3200000          1
+#> 6  chr1   250 300   0.4000000          1
+```
+
+This avoids duplicating large sequence files while allowing you to
+maintain your own tracks.
+
+##### Unloading Datasets
+
+Remove loaded datasets from the namespace:
+
+``` r
+
+# Unload a dataset (tracks/intervals become unavailable)
+gdataset.unload(my_project)
+
+# Safe to call even if not loaded (no error by default)
+gdataset.unload("/nonexistent/path")
+
+# Error if validate=TRUE and not loaded
+gdataset.unload("/nonexistent/path", validate = TRUE)
+#> Error:
+#> ! Dataset '/nonexistent/path' is not loaded
+```
+
+When unloading datasets that had track collisions (loaded with
+`force=TRUE`), shadowed tracks are restored with proper precedence:
+working database first, then datasets in load order.
+
+##### Moving and Copying Tracks
+
+Use
+[`gtrack.mv()`](https://tanaylab.github.io/misha/reference/gtrack.mv.md)
+to rename a track or move it within the same database:
+
+``` r
+
+gsetroot(my_project)
+gtrack.copy("dense_track", "old_name")
+
+# Rename a track
+gtrack.mv("old_name", "new_name")
+
+# Move to a different namespace (directory)
+gtrack.mv("new_name", "results.new_name")
+gtrack.ls("new_name")
+#> [1] "results.new_name"
+gtrack.rm("results.new_name", force = TRUE)
+```
+
+Use
+[`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+to create a copy of a track. The copy is created in the current working
+directory (GWD), which may be in a different database when multiple
+databases are connected:
+
+``` r
+
+# Copy a track within the same database
+gtrack.copy("dense_track", "copy_track")
+gtrack.exists("copy_track")
+#> [1] TRUE
+gtrack.rm("copy_track", force = TRUE)
+
+# Copy from a loaded dataset to the working database
+gsetroot(my_project)
+gdataset.load(shared_annotations)
+gtrack.copy("annotation_track", "my_local_copy") # Copy to working db
+gtrack.dataset("my_local_copy")
+#> [1] "/tmp/RtmptX5vqb/trackdb/test"
+gtrack.rm("my_local_copy", force = TRUE)
+```
+
+Note:
+[`gtrack.mv()`](https://tanaylab.github.io/misha/reference/gtrack.mv.md)
+only works within the same database. To move a track between databases,
+use
+[`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+followed by
+[`gtrack.rm()`](https://tanaylab.github.io/misha/reference/gtrack.rm.md).
+
+##### Virtual Tracks Across Sources
+
+Virtual tracks remain global and are not tied to any specific source.
+They can reference tracks from any loaded source:
+
+``` r
+
+gsetroot(my_project)
+gdataset.load(shared_annotations)
+
+# Create virtual track referencing track from working db
+gvtrack.create("vt1", "dense_track", "avg")
+
+# Create virtual track referencing track from dataset
+gvtrack.create("vt2", "annotation_track", "max")
+
+# Use both in same expression
+head(gextract("vt1 + vt2", gintervals(1, 0, 10000)))
+#>   chrom start end vt1 + vt2 intervalID
+#> 1  chr1     0  50 0.3555556          1
+#> 2  chr1    50 100 0.3200000          1
+#> 3  chr1   100 150 0.3600000          1
+#> 4  chr1   150 200 0.3200000          1
+#> 5  chr1   200 250 0.3200000          1
+#> 6  chr1   250 300 0.4000000          1
+```
+
+##### Backward Compatibility
+
+Single-database usage works exactly as before:
+
+``` r
+
+gsetroot(my_project) # Works unchanged
+gdb.init(my_project) # Equivalent, also works
+gdataset.ls()
+#> [1] "/tmp/RtmptX5vqb/trackdb/test"
+```
+
+An example of a Genomic Database file structure:
+
+    hg38/              <- Genomic Database root directory
+       chrom_sizes.txt
+       .ro_attributes  <- List of read-only attributes
+       pssms/             <- (optional)
+          motif1.data        <- pssm data file
+          motif1.key         <- pssm key file
+          mypssm.data        <- ...
+          mypssm.key         <- ...
+       seq/               <- (optional)
+          genome.seq         <- indexed format: single sequence file
+          genome.idx         <- indexed format: index file
+          OR
+          chr1.seq           <- per-chromosome format: separate files
+          chr2.seq           <- ...
+          chr3.seq           <- ...
+       tracks/
+          tss.interv         <- small intervals set = tss
+          big_data.interv/   <- big intervals set = big_data (per-chromosome format)
+             .meta              <- summary of the intervals set
+             chr1               <- chrom files
+             chr5               <- ...
+          indexed_intervals.interv/  <- big intervals set (indexed format)
+             intervals.dat      <- consolidated interval data
+             intervals.idx      <- index file
+          rpt.track/         <- track = rpt (per-chromosome format)
+             .attributes        <- track attributes (optional)
+             chr1               <- chrom files
+             chr2               <- ...
+             chr3               <- ...
+             vars/              <- track variables (optional)
+                 myresult           <- track variable
+          indexed_track.track/   <- track (indexed format)
+             track.dat          <- consolidated track data
+             track.idx          <- index file
+             .attributes        <- track attributes (optional)
+             vars/              <- track variables (optional)
+          test/
+             intervals1.interv  <- intervals = test.intervals1
+             track1.track/      <- track = test.track1
+             .attributes        <- track attributes (optional)
+             chr1               <- chrom files
+             chr2               <- ...
+             chr3               <- ...
+          savta/
+             fourC.track/    <- track = savtra.fourC
+                chr1               <- chrom files
+                chr2               <- ...
+                chr3               <- ...
+
+### File Formats
+
+#### `chrom_sizes.txt`
+
+`chrom_sizes.txt` file must be located under the root directory of
+Genomic Database. This file lists the chromosomes and their sizes. The
+chromosome name appears in the first column, the size is indicated in
+the second column. The chromosome name should appear without “chr”
+prefix. The two columns are separated by tab character. Example:
+
+``` tsv
+1    247249719
+2    242951149
+3    199501827
+X    154913754
+Y    57772954
+```
+
+#### Seq Files
+
+Genomic sequences are stored in the `seq` directory. Two formats are
+supported:
+
+##### Indexed Format (Recommended)
+
+The indexed format uses two files: - `genome.seq`: Single binary file
+containing concatenated sequences for all contigs - `genome.idx`: Binary
+index mapping contig names to positions in genome.seq
+
+This format provides better performance and scalability, especially for
+genomes with many contigs. It is the default format created by
+[`gdb.create()`](https://tanaylab.github.io/misha/reference/gdb.create.md).
+
+**Format Specifications:**
+
+The `genome.idx` file has the following structure: - **Header (24
+bytes)**: - Magic number: `"MISHAIDX"` (8 bytes) - Index version:
+`uint32_t` (4 bytes, currently 1) - Number of contigs: `uint32_t` (4
+bytes) - CRC64-ECMA checksum: `uint64_t` (8 bytes)
+
+- **Entries** (one per contig):
+  - Chromosome ID: `uint32_t` (4 bytes) - alphabetical rank (0, 1, 2, …)
+  - Name length: `uint16_t` (2 bytes)
+  - Name: UTF-8 string (not null-terminated)
+  - Offset in genome.seq: `uint64_t` (8 bytes)
+  - Sequence length: `uint64_t` (8 bytes)
+  - Reserved: `uint64_t` (8 bytes, currently zeros)
+
+All multi-byte integers are stored in little-endian byte order.
+
+##### Per-Chromosome Format
+
+Each contig has a separate `.seq` file containing its genomic sequence
+as a contiguous string of ASCII characters. Files are named `chrXXX.seq`
+where `XXX` is the contig name from `chrom_sizes.txt`.
+
+Example of a short (25 base pairs) Seq file:
+
+``` csv
+ggtgaAGccctggagattcttatta
+```
+
+To create a database in the per-chromosome format, use
+`gdb.create(..., format = "per-chromosome")`.
+
+#### Track Files
+
+Tracks can be stored in two different formats: **per-chromosome format**
+or **indexed format**.
+
+##### Per-Chromosome Format
+
+In the traditional per-chromosome format, each chromosome’s track data
+is stored in a separate file within a track directory (e.g.,
+`tracks/mytrack.track/chr1`, `tracks/mytrack.track/chr2`, etc.). This
+format works well for genomes with a small number of chromosomes.
+
+##### Indexed Format (Recommended for Multi-Contig Genomes)
+
+The indexed format consolidates all chromosome data into two files: -
+`track.dat`: Single binary file containing concatenated track data for
+all chromosomes - `track.idx`: Binary index mapping chromosome IDs to
+positions in track.dat
+
+This format dramatically reduces file descriptor usage for genomes with
+many contigs (e.g., draft assemblies with thousands of scaffolds) and
+improves performance for parallel access.
+
+**Format Specifications:**
+
+The `track.idx` file has the following structure: - **Header (36
+bytes)**: - Magic number: `"MISHATDX"` (8 bytes) - Index version:
+`uint32_t` (4 bytes, currently 1) - Track type: `uint32_t` (4 bytes) -
+0=dense, 1=sparse, 2=array - Number of contigs: `uint32_t` (4 bytes) -
+Flags: `uint64_t` (8 bytes) - bit 0 indicates little-endian - CRC64-ECMA
+checksum: `uint64_t` (8 bytes)
+
+- **Entries** (24 bytes per contig):
+  - Chromosome ID: `uint32_t` (4 bytes)
+  - Offset in track.dat: `uint64_t` (8 bytes)
+  - Data length: `uint64_t` (8 bytes)
+  - Reserved: `uint32_t` (4 bytes, for future use)
+
+All multi-byte integers are stored in little-endian byte order.
+
+**Converting to Indexed Format:**
+
+Existing per-chromosome tracks can be converted to indexed format using
+[`gtrack.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.convert_to_indexed.md):
+
+``` r
+
+gtrack.copy("dense_track", "my_track")
+
+# Convert a track to indexed format
+gtrack.convert_to_indexed("my_track")
+
+# Check track format
+info <- gtrack.info("my_track")
+print(info$format) # "indexed" or "per-chromosome"
+#> [1] "indexed"
+gtrack.rm("my_track", force = TRUE)
+```
+
+**Supported Track Types:** Dense (fixed-bin), Sparse, and Array tracks
+(1D) and Rectangles and Points tracks (2D) can use indexed format.
+Virtual tracks and Computed 2D tracks are not supported for indexed
+format.
+
+**Backward Compatibility:** The indexed format is fully transparent to
+all misha functions. Both formats can coexist in the same database and
+are used identically in track expressions and analysis functions.
+
+**Validation Limits:** To prevent issues with corrupted or malicious
+index files, the following limits are enforced:
+
+- **Maximum contigs per index**: 20,000,000 (applies to genome.idx,
+  track.idx, intervals.idx)
+- **Maximum contig name length**: 1,024 bytes
+
+#### PSSM Set
+
+Each *PSSM Set* consists of two files: *PSSM key* and *PSSM data*. The
+files should be named `XXX.key` and `XXX.data` accordingly, where `XXX`
+is the name of PSSM set. Both files must be placed into `pssms`
+directory.
+
+##### PSSM Key
+
+*PSSM Key* file contains description of PSSMs in the following format
+(columns are separated by tab character):
+
+| Column | Type | Description |
+|----|----|----|
+| ID | Integer | Unique ID (referenced in PSSM Data file) |
+| Sequence | String | PSSM sequence |
+| Bidirectional | ‘0’ or ‘1’ | If Bidirectional is ‘1’ energy is calculated on complementary strand as well |
+
+Example:
+
+``` tsv
+0    *************ATTAAT**************    1
+1    *********A*ACACACACA*****A*******    1
+2    *************AAAATGGC*G**********    1
+3    *************ACTGCTTG************    1
+4    ****WW**GTWGCATACTTTT*GGCG*******    1
+5    *********C*RGCAACATKTTG**********    1
+6    ****G*G*G*G*GAGCGAGA*RG**********    1
+7    **************CCGAAG*************    1
+```
+
+##### PSSM Data
+
+*PSSM Data* file contains probability matrices for each PSSM key in the
+following format (columns are separated by tab character):
+
+| Column | Type | Description |
+|----|----|----|
+| ID | Integer | Unique ID (must appear in PSSM Key file) |
+| Position | Integer | Zero based position in the range of \[0, length(PSSM sequence)-1\] |
+| Probability of ‘A’ | Numeric | Probability of ‘A’ in the range of \[0, 1\] |
+| Probability of ‘C’ | Numeric | Probability of ‘C’ in the range of \[0, 1\] |
+| Probability of ‘G’ | Numeric | Probability of ‘G’ in the range of \[0, 1\] |
+| Probability of ‘T’ | Numeric | Probability of ‘T’ in the range of \[0, 1\] |
+
+### Intervals
+
+#### 1D Intervals
+
+A **1D interval** (or one-dimensional interval) represents a genomic
+section. It is defined by `(chrom, start, end)` where `start` and `end`
+are genomic coordinates (`start < end`). The coordinates are zero-based,
+meaning the chromosome starts at coordinate 0. The end coordinate marks
+the last coordinate in the section plus 1. To represent a point in the
+genome at coordinate `X`, one should create an interval with start
+coordinate set to `X` and end coordinate set to `X + 1`.
+
+#### 2D Intervals
+
+A **2D interval** (or two-dimensional interval) represents a rectangle
+in a genomic space. It is defined by
+`(chrom_1, start_1, end_1, chrom_2, start_2, end_2)`, where
+`start_1, start_2, end_1,` and `end_2` are start and end coordinates
+that mark the limits of a rectangle.
+
+#### Interval Sets
+
+Multiple intervals can be combined into a table, known as an **interval
+set** or often simply referred to as **intervals**. This table is
+represented by a data frame. In the case of 1D intervals, the data frame
+must have the first three columns named `chrom`, `start`, and `end`.
+Similarly, 2D intervals must have the first six columns named `chrom1`,
+`start1`, `end1`, `chrom2`, `start2`, and `end2`.
+
+Additional columns might be added to the intervals, and some of them
+might be utilized by various functions. For instance, the
+`gintervals.neighbors` function uses the `strand` column if it is
+presented in 1D intervals (should come after the regular three columns).
+Use `gintervals` and `gintervals.2d` functions to create 1D and 2D
+intervals, respectively.
+
+Both 1D and 2D intervals are prevalent in various functions. Some of
+these functions manipulate the intervals (unify, intersect, etc.).
+Others use the intervals to limit the function’s scope. There are also
+functions that perform their calculation for each interval in the
+interval set.
+
+#### Dual Intervals
+
+**Dual intervals** is a list containing two elements. The first element
+is a 1D interval set, while the second element is a 2D interval set.
+
+The `.misha$ALLGENOME` variable is frequently used as a default value
+for the intervals argument. `.misha$ALLGENOME` is an interval set of a
+dual type. `.misha$ALLGENOME[[1]]` represents a set of intervals that
+cover the entire genome (1D), while `.misha$ALLGENOME[[2]]` contains all
+the possible pairs between the chromosomes (2D). One can also use
+`gintervals.all` and `gintervals.2d.all` functions to return all 1D or
+2D intervals.
+
+#### Serializing Intervals, Big and Small Interval Sets
+
+Interval sets can be saved in the Genomic Database. Use the
+`gintervals.save` and `gintervals.load` functions to save or load an
+interval set from the database, and `gintervals.update` to
+update/add/delete a certain chromosome from the set.
+
+Internally, interval sets can be stored in two different formats:
+**small interval set** or **big interval set**. The specific format is
+chosen depending on the size of the interval set. Big format is selected
+for interval sets that contain more than `gbig.intervals.size` intervals
+(default: 1,000,000; set via `options`), while smaller sets are stored
+in the small format. Use `gintervals.is.bigset` to determine the format
+of the stored interval set.
+
+> **Note:** `gbig.intervals.size` controls *storage format* for interval
+> sets (disk-based vs. in-memory), while `gmax.data.size` controls
+> *buffer sizes* for streaming operations like `gextract` and
+> `gquantiles`. These are independent thresholds serving different
+> purposes.
+
+Saved interval sets in the small format can be seamlessly used in all
+functions and track expressions without the need to explicitly load
+them.
+
+##### Interval Set Storage Formats
+
+Big interval sets can be stored in two formats: **per-chromosome
+format** or **indexed format**.
+
+**Per-Chromosome Format:** In this traditional format, intervals for
+each chromosome (or chromosome pair for 2D intervals) are stored in
+separate files within an interval set directory. For 1D intervals:
+`myintervals.interv/chr1`, `chr2`, etc. For 2D intervals:
+`myintervals.interv/chr1-chr2`, `chr1-chr3`, etc.
+
+**Indexed Format (Recommended for Multi-Contig Genomes):** The indexed
+format consolidates all chromosomes into two files, dramatically
+reducing file descriptor usage for genomes with many contigs.
+
+**1D Intervals** use: - `intervals.dat`: Binary file with concatenated
+interval data - `intervals.idx`: Binary index file (36-byte header + 24
+bytes per contig)
+
+The `intervals.idx` file structure: - **Header (36 bytes)**: - Magic:
+`"MISHAI1D"` (8 bytes) - Version: `uint32_t` (4 bytes) - Number of
+entries: `uint32_t` (4 bytes) - Flags: `uint64_t` (8 bytes) - bit 0
+indicates little-endian - CRC64-ECMA checksum: `uint64_t` (8 bytes) -
+Reserved: `uint32_t` (4 bytes)
+
+- **Entries** (24 bytes per contig):
+  - Chromosome ID: `uint32_t` (4 bytes)
+  - Offset: `uint64_t` (8 bytes)
+  - Length: `uint64_t` (8 bytes)
+  - Reserved: `uint32_t` (4 bytes)
+
+**2D Intervals** use: - `intervals2d.dat`: Binary file with concatenated
+pair data - `intervals2d.idx`: Binary index file (40-byte header + 28
+bytes per pair)
+
+The `intervals2d.idx` file structure: - **Header (40 bytes)**: - Magic:
+`"MISHAI2D"` (8 bytes) - Version: `uint32_t` (4 bytes) - Number of
+entries: `uint32_t` (4 bytes) - Flags: `uint64_t` (8 bytes) - CRC64-ECMA
+checksum: `uint64_t` (8 bytes) - Reserved: `uint64_t` (8 bytes)
+
+- **Entries** (28 bytes per pair):
+  - Chromosome 1 ID: `uint32_t` (4 bytes)
+  - Chromosome 2 ID: `uint32_t` (4 bytes)
+  - Offset: `uint64_t` (8 bytes)
+  - Length: `uint64_t` (8 bytes)
+  - Reserved: `uint32_t` (4 bytes)
+
+**Note:** Only non-empty chromosome pairs are stored in the 2D index,
+avoiding O(N²) space overhead.
+
+**Converting to Indexed Format:**
+
+``` r
+
+# Only big interval sets are stored per chromosome, so lower the threshold to
+# get a big set out of the small example database (the default is 1,000,000).
+options(gbig.intervals.size = 10)
+gintervals.save("my_intervals", gscreen("dense_track > 0.3"))
+gintervals.save("my_2d_intervals", gextract("rects_track", gintervals.2d.all())[, 1:6])
+options(gbig.intervals.size = 1e6)
+
+# Convert 1D interval set to indexed format
+gintervals.convert_to_indexed("my_intervals")
+
+# Convert 2D interval set to indexed format
+gintervals.2d.convert_to_indexed("my_2d_intervals")
+
+# Convert and remove old per-chromosome files
+gintervals.convert_to_indexed("my_intervals", remove.old = TRUE, force = TRUE)
+
+gintervals.rm("my_intervals", force = TRUE)
+gintervals.rm("my_2d_intervals", force = TRUE)
+```
+
+All multi-byte integers are stored in little-endian byte order. The
+indexed format is fully backward compatible with all misha functions.
+
+``` r
+
+# 'annotations' is an intervals set saved in Genomic Database
+gintervals.intersect("annotations", gintervals(2))
+#>   chrom start   end
+#> 1  chr2    20  2000
+#> 2  chr2  3000  8000
+#> 3  chr2  9000 11000
+#> 4  chr2 12000 12001
+#> 5  chr2 13000 14000
+#> 6  chr2 15000 15500
+```
+
+Likewise, big interval sets can be used in many but not all functions. A
+notable exception is `gintervals.load` that allows loading only a single
+chromosome (or a chromosome pair for 2D cases) of a big intervals set.
+
+### Tracks
+
+A **Track** is a data structure that allows binding numeric data
+(floating point values) to a genomic space (a set of genomic intervals).
+The data in the tracks can typically be accessed through **track
+expressions** that are widely used by various functions of the package.
+
+Two fundamental types of tracks exist: **1D** and **2D**.
+
+#### 1D Track
+
+A **1D track** (or one-dimensional track) maps numeric values
+$`V_0, ..., V_n`$ to non-overlapping 1D intervals. The package supports
+two formats of 1D tracks: **Dense** (sometimes also referred to as
+**Fixed Bin**) and **Sparse**.
+
+For a Dense track, the size of the genomic interval is always fixed and
+called **bin size**. Numeric values are stored for all genomic intervals
+that cover the genome, although some values can be `NaN`. A Dense track
+file appears as a continuous chunk of values $`V_0, ..., V_n`$, where
+$`V_i`$ maps to an interval $`[binsize * i, binsize * (i+1))`$. Dense
+track files do not store interval coordinates, allowing them to
+represent large amounts of numeric data compactly. The size of a Dense
+track is inversely proportional to the bin size. Random access to a
+value at a given coordinate has constant complexity, i.e., $`O(1)`$.
+
+Sparse tracks offer more flexibility compared to Dense tracks. Each
+numeric value can map to a genomic interval of any size. The size of a
+Sparse track is proportional to the number of numeric values (excluding
+`NaN`s). On the downside, the complexity of random access to a value at
+a given coordinate is $`O(logN)`$, where $`N`$ is the number of values
+in the track.
+
+To summarize the differences between Dense and Sparse tracks:
+
+|  | Dense | Sparse |
+|----|----|----|
+| Optimal use case | Data covering nearly the whole genome | Data covering a limited portion of the genome |
+| Values stored | Per bin (interval of a fixed size) | Per interval of an arbitrary size |
+| Random access complexity | $`O(1)`$ | $`O(logN)`$ |
+| Disk usage | 4 bytes per bin | 20 bytes per value |
+
+1D tracks can be created by various functions, such as `gtrack.create`,
+`gtrack.create_sparse`, `gtrack.import_set`, and more.
+
+#### Array Track
+
+An **Array track** is similar to a Sparse track in that it maps data to
+one-dimensional intervals of any size. However, unlike Sparse tracks, an
+Array track can map multiple values to each interval. Array tracks thus
+store large amounts of data in one track - a task that would otherwise
+require numerous tracks.
+
+The values in an Array track are organized into **columns**, each with a
+name and an index. You can view it as an NxM table, where N is the
+number of intervals, and M is the number of columns. The size of an
+Array track is proportional to the total number of numeric values stored
+(excluding `NaN`s).
+
+As useful as they are, Array tracks should not replace Dense or Sparse
+tracks. A single Sparse track will always be more compact and efficient
+than an Array track holding only one column.
+
+You can create Array tracks with the `gtrack.array.import` function.
+
+#### 2D Track
+
+A **2D track** (or two-dimensional track) maps numeric values
+$`V_0, ..., V_n`$ to non-overlapping 2D intervals. These are often used
+to represent interactions between different parts of the genome.
+
+2D tracks are stored internally in **chunks** with each chunk containing
+multiple track values. When accessing a track value, its entire chunk is
+loaded into memory. The byte size of a chunk, determined by the
+`gtrack.chunk.size` option, is a tradeoff between single value access
+(smaller chunk) and multiple value access (larger chunk).
+
+When accessing multiple track values, multiple chunks might be loaded
+into memory. Given the potential size of 2D tracks, the total number of
+chunks in memory can be limited using the `gtrack.num.chunks` parameter.
+
+Typically, 2D tracks use the **Rectangles** format. However, a more
+space-efficient **Points** format exists, similar in behavior to
+Rectangles. There’s also a **Computed** format, which is beyond the
+scope of this documentation.
+
+Rectangles tracks: `gtrack.create`, `gtrack.2d.create`.
+
+Points tracks: `gtrack.2d.import_contacts`.
+
+#### Track as an Intervals Set
+
+Tracks represent sets of intervals, augmented with values, and can
+therefore replace interval sets in functions like `gextract`,
+`gintervals.neighbors`, and `gintervals.chrom_sizes`. The only exception
+is **Dense** tracks which can’t be used in place of interval sets.
+
+#### Track Attributes
+
+Beyond numeric data, tracks can store metadata, such as descriptions or
+sources. This metadata is stored as name-value pairs or attributes with
+the value being a string. Tracks created using `gtrack.create`,
+`gtrack.smooth`, etc., automatically have `created.by`, `created.date`,
+and `description` attributes.
+
+While there’s no strict rule, attributes typically store short strings.
+For other data formats, consider using **track variables**.
+
+Attribute management: - Retrieval/Modification: `gtrack.attr.get`,
+`gtrack.attr.set`. - Bulk Actions: `gtrack.attr.export`,
+`gtrack.attr.import`. - Search by Pattern: `gtrack.ls`.
+
+Some attributes are read-only, like `created.by` and `created.date`. Use
+`gdb.get_readonly_attrs` and `gdb.set_readonly_attrs` to manage these.
+
+#### Track Variables
+
+Track variables store statistics, computation results, historical data,
+etc., related to a track. Unlike attributes, they can store data in any
+format.
+
+Variable management: - Retrieval/Modification/Removal: `gtrack.var.get`,
+`gtrack.var.set`, `gtrack.var.rm`. - List variables: `gtrack.var.ls`.
+
+#### Track Attributes vs. Track Variables
+
+Both track attributes and variables store track metadata, but they have
+distinct uses:
+
+|  | Track Attributes | Track Variables |
+|----|----|----|
+| Use Case | Track metadata as short strings (e.g., description) | Arbitrary track-associated data |
+| Value Type | String | Any |
+| Single Value Retrieval | `gtrack.attr.get` | `gtrack.var.get` |
+| Single Value Modification | `gtrack.attr.set` | `gtrack.var.set` |
+| Bulk Retrieval | `gtrack.attr.export` | N/A |
+| Bulk Modification | `gtrack.attr.import` | N/A |
+| Object Names Retrieval | `gtrack.attr.export` | `gtrack.var.ls` |
+| Object Removal | `gtrack.attr.set` (with an empty string) | `gtrack.var.rm` |
+| Search by Value | `gtrack.ls` | N/A |
+
+### Track Expressions
+
+#### Introduction
+
+*Track expression* is a key concept of the package. Track expressions
+are widely used in various functions (`gscreen`, `gextract`, `gdist`,
+…).
+
+Track expression is a character string that closely resembles a valid R
+expression. Just like any other R expression it may include conditions,
+functions and variables defined beforehand. `"1 > 2"`, `"mean(1:10)"`
+and `"myvar < 17"` are all valid track expressions. Unlike regular R
+expressions track expression might also contain track names or *virtual
+track* names.
+
+How does a track expression get evaluated? A track expression is
+accompanied by an *iterator* that determines a set of intervals over
+which the expression iterator goes. For each each iterator interval the
+track expression is evaluated. The value of a track expression
+`"mean(1:10)"` is constant regardless the iterator interval. However
+suppose the track expression contains a track name `mytrack`, like:
+`"mytrack * 3"`, and the whole story becomes very different. The library
+first recognizes that `mytrack` is not a regular R variable but rather a
+track name. A new R variable named `mytrack` is added then to R
+environment. For each iterator interval this variable is assigned the
+corresponding value of the track. This value obviously depends on the
+iterator interval. Once `mytrack` is assigned the corresponding value,
+the track expression is evaluated in R.
+
+So how exactly the value of `mytrack` variable is determined given the
+iterator interval? We will demonstrate the answer by the following
+example. Suppose the track `mytrack` is in sparse format. It consists of
+a single chromosome with the following values:
+
+| chrom | start | end | value |
+|-------|-------|-----|-------|
+| chr1  | 100   | 200 | 10    |
+| chr1  | 200   | 250 | 25    |
+| chr1  | 500   | 560 | 17    |
+| chr1  | 600   | 700 | 44    |
+
+What would be the value of the variable `mytrack` given an iterator
+interval? The resulted value is an average of all values of track
+`mytrack` covered by the iterator interval. For example, if the iterator
+interval is `[230, 620)` then the resulted value is an average of values
+25, 17 and 44. Similarly if the iterator interval is `[0, 300)` then the
+resulted value is an average of 10 and 25. Lastly if the iterator
+intervals is `[300, 400)` then the resulted value is $`NaN`$. Same
+evaluation logics is applied for Dense and Array tracks. (In the latter
+case the values from all columns are averaged.) On contrary Rectangles
+track value is calculated as a *weighted* average of the values covered
+by the iterator interval. The weight equals to the intersection area of
+the iterator interval and the 2D interval that contains the value.
+
+See the table below:
+
+| Track Type | Value |
+|----|----|
+| Dense | Average of non $`NaN`$ values covered by iterator interval. |
+| Sparse | Average of non $`NaN`$ values covered by iterator interval. |
+| Array | Average of non $`NaN`$ values from all columns covered by iterator interval. |
+| Rectangles | Weighted average of non $`NaN`$ values covered by iterator interval. Each weight equals to the intersection area between iterator interval and track interval that contains the value. |
+
+#### Virtual Tracks
+
+So far we showed that the value of a `mytrack` variable is set to be the
+average (or weighted average) of the track values that are covered by
+the iterator interval. But what if we do not want to average the values
+but rather pick up the maximal or minimal values? What if we want to use
+the percentile of a track value rather than the value itself? And maybe
+we even want to alter the iterator interval itself on the fly? This is
+where virtual tracks become useful.
+
+Virtual track is a set of rules that describe how the “source” (a real
+track, intervals, or a value-based track) should be proceeded, and how
+the iterator interval should be modified. Virtual tracks are created
+with `gvtrack.create` function:
+
+``` r
+
+gvtrack.create("myvtrack", "dense_track")
+```
+
+This call creates a new virtual track named `myvtrack`. This virtual
+track can be used in the track expression instead of a real track
+`dense_track`. In our example `myvtrack` is just an alias of
+`dense_track`. Yet we can go on and create a more complicated virtual
+track if we specify a “function”, i.e. instruct the virtual track of
+what should be its value in track expression.
+
+``` r
+
+gvtrack.create("myvtrack", "dense_track", "global.percentile")
+```
+
+In this example when `myvtrack` is evaluated in the track expression it
+will return the percentile of $`V_{avg}`$ among the values of
+`dense_track` where $`V_{avg}`$ is an average (or weighted average) of
+the track values that are covered by the iterator interval.
+
+Virtual tracks are especially useful for Array tracks. By default if an
+Array track is used in a track expressions, its interval value would be
+the average of all non-NaN column values covered by an iterator
+interval. `gvtrack.array.slice` allows to select specific columns and to
+specify the function applied to the values of each track interval.
+
+``` r
+
+gvtrack.create("myvtrack", "array_track", "sum")
+gvtrack.array.slice("myvtrack", c("col2", "col5"), "max")
+```
+
+In this example we create a virtual track based on `array_track`. Assume
+that an iterator interval $`I`$ covers $`n`$ different intervals in
+`array_track`: $`I_0, ..., I_n`$. The value of `myvtrack` in a track
+expression would be then:
+``` math
+ \sum_{i=1}^{n}max(V_{i,2}, V_{i,5}) 
+```
+where $`V_{i,j}`$ is a value of the track in column $`j`$ for interval
+$`I_i`$.
+
+Virtual tracks allow also to alter the iterator interval “on the fly”:
+
+``` r
+
+gvtrack.iterator("myvtrack", sshift = -100, eshift = 200)
+```
+
+In this example we expand each iterator interval by adding -100 to its
+`start` coordinate and 200 to its `end` coordinate.
+
+Similarly, iterator modifiers can be defined for 2D intervals. Moreover,
+an iterator modifier can create a 1D interval from a 2D iterator
+interval by projecting one of its axes.
+
+``` r
+
+gvtrack.create("myvtrack", "dense_track")
+gvtrack.iterator("myvtrack", dim = 2)
+```
+
+It is important to remember that iterator modifiers transform the
+iterator interval only for the given virtual tracks. Assume an iterator
+interval $`I`$ and two virtual tracks $`V_0`$ and $`V_1`$. If $`I`$ is a
+2D interval then *band* rules are applied first to it. $`I`$ is
+transformed then to $`I_0`$ and $`I_1`$ according to the modification
+rules defined by the virtual tracks. Finally, $`I_0`$ and $`I_1`$ are
+passed to $`V_0`$ and $`V_1`$ accordingly as the iterator intervals.
+
+So far we have used a track `dense_track` as a “source” of a virtual
+track. We can also use intervals as a source. In this case, the value of
+the virtual track will be some function that takes into account the
+“source” intervals and the current iterator interval.
+
+``` r
+
+gvtrack.create("myvtrack", "annotations", "distance")
+intervs <- gscreen("dense_track > 0.45")
+head(gextract("myvtrack", .misha$ALLGENOME, iterator = intervs))
+#>   chrom  start    end myvtrack intervalID
+#> 1  chr1  39350  39400    36775          1
+#> 2  chr1  73700  73750    71125          1
+#> 3  chr1  73800  73900    71250          1
+#> 4  chr1  91200  91250    88625          1
+#> 5  chr1 114700 114750   112125          1
+#> 6  chr1 137300 137350   134725          1
+```
+
+In this example `myvtrack` returns the minimal distance between
+intervals from an interval set `annotations` and the center of the
+current iterator interval from `intervs`.
+
+##### Value-Based Tracks
+
+In addition to using database tracks and interval sets as sources,
+virtual tracks can also use **value-based tracks** as sources.
+Value-based tracks are data frames containing genomic intervals with
+associated numeric values. They function as in-memory sparse tracks
+without requiring track creation in the database.
+
+To create a value-based virtual track, provide a data frame with columns
+`chrom`, `start`, `end`, and one numeric value column (any column name
+is acceptable):
+
+``` r
+
+# Create a data frame with intervals and numeric values
+intervals_with_values <- data.frame(
+    chrom = "chr1",
+    start = c(100, 300, 500),
+    end = c(200, 400, 600),
+    score = c(10, 20, 30)
+)
+
+# Use as value-based sparse track
+gvtrack.create("myvtrack", intervals_with_values, "avg")
+gvtrack.create("myvtrack_max", intervals_with_values, "max")
+```
+
+Value-based tracks support all track-based summarizer functions (e.g.,
+`avg`, `min`, `max`, `sum`, `stddev`, `quantile`, `nearest`, `exists`,
+`size`, `first`, `last`, `sample`, and position functions). However,
+they have one important restriction: **intervals must not overlap**.
+Unlike interval-based summarizers (which work with overlapping
+intervals), value-based tracks behave like sparse tracks and require
+non-overlapping intervals.
+
+Value-based tracks aggregate values using count-based averaging (each
+interval contributes equally regardless of length), matching the
+behavior of sparse tracks. This means when multiple intervals are
+covered by an iterator interval, each interval’s value contributes
+equally to the aggregation, regardless of the interval’s length.
+
+For a full list of supported functions please see `gvtrack.create` and
+`gvtrack.array.slice` functions.
+
+#### Administrating Virtual Tracks
+
+As described in the previous chapter virtual tracks define a set of
+rules of how to access and proceed the values of the “source” object.
+The connection between the virtual track and the source object is done
+via “soft link”, i.e. by name and not by reference. For example, a
+virtual track will continue to exist until explicitly removed by
+`gvtrack.rm` even if the physical track that it is pointing to is
+deleted or renamed.
+
+Operations such as `gdb.init` and `gdir.cd` alter the list of available
+tracks and intervals sets. Since these objects are referenced by virtual
+tracks, these latter are always defined in the context of the current
+working directory in Genomic Database (not to be confused with shell’s
+current working directory). Changing the current working directory using
+`gdb.init` or `gdir.cd` will also change the list of available virtual
+tracks.
+
+Another issue to bare in mind is that unlike regular tracks whose data
+is stored on disk virtual tracks are non-persistent objects in current R
+environment. Their definition is stored in the `GVTRACKS` variable
+inside the package’s `.misha` environment (since misha 4.2.0 the package
+no longer creates these variables in the global environment). In
+particular a virtual track named “vtrack” that was created within a
+context of “/home/user/trackdb” Genomic Database working directory would
+reside in `.misha$GVTRACKS[["/home/user/trackdb"]][["vtrack"]]`. One can
+also use `gvtrack.info` function that provides a more convenient access
+to virtual track definitions.
+
+As the virtual tracks are stored in an R variable their behavior hence
+complies with the rules of other R variables: a virtual track defined by
+one user will not be seen by another one, virtual tracks might disappear
+once R is relaunched, etc.
+
+To preserve the definition of virtual tracks between the sessions one
+would need to save `.misha$GVTRACKS` on disk. The serialization is under
+user’s responsibility. The standard suit of functions for saving /
+loading R variables can be used for that purpose.
+
+Note that if `.misha$GVTRACKS` is loaded from a file or changed manually
+by a user the *auto-completion* list (in case it is turned on) might
+need to be refreshed by calling `gdb.reload`.
+
+#### Track Expression Evaluation under Optimization
+
+Previously we described how a track expression `"mytrack * 3"` (where
+`mytrack` is a track name) leads to an implicit definition of `mytrack`
+variable in R environment. To make our explanation easier we presented
+this variable as a scalar whose value is altered each time the iterator
+interval changes. It’s time to admit that that was oversimplification.
+In reality the library defines `mytrack` variable as a vector (i.e. an
+array) and not as a single scalar. The vector is filled then with the
+corresponding values of the track. Finally the track expression is
+evaluated in R and the result is expected to be also a vector of the
+same size as `mytrack` vector. Working with vectors rather than single
+scalars reduces the number of evaluations within R and hence improves
+run-times.
+
+The size of the vector is controlled via `gbuf.size` option. By default
+it equals to 1000. Altering this value (for instance setting it to 1)
+might significantly affect the run-time of various functions in the
+library. If you still wish to force the functions to define scalars
+rather than vectors, set `gbuf.size` to 1:
+
+``` r
+
+options(gbuf.size = 1)
+getOption("gbuf.size")
+#> [1] 1
+options(gbuf.size = 1000) # back to the default for the rest of this vignette
+```
+
+One might wonder why should we care about the fact that `mytrack` is not
+a scalar but rather a vector? Indeed in many cases it does not really
+matter. For example `mytrack * 3` expression produces exactly the same
+results regardless whether `mytrack` is defined internally as a vector
+or as a scalar. This is due to the fact that the expression `V * 3` (`V`
+stands for a vector) results in each value of `V` being multiplied by 3.
+
+Multiplication is a good example of “parallel” operation in R (works on
+each element in vector separately). On contrary some functions that
+accept a vector might return a scalar rather than a vector. Such is, for
+example, `min` function.
+
+Let’s look at the following track expression:
+`track1 + min(track1, track2)`. This expression was probably meant to
+produce a sum of `track1` track and a minimum value between `track1` and
+`track2` tracks for each iterator interval. However the library defines
+the variables `track1` and `track2` to be vectors of `gbuf.size` size
+(by default: 1000). `min` is not a “parallel” operation. Given two
+vectors of any size it returns a single scalar that is the minimal value
+of *all* values in both of the vectors. Therefore
+`track1 + min(track1, track2)` will be interpreted as `track1 + M`,
+where M is minimum of 2000 values (1000 values from `track1` track, and
+another 1000 - from `track2` track). We can hardly imagine that a user
+would have really meant this! Sadly enough the expression will be
+seamlessly evaluated and produce a valid, but meaningless result. The
+solution for our example is to use `pmin` rather than `min` function.
+
+The library always verifies that the evaluation of the track expression
+produces a vector of the same size as the size of a track variable. In
+many cases this procedure is able to reveal faulty track expressions.
+Yet in more tricky examples like the one that we used before the library
+will not warn the user.
+
+> Make sure your track expressions work correctly on vectors!
+
+#### Revealing Current Iterator Interval
+
+During the evaluation of a track expression one can access a specially
+defined variable named `GITERATOR.INTERVALS`. This variable contains a
+set of iterator intervals for which the track expression is evaluated.
+`GITERATOR.INTERVALS` contains the same number of intervals as the size
+of `mytrack` vector from our previous example. The value of a track
+`mytrack` for an interval `i` is stored at `mytrack[i]`.
+
+Note that some intervals in `GITERATOR.INTERVALS` might have a start
+coordinate equal to -1. Skip those intervals and the values of `mytrack`
+at the corresponding index.
+
+#### Iterators
+
+So far we have discussed in details how the track expression is
+evaluated given the *iterator interval*. Yet how the iterator intervals
+can be controlled?
+
+Most of the functions that accept track expressions have an additional
+parameter named `iterator`. The value of this parameter determines the
+iterator intervals which is also sometimes called an *iterator policy*:
+
+| Value | Iterator Policy Type | Example | Description |
+|----|----|----|----|
+| Integer | Fixed Bin | `50` | Iterator intervals will advance by a fixed step (bin) starting from zero coordinate up to chromosome’s length: `[0,50), [50,100), [100,150), ...` |
+| Dense track | Fixed Bin | `"dense_track"` | Use the bin size of the track as a fixed step. |
+| 1D intervals | 1D Intervals | `"annotations"` | Iterate over the supplied intervals. *Note: the intervals are sorted and overlapping intervals are unified.* |
+| Sparse track | 1D Intervals | `"sparse_track"` | Iterate over the intervals of a sparse track. |
+| Array track | 1D Intervals | `"array_track"` | Iterate over the intervals of an array track. |
+| c(integer, integer) | 2D Intervals | `c(1000, 2000)` | 2D iterator intervals will cover the whole 2D chromosomal space by rectangles of fixed size: Width X Height. Please keep in mind that small rectangles used without a limiting scope might result in immense number of iterator intervals. |
+| 2D intervals | 2D Intervals | `gintervals.2d(c(1, 2))` | Iterate over the supplied intervals. *Note: the intervals are sorted and overlapping is forbidden.* |
+| Rectangles track | 2D Intervals | `"rects_track"` | Iterate over the intervals of a Rectangles track |
+| Cartesian grid iterator | 2D Intervals | `giterator.cartesian_grid( intervals1, intervals2, c(10, 20, 30))` | Iterate over 2D cartesian grid (see `giterator.cartesian_grid` function) |
+| NULL | Fixed Bin OR 1D Intervals OR 2D Intervals | NULL | Implicitly determine the iterator policy based on the tracks that appear in the track expression. If no track names presented or two different tracks determine different iterator policy, an error is reported. |
+
+#### Scope
+
+Many functions that accept a track expressions and iterator policy
+accept an additional set of intervals that limit the scope of a
+function. This scope also limits the iterator intervals. For instance:
+
+``` r
+
+gextract("dense_track", gintervals(2, 340, 520))
+#>   chrom start end dense_track intervalID
+#> 1  chr2   340 350        0.14          1
+#> 2  chr2   350 400        0.08          1
+#> 3  chr2   400 450        0.16          1
+#> 4  chr2   450 500        0.00          1
+#> 5  chr2   500 520        0.16          1
+```
+
+As one can notice the first and the last intervals in the result are
+truncated by the scope `[340, 520)`.
+
+In some cases the combination of iterator policy and scope might result
+in nontrivial set of iterator intervals. Use `giterator.intervals`
+function to retrieve the iterator intervals given a track expression,
+scope and an iterator.
+
+#### Band
+
+As explained before track expression iterator can be determined
+implicitly or through an `iterator` parameter. In either case the result
+is a set of 1D or 2D intervals depending on how the iterator was
+defined. If iterator intervals are 2D an additional filter can be
+applied to them: a *band*.
+
+A band is a pair of integers: $`D_1, D_2`$. We say that a 2D iterator
+interval $`(chrom_1, x_1, x_2, chrom_2, y_1, y_2)`$ intersects a band if
+and only if the next two conditions are true:
+
+1.  $`chrom_1 = chrom_2`$
+2.  $`\exists x,y: x_1 \le x < x_2 \wedge y_1 \le y < y_2 \wedge D_1 \le x-y < D_2`$.
+
+In a less formal way we can see a band as a space $`S`$ between two
+45-degrees diagonals where $`D1, D2`$ determine where these diagonals
+cross $`X`$ axis. An iterator interval represents a rectangle in a 2D
+space and can be therefore intersected with S. The result of the
+intersection can be a rectangle, a trapeze, a triangle, a hexagon or it
+can be empty if the interval does not intersect with the band. If the
+intersection is non empty, the resulted figure, whatever it is, can be
+bound by some larger rectangle. The rectangle that has the minimal space
+and yet containing the intersected shape is called *the minimal
+rectangle*.
+
+After the formal definitions it’s time to say how band is actually
+applied.
+
+If the intersection between the 2D iterator interval and the band is
+non-empty and $`chrom_1=chrom_2`$, the minimal rectangle replaces the
+original iterator interval. Otherwise the iterator interval is skipped
+as it lies outside of the band or the two chromosomes are not equal.
+
+The `gintervals.2d.band_intersect` function can help one better
+understand the concept:
+
+``` r
+
+intervs <- gintervals.2d(1, 200, 800, 1, 100, 1000)
+intervs <- rbind(intervs, gintervals.2d(1, 900, 950, 1, 0, 200))
+intervs <- rbind(intervs, gintervals.2d(1, 0, 100, 1, 0, 400))
+intervs <- rbind(intervs, gintervals.2d(1, 900, 950, 2, 0, 200))
+intervs
+#>   chrom1 start1 end1 chrom2 start2 end2
+#> 1   chr1    200  800   chr1    100 1000
+#> 2   chr1    900  950   chr1      0  200
+#> 3   chr1      0  100   chr1      0  400
+#> 4   chr1    900  950   chr2      0  200
+gintervals.2d.band_intersect(intervs, band = c(500, 1000))
+#>   chrom1 start1 end1 chrom2 start2 end2
+#> 1   chr1    600  800   chr1    100  300
+#> 2   chr1    900  950   chr1      0  200
+```
+
+`gintervals.2d.band_intersect` intersects the intervals with the band
+and returns the intervals shrunk to the minimal rectangle. As you can
+see we have four different intervals. The first one
+`(chr1, 200, 800, chr1, 100, 1000)` intersects the band and after
+shrinking to the minimal rectangle it becomes
+`(chr1, 600, 800, chr1, 100, 300)`. The second interval lies entirely
+within the band and hence is returned without any change. The third
+interval lies entirely outside of the band, and hence is eliminated from
+the result. The last interval is coming from two different chromosomes
+and therefore is also filtered out.
+
+As said band filters out and alters 2D iterator intervals. Yet it also
+affects the result of 2D tracks. Let’s look at the following example:
+
+``` r
+
+intervs <- gintervals.2d(1, c(100, 400), c(300, 490), 1, c(120, 180), c(200, 500))
+gtrack.2d.create("test2d", "test 2D track", intervs, c(10, 20))
+gextract("test2d", .misha$ALLGENOME)
+#>   chrom1 start1 end1 chrom2 start2 end2 test2d intervalID
+#> 1   chr1    100  300   chr1    120  200     10          1
+#> 2   chr1    400  490   chr1    180  500     20          1
+gextract("test2d", .misha$ALLGENOME, iterator = gintervals.2d(1, 0, 1000, 1, 0, 1000))
+#>   chrom1 start1 end1 chrom2 start2 end2   test2d intervalID
+#> 1   chr1      0 1000   chr1      0 1000 16.42857          1
+gintervals.2d.band_intersect(intervs, band = c(150, 1000))
+#>   chrom1 start1 end1 chrom2 start2 end2
+#> 1   chr1    270  300   chr1    120  150
+#> 2   chr1    400  490   chr1    180  340
+gextract("test2d", .misha$ALLGENOME, iterator = gintervals.2d(1, 0, 1000, 1, 0, 1000), band = c(150, 1000))
+#>   chrom1 start1 end1 chrom2 start2 end2   test2d intervalID
+#> 1   chr1    150 1000   chr1      0  850 19.57182          1
+gtrack.rm("test2d", force = TRUE)
+```
+
+We created a 2D track `test2d` and inserted two values into it: $`10`$
+and $`20`$. If an iterator interval covers all the track’s rectangles,
+the resulted value of the track would be a weighted average of its
+values where the weight is equal to the intersected area. In our example
+it is $`16.42857`$.
+
+We added a band then. `gintervals.2d.band_intersect` shows the minimal
+rectangles: the intersection result of the original rectangles with the
+band. The output of the new `gextract` has been changed accordingly: the
+new weights in the weighted average are equal to the new and smaller
+intersected area. The value has changed therefore to: $`19.57182`$.
+
+> Note, however, that the space used in the calculation of the weighted
+> average is the actual space of the intersection and not the space
+> occupied by the minimal rectangles!
+
+### Random Algorithms
+
+Various functions in the library such as `gsample` make use of
+pseudo-random number generator. Each time the function is invoked a
+unique series of random numbers is issued. Hence two identical calls
+might produce different results. To guarantee reproducible results call
+`set.seed` before invoking the function.
+
+``` r
+
+set.seed(60427)
+r1 <- gsample("dense_track", 10)
+r2 <- gsample("dense_track", 10) # r2 differs from r1
+set.seed(60427)
+r3 <- gsample("dense_track", 10) # r3 == r1
+identical(r1, r2)
+#> [1] FALSE
+identical(r1, r3)
+#> [1] TRUE
+```
+
+### Multitasking
+
+#### Controlling the Number of Processes
+
+To boost the run time performance various functions in the library
+support multitasking mode, i.e. parallel computation of the result by
+several concurrent processes. The exact number of processes internally
+launched depends on the specific call however the upper bound can be
+controlled by a few parameters such as `gmax.processes` (absolute upper
+bound), `gmax.processes2core` (maximal number of processes per CPU core)
+and `gmin.scope4process` (minimal scope range / surface assigned to a
+process). Multitasking can also be completely switched off by setting
+`gmultitasking` parameter to `FALSE`.
+
+#### Auto-Configuration
+
+The `misha` package automatically configures itself based on your
+system’s resources when loaded. This happens transparently without any
+user intervention:
+
+**Automatic Process Limits:** The package detects the number of CPU
+cores and sets `gmax.processes = 70% of cores`. This ensures optimal
+parallelism while leaving headroom for the system. For example: - On a
+4-core laptop: `gmax.processes = 2` (70% of 4) - On a 16-core
+workstation: `gmax.processes = 11` (70% of 16) - On a 128-core server:
+`gmax.processes = 89` (70% of 128)
+
+**Automatic Buffer Size:** The package coordinates buffer size with
+process limits to ensure
+`gmax.processes * gmax.data.size <= 70% of RAM`. Specifically, it sets
+`gmax.data.size = min((RAM * 0.7) / gmax.processes, 10GB)`. This ensures
+that when all processes are running at full capacity, total memory usage
+stays within safe limits. For example: - On a 4-core, 8GB laptop:
+`gmax.processes = 2`, `gmax.data.size = 2.8GB` (total: 5.6GB = 70% of
+8GB) - On a 16-core, 32GB workstation: `gmax.processes = 11`,
+`gmax.data.size = 2.0GB` (total: 22.4GB = 70% of 32GB) - On a 128-core,
+256GB server: `gmax.processes = 89`, `gmax.data.size = 2.0GB` (total:
+179.2GB = 70% of 256GB)
+
+The 10GB cap is empirically determined - larger shared memory
+allocations can fail even when system limits appear to allow them. This
+cap is rarely hit on multi-core systems due to the per-process division.
+
+**Small Workloads:** Some functions may choose to run single-threaded
+for very small workloads to avoid fork overhead. This behavior can be
+function-specific. To disable multitasking entirely, set
+`options(gmultitasking = FALSE)`.
+
+**Manual Override:** You can still manually set these options if needed:
+
+``` r
+
+options(gmax.processes = 32)        # Override process limit
+options(gmax.data.size = 5e9)       # Override buffer size (5GB)
+options(gmultitasking = FALSE)      # Disable multitasking entirely
+```
+
+To check current auto-configured values:
+
+``` r
+
+getOption("gmax.processes")         # Current process limit
+getOption("gmax.data.size") / 1e9   # Current buffer size in GB
+```
+
+#### Limiting the Memory Consumption
+
+For certain functions multitasking might result in higher memory
+consumption. Users who have per process virtual memory limit (see:
+`ulimit -v`) might be the first to suffer from memory allocation errors.
+
+Various factors can affect the memory usage such as the number of
+running processes used for parallel computation, the value of
+`gmax.data.size` option or the combination of both. Some of the
+functions such as `gscreen` or `gextract` consume in multitasking mode
+amount of memory proportional to `gmax.data.size`. Please be aware of it
+while altering the value of this option.
+
+To limit memory consumption in multitasking mode one might lower down
+the values of `gmax.data.size` and `gmax.mem.usage` options or even
+switch off multitasking mode completely. `gmax.mem.usage` indicates the
+upper limit in KB of memory consumed cumulatively by the child
+processes. Once this limit is breached an internal mechanism tries to
+pause some of the running child processes, thereby preventing them from
+allocating more memory. The paused processes are resumed once the memory
+consumption drops or other sibling processes end.
+
+One should not expect the internal limiting mechanism to be the panacea
+for memory hungry tasks. First, the memory consumption of some of the
+functions is proportional to `gmax.data.size` option regardless of the
+number of running processes. Second, even when the memory limit is
+exceeded at least one process is still left to run and to potentially
+increase the memory consumption further. Third, the mechanism is mainly
+periodic, i.e. excessive memory consumption is detected only once in a
+while. The decision to pause running processes is thus periodic as well.
+The memory that has already been consumed in the time gap between the
+checks will not be release up until the whole task is complete.
+
+It is worth to say a word about memory consumption. Deducting real
+memory usage of the process based on “top”, “ps” or other utilities of
+similar kind might be highly misleading. Since all the processes are
+spawned from R, their memory usage as reported by these utilities will
+be at least as high as that of their parent process. If, for example, R
+process uses 5 Gb of memory and 10 processes are spawned from it, the
+virtual memory of all these 11 processes will top 55 Gb. Yet the
+majority of the consumed memory will be shared and unless the child
+processes start modifying this memory or allocating new one, the
+physical free memory of the machine will remain almost unaltered. The
+internal memory consumption limiting mechanism tries to estimate the
+drop of system free memory and hence deducts its data from counting
+“Private Dirty” bytes (on Linux) or from internal estimation (on other
+platforms) - a very different datum from what “top” is reporting.
+
+#### Other Considerations
+
+In multitasking mode the return value of `gquantiles` may vary depending
+on the number of CPU cores. For more details please refer the
+documentation of this function.

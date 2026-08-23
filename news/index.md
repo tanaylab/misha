@@ -1,0 +1,3191 @@
+# Changelog
+
+## misha 5.11.20
+
+- **Crash fix:**
+  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  leaked one R protection-stack slot per call, printing “Warning: stack
+  imbalance in ‘\<-’” every time and killing a loop of ~50000 calls with
+  “protect(): protection stack overflow”. Results were never affected.
+- **Bug fix:**
+  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md)
+  running on several processes now reports a child process’s error - it
+  used to return whatever the child left in shared memory - and, like
+  the rest of misha, honours Ctrl-C and `gmax.mem.usage` while the
+  children work.
+- **Documentation:** the vignettes now execute. Every chunk that can run
+  against the bundled examples database does, so the code on the website
+  is code that ran. This exposed several broken examples, all fixed: the
+  short guide’s
+  [`gintervals.save()`](https://tanaylab.github.io/misha/reference/gintervals.save.md)
+  call had its arguments reversed, its headline peak-calling step
+  screened at a threshold no bin in the example data reaches, the
+  Manual’s band example never called
+  [`gintervals.2d.band_intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.band_intersect.md)
+  despite describing its output, and both cross-database copy recipes in
+  the database-formats vignette were wrong - one errored, the other
+  silently turned a dense track into a sparse one 5x the size. Use
+  `gtrack.copy(src, db = target)` to copy tracks between databases.
+- **Bug fix:**
+  [`gtrack.dataset()`](https://tanaylab.github.io/misha/reference/gtrack.dataset.md)
+  and
+  [`gintervals.dataset()`](https://tanaylab.github.io/misha/reference/gintervals.dataset.md)
+  returned `NA` for tracks and interval sets that were already there,
+  after the first
+  [`gtrack.create()`](https://tanaylab.github.io/misha/reference/gtrack.create.md)
+  or
+  [`gintervals.save()`](https://tanaylab.github.io/misha/reference/gintervals.save.md)
+  of a session.
+- **Bug fix:**
+  [`gdataset.save()`](https://tanaylab.github.io/misha/reference/gdataset.save.md)
+  produced a dataset with an empty, unreadable track directory when
+  given a namespaced name such as `"subdir.mytrack"`.
+- **Bug fix:** reading a track after converting it to indexed format,
+  then pointing the session at a database rebuilt under the same path,
+  failed with “Cannot open …/track.dat”.
+  [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+  now drops the cached track layout.
+- **Bug fix:**
+  [`gtrack.mv()`](https://tanaylab.github.io/misha/reference/gtrack.mv.md),
+  [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  and
+  [`gintervals.update()`](https://tanaylab.github.io/misha/reference/gintervals.update.md)
+  could leave the session reading a track or interval set through the
+  layout of whatever previously occupied that path:
+  [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
+  reported the wrong track type, and reads failed with a bin-count
+  mismatch or “unknown input format”. All three now drop the cached
+  layout.
+- **Bug fix:**
+  [`gdataset.save()`](https://tanaylab.github.io/misha/reference/gdataset.save.md)
+  reported success after failing to copy a track or interval set,
+  leaving behind a dataset whose `misha.yaml` counted files that were
+  not on disk - and which then blocked every retry, because the function
+  refuses a path that already exists. It now errors naming what failed,
+  and leaves nothing behind.
+- [`gintervals.save()`](https://tanaylab.github.io/misha/reference/gintervals.save.md)
+  and the other `intervals.set.out` arguments now reject a non-string
+  set name with a message that names the argument order, instead of
+  failing with “the condition has length \> 1”.
+
+## misha 5.11.19
+
+- **Crash fix:** catching a warning from
+  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md),
+  [`gintervals.quantiles()`](https://tanaylab.github.io/misha/reference/gintervals.quantiles.md),
+  [`gbins.quantiles()`](https://tanaylab.github.io/misha/reference/gbins.quantiles.md),
+  or from loading an intervals set that contains zero-length intervals -
+  with `tryCatch(warning = )`, `options(warn = 2)`, or
+  [`testthat::expect_warning()`](https://testthat.r-lib.org/reference/expect_error.html) -
+  left the session broken: later multitasking calls failed, and the
+  overlapping-iterator warning fell silent. The warnings themselves are
+  unchanged.
+- **Crash fix:**
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  of a 2D track (`rects`/`points`) into a database with more than
+  `getOption("gmulticontig.2d.threshold", 100)` contigs - which includes
+  hg38 with scaffolds - wrote past the end of an internal
+  per-chromosome-pair buffer, crashing R or corrupting the track it was
+  writing. Any 2D track produced by
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  into such a database before this release should be regenerated.
+- **Bug fix:**
+  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)
+  returned wrong values - zeros, and every percentile above them
+  shifted - or aborted the session, when it ran across processes on a
+  scope holding more values than `gmax.data.size` but fewer than
+  `gquantile.edge.data.size` (100000 by default).
+- **Bug fix:** 2D queries over an explicitly given 2D scope - a 2D
+  track, or a 2D intervals set big enough to be stored as a big set -
+  returned `NULL` on a database with more than
+  `getOption("gmulticontig.2d.threshold", 100)` contigs while
+  `gmultitasking` was on, and the correct result with it off. Every 2D
+  entry point that multitasks was affected, including
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md),
+  [`gsummary()`](https://tanaylab.github.io/misha/reference/gsummary.md),
+  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md),
+  [`gdist()`](https://tanaylab.github.io/misha/reference/gdist.md),
+  [`gcor()`](https://tanaylab.github.io/misha/reference/gcor.md),
+  [`gscreen()`](https://tanaylab.github.io/misha/reference/gscreen.md)
+  and
+  [`gintervals.mapply()`](https://tanaylab.github.io/misha/reference/gintervals.mapply.md).
+- **Bug fix:**
+  [`gcis_decay()`](https://tanaylab.github.io/misha/reference/gcis_decay.md)
+  returned an all-zero decay curve on a database with more than
+  `getOption("gmulticontig.2d.threshold", 100)` contigs - and `NULL`
+  (surfacing as “attempt to set an attribute on NULL”) while
+  `gmultitasking` was on - because it dropped every chromosome pair from
+  its scope. Any cis-decay curve computed on such a database should be
+  recomputed.
+- **Behavior fix:** `score.thresh` is now mandatory for `pwm.count`
+  virtual tracks and for `gseq.pwm(mode = "count")`, which also rejects
+  a threshold vector instead of silently keeping its first element. The
+  old default of 0 sits above the score range of any PSSM scored with a
+  non-zero `prior`, so those calls counted nothing at all; pick a
+  threshold from your own PSSM’s range, which `pwm.max` /
+  `gseq.pwm(mode = "max")` reports. With `prior = 0` the default was a
+  real exact-match threshold - pass `score.thresh = 0` explicitly and
+  your results are unchanged. `pwm`, `pwm.max` and `pwm.max.pos` neither
+  require nor use it.
+- **Behavior fix:** the `pwm.edit_distance` family, `pwm.n_mutations`
+  and
+  [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
+  take the same `score.thresh` values as `pwm.count`: a number, an
+  integer, or the character or factor spelling of a number that a config
+  file or a [`read.csv()`](https://rdrr.io/r/utils/read.table.html)
+  column hands you. A missing (`NA`) threshold now errors: it used to
+  return exactly what an out-of-reach threshold returns - an all-`NaN`
+  column, or no rows at all from
+  [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md) -
+  so the two were indistinguishable.
+
+## misha 5.11.18
+
+- **Behavior fix:** passing overlapping intervals as a 1D iterator now
+  warns that they were merged into wider blocks, naming one merged pair
+  and the row it became. An interval nested inside another one counts as
+  merged too: it widens no row, so it used to disappear silently. Exact
+  duplicates stay silent - both copies come back as the same row, so no
+  interval is missing from the output. Results are unchanged; to get one
+  value per interval, call
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  with the same intervals as its scope and map the rows back with the
+  `intervalID` column.
+- **Crash fix:**
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  killed a worker process - failing the call and deleting the session
+  [`tempdir()`](https://rdrr.io/r/base/tempfile.html), with any database
+  kept there - when it produced more than 64 rows per iterator interval,
+  which is what a merged block of overlapping peaks typically does.
+- **Behavior fix:**
+  [`gtrack.import()`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+  errors when none of the chromosome names in a WIG / bedGraph / tab
+  file exist in the genome database, instead of silently creating an
+  all-NaN track. A partial match still imports the rest and now reports
+  the names it skipped - as a message for scaffolds/contigs, or as a
+  warning that aborts and leaves no track behind under
+  `options(warn = 2)` when a skipped name looks like a primary
+  chromosome.
+
+## misha 5.11.17
+
+- **Bug fix:** a virtual track whose
+  [`gvtrack.iterator()`](https://tanaylab.github.io/misha/reference/gvtrack.iterator.md)
+  `sshift`/`eshift` pushes the iterator interval off the chromosome now
+  returns `NaN`, whatever the function. `pwm*`, `kmer*` and `masked*`
+  returned `0` or `-Inf`, or a value that depended on the database
+  format, and errored out (“start coordinate must be lesser than end
+  coordinate”) when four or more sequence virtual tracks were extracted
+  in one call; `coverage` and `neighbor.count` returned `0`,
+  indistinguishable from a real answer. An interval that only partly
+  leaves the chromosome is still clamped to it, as before.
+
+## misha 5.11.15
+
+- **Bug fix:**
+  [`gintervals.import_bed()`](https://tanaylab.github.io/misha/reference/gintervals.import_bed.md),
+  [`gintervals.import_gff()`](https://tanaylab.github.io/misha/reference/gintervals.import_gff.md)
+  and
+  [`gintervals.import_vcf()`](https://tanaylab.github.io/misha/reference/gintervals.import_vcf.md)
+  now import gzipped files, and error on a truncated or corrupt `.gz`
+  instead of importing whatever happened to decompress.
+- **Behavior fix:**
+  [`gvtrack.create()`](https://tanaylab.github.io/misha/reference/gvtrack.create.md)
+  rejects parameter names that `func` does not accept, whether given in
+  `params` or as named arguments, and rejects mixing the two in one
+  call. A misspelled key was silently dropped and defaulted before, and
+  `gvtrack.create("v", "trk", "avg", iterator = 10)` now errors instead
+  of doing nothing. `masked.count`/`masked.frac` keep their existing
+  warning.
+- **Bug fix:**
+  [`gbins.quantiles()`](https://tanaylab.github.io/misha/reference/gbins.quantiles.md)
+  and
+  [`gbins.summary()`](https://tanaylab.github.io/misha/reference/gbins.summary.md)
+  no longer drop the last `bin_expr`/`breaks` pair when `expr` is passed
+  by name, which silently turned a 2-dimensional binning into a
+  1-dimensional one.
+- **Behavior fix:**
+  [`gdist()`](https://tanaylab.github.io/misha/reference/gdist.md),
+  [`gbins.quantiles()`](https://tanaylab.github.io/misha/reference/gbins.quantiles.md)
+  and
+  [`gbins.summary()`](https://tanaylab.github.io/misha/reference/gbins.summary.md)
+  error when a scope (or `expr`, for the `gbins.*` functions) is given
+  both positionally and by name; the named argument used to be discarded
+  silently.
+- [`gtrack.ls()`](https://tanaylab.github.io/misha/reference/gtrack.ls.md)
+  accepts `pattern =` like its
+  [`gintervals.ls()`](https://tanaylab.github.io/misha/reference/gintervals.ls.md)/[`gvtrack.ls()`](https://tanaylab.github.io/misha/reference/gvtrack.ls.md)
+  siblings; as with `db`/`perl`/`fixed`, a track attribute of that name
+  can no longer be filtered by name.
+
+## misha 5.11.14
+
+- **Database corruption fix:** creating or removing a track/interval set
+  wrote the in-memory listing into `<groot>/.db.cache` without checking
+  which database that listing came from. If `GROOT` and the listing had
+  drifted apart -
+  [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+  interrupted with Ctrl-C mid-reload, or
+  `misha.ext::gset_genome(force = FALSE)` restoring a memoized session -
+  one database’s inventory was published into another’s cache, and every
+  subsequent session on that database saw the wrong tracks until someone
+  ran `gdb.reload(rescan = TRUE)`. The cache is now only written when
+  the listing provably came from that database; otherwise it is marked
+  dirty and rescanned.
+- Ctrl-C during
+  [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+  is no longer swallowed: it unloads the session instead of returning as
+  if it had succeeded.
+
+## misha 5.11.13
+
+- **Data corruption fix:**
+  [`gtrack.create_pwm_energy()`](https://tanaylab.github.io/misha/reference/gtrack.create_pwm_energy.md)
+  (and, for sequence-based virtual tracks,
+  [`gtrack.smooth()`](https://tanaylab.github.io/misha/reference/gtrack.smooth.md),
+  [`glookup()`](https://tanaylab.github.io/misha/reference/glookup.md)
+  and
+  [`gcis_decay()`](https://tanaylab.github.io/misha/reference/gcis_decay.md))
+  opened the genome sequence before forking. Forked workers share the
+  file offset of an inherited descriptor, so on an indexed database they
+  read each other’s bytes - producing a small fraction of silently wrong
+  values, varying run to run. Measured at 0.2% of bins on a 120 Mb
+  scope.
+- [`gseq.extract()`](https://tanaylab.github.io/misha/reference/gseq.extract.md)
+  distributes large interval sets (500+) across processes when the
+  sequence files are not already cached, which is where it spent nearly
+  all of its time (19,000 intervals on an NFS database: ~200s -\> ~23s).
+  Cached extractions and densely tiled interval sets stay in one
+  process. Note it now forks like the other multitasking functions, and
+  peak memory roughly doubles while the result is assembled;
+  `gmultitasking = FALSE` restores the old behaviour.
+
+## misha 5.11.12
+
+- [`gtrack.import()`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+  no longer fails on non-Linux platforms: the bundled `bigWigToWig` is a
+  Linux x86-64 binary, so macOS/Windows now use one found on `PATH` (or
+  `options(misha.bigWigToWig = "...")`), with an actionable error if
+  none is installed.
+- [`gtrack.create_sparse()`](https://tanaylab.github.io/misha/reference/gtrack.create_sparse.md)
+  can take the values from a `value` column of `intervals` when `values`
+  is omitted, which rules out a values/intervals order mismatch.
+  Documented that
+  [`gintervals()`](https://tanaylab.github.io/misha/reference/gintervals.md)
+  returns its rows sorted, so a separately held value vector must be
+  reordered too.
+
+## misha 5.11.11
+
+- **Internal consistency:** `N`/`*` are now scored the same on both
+  strands in the PWM energy routines (reverse used `log(0.25)`, forward
+  used the column average; both now use the average). No behavior change
+  for genomic scoring, where `N`-windows are masked to `-Inf`; keeps
+  `DnaPSSM` in sync with the `prego` package.
+
+## misha 5.11.10
+
+- **Behavior fix:** non-multitask
+  [`gintervals.quantiles()`](https://tanaylab.github.io/misha/reference/gintervals.quantiles.md)
+  (`options(gmultitasking = FALSE)`) no longer truncates the result to
+  the first ~1000 intervals on a large scope; the streaming
+  (`intervals.set.out=`) and in-memory results now match the
+  multitasking output
+  ([\#149](https://github.com/tanaylab/misha/issues/149)).
+
+## misha 5.11.9
+
+Fixes from a full source audit (see commit messages for details):
+
+- **Behavior fix:**
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  /
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  no longer drop a mapping reachable only through a wider earlier chain
+  when source chains overlap (`src_overlap_policy = "keep"`).
+- **Behavior fix:**
+  [`gtrack.export_bedgraph()`](https://tanaylab.github.io/misha/reference/gtrack.export_bedgraph.md)
+  /
+  [`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
+  write coordinates as plain integers; large round positions were
+  previously emitted in scientific notation, corrupting the output.
+- **Behavior fix:** track-parallel
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  (many tracks over an interval iterator) now returns value columns in
+  the requested track order; worker scheduling could reorder them
+  (column names were already correct).
+- **Behavior fix:**
+  [`gintervals.quantiles()`](https://tanaylab.github.io/misha/reference/gintervals.quantiles.md)
+  with multiple percentiles and `intervals.set.out=` no longer writes
+  stale values for in-scope chromosomes the iterator does not cover (now
+  correctly `NaN`).
+- `pwm.edit_distance*` virtual tracks no longer read out of bounds for
+  motifs longer than 64 bp.
+- [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  errors whose R message contains a `%` are reported cleanly instead of
+  crashing the session.
+- [`gtrack.create()`](https://tanaylab.github.io/misha/reference/gtrack.create.md)
+  /
+  [`gtrack.rm()`](https://tanaylab.github.io/misha/reference/gtrack.rm.md)
+  run from a database subdirectory
+  ([`gdir.cd()`](https://tanaylab.github.io/misha/reference/gdir.cd.md))
+  no longer corrupt the root track listing cache for the next session.
+- `gextract(..., file=)` with very many expressions no longer overflows
+  its line buffer.
+- **Behavior fix:**
+  [`gintervals.canonic()`](https://tanaylab.github.io/misha/reference/gintervals.canonic.md)
+  /
+  [`gintervals.mark_overlaps()`](https://tanaylab.github.io/misha/reference/gintervals.mark_overlaps.md)
+  return the correct `mapping` for 2D intervals (it was inverted,
+  breaking the documented `tapply(..., mapping, ...)` pattern and 2D
+  `mark_overlaps`).
+- **Behavior fix:**
+  [`gintervals.annotate()`](https://tanaylab.github.io/misha/reference/gintervals.annotate.md)
+  fills `na_value` for query intervals that have no neighbor in range
+  (previously left as `NA`).
+- [`gtrack.convert()`](https://tanaylab.github.io/misha/reference/gtrack.convert.md)
+  with an explicit target track now registers the new track (previously
+  it was unusable, or trashed on an indexed database, until a reload).
+- [`gtrack.import_set()`](https://tanaylab.github.io/misha/reference/gtrack.import_set.md)
+  derives the track name from the file name only; a dot in a parent
+  directory no longer truncates it (which silently collided imports).
+- `gtrack.ls(db=...)` returns the tracks when only one database is
+  loaded (previously `NULL`).
+- [`gtrack.var.ls()`](https://tanaylab.github.io/misha/reference/gtrack.var.ls.md)
+  accepts an expression (e.g. `tracks[i]`) as the track argument, like
+  `gtrack.var.get/set/rm`.
+- [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+  leaves the current database loaded when the target’s `chrom_sizes.txt`
+  is missing or malformed (previously it unloaded the session first).
+- Fixed out-of-bounds memory accesses in
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  aggregation, strand-autocorrelation reads near contig ends, and
+  indexed fixed-bin track validation; clearer “data size exceeded”
+  message.
+- Non-ASCII track attribute values no longer truncate when read back.
+- [`gtrack.array.extract()`](https://tanaylab.github.io/misha/reference/gtrack.array.extract.md)
+  rejects `NA` column indices instead of forwarding them.
+- Fixed a 2D indexed-format writer that produced unreadable interval
+  sets under `options(gmulticontig.indexed_format = TRUE)`.
+- `created.by` provenance strings for
+  [`gtrack.2d.create()`](https://tanaylab.github.io/misha/reference/gtrack.2d.create.md),
+  [`gtrack.2d.import_contacts()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import_contacts.md),
+  and
+  [`gtrack.modify()`](https://tanaylab.github.io/misha/reference/gtrack.modify.md)
+  are now well-formed.
+- `gmax.processes` is floored at 1 (was 0 on single-core /
+  undetectable-core hosts).
+- Internal hardening:
+  [`ggenome.implant()`](https://tanaylab.github.io/misha/reference/ggenome.implant.md)
+  no longer leaks buffers on error paths; corrupt-file checks in the
+  on-disk 2D quadtree.
+
+## misha 5.11.8
+
+- **Behavior fix:** 2D
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  now aggregates overlapping mapped rectangles instead of inserting them
+  as overlapping objects (which corrupted read-back and double-counted).
+  `multi_target_agg`, `na.rm`, and `min_n` now apply to 2D tracks too,
+  matching the 1D path. Overlaps arise when a chain maps disjoint source
+  rectangles onto overlapping target rectangles; lifted 2D track values
+  change accordingly.
+
+## misha 5.11.7
+
+- **Behavior fix:**
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  no longer silently drops an interval whose start coincides with its
+  leftmost overlapping chain when it is lifted in the same call after a
+  wider interval (a `map_interval` slow-path miss; the carried hint had
+  advanced past the chain). Affected multi-interval lifts under any
+  target policy.
+- [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  now rejects the cluster target-overlap policies
+  (`best_source_cluster`, `best_cluster_union`, `best_cluster_sum`,
+  `best_cluster_max`) with a clear error - they are implemented only for
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md);
+  previously they failed with a confusing internal message.
+
+## misha 5.11.6
+
+- **Behavior fix:**
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  aggregation (`multi_target_agg`) now combines all distinct source bins
+  that map to a target bin, instead of keeping only the first when
+  several come from the same chain. Previously, with a chain whose
+  blocks are not aligned to the bin grid (i.e. most real liftovers),
+  `max`/`sum`/`mean`/`count` reflected only the first contributing
+  source bin. (`gintervals.liftover` was already correct.) Lifted track
+  values change accordingly.
+
+## misha 5.11.5
+
+- **Behavior fix:**
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  /
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  with a minus-strand chain that the target-overlap sweep truncates or
+  splits (e.g. under `tgt_overlap_policy = "auto"`) now keep the correct
+  reversed source coordinates for the surviving slice instead of the
+  coordinates of the discarded half.
+- **Behavior fix:**
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  /
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  no longer drop a chain’s finite contribution to a target locus when
+  the same chain also maps a `NaN` source bin there with `na.rm = TRUE`;
+  NaN pieces are now removed before the per-chain merge.
+- **Behavior fix:** 2D
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  no longer drops rectangles when the chain has multiple blocks (the
+  quadtree’s spatial iteration order defeated a carried mapping cursor).
+
+## misha 5.11.4
+
+- **Behavior fix:**
+  [`gintervals.liftover()`](https://tanaylab.github.io/misha/reference/gintervals.liftover.md)
+  /
+  [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  no longer drop a mapping through a wider earlier source chain when
+  source chains overlap (`src_overlap_policy = "keep"`). The
+  `map_interval` fast path trusted a carried cursor as the leftmost
+  overlap after checking only its immediate predecessor; it now confirms
+  leftmost-ness via the per-chromosome prefix-max, falling back to the
+  full search otherwise.
+
+## misha 5.11.3
+
+- **Behavior fix:** `gtrack.liftover(tgt_overlap_policy = "agg")` no
+  longer drops a lifted contribution that spans a target bin boundary
+  when an overlapping chain shares its interval. The per-bin sweep
+  over-advanced its cursor, losing the spanning contribution for the
+  next bin and producing spurious `NaN`s (or wrong aggregates) in bins
+  fed by multiple overlapping chains.
+
+## misha 5.11.2
+
+- **Behavior fix:** `gintervals.load_chain(..., src_groot=)` no longer
+  leaves the session pointing at the source database after validation.
+  It now fully restores the active database - the working directory
+  (`GWD`), loaded datasets and virtual tracks included, not just the
+  genome root.
+
+## misha 5.11.1
+
+- **Behavior fix:**
+  [`gquantiles()`](https://tanaylab.github.io/misha/reference/gquantiles.md)
+  /
+  [`gintervals.quantiles()`](https://tanaylab.github.io/misha/reference/gintervals.quantiles.md)
+  name percentile columns with the shortest decimal that round-trips
+  each percentile, so nearby percentiles no longer collapse to the same
+  name - e.g. `0.123456789` and `0.1234567891` previously both became
+  `"0.123457"`, and `0.9999999` became `"1"` (colliding with the `1.0`
+  quantile). Common percentiles (`0.5`, `0.95`, …) are unchanged.
+
+## misha 5.11.0
+
+- **Breaking:**
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  no longer truncates auto-generated column names to 40 characters -
+  columns are named after the full expression (the complete track name)
+  instead of `<first 37 chars>...`. Long names that previously collapsed
+  to the same truncated name, hiding a column, are now distinct. Pass
+  `colnames=` to set names explicitly.
+
+## misha 5.10.3
+
+- **Behavior fix:** reading an indexed dense track on an empty
+  (length-0) contig that follows a populated one in the same scan no
+  longer returns the previous chromosome’s values. The mmap read path
+  (added in 5.6.7) left its window pointing at the prior chrom on a
+  length-0 entry, so `max.pos.*`/`min.pos.*`, mixed-function, and
+  `avg`+`nearest` virtual tracks could read stale values for the empty
+  contig instead of `NA`. Single-function `avg`/`sum`/`lse` tracks were
+  unaffected.
+- **Behavior fix:** `pwm.edit_distance` / `pwm.edit_distance.pos` /
+  `pwm.max.edit_distance` with `direction = "below"` and `max_edits` set
+  no longer skip N-containing windows. An N is not a mandatory edit when
+  going below threshold, so an N-heavy window already scoring below
+  threshold needs 0 edits; the N-count skip (added in 5.6.11) wrongly
+  pruned such windows, returning `NA` or missing the true minimum. The
+  skip is now restricted to `direction = "above"` substitutions-only,
+  where it is exact.
+
+## misha 5.10.2
+
+- **Performance fix:** a single-function `lse` (or
+  `sum`/`exists`/`size`) virtual track scanned over a sliding window
+  (`gvtrack.iterator(sshift=, eshift=)`) genome-wide is fast again.
+  Since 5.6.7 a single-function “fast path” recomputed the windowed
+  reduction from scratch on every step, bypassing the incremental
+  sliding-window path; the common motif-energy quantile workload
+  (windowed `lse` + `gquantiles`/`gscreen`) was ~2.5x slower (worse with
+  wider windows). Such single-function reducers now keep the
+  sliding-window path. Output is unchanged.
+
+## misha 5.10.1
+
+- **Behavior fix:** indexed dense tracks whose first genome chrom has no
+  data (typically produced by
+  [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  when the destination DB has a leading chrom that was not in the
+  source’s per-chrom files) no longer report `bin.size = 0` from
+  [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
+  and no longer SIGFPE on subsequent reads.
+  `GenomeTrackFixedBin::init_read` now back-fills `m_bin_size` from the
+  first non-empty index entry on a length-0 lookup, instead of leaving
+  it at the constructor default.
+- **Behavior fix:**
+  [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
+  on a per-chromosome dense track whose first genome chrom has no
+  per-chrom file (an empty scaffold, or a partial track) now reports the
+  correct `bin.size` instead of erroring with “No such file or
+  directory”. This also unblocks
+  [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  of such tracks, which calls
+  [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
+  on the source.
+
+## misha 5.10.0
+
+- [`gdb.install_intervals()`](https://tanaylab.github.io/misha/reference/gdb.install_intervals.md)
+  /
+  [`gdb.build_genome()`](https://tanaylab.github.io/misha/reference/gdb.build_genome.md)
+  now attach `name` (transcript accession) and `geneName` (gene symbol)
+  columns to the installed `tss`/`exons`/`utr3`/`utr5` sets, taken from
+  the source annotation. Sources without symbols build cleanly with a
+  blank `geneName`.
+
+## misha 5.9.1
+
+#### Bug fixes
+
+- **Behavior fix:** the `distance`, `distance.edge`, and
+  `distance.center` virtual-track functions now always return the true
+  nearest source interval. With overlapping or nested sources
+  (e.g. `intervs.global.rmsk`) the old scan could return a non-nearest
+  interval - even a nonzero distance for a query that overlaps the
+  source. `distance.edge` again matches `gintervals.neighbors` exactly.
+- `distance.center` now accepts overlapping source intervals (a query
+  center inside several resolves to the nearest center) instead of
+  erroring at vtrack creation.
+
+## misha 5.9.0
+
+#### New features
+
+- [`gintervals.2d.intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.intersect.md)
+  and
+  [`gintervals.2d.union()`](https://tanaylab.github.io/misha/reference/gintervals.2d.union.md)
+  for general 2D (rectangle) interval set operations, complementing the
+  existing
+  [`gintervals.2d.band_intersect()`](https://tanaylab.github.io/misha/reference/gintervals.2d.band_intersect.md).
+  Intersection clips overlapping rectangles pairwise per chromosome
+  pair; union concatenates without merging (the union of two rectangles
+  is not a rectangle).
+- [`gintervals.from_strings()`](https://tanaylab.github.io/misha/reference/gintervals.from_strings.md)
+  builds 1D intervals from UCSC-style coordinate strings such as
+  `"chr1:1000-2000"` (optional `:+`/`:-` strand; a bare `"chr1"` is the
+  whole chromosome).
+- [`gvtrack.clear()`](https://tanaylab.github.io/misha/reference/gvtrack.clear.md)
+  removes all virtual tracks of the current working directory in one
+  call.
+- [`gdb.unload()`](https://tanaylab.github.io/misha/reference/gdb.unload.md)
+  unloads the active genome database and resets the session to an
+  uninitialized state.
+
+## misha 5.8.1
+
+#### Bug fixes
+
+- [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  and the strand-autocorrelation importer now print a correct message
+  (instead of a garbage value or a possible crash) when given a
+  non-positive `cols.order` entry; the latter also reports the offending
+  `maxread` rather than `binsize`.
+- [`ggenome.implant()`](https://tanaylab.github.io/misha/reference/ggenome.implant.md)
+  validates the output trackdb destination before writing the FASTA, so
+  a pre-existing trackdb with `overwrite = FALSE` no longer leaves an
+  orphaned output file behind.
+
+#### Performance
+
+- [`gintervals.force_range()`](https://tanaylab.github.io/misha/reference/gintervals.force_range.md)
+  is markedly faster when writing to an output set (or with big-set
+  inputs) on genomes with many contigs: the per-chromosome
+  chromosome-end lookup is computed once instead of being re-derived
+  from the full genome on every chromosome.
+
+## misha 5.8.0
+
+- [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  now accepts BAM files directly: bgzip magic bytes are auto-detected
+  and the file is streamed through `samtools view` into the existing
+  parser. Requires `samtools` on `PATH` (declared in
+  `SystemRequirements`); a clear error names the missing tool otherwise.
+  For BAM input the function treats the default
+  `cols.order = c(9, 11, 13, 14)` as SAM mode (i.e. `NULL`); explicitly
+  passing a non-NULL `cols.order` with a BAM file is rejected with an
+  error.
+- [`gtrack.import_mappedseq()`](https://tanaylab.github.io/misha/reference/gtrack.import_mappedseq.md)
+  also auto-detects plain gzipped SAM / TSV input (`.sam.gz`, `.tsv.gz`)
+  via zlib. No user-facing API change.
+- Progress reporting now caps at 100% (previously could overshoot when
+  iterator step budgets were under-estimated).
+
+## misha 5.7.4
+
+#### Bug fixes
+
+- **Behavior fix:**
+  [`gintervals.load()`](https://tanaylab.github.io/misha/reference/gintervals.load.md)
+  of a 1D/2D big intervals set whose meta-stats has exactly one row was
+  returning the wrong slice (typo `meta$stat` -\> `meta$stats`).
+- **Behavior fix:** `gtracksummary()` /
+  [`gintervals.summary()`](https://tanaylab.github.io/misha/reference/gintervals.summary.md)
+  standard deviation now returns 0 instead of NaN on nearly-constant
+  input; same catastrophic-cancellation clamp applied in Spearman
+  correlation.
+- **Behavior fix:**
+  [`gtrack.rm()`](https://tanaylab.github.io/misha/reference/gtrack.rm.md)
+  /
+  [`gintervals.rm()`](https://tanaylab.github.io/misha/reference/gintervals.rm.md)
+  / [`gdir.rm()`](https://tanaylab.github.io/misha/reference/gdir.rm.md)
+  in a non-interactive session without `force = TRUE` now stop with a
+  clear message instead of crashing on `readLines(n = 1)` returning
+  length-zero.
+- **Behavior fix:**
+  [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
+  rejects `nuc_probs` with duplicated or missing names (previously
+  silently produced NaN probabilities).
+- [`gtrack.import()`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+  accepts bedGraph from genomes whose contig names don’t start with
+  `chr` (Ensembl-style, non-mammalian, scaffolded contigs).
+- Plugged FILE-handle leaks on exception paths in big-intervals readers,
+  `RSaneSerialize`/`RSaneUnserialize`, and
+  `Computer2D::unserializeComputer2D`.
+- Numerous correctness fixes in error messages (typos, missing `sprintf`
+  args, broken format specifiers) and defensive emptiness handling
+  (`1:length()` / `1:nrow()` -\>
+  [`seq_along()`](https://rdrr.io/r/base/seq.html) /
+  [`seq_len()`](https://rdrr.io/r/base/seq.html)).
+
+#### Performance
+
+- Removed O(N²) per-chromosome accumulator patterns in
+  `.gintervals.apply` and the gintervals FUN closures (`gintervals.diff`
+  / `.intersect` / `.union` / `.canonic` / `.normalize` / `.rbind` /
+  `.neighbors` / `gintervals.mapply`). ~70× speedup at 5000+
+  chromosomes; previously catastrophic on million-contig
+  scHi-C-scaffolded genomes.
+- [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
+  chromosome-boundary clamp vectorized: O(N) instead of O(N ·
+  scaffolds).
+
+## misha 5.7.3
+
+- [`gdb.reload()`](https://tanaylab.github.io/misha/reference/gdb.reload.md)
+  now also clears the C++ track-index cache, so a track replaced
+  out-of-process (sibling R session, manual rebuild from another script)
+  is picked up by the running session without restarting R. Previously
+  the cached track type could shadow the new on-disk track and surface
+  as
+  e.g. `function global.percentile.max is not supported by sparse tracks`
+  after the track was already rebuilt as dense.
+
+## misha 5.7.2
+
+- [`gtrack.import()`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+  of a malformed WIG/CSV file now surfaces the underlying parser error
+  (file name, line number, what was wrong) instead of the opaque
+  `Unrecognized format of file ...`. Makes typical failure modes (e.g. a
+  value line glued to a fixedStep header from a botched cat-style
+  concatenation) diagnosable at a glance.
+
+## misha 5.7.1
+
+- [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  gains an `intervals_join` argument with values `"id"` (default;
+  current behavior), `"intervals"` (drop `intervalID`, attach the input
+  intervals data frame’s columns to each output row), or `"none"` (drop
+  `intervalID`). Built-in replacement for
+  `misha.ext::gextract.left_join`, around 2x faster on wide-window
+  workloads (e.g. TSS +/- 5kb at 50bp iterator).
+- Fixed
+  [`gtrack.import()`](https://tanaylab.github.io/misha/reference/gtrack.import.md)
+  of BED files with `binsize` failing with
+  `func argument is not a string`. The BED-to-dense path was not updated
+  when
+  [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md)
+  gained the `func` argument in 5.6.31; it now passes the historical
+  `"weighted.mean"` default.
+
+## misha 5.7.0
+
+- New
+  [`gintervals.to_mat()`](https://tanaylab.github.io/misha/reference/gintervals.to_mat.md)
+  and
+  [`gintervals.from_mat()`](https://tanaylab.github.io/misha/reference/gintervals.from_mat.md)
+  round-trip an intervals + values data.frame to a numeric matrix
+  indexed by intervals. Pass `labels = FALSE` to skip rowname
+  construction.
+
+## misha 5.6.33
+
+#### Performance
+
+- Track-creation writes
+  ([`gtrack.create_sparse()`](https://tanaylab.github.io/misha/reference/gtrack.create_sparse.md),
+  [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md),
+  [`gtrack.create()`](https://tanaylab.github.io/misha/reference/gtrack.create.md),
+  [`gtrack.smooth()`](https://tanaylab.github.io/misha/reference/gtrack.smooth.md),
+  [`gtrack.modify()`](https://tanaylab.github.io/misha/reference/gtrack.modify.md),
+  [`gtrack.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.convert_to_indexed.md))
+  coalesce into far fewer syscalls on networked filesystems by bumping
+  the stdio buffer to 1 MiB on every misha-managed write file.
+  Noticeable on NFS-mounted track DBs.
+- [`gtrack.create_sparse()`](https://tanaylab.github.io/misha/reference/gtrack.create_sparse.md)
+  on per-chromosome (non-indexed) DBs now creates the empty-chrom
+  signature files in parallel via raw POSIX syscalls. Worker count is
+  configurable via the `gtrack.create.threads` option (default 4,
+  matching NFSv3 CREATE concurrency).
+
+#### Bug fixes
+
+- **Behavior fix:** `gtrack.rm("X")` followed by
+  `gtrack.create_*("X", ...)` (and the analogous `gintervals.rm` +
+  `gintervals.save` cycle) on the same indexed DB no longer breaks
+  subsequent reads. The process-static index caches keyed by
+  track/intervals directory path were never invalidated, so after
+  rm-then-recreate readers could route to a stale layout and error with
+  `Cannot open track.dat: No such file or directory` or silently return
+  data from the prior lifecycle. Latent since v5.1.1 (1D tracks and
+  interval sets) and v5.5.0 (2D tracks).
+
+## misha 5.6.32
+
+- Fixed
+  [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md)
+  returning wrong values (and `func = "coverage"` exploding to huge
+  numbers) when overlapping intervals of mixed lengths fed into the same
+  bin. Older callers using the default `func = "weighted.mean"` got
+  plausible-looking but algebraically wrong means in affected bins.
+- Additional cache-protection fixes covering tracks and intervals path
+  lookups; closes the remaining same-family GC-safety gaps after the
+  5.6.31 chromkey fix.
+
+## misha 5.6.31
+
+- [`gtrack.create_dense()`](https://tanaylab.github.io/misha/reference/gtrack.create_dense.md)
+  gains a `func` argument selecting the per-bin aggregation over
+  overlapping intervals: `"weighted.mean"` (default, unchanged from
+  before), `"weighted.sum"`, `"max"`, `"min"`, `"median"`, `"count"`,
+  and `"coverage"` (= `sum(v_i * ov_i) / binsize`, i.e. average per-base
+  signal; with `values = rep(1, n)` this is a ChIP-seq-style pileup
+  track in one call).
+- Fixed crashes when calling misha functions after
+  [`gdb.init_examples()`](https://tanaylab.github.io/misha/reference/gdb.init_examples.md)
+  on some R installations.
+- `gdb.install_intervals(..., sets = "genes")` from NCBI no longer
+  aborts on a handful of unconvertible GFF records (typically the
+  immunoglobulin loci in RefSeq human/mouse): `gff3ToGenePred` is now
+  invoked with `-warnAndContinue`, so the offending transcripts are
+  skipped with a warning and the rest of the genome is installed.
+
+## misha 5.6.30
+
+- [`gtrack.rm()`](https://tanaylab.github.io/misha/reference/gtrack.rm.md)
+  (and
+  [`gintervals.rm()`](https://tanaylab.github.io/misha/reference/gintervals.rm.md))
+  now returns immediately even when the target directory contains
+  millions of files; the actual filesystem cleanup runs in the
+  background.
+- Track creation
+  ([`gtrack.create()`](https://tanaylab.github.io/misha/reference/gtrack.create.md)
+  and friends) is now atomic on databases with many contigs: an
+  interrupted create no longer leaves a partial track directory that
+  blocks re-creation. Cleanup of failed creates runs in the background.
+- On indexed databases,
+  [`gtrack.create()`](https://tanaylab.github.io/misha/reference/gtrack.create.md)
+  for dense (fixed-bin) and sparse tracks now writes the indexed format
+  (`track.dat` + `track.idx`) directly instead of writing N
+  per-chromosome files and then deleting them. Substantially faster on
+  databases with \>1M contigs.
+- 2D track / interval-set creation and meta builders no longer allocate
+  `O(num_contigs^2)` per-pair entries. `gtrack.create_meta()` for 2D
+  tracks uses `track.idx` (indexed) or a directory scan (legacy) to
+  enumerate populated pairs instead of probing all N\*N. Enables 2D
+  tracks on databases with \>1000 contigs without OOM or multi-day
+  metadata scans.
+- [`gdataset.info()`](https://tanaylab.github.io/misha/reference/gdataset.info.md)
+  and `gdataset.ls(dataframe=TRUE)` now use a single C++ filesystem
+  traversal (with FTS_SKIP) instead of two recursive R-level
+  [`list.files()`](https://rdrr.io/r/base/list.files.html) calls. Faster
+  on databases with many tracks/intervals when `.db.cache` is missing or
+  stale.
+- [`gtrack.liftover()`](https://tanaylab.github.io/misha/reference/gtrack.liftover.md)
+  now writes the indexed format directly when the target database is
+  indexed, avoiding ~1M per-chromosome empty-placeholder file creations
+  when lifting onto a many-contig genome.
+- `gdb.convert_to_indexed(convert_tracks = TRUE)` and
+  `convert_intervals = TRUE` accept a new `threads` argument (default:
+  `min(detectCores(), 8)`) and run per-track conversions in parallel via
+  [`parallel::mclapply`](https://rdrr.io/r/parallel/mclapply.html).
+  Per-track failures are reported as warnings without aborting the
+  batch.
+- `gtrack.create_meta()` for sparse/array tracks on indexed databases
+  now consults `track.idx` to find populated chromosomes instead of
+  stat’ing per-chromosome files that don’t exist. Drops a one-time
+  O(N_contigs) syscall cost from the first use of a sparse/array track.
+- [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  / [`gscreen()`](https://tanaylab.github.io/misha/reference/gscreen.md)
+  and other track-expression iterators now validate indexed 1D tracks
+  via `track.idx` instead of stat’ing it once per chromosome. On a
+  1.28M-contig database, `gextract` of 100 random 5 bp intervals from a
+  dense indexed track drops from ~64 s to ~8 s (system time from ~52 s
+  to ~2 s).
+- Fixed
+  [`gintervals.random()`](https://tanaylab.github.io/misha/reference/gintervals.random.md)
+  rejecting chromosomes whose length exactly equals
+  `size + 2*dist_from_edge` (where a single valid interval is available)
+  and biasing sampling away from the right edge. The no-filter path now
+  uses the same full-range semantics as the filter path.
+- Most misha functions paid a fixed ~1.5 s setup cost on million-contig
+  databases (rebuilding the chromosome table and the all-genome interval
+  list on every call). Both are now cached. On a 1.28M-contig database,
+  [`gtrack.info()`](https://tanaylab.github.io/misha/reference/gtrack.info.md)
+  drops from ~1.4 s to \<1 ms and
+  [`gseq.extract()`](https://tanaylab.github.io/misha/reference/gseq.extract.md)
+  from ~14 s to ~0.4 s; smaller genomes are unaffected.
+- [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+  is ~3x faster on million-contig databases (~13 s -\> ~5 s on a
+  1.28M-contig DB).
+- [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  and other scan operations are faster on indexed tracks of databases
+  with many chromosome aliases (skips a per-contig alias lookup that has
+  no effect on indexed tracks).
+- [`gdb.install_intervals()`](https://tanaylab.github.io/misha/reference/gdb.install_intervals.md)
+  from `ncbi` now translates chrom names to the groot’s convention,
+  fetches `genes` and `rmsk` from the NCBI FTP when the Datasets API
+  doesn’t ship them (older / suppressed accessions like GRCm38.p6), and
+  no longer downloads the FASTA.
+- `min_coverage` is now checked after the alias rescue passes, so hybrid
+  naming (e.g. UCSC-style chroms mixed with bare GenBank accessions)
+  passes at the strict default.
+
+## misha 5.6.29
+
+- [`gdb.install_intervals()`](https://tanaylab.github.io/misha/reference/gdb.install_intervals.md)
+  now errors if any requested set is unavailable from the source
+  (previously skipped silently with a warning). Pass `force = TRUE` to
+  demote the error to a summary warning and install the available sets.
+
+## misha 5.6.28
+
+- [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md)
+  gained a `db` argument to copy tracks across databases, and an
+  `overwrite` argument to replace existing destinations. Format
+  conversion (per-chromosome \<-\> indexed) and chromosome-order remap
+  are handled automatically. Multi-track input is also supported.
+
+## misha 5.6.27
+
+- Added `gdb.build_genome(name)` for build-from-source genome creation.
+  Backends: `ucsc` (golden path), `ucsc-hub` (224/241 Zoonomia mammals),
+  `ncbi` (Datasets API), `manual`, `local`, `s3`. `name` resolves
+  through a registry chain (`misha.genome_registry` option,
+  project-local `misha.yaml`, built-in `inst/genomes.yaml`), with a
+  fallback to `ucsc-hub` for `GC[FA]_*` accessions. Companions:
+  [`gdb.list_genomes()`](https://tanaylab.github.io/misha/reference/gdb.list_genomes.md),
+  [`gdb.genome_info()`](https://tanaylab.github.io/misha/reference/gdb.genome_info.md).
+- Added
+  [`gdb.install_intervals()`](https://tanaylab.github.io/misha/reference/gdb.install_intervals.md)
+  to layer gene / `rmsk` / `cgi` / cytoband sets onto an existing
+  groot - useful for adding annotations to a private FASTA build or
+  resuming a failed install without re-fetching. `rmsk` now also
+  produces per-class subsets `rmsk_<class>` (e.g. `rmsk_sine`).
+- Naming alignment to external schemes (e.g. HAL canonical names) via
+  `target_chroms` / `target_lengths` / `match_by_length` (default
+  `TRUE`) / `chrom_naming` / `min_coverage` arguments: misha picks the
+  chromAlias column that best matches the target and falls back to
+  per-row length pairing when a single column doesn’t cover everything.
+  UCSC-hub builds also merge `<acc>_assembly_report.txt` when present to
+  expose extra alias columns. Coverage is bp-weighted on the groot side,
+  so small unmapped contigs (e.g. a 16 kb mitochondrion) don’t trip
+  thresholds.
+- Cheap pre-flight runs before any multi-GB download: UCSC-hub coverage
+  is checked from ~190 KB of metadata; NCBI annotation availability is
+  checked via the Datasets `dataset_report`. Missing-annotation builds
+  drop `genes` with an actionable warning (suggesting a RefSeq companion
+  if one exists). Post-pre-flight failures clean up the partial output
+  directory.
+- Added
+  [`gdb.install_gff3_converter()`](https://tanaylab.github.io/misha/reference/gdb.install_gff3_converter.md)
+  /
+  [`gdb.install_gtf_converter()`](https://tanaylab.github.io/misha/reference/gdb.install_gtf_converter.md)
+  to pre-install the UCSC `gff3ToGenePred` / `gtfToGenePred` binaries;
+  override paths via `MISHA_GFF3_TO_GENEPRED` / `MISHA_GTF_TO_GENEPRED`.
+  UCSC’s prebuilt binaries need glibc \>= 2.34; older systems can
+  `conda install -c bioconda ucsc-gff3togenepred ucsc-gtftogenepred`.
+- **Renames in
+  [`gdb.build_genome()`](https://tanaylab.github.io/misha/reference/gdb.build_genome.md)**:
+  argument `annotations` -\> `sets`; track `cpgIsland` -\> `cgi`.
+- `gsetroot` is much faster on fragmented assemblies (e.g. ~93 s -\> ~11
+  s on a 2.4M-contig genome).
+  [`gdb.build_genome()`](https://tanaylab.github.io/misha/reference/gdb.build_genome.md)
+  and
+  [`gdb.install_intervals()`](https://tanaylab.github.io/misha/reference/gdb.install_intervals.md)
+  are also substantially faster on large assemblies (vectorized
+  chromAlias translation and RepeatMasker `.out` parsing, optional
+  `data.table` for genePred I/O).
+
+## misha 5.6.26
+
+- Fixed `gpartition`, `gquantiles` and other consumers of `BinFinder`
+  silently routing every value into the highest bin when the breaks
+  vector contained both `-Inf` and `+Inf` (e.g. `c(-Inf, 0, Inf)`). The
+  uniform-binsize fast path computed `Inf/Inf = NaN` whose cast to int
+  is undefined behaviour. `BinFinder::init` now falls back to binary
+  search when binsize is non-finite.
+
+## misha 5.6.25
+
+- [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+  and
+  [`gsynth.random()`](https://tanaylab.github.io/misha/reference/gsynth.random.md)
+  now preserve `N` (and lowercase `n`) positions from the original
+  reference by default. Previously, every position was filled with a
+  sampled/random ACGT base, so reference gaps and centromeres came out
+  as fabricated nucleotides. Pass `preserve_n = FALSE` to restore the
+  legacy behavior.
+
+## misha 5.6.24
+
+- Fixed `gquantiles` (`gmultitasking = FALSE`) hanging for hours on the
+  first `global.percentile.max` lookup of a fresh dense track
+  (regression in the 5.6.20 single-process fast path). Above
+  ~2\*log_2(N) target ranks the fast path now sorts the reservoir once
+  and indexes; below it the suffix walk is preserved. Single-process and
+  multitask results remain bit-identical.
+- Fixed small-scope `gscreen` regression introduced in 5.6.7 by
+  sub-chromosome range splitting: with `iterator=1` on a ~5 Mb scope,
+  range-split forks were too small to amortise fork overhead. Added a
+  500 kbp-per-kid floor; full-genome scans still cap at `gmax.processes`
+  kids. Measured chr19:0-5 Mb gscreen: 1.47 s -\> 0.31 s.
+
+## misha 5.6.23
+
+- Improved error messages: “start exceeds or equals to end” now mentions
+  misha’s 0-based half-open convention and the GFF/VCF 1-based hint;
+  “chromosome does not exist” lists known chromosomes and points to
+  `CHROM_ALIAS`.
+- C++ converter now emits an R warning (“N intervals had start == end
+  and were extended by 1bp”) when zero-length intervals from a loaded
+  file are auto-bumped (previously silent).
+- Added
+  [`gintervals.import_bed()`](https://tanaylab.github.io/misha/reference/gintervals.import_bed.md),
+  [`gintervals.import_gff()`](https://tanaylab.github.io/misha/reference/gintervals.import_gff.md),
+  [`gintervals.import_vcf()`](https://tanaylab.github.io/misha/reference/gintervals.import_vcf.md)
+  for direct import from common interval file formats. All three
+  normalize chromosome names via `CHROM_ALIAS`, apply misha’s 0-based
+  half-open convention (subtracting 1 from start for 1-based GFF/GTF/VCF
+  inputs), and preserve common metadata columns (`name`/`score`/`strand`
+  for BED; `type`/`source`/`score`/`attrs` for GFF;
+  `id`/`ref`/`alt`/`qual`/`filter`/`info` for VCF).
+
+## misha 5.6.22
+
+- Intervals’ `strand` column now accepts character (`"+"`, `"-"`, `"."`,
+  `"*"`, `""`) or factor input in addition to numeric `1`/`-1`/`0`.
+  Strings are normalized to the numeric convention at the R-\>C++
+  boundary; output stays numeric.
+
+## misha 5.6.21
+
+- Added `prior` argument to
+  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md)
+  (default `"marginal"`). Per-bin Dirichlet priors are now learned from
+  the trainer’s own counts by default, so unobserved (cell,
+  k-mer-context) entries fall back to the cell’s empirical base
+  composition instead of uniform 1/4. Other modes: `"global"`,
+  `NULL`/`"uniform"`, length-4 numeric, and `n_bins x 4` matrix.
+- CDF formula changed from `(N + alpha) / (sum_a N + 4*alpha)` to
+  `(N + alpha * pi_a(b)) / (sum_a N + alpha)` (pi sums to 1). To
+  reproduce the pre-5.6.21 Laplace-add-one behavior, pass
+  `prior = NULL, pseudocount = 4`.
+- `.gsm` metadata gains optional `prior`/`prior_mode` fields; older
+  files load with `prior = uniform` (their on-disk CDF is the truth).
+
+## misha 5.6.20
+
+- Fixed `gquantiles` hanging for many minutes on dense `binsize=1`
+  whole-genome scans. Kids now sort their samples buffer before packing
+  and the parent does a heap-based k-way merge instead of a global
+  single-thread sort; the single-process path uses `std::nth_element`
+  per percentile rank. mm10 dense full-genome `gquantiles`: was hung,
+  now ~75 s (multitask) / ~270 s (single-process).
+
+## misha 5.6.19
+
+- Fixed `gintervals.load` failing with “invalid columns definition”
+  after `gintervals.save` of a bigset whose input had character `chrom`
+  (e.g. a tibble from `dplyr`). On-disk per-chromosome files and the
+  `.meta` zeroline now both store `chrom`/`chrom1`/`chrom2` as factor
+  with full ALLGENOME levels, and the on-disk frame is normalized to
+  plain `data.frame`.
+
+## misha 5.6.18
+
+- Added
+  [`gsynth.score()`](https://tanaylab.github.io/misha/reference/gsynth.score.md):
+  writes a misha fixed-bin dense track of summed natural-log conditional
+  probability under a trained stratified Markov-k model. Two scored
+  tracks subtracted at any resolution give a windowed log-Bayes-factor.
+  `mask` argument NA-poisons positions inside the mask (e.g. repeats);
+  predicted-base `N` is unconditional NA.
+- [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+  now looks up the stratum bin at `pos - k` to match
+  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md).
+  Previously it queried the bin at the predicted-base position, which
+  differed from training at the first `k` bp of every iter window.
+  Cached `.gsm` models are unchanged; samples generated with earlier
+  versions had a slight stratum-shift artifact at iter boundaries.
+- Added `getOption("gmultitasking.strategy")` for `gextract` (default
+  `"auto"`). For large many-track workloads (\>= 8 tracks, non-streaming
+  iterator) `auto` routes to a track-parallel mode (each worker handles
+  a track subset across all tiles) instead of the legacy tile-parallel
+  mode. Realistic 3,110 motif tracks x 2.19M peaks: 57.6 min vs ~3.4 h
+  projected (3.5x per-track speedup). Override with
+  `options(gmultitasking.strategy = "tracks" | "tiles" | "auto")`.
+
+## misha 5.6.17
+
+- Fixed `gextract` over thousands of tracks failing with “Too many open
+  files” (EMFILE). `BufferedFile` handles are now released once data is
+  loaded (sparse) or mmapped (dense), so the open-FD count no longer
+  scales with track count. Negligible perf cost.
+- Fixed dense-track `gextract` regression introduced in v5.6.11 where
+  calls over ~50 motif tracks became 10-20x slower. `MmapFile` no longer
+  eagerly pages with `MAP_POPULATE`, and track-validation loops use a
+  metadata-only path (stat for size, read `bin_size` once) instead of
+  round-tripping `init_read()` per chromosome per track. Tamar’s
+  51-motif workload: 22 s -\> 0.4 s.
+- Added an opt-in performance regression test (`MISHA_PERF_TESTS=true`)
+  covering many-track `gextract` setup overhead.
+
+## misha 5.6.16
+
+- [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+  with `output_format = "fasta"` now writes a samtools-compatible `.fai`
+  alongside the FASTA, removing the need to call `samtools faidx` by
+  hand. Matches the convention already used by
+  [`ggenome.implant()`](https://tanaylab.github.io/misha/reference/ggenome.implant.md).
+- Added `cell_merge` argument to
+  [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+  and a companion exported utility
+  [`gsynth.cell_merge()`](https://tanaylab.github.io/misha/reference/gsynth.cell_merge.md).
+  Unlike `bin_merge` (which redirects bins independently along each
+  dimension), `cell_merge` redirects specific per-joint-cell CDFs to
+  other joint cells (e.g. `(GC=0.725, CG=0.05) -> (GC=0.70, CG=0.08)`).
+  Intended for reassigning under-trained joint cells to a
+  nearest-sufficient neighbor to avoid sequence leakage from tiny
+  training sets.
+- Added `gsynth.forbid_kmer(model, pattern)` returning a new
+  `gsynth.model` whose samples are guaranteed pattern-free downstream of
+  the seeding window (e.g. `gsynth.forbid_kmer(model, "CG")` for a
+  CpG-null background). Pattern length is capped at `model$k + 1`.
+
+#### Bug fixes
+
+- Fixed
+  [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md)
+  silently falling back to uniform-random sampling for most positions
+  inside any interval whose start was not aligned to `model$iterator`
+  ([\#94](https://github.com/tanaylab/misha/issues/94)). Output k-mer
+  statistics on unaligned intervals were wrong; composition was
+  partially uniform.
+
+## misha 5.6.15
+
+- Fixed
+  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md),
+  [`gsynth.sample()`](https://tanaylab.github.io/misha/reference/gsynth.sample.md),
+  and `gsynth.random_seqs()` silently reading sequences from the wrong
+  chromosome when `intervals` omitted one or more earlier chromosomes in
+  the chromkey - the C++ side opened the wrong sequence (shifted by the
+  number of earlier missing chromosomes), producing invalid models and
+  corrupted sampled genomes without any error. Calls that passed
+  `intervals = gintervals.all()` (or left it at the default) were not
+  affected. Users who ran these functions on custom interval subsets
+  should re-run them with this version.
+
+## misha 5.6.14
+
+- Fixed indexed tracks re-mmapping the entire `track.dat` for every
+  chromosome during iterator init and chromosome transitions. Made
+  indexed tracks unusable on genomes with many contigs
+  (e.g. Pan_troglodytes with 4344 contigs).
+
+## misha 5.6.13
+
+- Fixed `pwm.max.pos` returning wrong strand sign. The direction
+  (positive/negative) of the returned position was determined by the
+  last scanned position in the interval rather than the position with
+  the best score. Bug existed since `pwm.max.pos` was introduced
+  (v4.3.0).
+
+## misha 5.6.12
+
+- Fixed child processes surviving `rexit()` due to R’s SIGTERM handler.
+  All multitasked operations (`gmultitasking = TRUE`) were affected.
+  Track-creating functions (`gtrack.create`, `gtrack.smooth`,
+  `gtrack.create_pwm_energy`) could corrupt data on indexed databases
+  because children ran `gtrack.convert_to_indexed` concurrently.
+  Non-indexed track data and query functions (`gextract`, `gscreen`,
+  `gdist`, `gquantiles`, …) were unaffected (data was written to shared
+  memory before the failed exit).
+
+## misha 5.6.11
+
+- Added
+  [`ggenome.implant()`](https://tanaylab.github.io/misha/reference/ggenome.implant.md)
+  for replacing intervals in a reference genome with donor sequences and
+  writing a new FASTA. Supports literal donor sequences or extraction
+  from a misha database, with optional trackdb creation.
+- Added
+  [`ggenome.transplant()`](https://tanaylab.github.io/misha/reference/ggenome.transplant.md)
+  as sugar for cross-genome sequence swaps - extracts from a source
+  genome and implants into a target genome in a single call.
+
+## misha 5.6.10
+
+- Fixed `direction="below"` with `bidirect=TRUE` taking min across
+  strands instead of max. A genomic substitution changes both strands,
+  so disrupting a motif requires both strands to fall below the
+  threshold.
+- **Breaking**: removed the hidden default that set
+  `score.min = score.thresh` when `direction = "below"`. `score.min` now
+  defaults to NULL (no filter) for both directions. Set `score.min`
+  explicitly to filter windows.
+- Improved edit distance documentation: dedicated section with
+  direction/strand semantics, parameter reference, and worked examples.
+
+## misha 5.6.9
+
+- Added `k` parameter to
+  [`gsynth.train()`](https://tanaylab.github.io/misha/reference/gsynth.train.md)
+  to configure the Markov order (1-8, default 5).
+- 14-20x faster PWM scoring across all code paths (`gextract` with PWM
+  vtracks, `gseq.pwm`, PWM edit distance). Replaced switch-statement DNA
+  base encoding with O(1) lookup tables in the inner scoring loop.
+- Fixed a typo in `DnaPSSM::integrate_energy` (`case 'h'` for
+  `case 'g'`) on the reverse-complement scoring path. The affected
+  function is dead code (all user-facing callers use
+  `integrate_energy_logspat`), so no user-visible results were affected.
+
+## misha 5.6.8
+
+- Added `direction` parameter (“above”/“below”) to PWM edit distance
+  functions for computing minimum edits to bring score below a threshold
+  (motif disruption).
+
+## misha 5.6.7
+
+- Added PWM edit distance virtual track functions: `pwm.edit_distance`,
+  `pwm.edit_distance.pos`, `pwm.max.edit_distance`,
+  `pwm.edit_distance.lse`, and `pwm.edit_distance.lse.pos`. Compute
+  minimum edit distance (substitutions and indels) to reach a PWM score
+  threshold, with per-window (max) and aggregate (LSE) scoring modes.
+- Added
+  [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md)
+  for retrieving detailed per-edit information (positions and
+  replacement bases) from PWM edit distance computation.
+- Enabled sub-chromosome range splitting for `gscreen` and `gextract`,
+  improving parallel efficiency on genomes with large chromosomes.
+- Fixed `gscreen` returning split intervals at sub-chromosome parallel
+  boundaries instead of merged contiguous intervals.
+- Enabled sub-chromosome range splitting for `gsummary`, `gdist`, and
+  `gcor` (Pearson), improving parallel efficiency with explicit
+  iterators.
+- Multiple performance improvements for `gscreen` and `gextract` with
+  dense iterators.
+
+## misha 5.6.6
+
+CRAN release: 2026-03-19
+
+- Fixed CRAN check NOTE about non-standard top-level files.
+- Fixed CRAN check WARNING about `pipe.Rd` documenting `%>%` with a
+  `\usage` section.
+
+## misha 5.6.5
+
+- Replaced non-API C entry point `Rf_findVar` with `R_getVar` for R
+  4.6.0 compatibility.
+
+## misha 5.6.4
+
+- Fixed
+  [`gintervals.load()`](https://tanaylab.github.io/misha/reference/gintervals.load.md)
+  failing with “Intervals set does not exist” for intervals from
+  databases loaded via
+  [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md).
+
+## misha 5.6.3
+
+- Fixed
+  [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md)
+  performance: loading a large database as a dataset is now fast
+  regardless of call order. Previously,
+  `gsetroot(small_db); gdataset.load(large_db)` was extremely slow
+  because the dataset scan used R’s `list.files(recursive=TRUE)`, which
+  lists every file in the tree. Replaced with a fast path that reads
+  `.db.cache` or falls back to C++ `fts`-based scanning. Also changed
+  [`gdb.reload()`](https://tanaylab.github.io/misha/reference/gdb.reload.md)
+  calls in
+  [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md)/[`gdataset.unload()`](https://tanaylab.github.io/misha/reference/gdataset.unload.md)
+  to use `rescan=FALSE`, so existing databases use their cache instead
+  of being rescanned.
+
+- Fixed collision detection for hierarchical tracks in
+  [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md):
+  the R-level scan returned `/`-separated names while the dataset map
+  uses `.`-separated names, causing collision detection to silently fail
+  for tracks in subdirectories.
+
+## misha 5.6.2
+
+- Added motif format import functions:
+  [`gseq.read_meme()`](https://tanaylab.github.io/misha/reference/gseq.read_meme.md),
+  [`gseq.read_jaspar()`](https://tanaylab.github.io/misha/reference/gseq.read_jaspar.md),
+  and
+  [`gseq.read_homer()`](https://tanaylab.github.io/misha/reference/gseq.read_homer.md)
+  for reading MEME, JASPAR PFM, and HOMER motif formats. Returns named
+  lists of position probability matrices directly usable with
+  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md).
+  All parsers are native with no new dependencies.
+
+- Added track export functions:
+  [`gtrack.export_bedgraph()`](https://tanaylab.github.io/misha/reference/gtrack.export_bedgraph.md)
+  and
+  [`gtrack.export_bigwig()`](https://tanaylab.github.io/misha/reference/gtrack.export_bigwig.md)
+  for exporting tracks and track expressions to standard bedGraph and
+  BigWig formats. Supports gzip compression, virtual tracks, track
+  expressions, and custom iterators.
+
+## misha 5.6.1
+
+- [`gsynth.save()`](https://tanaylab.github.io/misha/reference/gsynth.save.md)
+  and
+  [`gsynth.load()`](https://tanaylab.github.io/misha/reference/gsynth.load.md)
+  now use the cross-platform `.gsm` format (YAML metadata + binary
+  arrays) instead of R-specific RDS. Models saved with pymisha can now
+  be loaded in R and vice versa. Legacy RDS files are still supported
+  for backward compatibility.
+
+- Added `compress` parameter to
+  [`gsynth.save()`](https://tanaylab.github.io/misha/reference/gsynth.save.md)
+  to optionally save as a ZIP archive.
+
+- Added
+  [`gsynth.convert()`](https://tanaylab.github.io/misha/reference/gsynth.convert.md)
+  to convert legacy RDS model files to the new `.gsm` format.
+
+## misha 5.6.0
+
+- Added
+  [`gintervals.attr.get()`](https://tanaylab.github.io/misha/reference/gintervals.attr.get.md),
+  [`gintervals.attr.set()`](https://tanaylab.github.io/misha/reference/gintervals.attr.set.md),
+  [`gintervals.attr.export()`](https://tanaylab.github.io/misha/reference/gintervals.attr.export.md),
+  and
+  [`gintervals.attr.import()`](https://tanaylab.github.io/misha/reference/gintervals.attr.import.md)
+  for managing interval set attributes. Attributes are stored as
+  `.iattr` binary files (null-separated key/value pairs) next to
+  `.interv` files for small interval sets, or inside the directory for
+  big interval sets.
+
+- [`gintervals.rm()`](https://tanaylab.github.io/misha/reference/gintervals.rm.md)
+  now cleans up companion `.iattr` attribute files when deleting
+  interval sets.
+
+## misha 5.5.2
+
+- Replaced the naive variance formula (E\[X²\]-E\[X\]²) with Welford’s
+  numerically stable online algorithm for standard deviation computation
+  in all track types (GenomeTrackFixedBin, GenomeTrackSparse,
+  GenomeTrackInMemory, GenomeTrackArrays). The naive formula is prone to
+  catastrophic cancellation when values are large or have small variance
+  relative to their mean.
+
+- Improved sum accumulation precision by using double-precision
+  intermediate accumulators in all non-sliding sum paths. The
+  `m_last_sum` member remains float for API compatibility, but
+  per-interval accumulation now happens in double, eliminating
+  float-\>float rounding errors for large sums.
+
+- Fixed potential out-of-bounds access in SAMPLE/SAMPLE_POS functions
+  when the random number generator returns exactly 1.0. Added bounds
+  clamping (ported from pymisha).
+
+- Fixed umask leak in `GenomeTrack::write_type()` and
+  `GenomeTrackFixedBin::init_write()` - the old umask is now saved and
+  restored immediately after
+  [`open()`](https://rdrr.io/r/base/connections.html), preventing
+  permanent process-wide umask changes.
+
+- Improved header validation in `GenomeTrackFixedBin::init_read()` to
+  use integer modulo instead of floating-point division, with an
+  additional underflow guard.
+
+- Added reusable scratch buffers (`m_scratch_all_values`,
+  `m_scratch_all_positions`) to GenomeTrackFixedBin, avoiding per-call
+  heap allocation for SAMPLE/SAMPLE_POS operations (ported from
+  pymisha).
+
+## misha 5.5.1
+
+- Fixed floating-point precision drift in sliding window sum for
+  fixed-bin virtual tracks. The incremental add/subtract pattern
+  accumulated rounding errors (~1e-7 per step) that compounded to
+  noticeable differences at genome-wide scale. Now uses Kahan
+  compensated summation for bit-accurate results. The bug was introduced
+  in version 5.4.3 (commit 7337ff30, 2026-02-09) as part of the
+  fixed-bin sum optimization.
+
+## misha 5.5.0
+
+- Added indexed format support for 2D tracks (rectangles and points).
+  Per-chromosome-pair files can now be consolidated into a single
+  `track.dat` + `track.idx`, matching the indexed format already
+  available for 1D tracks.
+
+- New function
+  [`gtrack.2d.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.2d.convert_to_indexed.md)
+  converts existing 2D tracks to indexed format with optional removal of
+  old per-pair files.
+
+- [`gtrack.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.convert_to_indexed.md)
+  now dispatches to 2D conversion automatically when given a rectangles
+  or points track.
+
+- [`gdb.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gdb.convert_to_indexed.md)
+  with `convert_tracks = TRUE` now includes 2D tracks in batch
+  conversion.
+
+- 2D tracks created via
+  [`gtrack.2d.create()`](https://tanaylab.github.io/misha/reference/gtrack.2d.create.md),
+  [`gtrack.2d.import()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import.md),
+  and
+  [`gtrack.2d.import_contacts()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import_contacts.md)
+  are automatically converted to indexed format when the database is in
+  indexed mode.
+
+## misha 5.4.8
+
+- Fixed NaN comparison bug in `distance.center` virtual track with
+  iterator modifiers - used `!=` instead of `std::isnan()`, causing the
+  guard condition to always be true under IEEE 754 semantics.
+
+- Fixed `distance` virtual track returning NaN instead of a valid
+  distance when one side of the sorted interval array has no intervals
+  on the current chromosome (NaN-unsafe `min` in sequential path).
+
+- Fixed `gtrack.smooth` MEAN algorithm producing spurious NaN values
+  during periodic recalculation when NaN values are present in the
+  smoothing window. The recalculation checked `isnan` on the accumulator
+  instead of the incoming value, permanently poisoning the sum.
+
+- Fixed incorrect standard deviation/variance computation in virtual
+  tracks with filter/mask - the parallel variance formula used the
+  already-incremented weight instead of the pre-increment value.
+
+- Fixed `min.pos`/`max.pos` virtual track aggregation comparing genomic
+  positions instead of signal values when combining sub-intervals,
+  returning the leftmost/rightmost sub-interval position instead of the
+  position of the actual min/max value.
+
+- Fixed missing `out_of_range` check in `distance.center` virtual track
+  with iterator modifiers, causing undefined behavior when all source
+  intervals lie upstream of the query coordinate.
+
+- Fixed copy-paste error in quantile track computation where
+  `highest_vals` buffer was resized using `kid_lowest_vals_buf_size`
+  instead of `kid_highest_vals_buf_size`.
+
+- Fixed `int32` truncation of `int64_t` genomic coordinates in
+  `gintervals.normalize` - could silently produce wrong results for
+  chromosomes longer than ~2.1 Gbp.
+
+- Fixed p-value transformation (`pv` function) being skipped when
+  virtual track has both a filter and a p-value function active.
+
+- Fixed `lse_accumulate` double overload producing NaN when both inputs
+  are `-infinity` (missing `isinf` guards that the float overload had).
+
+- Fixed `GInterval::dist2coord` treating `coord == end` as inside the
+  interval, inconsistent with the half-open `[start, end)` convention
+  used throughout the codebase.
+
+## misha 5.4.7
+
+- Fixed `distance.center` virtual track function returning incorrect
+  values when `gextract` is called with overlapping input intervals. The
+  sequential scanner could miss containing source intervals when
+  processing bins that go backward in position between overlapping
+  regions.
+
+- Fixed `neighbor.count` virtual track function undercounting neighbors
+  when `gextract` is called with overlapping input intervals. Same root
+  cause as the `distance`/`distance.edge` fix in 5.4.6.
+
+## misha 5.4.6
+
+- Fixed `distance` and `distance.edge` virtual track functions returning
+  incorrect values when `gextract` is called with overlapping input
+  intervals. The sequential scanner could miss closer source intervals
+  when processing bins that go backward in position between overlapping
+  regions.
+
+## misha 5.4.5
+
+CRAN release: 2026-02-20
+
+- Fixed devel compiler warnings in `GenomeTrackBinnedTransform.cpp` by
+  avoiding arithmetic between distinct anonymous enum types.
+
+## misha 5.4.4
+
+- Added
+  [`gdb.export_fasta()`](https://tanaylab.github.io/misha/reference/gdb.export_fasta.md)
+  to export all contigs from a database to a multi-FASTA file,
+  defaulting to the current gdb with optional `groot` override.
+
+## misha 5.4.3
+
+- Multiple performance optimizations for `gscreen` and `gextract` with
+  dense iterators.
+
+## misha 5.4.2
+
+- Added `lse` virtual track function that computes the log-sum-exp of
+  the values in the iterator interval.
+
+## misha 5.4.1
+
+- Added “fast-path” for intervals operations on data.frames in order to
+  avoid per-chromosome calls in multi-contig databases.
+
+## misha 5.4.0
+
+CRAN release: 2026-01-27
+
+- **Dataset API**: New dataset-based workflow for combining multiple
+  data sources
+  - **Working database + loaded datasets model**: Use
+    [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+    for your primary writable database, then
+    [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md)
+    to add read-only datasets
+  - **Collision handling**: By default, loading a dataset with tracks
+    that already exist will error. Use `force=TRUE` to override (working
+    db always wins)
+  - New dataset management functions:
+    - [`gdataset.load()`](https://tanaylab.github.io/misha/reference/gdataset.load.md):
+      Load a dataset into the namespace (tracks and intervals become
+      available)
+    - [`gdataset.unload()`](https://tanaylab.github.io/misha/reference/gdataset.unload.md):
+      Remove a dataset from the namespace
+    - [`gdataset.save()`](https://tanaylab.github.io/misha/reference/gdataset.save.md):
+      Create a new dataset from selected tracks/intervals
+    - [`gdataset.ls()`](https://tanaylab.github.io/misha/reference/gdataset.ls.md):
+      List working database and all loaded datasets
+    - [`gdataset.info()`](https://tanaylab.github.io/misha/reference/gdataset.info.md):
+      Show metadata and contents of a dataset
+  - New track/interval source query functions:
+    - [`gtrack.dataset()`](https://tanaylab.github.io/misha/reference/gtrack.dataset.md):
+      Get the source path for a track (working db or dataset)
+    - [`gtrack.dbs()`](https://tanaylab.github.io/misha/reference/gtrack.dbs.md):
+      Get all paths where a track exists (for debugging shadowed tracks)
+    - [`gintervals.dataset()`](https://tanaylab.github.io/misha/reference/gintervals.dataset.md):
+      Get the source path for an interval set
+    - [`gintervals.dbs()`](https://tanaylab.github.io/misha/reference/gintervals.dbs.md):
+      Get all paths where an interval set exists
+  - New `db` parameter for filtering by source:
+    - `gtrack.ls(db = "/path/to/dataset")`: List tracks from a specific
+      source
+    - `gintervals.ls(db = "/path/to/dataset")`: List intervals from a
+      specific source
+  - **Cross-database operations**: Track expressions work seamlessly
+    with tracks from different sources
+  - All datasets must have identical `chrom_sizes.txt` files (same
+    genome assembly)
+  - Virtual tracks remain global (shared across all loaded sources)
+  - Backward compatible: single database usage with
+    [`gsetroot()`](https://tanaylab.github.io/misha/reference/gdb.init.md)
+    works unchanged
+- New track management functions:
+  - [`gtrack.mv()`](https://tanaylab.github.io/misha/reference/gtrack.mv.md):
+    Rename or move a track within the same database
+  - [`gtrack.copy()`](https://tanaylab.github.io/misha/reference/gtrack.copy.md):
+    Copy a track (can copy between databases when multiple are loaded)
+- Added `gcor` function that computes correlation between two tracks, or
+  between multiple pairs of tracks.
+- Fix: `gextract` and `gscreen` almost always did not enable
+  multitasking mode due to incorrect gating.
+
+## misha 5.3.4
+
+- Added `dataframe` and `names` parameters to `gdist` function that
+  return a data frame instead of an N-dimensional vector.
+- Added `gsynth.train`, `gsynth.sample` and `gsynth.save` functions that
+  train a Markov model from a genome sequence and sample a synthetic
+  genome from the model
+- Added `gseq.kmer.dist` function that counts the number of occurrences
+  of k-mers in genomic intervals.
+- Fixed a bug in `gtrack.liftover` that created overlapping intervals
+  when lifting sparse tracks.
+
+## misha 5.3.3
+
+- Allow a vector of sizes in `gintervals.normalize`.
+- **BREAKING**: `gintervals.normalize` now returns +1bp for intervals
+  with odd sizes:
+  - Old: expansion = size/2; \[center-expansion, center+expansion\]
+    (loses 1bp for odd sizes)
+  - New: new_start = center - (size/2); new_end = new_start + size
+    (exact size always)
+- Added `interval_relative` parameter to
+  [`giterator.intervals()`](https://tanaylab.github.io/misha/reference/giterator.intervals.md)
+  for interval-aligned bin iteration.
+
+## misha 5.3.2
+
+CRAN release: 2025-12-14
+
+- Fixed GCC-ASAN / LTO compilation warnings.
+
+## misha 5.3.1
+
+CRAN release: 2025-12-10
+
+- Fixed a CRAN check warning about long lines in documentation.
+
+## misha 5.3.0
+
+- **Multi-contig support**: Added support for genomes with many contigs
+  (100+) through new indexed database format
+  - New indexed format (default): Uses unified `genome.seq` +
+    `genome.idx` files instead of per-chromosome files
+  - Dramatically reduces file descriptor usage for genomes with many
+    contigs
+  - Provides 4-14% performance improvement for large-scale analyses
+  - Removes the requirement for “chr” prefix in chromosome names.
+  - **Backward compatible**: Legacy per-chromosome format fully
+    supported
+  - Automatic format detection - no user action required
+  - New functions:
+    [`gdb.info()`](https://tanaylab.github.io/misha/reference/gdb.info.md),
+    [`gdb.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gdb.convert_to_indexed.md),
+    [`gtrack.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gtrack.convert_to_indexed.md),
+    [`gintervals.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gintervals.convert_to_indexed.md),
+    [`gintervals.2d.convert_to_indexed()`](https://tanaylab.github.io/misha/reference/gintervals.2d.convert_to_indexed.md)
+  - Set `options(gmulticontig.indexed_format = FALSE)` to create
+    databases in legacy format for compatibility with older misha
+    versions
+  - See
+    [`vignette("Database-Formats")`](https://tanaylab.github.io/misha/articles/Database-Formats.md)
+    for more details.
+- **Auto-configuration**: Package now automatically configures itself
+  based on system resources
+  - `gmax.processes` automatically set to 70% of available CPU cores
+  - `gmax.data.size` coordinated with process limits to ensure total
+    memory usage \<= 70% of RAM (capped at 10GB per process)
+  - Formula: `gmax.data.size = min((RAM * 0.7) / gmax.processes, 10GB)`
+    ensures safe memory usage across all parallel processes
+  - Dynamic auto-disable threshold: small datasets automatically use
+    single-threaded mode to avoid fork overhead
+  - Threshold scales with system: `gmax.processes * 1000 records` (e.g.,
+    2K on laptops, 89K on 128-core servers)
+  - Manual override still supported via
+    [`options()`](https://rdrr.io/r/base/options.html)
+  - See “Auto-Configuration” section in
+    [`vignette("Manual")`](https://tanaylab.github.io/misha/articles/Manual.md)
+    for details
+- Added in-memory value-based virtual tracks (`gvtrack.create` with
+  `src` parameter). These tracks behave exactly like regular sparse
+  tracks, but are stored in memory and can be used in track expressions.
+- Added `sshift`, `eshift` and `filter` parameters to `gvtrack.create`.
+- Added
+  [`gintervals.path()`](https://tanaylab.github.io/misha/reference/gintervals.path.md)
+  and
+  [`gtrack.path()`](https://tanaylab.github.io/misha/reference/gtrack.path.md)
+  functions that return the actual file system paths for interval sets
+  and tracks.
+- Added `masked.count` and `masked.frac` virtual track functions that
+  count and fraction masked base pairs (lowercase letters) in the
+  current iterator interval.
+- Added `distance.edge` virtual track function that computes
+  edge-to-edge distance from the iterator interval to the closest source
+  interval, using the same calculation as `gintervals.neighbors`.
+
+## misha 5.2.2
+
+- Fix: `gtrack.liftover` did not fill chromosomes missing the chain with
+  NA values. This caused errors when trying to access the tracks
+  afterwards.
+
+## misha 5.2.1
+
+- Added `gintervals.as_chain` function that converts a data frame to a
+  chain object.
+- Added value column aggregation support to `gintervals.liftover` via
+  `value_col` and `multi_target_agg` parameters.
+
+## misha 5.2.0
+
+- Added `src_overlap_policy` and `tgt_overlap_policy` parameters to
+  `gintervals.liftover`, `gintervals.load_chain`, and `gtrack.liftover`
+  functions.
+- Added target aggregation in `gtrack.liftover` via `multi_target_agg`
+  parameter.
+- `gintervals.load_chain` now returns valid misha intervals instead of a
+  chain object.
+- Added score-based liftover functionality matching UCSC liftOver
+  behavior:
+  - `gintervals.load_chain` now includes `score` and `chain_id` columns
+    for all loaded chains
+  - New `min_score` parameter in `gintervals.load_chain`,
+    `gintervals.liftover`, and `gtrack.liftover` filters out low-quality
+    chains
+  - New `tgt_overlap_policy = "auto_score"` (or `"auto"`) selects the
+    best chain mapping based on alignment score (highest score -\>
+    longest span -\> lowest chain_id)
+  - New `include_metadata` parameter in `gintervals.liftover` optionally
+    returns score and chain_id for each mapping **BREAKING**: “auto” is
+    now an alias for “auto_score”. For the old behavior, use
+    `tgt_overlap_policy = "auto_first"`.
+- Added `canonic` parameter to `gintervals.liftover` (default `FALSE`)
+  to merge adjacent target intervals resulting from the same source
+  interval and chain.
+- Added three clustering strategies for liftover target overlap
+  policies:
+  - `tgt_overlap_policy = "best_cluster_union"` (default, aliased as
+    `"best_source_cluster"`): Uses source union coverage
+  - `tgt_overlap_policy = "best_cluster_sum"`: Uses sum of target
+    lengths
+  - `tgt_overlap_policy = "best_cluster_max"`: Uses longest single
+    member
+
+## misha 5.1.4
+
+- Added new virtual track functions:
+  - `max.pos.abs`, `max.pos.relative`, `min.pos.abs`,
+    `min.pos.relative`: Returns the position of the maximum/minimum
+    value in the iterator interval
+  - `exists`: Returns 1 if any value exists (or specific vals if
+    provided), 0 otherwise
+  - `size`: Returns the number of non-NaN values in the iterator
+    interval
+  - `sample`: Returns a uniformly sampled source value from the iterator
+    interval
+  - `sample.pos.abs` and `sample.pos.relative`: Returns the position of
+    a uniformly sampled value
+  - `first` and `last`: Returns the first/last value in the iterator
+    interval
+  - `first.pos.abs`, `first.pos.relative`, `last.pos.abs`,
+    `last.pos.relative`: Returns the position of the first/last value
+
+## misha 5.1.3
+
+- Fixed a bug in `gintervals.neighbors` when using
+  `mindist=0, maxdist=0`: the function would miss zero-distance
+  (touching) intervals when using `mindist=0, maxdist=0`.
+- Fixed error reporting in multitasking mode: when a child process ends
+  unexpectedly, the error message is now correctly reported to the
+  parent process.
+- Fixed `pwm.count` with spatial sliding windows double-counting
+  bidirectional hits (forward + reverse) at the same genomic position;
+  the sliding path now matches the baseline per-position union
+  semantics.
+
+## misha 5.1.2
+
+- **BREAKING**: `gintervals.load_chain` now returns a data frame with 8
+  columns instead of 7. Columns are: `chrom`, `start`, `end`, `strand`,
+  `chromsrc`, `startsrc`, `endsrc`, `strandsrc`.
+- Added `src_overlap_policy` and `tgt_overlap_policy` parameters to
+  `gintervals.load_chain`, `gtrack.liftover` and `gintervals.liftover`
+  functions.
+- Added `neighbor.count` virtual track.
+- Added `gintervals.mark_overlaps` function that marks overlapping
+  intervals with a group ID.
+
+## misha 5.1.1
+
+- Allow data frames as input in `pssm` parameter of `gvtrack.create` and
+  `gseq.pwm` functions.
+- Implemented parallelism in `gseq.pwm` and added `neutral_chars_policy`
+  parameter.
+- Implemented sliding window optimization for PWM scoring modes (`pwm`,
+  `pwm.max` and `pwm.count`) for dense iterators when spatial weighting
+  is disabled, providing significant performance improvements for
+  consecutive genomic intervals.
+- **BREAKING**: `pwm.count(bidirect=TRUE)` now counts **per-position
+  union** of strands (via log-sum-exp), aligning with `pwm`/`pwm.max`.
+  Each position contributes at most 1 to the count. To reproduce the old
+  per-strand-sum behavior, add the two strand-specific counts:
+  `pwm.count(bidirect=FALSE, strand=1) + pwm.count(bidirect=FALSE, strand=-1)`.
+
+## misha 5.1.0
+
+- Added `gseq.pwm` and `gseq.kmer` functions that compute pwm and kmer
+  scores on sequences without the need for a genome database.
+- Added `gseq.rev` and `gseq.comp` functions that reverse and complement
+  DNA sequences without the need for a genome database.
+- Added `gseq.revcomp` alias for `grevcomp` function.
+- Added `gintervals.random` function that generates random genome
+  intervals.
+- Added `gintervals.covered_bp` and `gintervals.coverage_fraction`
+  functions that calculate the number of base pairs and the fraction of
+  base pairs covered by a set of intervals.
+
+## misha 5.0.0
+
+- Added `gvtrack.filters`: per vtrack genomic masks.
+
+## misha 4.3.14
+
+- Added spatial factors to pwm virtual tracks.
+- Added `pwm.count` virtual track function that counts the number of
+  occurrences of a PWM in the current iterator interval.
+
+## misha 4.3.13
+
+- Added directional neighbor finding functions:
+  - [`gintervals.neighbors.upstream()`](https://tanaylab.github.io/misha/reference/directional-neighbors.md) -
+    Find upstream neighbors relative to query strand
+  - [`gintervals.neighbors.downstream()`](https://tanaylab.github.io/misha/reference/directional-neighbors.md) -
+    Find downstream neighbors relative to query strand  
+  - [`gintervals.neighbors.directional()`](https://tanaylab.github.io/misha/reference/directional-neighbors.md) -
+    Find both upstream and downstream neighbors
+- Added `use_intervals1_strand` parameter to
+  [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md)
+  to use query intervals’ strand for distance directionality.
+- Added `warn.ignored.strand` parameter to
+  [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md)
+  to control warnings when query strand is ignored.
+- Fixed a bug in `gintervals.neighbors`: a stack imbalance in the C++
+  code in very rare cases of 2D intervals.
+- Fixed errors in regression tests of `gintervals.neighbors` due to
+  unbalanced `rprotect` calls.
+
+## misha 4.3.12
+
+CRAN release: 2025-08-31
+
+- Added `gintervals.normalize` and `gintervals.annotate` functions.
+- Fixed errors in `m1-asan` build.
+
+## misha 4.3.11
+
+CRAN release: 2025-08-25
+
+- Removed C++14 requirement.
+
+## misha 4.3.9
+
+- Fixed a bug in `pwm` and `kmer` virtual track functions: iterator
+  shifts were not applied.
+- Internal: address CRAN rchk notes and improve memory protection.
+
+## misha 4.3.8
+
+- Added `colnames` parameter to `gintervals.mapply` function.
+- Added `attrs` parameter to `gtrack.import` function.
+- Added `created.user` default attribute in track creation functions.
+- Support BED files in `gtrack.import` function.
+
+## misha 4.3.7
+
+- Added `gtrack.create_dense` function - creates a dense track from an
+  intervals and values.
+- Fixed compilation error in old versions of macOS (`clock_gettime` is
+  missing).
+- Fixed a bug in `gtrack.import_bigwig`: `intern` argument was not
+  passed to `system` calls.
+
+## misha 4.3.6
+
+CRAN release: 2025-03-06
+
+- Fixed memory alignment issues in clang-UBSAN.
+
+## misha 4.3.5
+
+- Bug fix in “coverage” virtual track function: incorrect results on
+  some cases when query intervals where from different chromosomes.
+
+## misha 4.3.4
+
+- Added “kmer.count” and “kmer.frac” virtual track functions that
+  calculate the number of k-mers and the fraction of k-mers in the
+  current iterator interval.
+
+## misha 4.3.3
+
+- Added “coverage” virtual track function that calculates the fraction
+  that iterator intervals are covered by given source intervals.
+
+## misha 4.3.2
+
+- Added requirement for C++14 standard.
+
+## misha 4.3.1
+
+- Fixed compilation issue on Ubuntu devel.
+
+## misha 4.3.0
+
+- Added PWM functions: “pwm”, “pwm.max” and “pwm.max.pos” are new
+  virtual track functions.
+- Added `grevcomp` function (reverse complement of a DNA sequence).
+
+## misha 4.2.14
+
+- Better error message in `gvtrack.create`.
+
+## misha 4.2.13
+
+- Added `gdb.create_genome` function.
+- removed non-API calls to R: `R_curErrorBuf`, `SET_TYPEOF`
+
+## misha 4.2.12
+
+- Fixed *noRemap* additional issue by adding `Rf_` prefix in the c++
+  code.
+- Removed non-API calls to R in the C++ code.
+
+## misha 4.2.10
+
+- Fixed a bug in `gtrack.import` from bigwig.
+
+## misha 4.2.9
+
+CRAN release: 2024-01-15
+
+- Fixed compilation issues in M1 Mac.
+
+## misha 4.2.8
+
+CRAN release: 2023-12-05
+
+- Fixed “mat string is not a string literal” warnings.
+
+## misha 4.2.7
+
+- Fixed gcc-UBSAN memory misalignment issues.
+
+## misha 4.2.6
+
+CRAN release: 2023-09-14
+
+- `ALLGENOME` is now only soft deprecated in order to support old misha
+  scripts.
+- Fixed compilation issues with gcc-UBSAN and LTO.
+
+## misha 4.2.3
+
+CRAN release: 2023-09-05
+
+- Added `gtrack.create_dirs` function.
+- Fixed a bug in `gcluster.run`.
+- Updated documentation of `gintervals.neighbors`.
+
+## misha 4.2.2
+
+- First CRAN release
+- **Breaking change**: Moved global variables into a separate
+  environment called `.misha`. Variables such as `ALLGENOME` can now be
+  accessed as `.misha$ALLGENOME`. This change is not backwards
+  compatible, please update your code accordingly.
+- **Breaking change**: Repair names of the resulting data frame of
+  `gintervals.neighbors` (same as `gintervals.neighbors1` from
+  `misha.ext`). This means that instead of having two columns of
+  ‘chrom’, ‘start’ and ‘end’, the resulting data frame would have
+  ‘chrom1’, ‘start1’ and ‘end1’.
+- Use roxygen2 for documentation
+- Fixed compilation errors on MAC.
+- Fixed many compilation warnings.
+- `gwget` now uses `curl` in order to work on systems that do not have
+  `ftp` installed.
+- User manual was converted to `markdown` format.
+- Added a new `Genomes` vignette that demonstrates how to create a new
+  genome database.
+- fix: wrong bins assignment in BinFinder.h (this code was never
+  accessible from the R API)
+
+## misha 4.1.0
+
+- Bug fix (bug first appears in 4.0.8): virtual tracks based on
+  “global.percentile”, “global.percentile.min” or
+  “global.percentile.max” might occasionally return unexpected results
+  and/or cause crashes due to faulty memory management.
+
+## misha 4.0.11
+
+- Fixed compilation errors on OSX.
+
+## misha 4.0.10
+
+- “unprotect_ptr: pointer not found” error in virtual tracks based on
+  intervals.
+
+## misha 4.0.9
+
+- Fixed a minor resource leak.
+- Redirect all messages and progress to stderr instead of stdout.
+
+## misha 4.0.8
+
+- Fixed a resource leak that might result in “protection stack overflow”
+  error.
+
+## misha 4.0.6
+
+- Crash fix in gdb.create / gintervals.import.genes.
+
+## misha 4.0.5
+
+- Increase the maximal number of tracks allowed in a track expression to
+  10.000.
+
+## misha 4.0.4
+
+- Bug fix: “child process ended unexpectedly” errors, crashes and hang
+  ups whilst multitasking when running out of memory
+
+## misha 4.0.3
+
+- Fixed installation issues on some platforms
+
+## misha 4.0.2
+
+- Switched from custom random seed control (options(grnd.seed=…)) to R
+  standard (set.seed)
+
+## misha 4.0.1
+
+- Bug fix in gsample: results differ on Linux vs. OSX even when the same
+  random seed is used on both platforms
+
+## misha 4.0.0
+
+- OSX support
+- Bug fix in all functions using 2D intervals set iterator: in
+  multitasking mode some of the chromosome pairs might be skipped. In
+  non-multitasking mode the scope might be considered as empty. This
+  behavior is random and recurrent calls might suddenly return correct
+  results.
+- Bug fix in multitasking: occasional hang ups when memory usage of the
+  child processes exceeds the limit gmax.mem.usage
+- Bug fix in multitasking: all functions creating new files and
+  reporting progress might create corrupted files (gtrack.create, ….)
+- Bug fix in all functions using intervals.set.out parameter: small
+  intervals set instead of big one might be created and vice versa. Also
+  an error message “result size exceeded the maximum allowed” might be
+  mistakenly generated
+- Bug fix in gintervals.load applied to 1D big intervals: “Error in if
+  (progress && percentage \< 100 && progress.percentage != percentage)”
+- Bug fix in all functions returning 1D or 2D intervals: in rare random
+  cases NULL or invalid intervals set is returned
+- Bug fix in gcompute_strands_autocorr: internal buffer overflow and
+  possible memory corruption
+- gdb.reload: run-time improvements
+
+## misha 3.7.1
+
+- Bug fix in gintervals.liftover and gtrack.liftover: some intervals
+  might fail to be translated
+- Bug fix in gintervals.liftover: “object ‘f’ not found” error if chain
+  intervals are used in “chain” parameter
+
+## misha 3.7.0
+
+- Ubuntu support (multitasking mode still not thoroughly tested)
+- Bug fix: no progress report in multitasking mode
+- Bug fix in gdb.create: temporary directory is created under the
+  current GROOT instead of the new one
+
+## misha 3.6.0
+
+- Bug fix: occasional defunc processes AND/OR hanging in multitasking
+  mode
+
+## misha 3.5.6
+
+- Run-time optimizations
+
+## misha 3.5.5
+
+- Avoid call to gdb.reload() (slow on large DB) in various functions:
+  that create or remove tracks or intervals sets
+- Bug fix in gintervals.neighbors: with 2D intervals the number of the
+  returned neighbors might be less than “maxneighbors” parameter
+- Bug fix in gintervals.neighbors: with 2D intervals NULL might be
+  returned instead of NA if na.if.notfound=T
+
+## misha 3.5.4
+
+- Improved control over total maximal memory consumption in multitasking
+  mode via gmax.mem.usage option.
+
+## misha 3.5.3
+
+- Run time optimizations when using several virtual tracks based on the
+  same array track, differing only by slice
+
+## misha 3.5.2
+
+- Allow usage of sparse / arrays tracks in place of intervals
+- Allow usage of big intervals sets in gintervals.diff,
+  gintervals.intersect, gintervals.mapply, gintervals.union
+- Run time optimizations when 1D big intervals set is used for scope
+- Run time optimizations in various gintervals.\* functions when big
+  intervals sets are used
+- Bug fix: functions might get stuck or crash when array track / sparse
+  track / 1D big intervals set iterator is used along with 1D big
+  intervals scope
+- Bug fix: functions might get stuck or crash when 2D big intervals set
+  iterator is used along with 2D big intervals scope
+- Bug fix in gintervals.neighbors and gintervals.intersect: result might
+  be poorly sorted when big interval sets are used
+- Bug fix in gintervals.load: on an empty set or chrom returns NULL for
+  small intervals sets and an empty data frame for a big intervals set
+- Bug fix: “100%…” or “100%” is sometimes printed as the only progress
+  report
+- Bug fix: multiple progress report in some functions
+
+## misha 3.5.1
+
+- Bug fix in various gintervals.\* functions: invalid output (except for
+  the first row) when 2D track is used for intervals
+- Bug fix in gextract: incorrect intervalID returned when 2D track is
+  used for intervals
+
+## misha 3.5.0
+
+- Allow usage of 2D track in place of intervals
+- Add progress report to gintervals.load
+- Bug fix when using 2D big intervals: in some cases some or all
+  chromosomes of the big intervals set might be skipped when big
+  intervals set is used as a scope
+- Big intervals set: before load verify that the size of a single
+  chromosome (or chromosome pair) does not exceed gmax.data.size
+- Bug fix in gcluster.run: clean up of running processes might not be
+  completed if Ctr+C is pressed multiple times
+- Bug fix in gintervals.load: returns all 2D intervals instead of a
+  subset if one of chrom1/chrom2 is NULL and another one is not NULL
+- Bug fix in gintervals.load: invalid row names if chrom / chrom1 /
+  chrom2 parameter is used for a small intervals set
+
+## misha 3.4.3
+
+- Support intervals represented by tibbles
+
+## misha 3.4.2
+
+- New function: gsample; returns N random samples from the specified
+  track expression
+- Improved random seed when options(grnd.seed=0): so far two calls
+  occurring within a second used identical random generators
+
+## misha 3.4.1
+
+- Fixed compilation errors on some platforms
+- Run time improvement in gintervals.intersect when big intervals sets
+  are used
+- Bug fix in gintervals.neighbors: returns NULL if 2D big intervals sets
+  are used
+- Bug fix: a few point tracks in a track expression might be used
+  without specifying an iterator
+
+## misha 3.4.0
+
+- Dynamically limit memory use in multitasking mode
+- Bug fix: race condition and potential crash in multitasking mode when
+  one of the child processes exits shortly after it is launched
+
+## misha 3.3.18
+
+- Bug fix in gintervals.force_range: error when intervals are out of
+  range
+
+## misha 3.3.17
+
+- Run-time optimizations in track expression evaluation
+- Run-time optimizations in gintervals.neighbors
+
+## misha 3.3.16
+
+- Run-time optimizations when working with large data frames of
+  intervals in: gintervals.chrom_sizes, gintervals.force_range,
+  gintervals.save
+- Run-time optimizations when working with large data frames of
+  intervals and using intervals.set.out parameter in all the functions
+  that accept this parameter
+
+## misha 3.3.15
+
+- Run-time optimizations when working with big intervals sets in:
+  gintervals.load, gintervals.diff, gintervals.force_range,
+  gintervals.intersect, gintervals.mapply, gintervals.neighbors,
+  gintervals.rbind, gintervals.update, gintervals.union
+- Bug fix in gintervals.diff, gintervals.intersect,
+  gintervals.neighbors, gintervals.rbind, gintervals.union: “object
+  ‘intervals’ not found” error in some cases when big intervals sets are
+  used
+- Bug fix in gintervals.rbind: result does not preserve the original
+  order if big intervals are used
+- New undocumented function: .grbind
+
+## misha 3.3.14
+
+- gintervals.neighbors: run-time optimizations (the answer is entirely
+  generated in C++)
+
+## misha 3.3.13
+
+- gintervals.neighbors: sort the output by original ids of intervals1,
+  then \|distance\| (Manhattan distance for 2D), then ids of intervals2
+
+## misha 3.3.12
+
+- New version of gintervals.neighbors replaces both the old
+  gintervals.neighbors and gintervals.annotate. By default
+  gintervals.neighbors returns the closest neighbor
+- gintervals.neighbors: support 2D intervals
+- New parameters in gintervals.neighbors: maxneighbors, mindist1,
+  maxdist1, mindist2, maxdist2, na.if.notfound
+- gintervals.neighbors: columns renamed in the output
+- Bug fix in gintervals.neighbors: in certain 1D cases some neighbors
+  are not stated
+- Check interrupts (Ctr+C) in gintervals.neighbors
+- gintervals.annotate is removed
+
+## misha 3.3.11
+
+- gintervals.annotate: change the output format (instead of annotation
+  id fully attach annotation interval)
+- gintevals.annotate: support 2D intervals
+- Bug fix: some jobs might return NA when run with gcluster.run
+
+## misha 3.3.10
+
+- gtrack.2d.import_contacts: support contacts files in interval-value
+  format
+- gtrack.2d.import_contacts: reduce the number of simultaneously opened
+  files
+- gtrack.2d.import: print out coordinates of duplicated object
+
+## misha 3.3.9
+
+- New function: gintervals.2d.import
+- New option: gbig.intervals.size - controls the threshold when big
+  intervals sets are created. Default value: 1000000
+- Bug fix in gintervals.2d.import_contacts: utterly huge tracks might
+  have missing areas of contacts
+- Reduced the default value of gmax.processes option from 64 to 16
+- Bug fix: incorrect progress report in gtrack.2d.import_contacts
+
+## misha 3.3.8
+
+- New function: gintervals.rbind. Runs rbind on intervals sets including
+  big intervals sets on disk
+- New “intervals.set.out” parameter added to: gtrack.array.extract,
+  gwilcox
+- Support big intervals sets in: gseq.extract, gtrack.array.extract,
+  gtrack.modify
+- Bug fix: gtrack.2d.import_contacts does not recognize chromosomes that
+  have “chr” prefix
+
+## misha 3.3.7
+
+- Bug fix for all functions using 2D iterators: in some cases full
+  chromosome pairs can be skipped. Bug first appeared in 3.3.0
+
+## misha 3.3.6
+
+- Bug fix in gdb.create: “Error in
+  .gintervals.check_new_set(intervals.set.out)…”
+
+## misha 3.3.5
+
+- Added ‘opt.flags’ parameter to gcluster.run. Use this parameter to add
+  restrictions to the machines that run submitted jobs: minimal RAM
+  requirement, explicit hostnames list, etc. See man for qsub, “-l”
+  flag.
+- Support big intervals sets in the following functions: gpartition
+- New “intervals.set.out” parameter added to: gpartition, gsegment
+- Bug fix: invalid error recovery in glookup - traces from
+  intervals.set.out might be left
+
+## misha 3.3.4
+
+- Interface change: gintervals.neighbors returns a data frame containing
+  full intervals instead of their ids
+- gintervals.neighbors: colnames parameter removed
+- Support SAM files in gtrack.import_mappedseq
+- Support big intervals sets in the following functions:
+  gintervals.neighbors, glookup
+- New “intervals.set.out” parameter added to: gintervals.neighbors,
+  glookup
+- Removed gintervals.merge function
+- Runtime optimizations when big intervals sets are used in the
+  following functions: gintervals.annotate, gintervals.diff,
+  gintervals.force_range, gintervals.intersect, gintervals.mapply,
+  gintervals.save, gintervals.union
+
+## misha 3.3.3
+
+- Bug fix in gquantiles, multitasking version (which is used by
+  default): invalid quantiles might be returned if the number of
+  iterator intervals exceeds gmax.data.size / number_of_child_processes.
+  number_of_child_processes equals at most to the number of different
+  chromosomes (or chromosome pairs for 2D) used in in “intervals”
+  parameter
+- Support big intervals sets in the following functions:
+  gintervals.mapply
+- New “intervals.set.out” parameter added to: gintervals.mapply
+
+## misha 3.3.2
+
+- Support big intervals sets in the following functions:
+  gintervals.annotate, gintervals.diff, gintervals.intersect,
+  gintervals.union, gsegment, gwilcox
+- New “intervals.set.out” parameter added to: gintervals.annotate,
+  gintervals.diff, gintervals.intersect, gintervals.union
+- Added progress report to: gintervals.save, gintervals.force_range
+
+## misha 3.3.1
+
+- Support big intervals sets in the following functions: gcis_decay
+  (only *intervals* parameter), gintervals.2d.band_intersect
+- New “intervals.set.out” parameter added to:
+  gintervals.2d.band_intersect
+- Bug fix in gintervals.force_range: “Error in if (size \>
+  max.data.size) { : argument is of length zero”
+
+## misha 3.3.0
+
+- New concept: big intervals sets
+- Big intervals sets can be used for *iterator* parameter in all
+  functions
+- Big intervals sets can be used in *intervals* parameter in the
+  following functions: gdist, gextract, gquantiles, gscreen, gsummary,
+  gbins.quantiles, gbins.summary, gintervals.quantiles,
+  gintervals.summary, giterator.intervals
+- Interface change: gintervals.quantiles, gintervals.summary now return
+  also the source intervals
+- New functions: gintervals.is.bigset, gintervals.chrom_sizes,
+  gintervals.update
+- New “chrom”, “chrom1”, “chrom2”, parameters for gintervals.load
+- New “intervals.set.out” parameter added to: gextract, gscreen,
+  gintervals.force_range, gintervals.quantiles, gintervals.summary,
+  giterator.intervals
+- Restrict gintervals.quantiles and gintervals.mapply to work with only
+  1D and Fixed Rectangle iterators
+- Changed the position of “file” parameter in gextract
+- Bug fix: gscreen on vtrack with global.percentile.max returns
+  different number of intervals in each run
+- Bug fix: in 2D iterators progress report can sometimes go backwards
+- Bug fix: empty intervals set is ignored if used as an iterator
+- Bug fix: crash if an empty intervals set is used for scope
+- Bug fix: memory leak in giterator.cartesian_grid
+
+## misha 3.2.8
+
+- Bug fix in gintervals.save: “variable shadows the name of the
+  intervals set” error can be generated even if auto-completion is
+  turned off
+- Bug fix in all functions that create a new track: “variable shadows
+  the name of the new track” error can be generated even if
+  auto-completion is turned off
+- Bug fix in gdb.create, gtrack.var.set and while creating P-values
+  table: insufficient permissions might be given to created directories
+
+## misha 3.2.7
+
+- Bug fix: no proper clean up if error is generated while P-values table
+  is loaded
+
+## misha 3.2.6
+
+- New function: gcis_decay
+
+## misha 3.2.5
+
+- New format for tracks created by gtrack.2d.import. This format uses on
+  average 30% less space. Old format can still be used
+- Old computed tracks now require conversion
+- Bug fix: crash reading computed tracks
+
+## misha 3.2.4
+
+- Changed format of 2D tracks (rectangles and computed). Use
+  gtrack.convert to convert the old tracks
+- Added undocumented function: .gdb.convert_tracks
+- Support track files larger than 2 Gb on 32-bit platforms
+- gtrack.2d.import_contacts: support creation of huge 2D tracks
+  (practically unlimited size) whilst constant memory usage
+- gtrack.2d.import_contacts: allow arbitrary order of contacts within
+  contacts file or between several contacts files
+- gtrack.2d.import_contacts: improved progress report
+- Ensure binary consistency of 2D track files. Previously the files
+  representing two identical 2D tracks could differ on binary level
+
+## misha 3.2.3
+
+- gtrack.2d.import_contacts: sum up duplicated contacts if
+  ‘allow.duplicates’ is TRUE
+- gtrack.2d.import_contacts: allow contacts to be passed in multiple
+  files
+
+## misha 3.2.2
+
+- Virtual tracks are not created anymore as variables in R environment
+  (dummy variables are created in autocompletion mode). Virtual tracks
+  are stored inside GVTRACKS variable.
+- Virtual tracks are not reset anymore on gsetroot or gdir.cd
+- New function: gvtrack.info
+- Removed functions: gvtrack.all.load, gvtrack.all.rm, gvtrack.all.save,
+  gvtrack.import
+- Bug fix: GERROR_EXPR variable reported but not set by functions
+  supporting multitasking
+
+## misha 3.2.1
+
+- Bug fix in gcluster.run: on some systems a warning is generated “bash:
+  module: line 1: syntax error: unexpected end of file: error importing
+  function definition for \`module’”
+
+## misha 3.2.0
+
+- Track variables are referenced by two parameters: track, varname
+  instead of “track.varname”
+- Renamed and adopted for new track variable convention:  
+  gvar.load =\> gtrack.var.get  
+  gvar.save =\> gtrack.var.set  
+  gvar.ls =\> gtrack.var.ls  
+  gvar.rm =\> gtrack.var.rm
+- Remove gvar.exists function
+- New concept: track attributes. Use .gdb.convert_attrs() to convert old
+  trackdb to the new format.
+- New functions: gtrack.attr.get, gtrack.attr.set, gtrack.attr.export,
+  gtrack.attr.import, gdb.get_readonly_attrs, gdb.set_readonly_attrs
+- created.by and created.date are no longer track variables but rather
+  read-only track attributes
+- gtrack.ls: allow filtering by track attributes
+- New obligatory “description” parameter in gtrack.2d.create,
+  gtrack.2d.import_contacts, gtrack.array.import, gtrack.convert,
+  gtrack.create, gtrack.create_pwm_energy, gtrack.create_sparse,
+  gtrack.import, gtrack.import_mappedseq, gtrack.import_set,
+  gtrack.liftover, gtrack.lookup, gtrack.smooth
+- New function: gset_input_mode. This function replaces gparam.type
+  option and controls auto-completion of track / intervals names
+- By default interactive mode is switched off (equivalent to
+  gparam.type=“string” in older version). Auto-completion is switched
+  off as well.
+- Check parameters correctness in giterator.cartesian_grid and not only
+  when the iterator is actually used
+- Bug fix in gcluster.run: distributed command resets GROOT and various
+  package options
+- Bug fix: in non-interactive input mode (“string” var mode)
+  gvtrack.array.slice fails
+- Bug fix: gsetroot, gdb.reload, gdb.cd leave traces in the environment
+  if they stop on error
+- Bug fix: gtrack.modify incorrectly sets created.by attribute
+- Bug fix: invalid usage printed in gvtrack.all.load
+
+## misha 3.1.11
+
+- Changed the policy for multitasking job distribution
+
+## misha 3.1.10
+
+- Multitasking for glookup, gtrack.smooth, gintervals.quantiles
+- Bug fix: memory corruption in gintervals.mapply when
+  intervals==ALGENOME and multitasking is turned off
+
+## misha 3.1.9
+
+- Multitasking for gintervals.mapply
+- Bug fix: invalid format of data frame returned by gintervals.mapply
+  when intervals==ALGENOME
+- Bug fix: error while preparing a track for percentiles queries
+
+## misha 3.1.8
+
+- Multitasking for gtrack.create
+
+## misha 3.1.7
+
+- Multitasking for gtrack.create_pwm_energy
+
+## misha 3.1.6
+
+- Multitasking for gquantiles
+
+## misha 3.1.5
+
+- Bug fix: some genomic intervals might be missing in
+  gintervals.load_chain
+- Bug fix: gintervals.liftover might incorrectly convert some genomic
+  intervals to NULL
+- Bug fix: gtrack.liftover might incorrectly set NA for some converted
+  genomic intervals
+
+## misha 3.1.4
+
+- Bug fix: unreleased shared memory or/and named semaphore if R/misha
+  crashes or is terminated with a signal
+- Bug fix: in some cases 3 seconds delay in multitasked functions
+- Bug fix: in some cases unresponsiveness on Ctrl+C in multitasked
+  functions
+- Bug fix: with non-default options gquantile could return incorrect
+  value for extreme percentiles (close to 0 or to 1)
+
+## misha 3.1.3
+
+- Bug fix: deadlock in all multitasked functions (gsummary, gextract,
+  gdist)
+
+## misha 3.1.2
+
+- Multitasking for gscreen, gsummary
+- New R option for the package: gmax.processes, default: 64
+- Bug fix: “child process ended unexpectedly” error in multitasked
+  functions when evaluation of track expression fails
+- Bug fix: Ctrl+C might stop working in R after evaluation of track
+  expression fails
+
+## misha 3.1.1
+
+- Multitasking for gextract
+- Bug fix: virtual tracks do not work in gdist
+- Bug fix: potential crash and process table bloating in gdist
+- Bug fix: potential freezing (deadlock) in gdist
+- Bug fix: error “2D iterator is used along with 1D intervals” in gdist
+  with 2D iterator and intervals==ALLGENOME
+
+## misha 3.1.0
+
+- Multitasking for gdist
+
+## misha 3.0.4
+
+- Bug fix: in gintervals.2d “Error in is.null(strands) : ‘strands’ is
+  missing”
+
+## misha 3.0.3
+
+- Add strand parameter to gintervals
+
+## misha 3.0.2
+
+- New function: gtrack.import
+- Allow tab-delimited files in gtrack.import_set
+- gintervals.import_genes / gdb.init: add kgID column to annotations
+- gintervals.import_genes / gdb.init: eliminate identical values in
+  overlapping intervals’ annotation
+- Bug fix: in tab-delimited files if end coordinate equals the chrom
+  size an error is reported
+
+## misha 3.0.1
+
+- Bug fix: gintervals.import_genes / gdb.create switches between utr3
+  and utr5
+
+## misha 3.00
+
+- New track type: array
+- New functions: gtrack.array.import, gtrack.array.get_colnames,
+  gtrack.array.set_colnames, gtrack.array.extract, gvtrack.array.slice
+- Renamed:  
+  gintervals.band.intersect =\> gintervals.2d.band_intersect  
+  giterator.cartesian.grid =\> giterator.cartesian_grid  
+  gsetroot.examples =\> gdb.init_examples  
+  gtrack.create_2d =\> gtrack.2d.create  
+  gtrack.import.2d_contacts =\> gtrack.2d.import_contacts  
+  gtrack.import.mappedseq =\> gtrack.import_mappedseq  
+  gtrack.import.wigs =\> gtrack.import_set
+- gsetroot has a new alias: gdb.init
+- gtrack.import_set: create a sparse track if binsize==0
+- gextract: allow saving result in a tab-delimited file
+- gintervals.force_range: eliminate intervals with non-existent
+  chromosome
+- gquantile / gintervals.quantile, quantile / global.percentile /
+  global.percentile.min / global.percentile.max functions of a virtual
+  track: use weighted average of nearest samples instead of picking up
+  the closest sample
+- Bug fix: sometimes using invalid value of quantile.edge.data.size
+  option. Result: sub-optimal precision at the edges for quantile
+  calculation OR memory bloating for quantile calculations on large sets
+  of data.
+- Bug fix: sometimes using invalid value for gtrack.chunk.size option.
+  Result: sub-optimal performance for newly created 2D tracks + memory
+  bloating while reading 2D tracks.
+- Bug fix: sometimes using invalid value for gtrack.num.chunks option.
+  Result: slow performance while reading 2D tracks OR memory bloating.
+- Bug fix: gsetroot / gdb.reload / gdir.cd corrupts the database state
+  if one of the names shadows a variable in R environment.
+
+## misha 2.75
+
+- giterator.cartesian.grid: replace ‘expansion’ parameter with
+  ‘expansion1’ and ‘expansion2’ parameters for each axis
+- giterator.cartesian.grid: changed the order of the parameters
+- Bug fix: cartesian grid iterator incorrectly restricted the expansion
+  between two neighbouring centers C1, C2 to be (C2-C1)/2
+
+## misha 2.74
+
+- New function: gdb.create
+- gdbreload renamed to gdb.reload
+- Added support of ftp and zipped files in gintervals.import_genes
+- Documentation updates
+
+## misha 2.73
+
+- New function: gintervals.import_genes
+- Documentation updates
+
+## misha 2.72
+
+- Added User Manual in PDF, Reference Manual in PDF and HTML.
+- Updated functions documentation.
+
+## misha 2.71
+
+- Added documentation for each function from R
+- Do not require libR.so for installation
+- Added “maxread” parameter to gcompute_strands_autocorr()
+- Do not unify overlapping intervals in gintervals
+- gintervals.apply is replaced with gintervals.mappy. The function
+  interface changes.
+- Renamed: gvar.get() to gvar.load() and gvar.set() to gvar.save()
+- Bug fix: gcluster.run() did not load the package
+- Bug fix: gcluster.run() corrupted the return value
+- Bug fix: track expression iterator might miss an interval if intervals
+  are not canonic and the iterator type is intervals/sparse
+
+## misha 2.70
+
+- “misha” becomes an R package
+- gversion() removed
+
+## misha 2.60
+
+- Bug fix: gdir.cd crashes
+
+## misha 2.59
+
+- Support 2D tracks (Rectangles type) in gtrack.liftover
+- Support 2D intervals in gintervals.liftover
+- Bug fix: gtrack.liftover does not remove temporary files
+
+## misha 2.58
+
+- Added gintervals.liftover function
+- Bug fix: error while trying to access a 2D track.
+
+## misha 2.57
+
+- Added gtrack.liftover and gintervals.load_chain functions
+
+## misha 2.56
+
+- Cleaned up stdout field in the result of gcluster.run
+
+## misha 2.55
+
+- Bug fix: scope might be incorrectly applied while using cartesian
+  iterator
+- Bug fix: gtrack.import.2d_contacts crashes when fend is out of range
+
+## misha 2.54
+
+- New functions: gbins.quantiles and gbins.summary
+- giterator.cartesian.grid: do not implicitly add zero expansion
+- Add R parameter in gcluster.run
+- Add support of bedGraph extension in gtrack.import.wigs
+- Bug fix: overlapping 2D intervals are not reported correctly
+
+## misha 2.53
+
+- New function: gcluster.run
+
+## misha 2.52
+
+- Faster gsetroot using cached list of tracks and intervals.
+- New rescan parameter for gsetroot and gdbreload.
+
+## misha 2.51
+
+- Added 2D intervals support in gintervals.apply.
+- Bug fix: gtrack.import.mappedseq crash.
+
+## misha 2.50
+
+- Added band parameter to gdist, gextract, glookup, gpartition,
+  gquantiles, gscreen, gsummary, gtrack.create, gtrack.lookup,
+  gintervals.quantiles, gintervals.summary, giterator.intervals.
+- New function: gintervals.band.intersect
+- Removed min.band, max.band parameters from giterator.cartesian.grid
+
+## misha 2.43
+
+- Run-time optimizations for 2D queries
+
+## misha 2.42
+
+- Bug fix: crash if “preparing track for percentiles queries” is
+  interrupted with CTRL-C
+
+## misha 2.41
+
+- New function: gdbreload
+- gtrack.import.wigs: create tmp directory in GROOT/downloads rather
+  than in /tmp
+- gwget: by default use path == GROOT/downloads
+- Bug fix in gtrack.import.wigs: do not proceed to import if one of the
+  previous steps (ftp/unzip/convert to wig) failed or interrupted
+
+## misha 2.40
+
+- Support BigWig / BedGraph formats in gtrack.import.wigs
+- Bug fixes in gtrack.import.wigs
+
+## misha 2.39
+
+- New functions: gwget, gtrack.import.wigs
+- Allow to use unsorted intervals for gtrack.modify,
+  gtrack.create_sparse
+- Allow to use unsorted and overlapping intervals for
+  gintervals.intersect, gintervals.union and gintervals.diff
+
+## misha 2.38
+
+- Run-time optimizations for 2D cartesian grid iterator
+- Bug fix: progress report goes reports 100% before the actual
+  completion of command
+
+## misha 2.37
+
+- Bug fix: 2D cartesian grid iterator skips some of the iterator
+  intervals
+
+## misha 2.36
+
+- Bug fix: gtrack.convert does not correctly convert old (version 1)
+  computed tracks
+
+## misha 2.35
+
+- Fix memory leaks when command exists on error or is interrupted by
+  CTRL-C
+
+## misha 2.34
+
+- Added “sum” virtual track function
+- Added “quantile” virtual track function
+- Renamed “percentile*” virtual track functions to ”global.percentile*”
+- Bug fix: when iterator interval does not intersect any intervals of
+  sparse track “stddev” virtual track function returns last value
+  instead of NaN
+
+## misha 2.33
+
+- Added “stddev” virtual track function
+
+## misha 2.32
+
+- Bug fix: memory corruption when the track expression contains more
+  than one virtual track of “distance” or “distance.center” type.
+- Bug fix: incorrect statistics in gsummary / gintervals.summary when
+  the summary is done on 1 sample.
+
+## misha 2.31
+
+- Changed the format of computed 2D tracks
+- Bug fixes in gtrack.convert
+- Bug fixes in GenomeTrack::get_type
+- New function: .gtrack.create_test_computer2d
+- gintervals.2d.force_range removed (gintervals.force_range now works
+  for both 1D and 2D intervals)
+
+## misha 2.30
+
+- Changed the format of 2D tracks, now using StatQuadTreeCached class
+- Added gtrack.convert function
+- gwrite.table, gread.table were removed
+
+## misha 2.26
+
+- Iterative algorithm in gtrack.smooth is reset once in a while to
+  prevent loss of precision in floating point calculations
+- Bug fix: giterator.cartesian.grid does not work correctly if
+  min/max.band are NULL.
+
+## misha 2.25
+
+- Added gintervals.force_range and gintervals.2d.force_range
+
+## misha 2.24
+
+- Change the default of min/max.band in cartesian iterator to NULL
+- Change the default of intervals2 in cartesian iterator to NULL
+- Add min/max.band.idx to cartesian iterator
+
+## misha 2.23
+
+- Changed virtual track function “dist” to distance
+
+## misha 2.22
+
+- Added gtraceback
+
+## misha 2.21
+
+- Added 2D computed tracks
+
+## misha 2.20
+
+- Changed the format of 2D tracks
+- Added “sum” and “area” functions to virtual tracks
+- Bug fix: Error message “Cannot implicitly determine iterator policy”
+  when used with two or more virtual tracks pointing to the same
+  physical track
+
+## misha 2.18
+
+- Bug fix: gtrackimport_mappedseq, gcompute_strands_autocorr might skip
+  the last portion of the input file
+- Bug fix: gtrackimport_mappedseq, gcompute_strands_autocorr might skip
+  the first row of the input file
+
+## misha 2.17
+
+- Added fixed rectangle iterator
+- Added support of 2D in gpartition
+- Added support of 2D in gtrack.lookup
+- Added support of 2D in gintervals.canonic
+- Added support of 2D in gintervals.intersect
+- Added gvtrack.ls
+- Check user interrupt in gseq.extract
+- Removed: gtrack.cache
+- Bug fix: incorrect error message in gwilcox when used with non
+  fixed-bin iterator
+- Bug fix: iterator=trackname produces an error
+- Bug fix: gtrack.lookup produces an error
+- Bug fix: gtrack.modify produces an error
+- Bug fix: gvtrack.import incorrectly imports a track if called within a
+  function
+- Bug fix: gtrack.import.2d_contacts memory leak
+
+## misha 2.16
+
+- Add band control to cartesian grid iterator
+- Bug fix: cartesian grid iterator might produce incorrect results while
+  using scope
+
+## misha 2.15
+
+- Added new vtrack function: dist.center
+- Bug fix: precision loss in gextract due to float / double conversion
+
+## misha 2.14
+
+- Bug fix: gintervals.\* might fail on overlapping intervals
+
+## misha 2.13
+
+- Run-time optimizations for gintervals and gintervals.2d
+- Run-time optimizations when using GITERATOR.INTERVALS
+
+## misha 2.12
+
+- Added cartesian grid iterator
+
+## misha 2.11
+
+- Remove canonic / original property for 2D tracks
+
+## misha 2.10
+
+- Added virtual tracks
+
+## misha 2.02
+
+- Hide the chrom1/chrom2 swap in 2D intervals from the user
+
+## misha 2.01
+
+- Added support for 2D intervals in gtrack.create
+- Added gtrack.info
+- Removed gtrack.binsize
+- Added gintervals.all
+- Added gintervals.2d.all
+
+## misha 2.00
+
+- Added gintervals.2d
+- Added gtrack.create_2d
+- Added support for 2D intervals in gscreen, gextract, glookup,
+  gsummary, gsummary.intervals, gquantiles, gintervals.quantiles, gdist,
+  giterator.intervals
+- Add unify_touching_intervals parameter to gintervals.canonic()
+
+## misha 1.25
+
+- Automatically build PV-table
+- Remove gtrack.makepvals()
+
+## misha 1.24
+
+- Allow maximal precision of gquantiles / gintervals.quantiles near
+  extreme probs (0 and 1)
+
+## misha 1.23
+
+- Allow gquantiles / gintervals.quantiles work on the whole genome (use
+  random sampling)
+- Allow using non-canonic intervals in gseq.extract()
+
+## misha 1.22
+
+- Added “.nearest” track function
+- Bug fix: invalid error report when fixed-bin track size does not match
+  chrom size
+
+## misha 1.21
+
+- Make .greloaddb faster (affect gsetroot, gdir.cd, …)
+- Do not autocomplete tracks variables
+- Add gvar.ls()
+- Remove gvar.load()
+- Added pattern matching for gtrack.ls(), gintervals.ls() and gvar.ls()
+- Added gtrack.exists() and gintervals.exists()
+- Print the track expression in various error messages
+
+## misha 1.20
+
+- Make .greloaddb faster (affect gsetroot, gdir.cd, …)
+- Bug fix: in various functions: “Error, undefined gparam.type”
+
+## misha 1.19
+
+- Require all track directories to have an extension .track
+- Forbid creation of tracks, intervals or directories inside track
+  directories
+- Forbid deletion of directories inside track directories
+- Bug fix: gtrack.cache() sometimes creates tracks shorter by one sample
+  than the chrom size
+
+## misha 1.18
+
+- Treat +/-Inf value in a track as NA
+- Allow “dir” argument in gsetroot
+
+## misha 1.17
+
+- Add gtrack.import.mappedseq
+- Add gcompute_strands_autocorr
+- Support integer breaks in gdist()
+- Suppress error report if force==TRUE and track/interv/dir do not exist
+  in gtrack.rm / ginterv.rm / gdir.rm
+
+## misha 1.16
+
+- Maintain virtual working directory in gsetroot / gdir.cd. Do not
+  change the shell working directory of the user.
+- Add gdir.cwd
+
+## misha 1.15
+
+- Add gdir.create, gdir.rm, gdir.cd
+- Remove gtrackset.*, gintervset.*
+
+## misha 1.14
+
+- Stop creating variables with tracksets/intervsets names for
+  TAB-completion
+- Before addition / removal of track/intervals variables check whether
+  they already exist
+- Bug: gtrack.cache overrides “created.by” and “created.date” variables
+
+## misha 1.13
+
+- Rename intervals files by adding them “.interv” extension
+
+## misha 1.12
+
+- Remove global/user attribute for tracksets/intervsets
+
+## misha 1.11
+
+- Add “iterator” parameter to the relevant functions
+- Remove giterator.policy() function
+- Remove gapply() function
+- Bug in gtrack.create_pwm_energy(): Error in
+  sprintf(“gtrack.create_pwm_energy(%s, %g, %s, %s, %g, track=%s)”, :
+  invalid format ‘%g’; use format %s for character objects
+- Add “breaks” attribute to gdist result
+
+## misha 1.10
+
+- Support sparse tracks and track expression iterators over intervals
+- Added gversion()
+- Check in giterator.intervals that the memory is not blown up
+- Do not unify touching intervals in giterator.policy()
+- error in gtrack.makepvals(): “Expression does not produce a numeric
+  result”
+- Allow GAPPLY.INTERVALS and GITERATOR.INTERVALS variables
+
+## misha 1.02
+
+- Stop supporting point intervals (start coordinate == end coordinate).
+  Automatically convert old point intervals to (chrom, start, start+1).
+- Bug fix: gtrack.modify() fails with “.created.by.intervs” error.
+
+## misha 1.01
+
+- Replace global variables with options: GMAX_DATA_SIZE =\>
+  gmax.data.size, GBINSIZE =\> gstep, GBUFSIZE =\> gbuf.size
+- Add an option “gparam.type” controlling the type of the arguments
+  (“var” or “string”)
+- gintervals.annotate produces incorrect results when annotation
+  intervals contain overlapping intervals
+
+## misha 1.00
+
+- Fix an error when the expression is too long or something like that
+  (Rami for details) Fixed by Amos 5/7/10 patched .Rprofile
+- Fix gcreate crash
+- If I have track names with a minus sign in them - they are built
+  correctly - but I can’t do conditions on them. e.g. : rv \<- gscreen
+  (GSE14097.ERG_AR_re_ChIP-7 \> 20 && TE.WT\_*Input \< 7). Resolve but
+  blocking - signs in track names (and maybe other sensitive
+  characters). Fixed: track names are not allowed to contain characters
+  other than alphanumeric and* . The fix applies for gcreatetrack,
+  gcachemultires, gsmooth.
+- added support for writing multi resolution track binning
+  (gcachemultires) - for use by tgbr.
+- Misha: grmtrack does not remove the dataset directory when the last
+  track is deleted
+- Misha: add force delete command line option for grmtrack for track
+  deletion without confirmation
+- Misha: add grmdataset function to delete the whole dataset recursively
+- Misha: eliminate use of the slow gsetroot() for track list refresh
+  after track creation or removal The fix applies to grmtrack,
+  gcreatetrack, gcachemultires, gsmooth.
+- Rami: On failure to create a track - remove it. The fix applies for
+  gcreatetrack, gcachemultires, gsmooth.
+- Misha: allow a dot in the name of the track variable.
+- should store the command that created a track in a track variable (For
+  future reference), we should also save the date (in the future we may
+  want to do something with dependencies). Each newly created track is
+  assigned two track variables: created.by and created.date.
+- Rami: Easier dump to text of info (current need to use sep=“ rownames
+  = F, etc) Added gwrite.table() function.
+- Summary statistics on tracks (a simplification of the distribution
+  feature). We want to compute the total, average, stdev, min and max of
+  a track, number of bins, number of NAN bins. All that without going
+  through the distribution computation (maybe using R function that seat
+  over the gdist function) New function added: gsummary.
+- Change coordinate-\>bin function (should be int(coordinate/bin_size)
+- Iterator protect/unprotect (eval_next_int, eval_next_bool etc)
+- Misha: gsetroot() should undefine previous track variables
+- Misha: mix of float and double in gdist() causes incorrect bin
+  assignment for the values at the border.
+- Misha: add smart progress report.
+- Misha: end coordinate of the last segment of the chromosome was
+  mistakenly extended by binsize.
+- Misha: limit the range that intervals cover for gextract and
+  gquantiles to prevent memory allocation failures.
+- Misha: enhance gintervals() function to accept chroms as strings
+  without “chr” prefix or as integers.
+- eliminate gpath support.
+- Allow various services (gscan, gdist) to be limited to a subset of the
+  genome (defined by a give interval set). This will probably require
+  changing the classes that iterate over chromosome such that all will
+  use a common GenomeTrack interface.
+- Misha: allow track expressions for gextract and gquantiles.
+- Rami: Find out why you need to do ‘as.vector’ on output of gquantiles
+  to get regular numbers. Misha: as designed. gquantiles returns a
+  table, not a vector. The table is of NxM size where N is the number of
+  intervals, and M is the number of quantiles.
+- Return intervals as a dataframe from C code rather than a list that
+  should be later converted to a dataframe. Misha: affects gscreen,
+  gwilcox, gintervals.union, gsetroot. Improves run time for large sets
+  of intervals.
+- Misha: intervals returned by gwilcox should cover the whole area
+  covered by the small window rather than just the center of the window.
+- Why is the usage of: PeakIntervals_TE_AR_AR \<- gwilcox
+  (TE.TE_AR_DHT\_\_AR, 100000, 1000, maxpval = 0.001) - giving me
+  intervals with peak values of 0? Misha: added *what2find* option to
+  gwilcox. This option controls whether peaks/lows or both should be
+  searched by gwilcox.
+- Implement operations on intervals. Union: generate a new interval set,
+  which include an interval for each closure of the two given set.
+  Intersection: returns an interval set with all the non empty
+  intersections of intervals in the two sets. Difference: returns the
+  intervals of set A such that intersection with interval from B are
+  removed. Misha: added gintervals.union(), gintervals.intersect(),
+  gintervals.diff() function
+- Call R eval in bulks to boost run times. Misha: added “.bufsize=1”
+  parameter to all functions that accept track expressions. Increase
+  “bufsize” to boost the performance.
+- Misha: allow command interruption by “ctrl-C” in various function such
+  as gwilcox. (Check R event loop?)
+- Misha: if “ctrl-C” is pressed whilst gcreate/gsmooth/gcachemult track
+  directory is not removed.
+- Add gintervals.annotate function
+- Add auto-completion with TAB for annotations.
+- Add gls.annots() function
+- Add support for annotation function “annotation.dist” in the track
+  expressions
+- Misha: determine .bufsize parameter automatically based on the
+  dimensions of the first evaluation + the interval size Misha: for now
+  interval size is not checked
+- Misha: fix error messages format Misha: fixed with an ugly hack
+- Add gapply
+- Allow TrackScanner to iterate over a few track expressions
+- Bug: message “Error: GBINSIZE variable is undefined or not numeric” is
+  printed when invalid trackname is used in track expression.
+- Bug: invalid results whenever the same track is used in more than one
+  track expression in gdist()
+- Bug: incorrect pvals when the limits are falling on the maximum
+- Bug: incorrect annot.dist when you also use intervals=something
+- Bug: gscreen returns one bin less for each interval
+- create all track dirs with group open permissions
+- Provide quick gsetroot (for scripts - e.g. not set up of completion
+  variables? focus on subset of dirs? lazy init of gsetroot?) Misha: the
+  performance of the original gsetroot was optimized
+- Take care of environment handling in various eval(parse()) constructs
+- Allow string parameters for track_expr - if the parameter is a string,
+  just avoid parse
+- Reverse the convention of positive / negative distance between coord /
+  interval and annotation
+- Change DB directory structure: tracks/tracksets/tracknames,
+  annots/annotsets/annotnames Misha: renamed functions: gls =\>
+  gls.tracks, gcreatetrack =\> gcreate.track, grmtrack =\> grm.track,
+  grmdataset =\> grm.trackset. Newly added functions: gls.annots,
+  gls.annotsets, gls.tracksets, gcreate.annotset, grm.annotset.
+- Add trackset / annotset manipulation functions + user / global flag
+  support
+- Bug: if ~ symbol is used in gsetroot, track files cannot be accessed
+- Allow custom column names for gapply and gextract
+- Regression tests
+- make it easier to import intervals/annotations: add ginterval.import
+  that will take non canonical intervals and will sort them and unify
+  them to become disjoint. The function will return the canonical
+  ginterval object plus a factor mapping ids in the original data frame
+  to the new canonical gintervals. We can then use tapply to import
+  meta-data.
+- Merge annotations and intervals concepts. Misha: renamed functions:
+  gls.annots =\> gls.intervs, gls.annotset =\> gls.intervsets,
+  grm.annots =\> grm.intervs, grm.annotsets =\> grm.intervsets. Newly
+  added functions: gintervals.load, gintervals.save.
+- Effi: segmentation fault in gdist
+- Buf fix: calling gprepare_pvals() twice on the same track fails
+- need a simple way to merge data onto intervals, without reordering and
+  invalidating the intervals (i.e. doing ginterval.import after merge is
+  annoying. This may be solvable using standard r merge options, but we
+  need to wrap it up nicely) Misha: Added gintervals.merge function
+- More protective use of intervals: coerce fields as factors if needed
+  and generally be aware of potential user changes to intervals.
+- allow collection of pairs of interval within a maximal distance Misha:
+  Added gintervals.neighbors function
+- Bug fix: gcachemultires does not work
+- Decide about the naming policy for the functions
+- Restrict gdist to accept minval=2
+- Add dist.XXX function
+- check how many times gapply calls func1 in gapply(func1(x1), track,
+  gintervals(1, 0, 100))
+- gintervals.apply should reverse intervals of the minus strand
+- bug: gintervals.neighbors(gintervals(1, 0, 2000, 1), gintervals(1,
+  500, 1500, 1), 0, 0) produces an error
+- added colnames parameter to gintervals.neighbors
+- file descriptors are not closed properly in onexit() causing various
+  *.create* functions to leave junk if interrupted
+- chromo sequence and pwms to the trackdb directory: allow import of
+  pwms to the library (using several sets of pwm, each defined by a
+  file?)
+- allow PWM energy computation (using the chromo sequence and a pwm)
+- Create tracks from 4c sites and prof files
+- BUG: The same interval.dist could not appear more than once in an
+  expression - for example ,
+  gdist(global.tss.dist+global.tss.dist,-1000,1000,100) produces “object
+  ‘global.tss.dist’ not found”
+- Provide the interval ID in the function provided to intervals.gapply
+  Misha: GINTERVID variable is maintained while gapply
+- add progress report for non-track expression functions Misha: added
+  progress report to gintervals.annotate
+- Allow to smooth NaN values in gtrack.smooth (add smooth_nans
+  parameter)
+- it might be useful to have a direct way get sets of intervals
+  corresponding to division of the genome according to the values of
+  some track. it would be best if gdist could return another extra value
+  with intervals corresponding to each of the track combinations Misha:
+  gpartition function was added
+- Misha: avoid memory blow up when large vectors are returned by
+  gquantile, etc.
+- gseq.extract() should return reverse-complementary sequence for strand
+  -1
+- Bug fix: gpartition does not treat NaNs correctly
+- Change gdist and gpartition to accept breaks rather than
+  minval/maxval/numbins
+- Bug: with equal bin size gdist crashes
+- Bug: gquantiles crashes with error: unprotect_ptr: pointer not found
+- Bug: gdist called from a function does not work Misha: deal with
+  unevaluated (=promised) values
+- In case of track expression result mismatch save the result of the
+  last evaluation in GERROR_EXPR variable
+- Bug: gtrack.make_pvals() does not work
+- Bug: gsummary() max value is incorrect for negative values
+- Added gvar.get() function
+- Added gvar.exists() function
+- gvar.rm() “warning: variable was not found” when variable exists but
+  not loaded
+- Added gtrack.binsize()
+- Allow gintervals(chrom) which is equal to gintervals(chrom, 0, -1)
+- Effi: if x contains a line of NA’s gintervals.import(x) causes
+  segmentation fault
+- Misha: optimize gextract to present chroms as factors rather than
+  strings
+- Misha: truncate long column names
+- Added glookup() and gtrack.lookup() functions
+- Renamed “origin” attribute of gintervals.import to “mapping”
+- Allow regression tests to be invoked by the matching string
+- Removed gvar.loadall() function
+- Added gtrack.modify() function
+- Misha: delete gvar.loadall() - as it might blow up the memory in large
+  databases
+- Misha: gvar.\* functions do not work when track variable X is loaded
+  and passed unquoted
+- Misha: read-only functions refuse to work with a track that does not
+  have write permissions
+- Allow overlaps all functions except gintervals.intersect,
+  gintervals.diff, gintervals.union, dist.XXX
+- Renamed gquantiles to gintervals.quantiles
+- Renamed gintervals.import to gintervals.canonic
+- Added gintervals.summary()
+- Added gquantiles()
+- Bug: gvar.load does not work when the variable is given unquoted
+- Warning “is.na() applied to non-(list or vector) of type ‘NULL’” when
+  gscreen(is.na(track)) is called
+- Versioning and installation added
+- Calling gintervals.canonic(i) when i is a dataframe without any rows
+  causes R to crash Misha: other functions (gintervals.union, …) were
+  fixed too
