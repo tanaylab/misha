@@ -91,7 +91,7 @@ gdir.create <- function(dir = NULL, showWarnings = TRUE, mode = "0777") {
                 stop("gdir.create cannot create track directories", call. = FALSE)
             }
 
-            dir.create(dir, showWarnings = showWarnings, recursive = FALSE, mode = mode)
+            .gwith_umask(dir.create(dir, showWarnings = showWarnings, recursive = FALSE, mode = mode))
         },
         interrupt = function(interrupt) {
             setwd(oldwd)

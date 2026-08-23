@@ -113,10 +113,12 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             assign("CHROM_ALIAS", NULL, envir = .misha)
             .refresh_chrom_alias_env()
             assign("DB_IS_PER_CHROMOSOME", FALSE, envir = .misha)
-            dir.create(groot, showWarnings = FALSE, recursive = TRUE, mode = "0777")
-            dir.create(paste(groot, "pssms", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
-            dir.create(paste(groot, "seq", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
-            dir.create(paste(groot, "tracks", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
+            .gwith_umask({
+                dir.create(groot, showWarnings = FALSE, recursive = TRUE, mode = "0777")
+                dir.create(paste(groot, "pssms", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
+                dir.create(paste(groot, "seq", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
+                dir.create(paste(groot, "tracks", sep = "/"), showWarnings = FALSE, recursive = TRUE, mode = "0777")
+            })
 
             # Detect import mode: multi-FASTA (indexed) vs per-chromosome
             is_single_file <- (length(fasta) == 1 && file.exists(fasta))
@@ -152,7 +154,7 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
                 chrom.sizes <- data.frame(chrom = chroms, size = file.info(seq.files)$size)
             }
 
-            utils::write.table(chrom.sizes, paste(groot, "chrom_sizes.txt", sep = "/"), quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE)
+            .gwith_umask(utils::write.table(chrom.sizes, paste(groot, "chrom_sizes.txt", sep = "/"), quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE))
 
             # Compute chromosome aliases early so we can add them to factor levels
             canonical_names <- as.character(chrom.sizes$chrom)
@@ -212,9 +214,11 @@ gdb.create <- function(groot = NULL, fasta = NULL, genes.file = NULL, annots.fil
             }
 
             # write read-only attributes
-            f <- file(paste(groot, ".ro_attributes", sep = "/"), "wb")
-            serialize(c("created.by", "created.date", "created.user"), f)
-            close(f)
+            .gwith_umask({
+                f <- file(paste(groot, ".ro_attributes", sep = "/"), "wb")
+                serialize(c("created.by", "created.date", "created.user"), f)
+                close(f)
+            })
 
             if (verbose) message("Database was successfully created")
             success <- TRUE
@@ -273,10 +277,10 @@ gdb.create_genome <- function(genome, path = getwd(), tmpdir = tempdir()) {
     message("Downloading ", genome, " genome...")
     utils::download.file(url, temp_file, mode = "wb")
 
-    dir.create(path, showWarnings = FALSE, recursive = TRUE)
+    .gwith_umask(dir.create(path, showWarnings = FALSE, recursive = TRUE))
 
     message("Extracting ", genome, " genome...")
-    utils::untar(temp_file, exdir = path)
+    .gwith_umask(utils::untar(temp_file, exdir = path))
 
     unlink(temp_file)
 
@@ -396,10 +400,10 @@ gdb.init_examples <- function(dir = NULL) {
         env <- Sys.getenv("MISHA_EXAMPLES_DIR", unset = "")
         dir <- if (nzchar(env)) env else tempdir()
     }
-    if (!dir.exists(dir)) dir.create(dir, recursive = TRUE, mode = "0755")
+    if (!dir.exists(dir)) .gwith_umask(dir.create(dir, recursive = TRUE, mode = "0777"))
     test_path <- file.path(dir, "trackdb/test")
     unlink(test_path, recursive = TRUE)
-    utils::untar(system.file("testdb.tar.gz", package = "misha"), exdir = dir)
+    .gwith_umask(utils::untar(system.file("testdb.tar.gz", package = "misha"), exdir = dir))
     gsetroot(test_path)
     if (getOption("gmulticontig.indexed_format", FALSE)) {
         gdb.convert_to_indexed(test_path, convert_tracks = TRUE, remove_old_files = TRUE, convert_intervals = TRUE, verbose = FALSE, force = TRUE)

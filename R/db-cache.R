@@ -115,7 +115,7 @@ gdb.reload <- function(rescan = TRUE) {
                 }
                 try(
                     {
-                        f <- file(db.filename, "wb")
+                        f <- .gwith_umask(file(db.filename, "wb"))
                         serialize(res, f)
                         close(f)
                         .gdb.cache_clear_dirty(groot)
@@ -175,7 +175,7 @@ gdb.reload <- function(rescan = TRUE) {
                     # Write cache for this db
                     try(
                         {
-                            f <- file(db.filename, "wb")
+                            f <- .gwith_umask(file(db.filename, "wb"))
                             serialize(res, f)
                             close(f)
                             .gdb.cache_clear_dirty(g)
@@ -191,7 +191,7 @@ gdb.reload <- function(rescan = TRUE) {
                         res[[2]] <- norm_intervals
                         try(
                             {
-                                f <- file(db.filename, "wb")
+                                f <- .gwith_umask(file(db.filename, "wb"))
                                 serialize(res, f)
                                 close(f)
                             },
@@ -513,12 +513,12 @@ gdb.reload <- function(rescan = TRUE) {
     if (is.null(dirty_path)) {
         return(invisible(FALSE))
     }
-    dir.create(dirname(dirty_path), recursive = TRUE, showWarnings = FALSE)
+    .gwith_umask(dir.create(dirname(dirty_path), recursive = TRUE, showWarnings = FALSE))
 
     # Write timestamp to dirty file for debugging and to reduce race conditions
     success <- tryCatch(
         {
-            writeLines(as.character(Sys.time()), dirty_path)
+            .gwith_umask(writeLines(as.character(Sys.time()), dirty_path))
             TRUE
         },
         warning = function(w) {
@@ -571,7 +571,7 @@ gdb.reload <- function(rescan = TRUE) {
         return(invisible(FALSE))
     }
 
-    dir.create(dirname(cache_path), recursive = TRUE, showWarnings = FALSE)
+    .gwith_umask(dir.create(dirname(cache_path), recursive = TRUE, showWarnings = FALSE))
 
     tmp_path <- paste0(cache_path, ".tmp")
     .gdb.cache_mark_dirty(groot)
@@ -580,7 +580,9 @@ gdb.reload <- function(rescan = TRUE) {
     error_msg <- NULL
     tryCatch(
         {
-            con <- file(tmp_path, "wb")
+            # The rename below carries this file's mode to cache_path, so the
+            # umask has to be right here, at the open.
+            con <- .gwith_umask(file(tmp_path, "wb"))
             on.exit(close(con), add = TRUE)
             serialize(list(tracks, intervals), con)
             close(con)

@@ -423,7 +423,7 @@
         recipe = recipe,
         files = files
     )
-    yaml::write_yaml(info, file.path(groot, "genome_info.yaml"))
+    .gwith_umask(yaml::write_yaml(info, file.path(groot, "genome_info.yaml")))
     invisible(NULL)
 }
 
@@ -1748,6 +1748,6 @@ gdb.install_intervals <- function(groot,
             installed_at = ts
         )
     }
-    yaml::write_yaml(info, info_path)
+    .gwith_umask(yaml::write_yaml(info, info_path))
     invisible(NULL)
 }
