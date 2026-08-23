@@ -168,8 +168,8 @@ build_test_db_overlay <- function(path, source_db = shared_test_db_path(), top_l
 }
 
 # One overlay per R process, keyed by the source database. Lives under
-# tempdir(), which R removes on exit; a killed run leaves behind ~700 KB of
-# symlinks under TMPDIR and nothing at all in the shared database.
+# tempdir(), which R removes on exit; a killed run leaves behind about a
+# megabyte of symlinks under TMPDIR and nothing at all in the shared database.
 .test_db_overlays <- new.env(parent = emptyenv())
 
 #' Path to this process's writable view of the shared test database
