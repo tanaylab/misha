@@ -28,7 +28,9 @@ Imports:
     utils,
     tools,
     yaml
-SystemRequirements: samtools (>= 1.0; optional, required only for BAM input)
+SystemRequirements: samtools (>= 1.0; optional, required only for BAM input),
+    bedGraphToBigWig or wigToBigWig from UCSC (optional, required only for
+    bigWig export; available as the bioconda package ucsc-bedgraphtobigwig)
 Suggests:
     data.table,
     dplyr,

@@ -27,8 +27,8 @@ Returns a sample of the specified size from the values of track expression.
 \details{
 This function returns a sample of the specified size from the values of
 track expression. If 'n' is less than the total number of values, the data
-is randomly sampled. The seed of the pseudo-random generator can be
-controlled through 'grnd.seed' option.
+is randomly sampled. Call \code{set.seed()} before this function to make
+the sample reproducible.
 
 If 'n' is higher than the total number of values, all values are returned
 (yet reshuffled).

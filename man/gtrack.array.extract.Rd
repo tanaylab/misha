@@ -27,7 +27,7 @@ optionally outputted}
 }
 \value{
 If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
-additional columns for 'Array' track column values and 'columnID'.
+additional columns for 'Array' track column values and 'intervalID'.
 }
 \description{
 Returns values from 'Array' track.
