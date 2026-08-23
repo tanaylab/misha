@@ -1,3 +1,7 @@
+# misha 5.11.21
+
+* **Bug fix:** reading a corrupt interval set or meta file that holds a serialized `NULL` left one of misha's own R objects unprotected for the rest of the call, exposing it to garbage collection.
+
 # misha 5.11.20
 
 * **Crash fix:** `gseq.pwm()` leaked one R protection-stack slot per call, printing "Warning: stack imbalance in '<-'" every time and killing a loop of ~50000 calls with "protect(): protection stack overflow". Results were never affected.
