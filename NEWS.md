@@ -4,6 +4,7 @@
 * **Bug fix:** writing a 2D track put four uninitialised bytes of process memory into every record, so the same input produced byte-different track files and those bytes travelled with any track that was copied or shared. Values read back were never affected, and the on-disk layout is unchanged.
 * **Behaviour change:** misha no longer changes the umask of your R session. Loading the package used to set `Sys.umask("0002")` permanently, which silently changed the permissions of every file the session wrote, misha's or not. The umask is now applied only around misha's own writes into a database and restored immediately afterwards.
 * New option `gpermissions.umask` (default `"0007"`) controls it: files come out 660 and directories 770 - group-writable, no world access - matching what misha's C++ layer already enforced on track data. On hosts whose default umask is 022 this drops world-read from newly created databases, interval sets, `.db.cache` and dataset directories, which used to be 664/775. Set `options(gpermissions.umask = "0002")` for the old permissions, or `NULL` to have misha respect your own umask.
+* **Bug fix:** `gtrack.attr.import(..., remove.others = TRUE)` failed with "Number of calls to unprotect exceeds the number of calls to protect" once read-only attributes were set (`gdb.set_readonly_attrs()`) and more than one track was listed. Only the first track was updated, and the session was left in a corrupt state that could crash a later call.
 
 # misha 5.11.20
 
