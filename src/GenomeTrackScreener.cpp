@@ -252,6 +252,8 @@ SEXP C_gscreen(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _band, S
 
 SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP _band, SEXP _intervals_set_out, SEXP _envir)
 {
+	bool single_shard = false;
+
 	try {
 		RdbInitializer rdb_init;
 
@@ -278,8 +280,13 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 		// safety guards as gextract. This allows large chromosomes (e.g. hg38 chr1, 249Mb)
 		// to be split across multiple worker processes for better parallel efficiency.
 		bool allow_range_split = !Rf_isNull(_iterator_policy) && intervset_out.empty();
-		if (!iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band, allow_range_split))
+		int num_kids = iu.prepare4multitasking(_expr, intervals1d, intervals2d, _iterator_policy, _band, allow_range_split);
+
+		if (!num_kids)
 			rreturn(R_NilValue);
+
+		if (num_kids == 1)
+			throw rdb::SingleShard();
 
 		GIntervals res_intervals1d;
 		GIntervals2D res_intervals2d;
@@ -459,6 +466,10 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 					GIntervalsBigSet2D::end_save_plain_intervals(intervset_out.c_str(), iu, chromstats2d);
 			}
 		}
+	} catch (rdb::SingleShard &) {
+		// the serial entry point below re-queues whatever it warrants
+		clear_pending_diagnostics(_envir);
+		single_shard = true;
 	} catch (TGLException &e) {
 		string msg(e.msg());
 		// Only the parent may re-run the call serially: returning from a child process
@@ -472,6 +483,13 @@ SEXP gscreen_multitask(SEXP _expr, SEXP _intervals, SEXP _iterator_policy, SEXP 
 	} catch (const bad_alloc &e) {
 		rerror("Out of memory");
 	}
+	// The scope fits in a single shard: forking one kid would buy no parallelism, only a
+	// fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+	// very path gmultitasking = FALSE takes. This must happen out here, after the try
+	// block has destroyed our RdbInitializer (see rdb::SingleShard).
+	if (single_shard)
+		return C_gscreen(_expr, _intervals, _iterator_policy, _band, _intervals_set_out, _envir);
+
 	rreturn(R_NilValue);
 }
 

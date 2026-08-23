@@ -275,3 +275,64 @@ test_that("gseq.pwm small workloads stay sequential and avoid fork overhead", {
     expect_true(time_seq["elapsed"] >= 0)
     expect_true(time_threshold["elapsed"] >= 0)
 })
+
+test_that("gseq.pwm does not leak protection stack slots", {
+    withr::local_options(list(gmultitasking = TRUE))
+
+    pssm <- create_test_pssm()
+    seqs <- c("ACGTACGTACGT", "GGGGACGTCCCC", "TTTTTTTTTTTT")
+
+    # The multitasking entry used to pin ALLGENOME on misha's PROTECT stack with no
+    # RdbInitializer to release it: one slot leaked per call, R printed "stack
+    # imbalance in '<-'", and a loop died with "protect(): protection stack overflow"
+    # past R's default 50000 slots.
+    loop <- function(n) {
+        for (i in seq_len(n)) x <- gseq.pwm(seqs, pssm, mode = "max")
+        TRUE
+    }
+    expect_true(loop(60000))
+})
+
+test_that("gseq.pwm multitask matches sequential for pos+strand and per-sequence ROIs", {
+    pssm <- create_test_pssm()
+    # a sequence count that divides evenly into no plausible number of processes
+    seqs <- replicate(997, paste(sample(c("A", "C", "G", "T"), 200, replace = TRUE), collapse = ""))
+    start_pos <- sample(1:50, 997, replace = TRUE)
+    end_pos <- sample(150:200, 997, replace = TRUE)
+
+    withr::local_options(list(gmultitasking = FALSE))
+    seq_pos <- gseq.pwm(seqs, pssm, mode = "pos", bidirect = TRUE, return_strand = TRUE)
+    seq_roi <- gseq.pwm(seqs, pssm, mode = "max", start_pos = start_pos, end_pos = end_pos)
+
+    withr::local_options(list(
+        gmultitasking = TRUE,
+        gmax.processes = 4,
+        gmin.seqs.work4process = 100
+    ))
+    expect_equal(gseq.pwm(seqs, pssm, mode = "pos", bidirect = TRUE, return_strand = TRUE), seq_pos)
+    expect_equal(gseq.pwm(seqs, pssm, mode = "max", start_pos = start_pos, end_pos = end_pos), seq_roi)
+})
+
+test_that("a failing child process reports the real error", {
+    withr::local_options(list(
+        gmultitasking = TRUE,
+        gmax.processes = 4,
+        gmin.seqs.work4process = 100
+    ))
+
+    # gseq.pwm() rejects a PSSM without column names before it reaches C, so go straight
+    # to the entry point: the failure has to happen in the children. An Rf_error() there
+    # would longjmp back into R and let the child escape into this session.
+    pssm <- create_test_pssm()
+    dimnames(pssm) <- NULL
+    seqs <- replicate(500, paste(sample(c("A", "C", "G", "T"), 200, replace = TRUE), collapse = ""))
+
+    expect_error(
+        .Call(
+            "C_gseq_pwm_multitask", seqs, pssm, "max", TRUE, 0L, 0, NULL, NULL, FALSE,
+            list(NULL, 1L, NULL, NULL), FALSE, FALSE, character(0), 0.01,
+            character(0), "average", misha:::.misha_env()
+        ),
+        "column names"
+    )
+})

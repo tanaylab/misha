@@ -1,7 +1,7 @@
 Type: Package
 Package: misha
 Title: Toolkit for Analysis of Genomic Data
-Version: 5.11.19
+Version: 5.11.20
 Authors@R: c(
     person("Misha", "Hoichman", , "misha@hoichman.com", role = "aut"),
     person("Aviezer", "Lifshitz", , "aviezer.lifshitz@weizmann.ac.il", role = c("aut", "cre")),
@@ -28,7 +28,9 @@ Imports:
     utils,
     tools,
     yaml
-SystemRequirements: samtools (>= 1.0; optional, required only for BAM input)
+SystemRequirements: samtools (>= 1.0; optional, required only for BAM input),
+    bedGraphToBigWig or wigToBigWig from UCSC (optional, required only for
+    bigWig export; available as the bioconda package ucsc-bedgraphtobigwig)
 Suggests:
     data.table,
     dplyr,

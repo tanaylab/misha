@@ -273,6 +273,18 @@
 }
 
 .gintervals.check_new_set <- function(intervals.set) {
+    # The name of a new intervals set must be a single string. Without this
+    # guard, passing a data frame here (the classic mistake of calling
+    # gintervals.save(intervs, "name") with the arguments swapped) reaches
+    # match() with a multi-column object and dies with the opaque
+    # "the condition has length > 1".
+    if (!is.character(intervals.set) || length(intervals.set) != 1 || is.na(intervals.set)) {
+        stop(sprintf(
+            "Invalid intervals set name: expected a single character string, got %s of length %d.\nNote that the name of the new intervals set comes first, e.g. gintervals.save(\"my_set\", intervs).",
+            paste(class(intervals.set), collapse = "/"), length(intervals.set)
+        ), call. = FALSE)
+    }
+
     if (!is.na(match(intervals.set, get("GINTERVS", envir = .misha)))) {
         stop(sprintf("Intervals set %s already exists", intervals.set), call. = FALSE)
     }

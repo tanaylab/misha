@@ -1,3 +1,17 @@
+url: https://tanaylab.github.io/misha/
+
+template:
+  bootstrap: 5
+
+articles:
+  - title: Articles
+    navbar: ~
+    contents:
+      - Misha-Basics
+      - Manual
+      - Genomes
+      - Database-Formats
+
 reference:
   - title: Track functions
     desc:  Functions to manipulate and create tracks

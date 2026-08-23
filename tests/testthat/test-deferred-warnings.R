@@ -222,16 +222,31 @@ test_that("forked workers add nothing to what the zero-length warning already sa
     scope <- gintervals(c(1, 2, 3), 0, 100000)
 
     many_kids <- withr::with_options(
-        list(gmin.scope4process = 1),
+        list(gmax.processes = 32),
         zero_length_warnings(gextract("test.fixedbin", scope, iterator = "zerolen"))
     )
     few_kids <- withr::with_options(
-        list(gmin.scope4process = 1e9),
+        list(gmax.processes = 2),
         zero_length_warnings(gextract("test.fixedbin", scope, iterator = "zerolen"))
     )
     expect_equal(many_kids, few_kids)
     expect_true(length(many_kids) >= 1)
     expect_true(all(many_kids == many_kids[1]))
+
+    # A scope that fits in a single shard forks nothing and runs the serial path, so it
+    # says exactly what gmultitasking = FALSE says. Same text, one repetition fewer -
+    # the extra copy above is the parent's own pre-fork conversion.
+    single_shard <- withr::with_options(
+        list(gmin.scope4process = 1e9),
+        zero_length_warnings(gextract("test.fixedbin", scope, iterator = "zerolen"))
+    )
+    serial <- withr::with_options(
+        list(gmultitasking = FALSE),
+        zero_length_warnings(gextract("test.fixedbin", scope, iterator = "zerolen"))
+    )
+    expect_equal(single_shard, serial)
+    expect_equal(unique(single_shard), unique(many_kids))
+
     expect_equal(pending_diagnostics(), character(0))
 })
 
