@@ -51,7 +51,7 @@
 #' memory; combining it with \code{file} or \code{intervals.set.out} raises an
 #' error.
 #' @return If 'file' and 'intervals.set.out' are 'NULL' a set of intervals with
-#' an additional column for each of the track expressions and 'columnID'
+#' an additional column for each of the track expressions and 'intervalID'
 #' column.
 #' @seealso \code{\link{gtrack.array.extract}}, \code{\link{gsample}},
 #' \code{\link{gtrack.import}}, \code{\link{gtrack.array.import}},
@@ -73,6 +73,7 @@
 #'     gintervals.2d("chr1", 0, 4000, "chr2", 2000, 5000)
 #' )
 #'
+#' @inheritSection misha-NaN NaN values
 #' @export gextract
 gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, band = NULL, file = NULL, intervals.set.out = NULL,
                      intervals_join = c("id", "intervals", "none")) {
@@ -207,9 +208,8 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 #' This function calculates the quantiles for the given percentiles.
 #'
 #' If data size exceeds the limit (see: 'getOption(gmax.data.size)'), the data
-#' is randomly sampled to fit the limit. A warning message is generated. The
-#' seed of the pseudo-random generator can be controlled through 'grnd.seed'
-#' option.
+#' is randomly sampled to fit the limit. A warning message is generated. Call
+#' \code{set.seed()} before this function to make the sample reproducible.
 #'
 #' Note: this function is capable to run in multitasking mode. Sampling may
 #' vary according to the extent of multitasking. Since multitasking depends on
@@ -238,6 +238,7 @@ gextract <- function(..., intervals = NULL, colnames = NULL, iterator = NULL, ba
 #'
 #' @export gquantiles
 
+#' @inheritSection misha-NaN NaN values
 gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOME", envir = .misha), iterator = NULL, band = NULL) {
     if (is.null(substitute(expr))) {
         stop("Usage: gquantiles(expr, percentiles = 0.5, intervals = .misha$ALLGENOME, iterator = NULL, band = NULL)", call. = FALSE)
@@ -282,6 +283,7 @@ gquantiles <- function(expr = NULL, percentiles = 0.5, intervals = get("ALLGENOM
 #' gdb.init_examples()
 #' gsummary("rects_track")
 #'
+#' @inheritSection misha-NaN NaN values
 #' @export gsummary
 gsummary <- function(expr = NULL, intervals = NULL, iterator = NULL, band = NULL) {
     if (is.null(substitute(expr))) {

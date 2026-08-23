@@ -267,8 +267,11 @@ gtrack.export_bigwig <- function(track, file, intervals = NULL, iterator = NULL)
 
     if (is.null(converter)) {
         stop(
-            "bedGraphToBigWig or wigToBigWig not found. ",
-            "Install from UCSC tools: https://hgdownload.cse.ucsc.edu/admin/exe/",
+            "bedGraphToBigWig or wigToBigWig not found on PATH.\n",
+            "Install with: conda install -c bioconda ucsc-bedgraphtobigwig\n",
+            "Or download from https://hgdownload.cse.ucsc.edu/admin/exe/ - note that ",
+            "UCSC's prebuilt binaries require glibc 2.34 or newer, so on older ",
+            "distributions the conda build is the one that works.",
             call. = FALSE
         )
     }

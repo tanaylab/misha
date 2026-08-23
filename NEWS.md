@@ -9,6 +9,9 @@
 * **Bug fix:** `gtrack.mv()`, `gtrack.copy()` and `gintervals.update()` could leave the session reading a track or interval set through the layout of whatever previously occupied that path: `gtrack.info()` reported the wrong track type, and reads failed with a bin-count mismatch or "unknown input format". All three now drop the cached layout.
 * **Bug fix:** `gdataset.save()` reported success after failing to copy a track or interval set, leaving behind a dataset whose `misha.yaml` counted files that were not on disk - and which then blocked every retry, because the function refuses a path that already exists. It now errors naming what failed, and leaves nothing behind.
 * `gintervals.save()` and the other `intervals.set.out` arguments now reject a non-string set name with a message that names the argument order, instead of failing with "the condition has length > 1".
+* Documentation: the query functions' man pages now carry a shared "NaN values" section stating what each one does with a bin the track has no data for - `gextract()` keeps it, `gsummary()` counts it, `gdist()`/`gquantiles()`/`gscreen()` drop it, and `gsegment()` spans it.
+* `gtrack.export()` to bigWig now names the conda package to install when the UCSC converter is missing, and `bedGraphToBigWig` is declared in SystemRequirements alongside `samtools`. UCSC's prebuilt binaries need glibc 2.34 or newer, so on older distributions the conda build is the one that works.
+* Documentation: `gextract()`'s extra column is named `intervalID`, not `columnID`; and `gsample()`/`gquantiles()` say to use `set.seed()` for a reproducible sample, replacing a reference to the `grnd.seed` option, which no longer exists.
 
 # misha 5.11.19
 
