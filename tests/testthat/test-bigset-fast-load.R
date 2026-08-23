@@ -296,4 +296,4 @@ test_that("2D indexed bigset load produces identical results to per-chromosome l
 })
 
 # Restore the test database after all tests
-suppressMessages(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+reset_test_db_root()
