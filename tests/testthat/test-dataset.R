@@ -1,3 +1,10 @@
+# This file re-roots into throwaway databases inside withr::with_tempdir(),
+# which leaves .misha$GROOT pointing at a directory that no longer exists.
+# Put a working root back for whatever runs next in this parallel worker -
+# without it, test-gdb-unload.R (and anything else that reads the ambient
+# root) fails on state this file left behind.
+restore_groot_on_exit()
+
 # Tests for dataset API
 # Note: create_test_db() helper is defined in helper-test_db.R
 
