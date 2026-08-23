@@ -398,7 +398,7 @@ gtrack.mv <- function(src = NULL, dest = NULL) {
     # Create destination parent directory if needed
     dest_parent <- dirname(dest_dir)
     if (!dir.exists(dest_parent)) {
-        dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
+        .gwith_umask(dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE))
     }
 
     # Move the track directory
@@ -574,7 +574,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     dest_dir <- file.path(dest_db, "tracks", paste0(gsub("\\.", "/", destname), ".track"))
     dest_parent <- dirname(dest_dir)
     if (!dir.exists(dest_parent)) {
-        dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE)
+        .gwith_umask(dir.create(dest_parent, recursive = TRUE, showWarnings = FALSE))
     }
 
     # Use the filesystem as the source of truth for "destination already exists".
@@ -622,7 +622,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
                 srcname, srcname
             ), call. = FALSE)
         }
-        if (!file.copy(src_dir, dest_dir, copy.mode = TRUE)) {
+        if (!.gwith_umask(file.copy(src_dir, dest_dir, copy.mode = TRUE))) {
             stop(sprintf("Failed to copy %s to %s", srcname, destname), call. = FALSE)
         }
         groot <- get("GROOT", envir = .misha)
@@ -643,7 +643,7 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
     # can find it in GTRACKS. .gdb.add_track only registers if the trackdir
     # already exists, so create it now -- .gtrack.copy.raw_dir tolerates a
     # pre-existing empty dest_dir.
-    if (!dir.create(dest_dir, showWarnings = FALSE) && !dir.exists(dest_dir)) {
+    if (!.gwith_umask(dir.create(dest_dir, showWarnings = FALSE)) && !dir.exists(dest_dir)) {
         stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
     }
     groot <- get("GROOT", envir = .misha)
@@ -795,12 +795,12 @@ gtrack.copy <- function(src = NULL, dest = NULL, db = NULL, overwrite = FALSE) {
 
 # Raw file copy of an entire .track directory.
 .gtrack.copy.raw_dir <- function(src_dir, dest_dir) {
-    if (!dir.create(dest_dir, showWarnings = FALSE) && !dir.exists(dest_dir)) {
+    if (!.gwith_umask(dir.create(dest_dir, showWarnings = FALSE)) && !dir.exists(dest_dir)) {
         stop(sprintf("Failed to create %s", dest_dir), call. = FALSE)
     }
     contents <- list.files(src_dir, full.names = TRUE, all.files = TRUE, no.. = TRUE)
     for (item in contents) {
-        if (!file.copy(item, dest_dir, recursive = TRUE, copy.mode = TRUE)) {
+        if (!.gwith_umask(file.copy(item, dest_dir, recursive = TRUE, copy.mode = TRUE))) {
             unlink(dest_dir, recursive = TRUE)
             .gdb.invalidate_dir_cache(dest_dir)
             stop(sprintf("Failed to copy %s into %s", item, dest_dir), call. = FALSE)

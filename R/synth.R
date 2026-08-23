@@ -2257,7 +2257,7 @@ gsynth.score <- function(model,
 
     track_path <- .track_dir(track)
     if (!dir.exists(track_path)) {
-        dir.create(track_path, recursive = TRUE, mode = "0777")
+        .gwith_umask(dir.create(track_path, recursive = TRUE, mode = "0777"))
     }
 
     # ---- Decide serial vs parallel chrom dispatch.
