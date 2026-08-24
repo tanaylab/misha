@@ -13,6 +13,7 @@
 ^add_include\.sh$
 ^CRAN-SUBMISSION$
 ^\.github$
+^\.git$
 ^.aider.chat.history.md$
 ^.aider.input.history$
 ^.aider.tags.cache.v3$
