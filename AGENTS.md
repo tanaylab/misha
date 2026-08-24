@@ -46,9 +46,12 @@ R -e "testthat::test_file('tests/testthat/test-pwm-sliding-window.R', desc = 'PW
 Concurrent test runs are safe: each process gets a private overlay of the lab
 database (`tests/testthat/helper-test_db.R`), so runs cannot see each other's
 tracks or interval sets, and a full suite leaves the shared database untouched.
-This was not true before 5.11.22 - two runs corrupted each other, which is where
-this project's "flaky tests" reputation came from. Give each concurrent run its
-own `TMPDIR` all the same, since the overlays live there.
+This was not true before 5.11.22. Two independent faults produced this project's
+"flaky tests" reputation, and both are fixed: concurrent runs corrupted each
+other through the shared database, and 27 test files ended with `GROOT` pointing
+at some other database, so whichever file ran next in that worker failed for
+reasons of its own. Give each concurrent run its own `TMPDIR` all the same,
+since the overlays live there.
 
 To run all tests in parallel (preferred - serial mode is dramatically slower):
 
