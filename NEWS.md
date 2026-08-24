@@ -1,6 +1,8 @@
 # misha 5.11.22
 
 * misha's C routines are now registered with R, so a call made with the wrong number of arguments is reported instead of silently running.
+* `gtrack.array.import()` no longer aborts the R session when the disk fills up.
+* `gtrack.2d.import()` and `gtrack.import_contacts()` now report a failed write instead of creating a track that reads as empty.
 * Partial track directories left behind by a killed writer are removed when misha next opens the database.
 
 # misha 5.11.21
