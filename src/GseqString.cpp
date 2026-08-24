@@ -600,6 +600,16 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
                 SEXP r_skip_gaps, SEXP r_gap_chars, SEXP r_prior,
                 SEXP r_neutral_chars, SEXP r_neutral_policy) {
     try {
+        // check_interrupt() reads a flag only misha's own SIGINT handler sets, and that
+        // handler is installed by RdbInitializer. Without one here the checks below would
+        // be dead on both paths that reach this function - the raw .Call taken when
+        // gmultitasking is FALSE, and C_gseq_pwm_multitask's serial fallback, which runs
+        // after its own RdbInitializer has been destroyed - and worse, they would read a
+        // stale flag left set by whatever misha call was interrupted last. Nested inside a
+        // multitasking child this is just a reference count: the child's SIGINT handling
+        // is R's, and the parent kills the fleet on Ctrl-C.
+        RdbInitializer rdb_init;
+
         // Validate and extract inputs
         if (!Rf_isString(r_seqs)) {
             rdb::verror("seqs must be a character vector");
@@ -709,16 +719,21 @@ SEXP C_gseq_pwm(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect,
         SEXP r_strand_out = R_NilValue;
 
         if (mode == "pos") {
-            PROTECT(r_pos = Rf_allocVector(INTSXP, n_seqs)); // rchk: protect
+            PROTECT(r_pos = rdb::RSaneAllocVector(INTSXP, n_seqs)); // rchk: protect
             if (return_strand) {
-                PROTECT(r_strand_out = Rf_allocVector(INTSXP, n_seqs)); // rchk: protect
+                PROTECT(r_strand_out = rdb::RSaneAllocVector(INTSXP, n_seqs)); // rchk: protect
             }
         } else {
-            PROTECT(r_result = Rf_allocVector(REALSXP, n_seqs)); // rchk: protect
+            PROTECT(r_result = rdb::RSaneAllocVector(REALSXP, n_seqs)); // rchk: protect
         }
         
         // Process each sequence
         for (int i = 0; i < n_seqs; ++i) {
+            // Two static loads per sequence, against a whole-sequence PWM scan and the
+            // std::string copy on the next line - unmeasurable, and the only granularity
+            // at which a scan of millions of sequences can be interrupted at all.
+            rdb::check_interrupt();
+
             std::string seq = r_string_to_upper(CHAR(STRING_ELT(r_seqs, i)));
             int L = seq.length();
             
@@ -809,12 +824,16 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
                  SEXP r_roi_start, SEXP r_roi_end, SEXP r_extend,
                  SEXP r_skip_gaps, SEXP r_gap_chars) {
     try {
+        // See C_gseq_pwm: the interrupt flag exists only while an RdbInitializer does.
+        // Rf_error() would longjmp past it, so validation reports through verror().
+        RdbInitializer rdb_init;
+
         // Validate and extract inputs
         if (!Rf_isString(r_seqs)) {
-            Rf_error("seqs must be a character vector");
+            rdb::verror("seqs must be a character vector");
         }
         if (!Rf_isString(r_kmer) || Rf_length(r_kmer) != 1) {
-            Rf_error("kmer must be a single character string");
+            rdb::verror("kmer must be a single character string");
         }
 
         int n_seqs = Rf_length(r_seqs);
@@ -854,10 +873,12 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
         
         // Prepare result vector
         SEXP r_result;
-        PROTECT(r_result = Rf_allocVector(REALSXP, n_seqs));
+        PROTECT(r_result = rdb::RSaneAllocVector(REALSXP, n_seqs));
         
         // Process each sequence
         for (int i = 0; i < n_seqs; ++i) {
+            rdb::check_interrupt();
+
             std::string seq = r_string_to_upper(CHAR(STRING_ELT(r_seqs, i)));
             int L = seq.length();
             
@@ -890,6 +911,10 @@ SEXP C_gseq_kmer(SEXP r_seqs, SEXP r_kmer, SEXP r_mode, SEXP r_strand_mode,
         UNPROTECT(1);
         return r_result;
         
+    } catch (TGLException &e) {
+        // The RdbInitializer above lives inside the try, so it is already destroyed here
+        // and Rf_error()'s longjmp has nothing of misha's left to skip.
+        Rf_error("%s", e.msg());
     } catch (std::exception& e) {
         Rf_error("Error in C_gseq_kmer: %s", e.what());
     } catch (...) {
@@ -993,7 +1018,7 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
                 int end_idx = std::min(start_idx + chunk_size, n_seqs);
                 int chunk_len = end_idx - start_idx;
 
-                SEXP r_seqs_chunk = PROTECT(Rf_allocVector(STRSXP, chunk_len));
+                SEXP r_seqs_chunk = PROTECT(rdb::RSaneAllocVector(STRSXP, chunk_len));
                 for (int i = start_idx; i < end_idx; ++i) {
                     SET_STRING_ELT(r_seqs_chunk, i - start_idx, STRING_ELT(r_seqs, i));
                 }
@@ -1003,7 +1028,7 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
                 SEXP r_roi_end_chunk = R_NilValue;
 
                 if (!Rf_isNull(r_roi_start) && Rf_length(r_roi_start) > 1) {
-                    r_roi_start_chunk = PROTECT(Rf_allocVector(INTSXP, chunk_len));
+                    r_roi_start_chunk = PROTECT(rdb::RSaneAllocVector(INTSXP, chunk_len));
                     for (int i = start_idx; i < end_idx; ++i) {
                         INTEGER(r_roi_start_chunk)[i - start_idx] =
                             INTEGER(r_roi_start)[i % Rf_length(r_roi_start)];
@@ -1013,7 +1038,7 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
                 }
 
                 if (!Rf_isNull(r_roi_end) && Rf_length(r_roi_end) > 1) {
-                    r_roi_end_chunk = PROTECT(Rf_allocVector(INTSXP, chunk_len));
+                    r_roi_end_chunk = PROTECT(rdb::RSaneAllocVector(INTSXP, chunk_len));
                     for (int i = start_idx; i < end_idx; ++i) {
                         INTEGER(r_roi_end_chunk)[i - start_idx] =
                             INTEGER(r_roi_end)[i % Rf_length(r_roi_end)];
@@ -1062,13 +1087,13 @@ SEXP C_gseq_pwm_multitask(SEXP r_seqs, SEXP r_pssm, SEXP r_mode, SEXP r_bidirect
         int num_protected = 1;
 
         if (is_pos_mode) {
-            PROTECT(r_pos = Rf_allocVector(INTSXP, n_seqs));
+            PROTECT(r_pos = rdb::RSaneAllocVector(INTSXP, n_seqs));
             if (return_strand) {
-                PROTECT(r_strand_out = Rf_allocVector(INTSXP, n_seqs));
+                PROTECT(r_strand_out = rdb::RSaneAllocVector(INTSXP, n_seqs));
                 num_protected = 2;
             }
         } else {
-            PROTECT(r_result = Rf_allocVector(REALSXP, n_seqs));
+            PROTECT(r_result = rdb::RSaneAllocVector(REALSXP, n_seqs));
         }
 
         for (int ikid = 0; ikid < num_processes; ++ikid) {

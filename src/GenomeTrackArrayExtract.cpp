@@ -17,6 +17,7 @@ using namespace rdb;
 static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, const vector<float> &res_vals,
 										  vector<unsigned> *interv_ids, int numcols, SEXP _colnames, IntervUtils &iu)
 {
+	unsigned protect_mark = protect_depth();
 	SEXP answer = iu.convert_intervs(out_intervals, interv_ids ? GInterval::NUM_COLS + numcols + 1 : GInterval::NUM_COLS + numcols, false);
 	uint64_t numvals = res_vals.size() / numcols;
 	vector<SEXP> rvals(numcols);
@@ -51,7 +52,11 @@ static SEXP build_rintervals_arrayextract(GIntervalsFetcher1D *out_intervals, co
         SET_VECTOR_ELT(answer, GInterval::NUM_COLS + icol, rvals[icol]);
 	}
     
-    runprotect(1); // colnames
+	// Keep "answer" (protected first by convert_intervs) and drop the scratch this
+	// function added on top - all of it is reachable from "answer" now. The
+	// intervals.set.out path calls this once per contig, so anything left here
+	// accumulates on R's 50,000-slot protect stack.
+	runprotect_to(protect_mark + 1);
     return answer;
 }
 
@@ -165,6 +170,7 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 				if (!intervset_out.empty() && !out_intervals.empty() && out_intervals.back().chromid != interval.chromid) {
 					SEXP rintervals = build_rintervals_arrayextract(&out_intervals, res_vals, NULL, numcols, _colnames, iu);
 					GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals, rintervals, iu, chromstats);
+					runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 					out_intervals.clear();
 					res_vals.clear();
 				} else
@@ -191,6 +197,7 @@ SEXP garrayextract(SEXP _track, SEXP _slice, SEXP _colnames, SEXP _file, SEXP _i
 
 		SEXP rintervals = build_rintervals_arrayextract(&out_intervals, res_vals, NULL, numcols, _colnames, iu);
 		GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals, rintervals, iu, chromstats);
+		runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 		out_intervals.clear();
 		res_vals.clear();
 		SEXP zeroline = build_rintervals_arrayextract(&out_intervals, res_vals, NULL, numcols, _colnames, iu);

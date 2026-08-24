@@ -149,6 +149,12 @@ gtrack.lookup <- function(track = NULL, description = NULL, lookup_table = NULL,
 #' modified. The iterator policy is set internally to the bin size of the
 #' track.
 #'
+#' The new values are written to a staging copy of the track's data files and
+#' swapped in only once the whole modification has succeeded, so an interrupt
+#' or an error leaves the track exactly as it was. The staging copy needs as
+#' much free space as the part of the track being rewritten, which on a
+#' database in indexed format is the track's whole data file.
+#'
 #' @param track track name
 #' @param expr track expression
 #' @param intervals genomic scope for which track is modified
@@ -183,7 +189,33 @@ gtrack.modify <- function(track = NULL, expr = NULL, intervals = NULL) {
     trackstr <- do.call(.gexpr2str, list(substitute(track)), envir = parent.frame())
     exprstr <- do.call(.gexpr2str, list(substitute(expr)), envir = parent.frame())
 
-    .gcall("gtrack_modify", trackstr, exprstr, intervals, iterator = trackstr, .misha_env())
+    # Staged, like every other writer: the C++ copies the data files the
+    # modification touches into stage_dir, writes the new values there, and
+    # renames them back over the originals only once the whole modification has
+    # succeeded. Until then the track on disk is the old one, so an interrupt,
+    # a bad expression or a full disk leaves it intact instead of durably
+    # half-old/half-new under its real name.
+    final_dir <- .track_dir(trackstr)
+    parent <- dirname(final_dir)
+    if (!dir.exists(parent)) {
+        stop(sprintf("Parent directory %s does not exist", parent), call. = FALSE)
+    }
+    try(.gdb.trash_sweep_old(parent), silent = TRUE)
+    stage_dir <- file.path(parent, .gdb.staging_name(basename(final_dir)))
+    if (!.gwith_umask(dir.create(stage_dir, showWarnings = FALSE))) {
+        stop(sprintf("Failed to create staging directory %s", stage_dir), call. = FALSE)
+    }
+
+    tryCatch(
+        .gcall("gtrack_modify", trackstr, exprstr, intervals, iterator = trackstr, stage_dir, .misha_env()),
+        finally = {
+            unlink(stage_dir, recursive = TRUE, force = TRUE)
+            # The staged copy was opened through the track-index cache under its
+            # own path; drop the entry so nothing later resolves that dead dir.
+            try(.gdb.invalidate_dir_cache(stage_dir), silent = TRUE)
+            try(.gdb.invalidate_dir_cache(final_dir), silent = TRUE)
+        }
+    )
 
     str <- sprintf("gtrack.modify(%s, %s, intervs)", trackstr, exprstr)
     created.by.str <- gtrack.attr.export(trackstr, "created.by")[1, 1]

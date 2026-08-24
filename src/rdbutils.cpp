@@ -589,7 +589,9 @@ int64_t RdbInitializer::update_kids_mem_usage()
 	return total_mem_usage;
 }
 
-void RdbInitializer::handle_error(const char *msg)
+// Both branches end in a function that cannot return - rexit() in the child, Rf_errorcall()
+// (declared NORET by R) in the parent - so control never reaches the end of this one.
+[[noreturn]] void RdbInitializer::handle_error(const char *msg)
 {
 	if (s_is_kid) {
 		{
@@ -600,10 +602,9 @@ void RdbInitializer::handle_error(const char *msg)
 			}
 		}
 		rexit();
-	} else {
-		Rf_errorcall(R_NilValue, "%s", msg);
 	}
 
+	Rf_errorcall(R_NilValue, "%s", msg);
 }
 
 void *RdbInitializer::allocate_res(uint64_t res_num_records)
@@ -738,7 +739,7 @@ void rdb::check_interrupt()
 	monitor_memusage();
 }
 
-void rdb::rerror(const char *fmt, ...)
+[[noreturn]] void rdb::rerror(const char *fmt, ...)
 {
 	va_list ap;
 	char buf[1000];
@@ -750,7 +751,7 @@ void rdb::rerror(const char *fmt, ...)
 	RdbInitializer::handle_error(buf);
 }
 
-void rdb::verror(const char *fmt, ...)
+[[noreturn]] void rdb::verror(const char *fmt, ...)
 {
 	va_list ap;
 	char buf[1000];
@@ -759,10 +760,15 @@ void rdb::verror(const char *fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
+	// Inside a .Call the error has to leave as a C++ exception: an RdbInitializer is alive
+	// on the stack, and Rf_errorcall's longjmp would skip its destructor and leave
+	// s_ref_count stuck above zero. TGLError() hands the exception to the installed handler
+	// and throws it itself if that handler returns, so this branch cannot fall through into
+	// the one below.
 	if (RdbInitializer::s_ref_count)
 		TGLError("%s", buf);
-	else
-		RdbInitializer::handle_error(buf);
+
+	RdbInitializer::handle_error(buf);
 }
 
 bool rdb::is_kid()
@@ -798,6 +804,16 @@ void rdb::runprotect(int count)
 	RdbInitializer::s_protect_counter -= count;
 }
 
+unsigned rdb::protect_depth()
+{
+	return RdbInitializer::s_protect_counter;
+}
+void rdb::runprotect_to(unsigned depth)
+{
+	unsigned cur = protect_depth();
+	if (cur > depth)
+		runprotect((int)(cur - depth));
+}
 void rdb::runprotect(SEXP &expr)
 {
 	if (expr != R_NilValue) {
@@ -1021,14 +1037,21 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 	rprotect(res = R_tryEval(parsed_command, envir, &check_error));
 	if (check_error)
 	{
+		// Ctrl-C first: in the parent our own SIGINT handler has already set the flag,
+		// and reporting the interrupt is more useful than whatever error message the
+		// aborted evaluation happens to have left behind.
+		check_interrupt();
+
 		// Get the last error message
 		PROTECT(err_call = Rf_lang1(Rf_install("geterrmessage")));
 		SEXP err_msg = R_tryEval(err_call, R_GlobalEnv, &check_error);
 		UNPROTECT(1);
 
-		if (!check_error && TYPEOF(err_msg) == STRSXP && LENGTH(err_msg) > 0)
+		const char *error_msg = NULL;
+
+		if (!check_error && TYPEOF(err_msg) == STRSXP && LENGTH(err_msg) > 0 && STRING_ELT(err_msg, 0) != NA_STRING)
 		{
-			const char *error_msg = CHAR(STRING_ELT(err_msg, 0));
+			error_msg = CHAR(STRING_ELT(err_msg, 0));
 			// Strip "Error: " or "Error : " prefix from geterrmessage() to avoid double "Error:" in output
 			if (strncmp(error_msg, "Error : ", 8) == 0)
 				error_msg += 8;
@@ -1036,21 +1059,36 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 				error_msg += 7;
 			else if (strncmp(error_msg, "Error ", 6) == 0)
 				error_msg += 6;
+			while (*error_msg == ' ' || *error_msg == '\t' || *error_msg == '\n' || *error_msg == '\r')
+				++error_msg;
+		}
+
+		if (error_msg && *error_msg)
 			verror("%s", error_msg);
-		}
-		else
-		{
-			verror("R evaluation error: Unknown error");
-		}
+
+		// R_tryEval's R_ToplevelExec catches an interrupt as well as an error, and R
+		// fills geterrmessage() for every real error - so a failure with nothing to
+		// report is the interrupt. This is the multitasking child's case: the fork
+		// restores R's own SIGINT handler, so Ctrl-C is delivered there through R and
+		// never reaches the flag check_interrupt() reads. Without this the call
+		// surfaced as a bare "Error: " and .gcall's interrupt handler never fired.
+		verror("Command interrupted!");
 	}
 	return res;
 }
 
 SEXP rdb::run_in_R(const char *command, SEXP envir)
 {
-    SEXP expr;
+    SEXP expr = R_NilValue;
     SEXP parsed_expr = R_NilValue;
 	ParseStatus status;
+
+	// Named unprotects: eval_in_R() below leaves its result on the stack (unless the
+	// command evaluated to NULL, when it leaves nothing), so "the last two" were the
+	// result and the parsed expression - the string was left behind and the value
+	// handed back to the caller was no longer protected.
+	SEXPCleaner expr_cleaner(expr);
+	SEXPCleaner parsed_expr_cleaner(parsed_expr);
 
     expr = rprotect_ptr(RSaneAllocVector(STRSXP, 1));
 	SET_STRING_ELT(expr, 0, Rf_mkChar(command));
@@ -1058,9 +1096,8 @@ SEXP rdb::run_in_R(const char *command, SEXP envir)
 	if (status != PARSE_OK)
 		verror("Failed to parse expression \"%s\"", command);
 
-    SEXP result = eval_in_R(VECTOR_ELT(parsed_expr, 0), envir);
-    runprotect(2);
-    return result;
+	// Stays protected for the rest of the .Call, like every other eval_in_R() result.
+    return eval_in_R(VECTOR_ELT(parsed_expr, 0), envir);
 }
 
 struct RSaneSerializeData {
@@ -1106,12 +1143,19 @@ struct RSaneUnserializeData {
 	SEXP  retv;
 };
 
+// Deliberately protect-neutral. R_ToplevelExec PROTECTs four objects of its own around the
+// callback and UNPROTECTs four afterwards, so anything the callback leaves on the protect
+// stack is popped in their place: an rprotect() here did not protect the result past the
+// return, it silently unprotected one of R's own saved values instead, and the counts only
+// balanced because RSaneUnserialize then popped the one R had leaked. Nothing allocates
+// between R_Unserialize returning and the caller receiving the value, and every caller
+// protects it immediately - see the contract in rdbutils.h.
 static void RSaneUnserializeCallback(void *_data)
 {
 	RSaneUnserializeData *data = (RSaneUnserializeData *)_data;
 	struct R_inpstream_st in;
 	R_InitFileInPStream(&in, data->fp, R_pstream_xdr_format, NULL, NULL);
-	rprotect(data->retv = R_Unserialize(&in));
+	data->retv = R_Unserialize(&in);
 }
 
 SEXP rdb::RSaneUnserialize(FILE *fp)
@@ -1127,12 +1171,6 @@ SEXP rdb::RSaneUnserialize(FILE *fp)
 		// and there's no way to prevent it without heavy hacking. On the other hand we want to abort the execution on error.
 		// Solution: write a different error message. :)
 		verror("Execution aborted");
-	// rprotect() is a no-op on R_NilValue, so a file holding a serialized NULL
-	// pushes nothing; an unconditional runprotect(1) would then pop - and leave
-	// exposed to the GC - whatever the caller had protected last. Same asymmetry
-	// that define_in_misha() had to fix.
-	if (data.retv != R_NilValue)
-		runprotect(1);
 	return data.retv;
 }
 
@@ -1229,4 +1267,37 @@ bool rdb::is_db_indexed(SEXP _envir) {
 
 	struct stat st;
 	return (stat(idx_path.c_str(), &st) == 0 && stat(seq_path.c_str(), &st) == 0);
+}
+
+extern "C" {
+
+// Internal, deliberately not exported from NAMESPACE. Returns RdbInitializer's two lifetime
+// counters as a named integer vector, c(ref_count = ..., protect_count = ...).
+//
+// C6 - both counters return to their entry values on every exit, error and interrupt
+// included - used to be observable from R only by proxy: the regression test for the
+// SingleShard fallback asserted on the process umask, because the outermost constructor sets
+// umask(07) and only the matching destructor puts the old value back. That works, but it
+// tests a side effect rather than the invariant, and it stopped being an honest stand-in once
+// 5.11.21 made the umask configurable. This reports the counters themselves.
+//
+// It takes no RdbInitializer of its own on purpose: one would add its own reference and its
+// own protection frame to the very numbers being read, and would report 1 where the caller
+// needs to see 0. That also makes the raw PROTECT/UNPROTECT below the correct choice - there
+// is no s_protect_counter frame here for rprotect() to unwind.
+SEXP C_lifetime_counters()
+{
+	SEXP counters = PROTECT(Rf_allocVector(INTSXP, 2));
+	SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
+
+	INTEGER(counters)[0] = RdbInitializer::get_ref_count();
+	INTEGER(counters)[1] = (int)RdbInitializer::get_protect_count();
+	SET_STRING_ELT(names, 0, Rf_mkChar("ref_count"));
+	SET_STRING_ELT(names, 1, Rf_mkChar("protect_count"));
+	Rf_setAttrib(counters, R_NamesSymbol, names);
+
+	UNPROTECT(2);
+	return counters;
+}
+
 }

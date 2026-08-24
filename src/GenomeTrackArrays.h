@@ -3,9 +3,12 @@
 
 #include <cstdint>
 #include <cmath>
+#include <exception>
 #include <limits>
 #include <vector>
 #include <string>
+
+#include <R_ext/Print.h>
 
 #include "GenomeTrack1D.h"
 #include "GIntervals.h"
@@ -35,7 +38,31 @@ public:
 	typedef vector<ArrayVal> ArrayVals;
 
 	GenomeTrackArrays();
-	virtual ~GenomeTrackArrays() { finish_writing(); }
+
+	// Destructors are implicitly noexcept: a TGLException escaping here is
+	// std::terminate, which kills the process before R can run the R-level
+	// cleanup that discards the half-written staging directory. So the footer
+	// is written by an explicit finish_writing() on the success path, and the
+	// destructor is only a last-resort, never-throwing net:
+	//   - while an exception is already in flight the track is being discarded
+	//     anyway, so write nothing (no allocations, no I/O mid-unwind);
+	//   - otherwise finalise, but swallow any failure after reporting it.
+	virtual ~GenomeTrackArrays() noexcept {
+		if (!m_is_writing)
+			return;
+		if (std::uncaught_exceptions() > 0) {
+			m_is_writing = false;
+			return;
+		}
+		try {
+			finish_writing();
+		} catch (const TGLException &e) {
+			m_is_writing = false;
+			REprintf("Failed to finalize array track file: %s\n", e.msg());
+		} catch (...) {
+			m_is_writing = false;
+		}
+	}
 
 	// Used for optimization in TrackExpressionVars to prevent multiple virtual tracks read the same file over and over.
 	// It optimizes read_interval: the file is read only once and then all objects that are depending on the master calculate
@@ -56,6 +83,11 @@ public:
 	void init_write(const char *filename, int chromid);
 
 	void write_next_interval(const GInterval &interval, const ArrayVals::const_iterator &iarray_vals_begin, const ArrayVals::const_iterator &iarray_vals_end);
+
+	// Writes the array-track footer (intervals map) and ends the write session.
+	// MUST be called explicitly by every writer on its success path - see the
+	// destructor comment above. Throws TGLException on a short write.
+	void finish_writing();
 
 	const GIntervals &get_intervals();
 	void get_sliced_vals(GIntervals::const_iterator iinterval, vector<float> &vals, unsigned numcols);
@@ -93,7 +125,7 @@ protected:
 	double                      m_sum_accum;
 
 	void read_intervals_map();
-	void finish_writing();
+	void fail_writing();  // always throws TGLException
 	void read_array_vals(uint64_t idx);
 	float get_array_val(uint64_t islice);
 	float get_sliced_val(uint64_t idx);

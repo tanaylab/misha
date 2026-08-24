@@ -1304,7 +1304,7 @@ gvtrack.info <- function(vtrack = NULL) {
     if (!is.null(info$filter)) {
         filter_info <- tryCatch(
             {
-                .gcall("C_get_filter_info", info$filter, .misha_env())
+                .gcall("C_get_filter_info", info$filter)
             },
             error = function(e) {
                 NULL

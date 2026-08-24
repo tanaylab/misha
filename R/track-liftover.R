@@ -197,8 +197,7 @@ gtrack.liftover <- function(track = NULL,
             na.rm,
             if (is.null(min_n)) NA_integer_ else min_n,
             min_score,
-            .misha_env(),
-            silent = TRUE
+            .misha_env()
         )
     })
 

@@ -83,7 +83,12 @@ void DataFrameUtils::copy_data_frame_row(const vector<SEXP> &src_cols, int src_r
 		else if (Rf_isLogical(src_col))
 			LOGICAL(tgt_col)[tgt_row] = LOGICAL(src_col)[src_row];
 		else if (Rf_isString(src_col))
-			SET_STRING_ELT(tgt_col, tgt_row, Rf_mkChar(CHAR(STRING_ELT(src_col, src_row))));
+			// Copy the CHARSXP straight across. Going via
+			// Rf_mkChar(CHAR(...)) turned NA_STRING into the literal string
+			// "NA", because CHAR(NA_STRING) is "NA" - so is.na() reported
+			// FALSE on what had been a missing value. The direct copy also
+			// skips a lookup in R's CHARSXP cache.
+			SET_STRING_ELT(tgt_col, tgt_row, STRING_ELT(src_col, src_row));
 	}
 }
 
@@ -109,8 +114,9 @@ void DataFrameUtils::copy_data_frame_rows(const vector<SEXP> &src_cols, int src_
 			for (int i = 0; i < num_rows; ++i) 
 				tgt_vals[tgt_row + i] = src_vals[src_row + i];
 		} else if (Rf_isString(src_col)) {
+			// Raw Rf_mkChar on purpose - see copy_data_frame_row() above.
 			for (int i = 0; i < num_rows; ++i) 
-				SET_STRING_ELT(tgt_col, tgt_row + i, Rf_mkChar(CHAR(STRING_ELT(src_col, src_row + i))));
+				SET_STRING_ELT(tgt_col, tgt_row + i, STRING_ELT(src_col, src_row + i));
 		}
 	}
 }

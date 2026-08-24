@@ -79,7 +79,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 random interv
     local_db_state()
 
     # Set up hg19 as source
-    gsetroot(hg19_path)
+    gsetroot(test_db_root(hg19_path))
     gdb.reload()
 
     # Generate random intervals
@@ -124,7 +124,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 random interv
 
     # Switch to hg38 (target database) to load chain and do liftover
     # This validates both chain target coords and result coords against hg38
-    gsetroot(hg38_path)
+    gsetroot(test_db_root(hg38_path))
     gdb.reload()
 
     # Load chain with policies that match Kent's behavior:
@@ -265,7 +265,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 with larger r
     local_db_state()
 
     # Set up hg19 as source
-    gsetroot(hg19_path)
+    gsetroot(test_db_root(hg19_path))
     gdb.reload()
 
     # Generate larger set of random intervals with varying sizes
@@ -309,7 +309,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 with larger r
     kent_result <- kent_result[, c("chrom", "start", "end", "name")]
 
     # Switch to hg38 (target database) to load chain and do liftover
-    gsetroot(hg38_path)
+    gsetroot(test_db_root(hg38_path))
     gdb.reload()
 
     # Load chain with Kent-matching policies
@@ -416,7 +416,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 small interva
     local_db_state()
 
     # Set up hg19 as source
-    gsetroot(hg19_path)
+    gsetroot(test_db_root(hg19_path))
     gdb.reload()
 
     # Generate random intervals with small sizes (1-10 bp)
@@ -468,7 +468,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 small interva
     }
 
     # Switch to hg38 (target database) to load chain and do liftover
-    gsetroot(hg38_path)
+    gsetroot(test_db_root(hg38_path))
     gdb.reload()
 
     # Load chain with Kent-matching policies
@@ -579,7 +579,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 specific chro
     local_db_state()
 
     # Set up hg19 as source
-    gsetroot(hg19_path)
+    gsetroot(test_db_root(hg19_path))
     gdb.reload()
 
     # Generate intervals on specific chromosomes with known differences
@@ -643,7 +643,7 @@ test_that("gintervals.liftover matches Kent liftOver on hg19->hg38 specific chro
     }
 
     # Switch to hg38 (target database) to load chain and do liftover
-    gsetroot(hg38_path)
+    gsetroot(test_db_root(hg38_path))
     gdb.reload()
 
     # Load chain with Kent-matching policies
@@ -754,7 +754,7 @@ test_that("gtrack.liftover matches Kent liftOver on hg19->hg38 random sparse tra
     local_db_state()
 
     # Set up hg19 as source
-    gsetroot(hg19_path)
+    gsetroot(test_db_root(hg19_path))
     gdb.reload()
 
     # Generate random intervals with values
@@ -778,7 +778,7 @@ test_that("gtrack.liftover matches Kent liftOver on hg19->hg38 random sparse tra
         random_intervals$value
     )
 
-    src_track_dir <- file.path(hg19_path, "tracks", paste0(temp_track, ".track"))
+    src_track_dir <- file.path(test_db_root(hg19_path), "tracks", paste0(temp_track, ".track"))
 
     # Create BED file for Kent's liftOver
     # Kent uses chain scores to resolve overlapping targets by default
@@ -816,7 +816,7 @@ test_that("gtrack.liftover matches Kent liftOver on hg19->hg38 random sparse tra
     kent_result <- kent_result[order(kent_result$chrom, kent_result$start), ]
 
     # Switch to hg38 for misha liftover
-    gsetroot(hg38_path)
+    gsetroot(test_db_root(hg38_path))
     gdb.reload()
 
     # Run gtrack.liftover with Kent-matching parameters:

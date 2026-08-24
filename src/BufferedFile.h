@@ -31,6 +31,14 @@ public:
 	// see fclose for return value
 	int close();
 
+	// Pushes the stdio buffer to the OS. Returns 0 on success, EOF on failure
+	// (errno set). Writes go through fwrite into a 1 MiB stdio buffer, so a
+	// successful write() return says nothing about the bytes reaching the disk:
+	// ENOSPC/EDQUOT surface here (or, unchecked, at fclose). Every writer that
+	// finalises a file must flush() and check before it stops being able to
+	// report an error.
+	int flush() { return m_fp ? fflush(m_fp) : 0; }
+
 	// see fgetc for return value
 	int getc();
 

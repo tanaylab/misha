@@ -1,6 +1,6 @@
 test_that("gtrack.rm returns quickly and removes track", {
-    skip_if_not(dir.exists("/net/mraid20/export/tgdata/db/tgdb/misha_test_db"))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db")
+    skip_if(is.null(test_db_root()), "Shared test database not available")
+    gsetroot(test_db_root())
     on.exit(gdb.reload(), add = TRUE)
 
     # Create a track to remove
@@ -18,14 +18,14 @@ test_that("gtrack.rm returns quickly and removes track", {
 })
 
 test_that("gtrack.rm with force on non-existent track is silent", {
-    skip_if_not(dir.exists("/net/mraid20/export/tgdata/db/tgdb/misha_test_db"))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db")
+    skip_if(is.null(test_db_root()), "Shared test database not available")
+    gsetroot(test_db_root())
     expect_silent(gtrack.rm("nope_definitely_no_such_track", force = TRUE))
 })
 
 test_that("gtrack.rm uses .gdb.trash (creates trash sibling)", {
-    skip_if_not(dir.exists("/net/mraid20/export/tgdata/db/tgdb/misha_test_db"))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db")
+    skip_if(is.null(test_db_root()), "Shared test database not available")
+    gsetroot(test_db_root())
     on.exit(gdb.reload(), add = TRUE)
 
     suppressWarnings(gtrack.rm("test.rm_trash", force = TRUE))
@@ -52,8 +52,8 @@ test_that("gtrack.rm uses .gdb.trash (creates trash sibling)", {
 })
 
 test_that("gtrack.rm force-branch reports failure when trash returns FALSE", {
-    skip_if_not(dir.exists("/net/mraid20/export/tgdata/db/tgdb/misha_test_db"))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db")
+    skip_if(is.null(test_db_root()), "Shared test database not available")
+    gsetroot(test_db_root())
     on.exit(gdb.reload(), add = TRUE)
 
     # Create a track and then drop it from GTRACKS so gtrack.rm enters the
@@ -81,8 +81,8 @@ test_that("gtrack.rm force-branch reports failure when trash returns FALSE", {
 })
 
 test_that("gtrack.rm force-branch with no on-disk residue scrubs cache silently", {
-    skip_if_not(dir.exists("/net/mraid20/export/tgdata/db/tgdb/misha_test_db"))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db")
+    skip_if(is.null(test_db_root()), "Shared test database not available")
+    gsetroot(test_db_root())
     on.exit(gdb.reload(), add = TRUE)
 
     # Track that was never on disk but is also not in GTRACKS -> existed=FALSE
@@ -92,8 +92,8 @@ test_that("gtrack.rm force-branch with no on-disk residue scrubs cache silently"
 })
 
 test_that("gtrack.copy overwrite aborts when trash fails", {
-    skip_if_not(dir.exists("/net/mraid20/export/tgdata/db/tgdb/misha_test_db"))
-    gsetroot("/net/mraid20/export/tgdata/db/tgdb/misha_test_db")
+    skip_if(is.null(test_db_root()), "Shared test database not available")
+    gsetroot(test_db_root())
     on.exit(gdb.reload(), add = TRUE)
 
     suppressWarnings(gtrack.rm("test_copy_src", force = TRUE))

@@ -193,4 +193,4 @@ test_that("threads default resolves to a sensible value", {
 })
 
 # Restore the test database after this file's tests.
-suppressMessages(gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/"))
+reset_test_db_root()

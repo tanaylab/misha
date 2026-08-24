@@ -451,11 +451,11 @@ SEXP gseq_multifasta_import(SEXP _fasta, SEXP _seq, SEXP _index, SEXP _sort, SEX
         write_index_file(index_fname, entries);
 
         // Return data frame with contig names and sizes
-        SEXP name_col = PROTECT(Rf_allocVector(STRSXP, entries.size()));
-        SEXP size_col = PROTECT(Rf_allocVector(REALSXP, entries.size()));
+        SEXP name_col = PROTECT(RSaneAllocVector(STRSXP, entries.size()));
+        SEXP size_col = PROTECT(RSaneAllocVector(REALSXP, entries.size()));
 
         for (size_t i = 0; i < entries.size(); i++) {
-            SET_STRING_ELT(name_col, i, Rf_mkChar(entries[i].name.c_str()));
+            SET_STRING_ELT(name_col, i, RSaneMkChar(entries[i].name.c_str()));
             REAL(size_col)[i] = (double)entries[i].length;
         }
 

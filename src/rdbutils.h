@@ -130,9 +130,18 @@ void set_rel_timeout(int64_t delay_msec, struct timespec &req);
 bool is_time_elapsed(int64_t delay_msec, const struct timespec &start_time);
 
 // use rerror/verror instead of error!
-void rerror(const char *fmt, ...);
+//
+// Neither returns, and neither can be made to return by anything a caller does. verror()
+// inside a .Call throws (TGLError, which throws itself if the installed error handler
+// hands control back); outside one it goes to handle_error(), which either ends a
+// multitasking child through rexit() or reaches R through Rf_errorcall(). Every one of
+// those is [[noreturn]] in turn, so the annotation here rests on construction rather than
+// on the current contents of TGLException::s_error_handler - a mutable global with a
+// public setter. Static analysers read it too: rchk otherwise walks the impossible
+// fall-through past "runprotect(n); verror(...)" and reports the imbalance it invents.
+[[noreturn]] void rerror(const char *fmt, ...);
 
-void verror(const char *fmt, ...);
+[[noreturn]] void verror(const char *fmt, ...);
 
 // Returns true the first time it is called with a given key within one top-level
 // .Call, and always false inside a multitasking child process. Use it to run a
@@ -152,8 +161,24 @@ SEXP rprotect(SEXP &expr);
 // "address taken" notes for local variables.
 SEXP rprotect_ptr(SEXP expr);
 
-// Unprotect the last "count" object
+// Unprotect the last "count" objects.
+//
+// SAFE ONLY WHILE NOTHING ELSE PROTECTS IN BETWEEN. The stack is shared with every
+// other rprotect() in the call - IntervUtils' constructor pins ALLGENOME on it and
+// never releases it, and convert_intervs() leaves its result on it - so "the n I
+// protected" and "the last n" are the same objects only as long as nothing called in
+// between protected anything of its own. When the number is conditional, or a helper
+// runs in between, prefer runprotect(SEXP&) or protect_depth()/runprotect_to().
 void runprotect(int count);
+
+// Current depth of misha's protect stack, for use with runprotect_to().
+unsigned protect_depth();
+
+// Pops everything protected since protect_depth() returned "depth", and nothing below
+// it. Unlike runprotect(int) the caller need not know how many objects the code in
+// between chose to protect, so it stays correct when that changes. No-op if the stack
+// is already at or below "depth".
+void runprotect_to(unsigned depth);
 
 // Unprotects object expr and sets it to R_NilValue. Works slower than runprotect(unsigned)!
 void runprotect(SEXP &expr);
@@ -208,17 +233,113 @@ void RSaneSerialize(SEXP rexp, FILE *fp);
 void RSaneSerialize(SEXP rexp, const char *fname);
 
 // This function reads R object from a file. Object is expected to be saved using R's serialize() function or RSaneSerialize().
-// The returned value is already protected.
+// THE RETURNED VALUE IS NOT PROTECTED. Protect it before the next allocation - all current
+// callers either rprotect() it on the spot or store it into an already-protected object
+// with nothing allocating in between. (The header used to claim the opposite; it could not
+// be true, because R_ToplevelExec unwinds the protect stack to its own entry depth.)
 // Unlike R_Unserialize function that just stops the execution if anything goes wrong (meaning: no clean up, destructors, etc.)
 // RSaneUnserialize throws an exception in case of error.
 SEXP RSaneUnserialize(FILE *fp);
 SEXP RSaneUnserialize(const char *fname);
 
-// Same as above: replaces Rf_allocVector which can fail on memory allocation and then R makes a longmp, skipping all the destructors
+// ---------------------------------------------------------------------------
+// The RSane* allocators, and when a raw R allocator is fine
+// ---------------------------------------------------------------------------
+//
+// R's allocators raise an R error when they cannot satisfy a request, and an R
+// error is a longjmp. A longjmp out of a .Call entry point skips every C++
+// destructor between the throw point and R's top level - including
+// ~RdbInitializer, which is what returns s_ref_count to its entry value and
+// releases the shared memory, the child processes and the temporary files. A
+// stuck s_ref_count is not a leak: this failure mode has already produced two
+// defects in which a worker's exit through R's shutdown deleted the session
+// tempdir, and the database inside it. This is invariant C3 of the lifetime
+// contract: nothing inside an RdbInitializer scope may longjmp.
+//
+// Each RSane* wrapper runs the allocation inside R_ToplevelExec, so an
+// allocation failure comes back as a TGLException instead. The entry point's
+// own catch then unwinds the stack properly, running ~RdbInitializer on the
+// way, and calls rerror() from a context where a longjmp is safe.
+//
+// WHEN TO USE ONE
+//
+//   Use an RSane* wrapper when the number of bytes the site requests grows
+//   with the user's data - the length of a result column, one CHARSXP per
+//   output row, a matrix sized by 4^k. Those are the requests that actually
+//   run out of memory, and gseq.extract on a large interval set is the
+//   canonical way a misha user does it.
+//
+// WHEN A RAW CALL IS FINE - and most of them are
+//
+//   1. Fixed-size requests. A 7-element column-name vector, Rf_mkString of a
+//      literal, Rf_ScalarReal: R cannot be unable to find room for 8 bytes and
+//      still be a working session. Wrapping these buys nothing and costs a
+//      measured ~23 ns of R_ToplevelExec each.
+//   2. Requests bounded by the shape of the database rather than by the call -
+//      one element per chromosome, per column, per track. The widest genome in
+//      the lab has 13,397 contigs; a STRSXP of chromosome names is under a
+//      megabyte however large the query was.
+//   3. Rf_mkChar(CHAR(STRING_ELT(src, i))) round-trips. R's CHARSXP cache
+//      returns the *same* CHARSXP for a string that is already interned, and
+//      every CHARSXP inside a live STRSXP is. Measured: 2,000,000 such calls
+//      over a column of 26,000 distinct values allocated nothing at all.
+//   4. Anywhere no RdbInitializer is live - C_revcomp, C_rev, C_comp,
+//      C_intervals_coord_strings are pure R-to-R helpers, and a longjmp out of
+//      one destroys nothing.
+//
+// Do not sweep. As of 5.11.22, 318 raw allocating calls remain in src/,
+// and every one of them falls under one of those four heads. The worst defect
+// found in the 2026-08 audit - a runprotect() count inside a loop that
+// corrupted a database - was introduced by a commit whose stated purpose was
+// hardening PROTECT usage across many sites at once.
+//
+// NOTE ON PROTECTION: like Rf_allocVector, none of these return a protected
+// value. rprotect() the result before the next allocation.
+
+// Replaces Rf_allocVector, which can fail on memory allocation and then R makes a longjmp, skipping all the destructors
 SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
 // Same as above for Rf_mkChar, which allocates a CHARSXP and can fail the same way
 SEXP RSaneMkChar(const char *str);
+
+// Runs one R allocation under R_ToplevelExec and turns a failure into a
+// TGLException. `alloc` must be a plain R allocator call and nothing else: it
+// runs inside an R context, so it must not throw a C++ exception (that would
+// unwind past endcontext) and must not call back into misha.
+//
+// This is the escape hatch for the allocators that have no named wrapper.
+// There is deliberately no RSaneMkString / RSaneScalarReal / RSaneScalarInteger:
+// every call site of those in misha allocates a fixed, tiny object, so naming
+// a wrapper for them would only invite the mechanical sweep this comment
+// exists to discourage.
+template <typename Alloc>
+SEXP RSaneAlloc(Alloc alloc)
+{
+	struct Payload { Alloc *alloc; SEXP retv; } payload = { &alloc, R_NilValue };
+
+	Rboolean ok = R_ToplevelExec([](void *p) {
+			Payload *d = (Payload *)p;
+			d->retv = (*d->alloc)();
+		}, &payload);
+
+	if (!ok)
+		verror("Allocation failed");
+	return payload.retv;
+}
+
+// Same as RSaneAllocVector for Rf_mkCharLenCE. gseq.extract makes one of these
+// per interval, each holding a whole DNA sequence - the largest allocations
+// misha ever asks R for.
+inline SEXP RSaneMkCharLenCE(const char *str, int len, cetype_t enc)
+{
+	return RSaneAlloc([&]() { return Rf_mkCharLenCE(str, len, enc); });
+}
+
+// Same as RSaneAllocVector for Rf_allocMatrix.
+inline SEXP RSaneAllocMatrix(SEXPTYPE type, int nrow, int ncol)
+{
+	return RSaneAlloc([&]() { return Rf_allocMatrix(type, nrow, ncol); });
+}
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 
@@ -247,7 +368,10 @@ static inline SEXP find_in_misha(SEXP envir, const char *name) {
     SEXP misha_env = R_NilValue;
     misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, (Rboolean)TRUE));
     SEXP val = R_getVarEx(Rf_install(name), misha_env, (Rboolean)TRUE, R_UnboundValue);
-    runprotect(1);
+    // rprotect_ptr() is a no-op on R_NilValue, so pop only what was actually pushed -
+    // the same guard define_in_misha() below already carries. An unguarded
+    // runprotect(1) would pop the caller's object instead.
+    runprotect(misha_env != R_NilValue);
     return val;
 }
 
@@ -371,11 +495,68 @@ template<typename T> void unpack_data(void *&ptr, T &data, uint64_t n) {
 #define MAX_KIDS 1000
 #define rreturn(retv) { if (RdbInitializer::is_kid()) rexit(); return(retv); }
 
+//---------------------------------------------------------------------------------------------
+//                          THE C++/R LIFETIME CONTRACT (C1 - C6)
+//---------------------------------------------------------------------------------------------
+//
+// Every misha .Call entry point runs inside an RdbInitializer. That object owns process-wide
+// state - the SIGINT handler, the set of file descriptors the call opened, misha's PROTECT
+// counter, the shared-memory arena and kid bookkeeping used by multitasking - and ~RdbInitializer
+// is the only thing that puts it back. So any path that leaves the frame without running the
+// destructor does not fail the current call: it corrupts every later call in the session.
+//
+// The six rules below are what keeps that from happening. They are written here rather than in a
+// design document because four defects in one week came from breaking them, two of which ended
+// up deleting a database, and none of them was reported by rchk, valgrind, ASAN or UBSAN.
+//
+// C1  Every .Call entry point owns an RdbInitializer, declared inside a try block that catches
+//     TGLException (and std::exception). Nothing else restores the SIGINT handler, closes the
+//     files the call opened, or drains the protect stack.
+//
+// C2  Nothing holding an RdbInitializer may call another entry point INLINE. The inner entry
+//     point constructs a second RdbInitializer; an error raised inside it reaches R through
+//     Rf_error/Rf_errorcall, whose longjmp goes to R's top level and skips both destructors, so
+//     s_ref_count and s_protect_counter stay above their entry values for the rest of the
+//     session - and every later multitasking call reuses stale shared memory and a stale kid
+//     index. Use rdb::SingleShard (declared just below) instead: throw it, catch it OUTSIDE the
+//     try block that owns the RdbInitializer, and call the serial entry point from there, with
+//     the first frame already unwound.
+//
+//     This is about DIRECT inline C++ calls. A misha call nested through eval_in_R() - a track
+//     expression, say - is safe: R_tryEval() runs it under R_ToplevelExec(), which blanks the
+//     handler stack, so the inner Rf_errorcall lands on that context and the surrounding C++
+//     frames unwind normally.
+//
+// C3  Nothing inside the scope may longjmp. That rules out Rf_error, Rf_warning, and any
+//     allocator that can fail into R's error path (Rf_allocVector, Rf_mkChar, R_alloc). Use
+//     rerror/verror, add_pending_diagnostic(), RSaneAllocVector() and RSaneMkChar(), which all
+//     report through C++ and let the stack unwind. An exiting R-level handler makes this bite in
+//     places that look harmless: options(warn = 2) turns a plain Rf_warning() into a longjmp.
+//
+// C4  A forked multitasking child must never longjmp into R. It shares the parent's R heap image
+//     but owns none of its resources, so unwinding into R's error path there runs R's shutdown
+//     code - including the part that removes the session temp directory - in a process that does
+//     not own it. Children leave through rexit()/rreturn(), which raise SIGTERM on themselves so
+//     the process dies without unwinding at all. (That deliberate non-unwinding is also why
+//     valgrind reports "possibly lost" blocks in kids; see tools/valgrind.supp.)
+//
+// C5  Protection is balanced on every path, including error and interrupt. Prefer the by-object
+//     runprotect(SEXP &) over the count-based runprotect(unsigned): a count computed once outside
+//     a loop and unprotected inside it is exactly how TrackVars.cpp came to read freed memory.
+//
+// C6  s_ref_count and s_protect_counter are back at their entry values on every exit. This is the
+//     observable consequence of C1 - C5 rather than a separate rule: if it does not hold, one of
+//     the five above was broken somewhere.
+//
+//---------------------------------------------------------------------------------------------
+
 namespace rdb {
 
-// Thrown by a multitasking entry point when prepare4multitasking() planned a single shard,
-// i.e. when forking one kid would buy no parallelism. Catching it OUTSIDE the try block that
-// owns the RdbInitializer is what makes the fallback safe: the throw unwinds that frame, so
+// Thrown by a multitasking entry point that has decided not to multitask after all: either
+// prepare4multitasking() planned a single shard, i.e. forking one kid would buy no
+// parallelism, or the shared-memory arena could not be allocated and the retry ladder is
+// exhausted. Catching it OUTSIDE the try block that owns the RdbInitializer is what makes
+// the fallback safe: the throw unwinds that frame, so
 // the RdbInitializer is destroyed before the serial entry point (with its own RdbInitializer)
 // runs. Calling the serial entry point while the multitasking one still holds an
 // RdbInitializer is not an option - an error inside it reaches R through Rf_error, whose
@@ -385,7 +566,7 @@ struct SingleShard {};
 
 }
 
-void rexit();
+[[noreturn]] void rexit();
 
 // Define RdbInitializer instance in your main function that is called by R.
 // RdbInitializer should be defined inside "try-catch" statement that catches TGLException.
@@ -404,6 +585,14 @@ public:
 	static bool   is_kid() { return s_is_kid; }
 	static int    get_kid_idx() { return s_kid_index; }
     static void   get_open_fds(set<int> &fds);
+
+	// The two counters that carry misha's lifetime invariant: both must be back at their
+	// entry values when a .Call returns, and a longjmp past ~RdbInitializer is exactly what
+	// leaves them stuck. Exposed so that C_lifetime_counters() (src/rdbutils.cpp) can report
+	// them to R and a test can assert on the invariant itself rather than on a side effect
+	// of it, such as the process umask.
+	static int      get_ref_count() { return s_ref_count; }
+	static unsigned get_protect_count() { return s_protect_counter; }
 
 	// allows to safely write to stdout even from a child process
 	// (before doing so please make sure launch_process() does not close stdout)
@@ -489,7 +678,7 @@ private:
 	static void    wait_for_kids(rdb::IntervUtils &iu);
 	static int64_t update_kids_mem_usage();
 	static int     get_num_kids() { return s_kid_index; }
-	static void    handle_error(const char *msg);
+	[[noreturn]] static void handle_error(const char *msg);
 	static void    update_progress(unsigned char progress);
 	static void    update_res_data_size(uint64_t size);
 	static void   *allocate_res(uint64_t res_num_records);
@@ -561,6 +750,7 @@ private:
 	friend void rdb::check_interrupt();
 	friend SEXP rdb::rprotect(SEXP &expr);
 	friend void rdb::runprotect(int count);
+	friend unsigned rdb::protect_depth();
 	friend void rdb::runprotect(SEXP &expr);
 	friend void rdb::runprotect(vector<SEXP> &exprs);
 	friend void rdb::runprotect_all();
@@ -584,7 +774,7 @@ private:
 
 // ------------------------------- IMPLEMENTATION --------------------------------
 
-inline void rexit() {
+[[noreturn]] inline void rexit() {
 	if (RdbInitializer::is_kid()){
 		// Normally we should have called exit() here. However "R CMD check"
 		// doesn't like calls to exit/abort/etc because they end R session
@@ -603,10 +793,28 @@ inline void rexit() {
 		sigemptyset(&sa.sa_mask);
 		sa.sa_flags = 0;
 		sigaction(MISHA_EXIT_SIG, &sa, NULL);
+
+		// kill() returns 0 on success. POSIX only promises that the signal is delivered
+		// before it returns if the signal is unblocked, so a blocked MISHA_EXIT_SIG - misha
+		// never blocks it, but the mask a fork inherits is not misha's to assume - would
+		// leave the child running R-level code on the parent's file descriptors, which is
+		// the corruption the SIG_DFL reset above was added to stop. Unblock it first.
+		sigset_t exit_sig;
+		sigemptyset(&exit_sig);
+		sigaddset(&exit_sig, MISHA_EXIT_SIG);
+		sigprocmask(SIG_UNBLOCK, &exit_sig, NULL);
 		kill(getpid(), MISHA_EXIT_SIG);
-	} else {
-		rdb::verror("rexit is called from parent process");
+
+		// Unreachable in practice. It is here so that "this never returns" is a property of
+		// the code rather than an argument about kill(): SIGKILL can be neither caught,
+		// blocked nor ignored, and the loop leaves the compiler no path out of the branch.
+		// A child that somehow cannot die then hangs - visible, and recoverable with Ctrl-C -
+		// instead of falling through into R.
+		for (;;)
+			kill(getpid(), SIGKILL);
 	}
+
+	rdb::verror("rexit is called from parent process");
 }
 
 inline SEXP rdb::rprotect_ptr(SEXP expr)

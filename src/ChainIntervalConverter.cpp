@@ -112,6 +112,7 @@ SEXP ChainIntervalConverter::convert_chain_intervs(const rdb::ChainIntervals &ch
 	for (ChainIntervals::const_iterator iinterval = chain_intervs.begin(); iinterval != chain_intervs.end(); ++iinterval)
 		tmp_intervals.push_back((GInterval)*iinterval);
 
+    unsigned protect_mark = protect_depth();
     SEXP answer = m_iu.convert_intervs(&tmp_intervals, ChainInterval::NUM_COLS);
 	SEXP src_chroms, src_chroms_idx, src_starts, src_ends, src_strands, tgt_strands, chain_ids, scores;
     SEXP col_names = Rf_getAttrib(answer, R_NamesSymbol);
@@ -155,7 +156,10 @@ SEXP ChainIntervalConverter::convert_chain_intervs(const rdb::ChainIntervals &ch
     SET_VECTOR_ELT(answer, ChainInterval::CHAIN_ID, chain_ids);
     SET_VECTOR_ELT(answer, ChainInterval::SCORE, scores);
 
-    runprotect(7);
+    // Keep "answer" (protected first by convert_intervs); col_names and the eight
+    // column vectors above it are reachable from it now. The old hand-counted
+    // runprotect(7) left two of the nine behind.
+    runprotect_to(protect_mark + 1);
     return answer;
 }
 

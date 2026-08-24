@@ -285,6 +285,10 @@ SEXP C_gcompute_strands_autocorr(SEXP _infile, SEXP _chrom, SEXP _binsize, SEXP 
 		SET_VECTOR_ELT(answer, 0, total_stat);
 		SET_VECTOR_ELT(answer, 1, bin_stat);
 
+		// Eight objects were protected here and nothing in between protects, so these
+		// are the top seven: everything except total_stat, which stays behind until
+		// ~RdbInitializer. "answer" is among them, which is safe only because nothing
+		// allocates between here and the return.
 		runprotect(7);
 		return answer;
 	} catch (TGLException &e) {

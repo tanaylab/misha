@@ -743,4 +743,4 @@ test_that("multi-FASTA import handles Windows line endings", {
     expect_equal(seq, "ACTG")
 })
 
-gdb.init("/net/mraid20/export/tgdata/db/tgdb/misha_test_db/")
+reset_test_db_root()

@@ -4,6 +4,11 @@
 
 # --- shared helpers -----------------------------------------------------------
 
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
+
 .gsa_train_small_model <- function(intervals, iterator = 200) {
     # Caller is responsible for removing "test_vt" (the vtrack is referenced
     # again at sample time via model$dim_specs).
