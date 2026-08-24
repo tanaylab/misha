@@ -371,6 +371,8 @@ SEXP gmapply_multitask(SEXP _intervals, SEXP _fn, SEXP _track_exprs, SEXP _enabl
 			Rf_setAttrib(answer, R_NamesSymbol, col_names);
 			Rf_setAttrib(answer, R_ClassSymbol, Rf_mkString("data.frame"));
 			Rf_setAttrib(answer, R_RowNamesSymbol, row_names);
+			// rvals only: it is the last one protected here, and "answer" - which
+			// rreturn() hands back - must stay protected below it.
 			runprotect(1);
 			rreturn(answer);
 		}

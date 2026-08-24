@@ -290,6 +290,9 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			SET_VECTOR_ELT(answer, Rf_length(_intervs1) + Rf_length(_intervs2), rdists);
 			SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2), Rf_mkChar("dist"));
+			// colnames only - the last thing protected. create_data_frame() and
+			// define_data_frame_cols() left their own objects below it, and "answer"
+			// must stay protected among them.
 			runprotect(1);
 
 			return answer;
@@ -426,6 +429,7 @@ SEXP gfind_neighbors(SEXP _intervs1, SEXP _intervs2, SEXP _maxneighbors, SEXP _d
 			SEXP colnames = rprotect_ptr(Rf_getAttrib(answer, R_NamesSymbol));
 			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2), Rf_mkChar("dist1"));
 			SET_STRING_ELT(colnames, Rf_length(_intervs1) + Rf_length(_intervs2) + 1, Rf_mkChar("dist2"));
+			// colnames only - see the 1D branch above.
 			runprotect(1);
 
 			return answer;

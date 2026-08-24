@@ -129,7 +129,9 @@ void GIntervalsBigSet2D::load_chrom(int chromid1, int chromid2)
 
 			// Convert R intervals to C++ intervals
 			m_iu->convert_rintervs(rintervals, NULL, &m_intervals);
-			runprotect(1);
+			// Name it: convert_rintervs protects on some of its input shapes, so
+			// "the last one protected" is not necessarily rintervals.
+			runprotect(rintervals);
 
 			// set udata
 			// Cumulative orig_size of all populated pairs strictly preceding
@@ -195,6 +197,8 @@ void GIntervalsBigSet2D::save_chrom_plain_intervals(const char *intervset, GInte
 	if (intervals.size()) {
 		SEXP rintervals = iu.convert_intervs(&intervals);
 		save_chrom(intervset, &intervals, rintervals, iu, chromstats);
+		// Every caller runs this once per chromosome pair - see the 1D overload.
+		runprotect(rintervals);
 		intervals.clear();
 	}
 }
