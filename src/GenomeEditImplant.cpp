@@ -198,14 +198,14 @@ SEXP C_ggenome_implant(SEXP _genome_fasta, SEXP _output,
         // --- return .fai as R data frame ---
         int n = (int)fai_entries.size();
 
-        SEXP name_col   = PROTECT(Rf_allocVector(STRSXP,  n));
-        SEXP length_col = PROTECT(Rf_allocVector(REALSXP, n));
-        SEXP offset_col = PROTECT(Rf_allocVector(REALSXP, n));
-        SEXP lbase_col  = PROTECT(Rf_allocVector(INTSXP,  n));
-        SEXP lwidth_col = PROTECT(Rf_allocVector(INTSXP,  n));
+        SEXP name_col   = PROTECT(RSaneAllocVector(STRSXP,  n));
+        SEXP length_col = PROTECT(RSaneAllocVector(REALSXP, n));
+        SEXP offset_col = PROTECT(RSaneAllocVector(REALSXP, n));
+        SEXP lbase_col  = PROTECT(RSaneAllocVector(INTSXP,  n));
+        SEXP lwidth_col = PROTECT(RSaneAllocVector(INTSXP,  n));
 
         for (int i = 0; i < n; i++) {
-            SET_STRING_ELT(name_col, i, Rf_mkChar(fai_entries[i].name.c_str()));
+            SET_STRING_ELT(name_col, i, RSaneMkChar(fai_entries[i].name.c_str()));
             REAL(length_col)[i] = (double)fai_entries[i].length;
             REAL(offset_col)[i] = (double)fai_entries[i].offset;
             INTEGER(lbase_col)[i]  = fai_entries[i].linebases;
