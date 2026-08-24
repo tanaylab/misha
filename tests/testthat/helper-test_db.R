@@ -260,30 +260,46 @@ local_db_state <- function(env = parent.frame()) {
     )
 }
 
-#' Guarantee this test file leaves a usable GROOT behind
+#' Guarantee this test file leaves this process's overlay behind
 #'
-#' Files that build their own temporary database and re-root into it leave
-#' .misha$GROOT dangling as soon as that directory is removed (withr deletes
-#' it at the end of the test or the file). Under TESTTHAT_PARALLEL the next
-#' file in the same worker process inherits the dangling root and fails with
-#' something unrelated to its own subject matter - "Database directory does
-#' not exist", "Chromosome chr1 does not exist ... Known chromosomes: chrA",
-#' or "Cannot delete track from read-only database" (a deleted directory is
-#' not writable, so it reads as read-only).
+#' Files that re-root hand whatever they finish with to the next file in the
+#' same parallel worker, which then fails on something unrelated to its own
+#' subject matter. Two shapes of that, both measured across the suite:
 #'
-#' Call this once at the top of any file that re-roots. It is idempotent and
-#' does nothing when the file leaves a valid root behind.
+#'   - a *dangling* root - the file built a database under tempfile() and withr
+#'     removed it - giving "Database directory does not exist" or "Cannot delete
+#'     track from read-only database" (a deleted directory is not writable, so
+#'     it reads as read-only);
+#'   - a *foreign* root that exists perfectly well but is the wrong database -
+#'     gdb.init_examples(), an hg38 fixture, a two-chromosome create_test_db() -
+#'     giving "Invalid interval (chr1, ...): end coordinate exceeds chromosome
+#'     boundaries" or "Interval test.fixedbin does not exist".
+#'
+#' The second is the common one and is why this checks identity rather than mere
+#' existence: a file that finishes on the example database leaves something that
+#' passes every "is this a usable database" test and still breaks the next file.
+#'
+#' Call this once at the top of any file that re-roots (via
+#' `restore_groot_on_exit()`, which is what registers it in the right order). It
+#' is idempotent and does nothing when the session is already at the overlay.
 ensure_valid_groot <- function() {
+    root <- test_db_root()
+    if (is.null(root)) {
+        return(invisible(NULL))
+    }
     groot <- if (exists("GROOT", envir = .misha, inherits = FALSE)) {
         get("GROOT", envir = .misha)
     } else {
         NULL
     }
-    if (is.null(groot) || !dir.exists(groot)) {
-        root <- test_db_root()
-        if (!is.null(root)) {
-            suppressMessages(gdb.init(root))
-        }
+    at_overlay <- !is.null(groot) && is.character(groot) && length(groot) == 1 &&
+        dir.exists(groot) &&
+        identical(
+            normalizePath(groot, mustWork = FALSE),
+            normalizePath(root, mustWork = FALSE)
+        )
+    if (!at_overlay) {
+        suppressMessages(gdb.init(root))
     }
     invisible(NULL)
 }
