@@ -36,5 +36,5 @@ test_that("a track expression that parses to NULL errors instead of crashing a w
         "evaluates to NULL"
     )
     # the session is still usable afterwards
-    expect_equal(nrow(gextract("dense_track", gintervals(1, 0, 1000), iterator = 100)), 10)
+    expect_equal(nrow(gextract("test.fixedbin", gintervals(1, 0, 1000), iterator = 100)), 10)
 })
