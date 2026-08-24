@@ -46,23 +46,29 @@ static bool copy_file_contents(const string &src, FILE *dest, uint64_t &bytes_wr
         TGLError<GenomeTrack>("Failed to seek to start of %s", src.c_str());
     }
 
-    // Copy in chunks
+    // Copy in chunks. vector, not new[]: check_interrupt() below throws, and so does
+    // every TGLError on this path.
     const size_t BUFFER_SIZE = 1024 * 1024; // 1MB buffer
-    char *buffer = new char[BUFFER_SIZE];
+    vector<char> buffer(BUFFER_SIZE);
     uint64_t total_read = 0;
 
     while (total_read < file_size) {
+        // One flag test per megabyte copied: a single chromosome of a multi-GB track is
+        // minutes of work on its own, so the per-chromosome check in the caller is not
+        // granular enough to make Ctrl-C usable. The throw leaves src_fp open; the
+        // caller's ~RdbInitializer closes every descriptor the call opened, which is
+        // what the rest of this file's error paths rely on too.
+        check_interrupt();
+
         size_t to_read = min((uint64_t)BUFFER_SIZE, file_size - total_read);
-        size_t read_bytes = fread(buffer, 1, to_read, src_fp);
+        size_t read_bytes = fread(buffer.data(), 1, to_read, src_fp);
         if (read_bytes != to_read) {
-            delete[] buffer;
             fclose(src_fp);
             TGLError<GenomeTrack>("Failed to read from %s", src.c_str());
         }
 
-        size_t written = fwrite(buffer, 1, read_bytes, dest);
+        size_t written = fwrite(buffer.data(), 1, read_bytes, dest);
         if (written != read_bytes) {
-            delete[] buffer;
             fclose(src_fp);
             TGLError<GenomeTrack>("Failed to write to track.dat");
         }
@@ -70,7 +76,6 @@ static bool copy_file_contents(const string &src, FILE *dest, uint64_t &bytes_wr
         total_read += read_bytes;
     }
 
-    delete[] buffer;
     fclose(src_fp);
     bytes_written = file_size;
     return true;
@@ -170,6 +175,8 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
         }
 
         for (int chromid = 0; chromid < (int)chromkey.get_num_chroms(); chromid++) {
+            check_interrupt();
+
             string chrom_name = chromkey.id2chrom(chromid);
 
             // Try to find the chromosome file, handling chr prefix mismatch
@@ -284,6 +291,10 @@ SEXP gtrack_convert_to_indexed_format(SEXP _track, SEXP _remove_old, SEXP _envir
  * Creates an empty indexed track (track.idx + track.dat with no data)
  * This is used for empty tracks created by liftover or other operations
  */
+// No check_interrupt() here, unlike the other conversion entry points: this one has no
+// loop at all - three file operations and a 16-byte header - so there is no window for an
+// interrupt to land in, and a check right after the constructor would read a flag the
+// constructor has just zeroed.
 SEXP gtrack_create_empty_indexed(SEXP _track, SEXP _envir) {
     try {
         RdbInitializer rdb_init;

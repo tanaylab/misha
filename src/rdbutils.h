@@ -208,7 +208,10 @@ void RSaneSerialize(SEXP rexp, FILE *fp);
 void RSaneSerialize(SEXP rexp, const char *fname);
 
 // This function reads R object from a file. Object is expected to be saved using R's serialize() function or RSaneSerialize().
-// The returned value is already protected.
+// THE RETURNED VALUE IS NOT PROTECTED. Protect it before the next allocation - all current
+// callers either rprotect() it on the spot or store it into an already-protected object
+// with nothing allocating in between. (The header used to claim the opposite; it could not
+// be true, because R_ToplevelExec unwinds the protect stack to its own entry depth.)
 // Unlike R_Unserialize function that just stops the execution if anything goes wrong (meaning: no clean up, destructors, etc.)
 // RSaneUnserialize throws an exception in case of error.
 SEXP RSaneUnserialize(FILE *fp);

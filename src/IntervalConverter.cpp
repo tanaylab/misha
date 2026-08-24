@@ -499,7 +499,6 @@ SEXP IntervalConverter::convert_intervs(GIntervalsFetcher2D *intervals, unsigned
 	SEXP col_names;
 
 	rprotect(answer = RSaneAllocVector(VECSXP, num_cols));
-    rprotect(chroms1 = RSaneAllocVector(STRSXP, num_chroms));
     rprotect(starts1 = RSaneAllocVector(REALSXP, intervals->size()));
     rprotect(ends1 = RSaneAllocVector(REALSXP, intervals->size()));
     rprotect(chroms_idx1 = RSaneAllocVector(INTSXP, intervals->size()));

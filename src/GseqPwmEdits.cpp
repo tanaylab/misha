@@ -34,6 +34,7 @@
 #include "DnaPSSM.h"
 #include "PWMScorer.h"
 #include "PwmCoreParams.h"
+#include "rdbutils.h"
 #include <set>
 #include <algorithm>
 #include <cmath>
@@ -1055,8 +1056,13 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
                        SEXP r_direction)
 {
     try {
-        if (!Rf_isString(r_seqs)) Rf_error("seqs must be a character vector");
-        if (!Rf_isMatrix(r_pssm) || !Rf_isReal(r_pssm)) Rf_error("pssm must be a numeric matrix");
+        // check_interrupt() below reads a flag only misha's own SIGINT handler sets, and
+        // that handler exists only while an RdbInitializer does. Rf_error() would longjmp
+        // straight past it, so validation reports through verror() from here on.
+        RdbInitializer rdb_init;
+
+        if (!Rf_isString(r_seqs)) rdb::verror("seqs must be a character vector");
+        if (!Rf_isMatrix(r_pssm) || !Rf_isReal(r_pssm)) rdb::verror("pssm must be a numeric matrix");
 
         int n_seqs = Rf_length(r_seqs);
         if (n_seqs == 0) {
@@ -1226,6 +1232,11 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         std::vector<EditRow> all_rows;
 
         for (int si = 0; si < n_seqs; si++) {
+            // Per sequence, not per window: each iteration runs a full edit-distance DP
+            // over every window of the sequence, so a flag test here costs nothing and is
+            // the only point at which a long scan can be interrupted.
+            rdb::check_interrupt();
+
             SEXP r_str = STRING_ELT(r_seqs, si);
             if (r_str == NA_STRING) continue;
 
@@ -1404,6 +1415,9 @@ SEXP C_gseq_pwm_edits(SEXP r_seqs, SEXP r_pssm, SEXP r_score_thresh,
         UNPROTECT(18);
         return result_df;
 
+    } catch (TGLException &e) {
+        // rdb_init lives inside the try, so it is destroyed before this longjmp.
+        Rf_error("%s", e.msg());
     } catch (std::exception& e) {
         Rf_error("C_gseq_pwm_edits: %s", e.what());
     } catch (...) {
