@@ -27,9 +27,20 @@ jobs:
         continue-on-error: true
         id: fetch_pymisha
 
+      # Advisory, never blocking. It compares against pymisha's default branch,
+      # which only moves when pymisha cuts a release - development happens on a
+      # branch this job cannot see. So a misha change to a shared file shows up
+      # here for a while before pymisha can possibly match it, and that lag is
+      # normal rather than a failure. Read the output, do not gate on it.
       - name: Check shared C++ sources for drift
         if: steps.fetch_pymisha.outcome == 'success'
+        continue-on-error: true
+        id: drift
         run: python3 misha/tools/check-shared-cpp.py --misha misha --pymisha pymisha --show-diff
+
+      - name: Surface drift as a warning
+        if: steps.drift.outcome == 'failure'
+        run: echo "::warning::Shared C++ sources differ from pymisha's released branch - see the step above. Advisory only." 
 
       - name: Report skip
         if: steps.fetch_pymisha.outcome != 'success'
