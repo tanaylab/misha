@@ -37,7 +37,10 @@ struct Computed_val : public Rectangle {
 
 	Computed_val &operator=(const Computed_val &o) = default;
 
-	void clear_padding() { char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end); }
+	void clear_padding() {
+		MISHA_ASSERT_LAST_MEMBER(Computed_val, v)
+		char *v_end = (char *)&v + sizeof(v); memset(v_end, 0, (char *)this + sizeof(*this) - v_end);
+	}
 
 	double val(const Rectangle &rect, void* uptr) const {
         if (x1 == rect.x1 && x2 == rect.x2 && y1 == rect.y1 && y2 == rect.y2)
