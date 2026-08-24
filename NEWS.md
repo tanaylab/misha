@@ -6,6 +6,11 @@
 * `gtrack.array.import()` no longer aborts the R session when the disk fills up.
 * `gtrack.2d.import()` and `gtrack.import_contacts()` now report a failed write instead of creating a track that reads as empty.
 * Partial track directories left behind by a killed writer are removed when misha next opens the database.
+* Ctrl-C now stops indexed-format track conversions and `gseq.pwm()`, `gseq.kmer()` and `gseq.pwm_edits()`, which used to run to completion regardless.
+* An interrupted track expression now reports "Command interrupted!" instead of a blank error.
+* An unusable `gbuf.size` option - too large, `NA`, or not a number - is now reported. It used to break the session's Ctrl-C.
+* `gbuf.size` may now be given as an integer (`options(gbuf.size = 5000L)`), which was previously ignored in favour of the default.
+* `gtrack.lookup()` errors raised before the first chromosome is written no longer carry a garbled file name.
 
 # misha 5.11.21
 
