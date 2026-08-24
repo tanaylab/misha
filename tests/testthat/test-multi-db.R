@@ -2,6 +2,11 @@
 # These tests complement test-dataset.R by testing more advanced scenarios
 # Note: create_test_db() helper is defined in helper-test_db.R
 
+# These tests gsetroot() into tempdir databases that withr removes underneath GROOT, and
+# some of them leave it unset altogether. Put a usable root back for the next file in this
+# parallel worker.
+restore_groot_on_exit()
+
 # ==============================================================================
 # Migration tests: verify old multi-db patterns migrate to new API
 # ==============================================================================
