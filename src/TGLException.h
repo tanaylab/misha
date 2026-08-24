@@ -12,20 +12,27 @@ using namespace std;
 // call the installed error handler (TGLException::set_error_handler()).
 // Use the template version of TGLThrow to keep track of the object that generated the exception
 // (this object can be retrieved by TGLException::type())
+//
+// None of them returns. The error handler is reached through s_error_handler, an indirect
+// call through a mutable global with a public setter, so what the handler does is not
+// visible here and not fixed at compile time: a handler that returned would drop the caller
+// back into the code that had already given up. Each function therefore throws the exception
+// itself if the handler comes back, which is what makes [[noreturn]] - and everything built
+// on it, such as rdb::verror - true by construction rather than by convention.
 
 void TGLAssert(bool cond, const char *format, ...);
 
 void TGLAssert(bool cond, int errcode, const char *format, ...);
 
-void TGLError(const char *format, ...);
+[[noreturn]] void TGLError(const char *format, ...);
 
-void TGLError(int errcode, const char *format, ...);
-
-template <typename T>
-void TGLError(const char *format, ...);
+[[noreturn]] void TGLError(int errcode, const char *format, ...);
 
 template <typename T>
-void TGLError(int errcode, const char *format, ...);
+[[noreturn]] void TGLError(const char *format, ...);
+
+template <typename T>
+[[noreturn]] void TGLError(int errcode, const char *format, ...);
 
 
 // ------------------- TGLException --------------
@@ -78,6 +85,7 @@ inline void TGLAssert(bool cond, const char *format, ...)
     	TGLException e(-1, ap, format);
     	va_end(ap);
     	TGLException::s_error_handler(e);
+    	throw e;
     }
 }
 
@@ -89,25 +97,28 @@ inline void TGLAssert(bool cond, int errcode, const char *format, ...)
     	TGLException e(errcode, ap, format);
     	va_end(ap);
     	TGLException::s_error_handler(e);
+    	throw e;
     }
 }
 
-template <typename T> void TGLError(const char *format, ...)
+template <typename T> [[noreturn]] void TGLError(const char *format, ...)
 {
 	va_list ap;
 	va_start(ap, format);
 	TGLException e(-1, typeid(T), ap, format);
 	va_end(ap);
 	TGLException::s_error_handler(e);
+	throw e;
 }
 
-template <typename T> void TGLError(int errcode, const char *format, ...)
+template <typename T> [[noreturn]] void TGLError(int errcode, const char *format, ...)
 {
 	va_list ap;
 	va_start(ap, format);
 	TGLException e(errcode, typeid(T), ap, format);
 	va_end(ap);
 	TGLException::s_error_handler(e);
+	throw e;
 }
 
 #endif

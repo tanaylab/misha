@@ -589,7 +589,9 @@ int64_t RdbInitializer::update_kids_mem_usage()
 	return total_mem_usage;
 }
 
-void RdbInitializer::handle_error(const char *msg)
+// Both branches end in a function that cannot return - rexit() in the child, Rf_errorcall()
+// (declared NORET by R) in the parent - so control never reaches the end of this one.
+[[noreturn]] void RdbInitializer::handle_error(const char *msg)
 {
 	if (s_is_kid) {
 		{
@@ -600,10 +602,9 @@ void RdbInitializer::handle_error(const char *msg)
 			}
 		}
 		rexit();
-	} else {
-		Rf_errorcall(R_NilValue, "%s", msg);
 	}
 
+	Rf_errorcall(R_NilValue, "%s", msg);
 }
 
 void *RdbInitializer::allocate_res(uint64_t res_num_records)
@@ -738,7 +739,7 @@ void rdb::check_interrupt()
 	monitor_memusage();
 }
 
-void rdb::rerror(const char *fmt, ...)
+[[noreturn]] void rdb::rerror(const char *fmt, ...)
 {
 	va_list ap;
 	char buf[1000];
@@ -750,7 +751,7 @@ void rdb::rerror(const char *fmt, ...)
 	RdbInitializer::handle_error(buf);
 }
 
-void rdb::verror(const char *fmt, ...)
+[[noreturn]] void rdb::verror(const char *fmt, ...)
 {
 	va_list ap;
 	char buf[1000];
@@ -759,10 +760,15 @@ void rdb::verror(const char *fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
+	// Inside a .Call the error has to leave as a C++ exception: an RdbInitializer is alive
+	// on the stack, and Rf_errorcall's longjmp would skip its destructor and leave
+	// s_ref_count stuck above zero. TGLError() hands the exception to the installed handler
+	// and throws it itself if that handler returns, so this branch cannot fall through into
+	// the one below.
 	if (RdbInitializer::s_ref_count)
 		TGLError("%s", buf);
-	else
-		RdbInitializer::handle_error(buf);
+
+	RdbInitializer::handle_error(buf);
 }
 
 bool rdb::is_kid()
@@ -1245,4 +1251,37 @@ bool rdb::is_db_indexed(SEXP _envir) {
 
 	struct stat st;
 	return (stat(idx_path.c_str(), &st) == 0 && stat(seq_path.c_str(), &st) == 0);
+}
+
+extern "C" {
+
+// Internal, deliberately not exported from NAMESPACE. Returns RdbInitializer's two lifetime
+// counters as a named integer vector, c(ref_count = ..., protect_count = ...).
+//
+// C6 - both counters return to their entry values on every exit, error and interrupt
+// included - used to be observable from R only by proxy: the regression test for the
+// SingleShard fallback asserted on the process umask, because the outermost constructor sets
+// umask(07) and only the matching destructor puts the old value back. That works, but it
+// tests a side effect rather than the invariant, and it stopped being an honest stand-in once
+// 5.11.21 made the umask configurable. This reports the counters themselves.
+//
+// It takes no RdbInitializer of its own on purpose: one would add its own reference and its
+// own protection frame to the very numbers being read, and would report 1 where the caller
+// needs to see 0. That also makes the raw PROTECT/UNPROTECT below the correct choice - there
+// is no s_protect_counter frame here for rprotect() to unwind.
+SEXP C_lifetime_counters()
+{
+	SEXP counters = PROTECT(Rf_allocVector(INTSXP, 2));
+	SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
+
+	INTEGER(counters)[0] = RdbInitializer::get_ref_count();
+	INTEGER(counters)[1] = (int)RdbInitializer::get_protect_count();
+	SET_STRING_ELT(names, 0, Rf_mkChar("ref_count"));
+	SET_STRING_ELT(names, 1, Rf_mkChar("protect_count"));
+	Rf_setAttrib(counters, R_NamesSymbol, names);
+
+	UNPROTECT(2);
+	return counters;
+}
+
 }

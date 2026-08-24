@@ -130,9 +130,18 @@ void set_rel_timeout(int64_t delay_msec, struct timespec &req);
 bool is_time_elapsed(int64_t delay_msec, const struct timespec &start_time);
 
 // use rerror/verror instead of error!
-void rerror(const char *fmt, ...);
+//
+// Neither returns, and neither can be made to return by anything a caller does. verror()
+// inside a .Call throws (TGLError, which throws itself if the installed error handler
+// hands control back); outside one it goes to handle_error(), which either ends a
+// multitasking child through rexit() or reaches R through Rf_errorcall(). Every one of
+// those is [[noreturn]] in turn, so the annotation here rests on construction rather than
+// on the current contents of TGLException::s_error_handler - a mutable global with a
+// public setter. Static analysers read it too: rchk otherwise walks the impossible
+// fall-through past "runprotect(n); verror(...)" and reports the imbalance it invents.
+[[noreturn]] void rerror(const char *fmt, ...);
 
-void verror(const char *fmt, ...);
+[[noreturn]] void verror(const char *fmt, ...);
 
 // Returns true the first time it is called with a given key within one top-level
 // .Call, and always false inside a multitasking child process. Use it to run a
@@ -390,7 +399,7 @@ struct SingleShard {};
 
 }
 
-void rexit();
+[[noreturn]] void rexit();
 
 // Define RdbInitializer instance in your main function that is called by R.
 // RdbInitializer should be defined inside "try-catch" statement that catches TGLException.
@@ -409,6 +418,14 @@ public:
 	static bool   is_kid() { return s_is_kid; }
 	static int    get_kid_idx() { return s_kid_index; }
     static void   get_open_fds(set<int> &fds);
+
+	// The two counters that carry misha's lifetime invariant: both must be back at their
+	// entry values when a .Call returns, and a longjmp past ~RdbInitializer is exactly what
+	// leaves them stuck. Exposed so that C_lifetime_counters() (src/rdbutils.cpp) can report
+	// them to R and a test can assert on the invariant itself rather than on a side effect
+	// of it, such as the process umask.
+	static int      get_ref_count() { return s_ref_count; }
+	static unsigned get_protect_count() { return s_protect_counter; }
 
 	// allows to safely write to stdout even from a child process
 	// (before doing so please make sure launch_process() does not close stdout)
@@ -494,7 +511,7 @@ private:
 	static void    wait_for_kids(rdb::IntervUtils &iu);
 	static int64_t update_kids_mem_usage();
 	static int     get_num_kids() { return s_kid_index; }
-	static void    handle_error(const char *msg);
+	[[noreturn]] static void handle_error(const char *msg);
 	static void    update_progress(unsigned char progress);
 	static void    update_res_data_size(uint64_t size);
 	static void   *allocate_res(uint64_t res_num_records);
@@ -589,7 +606,7 @@ private:
 
 // ------------------------------- IMPLEMENTATION --------------------------------
 
-inline void rexit() {
+[[noreturn]] inline void rexit() {
 	if (RdbInitializer::is_kid()){
 		// Normally we should have called exit() here. However "R CMD check"
 		// doesn't like calls to exit/abort/etc because they end R session
@@ -608,10 +625,28 @@ inline void rexit() {
 		sigemptyset(&sa.sa_mask);
 		sa.sa_flags = 0;
 		sigaction(MISHA_EXIT_SIG, &sa, NULL);
+
+		// kill() returns 0 on success. POSIX only promises that the signal is delivered
+		// before it returns if the signal is unblocked, so a blocked MISHA_EXIT_SIG - misha
+		// never blocks it, but the mask a fork inherits is not misha's to assume - would
+		// leave the child running R-level code on the parent's file descriptors, which is
+		// the corruption the SIG_DFL reset above was added to stop. Unblock it first.
+		sigset_t exit_sig;
+		sigemptyset(&exit_sig);
+		sigaddset(&exit_sig, MISHA_EXIT_SIG);
+		sigprocmask(SIG_UNBLOCK, &exit_sig, NULL);
 		kill(getpid(), MISHA_EXIT_SIG);
-	} else {
-		rdb::verror("rexit is called from parent process");
+
+		// Unreachable in practice. It is here so that "this never returns" is a property of
+		// the code rather than an argument about kill(): SIGKILL can be neither caught,
+		// blocked nor ignored, and the loop leaves the compiler no path out of the branch.
+		// A child that somehow cannot die then hangs - visible, and recoverable with Ctrl-C -
+		// instead of falling through into R.
+		for (;;)
+			kill(getpid(), SIGKILL);
 	}
+
+	rdb::verror("rexit is called from parent process");
 }
 
 inline SEXP rdb::rprotect_ptr(SEXP expr)
