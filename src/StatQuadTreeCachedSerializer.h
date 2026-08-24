@@ -2,8 +2,13 @@
 #define STATQUADTREECACHEDSERIALIZER_H_
 
 #include <cstdint>
+#include <errno.h>
+#include <exception>
 #include <math.h>
+#include <string.h>
 #include <strings.h>
+
+#include <R_ext/Print.h>
 
 #include "StatQuadTreeCached.h"
 
@@ -42,7 +47,31 @@ public:
 
 	StatQuadTreeCachedSerializer();
 
-	~StatQuadTreeCachedSerializer() { end(); }
+	// Destructors are implicitly noexcept: a TGLException escaping here is
+	// std::terminate, which kills the process before R can run the R-level
+	// cleanup that discards the half-written staging directory. end() is
+	// therefore called explicitly on the success path, and the destructor is
+	// only a last-resort, never-throwing net:
+	//   - while an exception is already in flight the track is being discarded
+	//     anyway, so do nothing (seal_qtree() allocates and writes; neither
+	//     belongs mid-unwind);
+	//   - otherwise finalise, but swallow any failure after reporting it.
+	~StatQuadTreeCachedSerializer() noexcept {
+		if (m_is_ended)
+			return;
+		if (std::uncaught_exceptions() > 0) {
+			m_is_ended = true;
+			return;
+		}
+		try {
+			end();
+		} catch (const TGLException &e) {
+			m_is_ended = true;
+			REprintf("Failed to finalize 2D track file: %s\n", e.msg());
+		} catch (...) {
+			m_is_ended = true;
+		}
+	}
 
 	// Note: num_subtrees must be a power of 4
 	void begin(BufferedFile &file, int64_t x1, int64_t y1, int64_t x2, int64_t y2, unsigned num_subtrees, bool check_overlaps, 
@@ -94,6 +123,9 @@ private:
 							   typename StatQuadTreeCached<T, Size>::Stat &stat);
 
 	void seal_qtree();
+
+	void write_chk(const void *buf, int64_t size);
+	void seek_chk(int64_t offset);
 };
 
 typedef StatQuadTreeCachedSerializer<Rectangle_val<float>, uint64_t> RectsQuadTreeCachedSerializer;
@@ -149,8 +181,8 @@ void StatQuadTreeCachedSerializer<T, Size>::begin(BufferedFile &file, int64_t x1
 
 		uint64_t num_objs = 0;
 		int64_t root_chunk_start_fpos = 0;
-		m_file->write(&num_objs, sizeof(num_objs));  // write a placeholder for number of objects
-		m_file->write(&root_chunk_start_fpos, sizeof(root_chunk_start_fpos)); // write a placeholder for the file position of the root chunk
+		write_chk(&num_objs, sizeof(num_objs));  // write a placeholder for number of objects
+		write_chk(&root_chunk_start_fpos, sizeof(root_chunk_start_fpos)); // write a placeholder for the file position of the root chunk
 	}
 
 	m_is_ended = false;
@@ -183,10 +215,10 @@ void StatQuadTreeCachedSerializer<T, Size>::end()
 		int64_t root_chunk_start_fpos = m_file->tell();
 
 		// write down the header of the tree
-		m_file->seek(m_tree_start_fpos, SEEK_SET);
-		m_file->write(&num_objs, sizeof(num_objs));
-		m_file->write(&root_chunk_start_fpos, sizeof(root_chunk_start_fpos));
-		m_file->seek(root_chunk_start_fpos, SEEK_SET);
+		seek_chk(m_tree_start_fpos);
+		write_chk(&num_objs, sizeof(num_objs));
+		write_chk(&root_chunk_start_fpos, sizeof(root_chunk_start_fpos));
+		seek_chk(root_chunk_start_fpos);
 
 		if (num_objs) {
 			int64_t top_node_offset = 0;
@@ -198,18 +230,38 @@ void StatQuadTreeCachedSerializer<T, Size>::end()
 			int64_t size = sizeof(typename StatQuadTreeCached<T, Size>::Node) * (m_num_subtrees - 1) / 3 + sizeof(size) + sizeof(top_node_offset);
 
 			m_top_chunk_start_fpos = m_file->tell();
-			m_file->write(&size, sizeof(size));                       // write the chunk size
-			m_file->write(&top_node_offset, sizeof(top_node_offset)); // write a placeholder for a top node file position
+			write_chk(&size, sizeof(size));                       // write the chunk size
+			write_chk(&top_node_offset, sizeof(top_node_offset)); // write a placeholder for a top node file position
 
 			typename StatQuadTreeCached<T, Size>::Stat stat;
 			top_node_offset = serialize_top_tree(0, 0, m_num_subtrees_sqrt, m_num_subtrees_sqrt, m_arena.x1, m_arena.y1, m_arena.x2, m_arena.y2, stat);
 
 			int64_t cur_fpos = m_file->tell();
-			m_file->seek(m_top_chunk_start_fpos + sizeof(size), SEEK_SET);
-			m_file->write(&top_node_offset, sizeof(top_node_offset));
-			m_file->seek(cur_fpos, SEEK_SET);
+			seek_chk(m_top_chunk_start_fpos + sizeof(size));
+			write_chk(&top_node_offset, sizeof(top_node_offset));
+			seek_chk(cur_fpos);
 		}
 	}
+
+	// Push the tree out of the stdio buffer: writes go through a 1 MiB buffer,
+	// so ENOSPC/EDQUOT would otherwise surface at fclose(), where nothing can
+	// be reported, and the track would be silently truncated.
+	if (m_file->flush())
+		TGLError< StatQuadTreeCachedSerializer<T, Size> >("Failed to write file %s: %s", m_file->file_name().c_str(), strerror(errno));
+}
+
+template <class T, class Size>
+void StatQuadTreeCachedSerializer<T, Size>::write_chk(const void *buf, int64_t size)
+{
+	if ((int64_t)m_file->write(buf, size) != size)
+		TGLError< StatQuadTreeCachedSerializer<T, Size> >("Failed to write file %s: %s", m_file->file_name().c_str(), strerror(errno));
+}
+
+template <class T, class Size>
+void StatQuadTreeCachedSerializer<T, Size>::seek_chk(int64_t offset)
+{
+	if (m_file->seek(offset, SEEK_SET))
+		TGLError< StatQuadTreeCachedSerializer<T, Size> >("Failed to seek file %s: %s", m_file->file_name().c_str(), strerror(errno));
 }
 
 template <class T, class Size>
@@ -296,6 +348,11 @@ void StatQuadTreeCachedSerializer<T, Size>::seal_qtree()
 	StatQuadTreeCached<T, Size> qtree_cached(m_chunk_size, m_max_num_chunks);
 	m_subtree_fpos[m_cur_qtree_idx] = qtree_cached.serialize_as_chunk(*m_file, m_cur_qtree, local2global_id);
 
+	// serialize_as_chunk() does not check its own writes; catch a failed chunk
+	// here rather than letting end() stamp a header over a truncated tree.
+	if (m_file->error())
+		TGLError< StatQuadTreeCachedSerializer<T, Size> >("Failed to write file %s: %s", m_file->file_name().c_str(), strerror(errno));
+
 	m_cur_id_offset += num_unique_objs;
 	m_stat[m_cur_qtree_idx] = m_cur_qtree.m_nodes.front().stat;
 	m_cur_qtree.reset();
@@ -379,7 +436,7 @@ int64_t StatQuadTreeCachedSerializer<T, Size>::serialize_top_tree(int i1, int j1
 	}
 
 	int64_t top_node_fpos = m_file->tell();
-	m_file->write(&node, sizeof(node));
+	write_chk(&node, sizeof(node));
 	stat.weighted_sum += node.stat.weighted_sum;
 	stat.min_val = min(stat.min_val, node.stat.min_val);
 	stat.max_val = max(stat.max_val, node.stat.max_val);

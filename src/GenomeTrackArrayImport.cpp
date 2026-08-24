@@ -270,6 +270,12 @@ SEXP garrays_import(SEXP _track, SEXP _src, SEXP _colnames, SEXP _envir)
 			progress.report(1);
 		}
 
+		// Write the footer of the last chromosome explicitly. Leaving it to
+		// ~GenomeTrackArrays() would mean a short write (ENOSPC/EDQUOT) throws
+		// from a noexcept destructor, i.e. std::terminate, and the staging
+		// directory would be orphaned because R never regains control.
+		track.finish_writing();
+
 		unsigned totcols = 0;
 		for (Sources::const_iterator isrc = sources.begin(); isrc != sources.end(); ++isrc) {
 			for (unsigned i = 0; i < (*isrc)->get_colnames().size(); ++i) {
