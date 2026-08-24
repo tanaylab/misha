@@ -179,6 +179,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 	SEXP rtracknames[NUM_VAR_TYPES] = { R_NilValue, R_NilValue };
 	SEXP gvtracks = R_NilValue;
 	SEXP vtracks = R_NilValue;
+	SEXP gwds = R_NilValue;
 
     // retrieve track names (split nested calls and protect environment)
     rtracknames[TRACK] = rprotect_ptr(find_in_misha(m_iu.get_env(), "GTRACKS"));
@@ -188,7 +189,7 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
     gvtracks = rprotect_ptr(find_in_misha(m_iu.get_env(), "GVTRACKS"));
 
     if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) { 
-        SEXP gwds = rprotect_ptr(Rf_getAttrib(gvtracks, R_NamesSymbol));
+        gwds = rprotect_ptr(Rf_getAttrib(gvtracks, R_NamesSymbol));
 
 		if (!Rf_isVector(gvtracks) || (Rf_length(gvtracks) && !Rf_isString(gwds)) || Rf_length(gwds) != Rf_length(gvtracks))
 			verror("Invalid format of GVTRACKS variable.\n"
@@ -209,12 +210,17 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 			}
 		}
 	}
-    // Unprotect: rtracknames[TRACK], gvtracks (if non-null), gwds if we protected it
-    if (!Rf_isNull(gvtracks) && !Rf_isSymbol(gvtracks)) {
-        runprotect(2); // rtracknames[TRACK], gvtracks
-    } else {
-        runprotect(1); // rtracknames[TRACK]
-    }
+    // Done with the gwd names. rtracknames[TRACK] and gvtracks stay protected until
+    // the loop below finishes with them: it reads STRING_ELT(rtracknames[TRACK], ..)
+    // and VECTOR_ELT(vtracks, ..) - vtracks being an element of gvtracks, and
+    // rtracknames[VTRACK] an attribute of vtracks - while add_track_var() and
+    // add_vtrack_var() allocate in between.
+    //
+    // Named unprotects, not a count: rprotect_ptr() is a no-op on R_NilValue (an
+    // absent GVTRACKS, or a list with no names), so the number actually pushed here
+    // is 0, 1, 2 or 3 depending on the database, and add_*_var() below protects
+    // objects of its own that must outlive this function.
+    runprotect(gwds);
 
 	for (vector<string>::const_iterator iexpr = track_exprs.begin(); iexpr != track_exprs.end(); ++iexpr) {
 		for (int var_type = 0; var_type < NUM_VAR_TYPES; ++var_type) {
@@ -238,6 +244,9 @@ void TrackExpressionVars::parse_exprs(const vector<string> &track_exprs)
 			}
 		}
 	}
+
+	runprotect(gvtracks);
+	runprotect(rtracknames[TRACK]);
 
 	for (Interv_vars::iterator ivar = m_interv_vars.begin(); ivar != m_interv_vars.end(); ++ivar) {
 		ivar->siinterv = ivar->sintervs.begin();
