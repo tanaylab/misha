@@ -1,5 +1,9 @@
 # misha 5.11.22
 
+* A track expression of `"NULL"` now errors instead of crashing a worker process.
+
+* `NA` in a character column of an intervals set is no longer turned into the string `"NA"` by `gintervals.rbind()` and `gintervals.neighbors()`, which made `is.na()` report `FALSE`.
+
 * misha's C routines are now registered with R, so a call made with the wrong number of arguments is reported instead of silently running.
 * An error while `gextract()` or `gscreen()` recovers from a failed shared-memory allocation no longer breaks the rest of the session.
 * `gtrack.modify()` now stages its writes, so an interrupted or failed modification leaves the track as it was instead of half-old and half-new.

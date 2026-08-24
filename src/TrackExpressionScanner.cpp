@@ -228,6 +228,14 @@ void TrackExprScanner::check(const vector<string> &track_exprs, GIntervalsFetche
 			parsed_expr = rprotect_ptr(R_ParseVector(expr, -1, &status, R_NilValue));
 			if (status != PARSE_OK)
     			verror("R parsing of expression \"%s\" failed", m_track_exprs[iexpr].c_str());
+			// m_eval_exprs holds R_NilValue for expressions that need no R
+			// evaluation, so an expression that PARSES to NULL - "NULL",
+			// "invisible(NULL)", "if (FALSE) 1" - is indistinguishable from that
+			// sentinel. It would then never be evaluated, its buffer would stay
+			// NULL, and the first read of it crashes: in a multitasking worker
+			// that means "Child process ended unexpectedly (signal 11)".
+			if (VECTOR_ELT(parsed_expr, 0) == R_NilValue)
+				verror("Track expression \"%s\" evaluates to NULL", m_track_exprs[iexpr].c_str());
 			m_eval_exprs[iexpr] = VECTOR_ELT(parsed_expr, 0);
         }
 	}
