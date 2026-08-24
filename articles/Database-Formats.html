@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.22</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.23</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -181,7 +181,7 @@ misha):</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/gdb.info.html">gdb.info</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $path</span></span>
-<span><span class="co">#&gt; [1] "/tmp/RtmpsRFSRL/trackdb/test"</span></span>
+<span><span class="co">#&gt; [1] "/tmp/RtmpJa57Cn/trackdb/test"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $is_db</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
@@ -328,7 +328,7 @@ copy is a single call.</p>
 <span><span class="va">target_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"target_db"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">target_db</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/gdb.create_linked.html">gdb.create_linked</a></span><span class="op">(</span><span class="va">target_db</span>, parent <span class="op">=</span> <span class="va">source_db</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Created linked database at /tmp/RtmpsRFSRL/target_db (linked to /tmp/RtmpsRFSRL/trackdb/test)</span></span>
+<span><span class="co">#&gt; Created linked database at /tmp/RtmpJa57Cn/target_db (linked to /tmp/RtmpJa57Cn/trackdb/test)</span></span>
 <span></span>
 <span><span class="co"># One track, or many</span></span>
 <span><span class="fu"><a href="../reference/gtrack.copy.html">gtrack.copy</a></span><span class="op">(</span><span class="st">"dense_track"</span>, db <span class="op">=</span> <span class="va">target_db</span><span class="op">)</span></span>
