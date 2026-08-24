@@ -6,6 +6,11 @@
 # ==============================================================================
 
 # Set up test database and ensure test data exists
+
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 test_that("HiC test database is available", {
     # Use the snapshot database
     test_db <- "/net/mraid20/export/tgdata/db/tgdb/misha_snapshot/hg19"

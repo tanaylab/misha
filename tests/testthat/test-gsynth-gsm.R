@@ -1,5 +1,10 @@
 # Tests for .gsm format (gsynth.save / gsynth.load / gsynth.convert)
 
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
+
 test_that("gsynth.save creates directory .gsm format with correct files", {
     gdb.init_examples()
 

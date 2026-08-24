@@ -1,3 +1,7 @@
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 test_that("gcor supports positional intervals as last argument", {
     gdb.init_examples()
     intervals <- gintervals(1, 0, 10000)

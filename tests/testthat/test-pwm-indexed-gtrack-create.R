@@ -1,3 +1,7 @@
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
 test_that("gtrack.create works with PWM virtual tracks on indexed databases", {
     # This is a regression test for a bug where gtrack.create would fail with
     # "Invalid format of intervals argument" when creating tracks from PWM virtual
