@@ -20,6 +20,11 @@
 # same tail for an unrelated reason and the fallback branch is never reached. gintervals(1:4)
 # plans four children.
 
+# Re-root at a database of this file's own. Under the parallel runner a file inherits
+# whatever GROOT the previous file in the same worker left behind, and gintervals(1:4)
+# then fails before the first expectation runs.
+create_isolated_test_db()
+
 SHM_FAIL_MAX_DATA_SIZE <- 1e13
 
 test_that("gextract falls back to the serial path when shared memory cannot be allocated", {
