@@ -226,11 +226,104 @@ void RSaneSerialize(SEXP rexp, const char *fname);
 SEXP RSaneUnserialize(FILE *fp);
 SEXP RSaneUnserialize(const char *fname);
 
-// Same as above: replaces Rf_allocVector which can fail on memory allocation and then R makes a longmp, skipping all the destructors
+// ---------------------------------------------------------------------------
+// The RSane* allocators, and when a raw R allocator is fine
+// ---------------------------------------------------------------------------
+//
+// R's allocators raise an R error when they cannot satisfy a request, and an R
+// error is a longjmp. A longjmp out of a .Call entry point skips every C++
+// destructor between the throw point and R's top level - including
+// ~RdbInitializer, which is what returns s_ref_count to its entry value and
+// releases the shared memory, the child processes and the temporary files. A
+// stuck s_ref_count is not a leak: this failure mode has already produced two
+// defects in which a worker's exit through R's shutdown deleted the session
+// tempdir, and the database inside it. This is invariant C3 of the lifetime
+// contract: nothing inside an RdbInitializer scope may longjmp.
+//
+// Each RSane* wrapper runs the allocation inside R_ToplevelExec, so an
+// allocation failure comes back as a TGLException instead. The entry point's
+// own catch then unwinds the stack properly, running ~RdbInitializer on the
+// way, and calls rerror() from a context where a longjmp is safe.
+//
+// WHEN TO USE ONE
+//
+//   Use an RSane* wrapper when the number of bytes the site requests grows
+//   with the user's data - the length of a result column, one CHARSXP per
+//   output row, a matrix sized by 4^k. Those are the requests that actually
+//   run out of memory, and gseq.extract on a large interval set is the
+//   canonical way a misha user does it.
+//
+// WHEN A RAW CALL IS FINE - and most of them are
+//
+//   1. Fixed-size requests. A 7-element column-name vector, Rf_mkString of a
+//      literal, Rf_ScalarReal: R cannot be unable to find room for 8 bytes and
+//      still be a working session. Wrapping these buys nothing and costs a
+//      measured ~23 ns of R_ToplevelExec each.
+//   2. Requests bounded by the shape of the database rather than by the call -
+//      one element per chromosome, per column, per track. The widest genome in
+//      the lab has 13,397 contigs; a STRSXP of chromosome names is under a
+//      megabyte however large the query was.
+//   3. Rf_mkChar(CHAR(STRING_ELT(src, i))) round-trips. R's CHARSXP cache
+//      returns the *same* CHARSXP for a string that is already interned, and
+//      every CHARSXP inside a live STRSXP is. Measured: 2,000,000 such calls
+//      over a column of 26,000 distinct values allocated nothing at all.
+//   4. Anywhere no RdbInitializer is live - C_revcomp, C_rev, C_comp,
+//      C_intervals_coord_strings are pure R-to-R helpers, and a longjmp out of
+//      one destroys nothing.
+//
+// Do not sweep. As of 5.11.22, 318 raw allocating calls remain in src/,
+// and every one of them falls under one of those four heads. The worst defect
+// found in the 2026-08 audit - a runprotect() count inside a loop that
+// corrupted a database - was introduced by a commit whose stated purpose was
+// hardening PROTECT usage across many sites at once.
+//
+// NOTE ON PROTECTION: like Rf_allocVector, none of these return a protected
+// value. rprotect() the result before the next allocation.
+
+// Replaces Rf_allocVector, which can fail on memory allocation and then R makes a longjmp, skipping all the destructors
 SEXP RSaneAllocVector(SEXPTYPE type, R_xlen_t len);
 
 // Same as above for Rf_mkChar, which allocates a CHARSXP and can fail the same way
 SEXP RSaneMkChar(const char *str);
+
+// Runs one R allocation under R_ToplevelExec and turns a failure into a
+// TGLException. `alloc` must be a plain R allocator call and nothing else: it
+// runs inside an R context, so it must not throw a C++ exception (that would
+// unwind past endcontext) and must not call back into misha.
+//
+// This is the escape hatch for the allocators that have no named wrapper.
+// There is deliberately no RSaneMkString / RSaneScalarReal / RSaneScalarInteger:
+// every call site of those in misha allocates a fixed, tiny object, so naming
+// a wrapper for them would only invite the mechanical sweep this comment
+// exists to discourage.
+template <typename Alloc>
+SEXP RSaneAlloc(Alloc alloc)
+{
+	struct Payload { Alloc *alloc; SEXP retv; } payload = { &alloc, R_NilValue };
+
+	Rboolean ok = R_ToplevelExec([](void *p) {
+			Payload *d = (Payload *)p;
+			d->retv = (*d->alloc)();
+		}, &payload);
+
+	if (!ok)
+		verror("Allocation failed");
+	return payload.retv;
+}
+
+// Same as RSaneAllocVector for Rf_mkCharLenCE. gseq.extract makes one of these
+// per interval, each holding a whole DNA sequence - the largest allocations
+// misha ever asks R for.
+inline SEXP RSaneMkCharLenCE(const char *str, int len, cetype_t enc)
+{
+	return RSaneAlloc([&]() { return Rf_mkCharLenCE(str, len, enc); });
+}
+
+// Same as RSaneAllocVector for Rf_allocMatrix.
+inline SEXP RSaneAllocMatrix(SEXPTYPE type, int nrow, int ncol)
+{
+	return RSaneAlloc([&]() { return Rf_allocMatrix(type, nrow, ncol); });
+}
 
 SEXP get_rvector_col(SEXP v, const char *colname, const char *varname, bool error_if_missing);
 

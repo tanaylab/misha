@@ -178,14 +178,14 @@ SEXP C_gseq_kmer_dist(SEXP _intervals, SEXP _k, SEXP _mask, SEXP _envir) {
             if (counts[i] > 0) ++num_nonzero;
         }
 
-        rprotect(kmer_col = Rf_allocVector(STRSXP, num_nonzero));
-        rprotect(count_col = Rf_allocVector(REALSXP, num_nonzero));
-        rprotect(row_names = Rf_allocVector(INTSXP, num_nonzero));
+        rprotect(kmer_col = RSaneAllocVector(STRSXP, num_nonzero));
+        rprotect(count_col = RSaneAllocVector(REALSXP, num_nonzero));
+        rprotect(row_names = RSaneAllocVector(INTSXP, num_nonzero));
 
         int idx = 0;
         for (int i = 0; i < num_kmers; ++i) {
             if (counts[i] > 0) {
-                SET_STRING_ELT(kmer_col, idx, Rf_mkChar(decode_kmer(i, k).c_str()));
+                SET_STRING_ELT(kmer_col, idx, RSaneMkChar(decode_kmer(i, k).c_str()));
                 REAL(count_col)[idx] = static_cast<double>(counts[i]);
                 INTEGER(row_names)[idx] = idx + 1;
                 ++idx;

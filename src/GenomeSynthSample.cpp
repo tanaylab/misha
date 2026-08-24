@@ -497,9 +497,9 @@ SEXP C_gsynth_sample(SEXP _cdf_list, SEXP _breaks, SEXP _bin_indices,
         // Return vector of sequences if requested
         if (output_format == 2) {
             SEXP result;
-            rprotect(result = Rf_allocVector(STRSXP, collected_seqs.size()));
+            rprotect(result = RSaneAllocVector(STRSXP, collected_seqs.size()));
             for (size_t i = 0; i < collected_seqs.size(); ++i) {
-                SET_STRING_ELT(result, i, Rf_mkChar(collected_seqs[i].c_str()));
+                SET_STRING_ELT(result, i, RSaneMkChar(collected_seqs[i].c_str()));
             }
             return result;
         }

@@ -126,7 +126,7 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 				seqfetch.read_interval(interval, iu.get_chromkey(), buf);
 				seqlen += buf.size();
 				SET_STRING_ELT(answer, iu.get_orig_interv_idx(interval),
-							   Rf_mkCharLenCE(buf.empty() ? "" : &buf[0], (int)buf.size(), CE_NATIVE));
+							   RSaneMkCharLenCE(buf.empty() ? "" : &buf[0], (int)buf.size(), CE_NATIVE));
 			}
 
 			clock_gettime(CLOCK_REALTIME, &probe_end);
@@ -260,7 +260,7 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 					if (idx >= num_intervs || (uint64_t)(end - ptr) < len)
 						verror("Corrupted sequence record from process %d", ikid);
 
-					SET_STRING_ELT(answer, idx, Rf_mkCharLenCE(ptr, (int)len, CE_NATIVE));
+					SET_STRING_ELT(answer, idx, RSaneMkCharLenCE(ptr, (int)len, CE_NATIVE));
 					ptr += len;
 					++num_unpacked;
 				}
@@ -285,7 +285,7 @@ SEXP gseqread(SEXP _intervals, SEXP _envir)
 			// Avoid strlen by constructing string with known length
 			SET_STRING_ELT(answer,
 						   iu.get_orig_interv_idx(intervals->cur_interval()),
-						   Rf_mkCharLenCE(buf.empty() ? "" : &buf[0], (int)buf.size(), CE_NATIVE));
+						   RSaneMkCharLenCE(buf.empty() ? "" : &buf[0], (int)buf.size(), CE_NATIVE));
 			check_interrupt();
 		}
 		return answer;

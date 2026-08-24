@@ -319,7 +319,7 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
 
         // breaks
         SEXP r_breaks;
-        rprotect(r_breaks = Rf_allocVector(REALSXP, num_breaks));
+        rprotect(r_breaks = RSaneAllocVector(REALSXP, num_breaks));
         memcpy(REAL(r_breaks), breaks_vec.data(), num_breaks * sizeof(double));
         SET_VECTOR_ELT(answer, 1, r_breaks);
         SET_STRING_ELT(names, 1, Rf_mkChar("breaks"));
@@ -330,7 +330,7 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
 
         // per_bin_kmers
         SEXP r_per_bin;
-        rprotect(r_per_bin = Rf_allocVector(REALSXP, num_bins));
+        rprotect(r_per_bin = RSaneAllocVector(REALSXP, num_bins));
         for (int i = 0; i < num_bins; ++i) {
             REAL(r_per_bin)[i] = static_cast<double>(model.get_bin_kmers(i));
         }
@@ -351,8 +351,8 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
 
         // counts: list of matrices (num_bins x (num_kmers * 4))
         SEXP r_counts, r_cdf;
-        rprotect(r_counts = Rf_allocVector(VECSXP, num_bins));
-        rprotect(r_cdf = Rf_allocVector(VECSXP, num_bins));
+        rprotect(r_counts = RSaneAllocVector(VECSXP, num_bins));
+        rprotect(r_cdf = RSaneAllocVector(VECSXP, num_bins));
 
         const auto& model_counts = model.get_counts();
         const auto& model_cdf = model.get_cdf();
@@ -361,11 +361,11 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
         for (int b = 0; b < num_bins; ++b) {
             // Counts matrix: num_kmers rows x 4 cols (column-major for R)
             SEXP count_mat;
-            rprotect(count_mat = Rf_allocMatrix(REALSXP, num_kmers, NUM_BASES));
+            rprotect(count_mat = RSaneAllocMatrix(REALSXP, num_kmers, NUM_BASES));
             double* count_data = REAL(count_mat);
 
             SEXP cdf_mat;
-            rprotect(cdf_mat = Rf_allocMatrix(REALSXP, num_kmers, NUM_BASES));
+            rprotect(cdf_mat = RSaneAllocMatrix(REALSXP, num_kmers, NUM_BASES));
             double* cdf_data = REAL(cdf_mat);
 
             for (int ctx = 0; ctx < num_kmers; ++ctx) {
@@ -399,7 +399,7 @@ SEXP C_gsynth_train(SEXP _chrom_ids, SEXP _chrom_starts, SEXP _chrom_ends,
 
         // Resolved per-bin prior matrix (n_bins x 4, column-major for R)
         SEXP r_prior;
-        rprotect(r_prior = Rf_allocMatrix(REALSXP, num_bins, NUM_BASES));
+        rprotect(r_prior = RSaneAllocMatrix(REALSXP, num_bins, NUM_BASES));
         {
             const auto& prior = model.get_prior();
             double* prior_data = REAL(r_prior);
