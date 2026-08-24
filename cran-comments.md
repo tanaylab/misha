@@ -4,12 +4,16 @@
 
 ## Changes
 
+5.11.22 was rejected for shipping a `.git` directory; `.Rbuildignore` now excludes it.
+No other change from that submission.
+
 CRAN currently serves 5.6.6. See NEWS.md for the per-version detail.
 
-* Corrected several out-of-bounds accesses and protection-stack errors in the C++ layer.
-* Corrected cache invalidation when a database is rebuilt or a track renamed.
-* Argument validation across the API.
-* Vignettes are now evaluated at build time.
+* Corrected out-of-bounds accesses, protection-stack errors and uninitialised reads in the C++ layer.
+* Native routines are now registered, so argument counts are checked at call time.
+* Track writes are staged, and a failed or interrupted write no longer leaves a partial track.
+* Ctrl-C now interrupts long conversions and sequence scans.
+* Argument validation across the API, and the vignettes are evaluated at build time.
 
 ## Note on portability
 

@@ -1,3 +1,7 @@
+# misha 5.11.23
+
+* Packaging fix for the CRAN submission; no user-visible changes.
+
 # misha 5.11.22
 
 * A track expression of `"NULL"` now errors instead of crashing a worker process.
