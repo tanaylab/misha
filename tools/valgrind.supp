@@ -1,0 +1,56 @@
+# Valgrind suppressions for misha's forked multitasking workers.
+#
+# R-hub's valgrind platform appends this file to the container's default.supp
+# (r-hub/actions/run-check/scripts/valgrind-suppressions.sh) and then fails the job for any
+# non-zero "ERROR SUMMARY", so without it the platform is permanently red and its output stops
+# being read.
+#
+# What it covers. A misha multitasking child ends through rexit(), which raises SIGTERM on
+# itself so the process dies WITHOUT unwinding - see rule C4 of the lifetime contract at the top
+# of src/rdbutils.h. That is deliberate: a child that unwound into R's error path would run R's
+# shutdown, including the part that removes the session temp directory it does not own. The cost
+# is that whatever R and its dependencies allocated during their own start-up is still held when
+# valgrind takes its snapshot, and three of those blocks are reachable only through interior
+# pointers, so memcheck files them as "possibly lost".
+#
+# Measured on the R-hub valgrind run of 2026-08-23 (misha 5.11.21, run 32639267717): 30 forked
+# children, each reporting exactly these three allocation shapes and nothing else - 5 contexts,
+# 962 bytes, zero definitely lost, zero errors of any other kind. Every one of them is allocated
+# by R, glibc or OpenBLAS during start-up; not one has a misha frame in it. Reproduced locally
+# under valgrind 3.27.1 against a two-kid gextract, with the same three stacks in the kids and
+# none of them in the parent.
+#
+# What it deliberately does NOT cover. Each entry pins "possibly lost" only, and pins the
+# allocating function, so a block misha itself leaks - or anything lost definitely or
+# indirectly - is still reported. If a new context appears here, that is a finding: read it
+# before adding to this file.
+
+{
+   misha-multitasking-child-exit-R-setenv-string
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   fun:__add_to_environ
+   fun:setenv
+}
+
+{
+   misha-multitasking-child-exit-glibc-environ-tsearch-node
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   fun:tsearch
+   fun:__add_to_environ
+   fun:setenv
+}
+
+{
+   misha-multitasking-child-exit-openblas-thread-tls
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   ...
+   fun:_dl_allocate_tls
+   ...
+   fun:blas_thread_init
+}
