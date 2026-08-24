@@ -43,18 +43,32 @@ Sys.setenv(TESTTHAT_PARALLEL = "TRUE")
 devtools::test()
 ```
 
-**Only one test suite may run at a time.** The 14 test files that call
-`load_test_db()` open the lab’s shared database on NFS in place - they
-do not get a private copy - and each one deletes and recreates
-`tracks/temp` inside it. Two concurrent runs corrupt each other,
-whatever their `TMPDIR`s: two worktrees, two people, or a local run
-alongside CI. The symptom is failures that move between files from run
-to run, most often in tests that enumerate a database’s contents
-(`gintervals.ls`, `gtrack.ls`). Comparing a branch against master means
-running them one after the other. Tests that need real isolation use
-`create_isolated_test_db()`, which does copy.
+### The shared test database
 
-Tests that do copy a database put it under
+Most tests need the lab’s 5.9 TB test database on NFS, which is far too
+large to copy. They do not open it directly. Every test process builds a
+private **overlay** of it under
+[`tempdir()`](https://rdrr.io/r/base/tempfile.html) - directories misha
+writes into (`tracks`, `tracks/test`, `tracks/temp`, …) are real
+directories, and the tracks and interval sets inside them are symlinks.
+The overlay reads exactly like the shared database and costs about 0.1 s
+and 700 KB, and every track, interval set or attribute a test writes
+lands in [`tempdir()`](https://rdrr.io/r/base/tempfile.html) instead of
+in lab data.
+
+Concurrent runs are therefore fine: two worktrees, two people, or a
+local run alongside CI. Nothing in the suite may root a session at
+`shared_test_db_path()`; use one of
+
+- `test_db_root()` - this process’s overlay, shared by every file in it.
+- `create_isolated_test_db()` - a fresh overlay for the calling file,
+  removed when that file finishes.
+- `load_test_db()` - `test_db_root()` plus an emptied `tracks/temp`.
+
+Nothing needs cleaning up in the shared database: the overlays never
+write to it, and a killed run leaves only symlinks under `TMPDIR`.
+
+Overlays and the databases some tests build from scratch live under
 [`tempdir()`](https://rdrr.io/r/base/tempfile.html), so point `TMPDIR`
 at a filesystem with several GB free before starting R:
 

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.21</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.22</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,24 @@
       <small>Source: <a href="https://github.com/tanaylab/misha/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="5.11.22" id="misha-51122">misha 5.11.22<a class="anchor" aria-label="anchor" href="#misha-51122"></a></h2>
+<ul><li><p>A track expression of <code>"NULL"</code> now errors instead of crashing a worker process.</p></li>
+<li><p><code>NA</code> in a character column of an intervals set is no longer turned into the string <code>"NA"</code> by <code><a href="../reference/gintervals.rbind.html">gintervals.rbind()</a></code> and <code><a href="../reference/gintervals.neighbors.html">gintervals.neighbors()</a></code>, which made <code><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na()</a></code> report <code>FALSE</code>.</p></li>
+<li><p>misha’s C routines are now registered with R, so a call made with the wrong number of arguments is reported instead of silently running.</p></li>
+<li><p>An error while <code><a href="../reference/gextract.html">gextract()</a></code> or <code><a href="../reference/gscreen.html">gscreen()</a></code> recovers from a failed shared-memory allocation no longer breaks the rest of the session.</p></li>
+<li><p><code><a href="../reference/gtrack.modify.html">gtrack.modify()</a></code> now stages its writes, so an interrupted or failed modification leaves the track as it was instead of half-old and half-new.</p></li>
+<li><p><code><a href="../reference/gtrack.array.import.html">gtrack.array.import()</a></code> no longer aborts the R session when the disk fills up.</p></li>
+<li><p><code><a href="../reference/gtrack.2d.import.html">gtrack.2d.import()</a></code> and <code>gtrack.import_contacts()</code> now report a failed write instead of creating a track that reads as empty.</p></li>
+<li><p>Partial track directories left behind by a killed writer are removed when misha next opens the database.</p></li>
+<li><p>Ctrl-C now stops indexed-format track conversions and <code><a href="../reference/gseq.pwm.html">gseq.pwm()</a></code>, <code><a href="../reference/gseq.kmer.html">gseq.kmer()</a></code> and <code><a href="../reference/gseq.pwm_edits.html">gseq.pwm_edits()</a></code>, which used to run to completion regardless.</p></li>
+<li><p>An interrupted track expression now reports “Command interrupted!” instead of a blank error.</p></li>
+<li><p>An unusable <code>gbuf.size</code> option - too large, <code>NA</code>, or not a number - is now reported. It used to break the session’s Ctrl-C.</p></li>
+<li><p><code>gbuf.size</code> may now be given as an integer (<code>options(gbuf.size = 5000L)</code>), which was previously ignored in favour of the default.</p></li>
+<li><p><code><a href="../reference/gtrack.lookup.html">gtrack.lookup()</a></code> errors raised before the first chromosome is written no longer carry a garbled file name.</p></li>
+<li><p>Writing an intervals set with <code>intervals.set.out</code> no longer fails with “protection stack overflow” on genomes with more than ~7,000 contigs.</p></li>
+<li><p><code>gintervals.mapply(enable.gapply.intervals = TRUE)</code> no longer fails with “protection stack overflow” past ~8,300 intervals.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="5.11.21" id="misha-51121">misha 5.11.21<a class="anchor" aria-label="anchor" href="#misha-51121"></a></h2>
 <ul><li>

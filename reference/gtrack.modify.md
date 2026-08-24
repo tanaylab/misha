@@ -33,6 +33,12 @@ This function modifies the contents of a 'Dense' track by the values of
 modified. The iterator policy is set internally to the bin size of the
 track.
 
+The new values are written to a staging copy of the track's data files
+and swapped in only once the whole modification has succeeded, so an
+interrupt or an error leaves the track exactly as it was. The staging
+copy needs as much free space as the part of the track being rewritten,
+which on a database in indexed format is the track's whole data file.
+
 ## See also
 
 [`gtrack.create`](https://tanaylab.github.io/misha/reference/gtrack.create.md),

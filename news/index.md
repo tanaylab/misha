@@ -1,5 +1,68 @@
 # Changelog
 
+## misha 5.11.22
+
+- A track expression of `"NULL"` now errors instead of crashing a worker
+  process.
+
+- `NA` in a character column of an intervals set is no longer turned
+  into the string `"NA"` by
+  [`gintervals.rbind()`](https://tanaylab.github.io/misha/reference/gintervals.rbind.md)
+  and
+  [`gintervals.neighbors()`](https://tanaylab.github.io/misha/reference/gintervals.neighbors.md),
+  which made [`is.na()`](https://rdrr.io/r/base/NA.html) report `FALSE`.
+
+- misha’s C routines are now registered with R, so a call made with the
+  wrong number of arguments is reported instead of silently running.
+
+- An error while
+  [`gextract()`](https://tanaylab.github.io/misha/reference/gextract.md)
+  or
+  [`gscreen()`](https://tanaylab.github.io/misha/reference/gscreen.md)
+  recovers from a failed shared-memory allocation no longer breaks the
+  rest of the session.
+
+- [`gtrack.modify()`](https://tanaylab.github.io/misha/reference/gtrack.modify.md)
+  now stages its writes, so an interrupted or failed modification leaves
+  the track as it was instead of half-old and half-new.
+
+- [`gtrack.array.import()`](https://tanaylab.github.io/misha/reference/gtrack.array.import.md)
+  no longer aborts the R session when the disk fills up.
+
+- [`gtrack.2d.import()`](https://tanaylab.github.io/misha/reference/gtrack.2d.import.md)
+  and `gtrack.import_contacts()` now report a failed write instead of
+  creating a track that reads as empty.
+
+- Partial track directories left behind by a killed writer are removed
+  when misha next opens the database.
+
+- Ctrl-C now stops indexed-format track conversions and
+  [`gseq.pwm()`](https://tanaylab.github.io/misha/reference/gseq.pwm.md),
+  [`gseq.kmer()`](https://tanaylab.github.io/misha/reference/gseq.kmer.md)
+  and
+  [`gseq.pwm_edits()`](https://tanaylab.github.io/misha/reference/gseq.pwm_edits.md),
+  which used to run to completion regardless.
+
+- An interrupted track expression now reports “Command interrupted!”
+  instead of a blank error.
+
+- An unusable `gbuf.size` option - too large, `NA`, or not a number - is
+  now reported. It used to break the session’s Ctrl-C.
+
+- `gbuf.size` may now be given as an integer
+  (`options(gbuf.size = 5000L)`), which was previously ignored in favour
+  of the default.
+
+- [`gtrack.lookup()`](https://tanaylab.github.io/misha/reference/gtrack.lookup.md)
+  errors raised before the first chromosome is written no longer carry a
+  garbled file name.
+
+- Writing an intervals set with `intervals.set.out` no longer fails with
+  “protection stack overflow” on genomes with more than ~7,000 contigs.
+
+- `gintervals.mapply(enable.gapply.intervals = TRUE)` no longer fails
+  with “protection stack overflow” past ~8,300 intervals.
+
 ## misha 5.11.21
 
 - `gtrack.attr.import(remove.others = TRUE)` no longer fails partway -

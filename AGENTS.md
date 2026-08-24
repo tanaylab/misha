@@ -51,11 +51,16 @@ R -e “testthat::test_file(‘tests/testthat/test-pwm-sliding-window.R’,
 desc = ‘PWM sliding window MAX_POS mode works with iterator=20 and
 shifts’)”
 
-Only ONE suite may run at a time: the tests share a single database on
-NFS (`tests/testthat/helper-test_db.R`), so two concurrent runs corrupt
-each other and separate TMPDIRs do not help. Failures that move between
-files from run to run are that, not flaky tests. Re-run anything not
-green serially before believing it.
+Concurrent test runs are safe: each process gets a private overlay of
+the lab database (`tests/testthat/helper-test_db.R`), so runs cannot see
+each other’s tracks or interval sets, and a full suite leaves the shared
+database untouched. This was not true before 5.11.22. Two independent
+faults produced this project’s “flaky tests” reputation, and both are
+fixed: concurrent runs corrupted each other through the shared database,
+and 27 test files ended with `GROOT` pointing at some other database, so
+whichever file ran next in that worker failed for reasons of its own.
+Give each concurrent run its own `TMPDIR` all the same, since the
+overlays live there.
 
 To run all tests in parallel (preferred - serial mode is dramatically
 slower):
@@ -68,6 +73,39 @@ R -e “devtools::check()”
 
 **Always prefer running all tests in parallel and not doing it one by
 one. It would be significantly slower without parallelism**
+
+## Editing C++: the lifetime contract
+
+Before changing anything under `src/` that touches the R API, read the
+**C1 - C6 lifetime contract** at the top of `src/rdbutils.h` (just above
+`rdb::SingleShard`). Every `.Call` entry point runs inside an
+`RdbInitializer` that owns process-wide state - the SIGINT handler, the
+open-fd set, misha’s PROTECT counter, the multitasking arena - and only
+`~RdbInitializer` puts that state back. Breaking one of the six rules
+does not fail the current call; it corrupts every later call in the
+session. Four defects in one week came from breaking them, two of which
+ended up deleting a database, and rchk, valgrind, ASAN and UBSAN
+reported none of them.
+
+In one line each:
+
+- **C1** every `.Call` entry point owns an `RdbInitializer`, inside a
+  `try` that catches `TGLException`.
+- **C2** nothing holding one may call another entry point *inline* -
+  throw `rdb::SingleShard` and catch it outside that `try`. (A call
+  nested through `eval_in_R()` is fine.)
+- **C3** nothing inside the scope may longjmp - no `Rf_error`,
+  `Rf_warning`, `Rf_allocVector`, `Rf_mkChar`; use `verror`,
+  `add_pending_diagnostic()`, `RSaneAllocVector()`, `RSaneMkChar()`.
+- **C4** a forked multitasking child never longjmps into R - it leaves
+  through `rexit()`/`rreturn()`.
+- **C5** protection is balanced on every path, error and interrupt
+  included - prefer `runprotect(SEXP &)` over the count-based form.
+- **C6** `s_ref_count` and `s_protect_counter` are back at their entry
+  values on every exit.
+
+The header carries the reasoning for each; do not restate it here, and
+do not weaken a rule without reading it there first.
 
 ## Adding debug prints in C++ code
 

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.21</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.22</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,6 +75,11 @@
 'expr'. 'intervals' argument controls which portion of the track is
 modified. The iterator policy is set internally to the bin size of the
 track.</p>
+<p>The new values are written to a staging copy of the track's data files and
+swapped in only once the whole modification has succeeded, so an interrupt
+or an error leaves the track exactly as it was. The staging copy needs as
+much free space as the part of the track being rewritten, which on a
+database in indexed format is the track's whole data file.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

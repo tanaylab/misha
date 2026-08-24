@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.21</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.22</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,11 +75,22 @@
 <span><span class="co"># without cluster-only data)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>TESTTHAT_PARALLEL <span class="op">=</span> <span class="st">"TRUE"</span><span class="op">)</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">test</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><strong>Only one test suite may run at a time.</strong> The 14 test files that call <code>load_test_db()</code> open the lab’s shared database on NFS in place - they do not get a private copy - and each one deletes and recreates <code>tracks/temp</code> inside it. Two concurrent runs corrupt each other, whatever their <code>TMPDIR</code>s: two worktrees, two people, or a local run alongside CI. The symptom is failures that move between files from run to run, most often in tests that enumerate a database’s contents (<code>gintervals.ls</code>, <code>gtrack.ls</code>). Comparing a branch against master means running them one after the other. Tests that need real isolation use <code>create_isolated_test_db()</code>, which does copy.</p>
-<p>Tests that do copy a database put it under <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>, so point <code>TMPDIR</code> at a filesystem with several GB free before starting R:</p>
+<div class="section level3">
+<h3 id="the-shared-test-database">The shared test database<a class="anchor" aria-label="anchor" href="#the-shared-test-database"></a></h3>
+<p>Most tests need the lab’s 5.9 TB test database on NFS, which is far too large to copy. They do not open it directly. Every test process builds a private <strong>overlay</strong> of it under <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code> - directories misha writes into (<code>tracks</code>, <code>tracks/test</code>, <code>tracks/temp</code>, …) are real directories, and the tracks and interval sets inside them are symlinks. The overlay reads exactly like the shared database and costs about 0.1 s and 700 KB, and every track, interval set or attribute a test writes lands in <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code> instead of in lab data.</p>
+<p>Concurrent runs are therefore fine: two worktrees, two people, or a local run alongside CI. Nothing in the suite may root a session at <code>shared_test_db_path()</code>; use one of</p>
+<ul><li>
+<code>test_db_root()</code> - this process’s overlay, shared by every file in it.</li>
+<li>
+<code>create_isolated_test_db()</code> - a fresh overlay for the calling file, removed when that file finishes.</li>
+<li>
+<code>load_test_db()</code> - <code>test_db_root()</code> plus an emptied <code>tracks/temp</code>.</li>
+</ul><p>Nothing needs cleaning up in the shared database: the overlays never write to it, and a killed run leaves only symlinks under <code>TMPDIR</code>.</p>
+<p>Overlays and the databases some tests build from scratch live under <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>, so point <code>TMPDIR</code> at a filesystem with several GB free before starting R:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="va">TMPDIR</span><span class="op">=</span>/path/with/space <span class="ex">R</span> <span class="at">-e</span> <span class="st">'Sys.setenv(TESTTHAT_PARALLEL="TRUE"); devtools::test()'</span></span></code></pre></div>
 <p>On a shared machine <code>/tmp</code> often sits on a full root filesystem. Running out of space mid-run leaves partially copied test databases, and the resulting failures point at whichever test file happened to use them rather than at the disk — expect errors like <code>Interval test.fixedbin does not exist</code>. Failures that move between files across runs are a symptom of this, not of flaky tests.</p>
 <p>GitHub Actions runs <code>R CMD check</code> on every push and PR — treat that as the authoritative signal.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="other-dev-commands">Other dev commands<a class="anchor" aria-label="anchor" href="#other-dev-commands"></a></h2>

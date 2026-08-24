@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">misha</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.21</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">5.11.22</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -68,12 +68,30 @@
 <p>R -e ‘devtools::test(filter = “name_of_test_file_without_extension”)’</p>
 <p>To run a specific test in a file do (e.g.):</p>
 <p>R -e “testthat::test_file(‘tests/testthat/test-pwm-sliding-window.R’, desc = ‘PWM sliding window MAX_POS mode works with iterator=20 and shifts’)”</p>
-<p>Only ONE suite may run at a time: the tests share a single database on NFS (<code>tests/testthat/helper-test_db.R</code>), so two concurrent runs corrupt each other and separate TMPDIRs do not help. Failures that move between files from run to run are that, not flaky tests. Re-run anything not green serially before believing it.</p>
+<p>Concurrent test runs are safe: each process gets a private overlay of the lab database (<code>tests/testthat/helper-test_db.R</code>), so runs cannot see each other’s tracks or interval sets, and a full suite leaves the shared database untouched. This was not true before 5.11.22. Two independent faults produced this project’s “flaky tests” reputation, and both are fixed: concurrent runs corrupted each other through the shared database, and 27 test files ended with <code>GROOT</code> pointing at some other database, so whichever file ran next in that worker failed for reasons of its own. Give each concurrent run its own <code>TMPDIR</code> all the same, since the overlays live there.</p>
 <p>To run all tests in parallel (preferred - serial mode is dramatically slower):</p>
 <p>R -e ‘Sys.setenv(TESTTHAT_PARALLEL = “TRUE”); devtools::test()’</p>
 <p>To check the package:</p>
 <p>R -e “devtools::check()”</p>
 <p><strong>Always prefer running all tests in parallel and not doing it one by one. It would be significantly slower without parallelism</strong></p>
+</div>
+<div class="section level2">
+<h2 id="editing-c-the-lifetime-contract">Editing C++: the lifetime contract<a class="anchor" aria-label="anchor" href="#editing-c-the-lifetime-contract"></a></h2>
+<p>Before changing anything under <code>src/</code> that touches the R API, read the <strong>C1 - C6 lifetime contract</strong> at the top of <code>src/rdbutils.h</code> (just above <code>rdb::SingleShard</code>). Every <code>.Call</code> entry point runs inside an <code>RdbInitializer</code> that owns process-wide state - the SIGINT handler, the open-fd set, misha’s PROTECT counter, the multitasking arena - and only <code>~RdbInitializer</code> puts that state back. Breaking one of the six rules does not fail the current call; it corrupts every later call in the session. Four defects in one week came from breaking them, two of which ended up deleting a database, and rchk, valgrind, ASAN and UBSAN reported none of them.</p>
+<p>In one line each:</p>
+<ul><li>
+<strong>C1</strong> every <code>.Call</code> entry point owns an <code>RdbInitializer</code>, inside a <code>try</code> that catches <code>TGLException</code>.</li>
+<li>
+<strong>C2</strong> nothing holding one may call another entry point <em>inline</em> - throw <code>rdb::SingleShard</code> and catch it outside that <code>try</code>. (A call nested through <code>eval_in_R()</code> is fine.)</li>
+<li>
+<strong>C3</strong> nothing inside the scope may longjmp - no <code>Rf_error</code>, <code>Rf_warning</code>, <code>Rf_allocVector</code>, <code>Rf_mkChar</code>; use <code>verror</code>, <code>add_pending_diagnostic()</code>, <code>RSaneAllocVector()</code>, <code>RSaneMkChar()</code>.</li>
+<li>
+<strong>C4</strong> a forked multitasking child never longjmps into R - it leaves through <code>rexit()</code>/<code>rreturn()</code>.</li>
+<li>
+<strong>C5</strong> protection is balanced on every path, error and interrupt included - prefer <code>runprotect(SEXP &amp;)</code> over the count-based form.</li>
+<li>
+<strong>C6</strong> <code>s_ref_count</code> and <code>s_protect_counter</code> are back at their entry values on every exit.</li>
+</ul><p>The header carries the reasoning for each; do not restate it here, and do not weaken a rule without reading it there first.</p>
 </div>
 <div class="section level2">
 <h2 id="adding-debug-prints-in-c-code">Adding debug prints in C++ code<a class="anchor" aria-label="anchor" href="#adding-debug-prints-in-c-code"></a></h2>
