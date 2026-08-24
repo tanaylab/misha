@@ -126,7 +126,9 @@ void GIntervalsBigSet1D::load_chrom(int chromid)
 
 			// Convert R intervals to C++ intervals
 			m_iu->convert_rintervs(rintervals, &m_intervals, NULL);
-			runprotect(1);
+			// Name it: convert_rintervs protects on some of its input shapes, so
+			// "the last one protected" is not necessarily rintervals.
+			runprotect(rintervals);
 
 			// set udata
 			uint64_t offset = m_orig_chrom2offset[chromid];
@@ -157,6 +159,9 @@ void GIntervalsBigSet1D::save_chrom_plain_intervals(const char *intervset, GInte
 	if (intervals.size()) {
 		SEXP rintervals = iu.convert_intervs(&intervals);
 		save_chrom(intervset, &intervals, rintervals, iu, chromstats);
+		// Every caller runs this once per contig. convert_intervs' result has to be
+		// given back or the protect stack grows without bound across the genome.
+		runprotect(rintervals);
 		intervals.clear();
 	}
 }
