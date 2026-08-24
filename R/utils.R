@@ -81,6 +81,17 @@
     }
 }
 
+# RdbInitializer's two lifetime counters, as c(ref_count = , protect_count = ): the number of
+# entry-point scopes currently alive and the depth of misha's own protection stack. Both are
+# zero between calls, and both are restored by ~RdbInitializer on every exit - error and
+# interrupt included. Either one stuck above zero means a .Call left through a longjmp that
+# skipped that destructor, which is the failure mode behind the worst defects the package has
+# shipped. Internal and unexported: it exists so tests can assert on the invariant itself
+# rather than on a side effect of it.
+.glifetime_counters <- function() {
+    .Call("C_lifetime_counters")
+}
+
 .misha_env <- function() {
     e <- new.env(parent = parent.frame(2))
     assign(".misha", .misha, envir = e)

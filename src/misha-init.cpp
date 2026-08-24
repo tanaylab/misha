@@ -122,6 +122,7 @@ extern "C" {
     extern SEXP C_intervals_coord_strings(SEXP, SEXP, SEXP);
     extern SEXP C_register_filter(SEXP, SEXP, SEXP);
     extern SEXP C_get_filter_info(SEXP);
+    extern SEXP C_lifetime_counters(void);
 }
 
 static const R_CallMethodDef CallEntries[] = {
@@ -238,6 +239,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_intervals_coord_strings", (DL_FUNC)&C_intervals_coord_strings, 3},
     {"C_register_filter", (DL_FUNC)&C_register_filter, 3},
     {"C_get_filter_info", (DL_FUNC)&C_get_filter_info, 1},
+    {"C_lifetime_counters", (DL_FUNC)&C_lifetime_counters, 0},
     {NULL, NULL, 0}
 };
 

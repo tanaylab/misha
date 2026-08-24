@@ -51,26 +51,26 @@ test_that("an error inside the serial fallback leaves the session usable", {
     expected_extract <- gextract("test.sparse", scope)
     expected_screen <- gscreen("test.sparse > 0.5", scope)
 
-    # The umask is the one piece of RdbInitializer's teardown that R can observe: the
-    # outermost constructor sets umask(07), and only the matching destructor puts the old
-    # value back. Pick a value misha's own cannot be mistaken for.
-    old_umask <- Sys.umask("022")
-    withr::defer(Sys.umask(old_umask))
-
     local({
         withr::local_options(gmax.data.size = SHM_FAIL_MAX_DATA_SIZE)
         expect_error(gextract("test.sparse + .no_such_object_", scope), "not found")
         expect_error(gscreen("test.sparse > 0.5 & .no_such_object_", scope), "not found")
     })
 
-    expect_identical(Sys.umask(NA), as.octmode("022"))
+    # s_ref_count back at zero *is* the claim: only ~RdbInitializer puts it there, and a
+    # serial entry point called inline would have reached R through Rf_error, whose longjmp
+    # skips that destructor. This used to be asserted through the process umask instead -
+    # the outermost constructor sets umask(07) and only the destructor restores it - which
+    # tested a side effect rather than the invariant, and stopped being a dependable
+    # stand-in once 5.11.21 made misha's umask an option. See test-lifetime-counters.R.
+    expect_identical(.glifetime_counters()[["ref_count"]], 0L)
 
     # The calls below are only meaningful once the destructor is known to have run - and
     # only safe: with s_ref_count stuck, the second multitasking call after the leak
     # indexes the previous call's arena out of bounds, and the child that dies leaves
     # through R's own shutdown, whose R_CleanTempDir() deletes the session tempdir and the
     # test database inside it. Guard them rather than take the rest of the file down.
-    if (identical(Sys.umask(NA), as.octmode("022"))) {
+    if (identical(.glifetime_counters()[["ref_count"]], 0L)) {
         for (i in 1:2) {
             expect_equal(gextract("test.sparse", scope), expected_extract)
             expect_equal(gscreen("test.sparse > 0.5", scope), expected_screen)
