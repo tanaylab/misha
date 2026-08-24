@@ -373,9 +373,11 @@ template<typename T> void unpack_data(void *&ptr, T &data, uint64_t n) {
 
 namespace rdb {
 
-// Thrown by a multitasking entry point when prepare4multitasking() planned a single shard,
-// i.e. when forking one kid would buy no parallelism. Catching it OUTSIDE the try block that
-// owns the RdbInitializer is what makes the fallback safe: the throw unwinds that frame, so
+// Thrown by a multitasking entry point that has decided not to multitask after all: either
+// prepare4multitasking() planned a single shard, i.e. forking one kid would buy no
+// parallelism, or the shared-memory arena could not be allocated and the retry ladder is
+// exhausted. Catching it OUTSIDE the try block that owns the RdbInitializer is what makes
+// the fallback safe: the throw unwinds that frame, so
 // the RdbInitializer is destroyed before the serial entry point (with its own RdbInitializer)
 // runs. Calling the serial entry point while the multitasking one still holds an
 // RdbInitializer is not an option - an error inside it reaches R through Rf_error, whose

@@ -1423,8 +1423,13 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 							estimated_records = inflate_estimated_records(iu, base_estimated_records, max_records_factor);
 							continue;
 						}
-					if (!RdbInitializer::is_kid())   // see the outer catch: a kid must never return to R
-						return C_gextract(_intervals, _exprs, _colnames, _iterator_policy, _band, R_NilValue, _intervals_set_out, _intervals_join, _envir);
+					// Hand the serial run to the SingleShard tail below. Calling C_gextract()
+					// from here would run it while this frame still holds its RdbInitializer,
+					// and an error inside it would longjmp past our destructor (see
+					// rdb::SingleShard). A kid must never return to R, so it falls through to
+					// the rethrow and reports through the outer catch instead.
+					if (!RdbInitializer::is_kid())
+						throw rdb::SingleShard();
 				}
 				throw;
 			}
@@ -1567,8 +1572,9 @@ SEXP gextract_multitask(SEXP _intervals, SEXP _exprs, SEXP _colnames, SEXP _iter
 	} catch (const bad_alloc &e) {
 		rerror("Out of memory");
 	}
-	// The scope fits in a single shard: forking one kid would buy no parallelism, only a
-	// fork, a shared-memory segment and a wait. Run the serial entry point instead - the
+	// Multitasking is off the table: either the scope fits in a single shard (forking one
+	// kid would buy no parallelism, only a fork, a shared-memory segment and a wait) or the
+	// shared-memory arena could not be allocated. Run the serial entry point instead - the
 	// very path gmultitasking = FALSE takes. This must happen out here, after the try
 	// block has destroyed our RdbInitializer (see rdb::SingleShard).
 	if (single_shard)
