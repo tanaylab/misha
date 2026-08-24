@@ -1,5 +1,10 @@
 # Tests for gsynth.train(prior = ...) — informative Dirichlet prior added in misha 5.7.0.
 
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
+
 test_that("gsynth.train accepts prior = 'marginal' (default) and stores resolved prior", {
     gdb.init_examples()
     if ("g_frac" %in% gvtrack.ls()) gvtrack.rm("g_frac")

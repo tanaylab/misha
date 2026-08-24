@@ -1,3 +1,7 @@
+# Before create_isolated_test_db(): deferred handlers run last-in-first-out, so this one
+# fires after the isolated database has been torn down, not before.
+restore_groot_on_exit()
+
 create_isolated_test_db()
 
 test_that("gquantiles with test.fixedbin", {

@@ -1,6 +1,11 @@
 # Tests for .gsynth_process_parallel helper function
 # This helper extracts the common parallel processing pattern from gsynth functions
 
+# Re-roots into a database of its own; hand this process's overlay back to the next
+# file in the parallel worker (helper-test_db.R).
+restore_groot_on_exit()
+
+
 test_that(".gsynth_process_parallel returns NULL for small genomes", {
     gdb.init_examples()
 
