@@ -11,6 +11,8 @@
 * An unusable `gbuf.size` option - too large, `NA`, or not a number - is now reported. It used to break the session's Ctrl-C.
 * `gbuf.size` may now be given as an integer (`options(gbuf.size = 5000L)`), which was previously ignored in favour of the default.
 * `gtrack.lookup()` errors raised before the first chromosome is written no longer carry a garbled file name.
+* Writing an intervals set with `intervals.set.out` no longer fails with "protection stack overflow" on genomes with more than ~7,000 contigs.
+* `gintervals.mapply(enable.gapply.intervals = TRUE)` no longer fails with "protection stack overflow" past ~8,300 intervals.
 
 # misha 5.11.21
 

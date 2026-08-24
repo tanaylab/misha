@@ -161,8 +161,24 @@ SEXP rprotect(SEXP &expr);
 // "address taken" notes for local variables.
 SEXP rprotect_ptr(SEXP expr);
 
-// Unprotect the last "count" object
+// Unprotect the last "count" objects.
+//
+// SAFE ONLY WHILE NOTHING ELSE PROTECTS IN BETWEEN. The stack is shared with every
+// other rprotect() in the call - IntervUtils' constructor pins ALLGENOME on it and
+// never releases it, and convert_intervs() leaves its result on it - so "the n I
+// protected" and "the last n" are the same objects only as long as nothing called in
+// between protected anything of its own. When the number is conditional, or a helper
+// runs in between, prefer runprotect(SEXP&) or protect_depth()/runprotect_to().
 void runprotect(int count);
+
+// Current depth of misha's protect stack, for use with runprotect_to().
+unsigned protect_depth();
+
+// Pops everything protected since protect_depth() returned "depth", and nothing below
+// it. Unlike runprotect(int) the caller need not know how many objects the code in
+// between chose to protect, so it stays correct when that changes. No-op if the stack
+// is already at or below "depth".
+void runprotect_to(unsigned depth);
 
 // Unprotects object expr and sets it to R_NilValue. Works slower than runprotect(unsigned)!
 void runprotect(SEXP &expr);
@@ -352,7 +368,10 @@ static inline SEXP find_in_misha(SEXP envir, const char *name) {
     SEXP misha_env = R_NilValue;
     misha_env = rprotect_ptr(R_getVar(Rf_install(".misha"), envir, (Rboolean)TRUE));
     SEXP val = R_getVarEx(Rf_install(name), misha_env, (Rboolean)TRUE, R_UnboundValue);
-    runprotect(1);
+    // rprotect_ptr() is a no-op on R_NilValue, so pop only what was actually pushed -
+    // the same guard define_in_misha() below already carries. An unguarded
+    // runprotect(1) would pop the caller's object instead.
+    runprotect(misha_env != R_NilValue);
     return val;
 }
 
@@ -676,6 +695,7 @@ private:
 	friend void rdb::check_interrupt();
 	friend SEXP rdb::rprotect(SEXP &expr);
 	friend void rdb::runprotect(int count);
+	friend unsigned rdb::protect_depth();
 	friend void rdb::runprotect(SEXP &expr);
 	friend void rdb::runprotect(vector<SEXP> &exprs);
 	friend void rdb::runprotect_all();

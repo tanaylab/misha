@@ -65,6 +65,7 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 	SEXP answer;
 	unsigned num_interv_cols;
 	unsigned num_cols;
+	unsigned protect_mark = protect_depth();
 
 	if (out_intervals1d) {
 		num_interv_cols = GInterval::NUM_COLS;
@@ -101,7 +102,11 @@ static SEXP build_rintervals_bintransform(GIntervalsFetcher1D *out_intervals1d, 
 		SET_STRING_ELT(col_names, num_interv_cols + ID, Rf_mkChar("intervalID"));
 	}
 
-    runprotect(2); // col_names (+ ids or not) handled consistently by count
+	// Keep "answer" (protected first by convert_intervs) and drop the scratch this
+	// function added on top - all of it is reachable from "answer" now. The
+	// intervals.set.out path calls this once per contig, so anything left here
+	// accumulates on R's 50,000-slot protect stack.
+	runprotect_to(protect_mark + 1);
     return answer;
 }
 
@@ -252,6 +257,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 							if (scanner.isend() || last_scope_interval1d.chromid != scanner.last_scope_interval1d().chromid) {
 								SEXP rintervals = build_rintervals_bintransform(&out_intervals1d, NULL, out_values, NULL, _track_exprs, iu);
 								GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals1d, rintervals, iu, chromstats1d);
+								runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 								out_intervals1d.clear();
 								out_values.clear();
 							}
@@ -259,6 +265,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 							if (scanner.isend() || !last_scope_interval2d.is_same_chrom(scanner.last_scope_interval2d())) {
 								SEXP rintervals = build_rintervals_bintransform(NULL, &out_intervals2d, out_values, NULL, _track_exprs, iu);
 								GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), &out_intervals2d, rintervals, iu, chromstats2d);
+								runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 								out_intervals2d.clear();
 								out_values.clear();
 							}
@@ -406,6 +413,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 						if (scanner.isend() || last_scope_interval1d.chromid != scanner.last_scope_interval1d().chromid) {
 							SEXP rintervals = build_rintervals_bintransform(&out_intervals1d, NULL, out_values, NULL, _track_exprs, iu);
 							GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &out_intervals1d, rintervals, iu, chromstats1d);
+							runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 							out_intervals1d.clear();
 							out_values.clear();
 						}
@@ -413,6 +421,7 @@ SEXP gbintransform(SEXP _intervals, SEXP _track_exprs, SEXP _breaks, SEXP _inclu
 						if (scanner.isend() || !last_scope_interval2d.is_same_chrom(scanner.last_scope_interval2d())) {
 							SEXP rintervals = build_rintervals_bintransform(NULL, &out_intervals2d, out_values, NULL, _track_exprs, iu);
 							GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), &out_intervals2d, rintervals, iu, chromstats2d);
+							runprotect(rintervals); // one contig's worth of protect slots; the loop runs per contig
 							out_intervals2d.clear();
 							out_values.clear();
 						}

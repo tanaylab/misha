@@ -601,6 +601,8 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			}
 		}
 
+		unsigned protect_mark = protect_depth();
+
 		if (!tgt_intervs1d.empty()) {
 			// Count columns: intervalID and chain_id only if they contain non-NA values
 			int extra_cols = 0;
@@ -626,7 +628,6 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 			rprotect(col_names);
 
 			int col_idx = num_interv_cols;
-			int num_protected = 0;
 
 			// Only add intervalID if it contains non-NA values
 			if (has_valid_interval_ids) {
@@ -636,7 +637,6 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				SET_STRING_ELT(col_names, col_idx, Rf_mkChar("intervalID"));
 				SET_VECTOR_ELT(answer, col_idx, rsrc_indices);
 				col_idx++;
-				num_protected++;
 			}
 
 			// Only add chain_id if it contains non-NA values
@@ -647,7 +647,6 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				SET_STRING_ELT(col_names, col_idx, Rf_mkChar("chain_id"));
 				SET_VECTOR_ELT(answer, col_idx, rchain_ids);
 				col_idx++;
-				num_protected++;
 			}
 
 			if (include_metadata) {
@@ -657,7 +656,6 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 				SET_STRING_ELT(col_names, col_idx, Rf_mkChar("score"));
 				SET_VECTOR_ELT(answer, col_idx, rscores);
 				col_idx++;
-				num_protected++;
 			}
 
 			if (use_aggregation) {
@@ -666,10 +664,12 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
 					REAL(rvalues)[i] = values[i];
 				SET_STRING_ELT(col_names, col_idx, Rf_mkChar(value_col_name));
 				SET_VECTOR_ELT(answer, col_idx, rvalues);
-				num_protected++;
 			}
 
-			runprotect(num_protected);
+			// Keep "answer" (protected first by convert_intervs); col_names and every
+			// optional column above it are reachable from it now. A hand-maintained
+			// count would have to track which of the four optional columns exist.
+			runprotect_to(protect_mark + 1);
 			return answer;
 		}
 
@@ -686,7 +686,9 @@ SEXP gintervs_liftover(SEXP _src_intervs, SEXP _chain, SEXP _src_overlap_policy,
         SET_STRING_ELT(col_names, num_interv_cols, Rf_mkChar("intervalID"));
         SET_VECTOR_ELT(answer, num_interv_cols, rsrc_indices);
 
-        runprotect(1); // col_names
+        // Keep "answer"; col_names and rsrc_indices are reachable from it. (The old
+        // runprotect(1) popped rsrc_indices, not col_names as its comment claimed.)
+        runprotect_to(protect_mark + 1);
         return answer;
 
 	} catch (TGLException &e) {
