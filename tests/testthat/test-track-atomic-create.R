@@ -166,3 +166,18 @@ test_that(".gtrack.create_atomic loses gracefully when another session wins the 
     expect_true(dir.exists(final_dir))
     expect_equal(readLines(file.path(final_dir, "x")), "winner")
 })
+
+test_that(".gdb.fsync syncs a staged tree and reports failure", {
+    root <- withr::local_tempdir()
+    dir.create(file.path(root, "sub"))
+    writeLines("a", file.path(root, "a"))
+    writeLines("b", file.path(root, "sub", "b"))
+
+    expect_silent(.gdb.fsync(root, recursive = TRUE))
+    expect_silent(.gdb.fsync(root))
+    expect_silent(.gdb.fsync(file.path(root, "a")))
+
+    # A path that cannot be synced must not pass silently - the whole point
+    # is that the commit refuses to publish data that never reached disk.
+    expect_error(.gdb.fsync(file.path(root, "gone")))
+})

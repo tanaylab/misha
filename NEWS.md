@@ -1,3 +1,7 @@
+# misha 5.11.24
+
+* Track creation and `gtrack.modify()` now flush the new files to disk before committing them, so a machine crash cannot leave a completed track name pointing at half-written data.
+
 # misha 5.11.23
 
 * Packaging fix for the CRAN submission; no user-visible changes.
