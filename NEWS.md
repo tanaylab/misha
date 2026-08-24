@@ -2,6 +2,10 @@
 
 * misha's C routines are now registered with R, so a call made with the wrong number of arguments is reported instead of silently running.
 * An error while `gextract()` or `gscreen()` recovers from a failed shared-memory allocation no longer breaks the rest of the session.
+* `gtrack.modify()` now stages its writes, so an interrupted or failed modification leaves the track as it was instead of half-old and half-new.
+* `gtrack.array.import()` no longer aborts the R session when the disk fills up.
+* `gtrack.2d.import()` and `gtrack.import_contacts()` now report a failed write instead of creating a track that reads as empty.
+* Partial track directories left behind by a killed writer are removed when misha next opens the database.
 
 # misha 5.11.21
 

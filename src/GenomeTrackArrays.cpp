@@ -115,14 +115,18 @@ void GenomeTrackArrays::finish_writing()
 	m_is_writing = false;
 
 	// write the position of intervals in the file
-	m_bfile.seek(m_intervals_pos, SEEK_SET);
+	if (m_bfile.seek(m_intervals_pos, SEEK_SET))
+		fail_writing();
 	m_intervals_pos = m_bfile.file_size();
-	m_bfile.write(&m_intervals_pos, sizeof(m_intervals_pos));
+	if (m_bfile.write(&m_intervals_pos, sizeof(m_intervals_pos)) != sizeof(m_intervals_pos))
+		fail_writing();
 
 	// write the number of intervals
-	m_bfile.seek(m_intervals_pos, SEEK_SET);
+	if (m_bfile.seek(m_intervals_pos, SEEK_SET))
+		fail_writing();
 	uint64_t num_intervals = m_intervals.size();
-	m_bfile.write(&num_intervals, sizeof(num_intervals));
+	if (m_bfile.write(&num_intervals, sizeof(num_intervals)) != sizeof(num_intervals))
+		fail_writing();
 
 	// write the intervals
 	for (GIntervals::const_iterator iinterv = m_intervals.begin(); iinterv != m_intervals.end(); ++iinterv) {
@@ -131,12 +135,22 @@ void GenomeTrackArrays::finish_writing()
 		size += m_bfile.write(&iinterv->end, sizeof(iinterv->end));
 		size += m_bfile.write(&m_vals_pos[iinterv - m_intervals.begin()], sizeof(m_vals_pos.front()));
 
-		if ((int)size != RECORD_SIZE) {
-			if (m_bfile.error())
-				TGLError<GenomeTrackArrays>("Failed to write %s track file %s: %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str(), strerror(errno));
-			TGLError<GenomeTrackArrays>("Failed to write %s track file %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str());
-		}
+		if ((int)size != RECORD_SIZE)
+			fail_writing();
 	}
+
+	// Push the footer out of the stdio buffer so that a short write (ENOSPC,
+	// EDQUOT) is reported here rather than swallowed by fclose() in the
+	// destructor, where nothing can be thrown.
+	if (m_bfile.flush())
+		fail_writing();
+}
+
+void GenomeTrackArrays::fail_writing()
+{
+	if (m_bfile.error())
+		TGLError<GenomeTrackArrays>("Failed to write %s track file %s: %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str(), strerror(errno));
+	TGLError<GenomeTrackArrays>("Failed to write %s track file %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str());
 }
 
 void GenomeTrackArrays::read_intervals_map()
@@ -310,17 +324,19 @@ void GenomeTrackArrays::write_next_interval(const GInterval &interval, const Arr
 			++num_non_nan_vals;
 	}
 
-	m_bfile.write(&num_non_nan_vals, sizeof(num_non_nan_vals));
+	if (m_bfile.write(&num_non_nan_vals, sizeof(num_non_nan_vals)) != sizeof(num_non_nan_vals))
+		fail_writing();
 
 	for (ArrayVals::const_iterator iarray_val = iarray_vals_begin; iarray_val != iarray_vals_end; ++iarray_val) {
 		if (!std::isnan(iarray_val->val)) {
-			m_bfile.write(&iarray_val->val, sizeof(iarray_val->val));
-			m_bfile.write(&iarray_val->idx, sizeof(iarray_val->idx));
+			if (m_bfile.write(&iarray_val->val, sizeof(iarray_val->val)) != sizeof(iarray_val->val) ||
+				m_bfile.write(&iarray_val->idx, sizeof(iarray_val->idx)) != sizeof(iarray_val->idx))
+				fail_writing();
 		}
 	}
 
 	if (m_bfile.error())
-		TGLError<GenomeTrackArrays>("Failed to write %s track file %s: %s", TYPE_NAMES[ARRAYS], m_bfile.file_name().c_str(), strerror(errno));
+		fail_writing();
 }
 
 const GIntervals &GenomeTrackArrays::get_intervals()
