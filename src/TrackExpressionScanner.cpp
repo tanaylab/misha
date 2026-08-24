@@ -264,12 +264,18 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
         if (m_eval_exprs[iexpr] != R_NilValue) {
             SEXP res = eval_in_R(m_eval_exprs[iexpr], m_iu.get_env());
 
+            // Name it, do not count. eval_in_R protects through rprotect(), which is
+            // a no-op on R_NilValue - so an expression that evaluates to NULL
+            // ("NULL", "if (FALSE) 1", any invisible(NULL)) protects nothing and a
+            // runprotect(1) here popped whatever define_r_vars() had just protected:
+            // the iterator-intervals data frame whose column pointers this scanner
+            // caches. That is a use-after-free, and it segfaulted.
             if (Rf_length(res) != (int)m_eval_buf_limit) {
-                runprotect(1);
+                runprotect(res);
 				define_r_vars(1); // switch to scalar mode
                 break;
             }
-            runprotect(1);
+            runprotect(res);
         }
     }
 

@@ -798,6 +798,16 @@ void rdb::runprotect(int count)
 	RdbInitializer::s_protect_counter -= count;
 }
 
+unsigned rdb::protect_depth()
+{
+	return RdbInitializer::s_protect_counter;
+}
+void rdb::runprotect_to(unsigned depth)
+{
+	unsigned cur = protect_depth();
+	if (cur > depth)
+		runprotect((int)(cur - depth));
+}
 void rdb::runprotect(SEXP &expr)
 {
 	if (expr != R_NilValue) {
@@ -1063,9 +1073,16 @@ SEXP rdb::eval_in_R(SEXP parsed_command, SEXP envir)
 
 SEXP rdb::run_in_R(const char *command, SEXP envir)
 {
-    SEXP expr;
+    SEXP expr = R_NilValue;
     SEXP parsed_expr = R_NilValue;
 	ParseStatus status;
+
+	// Named unprotects: eval_in_R() below leaves its result on the stack (unless the
+	// command evaluated to NULL, when it leaves nothing), so "the last two" were the
+	// result and the parsed expression - the string was left behind and the value
+	// handed back to the caller was no longer protected.
+	SEXPCleaner expr_cleaner(expr);
+	SEXPCleaner parsed_expr_cleaner(parsed_expr);
 
     expr = rprotect_ptr(RSaneAllocVector(STRSXP, 1));
 	SET_STRING_ELT(expr, 0, Rf_mkChar(command));
@@ -1073,9 +1090,8 @@ SEXP rdb::run_in_R(const char *command, SEXP envir)
 	if (status != PARSE_OK)
 		verror("Failed to parse expression \"%s\"", command);
 
-    SEXP result = eval_in_R(VECTOR_ELT(parsed_expr, 0), envir);
-    runprotect(2);
-    return result;
+	// Stays protected for the rest of the .Call, like every other eval_in_R() result.
+    return eval_in_R(VECTOR_ELT(parsed_expr, 0), envir);
 }
 
 struct RSaneSerializeData {
