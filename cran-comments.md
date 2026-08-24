@@ -4,6 +4,9 @@
 
 ## Changes
 
+5.11.22 was rejected for shipping a `.git` directory; `.Rbuildignore` now excludes it.
+No other change from that submission.
+
 CRAN currently serves 5.6.6. See NEWS.md for the per-version detail.
 
 * Corrected out-of-bounds accesses, protection-stack errors and uninitialised reads in the C++ layer.
