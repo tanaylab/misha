@@ -58,6 +58,8 @@ SEXP gtrack_split_indexed_to_per_chrom(SEXP _track_dir, SEXP _chrom_names, SEXP 
         vector<char> buffer(BUF);
 
         for (const TrackContigEntry &entry : idx.get_all_entries()) {
+            check_interrupt();
+
             if (entry.chrom_id >= (uint32_t)n_chroms) {
                 fclose(dat_fp);
                 verror("track.idx references chrom_id %u but only %d chrom names supplied "
@@ -89,6 +91,12 @@ SEXP gtrack_split_indexed_to_per_chrom(SEXP _track_dir, SEXP _chrom_names, SEXP 
 
                 uint64_t remaining = entry.length;
                 while (remaining > 0) {
+                    // One flag test per MiB: a single contig of a multi-GB track is
+                    // long enough on its own that a per-contig check would not make
+                    // Ctrl-C usable. Descriptors left open by the throw are closed by
+                    // ~RdbInitializer, as on every other error path here.
+                    check_interrupt();
+
                     size_t to_read = (size_t)min((uint64_t)BUF, remaining);
                     size_t got = fread(buffer.data(), 1, to_read, dat_fp);
                     if (got != to_read) {
@@ -196,6 +204,8 @@ SEXP gtrack_pack_per_chrom_to_indexed(SEXP _track_dir, SEXP _chrom_names, SEXP _
         vector<char> buffer(BUF);
 
         for (int chromid = 0; chromid < n_chroms; ++chromid) {
+            check_interrupt();
+
             const string chr_file = track_dir + "/" + chrom_names[chromid];
 
             TrackContigEntry entry;
@@ -215,6 +225,8 @@ SEXP gtrack_pack_per_chrom_to_indexed(SEXP _track_dir, SEXP _chrom_names, SEXP _
 
                 uint64_t remaining = file_size;
                 while (remaining > 0) {
+                    check_interrupt();
+
                     size_t to_read = (size_t)min((uint64_t)BUF, remaining);
                     size_t got = fread(buffer.data(), 1, to_read, src_fp);
                     if (got != to_read) {

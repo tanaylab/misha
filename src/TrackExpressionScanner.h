@@ -120,11 +120,13 @@ private:
 	TrackExpressionVars          m_expr_vars;
 
 	static const int INIT_REPORT_STEP;
+	static const unsigned DEFAULT_EVAL_BUF_SIZE;
 	static const int REPORT_INTERVAL; // report interval in milliseconds
 	static const int MIN_REPORT_INTERVAL; // report interval in milliseconds
 
 	void convert_rtrack_exprs(SEXP rtrack_exprs, vector<string> &track_exprs);
 	void define_r_vars(unsigned eval_buf_limit);
+	static unsigned get_eval_buf_size();
 
 	bool eval_next();
 	void report_progress();
