@@ -23,6 +23,7 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 {
 	SEXP answer;
 	SEXP bins;
+	unsigned protect_mark = protect_depth();
 
 	answer = iu.convert_intervs(&res_intervals, Interval::NUM_COLS + 1, false);
     bins = rprotect_ptr(RSaneAllocVector(REALSXP, res_bins.size()));
@@ -43,7 +44,11 @@ SEXP gpartition_build_answer(Intervals &res_intervals, const vector<int> &res_bi
 		SET_STRING_ELT(range, bin, Rf_mkChar(buf));
 	}
     Rf_setAttrib(answer, Rf_install("range"), range);
-    runprotect(2); // colnames, range
+	// Keep "answer" (protected first by convert_intervs) and drop the scratch this
+	// function added on top - all of it is reachable from "answer" now. The
+	// intervals.set.out path calls this once per contig, so anything left here
+	// accumulates on R's 50,000-slot protect stack.
+	runprotect_to(protect_mark + 1);
     return answer;
 }
 
@@ -60,6 +65,7 @@ static void gpartition_add_interval2res(const GInterval &interval, GIntervals &r
 		if (!res_intervals.empty() && res_intervals.front().chromid != interval.chromid) {
 			SEXP answer = gpartition_build_answer<GInterval>(res_intervals, res_bins, bin_finder, include_lowest, iu);
 			GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &res_intervals, answer, iu, chromstats);
+			runprotect(answer); // one contig's worth of protect slots; the loop runs per contig
 			res_intervals.clear();
 			res_bins.clear();
 		}
@@ -88,6 +94,7 @@ static void gpartition_add_interval2res(const GInterval2D &interval, GIntervals2
 		if (!res_intervals.empty() && !interval.is_same_chrom(res_intervals.back())) {
 			SEXP answer = gpartition_build_answer<GInterval2D>(res_intervals, res_bins, bin_finder, include_lowest, iu);
 			GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), &res_intervals, answer, iu, chromstats);
+			runprotect(answer); // one contig's worth of protect slots; the loop runs per contig
 			res_intervals.clear();
 			res_bins.clear();
 		}
@@ -179,6 +186,7 @@ SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include
 				if (!res_intervals.empty()) {
 					SEXP answer = gpartition_build_answer<GInterval>(res_intervals, res_bins, bin_finder, include_lowest, iu);
 					GIntervalsBigSet1D::save_chrom(intervset_out.c_str(), &res_intervals, answer, iu, chromstats);
+					runprotect(answer); // one contig's worth of protect slots; the loop runs per contig
 					res_intervals.clear();
 					res_bins.clear();
 				}
@@ -206,6 +214,7 @@ SEXP C_gpartition(SEXP _intervals, SEXP _track_expr, SEXP _breaks, SEXP _include
 				if (!res_intervals.empty()) {
 					SEXP answer = gpartition_build_answer<GInterval2D>(res_intervals, res_bins, bin_finder, include_lowest, iu);
 					GIntervalsBigSet2D::save_chrom(intervset_out.c_str(), &res_intervals, answer, iu, chromstats);
+					runprotect(answer); // one contig's worth of protect slots; the loop runs per contig
 					res_intervals.clear();
 					res_bins.clear();
 				}
