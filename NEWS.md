@@ -1,6 +1,11 @@
 # misha 5.11.22
 
 * misha's C routines are now registered with R, so a call made with the wrong number of arguments is reported instead of silently running.
+* Ctrl-C now stops indexed-format track conversions and `gseq.pwm()`, `gseq.kmer()` and `gseq.pwm_edits()`, which used to run to completion regardless.
+* An interrupted track expression now reports "Command interrupted!" instead of a blank error.
+* An unusable `gbuf.size` option - too large, `NA`, or not a number - is now reported. It used to break the session's Ctrl-C.
+* `gbuf.size` may now be given as an integer (`options(gbuf.size = 5000L)`), which was previously ignored in favour of the default.
+* `gtrack.lookup()` errors raised before the first chromosome is written no longer carry a garbled file name.
 
 # misha 5.11.21
 

@@ -349,7 +349,10 @@ gseq.pwm <- function(seqs,
 
     # Call C++ implementation (multitask or sequential)
     if (.ggetOption("gmultitasking")) {
-        out <- .Call(
+        # .gcall, not .Call: this entry point forks, and .gcall's pid compare is the only
+        # thing that kills a child that escaped back into R before R's shutdown deletes
+        # the session tempdir out from under the parent.
+        out <- .gcall(
             "C_gseq_pwm_multitask",
             seqs,
             pssm,

@@ -521,7 +521,10 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 		string dirname = create_track_dir(_envir, track);
 
 		int cur_chromid = -1;
-		char filename[FILENAME_MAX];
+		// Empty until the first chromosome is opened: the catch below formats it with %s,
+		// and everything that can throw before then (a bad track expression, an
+		// unsupported iterator) used to hand vsnprintf an uninitialised stack buffer.
+		char filename[FILENAME_MAX] = { 0 };
 		IntervUtils iu(_envir);
 		TrackExprScanner scanner(iu);
 		GIntervals all_genome_intervs1d;
@@ -604,7 +607,9 @@ SEXP gtrack_bintransform(SEXP _track, SEXP _track_exprs, SEXP _breaks, SEXP _inc
 			}
 				
 		} catch (TGLException &e) {
-			verror("Error writing %s: %s", filename, e.msg());
+			if (filename[0])
+				verror("Error writing %s: %s", filename, e.msg());
+			verror("%s", e.msg());
 		}
 	} catch (TGLException &e) {
 		rerror("%s", e.msg());

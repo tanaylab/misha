@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <sys/time.h>
 
+#include <climits>
 #include <limits>
 #include <set>
 #include <unordered_set>
@@ -43,6 +44,8 @@
 #include "TrackIndex2D.h"
 
 const int TrackExprScanner::INIT_REPORT_STEP = 10000;
+// Default vectorized evaluation buffer size (the gbuf.size option's documented default).
+const unsigned TrackExprScanner::DEFAULT_EVAL_BUF_SIZE = 1000;
 const int TrackExprScanner::REPORT_INTERVAL = 3000;
 const int TrackExprScanner::MIN_REPORT_INTERVAL = 1000;
 
@@ -84,6 +87,36 @@ void TrackExprScanner::convert_rtrack_exprs(SEXP rtrack_exprs, vector<string> &t
 
 	for (unsigned iexpr = 0; iexpr < num_track_exprs; ++iexpr)
 		track_exprs[iexpr] = CHAR(STRING_ELT(rtrack_exprs, iexpr));
+}
+
+// Size of the vectorized evaluation buffer, from the gbuf.size option.
+// Unset falls back to the documented default; anything set but unusable is an error,
+// because silently substituting the default hides a value the user asked for and
+// casting it truncates (see the call site in begin()).
+unsigned TrackExprScanner::get_eval_buf_size()
+{
+	SEXP gbufsize = Rf_GetOption1(Rf_install("gbuf.size"));
+
+	if (gbufsize == R_NilValue)
+		return DEFAULT_EVAL_BUF_SIZE;
+
+	double val;
+
+	if (Rf_isReal(gbufsize) && Rf_length(gbufsize) == 1)
+		val = REAL(gbufsize)[0];
+	else if (Rf_isInteger(gbufsize) && Rf_length(gbufsize) == 1)
+		val = INTEGER(gbufsize)[0] == NA_INTEGER ? NA_REAL : (double)INTEGER(gbufsize)[0];
+	else
+		verror("gbuf.size option must be a single number");
+
+	// INT_MAX, not UINT_MAX: past it R's own vectors become "long" ones, and both this
+	// class and R's Rf_length() index the evaluation buffer with an int. A value R can
+	// still allocate but not attribute used to fail with a raw Rf_error from attrib.c,
+	// which is the same longjmp-past-~RdbInitializer this validation exists to prevent.
+	if (!R_FINITE(val) || val < 1 || val > (double)INT_MAX)
+		verror("gbuf.size option must be a finite number between 1 and %d", INT_MAX);
+
+	return (unsigned)val;
 }
 
 void TrackExprScanner::define_r_vars(unsigned eval_buf_limit)
@@ -219,11 +252,13 @@ bool TrackExprScanner::begin(const vector<string> &track_exprs, GIntervalsFetche
 	// Decide evaluation buffer size. Prefer vectorized evaluation (large buffers)
 	// but gracefully fall back to scalar evaluation (buffer size 1) if expressions
 	// cannot produce vectors of the requested size.
-    SEXP gbufsize = Rf_GetOption1(Rf_install("gbuf.size"));
-	if (!Rf_isReal(gbufsize) || REAL(gbufsize)[0] < 1)
-		define_r_vars(1000);
-	else
-		define_r_vars((unsigned)REAL(gbufsize)[0]);
+    // gbuf.size is a user option, so it must be validated rather than cast. A plain
+	// (unsigned)REAL(...)[0] turns 2^32 - or NA / Inf - into a buffer of 0; the scanner
+	// then evaluates nothing, convert_intervs() hands back NULL and the caller's
+	// VECTOR_ELT(NULL, ...) raises a raw Rf_error that longjmps past ~RdbInitializer,
+	// leaving misha's SIGINT handler installed and Ctrl-C dead for the rest of the
+	// session. Reject what cannot be honoured instead.
+	define_r_vars(get_eval_buf_size());
 
     for (unsigned iexpr = 0; iexpr < m_track_exprs.size(); ++iexpr) {
         if (m_eval_exprs[iexpr] != R_NilValue) {
