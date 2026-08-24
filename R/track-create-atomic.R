@@ -1,7 +1,7 @@
 # Wrap a C++ track-create .gcall so the on-disk creation is atomic.
 #
 # Steps:
-#  1. Compute a hidden tmp dir name: <parent>/.<basename>.tmp.<pid>.<rand>/
+#  1. Compute a hidden tmp dir name: <parent>/.<basename>.tmp.<host>-<pid>.<rand>/
 #     The leading "." and the embedded ".tmp." mean it is invisible to
 #     gfind_tracks_n_intervals (which skips dirs with "." in the stem
 #     before the .track suffix and treats *.track dirs as opaque).
@@ -23,7 +23,7 @@
 # function only owns the create+rename atomicity.
 #
 # Concurrency: two sessions creating the same trackname will each
-# write to a distinct tmp dir (PID + random suffix). The first to
+# write to a distinct tmp dir (host + PID + random suffix). The first to
 # reach file.rename wins; the second sees the final_dir already
 # present (rename onto a non-empty dir returns ENOTEMPTY/EEXIST on
 # POSIX) and aborts with a "Refusing to overwrite existing" error,
@@ -42,10 +42,11 @@
     if (!dir.exists(parent)) {
         stop(sprintf("Parent directory %s does not exist", parent), call. = FALSE)
     }
-    tmp_dir <- file.path(
-        parent,
-        sprintf(".%s.tmp.%d.%s", base, Sys.getpid(), basename(tempfile("")))
-    )
+    # Clear leftovers from writers that died before they could clean up (see
+    # .gdb.trash_sweep_old): a SIGKILL or a std::terminate never runs the
+    # finally below, and the abandoned copy is invisible to gtrack.ls.
+    try(.gdb.trash_sweep_old(parent), silent = TRUE)
+    tmp_dir <- file.path(parent, .gdb.staging_name(base))
 
     assign(".create_dir_override", tmp_dir, envir = .misha)
     # Defensive: clear the slot on exit. Normally the C++ consumes it,
