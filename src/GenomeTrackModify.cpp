@@ -66,14 +66,26 @@ public:
 
 	// Renames the staged data files over the originals. Nothing else may be
 	// interposed here: this is the commit.
+	//
+	// Each staged file is fsynced first, and the track directory after: a
+	// rename is atomic against other processes but not against a machine
+	// death, which could otherwise leave the live name pointing at bytes
+	// that never reached stable storage.
 	void commit()
 	{
+		for (vector<string>::const_iterator i = m_committable.begin(); i != m_committable.end(); ++i)
+			fsync_path(m_stage_dir + "/" + *i, false);
+
 		for (vector<string>::const_iterator i = m_committable.begin(); i != m_committable.end(); ++i) {
 			string src = m_stage_dir + "/" + *i;
 			string dst = m_track_dir + "/" + *i;
 			if (rename(src.c_str(), dst.c_str()))
 				verror("Failed to commit %s to %s: %s", src.c_str(), dst.c_str(), strerror(errno));
 		}
+
+		if (!m_committable.empty())
+			fsync_path(m_track_dir, true);
+
 		m_committable.clear();
 	}
 
@@ -83,6 +95,22 @@ private:
 	bool           m_indexed;
 	set<string>    m_staged;
 	vector<string> m_committable;
+
+	// A directory fsync answers EINVAL on filesystems that do not implement
+	// it; that means "unsupported", not "lost data".
+	static void fsync_path(const string &path, bool is_dir)
+	{
+		int fd = open(path.c_str(), O_RDONLY);
+		if (fd < 0)
+			verror("Failed to open %s for fsync: %s", path.c_str(), strerror(errno));
+
+		int rc = fsync(fd);
+		int err = errno;
+		close(fd);
+
+		if (rc && !(is_dir && err == EINVAL))
+			verror("Failed to fsync %s: %s", path.c_str(), strerror(err));
+	}
 
 	void stage_file(const string &name, bool committable)
 	{
